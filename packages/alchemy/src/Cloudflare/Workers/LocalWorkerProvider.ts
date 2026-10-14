@@ -10,7 +10,7 @@ import {
   type QueueConsumer as RuntimeQueueConsumer,
   type Workflow as RuntimeWorkflow,
 } from "@alchemy.run/cloudflare-runtime/core";
-import type { ContainerImage } from "@alchemy.run/cloudflare-runtime/core/Docker";
+import type { ContainerImage as RuntimeContainerImage } from "@alchemy.run/cloudflare-runtime/core/Docker";
 import * as WorkerProxy from "@alchemy.run/cloudflare-runtime/core/proxy/WorkerProxy";
 import * as Cause from "effect/Cause";
 import * as ConsoleService from "effect/Console";
@@ -49,6 +49,11 @@ import {
 import { sha256 } from "../../Util/sha256.ts";
 import { ANSI_RESET, ansiFg, colorsEnabled } from "../../Util/Terminal.ts";
 import { theme } from "../../Util/Theme.ts";
+import type { DevContainerImage } from "../Containers/ContainerApplication.ts";
+import {
+  assertBindingContainersOnAsyncClasses,
+  mergeWorkerContainers,
+} from "../Containers/ContainerConfiguration.ts";
 import { localAccountId } from "../LocalAccount.ts";
 import {
   isLiveId,
@@ -60,6 +65,7 @@ import type { ConsumerSettings } from "../Queues/Consumer.ts";
 import type { WorkerAssetsConfig, WorkerProps } from "../Workers/Worker.ts";
 import { readAssetsConfigFiles } from "./Assets.ts";
 import { getCompatibility } from "./Compatibility.ts";
+import { isDurableObjectExport } from "./DurableObject.ts";
 import { LocalEdge } from "./LocalEdge.ts";
 import { routePatternHost } from "./RoutePattern.ts";
 import { materializeRuntimeBindings, WorkerValidationError } from "./RuntimeBindings.ts";
@@ -353,13 +359,14 @@ export const LocalWorkerProvider = () =>
         // send_email descriptors. Part of the hashed config: flipping the
         // opt-out restarts the instance.
         const devRemote: Record<string, boolean> = {};
-        const containers: Record<string, ContainerImage> = {};
+        const containers: Record<string, NonNullable<RuntimeDurableObject["container"]>> = {};
         // Content hashes of the container images, keyed like `containers`.
         // `ContainerImage` itself only carries stable paths (context /
         // dockerfile / imageUri), so without the hash an image CONTENT
         // change (a Dockerfile edit, a rebuilt bundle) would never change
         // the config and the running container would serve stale code.
         const containerHashes: Record<string, string> = {};
+        const containerRows: NonNullable<Worker["Binding"]["containers"]> = [];
         const boundEnv: Record<string, any> = { ...props.env };
         for (const { data } of bindings) {
           if (data.env) Object.assign(boundEnv, data.env);
@@ -414,19 +421,33 @@ export const LocalWorkerProvider = () =>
               };
             }
           }
-          if (data.containers) {
-            for (const container of data.containers) {
-              if (!container.dev) {
-                return yield* Effect.die(`Container ${container.className} has no dev image`);
-              }
-              containers[container.className] = {
-                ...container.dev,
-                env: unwrapRedacted(container.dev.env),
-              };
-              if (container.hash !== undefined) {
-                containerHashes[container.className] = container.hash;
-              }
+          if (data.containers) containerRows.push(...data.containers);
+        }
+        // A Durable Object-managed class merges the images of every bound
+        // Container (keyed by Container id); a fleet class has one image.
+        const toRuntimeImage = (image: DevContainerImage) => ({
+          ...image,
+          env: unwrapRedacted(image.env),
+        });
+        const exportMap = (props.exports ?? {}) as Record<string, unknown>;
+        yield* assertBindingContainersOnAsyncClasses(
+          containerRows,
+          Object.keys(exportMap).filter((name) => isDurableObjectExport(exportMap[name])),
+        );
+        for (const container of yield* mergeWorkerContainers(containerRows)) {
+          if (container.devImages !== undefined) {
+            const images: Record<string, RuntimeContainerImage> = {};
+            for (const [key, image] of Object.entries(container.devImages)) {
+              images[key] = toRuntimeImage(image);
             }
+            containers[container.className] = { images };
+          } else if (container.dev) {
+            containers[container.className] = toRuntimeImage(container.dev);
+          } else {
+            return yield* Effect.die(`Container ${container.className} has no dev image`);
+          }
+          if (container.hash !== undefined) {
+            containerHashes[container.className] = container.hash;
           }
         }
         for (const [className, dev] of Object.entries(containers)) {
@@ -679,16 +700,20 @@ export const LocalWorkerProvider = () =>
           const fs = yield* PlatformFileSystem.FileSystem;
           const watched = new Map<string, { dockerfile: string | undefined }>();
           for (const namespace of worker.durableObjectNamespaces) {
-            const image = namespace.container;
-            if (image === undefined || !("dockerfile" in image)) continue;
-            const context = path.resolve(runtimeBase, image.context ?? ".");
-            if (isPathWithin(dotAlchemy, context, runtimeBase)) continue;
-            watched.set(context, {
-              dockerfile:
-                image.dockerfile !== undefined
-                  ? path.resolve(context, image.dockerfile)
-                  : undefined,
-            });
+            const container = namespace.container;
+            if (container === undefined) continue;
+            const images = "images" in container ? Object.values(container.images) : [container];
+            for (const image of images) {
+              if (!("dockerfile" in image)) continue;
+              const context = path.resolve(runtimeBase, image.context ?? ".");
+              if (isPathWithin(dotAlchemy, context, runtimeBase)) continue;
+              watched.set(context, {
+                dockerfile:
+                  image.dockerfile !== undefined
+                    ? path.resolve(context, image.dockerfile)
+                    : undefined,
+              });
+            }
           }
           const key = JSON.stringify([...watched.entries()].sort());
           const existing = containerWatchers.get(worker.fqn);

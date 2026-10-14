@@ -3,6 +3,7 @@ import type * as HttpClient from "effect/http/HttpClient";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Credentials } from "../Credentials.ts";
 import { dispatchByMode } from "../LocalGateway.ts";
+import type { InstantNamespace } from "./InstantNamespace.ts";
 import { makeProxyKVNamespaceHelpers } from "./LocalKVGateway.ts";
 import type { Namespace } from "./Namespace.ts";
 import type { makeKVNamespaceHelpers } from "./NamespaceBinding.ts";
@@ -47,7 +48,7 @@ export const makeLocalKVNamespaceBinding = <Client extends object>(options: {
     // enumerable here.
     const ambient = yield* Effect.context<never>();
 
-    return Effect.fn(function* (namespace: Namespace) {
+    return Effect.fn(function* (namespace: Namespace | InstantNamespace) {
       // Deferred accessor — resolves the namespaceId against the tracker at
       // apply time (in an Action, that's the engine's resolve context).
       const namespaceId = yield* namespace.namespaceId;

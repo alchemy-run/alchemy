@@ -12,7 +12,7 @@ const { test } = Test.make({ providers: AWS.providers() });
 
 // Environment deployment drives a CloudFormation stack (several minutes each
 // way) — the full lifecycle only runs when explicitly requested.
-const RUN_SLOW = process.env.AWS_TEST_SLOW === "1";
+const RUN_SLOW = !process.env.FAST;
 
 // The DefaultDataLake blueprint requires an S3 location whose bucket name
 // contains "datazone" (the provisioning policy scopes S3 access to

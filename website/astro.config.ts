@@ -127,11 +127,12 @@ function providerApiReferenceEntry(...providers: string[]) {
  */
 /**
  * Dev only: hand-written docs (`.md`/`.mdx`) are editable in the browser.
- * Generated reference pages are edited through their JSDoc instead.
+ * Generated reference pages are edited through their JSDoc instead, and blog
+ * posts aren't editable (in-place editing breaks selecting and copying text).
  */
 const markdownCopy: MarkdownFilesOptions = {
   root: fileURLToPath(new URL(".", import.meta.url)),
-  exclude: /\/src\/content\/docs\/providers\//,
+  exclude: /\/src\/content\/docs\/(providers|blog)\//,
   style: JSDOC_COPY_STYLE,
 };
 
@@ -243,6 +244,8 @@ export default defineConfig({
     "/better-auth/database-layers": "/better-auth/databases",
     "/better-auth/migrations": "/better-auth/guides/migrations",
     "/better-auth/upgrading": "/better-auth/upgrades/from-1-6-to-1-7",
+    // The Birthday Week post was published as beta.82, then re-released as beta.83.
+    "/blog/2026-10-12-beta-82": "/blog/2026-10-12-beta-83",
   },
   prefetch: true,
   devToolbar: { enabled: false },
@@ -572,6 +575,10 @@ export default defineConfig({
                   link: "/cloudflare/compute/hibernatable-websockets",
                 },
                 { label: "Containers", link: "/cloudflare/compute/containers" },
+                {
+                  label: "Container lifecycle",
+                  link: "/cloudflare/compute/container-lifecycle",
+                },
                 { label: "Workflows", link: "/cloudflare/compute/workflows" },
               ],
             },
@@ -643,6 +650,10 @@ export default defineConfig({
                   link: "/cloudflare/data/r2-presigned-urls",
                 },
                 { label: "Hyperdrive", link: "/cloudflare/data/hyperdrive" },
+                {
+                  label: "Private database (Workers VPC)",
+                  link: "/cloudflare/data/hyperdrive-private-database",
+                },
                 { label: "Drizzle ORM", link: "/cloudflare/data/drizzle" },
                 { label: "Prisma ORM", link: "/cloudflare/data/prisma" },
                 { label: "Drizzle on D1", link: "/cloudflare/data/d1-drizzle" },

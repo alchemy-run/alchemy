@@ -204,6 +204,14 @@ export const ProcessesRunProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
+      const parentRef = olds?.process ?? output?.process;
+      // A recovery read of an interrupted create gets persisted props whose
+      // unresolved parent reference was stripped; without the parent there
+      // is no name to look up, so report nothing found rather than calling
+      // the API with an empty path segment.
+      if (output?.name === undefined && (typeof parentRef !== "string" || parentRef.length === 0)) {
+        return undefined;
+      }
       const location = normalizeLocation(olds?.location ?? output?.location, env.region);
       const process = processOf(olds?.process ?? output?.process ?? "", env.project, location);
       const runId = yield* toPhysicalId(id, olds?.runId, output?.runId);

@@ -83,7 +83,8 @@ export type MagicSite = Resource<TypeId, MagicSiteProps, MagicSiteAttributes, ne
  * WANs, and ACLs are configured.
  *
  * Requires a Magic WAN subscription — accounts without it receive a typed
- * `MagicWanUnauthorized` error (Cloudflare code 1025).
+ * `MagicWanUnauthorized` error (Cloudflare code 1025) or `MagicWanNotEnabled`
+ * (code 1101, "forbidden: feature not enabled").
  *
  * `haMode` is create-only — changing it triggers a replacement. Everything
  * else is updated in place.
@@ -132,7 +133,9 @@ export const MagicSiteProvider = () =>
 
     // Account collection — Magic WAN sites are account-scoped and enumerated
     // via the paginated list API. Accounts without a Magic WAN subscription
-    // reject with the typed `MagicWanUnauthorized` (code 1025) → return [].
+    // reject with the typed `MagicWanUnauthorized` (code 1025) or
+    // `MagicWanNotEnabled` (code 1101) → return [].
+
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
       return yield* magicTransit.listSites.pages({ accountId }).pipe(
@@ -142,7 +145,9 @@ export const MagicSiteProvider = () =>
             (page.result ?? []).map((site) => toAttributes(site, accountId)),
           ),
         ),
-        Effect.catchTag("MagicWanUnauthorized", () => Effect.succeed<MagicSiteAttributes[]>([])),
+        Effect.catchTag(["MagicWanUnauthorized", "MagicWanNotEnabled"], () =>
+          Effect.succeed<MagicSiteAttributes[]>([]),
+        ),
       );
     }),
 

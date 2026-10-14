@@ -29,7 +29,7 @@ const assertGone = (name: string) =>
   memorydb.describeACLs({ ACLName: name }).pipe(
     Effect.flatMap(() => Effect.fail(new Error(`acl '${name}' still exists`))),
     Effect.catchTag("ACLNotFoundFault", () => Effect.void),
-    Effect.retry({ schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(15)]) }),
+    Effect.retry({ schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(18)]) }),
   );
 
 // Single-deploy lifecycle: create an ACL with a custom user, verify, destroy.
@@ -37,12 +37,9 @@ const assertGone = (name: string) =>
 // RBAC ACLs reference custom users.
 //
 // MemoryDB ACL create/delete cascades through "modifying"/"deleting" state
-// transitions that are latency-heavy (several minutes end-to-end, and slower
-// still under the factory's concurrent CPU load), so the full live lifecycle
-// is gated behind AWS_TEST_SLOW=1. The ungated probe above proves the typed
-// error union; the create/update/delete reconcile mechanism is identical to
-// the SubnetGroup and User providers, whose lifecycle tests run ungated.
-test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
+// transitions that are latency-heavy (~2 minutes end to end observed; ACLs
+// and users are free), so the live lifecycle is skipped under --fast.
+test.provider.skipIf(!!process.env.FAST)(
   "create ACL with a user, verify membership, delete",
   (stack) =>
     Effect.gen(function* () {

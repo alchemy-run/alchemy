@@ -13,7 +13,7 @@ const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Deb
 
 // App Hub is not enabled in the test project; live calls fail with
 // ServiceDisabled:
-// "App Hub API has not been used in project alchemy-gcp-testing-83661
+// "App Hub API has not been used in project <project>
 // before or it is disabled."
 const runLifecycle = !process.env.FAST && process.env.GCP_TEST_APPHUB === "1";
 const location = "global";

@@ -27,6 +27,7 @@ import {
   stringifyPolicyDocument,
   type PolicyDocument,
 } from "../IAM/Policy.ts";
+import { reapLogGroupsByPrefix } from "../Logs/reapLogGroups.ts";
 import type { Providers } from "../Providers.ts";
 import { runDataApiMigrations } from "./DataApiMigrations.ts";
 
@@ -2381,6 +2382,11 @@ export const DBInstanceProvider = () =>
               until: (exists) => exists === false,
             },
           ).pipe(Effect.catch(() => Effect.void));
+          // RDS creates `/aws/rds/instance/<id>/<logType>` for every
+          // `enableCloudwatchLogsExports` type and never deletes them.
+          yield* reapLogGroupsByPrefix(
+            `/aws/rds/instance/${output.dbInstanceIdentifier.toLowerCase()}/`,
+          );
         }),
       };
     }),

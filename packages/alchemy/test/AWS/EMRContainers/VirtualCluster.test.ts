@@ -89,11 +89,11 @@ test.provider(
 
 // Full lifecycle: a virtual cluster itself is free and provisions instantly,
 // but it requires a live EKS cluster (~10 min control-plane create + ~5 min
-// delete), so the whole path is gated behind AWS_TEST_SLOW=1. The EKS cluster
+// delete), so the whole path is skipped under `--fast`. The EKS cluster
 // uses API authentication mode so EMR on EKS registers its access entries
 // automatically — no kubectl/aws-auth step.
-test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
-  "virtual cluster lifecycle on a live EKS cluster (AWS_TEST_SLOW=1)",
+test.provider.skipIf(!!process.env.FAST)(
+  "virtual cluster lifecycle on a live EKS cluster",
   (stack) =>
     Effect.gen(function* () {
       // Clean slate in case a previous run died mid-flight.

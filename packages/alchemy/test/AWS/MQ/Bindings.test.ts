@@ -12,8 +12,8 @@ const testOptions = { providers: AWS.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
 
 // A broker bills per instance-hour and takes 5-10 min to provision, so the
-// live Lambda E2E is gated behind AWS_TEST_SLOW=1 (matching Broker.test.ts).
-const RUN_LIVE = !!process.env.AWS_TEST_SLOW;
+// live Lambda E2E skipped under `--fast` (matching Broker.test.ts).
+const RUN_LIVE = !process.env.FAST;
 
 // A well-formed but nonexistent broker id (the same shape Broker.test.ts
 // proves returns the typed NotFoundException for describeBroker).

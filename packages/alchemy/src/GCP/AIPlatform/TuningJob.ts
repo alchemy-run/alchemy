@@ -254,7 +254,12 @@ export const TuningJobProvider = () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
         const jobs = yield* listJobs(env.project, env.region);
-        return jobs.map((job) => toAttrs(job, env.project));
+        // Tuning jobs have no delete API — `delete` cancels. A terminal job
+        // holds no resources and can never be removed, so it is not a
+        // reclaimable leftover (nuke / census would report it forever).
+        return jobs
+          .filter((job) => !isJobTerminal(typeof job.state === "string" ? job.state : undefined))
+          .map((job) => toAttrs(job, env.project));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {

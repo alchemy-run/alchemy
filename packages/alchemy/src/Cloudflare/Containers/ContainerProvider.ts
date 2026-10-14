@@ -24,7 +24,11 @@ import { normalizeNulls } from "../../Util/stable.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import { isLiveId } from "../LocalRuntime.ts";
 import { CloudflareLogs, type TelemetryFilter } from "../Logs.ts";
-import type { AnyContainerApplicationProps, ContainerApplication } from "./ContainerApplication.ts";
+import type {
+  AnyContainerApplicationProps,
+  ContainerApplication,
+  DurableObjectContainerProps,
+} from "./ContainerApplication.ts";
 import {
   buildFinalDockerfile,
   bundleContainerProgram,
@@ -34,8 +38,17 @@ import {
   materializeInlineDockerfileContext,
   validateContainerImageProps,
 } from "./ContainerBundle.ts";
+import {
+  ContainerConfigurationError,
+  durableObjectPlaceholder,
+  hasImageSource,
+  isDurableObjectContainer,
+  validateContainerConfiguration,
+} from "./ContainerConfiguration.ts";
+import { waitForContainerImage } from "./ContainerImagePreparation.ts";
 import { ContainerPlatform } from "./ContainerPlatform.ts";
 import { retryContainerPublication } from "./ContainerPublication.ts";
+import { retryNamespacePropagation } from "./DurableObjectApplication.ts";
 
 /**
  * The image source resolved from a {@link ContainerApplicationProps}. Selects
@@ -111,6 +124,9 @@ class ContainerRegistryError extends Schema.TaggedError<ContainerRegistryError>(
     cause: Schema.optional(Schema.Defect({ includeStack: true })),
   },
 ) {}
+
+/** The explicit application name. Durable Object-managed Containers have none. */
+const nameOf = (props: AnyContainerApplicationProps | undefined) => props?.name;
 
 const digestFromImageRef = (imageRef: string) => {
   const separator = imageRef.lastIndexOf("@");
@@ -523,6 +539,7 @@ export const LiveContainerProvider = () =>
         // The full session, not just `note`: `Docker.image.build` streams the
         // builder's output through it as `kind: "output"` notes.
         session?: ScopedPlanStatusSession,
+        reuseRemotePublication = false,
       ) {
         const platform = publicationPlatform;
 
@@ -535,7 +552,7 @@ export const LiveContainerProvider = () =>
 
         const credentials = yield* registryCredentials(props, ["pull", "push"]);
 
-        if (build.kind !== "remote") {
+        if (build.kind !== "remote" || reuseRemotePublication) {
           const digest = yield* resolveRegistryDigest(imageRef, credentials).pipe(
             Effect.catchTag("ContainerRegistryError", (error) =>
               error.reason === "ImageNotFound" ? Effect.succeed(undefined) : Effect.fail(error),
@@ -563,7 +580,7 @@ export const LiveContainerProvider = () =>
           if (session) {
             yield* session.note(`Pulling container image ${build.image}...`);
           }
-          yield* docker.image.pull(build.image, platform);
+          yield* docker.image.pull(build.image, platform, undefined, session);
           yield* docker.image.tag(build.image, imageRef);
           yield* Effect.logInfo(`Cloudflare Container image: pushing ${imageRef}`);
           if (session) {
@@ -571,7 +588,9 @@ export const LiveContainerProvider = () =>
           }
           // Push the same platform that was pulled. A containerd image store
           // may also hold a host-architecture variant under this tag.
-          yield* docker.image.push(imageRef, credentials, platform).pipe(retryContainerPublication);
+          yield* docker.image
+            .push(imageRef, credentials, platform, undefined, session)
+            .pipe(retryContainerPublication);
         } else if (build.kind === "external") {
           // Build the user's Dockerfile directly against their context dir so
           // relative `COPY`/`ADD` paths resolve as the author intended.
@@ -655,6 +674,7 @@ export const LiveContainerProvider = () =>
         imageHash: string,
         previousImageRef: string | undefined,
         session?: ScopedPlanStatusSession,
+        reuseRemotePublication = false,
       ) {
         const { accountId } = yield* yield* CloudflareEnvironment;
         const key = JSON.stringify([
@@ -663,10 +683,11 @@ export const LiveContainerProvider = () =>
           props.publish?.repository,
           publicationPlatform,
           build.kind,
+          reuseRemotePublication,
           imageHash,
         ]);
         const candidate: ReturnType<typeof publishImage> = yield* Effect.cached(
-          publishImage(id, props, build, imageRef, session).pipe(
+          publishImage(id, props, build, imageRef, session, reuseRemotePublication).pipe(
             Effect.onExit((exit) =>
               Exit.isFailure(exit)
                 ? Effect.sync(() => {
@@ -698,6 +719,176 @@ export const LiveContainerProvider = () =>
               ? undefined
               : (yield* resolvePublishedImageRef(props, previousImageRef)).digest,
         };
+      });
+
+      const resolveDeploymentImage = Effect.fn(function* ({
+        id,
+        news,
+        existing,
+        build,
+        imageRef,
+        imageHash,
+        session,
+      }: {
+        id: string;
+        news: AnyContainerApplicationProps;
+        existing: ContainerApplication["Attributes"];
+        build: ImageBuild;
+        imageRef: string;
+        imageHash: string;
+        session: ScopedPlanStatusSession;
+      }) {
+        yield* validateContainerConfiguration(news, existing.schedulingPolicy);
+        const existingImage = existing.configuration.image;
+        if (!existingImage) {
+          return yield* new ContainerConfigurationError({
+            message: `Container application '${existing.applicationName}' has no deployment image.`,
+          });
+        }
+        let deploymentImageRef = existingImage;
+        let imageDigest = existing.hash?.digest;
+        if (imageHash !== existing.hash?.image) {
+          const published = yield* buildAndPushImage(
+            id,
+            news,
+            build,
+            imageRef,
+            imageHash,
+            existing.hash?.digest === undefined ? existingImage : undefined,
+            session,
+          );
+          const existingDigest = existing.hash?.digest ?? published.previousDigest;
+          deploymentImageRef =
+            published.digest === existingDigest && news.publish?.repository === undefined
+              ? existingImage
+              : published.imageRef;
+          imageDigest = published.digest;
+        }
+        return { deploymentImageRef, imageDigest };
+      });
+
+      // ---------------------------------------------------------------
+      // Durable Object-managed Containers (schedulingPolicy:
+      // "durable_object"). A Container publishes one image; the application
+      // belongs to the Durable Object class (see DurableObjectApplication).
+      // ---------------------------------------------------------------
+
+      /**
+       * Cloudflare must prepare an image before a Worker upload may reference
+       * it. Preparation is per image reference, so remember the ones that are
+       * already done for the lifetime of this provider.
+       */
+      const preparedImages = new Set<string>();
+      const waitForImagePrepared = Effect.fn(function* (
+        image: string,
+        name: string,
+        timeout: DurableObjectContainerProps["imagePreparationTimeout"],
+        session: ScopedPlanStatusSession,
+      ) {
+        if (preparedImages.has(image)) return;
+        const { accountId } = yield* yield* CloudflareEnvironment;
+        yield* waitForContainerImage({
+          image,
+          name,
+          timeout,
+          session,
+          prepare: Containers.prepareContainerImage({ accountId, image }),
+        });
+        preparedImages.add(image);
+      });
+
+      /** The build inputs and content hash of a Durable Object Container's image. */
+      const computeDurableObjectImage = (id: string, props: DurableObjectContainerProps) =>
+        hasImageSource(props) ? computeImage(id, props, {}) : Effect.succeed(undefined);
+
+      /**
+       * Publish the Container's image to Cloudflare's registry and wait until
+       * it is prepared. An unchanged content hash keeps the previously
+       * published reference.
+       */
+      const reconcileDurableObjectContainer = Effect.fn(function* ({
+        id,
+        news,
+        name,
+        output,
+        session,
+      }: {
+        id: string;
+        news: DurableObjectContainerProps;
+        name: string;
+        output: ContainerApplication["Attributes"] | undefined;
+        session: ScopedPlanStatusSession;
+      }) {
+        const { accountId } = yield* yield* CloudflareEnvironment;
+        const attributes = durableObjectPlaceholder({
+          // The application is owned by the Durable Object class.
+          applicationId: "",
+          applicationName: name,
+          accountId,
+          createdAt: output?.createdAt ?? "",
+          observability: news.observability,
+        });
+        const image = yield* computeDurableObjectImage(id, news);
+        if (image === undefined) return attributes;
+
+        let imageRef: string;
+        let digest: string | undefined;
+        if (output?.image !== undefined && output.hash?.image === image.imageHash) {
+          imageRef = output.image;
+          digest = output.hash.digest;
+        } else {
+          const published = yield* buildAndPushImage(
+            id,
+            news,
+            image.build,
+            image.imageRef,
+            image.imageHash,
+            undefined,
+            session,
+            // The registry tag keyed by image inputs is the durable publication checkpoint.
+            // Reuse it after an interrupted preparation, including mirrored images.
+            true,
+          );
+          imageRef = published.imageRef;
+          digest = published.digest;
+        }
+        yield* waitForImagePrepared(imageRef, id, news.imagePreparationTimeout, session);
+        return {
+          ...attributes,
+          image: imageRef,
+          dev: image.dev,
+          hash: { image: image.imageHash, digest },
+        } satisfies ContainerApplication["Attributes"];
+      });
+
+      const diffDurableObjectContainer = Effect.fn(function* ({
+        id,
+        news,
+        output,
+      }: {
+        id: string;
+        news: DurableObjectContainerProps;
+        output: ContainerApplication["Attributes"] | undefined;
+      }) {
+        if (output === undefined) return undefined;
+        // State written before one Container meant one image recorded the
+        // Container as the application itself. The application now belongs to
+        // the Durable Object class; drop the identity so deleting this
+        // Container never deletes the class's application.
+        if (output.applicationId !== "") {
+          return { action: "update" as const, stables: ["accountId"] };
+        }
+        // Image content (a Dockerfile, a context file) can change without any
+        // prop changing, so compare content hashes as well.
+        const image = yield* computeDurableObjectImage(id, news);
+        if (
+          image?.imageHash !== output.hash?.image ||
+          (image !== undefined && output.image === undefined) ||
+          !deepEqual(image?.dev, output.dev)
+        ) {
+          return { action: "update" } as const;
+        }
+        return undefined;
       });
 
       const maybeCreateRollout = Effect.fn(function* ({
@@ -811,14 +1002,16 @@ export const LiveContainerProvider = () =>
           });
         });
 
-        const application = yield* Containers.createContainerApplication({
-          accountId,
-          name,
-          ...scalingDefaults(news),
-          affinities: news.affinities,
-          configuration,
-          durableObjects,
-        }).pipe(
+        const application = yield* retryNamespacePropagation(
+          Containers.createContainerApplication({
+            accountId,
+            name,
+            ...scalingDefaults(news),
+            affinities: news.affinities,
+            configuration,
+            durableObjects,
+          }),
+        ).pipe(
           Effect.catchTag("DurableObjectAlreadyHasApplication", () =>
             durableObjects
               ? Effect.gen(function* () {
@@ -888,25 +1081,15 @@ export const LiveContainerProvider = () =>
         yield* Effect.logInfo(`Cloudflare Container update: preparing ${existing.applicationName}`);
         const env = makeContainerEnv(news, accountId, bindings);
         const { build, imageRef, imageHash, dev } = yield* computeImage(id, news, env);
-        let deploymentImageRef = existing.configuration.image;
-        let imageDigest = existing.hash?.digest;
-        if (imageHash !== existing.hash?.image) {
-          const published = yield* buildAndPushImage(
-            id,
-            news,
-            build,
-            imageRef,
-            imageHash,
-            existing.hash?.digest === undefined ? existing.configuration.image : undefined,
-            session,
-          );
-          const existingDigest = existing.hash?.digest ?? published.previousDigest;
-          deploymentImageRef =
-            published.digest === existingDigest && news.publish?.repository === undefined
-              ? existing.configuration.image
-              : published.imageRef;
-          imageDigest = published.digest;
-        }
+        const { deploymentImageRef, imageDigest } = yield* resolveDeploymentImage({
+          id,
+          news,
+          existing,
+          build,
+          imageRef,
+          imageHash,
+          session,
+        });
         const configuration = desiredConfiguration(news, env, deploymentImageRef);
         const scaling = scalingDefaults(news);
         const configurationHash = yield* applicationConfigurationHash(
@@ -958,14 +1141,16 @@ export const LiveContainerProvider = () =>
               yield* Effect.logInfo(
                 `Cloudflare Container update: ${existing.applicationName} no longer exists, creating fresh`,
               );
-              return yield* Containers.createContainerApplication({
-                accountId,
-                name: existing.applicationName,
-                ...scaling,
-                affinities: news.affinities,
-                configuration,
-                durableObjects,
-              });
+              return yield* retryNamespacePropagation(
+                Containers.createContainerApplication({
+                  accountId,
+                  name: existing.applicationName,
+                  ...scaling,
+                  affinities: news.affinities,
+                  configuration,
+                  durableObjects,
+                }),
+              );
             }),
           ),
         );
@@ -1019,16 +1204,21 @@ export const LiveContainerProvider = () =>
       return ContainerPlatform.Provider.of({
         stables: ["accountId", "applicationId"],
         diff: Effect.fn(function* ({ id, olds = {}, news = {}, output, newBindings, oldBindings }) {
-          if (!isResolved(news) || !isResolved(newBindings)) {
-            return undefined;
-          }
+          if (!isResolved(news)) return;
+          yield* validateContainerConfiguration(news, output?.schedulingPolicy);
+          if (!isResolved(newBindings)) return;
           const { accountId } = yield* yield* CloudflareEnvironment;
 
-          const oldName = output?.applicationName ?? (yield* createApplicationName(id, olds.name));
+          const oldName =
+            output?.applicationName ?? (yield* createApplicationName(id, nameOf(olds)));
           // Auto-generated names are engine-owned: the deployed name stays
           // authoritative even if the generator would name this id differently
           // today. Only an explicit user-provided name can force a replace.
-          const name = news.name ?? oldName;
+          const name = nameOf(news) ?? oldName;
+
+          if (isDurableObjectContainer(news)) {
+            return yield* diffDurableObjectContainer({ id, news, output });
+          }
 
           if ((output?.accountId ?? accountId) !== accountId || name !== oldName) {
             return { action: "replace" } as const;
@@ -1078,10 +1268,20 @@ export const LiveContainerProvider = () =>
           }
         }),
         precreate: Effect.fn(function* ({ id, news = {}, session }) {
-          const name = yield* createApplicationName(id, news.name);
+          yield* validateContainerConfiguration(news);
+          const name = yield* createApplicationName(id, nameOf(news));
           yield* Effect.logInfo(`Cloudflare Container precreate: starting ${name}`);
 
           const { accountId } = yield* yield* CloudflareEnvironment;
+          if (isDurableObjectContainer(news)) {
+            return yield* reconcileDurableObjectContainer({
+              id,
+              news,
+              name,
+              output: undefined,
+              session,
+            });
+          }
           const env = makeContainerEnv(news, accountId);
           const { build, imageRef, imageHash, dev } = yield* computeImage(id, news, env);
           const published = yield* buildAndPushImage(
@@ -1130,10 +1330,14 @@ export const LiveContainerProvider = () =>
           };
         }),
         reconcile: Effect.fn(function* ({ id, news = {}, bindings, output, session }) {
+          yield* validateContainerConfiguration(news, output?.schedulingPolicy);
           // Prefer the deployed name: regenerating would target a different
           // resource if the generator's output for this id ever drifts.
-          const name = output?.applicationName ?? (yield* createApplicationName(id, news.name));
+          const name = output?.applicationName ?? (yield* createApplicationName(id, nameOf(news)));
           yield* Effect.logInfo(`Cloudflare Container reconcile: starting ${name}`);
+          if (isDurableObjectContainer(news)) {
+            return yield* reconcileDurableObjectContainer({ id, news, name, output, session });
+          }
           const durableObjects = yield* getDurableObjects(bindings);
           const hasUnresolvedAttachment =
             durableObjects === undefined &&
@@ -1229,25 +1433,15 @@ export const LiveContainerProvider = () =>
                 });
               }
             }
-            let deploymentImageRef = existing.configuration.image;
-            let imageDigest = existing.hash?.digest;
-            if (imageHash !== existing.hash?.image) {
-              const published = yield* buildAndPushImage(
-                id,
-                news,
-                build,
-                imageRef,
-                imageHash,
-                existing.hash?.digest === undefined ? existing.configuration.image : undefined,
-                session,
-              );
-              const existingDigest = existing.hash?.digest ?? published.previousDigest;
-              deploymentImageRef =
-                published.digest === existingDigest && news.publish?.repository === undefined
-                  ? existing.configuration.image
-                  : published.imageRef;
-              imageDigest = published.digest;
-            }
+            const { deploymentImageRef, imageDigest } = yield* resolveDeploymentImage({
+              id,
+              news,
+              existing,
+              build,
+              imageRef,
+              imageHash,
+              session,
+            });
             const configuration = desiredConfiguration(news, env, deploymentImageRef);
             const configurationHash = yield* applicationConfigurationHash(
               scalingDefaults(news),
@@ -1347,7 +1541,7 @@ export const LiveContainerProvider = () =>
         delete: Effect.fn(function* ({ output }) {
           // A `dev:` applicationId only exists locally — there is no live
           // application to delete on Cloudflare.
-          if (!isLiveId(output.applicationId)) return;
+          if (!output.applicationId || !isLiveId(output.applicationId)) return;
           yield* Effect.logInfo(`Cloudflare Container delete: deleting ${output.applicationName}`);
           yield* Containers.deleteContainerApplication({
             accountId: output.accountId,
@@ -1370,6 +1564,7 @@ export const LiveContainerProvider = () =>
                 // API can't return — preserve the persisted one so a refresh
                 // doesn't wipe it (which would break a later `alchemy dev`).
                 dev: output?.dev,
+                image: output?.image,
               };
             });
 
@@ -1390,6 +1585,7 @@ export const LiveContainerProvider = () =>
                 ...toAttributes(app),
                 hash: output.hash,
                 dev: output.dev,
+                image: output.image,
               })),
               Effect.catchTag("ContainerApplicationNotFound", () =>
                 readByName(output.applicationName),
@@ -1399,12 +1595,12 @@ export const LiveContainerProvider = () =>
             return attrs;
           }
 
-          const name = yield* createApplicationName(id, olds?.name);
+          const name = yield* createApplicationName(id, nameOf(olds));
           attrs = yield* readByName(name);
           if (!attrs) return undefined;
           // Generated names identify this instance by its random suffix.
           // Explicit names alone do not establish ownership.
-          return olds?.name === undefined ? attrs : Unowned(attrs);
+          return nameOf(olds) === undefined ? attrs : Unowned(attrs);
         }),
         list: () =>
           Effect.gen(function* () {
@@ -1532,7 +1728,10 @@ const toAttributes = (
     application.constraints as ContainerApplication.Constraints | undefined,
   ),
   affinities: normalizeNulls(application.affinities as ContainerApplication.Affinities | undefined),
-  configuration: normalizeNulls(application.configuration as ContainerApplication.Configuration),
+  configuration: normalizeNulls(
+    application.configuration,
+  ) as Partial<ContainerApplication.Configuration>,
+  observability: normalizeNulls(application.observability ?? undefined),
   durableObjects: normalizeNulls(application.durableObjects) as { namespaceId: string } | undefined,
   createdAt: application.createdAt,
   version: application.version ?? undefined,

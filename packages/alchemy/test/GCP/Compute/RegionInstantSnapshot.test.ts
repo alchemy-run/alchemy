@@ -12,6 +12,10 @@ const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Deb
 
 const region = "us-central1";
 
+// A regional pd-balanced disk bills SSD quota for both replicas, so keep it
+// at the 10 GB minimum: the regional SSD_TOTAL_GB quota on a fresh project is
+// 250 GB and is shared with every other concurrent Compute test.
+
 const waitUntilGone = (project: string, instantSnapshot: string) =>
   compute.getRegionInstantSnapshots({ project, region, instantSnapshot }).pipe(
     Effect.as("found" as const),
@@ -35,7 +39,7 @@ test.provider.skipIf(!!process.env.FAST)(
             region,
             replicaZones: ["us-central1-a", "us-central1-b"],
             type: "pd-balanced",
-            sizeGb: 200,
+            sizeGb: 10,
           });
           const snapshot = yield* GCP.Compute.RegionInstantSnapshot("Checkpoint", {
             region,
@@ -69,7 +73,7 @@ test.provider.skipIf(!!process.env.FAST)(
             region,
             replicaZones: ["us-central1-a", "us-central1-b"],
             type: "pd-balanced",
-            sizeGb: 200,
+            sizeGb: 10,
           });
           const snapshot = yield* GCP.Compute.RegionInstantSnapshot("Checkpoint", {
             instantSnapshotName: created.snapshot.instantSnapshotName,
@@ -96,7 +100,7 @@ test.provider.skipIf(!!process.env.FAST)(
             region,
             replicaZones: ["us-central1-a", "us-central1-b"],
             type: "pd-balanced",
-            sizeGb: 200,
+            sizeGb: 10,
           });
           const snapshot = yield* GCP.Compute.RegionInstantSnapshot("Checkpoint", {
             instantSnapshotName: nextName,

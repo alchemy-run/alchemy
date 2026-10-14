@@ -45,6 +45,10 @@ export class Task extends Cloudflare.DurableObject<Task>()(
 /**
  * Fixture worker for `DurableObjectAbort.test.ts`.
  *
+ * Every route addresses the object named by the `name` query parameter, so
+ * each test attempt can use a fresh object with its own `boots` storage and
+ * in-memory `failedPings` counter.
+ *
  * `GET /ping` reports constructor-run count. `GET /fail-ping` throws an
  * application error over native RPC without resetting the object. `GET /abort` invokes
  * `state.abort` on the DO (the RPC fails because the isolate is reset)
@@ -70,7 +74,7 @@ export default class AbortWorker extends Cloudflare.Worker<AbortWorker>()(
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;
         const url = new URL(request.url, "http://x");
-        const task = tasks.getByName("default");
+        const task = tasks.getByName(url.searchParams.get("name") ?? "default");
 
         if (url.pathname === "/ping" || url.pathname === "/fail-ping") {
           return yield* task.ping(url.pathname === "/fail-ping").pipe(

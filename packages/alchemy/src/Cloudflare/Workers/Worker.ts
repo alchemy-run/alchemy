@@ -83,6 +83,22 @@ export interface WorkerCache extends Exclude<
   undefined
 > {}
 
+/**
+ * Per-entrypoint settings for one of a Worker's exports, keyed in
+ * {@link WorkerProps.entrypoints} by export name.
+ */
+export interface WorkerEntrypointSettings {
+  /**
+   * Workers Cache override for this entrypoint. `enabled` replaces the
+   * Worker-wide `cache.enabled` for calls into this entrypoint only;
+   * `crossVersionCache` stays Worker-wide.
+   */
+  cache?: {
+    /** Whether Workers Cache is checked before invoking this entrypoint. */
+    enabled: boolean;
+  };
+}
+
 export type WorkerPlacement = Exclude<workers.PutScriptRequest["metadata"]["placement"], undefined>;
 
 export type WorkerServices =
@@ -335,8 +351,8 @@ export interface WorkerVersionAffinity {
  *
  * A gradual rollout carries only what a version can: code, static assets,
  * bindings, compatibility settings, and cache configuration. A deploy that
- * changes Durable Object class migrations must go out at
- * 100% (migrations cannot ride a rollout), and script-level settings
+ * creates, renames, deletes or moves Durable Object classes must go out at
+ * 100% (class lifecycle changes cannot ride a rollout), and script-level settings
  * (tags, observability, limits, placement, logpush) keep their live
  * values until the next full deploy.
  */
@@ -668,6 +684,24 @@ export interface WorkerProps<
    * @see https://blog.cloudflare.com/workers-cache/
    */
   cache?: WorkerCache;
+  /**
+   * Per-entrypoint settings, keyed by export name: `default` for the
+   * default export, or the class name of a named `WorkerEntrypoint`.
+   * Entrypoints you leave out inherit the Worker-wide settings.
+   *
+   * Today the only setting is `cache`: a per-entrypoint `cache.enabled`
+   * overrides the Worker-wide {@link cache} for that entrypoint. Workers
+   * Cache only applies to `fetch()` invocations (including loopback calls
+   * through `ctx.exports`); custom RPC methods always bypass it.
+   *
+   * Names must not collide with Durable Object classes hosted by this
+   * Worker.
+   *
+   * Previews upload their own settings, and the versions of a gradual
+   * rollout may differ. `alchemy dev` does not emulate Workers Cache:
+   * locally, every entrypoint runs on every request.
+   */
+  entrypoints?: Record<string, WorkerEntrypointSettings>;
   tags?: string[];
   /**
    * Path to the Worker's entry module. Bundled with rolldown before
@@ -1284,6 +1318,13 @@ export type Worker<Bindings = any> = Resource<
     observability?: Pick<WorkerObservability, "traces">;
     containers?: {
       className: string;
+      /** Set when an async `Cloudflare.DurableObject(name, { containers })` binding contributed the row. */
+      attachedBy?: "binding";
+      /** Application name and prepared images for the native container API. */
+      name?: string;
+      images?: Record<string, string>;
+      /** Named image sources for local workerd. An empty map enables managed images. */
+      devImages?: Record<string, DevContainerImage>;
       dev: DevContainerImage | undefined;
       /**
        * Content hash of the image (bundle/Dockerfile/context). Part of the
@@ -1412,6 +1453,10 @@ export const isSelfUrl = (value: unknown): value is URLEffect =>
  * lowers it into a `service` binding targeting the Worker's own physical
  * name at upload, and local dev serves it with the runtime's in-process
  * self service.
+ *
+ * `Self` targets the Worker's default export. To bind one of its named
+ * `WorkerEntrypoint` classes instead, name it with
+ * `Cloudflare.WorkerEntrypoint("McpEntrypoint")`.
  *
  * The canonical consumer is OpenNext's `WORKER_SELF_REFERENCE` (the ISR
  * revalidation queue re-fetches the worker through it):
@@ -1579,6 +1624,8 @@ export const isSelf = (value: unknown): value is Self =>
  *   main: "./src/caller.ts",
  *   env: {
  *     API: Cloudflare.WorkerEntrypoint(target, "Api"), // env.API.greet("alice")
+ *     // one of this Worker's own entrypoints
+ *     MCP: Cloudflare.WorkerEntrypoint("McpEntrypoint"),
  *   },
  * });
  * ```
@@ -2259,6 +2306,41 @@ export const isSelf = (value: unknown): value is Self =>
  * }
  * ```
  *
+ * **Example:** Caching one entrypoint behind an uncached gateway
+ * ```typescript
+ * // alchemy.run.ts
+ * const api = yield* Cloudflare.Worker("Api", {
+ *   main: "./src/worker.ts",
+ *   entrypoints: {
+ *     default: { cache: { enabled: false } },
+ *     Public: { cache: { enabled: true } },
+ *   },
+ * });
+ * ```
+ *
+ * ```typescript
+ * // src/worker.ts
+ * import { WorkerEntrypoint } from "cloudflare:workers";
+ *
+ * export class Public extends WorkerEntrypoint {
+ *   async fetch() {
+ *     return new Response("hello", {
+ *       headers: { "Cache-Control": "public, max-age=300" },
+ *     });
+ *   }
+ * }
+ *
+ * export default {
+ *   // the gateway runs on every request, then forwards to the cached entrypoint
+ *   async fetch(request: Request, env: unknown, ctx: ExecutionContext) {
+ *     if (!request.headers.get("authorization")) {
+ *       return new Response("unauthorized", { status: 401 });
+ *     }
+ *     return ctx.exports.Public.fetch(request);
+ *   },
+ * };
+ * ```
+ *
  * ### Background Work & Scopes
  * Each incoming event (fetch, RPC call, scheduled run) gets its own Effect
  * `Scope`. When the handler finishes, the bridge closes that scope and
@@ -2308,6 +2390,52 @@ export const isSelf = (value: unknown): value is Self =>
  *     return HttpServerResponse.text("accepted", { status: 202 });
  *   }),
  * };
+ * ```
+ *
+ * ### Self Entrypoints & ctx.props
+ * `WorkerExecutionContext.props` reads the `ctx.props` the caller attached
+ * to its service binding or stub — an empty object for an external request.
+ * `ctx.exports.default({ props })` mints a stub to this Worker's own handlers
+ * that delivers those props (`ctx.exports.Name(...)` for a named entrypoint),
+ * as workerd's `ctx.exports` does; a Durable Object mints the same stub from
+ * `DurableObjectState.exports`. The
+ * stub is a `Cloudflare.Fetcher`, so it plugs into APIs that route traffic to
+ * a Worker entrypoint, and its `raw` is the native `Fetcher`.
+ *
+ * **Example:** Read ctx.props in a handler
+ * ```typescript
+ * // Construction
+ * const ctx = yield* Cloudflare.WorkerExecutionContext;
+ *
+ * return {
+ *   fetch: Effect.gen(function* () {
+ *     const { tenant } = yield* ctx.props;
+ *     return HttpServerResponse.text(`tenant: ${String(tenant ?? "none")}`);
+ *   }),
+ * };
+ * ```
+ *
+ * **Example:** Route a container's egress into this Worker with props
+ * ```typescript
+ * export default class Agent extends Cloudflare.DurableObject<Agent>()(
+ *   "Agents",
+ *   Effect.gen(function* () {
+ *     const ctx = yield* Cloudflare.DurableObjectState;
+ *     const sandbox = yield* Sandbox;
+ *
+ *     return Effect.gen(function* () {
+ *       return {
+ *         run: (tenant: string) =>
+ *           Effect.gen(function* () {
+ *             yield* sandbox.start();
+ *             // the Worker's fetch handler sees ctx.props = { tenant }
+ *             const egress = yield* ctx.exports.default({ props: { tenant } });
+ *             yield* sandbox.interceptOutboundHttps("api.example.com", egress);
+ *           }),
+ *       };
+ *     });
+ *   }),
+ * ) {}
  * ```
  *
  * ### R2 Bucket
@@ -2398,10 +2526,9 @@ export const isSelf = (value: unknown): value is Self =>
  *
  * ### Containers
  * Containers run long-lived processes alongside Durable Objects.
- * Provide `Cloudflare.Containers.layer(Sandbox, …)` on a DO's constructor to
- * bind, start, and monitor the container; then `yield* Sandbox`
- * resolves the **running** instance. Call its typed methods or use
- * `getTcpPort` to make HTTP requests to its exposed ports.
+ * `yield* Sandbox` binds the container to the DO and returns its handle
+ * without starting it. Call `start()` (a no-op once running) before using
+ * its typed methods or `getTcpPort`.
  *
  * **Example:** Running a Container from a Durable Object
  * ```typescript
@@ -2411,10 +2538,12 @@ export const isSelf = (value: unknown): value is Self =>
  *     const sandbox = yield* Sandbox;
  *
  *     return Effect.gen(function* () {
+ *       const start = sandbox.start({ enableInternet: true });
  *       return {
- *         exec: (cmd: string) => sandbox.exec(cmd),
+ *         shell: (cmd: string) => start.pipe(Effect.andThen(sandbox.shell(cmd))),
  *         health: () =>
  *           Effect.gen(function* () {
+ *             yield* start;
  *             const { fetch } = yield* sandbox.getTcpPort(3000);
  *             const res = yield* fetch(
  *               HttpClientRequest.get("http://container/health"),
@@ -2423,11 +2552,7 @@ export const isSelf = (value: unknown): value is Self =>
  *           }),
  *       };
  *     });
- *   }).pipe(
- *     Effect.provide(
- *       Cloudflare.Containers.layer(Sandbox, { enableInternet: true }),
- *     ),
- *   ),
+ *   }),
  * ) {}
  * ```
  *

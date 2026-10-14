@@ -54,9 +54,9 @@ const waitForStatus = (serviceArn: string, expected: string) =>
 
 // The fixture deploys a real App Runner service (3-5 min provisioning,
 // bills while running) plus a Lambda wired to it through the four runtime
-// bindings, so the whole flow is gated behind AWS_TEST_SLOW=1 and always
+// bindings, so the whole flow is skipped under `--fast` and always
 // destroys what it created.
-test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
+test.provider.skipIf(!!process.env.FAST)(
   "a Lambda manages an App Runner service through the runtime bindings",
   (stack) =>
     Effect.gen(function* () {
