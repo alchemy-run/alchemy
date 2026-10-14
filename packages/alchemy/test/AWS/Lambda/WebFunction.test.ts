@@ -79,8 +79,8 @@ const expectStreamed = (url: string) =>
     expect(chunks.at(-1)!.at - chunks[0]!.at).toBeGreaterThan(800);
   });
 
-const getEndpoint = (functionName: string) =>
-  LambdaWeb.getWebFunctionEndpoint({ functionName, endpointName: "default" });
+const getEndpoint = (functionName: string, endpointName = "default") =>
+  LambdaWeb.getWebFunctionEndpoint({ functionName, endpointName });
 
 const expectFunctionDeleted = (functionName: string, roleName: string) =>
   Effect.gen(function* () {
@@ -107,7 +107,11 @@ test.provider(
       yield* stack.destroy();
 
       const declare = (props: Partial<AWS.Lambda.WebFunctionProps>) =>
-        AWS.Lambda.WebFunction("AsyncFetch", { main: asyncFetchMain, ...props });
+        AWS.Lambda.WebFunction("AsyncFetch", {
+          main: asyncFetchMain,
+          authType: "ApplicationManaged",
+          ...props,
+        });
 
       const created = yield* stack.deploy(declare({ env: { GREETING: "hello" } }));
       expect(created.url).toBe(`https://${created.domainName}`);
@@ -188,11 +192,24 @@ test.provider(
       );
       expect(unsigned).toBe(403);
 
-      // Endpoint type and Regions are immutable: changing them replaces.
-      const multiRegion = yield* stack.plan(
-        declare({ env: { GREETING: "updated" }, regions: ["us-east-1"] }),
+      // Renaming the built-in endpoint creates a new one (new URL) and
+      // removes the old one; the function and its revision are untouched.
+      const renamed = yield* stack.deploy(
+        declare({
+          env: { GREETING: "updated" },
+          maxConcurrencyPerEnvironment: 32,
+          endpointName: "primary",
+        }),
       );
-      expect(multiRegion.resources.AsyncFetch).toMatchObject({ action: "replace" });
+      expect(renamed.functionName).toBe(created.functionName);
+      expect(renamed.endpointName).toBe("primary");
+      expect(renamed.url).not.toBe(created.url);
+      expect(renamed.revisionId).toBe(updated.revisionId);
+      const endpoints = yield* LambdaWeb.listWebFunctionEndpoints({
+        functionName: renamed.functionName,
+      });
+      expect(endpoints.endpoints.map((e) => e.endpointName)).toEqual(["primary"]);
+      expect(yield* getText(renamed.url)).toBe("greeting=updated");
 
       yield* stack.destroy();
       yield* expectFunctionDeleted(created.functionName, created.roleName);
@@ -209,6 +226,7 @@ test.provider(
       const fn = yield* stack.deploy(
         AWS.Lambda.WebFunction("AsyncListen", {
           main: asyncListenMain,
+          authType: "ApplicationManaged",
           // Fixtures live inside the `alchemy` package, which the bundler
           // marks pure: its top-level `listen()` call would be dropped.
           build: { pure: false },
@@ -262,7 +280,11 @@ test.provider(
       yield* stack.destroy();
 
       const fn = yield* stack.deploy(
-        AWS.Lambda.WebFunction("Prebuilt", { main: prebuiltMain, bundle: false }),
+        AWS.Lambda.WebFunction("Prebuilt", {
+          main: prebuiltMain,
+          bundle: false,
+          authType: "ApplicationManaged",
+        }),
       );
       const body = yield* getText(fn.url);
       expect(body).toMatch(/^prebuilt on .+:\d+$/);
@@ -281,6 +303,7 @@ test.provider(
 
       const declaration = AWS.Lambda.WebFunction("Rejected", {
         main: asyncFetchMain,
+        authType: "ApplicationManaged",
         // Reserved for Lambda: CreateWebFunction rejects the revision after
         // the execution role already exists.
         env: { AWS_LAMBDA_HTTP_ENDPOINT: "127.0.0.1:1" },

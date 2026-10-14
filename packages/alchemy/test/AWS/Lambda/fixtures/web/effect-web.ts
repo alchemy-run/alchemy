@@ -11,7 +11,7 @@ export class EffectWebFunction extends Lambda.WebFunction<Lambda.WebFunction>()(
 ) {}
 
 export default EffectWebFunction.make(
-  { main: import.meta.url },
+  { main: import.meta.url, authType: "ApplicationManaged" },
   Effect.gen(function* () {
     const bucket = yield* S3.Bucket("WebFunctionBucket", { forceDestroy: true });
     const putObject = yield* S3.PutObject(bucket);

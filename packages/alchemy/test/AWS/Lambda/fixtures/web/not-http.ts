@@ -8,7 +8,7 @@ import { ServerHost } from "@/Server";
 export class EventSourceWeb extends Lambda.WebFunction<Lambda.WebFunction>()("EventSourceWeb") {}
 
 export const EventSourceWebLive = EventSourceWeb.make(
-  { main: import.meta.url },
+  { main: import.meta.url, authType: "ApplicationManaged" },
   // @ts-expect-error — Lambda event sources need an AWS.Lambda.Function host
   Effect.gen(function* () {
     const queue = yield* SQS.Queue("WebEventSourceQueue");
@@ -22,7 +22,7 @@ export class BackgroundLoopWeb extends Lambda.WebFunction<Lambda.WebFunction>()(
 ) {}
 
 export const BackgroundLoopWebLive = BackgroundLoopWeb.make(
-  { main: import.meta.url },
+  { main: import.meta.url, authType: "ApplicationManaged" },
   // @ts-expect-error — a Web Function provides no ServerHost for background loops
   Effect.gen(function* () {
     const host = yield* ServerHost;

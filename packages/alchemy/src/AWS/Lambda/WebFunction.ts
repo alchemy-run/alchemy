@@ -24,15 +24,23 @@ import type { PolicyDocument, PolicyStatement } from "../IAM/Policy.ts";
 import type { Providers } from "../Providers.ts";
 import type { FunctionBuildOptions, FunctionZipProps } from "./Function.ts";
 import { makeFunctionBundler, type FunctionBundleOptions } from "./FunctionBundle.ts";
+import {
+  activeRevisionId,
+  createEndpointConfig,
+  deleteEndpoint,
+  getEndpoint,
+  syncEndpoint,
+  WebFunctionFailed,
+  WebFunctionNotReady,
+  type WebFunctionAuthType,
+  type WebFunctionEndpointSpec,
+} from "./WebFunctionEndpointSync.ts";
 
 export const WebFunctionTypeId = "AWS.Lambda.WebFunction" as const;
 export type WebFunctionTypeId = typeof WebFunctionTypeId;
 
-/**
- * The single endpoint Alchemy manages on every Web Function. Its domain is
- * the function's {@link WebFunction} `url`.
- */
-const ENDPOINT_NAME = "default";
+/** Name of the built-in endpoint unless `endpointName` is set. */
+const DEFAULT_ENDPOINT_NAME = "default";
 
 /** Entry file inside the archive (see `zipCode`). */
 const ENTRY_FILE = "index.mjs";
@@ -51,26 +59,6 @@ export const isWebFunction = (value: unknown): value is WebFunction =>
   value !== null &&
   "Type" in value &&
   (value as { Type?: unknown }).Type === WebFunctionTypeId;
-
-class WebFunctionNotReady extends Data.TaggedError("WebFunctionNotReady")<{
-  functionName: string;
-  resource: string;
-  state?: string;
-}> {
-  override get message() {
-    return `Lambda web function ${this.functionName}: ${this.resource} is ${this.state ?? "not ready"}`;
-  }
-}
-
-class WebFunctionFailed extends Data.TaggedError("WebFunctionFailed")<{
-  functionName: string;
-  resource: string;
-  reason?: string;
-}> {
-  override get message() {
-    return `Lambda web function ${this.functionName}: ${this.resource} failed: ${this.reason ?? "unknown reason"}`;
-  }
-}
 
 export interface WebFunctionProps extends PlatformProps {
   /**
@@ -129,26 +117,36 @@ export interface WebFunctionProps extends PlatformProps {
    */
   maxConcurrencyPerEnvironment?: number;
   /**
-   * Who may call the HTTPS endpoint. `"ApplicationManaged"` forwards every
-   * request (a public endpoint; authenticate in your application).
+   * Who may call the built-in endpoint. `"ApplicationManaged"` forwards
+   * every request (a public endpoint; authenticate in your application).
    * `"IamAuth"` requires SigV4-signed requests from principals with
-   * `lambda:InvokeWebFunctionEndpoint`.
-   * @default "ApplicationManaged"
+   * `lambda:InvokeWebFunctionEndpoint`, such as a CloudFront distribution
+   * with origin access control. Changes apply in place.
    */
-  authType?: "ApplicationManaged" | "IamAuth";
+  authType: WebFunctionAuthType;
   /**
-   * Additional AWS Regions to serve from. When set, the endpoint is
-   * `MultiRegion`: one global domain with latency-based routing across the
-   * home Region and these Regions. Changing it replaces the function.
+   * Name of the built-in endpoint. Your server receives it in the
+   * `lambda-web-endpoint-name` request header. Changing it recreates the
+   * endpoint, which gets a new URL.
+   * @default "default"
+   */
+  endpointName?: string;
+  /**
+   * Additional AWS Regions the built-in endpoint serves from. When set, the
+   * endpoint is `MultiRegion`: one global domain with latency-based routing
+   * across the home Region and these Regions. Changing it recreates the
+   * endpoint, which gets a new URL.
    */
   regions?: string[];
   /**
-   * Maximum number of execution environments per Region.
+   * Maximum number of execution environments the built-in endpoint uses per
+   * Region (2–10,000). Changes apply in place.
    */
   maxEnvironments?: number;
   /**
-   * Maximum requests per second the endpoint accepts (enforced per
-   * Region). Excess requests receive HTTP 429. `0` blocks all traffic.
+   * Maximum requests per second the built-in endpoint accepts, enforced per
+   * Region. Excess requests receive HTTP 429; `0` disables the endpoint.
+   * Changes apply in place.
    */
   rateLimit?: number;
   /**
@@ -177,15 +175,18 @@ export interface WebFunction extends Resource<
     functionName: string;
     /** ARN of the Web Function (`arn:aws:lambda:…:web-function/<name>`). */
     functionArn: string;
-    /** Name of the managed endpoint. */
+    /** Name of the built-in endpoint. */
     endpointName: string;
-    /** ARN of the managed endpoint, the resource for `lambda:InvokeWebFunctionEndpoint`. */
+    /** ARN of the built-in endpoint, the resource for `lambda:InvokeWebFunctionEndpoint`. */
     endpointArn: string;
-    /** Lambda-allocated domain of the endpoint. */
+    /** Lambda-allocated domain of the built-in endpoint. */
     domainName: string;
-    /** HTTPS URL of the endpoint (`https://<domainName>`). */
+    /** HTTPS URL of the built-in endpoint (`https://<domainName>`). */
     url: string;
-    /** Revision currently receiving all traffic. */
+    /**
+     * Revision created by the latest deploy. The built-in endpoint and every
+     * `WebFunctionEndpoint` route all traffic to it.
+     */
     revisionId: string;
     /** Name of the execution role. */
     roleName: string;
@@ -242,7 +243,7 @@ export type WebFunctionRuntimeContext = Omit<HostRuntimeContext, "run">;
  *
  * export default class Api extends AWS.Lambda.WebFunction<Api>()(
  *   "Api",
- *   { main: import.meta.url },
+ *   { main: import.meta.url, authType: "ApplicationManaged" },
  *   Effect.gen(function* () {
  *     const table = yield* AWS.DynamoDB.Table("Items", {
  *       partitionKey: "pk",
@@ -265,7 +266,7 @@ export type WebFunctionRuntimeContext = Omit<HostRuntimeContext, "run">;
  * ```typescript
  * export default class Chat extends AWS.Lambda.WebFunction<Chat>()(
  *   "Chat",
- *   { main: import.meta.url },
+ *   { main: import.meta.url, authType: "ApplicationManaged" },
  *   Effect.gen(function* () {
  *     return {
  *       fetch: Effect.succeed(
@@ -290,6 +291,7 @@ export type WebFunctionRuntimeContext = Omit<HostRuntimeContext, "run">;
  * // alchemy.run.ts
  * const api = yield* AWS.Lambda.WebFunction("Api", {
  *   main: "./src/server.ts",
+ *   authType: "ApplicationManaged",
  * });
  *
  * // src/server.ts
@@ -316,6 +318,7 @@ export type WebFunctionRuntimeContext = Omit<HostRuntimeContext, "run">;
  * const site = yield* AWS.Lambda.WebFunction("Site", {
  *   main: "./.output/server/index.mjs",
  *   bundle: false,
+ *   authType: "ApplicationManaged",
  * });
  * ```
  *
@@ -324,6 +327,7 @@ export type WebFunctionRuntimeContext = Omit<HostRuntimeContext, "run">;
  * ```typescript
  * const api = yield* AWS.Lambda.WebFunction("Api", {
  *   main: "./src/server.ts",
+ *   authType: "ApplicationManaged",
  *   maxConcurrencyPerEnvironment: 128,
  *   timeout: Duration.minutes(5),
  *   maxEnvironments: 10,
@@ -335,6 +339,7 @@ export type WebFunctionRuntimeContext = Omit<HostRuntimeContext, "run">;
  * ```typescript
  * const api = yield* AWS.Lambda.WebFunction("Api", {
  *   main: "./src/server.ts",
+ *   authType: "ApplicationManaged",
  *   regions: ["us-east-1", "eu-west-1"],
  * });
  * ```
@@ -344,6 +349,28 @@ export type WebFunctionRuntimeContext = Omit<HostRuntimeContext, "run">;
  * const internal = yield* AWS.Lambda.WebFunction("Internal", {
  *   main: "./src/server.ts",
  *   authType: "IamAuth",
+ * });
+ * ```
+ *
+ * ### Additional endpoints
+ * The settings above configure the function's built-in endpoint, whose
+ * domain is `url`. Add more endpoints, each with its own URL, auth, and
+ * limits, with `AWS.Lambda.WebFunctionEndpoint`. All endpoints serve the
+ * same code; your server tells them apart by the `lambda-web-endpoint-name`
+ * request header.
+ *
+ * **Example:** A private endpoint for CloudFront and a public one for webhooks
+ * ```typescript
+ * const api = yield* AWS.Lambda.WebFunction("Api", {
+ *   main: "./src/server.ts",
+ *   authType: "IamAuth",
+ *   maxEnvironments: 50,
+ * });
+ *
+ * const webhooks = yield* AWS.Lambda.WebFunctionEndpoint("Webhooks", {
+ *   function: api,
+ *   authType: "ApplicationManaged",
+ *   rateLimit: 100,
  * });
  * ```
  *
@@ -436,14 +463,6 @@ const toTimeoutSeconds = (timeout: Duration.Duration | undefined): number => {
       : timeout;
   return Math.max(1, Math.ceil(Duration.toSeconds(input)));
 };
-
-type EndpointType = "HomeRegion" | "MultiRegion";
-
-const endpointTypeOf = (props: WebFunctionProps): EndpointType =>
-  props.regions !== undefined && props.regions.length > 0 ? "MultiRegion" : "HomeRegion";
-
-const normalizeRegions = (regions: readonly string[] | undefined) =>
-  [...new Set(regions ?? [])].sort();
 
 export const WebFunctionProvider = () =>
   Provider.effect(
@@ -548,11 +567,6 @@ export const WebFunctionProvider = () =>
           Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
         );
 
-      const getEndpoint = (functionName: string) =>
-        LambdaWeb.getWebFunctionEndpoint({ functionName, endpointName: ENDPOINT_NAME }).pipe(
-          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
-        );
-
       const getRevision = (functionName: string, revisionId: string) =>
         LambdaWeb.getWebFunctionRevision({ functionName, revisionId }).pipe(
           Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
@@ -624,56 +638,6 @@ export const WebFunctionProvider = () =>
           }),
         );
 
-      const waitForEndpointSettled = (
-        functionName: string,
-        session: { note: (note: string) => Effect.Effect<void> },
-      ) =>
-        Effect.gen(function* () {
-          const endpoint = yield* getEndpoint(functionName);
-          if (endpoint?.state === "Failed" || endpoint?.updateStatus === "Failed") {
-            return yield* new WebFunctionFailed({
-              functionName,
-              resource: `endpoint ${ENDPOINT_NAME}`,
-              reason: endpoint.updateStatusReason ?? endpoint.stateReason,
-            });
-          }
-          if (endpoint?.state === "Active" && endpoint.updateStatus !== "InProgress") {
-            return endpoint;
-          }
-          return yield* new WebFunctionNotReady({
-            functionName,
-            resource: `endpoint ${ENDPOINT_NAME}`,
-            state:
-              endpoint?.updateStatus === "InProgress" ? "updating" : (endpoint?.state ?? "missing"),
-          });
-        }).pipe(
-          Effect.tapError((e) =>
-            e._tag === "WebFunctionNotReady" ? session.note(e.message) : Effect.void,
-          ),
-          Effect.retry({
-            while: (e) => e._tag === "WebFunctionNotReady",
-            schedule: Schedule.spaced("2 seconds"),
-            times: 90,
-          }),
-        );
-
-      const waitForEndpointGone = (functionName: string) =>
-        Effect.gen(function* () {
-          const endpoint = yield* getEndpoint(functionName);
-          if (endpoint === undefined) return;
-          return yield* new WebFunctionNotReady({
-            functionName,
-            resource: `endpoint ${ENDPOINT_NAME}`,
-            state: endpoint.state,
-          });
-        }).pipe(
-          Effect.retry({
-            while: (e) => e._tag === "WebFunctionNotReady",
-            schedule: Schedule.spaced("2 seconds"),
-            times: 45,
-          }),
-        );
-
       const waitForFunctionGone = (functionName: string) =>
         Effect.gen(function* () {
           const fn = yield* getFunction(functionName);
@@ -735,30 +699,6 @@ export const WebFunctionProvider = () =>
           desired.serviceConfig.environmentVariables ?? {},
         );
 
-      /** Endpoint settings that `UpdateWebFunctionEndpoint` can change in place. */
-      const desiredEndpointSettings = (news: WebFunctionProps, revisionId: string) => ({
-        authType: news.authType ?? "ApplicationManaged",
-        autoDeploymentMode: "Disabled" as const,
-        revisionWeights: [{ revisionId, weight: 100 }],
-        scalingConfig:
-          news.maxEnvironments === undefined ? {} : { maxEnvironments: news.maxEnvironments },
-        throttleConfig: news.rateLimit === undefined ? {} : { rateLimit: news.rateLimit },
-      });
-
-      const endpointSettingsMatch = (
-        observed: LambdaWeb.GetWebFunctionEndpointResponse,
-        desired: ReturnType<typeof desiredEndpointSettings>,
-      ) =>
-        observed.authType === desired.authType &&
-        observed.autoDeploymentMode === desired.autoDeploymentMode &&
-        deepEqual(
-          observed.revisionWeights.filter((w) => w.weight > 0),
-          desired.revisionWeights,
-        ) &&
-        (observed.scalingConfig?.maxEnvironments ?? undefined) ===
-          desired.scalingConfig.maxEnvironments &&
-        (observed.throttleConfig?.rateLimit ?? undefined) === desired.throttleConfig.rateLimit;
-
       const toAttributes = (
         fn: { functionName: string; functionArn: string },
         endpoint: LambdaWeb.GetWebFunctionEndpointResponse,
@@ -771,10 +711,7 @@ export const WebFunctionProvider = () =>
         endpointArn: endpoint.endpointArn,
         domainName: endpoint.domainName,
         url: `https://${endpoint.domainName}`,
-        revisionId:
-          endpoint.revisionWeights.find((w) => w.weight === 100)?.revisionId ??
-          endpoint.revisionWeights[0]?.revisionId ??
-          "",
+        revisionId: activeRevisionId(endpoint),
         roleName: role.roleName,
         roleArn: role.roleArn,
         code,
@@ -851,14 +788,6 @@ export const WebFunctionProvider = () =>
           if ((news.functionName ?? output.functionName) !== output.functionName) {
             return { action: "replace" };
           }
-          // Endpoint type and Regions are immutable on the endpoint, whose
-          // domain is this resource's identity.
-          if (
-            endpointTypeOf(olds) !== endpointTypeOf(news) ||
-            !deepEqual(normalizeRegions(olds.regions), normalizeRegions(news.regions))
-          ) {
-            return { action: "replace", deleteFirst: news.functionName !== undefined };
-          }
           if ((yield* bundle(id, news)).identityHash !== output.code.hash) {
             return { action: "update" };
           }
@@ -874,6 +803,7 @@ export const WebFunctionProvider = () =>
             output?.functionName ?? (yield* createNames(id, olds?.functionName)).functionName;
           const fn = yield* getFunction(functionName);
           const names = yield* createNames(id, olds?.functionName);
+          const endpointName = output?.endpointName ?? olds?.endpointName ?? DEFAULT_ENDPOINT_NAME;
           const { accountId, region } = yield* AWSEnvironment.current;
           const roleName = output?.roleName ?? names.roleName;
           if (fn === undefined) {
@@ -888,8 +818,8 @@ export const WebFunctionProvider = () =>
             const attrs = {
               functionName,
               functionArn: `arn:aws:lambda:${region}:${accountId}:web-function/${functionName}`,
-              endpointName: ENDPOINT_NAME,
-              endpointArn: `arn:aws:lambda:${region}:${accountId}:web-function/${functionName}/endpoint/${ENDPOINT_NAME}`,
+              endpointName,
+              endpointArn: `arn:aws:lambda:${region}:${accountId}:web-function/${functionName}/endpoint/${endpointName}`,
               domainName: "",
               url: "",
               revisionId: "",
@@ -899,7 +829,7 @@ export const WebFunctionProvider = () =>
             } satisfies WebFunction["Attributes"];
             return (yield* hasAlchemyTags(id, role.Role.Tags)) ? attrs : Unowned(attrs);
           }
-          const endpoint = yield* getEndpoint(functionName);
+          const endpoint = yield* getEndpoint(functionName, endpointName);
           const tags = yield* LambdaWeb.listTags({ resource: fn.functionArn }).pipe(
             Effect.map((r) => r.tags ?? {}),
             Effect.catchTag("ResourceNotFoundException", () =>
@@ -910,14 +840,11 @@ export const WebFunctionProvider = () =>
             ...output,
             functionName: fn.functionName,
             functionArn: fn.functionArn,
-            endpointName: endpoint?.endpointName ?? ENDPOINT_NAME,
-            endpointArn: endpoint?.endpointArn ?? `${fn.functionArn}/endpoint/${ENDPOINT_NAME}`,
+            endpointName,
+            endpointArn: endpoint?.endpointArn ?? `${fn.functionArn}/endpoint/${endpointName}`,
             domainName: endpoint?.domainName ?? output?.domainName ?? "",
             url: endpoint ? `https://${endpoint.domainName}` : (output?.url ?? ""),
-            revisionId:
-              endpoint?.revisionWeights.find((w) => w.weight === 100)?.revisionId ??
-              output?.revisionId ??
-              "",
+            revisionId: endpoint ? activeRevisionId(endpoint) : (output?.revisionId ?? ""),
             roleName,
             roleArn: output?.roleArn ?? `arn:aws:iam::${accountId}:role/${roleName}`,
             code: output?.code ?? { hash: "" },
@@ -985,8 +912,13 @@ export const WebFunctionProvider = () =>
             },
           };
 
-          const endpointType = endpointTypeOf(news);
-          const regions = normalizeRegions(news.regions);
+          const endpoint: WebFunctionEndpointSpec = {
+            endpointName: news.endpointName ?? DEFAULT_ENDPOINT_NAME,
+            authType: news.authType,
+            regions: news.regions,
+            maxEnvironments: news.maxEnvironments,
+            rateLimit: news.rateLimit,
+          };
 
           // Observe → ensure the function. `CreateWebFunction` creates the
           // first revision and the endpoint together; both are re-observed
@@ -999,19 +931,7 @@ export const WebFunctionProvider = () =>
               LambdaWeb.createWebFunction({
                 functionName,
                 revisionConfig: desiredRevision,
-                endpointConfig: {
-                  endpointName: ENDPOINT_NAME,
-                  endpointType,
-                  ...(endpointType === "MultiRegion" ? { regions } : {}),
-                  authType: news.authType ?? "ApplicationManaged",
-                  autoDeploymentMode: "Disabled",
-                  ...(news.maxEnvironments === undefined
-                    ? {}
-                    : { scalingConfig: { maxEnvironments: news.maxEnvironments } }),
-                  ...(news.rateLimit === undefined
-                    ? {}
-                    : { throttleConfig: { rateLimit: news.rateLimit } }),
-                },
+                endpointConfig: createEndpointConfig(endpoint),
                 tags: desiredTags,
               }),
               session,
@@ -1023,12 +943,15 @@ export const WebFunctionProvider = () =>
           }
           const fn = yield* waitForFunctionActive(functionName, session);
 
-          // Sync the revision: reuse the one the endpoint (or the create)
-          // points at when it already matches the desired config.
-          let endpoint = yield* getEndpoint(functionName);
+          // Sync the revision: reuse the one the built-in endpoint, the last
+          // deploy, or the create points at when it already matches the
+          // desired config (the endpoint is missing after a rename).
+          const observedEndpoint = yield* getEndpoint(functionName, endpoint.endpointName);
           const candidateIds = [
-            ...(endpoint?.revisionWeights.filter((w) => w.weight > 0).map((w) => w.revisionId) ??
-              []),
+            ...(observedEndpoint?.revisionWeights
+              .filter((w) => w.weight > 0)
+              .map((w) => w.revisionId) ?? []),
+            ...(output?.revisionId ? [output.revisionId] : []),
             ...(created?.revision ? [created.revision.revisionId] : []),
           ];
           let revisionId: string | undefined;
@@ -1054,60 +977,21 @@ export const WebFunctionProvider = () =>
           }
           yield* waitForRevisionActive(functionName, revisionId, session);
 
-          // Sync the endpoint. Type and Regions are immutable: an endpoint
-          // that disagrees (adoption) is recreated.
-          // Lambda adds the home Region to a MultiRegion endpoint itself.
-          const { region: homeRegion } = yield* AWSEnvironment.current;
-          const remoteRegions = (rs: readonly string[] | undefined) =>
-            normalizeRegions(rs?.filter((r) => r !== homeRegion));
+          // Sync the built-in endpoint onto the revision. A renamed endpoint is
+          // a new endpoint: create it, then remove the previous one.
+          const settled = yield* syncEndpoint({
+            functionName,
+            spec: endpoint,
+            revisionId,
+            session,
+          });
+          const previousEndpointName = output?.endpointName;
           if (
-            endpoint !== undefined &&
-            (endpoint.endpointType !== endpointType ||
-              (endpointType === "MultiRegion" &&
-                !deepEqual(remoteRegions(endpoint.regions), remoteRegions(news.regions))))
+            previousEndpointName !== undefined &&
+            previousEndpointName !== endpoint.endpointName
           ) {
-            yield* LambdaWeb.deleteWebFunctionEndpoint({
-              functionName,
-              endpointName: ENDPOINT_NAME,
-            }).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
-            yield* waitForEndpointGone(functionName);
-            endpoint = undefined;
+            yield* deleteEndpoint(functionName, previousEndpointName);
           }
-          const settings = desiredEndpointSettings(news, revisionId);
-          if (endpoint === undefined) {
-            yield* LambdaWeb.createWebFunctionEndpoint({
-              functionName,
-              endpointName: ENDPOINT_NAME,
-              endpointType,
-              ...(endpointType === "MultiRegion" ? { regions } : {}),
-              authType: settings.authType,
-              autoDeploymentMode: settings.autoDeploymentMode,
-              revisionWeights: settings.revisionWeights,
-              ...(news.maxEnvironments === undefined
-                ? {}
-                : { scalingConfig: settings.scalingConfig }),
-              ...(news.rateLimit === undefined ? {} : { throttleConfig: settings.throttleConfig }),
-            }).pipe(
-              Effect.retry({
-                while: (e) => e._tag === "ConflictException",
-                schedule: Schedule.spaced("2 seconds"),
-                times: 15,
-              }),
-            );
-          } else if (!endpointSettingsMatch(endpoint, settings)) {
-            yield* LambdaWeb.updateWebFunctionEndpoint({
-              functionName,
-              endpointName: ENDPOINT_NAME,
-              ...settings,
-            }).pipe(
-              Effect.retry({
-                while: (e) => e._tag === "ConflictException",
-                schedule: Schedule.spaced("2 seconds"),
-                times: 15,
-              }),
-            );
-          }
-          const settled = yield* waitForEndpointSettled(functionName, session);
 
           // Sync tags against the observed cloud tags.
           const observedTags = yield* LambdaWeb.listTags({ resource: fn.functionArn }).pipe(

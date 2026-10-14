@@ -20,6 +20,11 @@ export default {
       return new Response(body, { headers: { "content-type": "text/plain" } });
     }
 
+    if (url.pathname === "/endpoint") {
+      // Lambda sets this header; callers can't forge it.
+      return new Response(request.headers.get("lambda-web-endpoint-name") ?? "missing");
+    }
+
     if (url.pathname === "/echo" && request.method === "POST") {
       return Response.json({ method: request.method, body: await request.text() });
     }

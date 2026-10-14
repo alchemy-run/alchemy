@@ -711,6 +711,7 @@ export const providers = () =>
         Lambda.NetworkConnector,
         Lambda.Permission,
         Lambda.WebFunction,
+        Lambda.WebFunctionEndpoint,
         LexV2.Bot,
         LexV2.BotAlias,
         LexV2.BotLocale,
@@ -1389,6 +1390,7 @@ export const providers = () =>
           // Live-only: floci does not emulate Web Functions, so `alchemy dev`
           // deploys them to AWS like any mode-agnostic provider.
           Lambda.WebFunctionProvider(),
+          Lambda.WebFunctionEndpointProvider(),
           flociDual(Logs.Destination, () => Logs.DestinationProvider()),
           flociDual(Logs.LogGroup, () => Logs.LogGroupProvider()),
           flociDual(Logs.LogStream, () => Logs.LogStreamProvider()),

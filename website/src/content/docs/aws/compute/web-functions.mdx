@@ -31,7 +31,7 @@ import * as HttpServerResponse from "effect/http/HttpServerResponse";
 
 export default class Api extends AWS.Lambda.WebFunction<Api>()(
   "Api",
-  { main: import.meta.url },
+  { main: import.meta.url, authType: "ApplicationManaged" },
   Effect.gen(function* () {
     return {
       fetch: Effect.succeed(HttpServerResponse.text("Hello from Lambda!")),
@@ -42,6 +42,8 @@ export default class Api extends AWS.Lambda.WebFunction<Api>()(
 
 Your `fetch` handler runs on a Node HTTP server inside the Web Function, so
 the same `effect/http` code you'd run anywhere else works unchanged.
+`authType: "ApplicationManaged"` makes its endpoint public: every request
+reaches your code.
 
 ## Deploy it
 
@@ -88,7 +90,7 @@ import * as HttpServerResponse from "effect/http/HttpServerResponse";
 
 export default class Api extends AWS.Lambda.WebFunction<Api>()(
   "Api",
-  { main: import.meta.url },
+  { main: import.meta.url, authType: "ApplicationManaged" },
   Effect.gen(function* () {
     return {
 -      fetch: Effect.succeed(HttpServerResponse.text("Hello from Lambda!")),
@@ -119,7 +121,7 @@ import * as HttpServerResponse from "effect/http/HttpServerResponse";
 
 export default class Api extends AWS.Lambda.WebFunction<Api>()(
   "Api",
-  { main: import.meta.url },
+  { main: import.meta.url, authType: "ApplicationManaged" },
   Effect.gen(function* () {
 +    const bucket = yield* AWS.S3.Bucket("Uploads");
 +    const putObject = yield* AWS.S3.PutObject(bucket);
@@ -161,6 +163,7 @@ export default Alchemy.Stack(
   Effect.gen(function* () {
     const api = yield* AWS.Lambda.WebFunction("Api", {
       main: "./src/server.ts",
+      authType: "ApplicationManaged",
     });
     return { url: api.url };
   }),
@@ -186,6 +189,7 @@ the directory as it is:
 const site = yield* AWS.Lambda.WebFunction("Site", {
   main: "./.output/server/index.mjs",
   bundle: false,
+  authType: "ApplicationManaged",
 });
 ```
 
@@ -197,6 +201,7 @@ and caps on environments and requests per second:
 ```typescript
 const api = yield* AWS.Lambda.WebFunction("Api", {
   main: "./src/server.ts",
+  authType: "ApplicationManaged",
   maxConcurrencyPerEnvironment: 128,
   timeout: Duration.minutes(5),
   maxEnvironments: 10,
@@ -217,22 +222,67 @@ the nearest Region:
 ```typescript
 const api = yield* AWS.Lambda.WebFunction("Api", {
   main: "./src/server.ts",
+  authType: "ApplicationManaged",
   regions: ["us-east-1", "eu-west-1"],
 });
 ```
 
-Changing `regions` replaces the function and its URL.
+Changing `regions` gives the endpoint a new URL.
 
 ## Require signed requests
 
 Set `authType: "IamAuth"` to accept only SigV4-signed requests from
-callers allowed to call `lambda:InvokeWebFunctionEndpoint`:
+callers allowed to call `lambda:InvokeWebFunctionEndpoint`, such as a
+CloudFront distribution:
 
 ```typescript
 const internal = yield* AWS.Lambda.WebFunction("Internal", {
   main: "./src/server.ts",
   authType: "IamAuth",
 });
+```
+
+## Add another endpoint
+
+Each endpoint is a separate way in, with its own URL, auth, and limits.
+Add one with `WebFunctionEndpoint`, for example a public endpoint for
+webhooks next to a private one:
+
+```typescript
+const api = yield* AWS.Lambda.WebFunction("Api", {
+  main: "./src/server.ts",
+  authType: "IamAuth",
+  maxEnvironments: 50,
+});
+
+const webhooks = yield* AWS.Lambda.WebFunctionEndpoint("Webhooks", {
+  function: api,
+  authType: "ApplicationManaged",
+  rateLimit: 100,
+  maxEnvironments: 2,
+});
+```
+
+`api.url` is the function's own endpoint and `webhooks.url` is the new
+one. Both serve the same code and follow every deploy, but each scales on
+its own, so a webhook burst can't use up the other endpoint's capacity.
+
+Your server sees which endpoint a request came through in the
+`lambda-web-endpoint-name` header. Use it to keep each endpoint to its own
+routes:
+
+```typescript
+// src/server.ts
+export default {
+  async fetch(request: Request) {
+    const endpoint = request.headers.get("lambda-web-endpoint-name");
+    const { pathname } = new URL(request.url);
+    if (endpoint === "Webhooks" && !pathname.startsWith("/webhooks/")) {
+      return new Response("Not Found", { status: 404 });
+    }
+    return new Response("ok");
+  },
+};
 ```
 
 ## Shutdown
