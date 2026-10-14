@@ -4,6 +4,11 @@ import * as Effect from "effect/Effect";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
 import { fromDurableObjectStorage, type DurableObjectStorage } from "./DurableObjectStorage.ts";
 import { fromWebSocket, type WebSocket } from "./WebSocket.ts";
+import {
+  getLoopbackEntrypoint,
+  makeEntrypointExports,
+  type EntrypointExports,
+} from "./WorkerRuntime.ts";
 
 /**
  * Options for {@link DurableObjectState.abort}.
@@ -29,6 +34,15 @@ export class DurableObjectState extends Context.Service<
     waitUntil<A, E, R>(
       effect: Effect.Effect<A, E, R>,
     ): Effect.Effect<void, never, R | RuntimeContext>;
+    /**
+     * The entrypoints of the Worker hosting this Durable Object (workerd's
+     * `ctx.exports`): `yield* ctx.exports.default({ props })` mints a stub to
+     * the host Worker's own Effect handlers that delivers `props` as the
+     * target's `ctx.props`. The `Cloudflare.Fetcher` can be passed to APIs that
+     * route traffic to a Worker entrypoint, such as this object's container
+     * `interceptOutboundHttps`; its `raw` is the native `Fetcher`.
+     */
+    readonly exports: EntrypointExports;
     /**
      * The raw workerd DurableObjectState, for interop with async APIs.
      */
@@ -83,6 +97,9 @@ export const fromDurableObjectState = (
   container: state.container,
   storage: fromDurableObjectStorage(state.storage),
   raw: state,
+  exports: makeEntrypointExports((name, options) =>
+    getLoopbackEntrypoint(state.exports, name, options),
+  ),
   waitUntil: <A, E, R>(effect: Effect.Effect<A, E, R>) =>
     Effect.gen(function* () {
       const context = yield* Effect.context<R>();
