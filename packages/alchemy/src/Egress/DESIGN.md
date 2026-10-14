@@ -1,31 +1,40 @@
 # Egress (design)
 
 A sandbox holds no credentials. Its requests to egress hosts (GitHub,
-Anthropic, …) are handled outside it, where the rules run and the real token
-is added. Every other host goes straight out.
+Anthropic, …) go to an **egress gateway**, which checks them against the
+egress rules, adds the real token, and forwards them. Every other host goes
+straight out.
 
-The handlers always run in a stateless Worker entrypoint, never in a Durable
-Object. The Durable Object that owns the sandbox only decides *which* egresses
-the sandbox has. There are two ways in:
+The gateway is the same everywhere. It's something you set up, like any other
+Worker, and pass to a sandbox when you start it:
 
-- **Cloudflare Container:** the runtime intercepts the container's traffic
-  into the Worker's own `AlchemyEgress` entrypoint, with the sandbox's
-  egresses in the stub's props. The container can't read or forge props, so
-  there's no grant, TTL or renewal.
-- **Anywhere else** (AWS microVM, ECS, Fly, a local process): a proxy in the
-  sandbox sends egress hosts to a gateway over the public internet, with a
-  signed, short-lived grant. The gateway is a `fetch` you route to.
+```ts
+const gateway = yield* Egress.connect(Gateway);
+yield* sandbox.start({ size: "large", gateway, egress: [model, repo.narrow({ issue })] });
+```
+
+Only the transport differs by host. A Cloudflare Container reaches the gateway
+over a native Worker binding. Anywhere else, a proxy in the sandbox reaches it
+over HTTPS. Either way, every request carries a short-lived signed **grant**
+saying which egresses it may use, and the Durable Object that owns the sandbox
+keeps that grant fresh. Nothing is decided at build time: the gateway and the
+grant are pushed to the sandbox at run time, and can change while it runs.
 
 ```
-Cloudflare Container                              Cloudflare
-  git push ─▶ interceptOutboundHttps ───────────▶ Worker: AlchemyEgress entrypoint
-                (props: { egress: [refs] })         handler(ref) → add token → github.com
-                                                  Durable Object: sets props, never sees bytes
-
-microVM / ECS / Fly                               Cloudflare (or any HTTP host)
-  git push ─▶ proxy :3128 ─── HTTPS + grant ────▶ gateway.fetch
-              routes the grant's hosts              verify grant → handler(ref) → github.com
-  control :3129 ◀──── fresh grant before expiry ── Durable Object
+                         Durable Object that owns the sandbox
+                           decides: gateway, egresses, ttl (stored)
+                           mints a grant with the gateway's key, renews it
+                                │ push { gateway, grant }
+             ┌──────────────────┴──────────────────┐
+             ▼                                     ▼
+Cloudflare Container                     microVM / ECS / Fly / local
+  git push                                 git push
+   └ interceptOutboundHttps                 └ proxy :3128 (HTTPS_PROXY)
+     → relay entrypoint (props)               routes the grant's hosts
+     → service binding ─────────┐             → HTTPS + grant ──────┐
+                                ▼                                   ▼
+                     Egress gateway (a Worker, a Lambda, …): verify grant
+                       → egress handler (rules, token) → api.github.com
 ```
 
 ## 1. Declare the egresses
@@ -37,7 +46,7 @@ import * as GitHub from "alchemy/GitHub";
 import * as Config from "effect/Config";
 import { Sandbox } from "./Sandbox.ts";
 
-// Module-level declarations: every isolate of the Worker that imports them can run their handlers.
+// Module-level declarations: the gateway runs their handlers; the Durable Object grants them.
 export const Model = Anthropic.Egress(Sandbox, {
   apiKey: Config.Redacted("ANTHROPIC_API_KEY"),
 });
@@ -56,65 +65,56 @@ export const Repo = GitHub.Egress(Sandbox, {
 });
 ```
 
-## 2. Decide per session, in the Durable Object
+## 2. Set up an egress gateway
+
+`Egress.Gateway` is a whole Worker implementation by itself. It binds the
+egresses' secrets and its own signing key into the Worker, and serves
+`fetch`:
 
 ```ts
-// src/Agent.ts
+// src/gateway.ts
 import * as Cloudflare from "alchemy/Cloudflare";
-import * as Effect from "effect/Effect";
+import * as Egress from "alchemy/Egress";
 import { Model, Repo } from "./egress.ts";
-import { Sandbox } from "./Sandbox.ts";
 
-export class Agent extends Cloudflare.DurableObject<Agent>()(
-  "Agent",
-  Effect.gen(function* () {
-    const model = yield* Model;
-    const repo = yield* Repo;
-    const sandbox = yield* Sandbox;
-
-    return Effect.gen(function* () {
-      return {
-        work: (issue: number) =>
-          sandbox.start({
-            size: "large", // a name declared on Sandbox; each host maps it (section 3)
-            egress: [model, repo.narrow({ repository: "alchemy-run/alchemy", issue })],
-            // Grant lifetime off Cloudflare (default 5 minutes). Ignored on a Cloudflare Container.
-            ttl: "5 minutes",
-          }),
-        // Applies at once, on live connections too.
-        modelOnly: () => sandbox.setEgress([model]),
-        settle: () => sandbox.stop(),
-      };
-    });
-  }),
+export default class Gateway extends Cloudflare.Worker<Gateway>()(
+  "Gateway",
+  { main: import.meta.url },
+  Egress.Gateway({ egress: [Model, Repo] }),
 ) {}
 ```
+
+It can run anywhere that serves HTTP. The same gateway on a Lambda:
 
 ```ts
-// src/worker.ts — hosts Agent; nothing about egress
-import * as Cloudflare from "alchemy/Cloudflare";
-import * as Effect from "effect/Effect";
-import { HttpServerRequest } from "effect/http/HttpServerRequest";
-import * as HttpServerResponse from "effect/http/HttpServerResponse";
-import { Agent } from "./Agent.ts";
+// src/gateway.ts
+import * as AWS from "alchemy/AWS";
+import * as Egress from "alchemy/Egress";
+import { Model, Repo } from "./egress.ts";
 
-export default class Api extends Cloudflare.Worker<Api>()(
-  "Api",
-  { main: import.meta.url },
-  Effect.gen(function* () {
-    const agents = yield* Agent;
-
-    return {
-      fetch: Effect.gen(function* () {
-        const request = yield* HttpServerRequest;
-        const issue = Number(new URL(request.url, "http://x").searchParams.get("issue"));
-        yield* (yield* agents.getByName(`issue-${issue}`)).work(issue);
-        return HttpServerResponse.text("started");
-      }),
-    };
-  }),
+export default class Gateway extends AWS.Lambda.Function<Gateway>()(
+  "Gateway",
+  { main: import.meta.url, url: true },
+  Egress.Gateway({ egress: [Model, Repo] }),
 ) {}
 ```
+
+Or inside a Worker you already have, routed by hand:
+
+```ts
+// src/worker.ts
+const gateway = yield* Egress.Gateway({ egress: [Model, Repo] });
+return {
+  fetch: Effect.gen(function* () {
+    const request = yield* HttpServerRequest;
+    if (new URL(request.url, "http://x").pathname === "/egress") return yield* gateway.fetch;
+    // ...
+  }),
+};
+```
+
+You can have several gateways (per team, per region, per set of
+credentials). A sandbox uses whichever one it's given at `start`.
 
 ## 3. Declare the sandbox and its hosts
 
@@ -126,27 +126,9 @@ import * as AI from "alchemy/AI";
 export class Sandbox extends AI.Sandbox<Sandbox, { size: "small" | "large" }>()("Sandbox") {}
 ```
 
-Sizes are named, not measured, because hosts size differently. A Cloudflare
-Container picks its instance type at `start()`. A Lambda microVM's memory is
-fixed on its image (`CreateMicrovmImage.resources`; `RunMicrovm` has no size),
-so each size is its own image, built at deploy, and `start()` picks the image.
-Each host maps every declared name; a missing or extra name doesn't compile:
-
-```ts
-// alchemy internal: AWS/MicroVM/Sandbox.ts
-export const Sandbox = <S extends AI.Sandbox.Any>(
-  sandbox: S,
-  props: { sizes: Record<AI.Sandbox.Size<S>, `${number} GB`>; /* main, image, gateway, … */ },
-  program: Effect.Effect<SandboxShape, never, SandboxServices>,
-) => ...
-
-AWS.MicroVM.Sandbox(Sandbox, { sizes: { small: "4 GB" } }, program);
-// ✗ Property 'large' is missing in type '{ small: "4 GB" }'
-```
-
-There is no `Sandbox.make`. A host constructor takes the declaration, the
-host's props and the program, and the program provides its own layers,
-because only code written for a host knows what that host offers:
+A host constructor takes the declaration, the host's props and the program.
+The program provides its own layers, because only code written for a host
+knows what that host offers. Hosts say nothing about gateways:
 
 ```ts
 // src/Sandbox.cloudflare.ts
@@ -177,7 +159,6 @@ import * as AWS from "alchemy/AWS";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import Gateway from "./gateway.ts";
 import { Sandbox } from "./Sandbox.ts";
 
 export default AWS.MicroVM.Sandbox(
@@ -187,14 +168,29 @@ export default AWS.MicroVM.Sandbox(
     image: "node:24-bookworm",
     // One microVM image per name, built at deploy; start() picks the image.
     sizes: { small: "4 GB", large: "32 GB" },
-    // Where the proxy sends egress traffic: anything with a `url`, or a URL string.
-    // Routed inside your own Worker instead: `gateway: Api, gatewayPath: "/egress"`.
-    gateway: Gateway,
   },
   Anthropic.ClaudeCodeServer("Claude", { cwd: "/workspace/app" }).pipe(
     Effect.provide(Layer.mergeAll(NodeServices.layer, AWS.MicroVM.Metadata)),
   ),
 );
+```
+
+Sizes are named, not measured, because hosts size differently. A Cloudflare
+Container picks its instance type at `start()`. A Lambda microVM's memory is
+fixed on its image (`CreateMicrovmImage.resources`; `RunMicrovm` has no size),
+so each size is its own image. Each host maps every declared name; a missing
+or extra name doesn't compile:
+
+```ts
+// alchemy internal: AWS/MicroVM/Sandbox.ts
+export const Sandbox = <S extends AI.Sandbox.Any>(
+  sandbox: S,
+  props: { sizes: Record<AI.Sandbox.Size<S>, `${number} GB`>; /* main, image, … */ },
+  program: Effect.Effect<SandboxShape, never, SandboxServices>,
+) => ...
+
+AWS.MicroVM.Sandbox(Sandbox, { sizes: { small: "4 GB" } }, program);
+// ✗ Property 'large' is missing in type '{ small: "4 GB" }'
 ```
 
 A harness server (`Anthropic.ClaudeCodeServer`, `OpenAI.CodexServer`,
@@ -214,7 +210,76 @@ Effect.gen(function* () {
 });
 ```
 
-## 4. Pick the platform
+## 4. Start a sandbox with a gateway and its egresses
+
+```ts
+// src/Agent.ts
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Egress from "alchemy/Egress";
+import * as Effect from "effect/Effect";
+import { Model, Repo } from "./egress.ts";
+import Gateway from "./gateway.ts";
+import { Sandbox } from "./Sandbox.ts";
+
+export class Agent extends Cloudflare.DurableObject<Agent>()(
+  "Agent",
+  Effect.gen(function* () {
+    const model = yield* Model;
+    const repo = yield* Repo;
+    const sandbox = yield* Sandbox;
+    // A handle to the gateway: how to reach it, and the key to sign its grants.
+    const gateway = yield* Egress.connect(Gateway);
+
+    return Effect.gen(function* () {
+      return {
+        work: (issue: number) =>
+          sandbox.start({
+            size: "large",
+            gateway,
+            egress: [model, repo.narrow({ repository: "alchemy-run/alchemy", issue })],
+            ttl: "5 minutes", // each grant's lifetime (the default)
+          }),
+        // Applies at once, on live connections too.
+        modelOnly: () => sandbox.setEgress({ egress: [model] }),
+        // The gateway is a run-time value: switch it without restarting the sandbox.
+        moveTo: (other: Egress.GatewayHandle) => sandbox.setEgress({ gateway: other }),
+        settle: () => sandbox.stop(),
+      };
+    });
+  }),
+) {}
+```
+
+```ts
+// src/worker.ts — hosts Agent
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Effect from "effect/Effect";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { Agent } from "./Agent.ts";
+
+export default class Api extends Cloudflare.Worker<Api>()(
+  "Api",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const agents = yield* Agent;
+
+    return {
+      fetch: Effect.gen(function* () {
+        const request = yield* HttpServerRequest;
+        const issue = Number(new URL(request.url, "http://x").searchParams.get("issue"));
+        yield* (yield* agents.getByName(`issue-${issue}`)).work(issue);
+        return HttpServerResponse.text("started");
+      }),
+    };
+  }),
+) {}
+```
+
+If `start` grants an egress the gateway doesn't serve, the gateway refuses it
+(`github.com is not granted`): it fails closed.
+
+## 5. Pick the platform
 
 ```ts
 // alchemy.run.ts
@@ -234,105 +299,69 @@ export default Alchemy.Stack(
     state: Alchemy.localState(),
   },
   Effect.gen(function* () {
-    const api = yield* Api;
+    const api = yield* Api; // pulls in Agent, and through Egress.connect, the Gateway
     return { api: api.url.as<string>() };
   }).pipe(Effect.provide(SandboxLive)),
 );
 ```
 
-## 5. The gateway, off Cloudflare only
-
-A Cloudflare Container needs no gateway. Off Cloudflare, the proxy needs a
-public URL, so the gateway is a `fetch` you route to. `Egress.Gateway` is a
-whole Worker (or Lambda) implementation by itself:
+## 6. What `Egress.connect` gives the Durable Object
 
 ```ts
-// src/gateway.ts
-import * as Cloudflare from "alchemy/Cloudflare";
-import * as Egress from "alchemy/Egress";
-import { Model, Repo } from "./egress.ts";
-
-// Binds the egresses' secrets and the root key that verifies grants into this Worker.
-export default class Gateway extends Cloudflare.Worker<Gateway>()(
-  "Gateway",
-  { main: import.meta.url },
-  Egress.Gateway({ egress: [Model, Repo] }),
-) {}
-```
-
-```ts
-// src/gateway.ts — the same on a Lambda with a function URL
-export default class Gateway extends AWS.Lambda.Function<Gateway>()(
-  "Gateway",
-  { main: import.meta.url, url: true },
-  Egress.Gateway({ egress: [Model, Repo] }),
-) {}
-```
-
-```ts
-// or inside your own Worker, routed by hand (sandbox: `gateway: Api, gatewayPath: "/egress"`)
-const gateway = yield* Egress.Gateway({ egress: [Model, Repo] });
-return {
-  fetch: Effect.gen(function* () {
-    const request = yield* HttpServerRequest;
-    if (new URL(request.url, "http://x").pathname === "/egress") return yield* gateway.fetch;
-    // ...
-  }),
-};
-```
-
-If the Durable Object grants an egress the gateway doesn't serve, the gateway
-refuses it (`github.com is not granted`): it fails closed. The type system
-can't tie the two together, because the gateway is chosen in the Layer.
-
-## 6. Egresses are data
-
-A handler runs in a different isolate from the Durable Object that granted
-it, so an egress travels as a reference, and the handler is rebuilt from it:
-
-```ts
-// alchemy internal: Egress/Egress.ts
-export interface EgressRef {
-  readonly egress: string; // the declaration's key: "Repo"
-  readonly scope?: unknown; // what narrow() was given: { repository, issue }
+// alchemy internal: Egress/Gateway.ts
+export interface GatewayHandle {
+  readonly id: string; // stable: stored with the sandbox's egress set
+  readonly url: string; // the gateway's public URL (HTTPS transport)
+  readonly fetcher?: Cloudflare.Fetcher; // a service binding, when the gateway is a Worker
+  /** Sign a grant for these egresses, with this gateway's key. */
+  grant(egress: ReadonlyArray<EgressRef>, ttl: Duration.Duration): Effect.Effect<Grant>;
 }
 
-// Filled when the declaring module loads; every isolate of the script imports it.
-const declarations = new Map<string, EgressDeclaration>();
-
-/** Rebuild the handler for a ref, wherever it runs: rules from the declaration, secret from env. */
-export const handlerFor = (ref: EgressRef) =>
+export const connect = (gateway: GatewayDeclaration) =>
   Effect.gen(function* () {
-    const declaration = declarations.get(ref.egress);
-    if (!declaration) return yield* new EgressNotServed({ egress: ref.egress });
-    return yield* declaration.handler(ref.scope); // reads its token from WorkerEnvironment
+    const host = yield* Cloudflare.Worker; // the Worker hosting the Durable Object
+    const target = yield* gateway;
+    // Deploy time: the gateway's signing key, its URL, and (for a Worker) a service binding.
+    yield* host.bind`EgressGateway(${target.id})`({
+      env: { [`ALCHEMY_EGRESS_KEY_${target.id}`]: target.signingKey, [`ALCHEMY_EGRESS_URL_${target.id}`]: target.url },
+      ...(target.isWorker ? { bindings: [{ type: "service", name: `ALCHEMY_EGRESS_${target.id}`, service: target.workerName }] } : {}),
+    });
+    return makeHandle(target.id); // reads those bindings at run time
   });
 ```
 
-Declaring an egress binds its secret into the env of the Worker that hosts the
-Durable Object. On Cloudflare that is the same script as the `AlchemyEgress`
-entrypoint, so the handler has its token with nothing else declared.
+Each gateway owns its key (`Random("EgressKey", { bytes: 32 })`, declared by
+`Egress.Gateway`). `connect` binds it into the Worker that hosts the Durable
+Object, so grants are minted locally, without a call to the gateway.
 
-## 7. Cloudflare: intercept into the Worker, not the Durable Object
+## 7. How a sandbox's traffic reaches the gateway
 
-Today the runtime intercepts into the Worker, which forwards every request to
-the owning Durable Object (`WorkerBridge.ts` → `__alchemyEgress`). Instead,
-the Durable Object puts the sandbox's refs in the stub's props, and the
-Worker runs the handler itself:
+The sandbox learns its gateway and grant at run time. Both transports get the
+same thing from the Durable Object:
+
+```ts
+interface Route {
+  readonly gateway: { readonly id: string; readonly url: string }; // which gateway, and its URL
+  readonly grant: string; // encoded; "" routes nothing
+}
+```
+
+### Cloudflare Container: intercept into a relay entrypoint
+
+The Durable Object intercepts each granted host into its own Worker's
+`AlchemyEgress` entrypoint (#2251's `ctx.exports`), with the route in the
+props. The relay runs in the Worker, never in the Durable Object, and the
+container can't see the props:
 
 ```ts
 // alchemy internal: Cloudflare/Containers/ContainerClient.ts — in the owning Durable Object
-const applyEgress = (refs: ReadonlyArray<EgressRef>) =>
+const applyRoute = (route: Route, hosts: ReadonlyArray<string>) =>
   Effect.gen(function* () {
     const ctx = yield* Cloudflare.DurableObjectState;
-    for (const [host, ref] of hostsOf(refs)) {
-      // #2251: a stub to this script's own entrypoint, carrying props the container can't see
-      const egress = yield* ctx.exports.AlchemyEgress({ props: { egress: ref } });
-      yield* container.interceptOutboundHttps(host, egress);
-    }
-    for (const host of removedHosts) {
-      yield* container.interceptOutboundHttps(host, yield* ctx.exports.AlchemyEgress({ props: { deny: true } }));
-    }
+    const relay = yield* ctx.exports.AlchemyEgress({ props: route });
+    for (const host of hosts) yield* container.interceptOutboundHttps(host, relay);
+    const deny = yield* ctx.exports.AlchemyEgress({ props: { gateway: route.gateway, grant: "" } });
+    for (const host of removedHosts) yield* container.interceptOutboundHttps(host, deny);
   });
 ```
 
@@ -340,38 +369,23 @@ const applyEgress = (refs: ReadonlyArray<EgressRef>) =>
 // alchemy internal: the generated Worker entry exports AlchemyEgress next to `default`
 export class AlchemyEgress extends WorkerEntrypoint {
   fetch(request: Request) {
-    const { egress, deny } = this.ctx.props;
-    if (deny) return new Response("alchemy egress: this host is not allowed\n", { status: 403 });
-    return run(handlerFor(egress).pipe(Effect.flatMap((handle) => handle(request))));
+    const { gateway, grant } = this.ctx.props as Route;
+    if (!grant) return new Response("alchemy egress: this host is not allowed\n", { status: 403 });
+    const forwarded = toGatewayRequest(request, grant); // Authorization: Macaroon <grant>, x-alchemy-target
+    // A gateway Worker: native binding, no public hop. Anything else: its URL.
+    const binding = this.env[`ALCHEMY_EGRESS_${gateway.id}`] as Fetcher | undefined;
+    return binding ? binding.fetch(forwarded) : fetch(gateway.url, forwarded);
   }
 }
 ```
 
-The user's `fetch` is never involved: interception targets a dedicated
-entrypoint, and the container can't reach it any other way. Calling
-`interceptOutboundHttps` again with new props replaces them, even on open
-connections, so `setEgress` and `stop` apply at once.
+Calling `interceptOutboundHttps` again with new props replaces them, even on
+open connections, so a new grant, `setEgress` and `stop` apply at once.
 
-### Measured (live spike, one standard-4 container, 100 MB per download)
+### Anywhere else: a proxy in the sandbox
 
-```
-inline (handler in the Worker)     1 download: 133 MB/s   4: 274 MB/s   8: 269 MB/s
-through the Durable Object         1 download:  47 MB/s   4:  90 MB/s   8:  88 MB/s
-  … with the body as an Effect Stream          34 MB/s       81 MB/s       87 MB/s
-
-Durable Object RPC p90 while 8 downloads run (idle ≈ 45 ms)
-inline 74 ms · through the Durable Object 221 ms · Effect Stream 307 ms
-```
-
-The inline handler never ran in the Durable Object's isolate; concurrent
-intercepted requests mostly shared one other isolate, on the container's
-machine. The upstream was synthetic (speed.cloudflare.com rate-limits
-Workers), so the Durable Object's CPU cost is an upper bound; the throughput
-gap is the robust result.
-
-## 8. Off Cloudflare: proxy and grants
-
-### What the image gets (deploy time)
+The image gets the proxy switch, tools and placeholders at deploy time. No
+gateway and no hosts: those arrive at run time.
 
 ```ts
 // alchemy internal: Egress/Egress.ts, when a declaration is yielded at deploy time
@@ -384,125 +398,12 @@ yield* sandbox.bind`Egress(${key})`({
 });
 ```
 
-The image lists no hosts. Which hosts go to the gateway depends on the
-session and changes mid-session, so it comes from the grant.
-
-### What the Durable Object's Worker gets (deploy time)
-
 ```ts
-// alchemy internal: AWS/MicroVM/Sandbox.ts
-const worker = yield* Cloudflare.Worker; // hosts the Durable Object
-
-// Signs grants here; Egress.Gateway yields the same declaration to verify them.
-const rootKey = yield* Egress.RootKey; // Random("EgressRootKey", { bytes: 32 })
-yield* worker.bind`EgressRootKey`({ env: { ALCHEMY_EGRESS_ROOT_KEY: rootKey.value } });
-
-const gatewayUrl =
-  typeof options.gateway === "string"
-    ? options.gateway
-    : Output.interpolate`${(yield* options.gateway).url}${options.gatewayPath ?? "/"}`;
-yield* worker.bind`EgressGateway`({ env: { ALCHEMY_EGRESS_GATEWAY: gatewayUrl } });
-
-const launcher = yield* AWS.IAM.Role("SandboxLauncher", {
-  /* trust: this Worker; permissions: run/stop microVMs from this image */
-});
-yield* worker.bind`SandboxLauncher`({ env: { AWS_ROLE_ARN: launcher.roleArn } });
-```
-
-### The Durable Object starts the sandbox and keeps its grant fresh (run time)
-
-```ts
-// alchemy internal: AWS/MicroVM/Sandbox.ts — in the owning Durable Object
-interface EgressState {
-  readonly ttl: Duration.Duration;
-  readonly egress: ReadonlyArray<EgressRef>;
-}
-const load = state.storage.get<EgressState>("egress").pipe(
-  Effect.map((s) => s ?? { ttl: Duration.minutes(5), egress: [] }),
-);
-const save = (next: EgressState) => state.storage.put("egress", next);
-
-/** Renew at 40% of the TTL: one push can fail and the next still lands before expiry. */
-const renewIn = (ttl: Duration.Duration) => Duration.toMillis(ttl) * 0.4;
-
-const mintGrant = ({ ttl, egress }: EgressState) =>
-  Grant.mint(rootKey, crypto.randomUUID(), [
-    { expires: Date.now() + Duration.toMillis(ttl) },
-    ...egress.map((ref) => ({ egress: ref.egress, scope: ref.scope })),
-    { hosts: egress.flatMap(hostsOf) },
-  ]);
-
-/** Hand the proxy a new grant over its control port. */
-const pushGrant = (grant: Grant | undefined) =>
-  HttpClient.post(`${machineUrl(3129)}/grant`, {
-    body: grant ? Grant.encode(grant) : "",
-    headers: { authorization: `Bearer ${controlSecret}` },
-  });
-
-start: ({ size, egress: given, ttl }) =>
-  Effect.gen(function* () {
-    const stored = yield* load;
-    const current: EgressState = {
-      ttl: ttl !== undefined ? Duration.decode(ttl) : stored.ttl,
-      egress: given !== undefined ? given.map(Egress.toRef) : stored.egress,
-    };
-    yield* save(current);
-    if (yield* running) return yield* pushGrant(yield* mintGrant(current)); // already up: re-sync
-    const controlSecret = crypto.randomUUID();
-    yield* state.storage.put("controlSecret", controlSecret);
-    yield* microvms.run({
-      imageIdentifier: imageFor[size], // one image per declared size, built at deploy
-      env: {
-        ...imageEnv, // GH_TOKEN=alchemy-egress, ALCHEMY_EGRESS_PROXY=1
-        ALCHEMY_EGRESS_GATEWAY: env.ALCHEMY_EGRESS_GATEWAY,
-        ALCHEMY_EGRESS_GRANT: Grant.encode(yield* mintGrant(current)),
-        ALCHEMY_EGRESS_CONTROL_SECRET: controlSecret,
-        HTTPS_PROXY: "http://127.0.0.1:3128",
-        HTTP_PROXY: "http://127.0.0.1:3128",
-        NO_PROXY: "localhost,127.0.0.1",
-        NODE_USE_ENV_PROXY: "1",
-      },
-      ports: [3000, 3129], // the harness; the proxy's control port
-    });
-    yield* state.storage.setAlarm(Date.now() + renewIn(current.ttl));
-  }),
-
-alarm: () =>
-  Effect.gen(function* () {
-    if (!(yield* running)) return;
-    const current = yield* load; // from storage: correct after an eviction
-    yield* pushGrant(yield* mintGrant(current));
-    yield* state.storage.setAlarm(Date.now() + renewIn(current.ttl));
-  }),
-
-setEgress: (egress, options) =>
-  Effect.gen(function* () {
-    const stored = yield* load;
-    const current: EgressState = {
-      ttl: options?.ttl !== undefined ? Duration.decode(options.ttl) : stored.ttl,
-      egress: egress.map(Egress.toRef),
-    };
-    yield* save(current); // stored first: a crash before the push converges on the next alarm
-    yield* pushGrant(yield* mintGrant(current));
-    yield* state.storage.setAlarm(Date.now() + renewIn(current.ttl));
-  }),
-
-stop: () =>
-  pushGrant(undefined).pipe( // routes nothing from now on
-    Effect.andThen(microvms.stop(machineId)),
-    Effect.andThen(state.storage.deleteAlarm()),
-  ),
-```
-
-### The proxy (the image's bootstrap, before `main`)
-
-```ts
-// alchemy internal: Runtime/Bootstrap/index.ts
+// alchemy internal: Runtime/Bootstrap/index.ts — the image's entrypoint, before `main`
 await trustEgressCa(); // exists today: writes the CA bundle, sets SSL_CERT_FILE etc.
 if (process.env.ALCHEMY_EGRESS_PROXY) {
   await startEgressProxy({
-    gateway: process.env.ALCHEMY_EGRESS_GATEWAY!,
-    grant: process.env.ALCHEMY_EGRESS_GRANT!,
+    route: JSON.parse(process.env.ALCHEMY_EGRESS_ROUTE ?? '{"grant":""}'), // the first route, from start()
     controlSecret: process.env.ALCHEMY_EGRESS_CONTROL_SECRET!,
   });
 }
@@ -518,21 +419,20 @@ import * as Grant from "../../Egress/Grant.ts";
 import { makeLocalCa } from "../../Egress/LocalCa.ts";
 
 export const startEgressProxy = async (options: {
-  readonly gateway: string;
-  readonly grant: string;
+  readonly route: Route;
   readonly controlSecret: string;
 }) => {
-  let grant = options.grant;
-  // The grant decides routing; it changes whenever the Durable Object pushes one.
-  const routed = () => new Set(grant ? Grant.hosts(Grant.decodeUnverified(grant)) : []);
+  let route = options.route;
+  // The grant decides which hosts go to the gateway; both change whenever the Durable Object pushes.
+  const routed = () => new Set(route.grant ? Grant.hosts(Grant.decodeUnverified(route.grant)) : []);
   const ca = await makeLocalCa("/etc/cloudflare/certs/cloudflare-containers-ca.crt");
 
   const toGateway = (req: http.IncomingMessage, res: http.ServerResponse, host: string) => {
-    const out = http.request(options.gateway, {
+    const out = http.request(route.gateway.url, {
       method: "POST",
       headers: {
         ...req.headers,
-        authorization: `Macaroon ${grant}`, // replaces the placeholder credential
+        authorization: `Macaroon ${route.grant}`, // replaces the placeholder credential
         "x-alchemy-target": `https://${host}${req.url}`,
         "x-alchemy-method": req.method!,
       },
@@ -561,7 +461,7 @@ export const startEgressProxy = async (options: {
   });
   proxy.listen(3128, "127.0.0.1");
 
-  // :3129 — only the Durable Object (holding controlSecret) can swap the grant
+  // :3129 — only the Durable Object (holding controlSecret) can change the route
   http
     .createServer(async (req, res) => {
       if (req.headers.authorization !== `Bearer ${options.controlSecret}`) {
@@ -569,30 +469,33 @@ export const startEgressProxy = async (options: {
       }
       let body = "";
       for await (const chunk of req) body += chunk;
-      grant = body; // "" routes nothing
+      route = JSON.parse(body); // a new gateway, a new grant, or { grant: "" } to route nothing
       res.writeHead(204).end();
     })
     .listen(3129, "0.0.0.0");
 };
 ```
 
-### The gateway's `fetch` (stateless)
+## 8. The gateway's `fetch`
+
+The same on every transport, and stateless: a grant is checked with the
+gateway's own key, nothing else.
 
 ```ts
 // alchemy internal: Egress/Gateway.ts
 export const Gateway = (options: { readonly egress: ReadonlyArray<EgressDeclaration> }) =>
   Effect.gen(function* () {
-    const rootKey = yield* Egress.RootKey; // binds the key into whatever yields this
-    for (const declaration of options.egress) yield* declaration; // binds each secret here
+    const key = yield* Random("EgressKey", { bytes: 32 }); // bound into this host; `connect` shares it
+    for (const declaration of options.egress) yield* declaration; // binds each secret into this host
     return {
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;
         const grant = yield* Grant.decode(request.headers.authorization);
-        if (!(yield* Grant.verify(rootKey, grant))) return HttpServerResponse.text("bad grant", { status: 401 });
+        if (!(yield* Grant.verify(key, grant))) return HttpServerResponse.text("bad grant", { status: 401 });
         const target = new URL(request.headers["x-alchemy-target"]!);
         const ref = Grant.allowed(grant, target.hostname, Date.now()); // expiry + hosts + egress caveats
         if (!ref) return HttpServerResponse.text(`${target.hostname} is not granted`, { status: 403 });
-        // The same handler as on Cloudflare: rules, refusals in git's / gh's format, token, streamed body.
+        // Rules, refusals in git's / gh's format, the token, the body streamed.
         const handle = yield* handlerFor(ref);
         return yield* handle(toUpstreamRequest(request, target));
       }),
@@ -600,7 +503,126 @@ export const Gateway = (options: { readonly egress: ReadonlyArray<EgressDeclarat
   });
 ```
 
-### Grants (WebCrypto, no dependency)
+An egress travels as data, and the gateway rebuilds its handler from it:
+
+```ts
+// alchemy internal: Egress/Egress.ts
+export interface EgressRef {
+  readonly egress: string; // the declaration's key: "Repo"
+  readonly scope?: unknown; // what narrow() was given: { repository, issue }
+}
+
+// Filled when the declaring module loads; the gateway's entry imports its declarations.
+const declarations = new Map<string, EgressDeclaration>();
+
+/** Rules from the declaration, scope from the grant, token from this host's env. */
+export const handlerFor = (ref: EgressRef) =>
+  Effect.gen(function* () {
+    const declaration = declarations.get(ref.egress);
+    if (!declaration) return yield* new EgressNotServed({ egress: ref.egress });
+    return yield* declaration.handler(ref.scope);
+  });
+```
+
+## 9. Keeping the route fresh
+
+The Durable Object stores the decision and renews the grant before it
+expires. Only `apply` differs by host (intercept props, or a push to the
+proxy's control port):
+
+```ts
+// alchemy internal: AI/Sandbox.ts — shared by every host, runs in the owning Durable Object
+interface EgressState {
+  readonly gateway: string; // GatewayHandle.id
+  readonly ttl: Duration.Duration;
+  readonly egress: ReadonlyArray<EgressRef>;
+}
+const load = state.storage.get<EgressState>("egress");
+const save = (next: EgressState) => state.storage.put("egress", next);
+
+/** Renew at 40% of the TTL: one renewal can fail and the next still lands before expiry. */
+const renewIn = (ttl: Duration.Duration) => Duration.toMillis(ttl) * 0.4;
+
+const route = (s: EgressState) =>
+  Effect.gen(function* () {
+    const gateway = gatewayHandle(s.gateway);
+    const grant = yield* gateway.grant(s.egress, s.ttl);
+    return { gateway: { id: gateway.id, url: gateway.url }, grant: Grant.encode(grant) };
+  });
+
+const refresh = (s: EgressState) =>
+  Effect.gen(function* () {
+    yield* host.apply(yield* route(s)); // Cloudflare: re-intercept; elsewhere: push to :3129
+    yield* state.storage.setAlarm(Date.now() + renewIn(s.ttl));
+  });
+
+start: ({ size, gateway, egress, ttl }) =>
+  Effect.gen(function* () {
+    const stored = yield* load;
+    const next: EgressState = {
+      gateway: gateway?.id ?? stored!.gateway,
+      ttl: ttl !== undefined ? Duration.decode(ttl) : (stored?.ttl ?? Duration.minutes(5)),
+      egress: egress !== undefined ? egress.map(Egress.toRef) : (stored?.egress ?? []),
+    };
+    yield* save(next); // stored first: a crash before applying converges on the next alarm
+    if (!(yield* host.running)) yield* host.launch({ size, route: yield* route(next) });
+    yield* refresh(next);
+  }),
+
+alarm: () =>
+  Effect.gen(function* () {
+    const s = yield* load;
+    if (s && (yield* host.running)) yield* refresh(s); // from storage: correct after an eviction
+  }),
+
+setEgress: ({ gateway, egress, ttl }) =>
+  Effect.gen(function* () {
+    const s = (yield* load)!;
+    const next: EgressState = {
+      gateway: gateway?.id ?? s.gateway,
+      ttl: ttl !== undefined ? Duration.decode(ttl) : s.ttl,
+      egress: egress !== undefined ? egress.map(Egress.toRef) : s.egress,
+    };
+    yield* save(next);
+    yield* refresh(next);
+  }),
+
+stop: () =>
+  host.apply({ gateway: undefined, grant: "" }).pipe( // routes nothing from now on
+    Effect.andThen(host.stop()),
+    Effect.andThen(state.storage.deleteAlarm()),
+  ),
+```
+
+```ts
+// alchemy internal: AWS/MicroVM/Sandbox.ts — the microVM host
+launch: ({ size, route }) =>
+  Effect.gen(function* () {
+    const controlSecret = crypto.randomUUID();
+    yield* state.storage.put("controlSecret", controlSecret);
+    yield* microvms.run({
+      imageIdentifier: imageFor[size], // one image per declared size, built at deploy
+      env: {
+        ...imageEnv, // GH_TOKEN=alchemy-egress, ALCHEMY_EGRESS_PROXY=1
+        ALCHEMY_EGRESS_ROUTE: JSON.stringify(route), // the first gateway + grant
+        ALCHEMY_EGRESS_CONTROL_SECRET: controlSecret,
+        HTTPS_PROXY: "http://127.0.0.1:3128",
+        HTTP_PROXY: "http://127.0.0.1:3128",
+        NO_PROXY: "localhost,127.0.0.1",
+        NODE_USE_ENV_PROXY: "1",
+      },
+      ports: [3000, 3129], // the harness; the proxy's control port
+    });
+  }),
+
+apply: (route) =>
+  HttpClient.post(`${machineUrl(3129)}/route`, {
+    body: JSON.stringify(route),
+    headers: { authorization: `Bearer ${controlSecret}` },
+  }),
+```
+
+## 10. Grants (WebCrypto, no dependency)
 
 An HMAC chain over structured caveats: the useful part of macaroons, without
 third-party caveats or the binary format. WebCrypto runs on Workers, Node,
@@ -653,105 +675,128 @@ export const encode = (grant: Grant) => toBase64Url(JSON.stringify(grant));
 
 A grant isn't a credential for GitHub or Anthropic. It lets its holder ask the
 gateway to run the egresses it names, as narrowed, until it expires. The
-tokens stay in the gateway's host.
+tokens stay in the gateway's host, and so does its key (shared only with the
+Workers that `connect` to it).
 
-## 9. Where egress state lives
+## 11. Where egress state lives
 
 ```ts
-// Stateless, fixed at deploy time: declarations, rules, tokens (the handler host's env).
+// Fixed at deploy time: declarations, rules and tokens (the gateway's host), the gateway's key.
 export const Repo = GitHub.Egress(Sandbox, { token: GitHub.ProfileToken, repositories });
 
-// Stateful, in the owning Durable Object's storage: the egress set (and ttl), as data.
+// Decided at run time, stored by the owning Durable Object:
 yield* state.storage.get("egress");
-// { ttl: "5 minutes", egress: [{ egress: "Model" }, { egress: "Repo", scope: { repository, issue: 42 } }] }
+// {
+//   gateway: "Gateway",
+//   ttl: "5 minutes",
+//   egress: [{ egress: "Model" }, { egress: "Repo", scope: { repository, issue: 42 } }],
+// }
 
-// Applied copies of it:
-//   Cloudflare: the intercept props (the runtime holds them; the container can't see them)
-//   elsewhere:  a signed grant in the proxy's memory, expiring after `ttl`
+// Applied copies: a grant (and the gateway's URL) in the intercept props or the proxy's memory.
 ```
 
 ```ts
-yield* sandbox.start({ egress: [model, repo.narrow({ repository, issue })], ttl: "5 minutes" }); // stores, applies
-yield* sandbox.setEgress([model], { ttl: "1 hour" }); // stores, applies; ttl kept if omitted
-yield* sandbox.start(); // no `egress`: re-applies what's stored (keeps the setEgress above)
-yield* sandbox.stop(); // stops; the stored set stays for the next start()
+yield* sandbox.start({ size, gateway, egress, ttl }); // stores, applies
+yield* sandbox.setEgress({ egress: [model] }); // stores, applies; omitted fields are kept
+yield* sandbox.setEgress({ gateway: other }); // switch gateways while running
+yield* sandbox.start({ size }); // no gateway/egress: re-applies what's stored
+yield* sandbox.stop(); // stops; the stored decision stays for the next start()
 ```
 
 Every failure converges from storage:
 
 ```ts
-// The Durable Object is evicted while the sandbox runs:
-//   Cloudflare: constructing the Durable Object re-applies the stored refs as intercept props.
-//   elsewhere:  the next alarm mints from storage.
-// The proxy restarts: its startup grant may have expired; the next alarm (≤40% of ttl) pushes a fresh one.
-// A crash between storing and applying: the next construction / alarm applies what's stored.
+// The Durable Object is evicted while the sandbox runs: the next alarm (≤40% of ttl) re-applies.
+// The proxy restarts: its startup grant may have expired; the next alarm pushes a fresh route.
+// A crash between storing and applying: the next alarm applies what's stored.
 ```
 
-## 10. Revocation
+## 12. Revocation
 
 ```ts
-// The sandbox loses access at once, on every platform:
-yield* sandbox.setEgress([model]); // Cloudflare: new props on live connections; elsewhere: new grant
-yield* sandbox.stop();
+// The sandbox loses access at once, on every host:
+yield* sandbox.setEgress({ egress: [model] }); // a new, narrower grant replaces the old one
+yield* sandbox.stop(); // { grant: "" }: routes nothing
 
-// Off Cloudflare only: a grant copied out of the sandbox works until it expires, at most `ttl`.
+// A grant copied out of the sandbox works until it expires: at most `ttl`.
+// On Cloudflare the grant is in the intercept props, which the container can't read.
 ```
 
-A shorter `ttl` narrows that window. If it's ever not enough for writes, the
-gateway could keep a revocation list keyed by grant id, still without knowing
-who owns the sandbox.
+If `ttl` is ever too long for writes, a gateway can keep a revocation list
+keyed by grant id. It still wouldn't need to know who owns the sandbox.
 
-## 11. Bugs this fixes in what's built
+## 13. Measured: intercepting into a Worker, not the Durable Object
+
+Today interception forwards every request into the owning Durable Object
+(`WorkerBridge.ts` → `__alchemyEgress`). A live spike compared that with a
+handler in the Worker entrypoint (one standard-4 container, 100 MB per download):
+
+```
+in the Worker entrypoint           1 download: 133 MB/s   4: 274 MB/s   8: 269 MB/s
+through the Durable Object         1 download:  47 MB/s   4:  90 MB/s   8:  88 MB/s
+  … with the body as an Effect Stream          34 MB/s       81 MB/s       87 MB/s
+
+Durable Object RPC p90 while 8 downloads run (idle ≈ 45 ms)
+Worker entrypoint 74 ms · through the Durable Object 221 ms · Effect Stream 307 ms
+```
+
+The entrypoint never ran in the Durable Object's isolate. The upstream was
+synthetic (speed.cloudflare.com rate-limits Workers), so the Durable Object's
+CPU cost is an upper bound; the throughput gap is the robust result. The relay
+in section 7 adds one service-binding hop to the gateway, which runs on the
+caller's thread (no public network).
+
+## 14. Bugs this fixes in what's built
 
 ```ts
 // 1. ContainerClient.ts keeps the egress set in memory only:
 coordinationFor(container).liveEgress = next; // a WeakMap: gone when the Durable Object is evicted
 //    - interception is lost if the Durable Object restarts while the container runs (fails closed)
 //    - a repeated start({ egress }) re-applies the original set, undoing setEgress
-//    Fix: section 9 (stored refs, re-applied on construction).
+//    Fix: section 11 (stored decision, re-applied by the alarm).
 
 // 2. start({ egress }) skips re-intercepting when the set looks unchanged (found by the spike).
-//    Fix: compare against the stored refs, and always re-apply on construction.
+//    Fix: always apply what's stored.
 
 // 3. makeEgressHandle buffers request bodies. Fix: stream them (a large git push).
 ```
 
-## 12. Every environment
+## 15. Every environment
 
 ```ts
-// Cloudflare Container: interception into the Worker's AlchemyEgress entrypoint; size → instance type at start
+// The gateway: any HTTP host
+Cloudflare.Worker("Gateway", { main }, Egress.Gateway({ egress }));
+AWS.Lambda.Function("Gateway", { main, url: true }, Egress.Gateway({ egress }));
+
+// The sandbox hosts: none of them name a gateway
 Cloudflare.Containers.Sandbox(Sandbox, { main, image, sizes: { small: "basic", large: "standard-4" } }, program);
+AWS.MicroVM.Sandbox(Sandbox, { main, image, sizes: { small: "4 GB", large: "32 GB" } }, program);
+AWS.ECS.Sandbox(Sandbox, { main, image, sizes: { small: { cpu: 1, memory: "4 GB" }, large: { cpu: 8, memory: "32 GB" } } }, program);
+Fly.Sandbox(Sandbox, { main, image, sizes: { small: "shared-cpu-2x", large: "performance-8x" } }, program);
+Local.Sandbox(Sandbox, { main }, program); // alchemy dev: the same proxy
 
-// AWS microVM: proxy + grants + gateway; size → one image per name
-AWS.MicroVM.Sandbox(Sandbox, { main, image, sizes: { small: "4 GB", large: "32 GB" }, gateway }, program);
-
-// ECS / Fly / Kubernetes: the same proxy and gateway; size → that platform's task / machine size at start
-AWS.ECS.Sandbox(Sandbox, { main, image, sizes: { small: { cpu: 1, memory: "4 GB" }, large: { cpu: 8, memory: "32 GB" } }, gateway }, program);
-Fly.Sandbox(Sandbox, { main, image, sizes: { small: "shared-cpu-2x", large: "performance-8x" }, gateway }, program);
-
-// Every host: the Durable Object's code is the same
-yield* sandbox.start({ size: "large", egress });
-
-// A process on your machine under alchemy dev: the same proxy; the gateway runs locally
-Local.Sandbox(Sandbox, { main, gateway }, program);
+// The Durable Object: the same code on every host
+const gateway = yield* Egress.connect(Gateway);
+yield* sandbox.start({ size: "large", gateway, egress: [model, repo.narrow({ issue })] });
 ```
 
-## 13. Pull requests
+## 16. Pull requests
 
 ```
 1. #2251 (merged)  ctx.props and ctx.exports in the Effect DX
-2. Cloudflare      AlchemyEgress entrypoint; handlers from EgressRef props; stored refs;
-                   bugs 1–3; drop the __alchemyEgress hop through the Durable Object
-3. Harness servers yield { fetch }; Cloudflare.Containers.Sandbox(Sandbox, props, program)
-                   replaces Sandbox.make
-4. alchemy/Egress  Egress.Gateway, Egress.RootKey, Grant (WebCrypto), the bootstrap proxy
-5. AWS microVM     AWS.MicroVM.Sandbox host constructor on top of 4
+2. alchemy/Egress  Egress.Gateway, Egress.connect, Grant (WebCrypto), EgressRef + handlerFor
+3. Cloudflare      AlchemyEgress relay entrypoint; route via service binding / URL; stored decision
+                   + alarm renewal; bugs 1–3; drop the __alchemyEgress hop through the Durable Object
+4. Hosts           harness servers yield { fetch }; Cloudflare.Containers.Sandbox(Sandbox, props, program)
+                   replaces Sandbox.make; named sizes
+5. AWS microVM     the bootstrap proxy; AWS.MicroVM.Sandbox
 ```
 
-## 14. Open questions
+## 17. Open questions
 
-1. **Certificates in the proxy:** it signs X.509 leaf certificates per host, which Node can't do natively. `@peculiar/x509` (a dependency), hand-rolled DER, or a proxy written in Go?
-2. **The control port** must be reachable by the Durable Object only (a security group or private networking). Over the public internet, the control secret is the only protection.
-3. **Bypassing the proxy:** tools that ignore `HTTPS_PROXY` reach the internet directly. That can't leak credentials, but it skips the rules for non-egress hosts. Closing it needs a firewall that only allows the gateway.
-4. **A missed renewal:** if the Durable Object can't reach the control port for a whole `ttl`, egress stops until the next push. Fail closed like that, or let the proxy ask for a grant?
-5. **Isolate placement on Cloudflare:** concurrent intercepted requests mostly shared one isolate (~270 MB/s). Enough for agents; worth re-measuring with a real upstream before relying on it for bulk transfer.
+1. **Sharing the gateway's key:** `connect` binds it into every Worker that grants for that gateway, so minting needs no call. The alternative keeps the key in the gateway alone and mints over RPC (`gateway.grant(...)` through the service binding), at one call per renewal. Worth it?
+2. **Certificates in the proxy:** it signs X.509 leaf certificates per host, which Node can't do natively. `@peculiar/x509` (a dependency), hand-rolled DER, or a proxy written in Go?
+3. **The control port** must be reachable by the Durable Object only (a security group or private networking). Over the public internet, the control secret is the only protection.
+4. **Bypassing the proxy:** tools that ignore `HTTPS_PROXY` reach the internet directly. That can't leak credentials, but it skips the rules for non-egress hosts. Closing it needs a firewall that only allows the gateway.
+5. **A missed renewal:** if the Durable Object can't renew for a whole `ttl`, egress stops until it can. Fail closed like that, or let the proxy ask for a grant?
+6. **Isolate placement on Cloudflare:** concurrent intercepted requests mostly shared one isolate (~270 MB/s). Enough for agents; worth re-measuring with a real upstream before relying on it for bulk transfer.
