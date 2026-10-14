@@ -14,6 +14,7 @@ import { sha256, sha256Object } from "../Util/sha256.ts";
 import { bundleAnalyzerPlugin, type BundleAnalyzerPluginOptions } from "./BundleAnalyzerPlugin.ts";
 import { purePlugin, type PurePluginOptions } from "./PurePlugin.ts";
 import { rawPlugin } from "./RawPlugin.ts";
+import { unreachableChunksPlugin } from "./UnreachableChunksPlugin.ts";
 
 /**
  * `resolve.conditionNames` for a bundle that runs on bun / node.
@@ -530,6 +531,7 @@ async function builtInPlugins(extra?: BundleExtraOptions): Promise<rolldown.Roll
       : undefined,
     extra?.pure !== false ? purePlugin(extra?.pure ?? {}) : undefined,
     rawPlugin(),
+    unreachableChunksPlugin(),
   ];
 }
 
