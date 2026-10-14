@@ -83,7 +83,11 @@ export const KINDS: Record<Kind, KindStyle> = {
     name: "Stream",
     hue: "#9aa7c7",
     shape: "stack",
-    icon: ["M4 6h16", "M4 12h16", "M4 18h10"],
+    icon: [
+      "M2 7c2.5-2 4.5-2 7 0s4.5 2 7 0 4.5-2 6 0",
+      "M2 12c2.5-2 4.5-2 7 0s4.5 2 7 0 4.5-2 6 0",
+      "M2 17c2.5-2 4.5-2 7 0s4.5 2 7 0 4.5-2 6 0",
+    ],
   },
   policy: {
     name: "Policy",

@@ -19,10 +19,10 @@ Exposing an entry doesn't bypass its security. Each entry declares its own middl
   nodes={[
     { id: "client", label: "Client", type: "typed from the Api", kind: "query", col: 0, row: 1 },
     { id: "api", label: "CustomerApi", type: "Domain.Api", col: 1, row: 1 },
-    { id: "command", label: "DepositMoney", type: "send", kind: "command", col: 2, row: 0 },
-    { id: "view", label: "AccountSummary", type: "get, watch", kind: "view", col: 2, row: 1 },
-    { id: "stream", label: "AccountCard", type: "peek, watch", kind: "stream", col: 2, row: 2 },
-    { id: "aggregate", label: "Account", type: "get, events", kind: "aggregate", col: 2, row: 3 },
+    { id: "command", label: "DepositMoney", type: "command · send", kind: "command", col: 2, row: 0 },
+    { id: "view", label: "AccountSummary", type: "view · get, watch", kind: "view", col: 2, row: 1 },
+    { id: "stream", label: "AccountCard", type: "stream · peek, watch", kind: "stream", col: 2, row: 2 },
+    { id: "aggregate", label: "Account", type: "aggregate · get, events", kind: "aggregate", col: 2, row: 3 },
   ]}
   edges={[
     { from: "client", to: "api" },
