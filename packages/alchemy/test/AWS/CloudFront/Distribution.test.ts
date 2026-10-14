@@ -368,6 +368,34 @@ describe(
       { timeout: DEPLOY_DELETE_TIMEOUT },
     );
 
+    test.provider(
+      "webFunction origin refuses the AllViewer origin request policy",
+      (stack) =>
+        Effect.gen(function* () {
+          const failure = yield* stack
+            .plan(
+              Effect.gen(function* () {
+                const api = yield* AWS.Lambda.WebFunction("HostForwarded", {
+                  main: webFunctionMain,
+                  authType: "IamAuth",
+                });
+                return yield* Distribution("HostForwardedCdn", {
+                  origins: [{ id: "api", webFunction: api }],
+                  defaultCacheBehavior: {
+                    targetOriginId: "api",
+                    // Managed AllViewer: forwards the viewer's Host header.
+                    originRequestPolicyId: "216adef6-5c7f-47e4-b989-5492eafa07d3",
+                  },
+                });
+              }),
+            )
+            .pipe(Effect.exit);
+          expect(failure._tag).toBe("Failure");
+          expect(String(failure)).toContain("WebFunctionOriginForwardsHost");
+        }),
+      { tags: ["provider:aws:lambda"], timeout: 60_000 },
+    );
+
     test.provider.skipIf(!runLive)(
       "webFunction origin: CloudFront signs requests to an IamAuth Web Function",
       (stack) =>
@@ -380,24 +408,23 @@ describe(
                 main: webFunctionMain,
                 authType: "IamAuth",
               });
+              // No cache or origin request policy: a webFunction origin
+              // defaults to passing the whole request through uncached.
               const distribution = yield* Distribution("WebFunctionCdn", {
                 origins: [{ id: "api", webFunction: api }],
-                defaultCacheBehavior: {
-                  targetOriginId: "api",
-                  viewerProtocolPolicy: "redirect-to-https",
-                  cachePolicyId: MANAGED_CACHING_DISABLED_POLICY_ID,
-                  originRequestPolicyId: MANAGED_ALL_VIEWER_EXCEPT_HOST_HEADER_POLICY_ID,
-                },
+                defaultCacheBehavior: { targetOriginId: "api" },
               });
               return { api, distribution };
             }),
           );
 
-          // Through CloudFront: signed by the origin access control, and the
-          // viewer's own Authorization header still reaches the server.
+          // Through CloudFront: signed by the origin access control, with the
+          // method, query string, body and the viewer's own Authorization
+          // header all reaching the server.
           const viaCdn = yield* HttpClient.execute(
-            HttpClientRequest.get(`https://${distribution.domainName}/`).pipe(
+            HttpClientRequest.post(`https://${distribution.domainName}/echo?page=2`).pipe(
               HttpClientRequest.setHeader("authorization", "Bearer app-token"),
+              HttpClientRequest.bodyText("ping", "text/plain"),
             ),
           ).pipe(
             Effect.flatMap((response) =>
@@ -411,9 +438,31 @@ describe(
           );
           expect(viaCdn).toEqual({
             message: "hello through cloudfront",
+            method: "POST",
+            query: "?page=2",
+            body: "ping",
             endpoint: "default",
             authorization: "Bearer app-token",
           });
+
+          // The behavior got the API defaults.
+          const config = yield* cloudfront.getDistributionConfig({
+            Id: distribution.distributionId,
+          });
+          const behavior = config.DistributionConfig!.DefaultCacheBehavior;
+          expect(behavior.CachePolicyId).toBe(MANAGED_CACHING_DISABLED_POLICY_ID);
+          expect(behavior.OriginRequestPolicyId).toBe(
+            MANAGED_ALL_VIEWER_EXCEPT_HOST_HEADER_POLICY_ID,
+          );
+          expect(behavior.AllowedMethods?.Items.sort()).toEqual([
+            "DELETE",
+            "GET",
+            "HEAD",
+            "OPTIONS",
+            "PATCH",
+            "POST",
+            "PUT",
+          ]);
 
           // Directly, unsigned: refused.
           const direct = yield* HttpClient.get(api.url).pipe(Effect.map((r) => r.status));

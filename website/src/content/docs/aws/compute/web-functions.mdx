@@ -270,20 +270,15 @@ const api = yield* AWS.Lambda.WebFunction("Api", {
 
 const cdn = yield* AWS.CloudFront.Distribution("Cdn", {
   origins: [{ id: "api", webFunction: api }],
-  defaultCacheBehavior: {
-    targetOriginId: "api",
-    viewerProtocolPolicy: "redirect-to-https",
-    cachePolicyId: AWS.CloudFront.MANAGED_CACHING_DISABLED_POLICY_ID,
-    originRequestPolicyId: AWS.CloudFront.MANAGED_ALL_VIEWER_EXCEPT_HOST_HEADER_POLICY_ID,
-  },
+  defaultCacheBehavior: { targetOriginId: "api" },
 });
 ```
 
 CloudFront signs every request to the function, and only this
 distribution may call it, so requests to the function's own URL are
-refused. Your server still receives the viewer's `Authorization` header.
-Don't forward the viewer's `Host` header to this origin: Lambda routes on
-it, which is why the example uses `AllViewerExceptHostHeader`.
+refused. Requests pass through uncached with their method, query string,
+cookies and headers, including your app's own `Authorization` header.
+Set `cachePolicyId` on a behavior to cache a path, such as static assets.
 
 ## Reach private resources
 

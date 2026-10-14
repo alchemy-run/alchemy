@@ -9,6 +9,7 @@ import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
 import * as Namespace from "../../Namespace.ts";
+import * as Output from "../../Output.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource, type ResourceBinding } from "../../Resource.ts";
 import { createInternalTags, createTagsList, diffTags } from "../../Tags.ts";
@@ -19,6 +20,10 @@ import {
   type WebFunctionEndpointRef,
 } from "../Lambda/WebFunctionPermission.ts";
 import type { Providers } from "../Providers.ts";
+import {
+  MANAGED_ALL_VIEWER_EXCEPT_HOST_HEADER_POLICY_ID,
+  MANAGED_CACHING_DISABLED_POLICY_ID,
+} from "./ManagedPolicies.ts";
 import { OriginAccessControl } from "./OriginAccessControl.ts";
 
 const CLOUDFRONT_HOSTED_ZONE_ID = "Z2FDTNDATAQYW2" as const;
@@ -57,8 +62,12 @@ export interface DistributionOrigin {
    * signs every origin request, and grants this distribution (and only this
    * distribution) permission to invoke the endpoint. The endpoint must use
    * `authType: "IamAuth"`, so requests that bypass CloudFront are refused.
-   * Don't forward the viewer's `Host` header to this origin: Lambda routes
-   * on it.
+   *
+   * Behaviors targeting this origin default to an API setup: no caching,
+   * the whole viewer request forwarded except `Host` (Lambda routes on
+   * it), and every HTTP method allowed. Set `cachePolicyId`,
+   * `originRequestPolicyId` or `allowedMethods` on the behavior to change
+   * that.
    */
   webFunction?: WebFunctionOriginTarget | Effect.Effect<WebFunctionOriginTarget, never, Providers>;
   /**
@@ -527,6 +536,61 @@ export interface Distribution extends Resource<
 
 const DistributionResource = Resource<Distribution>("AWS.CloudFront.Distribution");
 
+/** CloudFront's managed `AllViewer` origin request policy: forwards `Host`. */
+const MANAGED_ALL_VIEWER_ORIGIN_REQUEST_POLICY_ID = "216adef6-5c7f-47e4-b989-5492eafa07d3";
+
+const ALL_METHODS: cloudfront.Method[] = [
+  "GET",
+  "HEAD",
+  "OPTIONS",
+  "PUT",
+  "PATCH",
+  "POST",
+  "DELETE",
+];
+
+/** A behavior targeting a `webFunction` origin forwards the viewer's `Host`. */
+export class WebFunctionOriginForwardsHost extends Data.TaggedError(
+  "WebFunctionOriginForwardsHost",
+)<{ distributionId: string; targetOriginId: string; message: string }> {}
+
+/**
+ * Behaviors that target a Lambda Web Function origin serve an API, not
+ * static files: unless the behavior says otherwise, don't cache, forward
+ * the whole viewer request except `Host` (Lambda routes on it), and allow
+ * every method. CloudFront's own defaults (cache GETs for a day, drop query
+ * strings, cookies and headers, GET/HEAD only) would break the server.
+ */
+const apiBehaviorDefaults = <B extends DistributionBehavior>(
+  distributionId: string,
+  webOriginIds: ReadonlySet<string>,
+  behavior: B,
+): Effect.Effect<B> => {
+  if (!webOriginIds.has(behavior.targetOriginId)) return Effect.succeed(behavior);
+  if (behavior.originRequestPolicyId === MANAGED_ALL_VIEWER_ORIGIN_REQUEST_POLICY_ID) {
+    return Effect.die(
+      new WebFunctionOriginForwardsHost({
+        distributionId,
+        targetOriginId: behavior.targetOriginId,
+        message: `AWS.CloudFront.Distribution "${distributionId}": the behavior for Lambda Web Function origin "${behavior.targetOriginId}" uses the AllViewer origin request policy, which forwards the viewer's Host header. Lambda routes on Host and would answer 404. Omit originRequestPolicyId to use AllViewerExceptHostHeader.`,
+      }),
+    );
+  }
+  const legacy = behavior.forwardedValues !== undefined;
+  return Effect.succeed({
+    ...behavior,
+    ...(behavior.allowedMethods === undefined
+      ? { allowedMethods: ALL_METHODS, cachedMethods: behavior.cachedMethods ?? ["GET", "HEAD"] }
+      : {}),
+    ...(behavior.cachePolicyId === undefined && !legacy
+      ? { cachePolicyId: MANAGED_CACHING_DISABLED_POLICY_ID }
+      : {}),
+    ...(behavior.originRequestPolicyId === undefined && !legacy
+      ? { originRequestPolicyId: MANAGED_ALL_VIEWER_EXCEPT_HOST_HEADER_POLICY_ID }
+      : {}),
+  });
+};
+
 /**
  * Compose the children a `webFunction` origin needs: an origin access
  * control before the distribution, and an invoke grant scoped to the
@@ -572,7 +636,26 @@ const withWebFunctionOrigins = (
         } satisfies DistributionOrigin;
       }),
     ).pipe(Namespace.push(id));
-    const distribution = yield* DistributionResource(id, { ...resolved, origins: nextOrigins });
+    const webOriginIds = new Set(targets.map((t) => t.originId));
+    const forWebFunction = <B extends DistributionBehavior>(behavior: B) =>
+      apiBehaviorDefaults(id, webOriginIds, behavior);
+    const defaultCacheBehavior = Output.isOutput(resolved.defaultCacheBehavior)
+      ? resolved.defaultCacheBehavior
+      : yield* forWebFunction(resolved.defaultCacheBehavior as DistributionBehavior);
+    const orderedCacheBehaviors =
+      resolved.orderedCacheBehaviors === undefined ||
+      Output.isOutput(resolved.orderedCacheBehaviors)
+        ? resolved.orderedCacheBehaviors
+        : yield* Effect.forEach(
+            resolved.orderedCacheBehaviors as (DistributionBehavior & { pathPattern: string })[],
+            forWebFunction,
+          );
+    const distribution = yield* DistributionResource(id, {
+      ...resolved,
+      origins: nextOrigins,
+      defaultCacheBehavior,
+      orderedCacheBehaviors,
+    });
     yield* Effect.forEach(targets, ({ originId, target }) =>
       WebFunctionPermission(`${originId}Invoke`, {
         endpoint: target,
@@ -653,13 +736,26 @@ const withWebFunctionOrigins = (
  *
  * const cdn = yield* AWS.CloudFront.Distribution("Cdn", {
  *   origins: [{ id: "api", webFunction: api }],
- *   defaultCacheBehavior: {
- *     targetOriginId: "api",
- *     viewerProtocolPolicy: "redirect-to-https",
- *     cachePolicyId: AWS.CloudFront.MANAGED_CACHING_DISABLED_POLICY_ID,
- *     originRequestPolicyId:
- *       AWS.CloudFront.MANAGED_ALL_VIEWER_EXCEPT_HOST_HEADER_POLICY_ID,
- *   },
+ *   defaultCacheBehavior: { targetOriginId: "api" },
+ * });
+ * ```
+ *
+ * Behaviors that target the origin don't cache, forward the whole viewer
+ * request except `Host`, and allow every method. Override any of that on
+ * the behavior, e.g. cache static assets under a path:
+ *
+ * **Example:** Cache one path, pass everything else through
+ * ```typescript
+ * const cdn = yield* AWS.CloudFront.Distribution("Cdn", {
+ *   origins: [{ id: "api", webFunction: api }],
+ *   defaultCacheBehavior: { targetOriginId: "api" },
+ *   orderedCacheBehaviors: [
+ *     {
+ *       pathPattern: "/assets/*",
+ *       targetOriginId: "api",
+ *       cachePolicyId: AWS.CloudFront.MANAGED_CACHING_OPTIMIZED_POLICY_ID,
+ *     },
+ *   ],
  * });
  * ```
  *
