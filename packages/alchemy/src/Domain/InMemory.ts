@@ -50,8 +50,6 @@ export interface Control {
   readonly suspended: <A, E, R>(effect: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>;
   /** Defects raised by policy and projection runs. */
   readonly failures: ReadonlyArray<unknown>;
-  /** The steps a saga run finished, in order, succeeded or failed. */
-  readonly steps: (saga: string, executionId: string) => ReadonlyArray<string>;
   /** Saga runs that ended with a defect, in the order they died. */
   readonly deaths: ReadonlyArray<{
     readonly saga: string;
@@ -76,7 +74,6 @@ export const make = (
   let running = 0;
   let suspended = 0;
   const failures: Array<unknown> = [];
-  const steps = new Map<string, Array<string>>();
   const deaths: Array<{ saga: string; executionId: string; defect: unknown }> = [];
   // Scheduled commands by `aggregate/id/commandId`, so rescheduling replaces.
   const timers = new Map<string, { readonly at: number; readonly fire: Effect.Effect<void> }>();
@@ -138,10 +135,6 @@ export const make = (
       ]),
     timer,
     failed: (cause) => void failures.push(cause),
-    stepped: (workflow, executionId, step) => {
-      const key = `${workflow}/${executionId}`;
-      steps.set(key, [...(steps.get(key) ?? []), step]);
-    },
     died: (saga, executionId, defect) => void deaths.push({ saga, executionId, defect }),
   });
 
@@ -154,7 +147,6 @@ export const make = (
         return effect.pipe(Effect.ensuring(Effect.sync(() => suspended--)));
       }),
     failures,
-    steps: (saga, executionId) => steps.get(`${saga}/${executionId}`) ?? [],
     deaths,
   };
 

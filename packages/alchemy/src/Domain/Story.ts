@@ -84,12 +84,6 @@ export type Step =
       readonly expected: Saga.Status<unknown, unknown> | { readonly _tag: "Died" };
     }
   | {
-      readonly _tag: "Steps";
-      readonly saga: Saga.Any;
-      readonly key: unknown;
-      readonly expected: ReadonlyArray<string>;
-    }
-  | {
       readonly _tag: "Provide";
       readonly service: Context.Key<unknown, unknown>;
       readonly value: unknown;
@@ -226,16 +220,6 @@ const saga = <S extends Saga.Any>(
   key,
   expected: expected as Saga.Status<unknown, unknown>,
 });
-
-/**
- * Check the steps a saga run has finished, in order: each `Activity` by its
- * name, whether it succeeded or failed, compensations included.
- */
-const sagaSteps = <S extends Saga.Any>(
-  saga: S,
-  key: SagaKeyOf<S>,
-  expected: ReadonlyArray<string>,
-): Step => ({ _tag: "Steps", saga, key, expected });
 
 /** A saga status, in a form to compare: rejections encoded, defects as text. */
 const statusJson = (status: Saga.Status<unknown, unknown> | { readonly _tag: "Died" }) =>
@@ -636,19 +620,6 @@ const make =
                 assertedDeaths.add(`${s.saga.sagaName}/${run.executionId}`);
               break;
             }
-            case "Steps": {
-              const client = yield* s.saga as unknown as Context.Key<
-                never,
-                Saga.Client<unknown, unknown, unknown, unknown>
-              >;
-              const actual = platform.control.steps(s.saga.sagaName, client.get(s.key).executionId);
-              if (!equal(actual, s.expected)) {
-                return yield* fail(
-                  `${s.saga.sagaName}\n  expected ${show(s.expected)}\n  actual   ${show(actual)}`,
-                );
-              }
-              break;
-            }
             case "Resolve": {
               const index = calls.findIndex((c) => c.system === s.op.system && c.op === s.op.op);
               if (index === -1) return yield* fail(`no pending call to ${s.op.system}.${s.op.op}`);
@@ -730,10 +701,9 @@ const make =
  * ```
  *
  * ### Sagas
- * **Example:** Check a saga run and the steps it finished
+ * **Example:** Check where a saga run is, and send it a signal
  * ```typescript
- * Story.saga(ExecuteTransfer, transfer, { _tag: "Rejected", rejection: new DestinationClosed() }),
- * Story.steps(ExecuteTransfer, transfer, ["debit", "credit", "refund", "record-failure"]),
+ * Story.saga(ExecuteTransfer, transfer, { _tag: "Running" }),
  * Story.signal(ExecuteTransfer, transfer, Decision, "approved"),
  * ```
  *
@@ -760,7 +730,6 @@ export const Story = {
   provide,
   signal,
   saga,
-  steps: sagaSteps,
   /** Marker for "the view key does not exist". */
   none,
 } as const;

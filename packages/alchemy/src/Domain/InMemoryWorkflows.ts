@@ -21,8 +21,6 @@ export interface Host {
   readonly timer: (key: string, at: number, fire: Effect.Effect<void>) => Effect.Effect<void>;
   /** Record a run that failed, so a story can report it. */
   readonly failed: (cause: unknown) => void;
-  /** Record a step a run finished, succeeded or failed, in the order it finished. */
-  readonly stepped: (workflow: string, executionId: string, step: string) => void;
   /** Record a run that ended with a defect, so a story can report it. */
   readonly died: (workflow: string, executionId: string, defect: unknown) => void;
 }
@@ -184,10 +182,7 @@ export const make = (host: Host): WorkflowEngine.WorkflowEngine["Service"] => {
             ),
           ),
         );
-        if (result._tag === "Complete") {
-          activities.set(key, result.exit);
-          host.stepped(instance.workflow._tag, instance.executionId, activity.name);
-        }
+        if (result._tag === "Complete") activities.set(key, result.exit);
         return result;
       }),
 

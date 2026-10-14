@@ -229,11 +229,10 @@ const status = yield* run.status;
 
 A story runs the whole saga in memory: the request, every step, the compensations, and its status at the end.
 
-`Story.saga` checks where the run is, with the same status its run handle reads. `Story.steps` checks which steps finished, in order, failed ones and compensations included.
+Test what a saga does, not how it's built: the commands its steps send show up as events on the aggregates, and `Story.saga` checks how the run ended, with the same status its run handle reads.
 
 ```typescript title="test/transfers.test.ts"
 Story.saga(ExecuteTransfer, transfer, { _tag: "Rejected", rejection: new DestinationClosed() }),
-Story.steps(ExecuteTransfer, transfer, ["debit", "credit", "refund", "record-failure"]),
 ```
 
 To test a saga on its own, complete what it waits for with `Story.signal`, and move its durable clocks with `Story.clock`:

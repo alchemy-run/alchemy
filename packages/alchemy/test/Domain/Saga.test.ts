@@ -318,7 +318,6 @@ describe("Domain.Saga", () => {
       ),
       Story.then(bob),
       Story.saga(MoveMoney, "t-1", { _tag: "Rejected", rejection: new DestinationClosed() }),
-      Story.steps(MoveMoney, "t-1", ["debit", "credit", "refund"]),
     ),
   );
 
@@ -339,20 +338,14 @@ describe("Domain.Saga", () => {
     checks(
       Story.when(transfer, request(40)),
       Story.saga(Screen, "t-1", { _tag: "Running" }),
-      Story.steps(Screen, "t-1", []),
       Story.expectCall(Sanctions.check, { wallet: "alice" }),
       Story.resolve(Sanctions.check, { clear: false }),
       Story.saga(Screen, "t-1", { _tag: "Rejected", rejection: new Flagged() }),
-      Story.steps(Screen, "t-1", ["check"]),
     ),
   );
 
   it.effect("a saga that dies reads as Died", () =>
-    checks(
-      Story.when(transfer, request(40, true)),
-      Story.saga(Explode, "t-1", { _tag: "Died" }),
-      Story.steps(Explode, "t-1", ["boom"]),
-    ),
+    checks(Story.when(transfer, request(40, true)), Story.saga(Explode, "t-1", { _tag: "Died" })),
   );
 
   it.effect("a saga that dies fails the story unless a step asserts it", () =>
