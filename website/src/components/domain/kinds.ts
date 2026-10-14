@@ -14,7 +14,8 @@ export type Kind =
   | "policy"
   | "rejection"
   | "external"
-  | "api";
+  | "api"
+  | "client";
 
 /** How a kind's box is drawn. */
 export type Shape =
@@ -122,6 +123,13 @@ export const KINDS: Record<Kind, KindStyle> = {
       "M12 3c3 3 3 15 0 18",
       "M12 3c-3 3-3 15 0 18",
     ],
+  },
+  client: {
+    name: "Client",
+    hue: "#c3ccd6",
+    shape: "outside",
+    // An app or service outside the model, calling it through an Api.
+    icon: ["M4 5h16v11H4z", "M2 19h20"],
   },
 };
 

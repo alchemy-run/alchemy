@@ -17,7 +17,7 @@ Exposing an entry doesn't bypass its security. Each entry declares its own middl
 
 <DAG
   nodes={[
-    { id: "client", label: "Client", type: "typed from the Api", kind: "query", col: 0, row: 1 },
+    { id: "client", label: "Client", type: "typed from the Api", kind: "client", col: 0, row: 1 },
     { id: "api", label: "CustomerApi", type: "Domain.Api", kind: "api", col: 1, row: 1 },
     { id: "command", label: "DepositMoney", type: "command · send", kind: "command", col: 2, row: 0 },
     { id: "view", label: "AccountSummary", type: "view · get, watch", kind: "view", col: 2, row: 1 },
@@ -119,8 +119,8 @@ export class SupportApi extends Domain.Api(
 
 <DAG
   nodes={[
-    { id: "app", label: "Customer app", type: "client" },
-    { id: "console", label: "Support console", type: "client" },
+    { id: "app", label: "Customer app", type: "web app", kind: "client" },
+    { id: "console", label: "Support console", type: "internal tool", kind: "client" },
     { id: "customerApi", label: "CustomerApi", type: "for customers", kind: "api" },
     { id: "supportApi", label: "SupportApi", type: "for support", kind: "api" },
     { id: "bank", label: "Bank", type: "model" },
