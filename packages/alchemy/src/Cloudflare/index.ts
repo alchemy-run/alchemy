@@ -110,7 +110,8 @@ export * as Zone from "./Zone/index.ts";
 export * from "./Containers/index.ts";
 export * from "./Images/Images.ts";
 export * from "./Workers/index.ts";
-export * from "./Workflows/index.ts";
+// Only the Workflow resource: the workflow engines stay under `Cloudflare.Workflows`.
+export * from "./Workflows/Workflow.ts";
 
 // runtime bridge factories — the generated Worker entry imports these from
 // the runtime-only "alchemy/Cloudflare/Bridge" entry (see Bridge.ts and
