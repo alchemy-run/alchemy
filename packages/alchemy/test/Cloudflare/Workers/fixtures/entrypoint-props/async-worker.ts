@@ -39,7 +39,7 @@ interface Env {
 }
 
 /**
- * Async counterpart of `effect-worker.ts` for `EntrypointProps.test.ts`.
+ * Async counterpart of `effect-worker.ts` for `WorkerEntrypoint.test.ts`.
  *
  * `GET /props` echoes `ctx.props`. `GET /mint` mints a `default` loopback
  * stub with props from the fetch handler and fetches `/props` through it;

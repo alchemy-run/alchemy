@@ -38,7 +38,7 @@ export class PropsMinter extends Cloudflare.DurableObject<PropsMinter>()(
 ) {}
 
 /**
- * Fixture worker for `EntrypointProps.test.ts`.
+ * Fixture worker for `WorkerEntrypoint.test.ts`.
  *
  * `GET /props` echoes `WorkerExecutionContext.props`. `GET /mint` mints a
  * `default` loopback stub with props from the fetch handler and fetches
