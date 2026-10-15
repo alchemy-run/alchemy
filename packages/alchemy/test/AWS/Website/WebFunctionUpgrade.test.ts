@@ -80,6 +80,8 @@ interface UpgradeCase {
   readonly marker: string;
   /** State rows of the old Lambda Functions and their Web Function successors. */
   readonly moved: ReadonlyArray<{ readonly from: string; readonly to: string }>;
+  /** State rows the upgrade removes without a successor. */
+  readonly removed?: ReadonlyArray<string>;
 }
 
 const cases: UpgradeCase[] = [
@@ -106,9 +108,13 @@ const cases: UpgradeCase[] = [
       "@effect/platform-bun": "~4.0.0",
     },
     marker: "NEXTJS_AWS_PAGE_MARKER",
-    moved: [
-      { from: "Site__Server", to: "Site__WebServer" },
-      { from: "Site__ImageOptimization", to: "Site__WebImageOptimization" },
+    moved: [{ from: "Site__Server", to: "Site__WebServer" }],
+    // Next's standalone server optimizes images and revalidates in-process.
+    removed: [
+      "Site__ImageOptimization",
+      "Site__Revalidation",
+      "Site__RevalidationQueue",
+      "Site__TagCache",
     ],
   },
 ];
@@ -236,6 +242,9 @@ for (const upgrade of cases) {
           for (const { from } of upgrade.moved) {
             expect((yield* readRow(from)).attr.functionUrl).toContain(".lambda-url.");
           }
+          for (const row of upgrade.removed ?? []) {
+            expect(yield* fs.exists(stateFile(row))).toBe(true);
+          }
           const before = yield* readRow("Site__Distribution");
           const distributionId: string = before.attr.distributionId;
           const siteUrl = `https://${before.attr.domainName}`;
@@ -259,6 +268,9 @@ for (const upgrade of cases) {
           for (const { from, to } of upgrade.moved) {
             expect((yield* readRow(to)).attr.domainName).toContain(".lambda-web.");
             expect(yield* fs.exists(stateFile(from))).toBe(false);
+          }
+          for (const row of upgrade.removed ?? []) {
+            expect(yield* fs.exists(stateFile(row))).toBe(false);
           }
 
           // THE assertion: same distribution, same URL, still serving.
