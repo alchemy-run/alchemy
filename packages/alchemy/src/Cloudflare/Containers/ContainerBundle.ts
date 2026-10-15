@@ -102,10 +102,23 @@ export const createContainerApplicationName = (id: string, name: string | undefi
  * (`Effect.die`) rather than typed errors.
  */
 export const validateContainerImageProps = (
-  props: Pick<AnyContainerApplicationProps, "main" | "image" | "dockerfile" | "context">,
+  props: Pick<
+    AnyContainerApplicationProps,
+    "main" | "image" | "dockerfile" | "context" | "buildArgs" | "buildSecrets"
+  >,
 ): Effect.Effect<void> => {
   const df = props.dockerfile;
   const hasInline = df !== undefined && isInlineDockerfile(df);
+  if (
+    (props.main || props.image !== undefined) &&
+    (props.buildArgs !== undefined || props.buildSecrets !== undefined)
+  ) {
+    return Effect.die(
+      new Error(
+        "`buildArgs` and `buildSecrets` apply to a Dockerfile you build yourself (`context` / `dockerfile`) — they cannot be combined with `main` or `image`.",
+      ),
+    );
+  }
   if (props.main) {
     if (props.image !== undefined && df !== undefined) {
       return Effect.die(

@@ -62,6 +62,8 @@ export declare namespace ContainerImage {
     readonly dockerfile: string;
     readonly context?: string;
     readonly buildArgs?: Record<string, string>;
+    /** BuildKit secrets by id, handed to `docker build` through its environment. */
+    readonly buildSecrets?: Record<string, string>;
   }
   export interface Pull extends Base {
     readonly imageUri: string;
@@ -347,12 +349,17 @@ export const DockerLive = Layer.effect(
       });
     };
 
-    const run = (args: Array<string>, stdin: ChildProcess.CommandInput = "ignore") =>
+    const run = (
+      args: Array<string>,
+      stdin: ChildProcess.CommandInput = "ignore",
+      env?: Record<string, string>,
+    ) =>
       ChildProcess.make(bin, args, {
         stdin,
         stdout: "pipe",
         stderr: "pipe",
         detached: false,
+        ...(env === undefined ? {} : { env, extendEnv: true }),
       }).pipe(
         spawner.spawn,
         Effect.flatMap((child) =>
@@ -550,6 +557,13 @@ export const DockerLive = Layer.effect(
       generateImageTag,
       build: (tag, image) =>
         Effect.suspend(() => {
+          // Values ride in generated variables: a secret id is the
+          // Dockerfile's choice and may shadow one Docker reads itself.
+          const secrets = Object.entries(image.buildSecrets ?? {}).map(([id, value], index) => ({
+            id,
+            variable: `ALCHEMY_BUILD_SECRET_${index}`,
+            value,
+          }));
           const args = [
             "build",
             "--load",
@@ -558,9 +572,11 @@ export const DockerLive = Layer.effect(
             "--platform",
             "linux/amd64",
             "--provenance=false",
-            ...Object.entries(image.buildArgs ?? {}).map(
-              ([name, value]) => `--build-arg ${name}=${value}`,
-            ),
+            ...Object.entries(image.buildArgs ?? {}).flatMap(([name, value]) => [
+              "--build-arg",
+              `${name}=${value}`,
+            ]),
+            ...secrets.flatMap(({ id, variable }) => ["--secret", `id=${id},env=${variable}`]),
             "-f",
             "-",
             path.resolve(image.context ?? path.dirname(image.dockerfile)),
@@ -572,6 +588,9 @@ export const DockerLive = Layer.effect(
                 ? path.resolve(image.context, image.dockerfile)
                 : path.resolve(image.dockerfile),
             ),
+            secrets.length === 0
+              ? undefined
+              : Object.fromEntries(secrets.map(({ variable, value }) => [variable, value])),
           ).pipe(
             Effect.withLogSpan(`docker: build ${tag}`),
             Effect.mapError((cause) =>
