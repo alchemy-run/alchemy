@@ -2,6 +2,7 @@ import * as NodeFs from "node:fs/promises";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import mime from "mime";
 import type * as vite from "vite";
 import * as Assets from "../../core/bindings/assets/Assets.ts";
 import * as Loopback from "../../core/globals/Loopback.ts";
@@ -17,11 +18,12 @@ const RouterWorker = {
   worker: () => loadInternalWorker("#cloudflare-runtime-vite-worker/assets/router.worker"),
 };
 /**
- * Marker prefix used by the vite-aware asset worker to indicate that an
- * HTML path lives inside Vite's `publicDir` (and so should be served
- * verbatim, without running through `transformIndexHtml`).
+ * Marker prefix used by the vite-aware asset worker to indicate that a
+ * path lives inside Vite's `publicDir` (and so should be served verbatim,
+ * without running through `transformIndexHtml`). It carries a leading slash
+ * because the asset worker reads the key back as a URL pathname.
  */
-const PUBLIC_DIR_PREFIX = "__VITE_PUBLIC_DIR__";
+const PUBLIC_DIR_PREFIX = "/__vite_public_dir__";
 
 /**
  * Asset plugin layer wired to a Vite dev server.
@@ -129,7 +131,8 @@ export const ViteAssetsLive = (viteDevServer: vite.ViteDevServer) =>
   );
 
 /**
- * Returns the resolved on-disk path for an HTML pathname (or `null`).
+ * Returns the asset key for a pathname (or `null`): any file in Vite's
+ * `publicDir`, or an HTML file under the root.
  * Files under Vite's `publicDir` are prefixed with `PUBLIC_DIR_PREFIX` so
  * the companion handler knows to skip `transformIndexHtml`.
  */
@@ -140,10 +143,6 @@ const viteHtmlExistsHandler =
       res.writeHead(200, { "content-type": "application/json" });
       res.end(JSON.stringify(body));
     };
-
-    if (!pathname.endsWith(".html")) {
-      return json(null);
-    }
 
     const { root, publicDir } = viteDevServer.config;
     const publicDirInRoot = publicDir.startsWith(withTrailingSlash(root));
@@ -157,7 +156,11 @@ const viteHtmlExistsHandler =
     const publicDirFilePath = `${publicDir}${pathname}`;
     const rootDirFilePath = `${root}${pathname}`;
 
-    for (const resolved of [publicDirFilePath, rootDirFilePath]) {
+    // Beyond the public dir only HTML resolves: other files under the root are Vite's modules.
+    const candidates = pathname.endsWith(".html")
+      ? [publicDirFilePath, rootDirFilePath]
+      : [publicDirFilePath];
+    for (const resolved of candidates) {
       try {
         const stats = await NodeFs.stat(resolved);
         if (stats.isFile()) {
@@ -173,10 +176,10 @@ const viteHtmlExistsHandler =
   };
 
 /**
- * Returns the HTML body for a path previously resolved by
+ * Returns the body for a path previously resolved by
  * {@link viteHtmlExistsHandler}. Non-public HTML is run through
  * `viteDevServer.transformIndexHtml` so that HMR and plugin transforms
- * apply.
+ * apply; other public files are served as raw bytes.
  */
 const viteFetchHtmlHandler =
   (viteDevServer: vite.ViteDevServer) => async (req: IncomingMessage, res: ServerResponse) => {
@@ -188,6 +191,14 @@ const viteFetchHtmlHandler =
       : `${root}${pathname}`;
 
     try {
+      if (isInPublicDir && !resolved.endsWith(".html")) {
+        const body = await NodeFs.readFile(resolved);
+        res.writeHead(200, {
+          "content-type": mime.getType(resolved) ?? "application/octet-stream",
+        });
+        res.end(body);
+        return;
+      }
       let html = await NodeFs.readFile(resolved, "utf-8");
       if (!isInPublicDir) {
         html = await viteDevServer.transformIndexHtml(resolved, html);
