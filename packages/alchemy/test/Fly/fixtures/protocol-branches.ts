@@ -1,3 +1,4 @@
+import { toEffect } from "@distilled.cloud/core/schema-lite";
 import { credentials } from "@distilled.cloud/fly-io/Credentials";
 import * as machines from "@distilled.cloud/fly-io/machines";
 import * as Clock from "effect/Clock";
@@ -74,9 +75,50 @@ export const withControlledClient =
 export const reply = (request: HttpClientRequest.HttpClientRequest, body: unknown, status = 200) =>
   HttpClientResponse.fromWeb(request, Response.json(body, { status }));
 
+type LiteNode = {
+  readonly _tag: string;
+  readonly thunk?: () => LiteNode;
+  readonly propertySignatures?: ReadonlyArray<{
+    readonly name: PropertyKey;
+    readonly type: LiteNode;
+  }>;
+  readonly rest?: ReadonlyArray<LiteNode>;
+  readonly types?: ReadonlyArray<LiteNode>;
+  readonly context?: { readonly isOptional: boolean };
+};
+
+// Optional members are `X | undefined` unions; the member's own schema is `X`.
+const resolveLite = (node: LiteNode): LiteNode => {
+  if (node._tag === "Suspend" && node.thunk) return resolveLite(node.thunk());
+  if (node._tag === "Union" && node.context?.isOptional) {
+    const defined = node.types?.filter((t) => t._tag !== "Undefined") ?? [];
+    if (defined.length === 1) return resolveLite(defined[0]!);
+  }
+  return node;
+};
+
+/**
+ * The Effect Schema of a member nested under an operation's input. Generated
+ * SDK schemas are module-private lite schemas, reachable only from `op.input`;
+ * `"[]"` in the path steps into an array's element.
+ */
+export const machineInputMember = <A>(path: ReadonlyArray<string>): Schema.Codec<A, unknown> => {
+  let node = machines.createMachine.input.ast as unknown as LiteNode;
+  for (const key of path) {
+    const resolved = resolveLite(node);
+    const next =
+      key === "[]"
+        ? resolved.rest?.[0]
+        : resolved.propertySignatures?.find((p) => p.name === key)?.type;
+    if (!next) throw new Error(`createMachine input has no member at ${path.join(".")}`);
+    node = next;
+  }
+  return toEffect(Schema, resolveLite(node) as never) as Schema.Codec<A, unknown>;
+};
+
 const Body = Schema.Struct({
   name: Schema.optional(Schema.String),
-  config: Schema.optional(Schema.toType(machines.FlyMachineConfig)),
+  config: Schema.optional(Schema.toType(machineInputMember<machines.FlyMachineConfig>(["config"]))),
   metadata: Schema.optional(Schema.Record(Schema.String, Schema.String)),
 });
 

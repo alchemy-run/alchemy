@@ -1,4 +1,7 @@
-import { PutDispatchNamespaceScriptRequest } from "@distilled.cloud/cloudflare/workers-for-platforms";
+import {
+  putDispatchNamespaceScript,
+  type PutDispatchNamespaceScriptRequest,
+} from "@distilled.cloud/cloudflare/workers-for-platforms";
 import { buildRequest } from "@distilled.cloud/core/protocol-http";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { expect, layer } from "alchemy-test";
@@ -31,7 +34,7 @@ layer(NodeServices.layer)("dispatch asset configuration serialization", (it) => 
           };
           const request = buildRequest({
             input,
-            inputAst: PutDispatchNamespaceScriptRequest.ast,
+            inputAst: putDispatchNamespaceScript.input.ast,
             baseUrl: "https://api.cloudflare.com/client/v4",
           });
           const form = (request.body as { formData: FormData }).formData;
