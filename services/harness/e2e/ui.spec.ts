@@ -1,4 +1,5 @@
 import { expect, type Page, test } from "@playwright/test";
+import { Api, listed, run, turn } from "./api.ts";
 
 const composer = (page: Page) => page.getByPlaceholder("Ask the agent to do something…");
 
@@ -138,7 +139,6 @@ test("a session's machine shows its stats and can be paused and resumed", async 
 
 test("settling a session stops its machine and archives it until a new prompt", async ({
   page,
-  request,
 }) => {
   await send(page, "Reply with exactly the word: settle");
   await expect(page.locator(".is-assistant").filter({ hasText: /settle/i })).toBeVisible();
@@ -156,18 +156,8 @@ test("settling a session stops its machine and archives it until a new prompt", 
   await expect(settled.getByTestId("settled-session").filter({ hasText: id })).toBeVisible();
   // Its machine stops; the server lists it as settled.
   await expect(page.getByTestId("machine-state")).toHaveText("Suspended", { timeout: 180_000 });
-  const API_URL = process.env.API_URL ?? "http://localhost:1338";
   await expect
-    .poll(
-      async () =>
-        (
-          (await (await request.get(`${API_URL}/agents`)).json()) as Array<{
-            id: string;
-            settledAt?: number;
-          }>
-        ).find((session) => session.id === id)?.settledAt,
-      { timeout: 60_000 },
-    )
+    .poll(async () => (await run(listed(id)))?.settledAt, { timeout: 60_000 })
     .toBeGreaterThan(0);
 
   // A new prompt brings it back.
@@ -180,32 +170,17 @@ test("settling a session stops its machine and archives it until a new prompt", 
   });
 });
 
-test("viewing or settling a session doesn't wake its machine", async ({ page, request }) => {
-  const API_URL = process.env.API_URL ?? "http://localhost:1338";
-  const listed = async (id: string) =>
-    (
-      (await (await request.get(`${API_URL}/agents`)).json()) as Array<{
-        id: string;
-        state: string;
-        settledAt?: number;
-      }>
-    ).find((session) => session.id === id);
-  const run = async (id: string) => {
-    const res = await request.post(`${API_URL}/agents/${id}`, {
-      data: { prompt: "Reply with exactly the word: asleep" },
-      timeout: 5 * 60_000,
-    });
-    expect(res.status(), await res.text()).toBe(200);
-  };
+test("viewing or settling a session doesn't wake its machine", async ({ page }) => {
+  const asleep = (id: string) => run(turn(id, "Reply with exactly the word: asleep"));
   const stamp = Date.now().toString(36);
   const viewed = `e2e-viewed-${stamp}`;
   const unopened = `e2e-unopened-${stamp}`;
-  await Promise.all([run(viewed), run(unopened)]);
+  await Promise.all([asleep(viewed), asleep(unopened)]);
 
   // Settled over the API, its machine stops.
-  await request.post(`${API_URL}/agents/${viewed}/settle`);
+  await run(Api.use((api) => api.settle({ sessionId: viewed })));
   await expect
-    .poll(async () => (await listed(viewed))?.state, { timeout: 120_000 })
+    .poll(async () => (await run(listed(viewed)))?.state, { timeout: 120_000 })
     .toBe("suspended");
   // Opening it shows its transcript without starting the machine.
   await page.goto(`/#${viewed}`);
@@ -231,7 +206,7 @@ test("viewing or settling a session doesn't wake its machine", async ({ page, re
     )
     .toContain("machine suspended");
   await page.waitForTimeout(5_000);
-  expect((await listed(viewed))?.state).toBe("suspended");
+  expect((await run(listed(viewed)))?.state).toBe("suspended");
   await page.getByRole("button", { name: "Toggle terminal" }).click();
 
   // Settled from the sidebar, never opened: it settles, and its machine stops.
@@ -239,9 +214,9 @@ test("viewing or settling a session doesn't wake its machine", async ({ page, re
   await row.hover();
   await row.getByRole("button", { name: `Settle ${unopened}` }).click();
   await expect
-    .poll(async () => (await listed(unopened))?.settledAt, { timeout: 60_000 })
+    .poll(async () => (await run(listed(unopened)))?.settledAt, { timeout: 60_000 })
     .toBeGreaterThan(0);
   await expect
-    .poll(async () => (await listed(unopened))?.state, { timeout: 120_000 })
+    .poll(async () => (await run(listed(unopened)))?.state, { timeout: 120_000 })
     .toBe("suspended");
 });

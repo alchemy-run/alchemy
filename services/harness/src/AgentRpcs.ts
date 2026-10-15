@@ -36,9 +36,9 @@ export type Machine = typeof Machine.Type;
 const Session = { sessionId: Schema.String };
 
 /**
- * This app's API for an issue's agent (one Durable Object per issue), served
- * over a WebSocket straight to the browser. Shared by the Durable Object and
- * the web UI; browser-safe (schemas only).
+ * An issue's agent (one Durable Object per issue): what its Durable Object
+ * serves, and what the Worker forwards to it as part of `HarnessRpcs`.
+ * Browser-safe (schemas only).
  */
 export class AgentRpcs extends RpcGroup.make(
   Rpc.make("start", {

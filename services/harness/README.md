@@ -9,9 +9,9 @@ HTTP ──▶ Worker ──▶ Agent (Durable Object, one per issue) ──▶ 
 
 - `src/Sandbox.ts`, `src/Sandbox.impl.ts` — the machine Claude Code runs in, and its program. `Anthropic.ClaudeCodeServer` installs the official Agent SDK (and the unmodified `claude` binary) into the image and serves sessions on the machine's port. The image holds only the toolchain. Hosted by `src/Sandbox.cf.ts` (a Cloudflare Container, the default) or `src/Sandbox.aws.ts` (an AWS Lambda MicroVM).
 - `src/Gateway.ts`, `src/Gateway.impl.ts` — the egress gateway (`Gateway`): which hosts a machine may reach, and the model API key and your GitHub login it adds to their requests. Hosted by `src/Gateway.aws.ts` (a Lambda Web Function in four Regions, the default) or `src/Gateway.cf.ts` (a Cloudflare Worker).
-- `src/AgentRpcs.ts` — this app's API (`AgentRpcs`), shared by the Durable Object and the web UI.
+- `src/AgentRpcs.ts`, `src/HarnessRpcs.ts` — the API: a session's `AgentRpcs` (served by its Durable Object), and `HarnessRpcs` (served by the Worker: every session's `AgentRpcs` plus `list`), shared by the Worker, the web UI and the e2e tests.
 - `src/Agent.ts` — one Durable Object per issue, serving `AgentRpcs`. It starts the session's container with egress from `Gateway` (`Anthropic.Egress`, `GitHub.Egress`), so the container holds no credentials: the gateway checks each request and adds them. It clones the repository into a container that has none; `Cloudflare.Containers.Harness` checkpoints the session's work into the Durable Object after every turn and keeps its history there, so a session resumes on any container.
-- `src/Worker.ts` — the HTTP API.
+- `src/Worker.ts` — serves `HarnessRpcs` over HTTP, forwarding each call to its session's Durable Object.
 
 ## Develop and deploy
 
@@ -25,23 +25,34 @@ bun alchemy deploy   # Cloudflare Containers; the gateway on AWS Lambda
 
 ## Use it
 
-Start a session and run a turn:
+The API is Effect RPC over HTTP: `HarnessRpcs` (`src/HarnessRpcs.ts`), every session's `AgentRpcs` plus `list`. Each call names its session and goes to that session's Durable Object.
 
-```sh
-curl -X POST $URL/agents/fix-42 -d '{"prompt":"Add a CONTRIBUTING.md"}'
-```
+```ts
+import * as Effect from "effect/Effect";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as Layer from "effect/Layer";
+import * as RpcClient from "effect/rpc/RpcClient";
+import * as RpcSerialization from "effect/rpc/RpcSerialization";
+import * as Stream from "effect/Stream";
+import { HarnessRpcs } from "./src/HarnessRpcs.ts";
 
-Follow its events (server-sent, resumable with `?after=<cursor>`):
-
-```sh
-curl -N $URL/agents/fix-42/events
-```
-
-Steer or stop it mid-turn:
-
-```sh
-curl -X POST $URL/agents/fix-42/steer -d '{"prompt":"keep it under 20 lines"}'
-curl -X POST $URL/agents/fix-42/interrupt
+const program = Effect.gen(function* () {
+  const api = yield* RpcClient.make(HarnessRpcs);
+  yield* api.start({ sessionId: "fix-42" });
+  const { turnId } = yield* api.prompt({ sessionId: "fix-42", prompt: "Add a CONTRIBUTING.md" });
+  // Steer or stop it mid-turn: api.steer({ sessionId, prompt }), api.interrupt({ sessionId })
+  const result = yield* api.result({ sessionId: "fix-42", turnId });
+  // Its events, resumable from a cursor
+  yield* api.events({ sessionId: "fix-42", after: 0 }).pipe(Stream.take(10), Stream.runDrain);
+  return result;
+}).pipe(
+  Effect.scoped,
+  Effect.provide(
+    RpcClient.layerProtocolHttp({ url: process.env.API_URL! }).pipe(
+      Layer.provide(Layer.mergeAll(RpcSerialization.layerNdjson, FetchHttpClient.layer)),
+    ),
+  ),
+);
 ```
 
 ## Test

@@ -1,49 +1,36 @@
 import * as AI from "alchemy/AI/Client";
+import * as Context from "effect/Context";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
 import * as ManagedRuntime from "effect/ManagedRuntime";
 import * as RpcClient from "effect/rpc/RpcClient";
+import type * as RpcClientError from "effect/rpc/RpcClientError";
+import type * as RpcGroup from "effect/rpc/RpcGroup";
 import * as RpcSerialization from "effect/rpc/RpcSerialization";
 import * as Schedule from "effect/Schedule";
 import * as Scope from "effect/Scope";
-import * as Socket from "effect/socket/Socket";
 import * as Stream from "effect/Stream";
 import { useSyncExternalStore } from "react";
-import { AgentRpcs, type Machine } from "../../src/AgentRpcs.ts";
+import type { Machine } from "../../src/AgentRpcs.ts";
+import { HarnessRpcs, type ListedSession } from "../../src/HarnessRpcs.ts";
 
 const API_URL = (import.meta.env.VITE_API_URL as string | undefined) ?? "http://localhost:1338";
 
-/** Each session is its own Durable Object, reached over its own WebSocket. */
-const socketUrl = (id: string) =>
-  `${API_URL.replace(/^http/, "ws")}/agents/${encodeURIComponent(id)}/rpc`;
+type Client = RpcClient.RpcClient<RpcGroup.Rpcs<typeof HarnessRpcs>, RpcClientError.RpcClientError>;
 
-/**
- * An Effect RPC client for an issue's `AgentRpcs`. The socket
- * protocol is built into the caller's scope, so it lives as long as the
- * session view does (providing it around `RpcClient.make` alone would close
- * the socket as soon as the client is created).
- */
-const connect = (id: string) =>
-  Effect.gen(function* () {
-    const protocol = yield* Layer.build(
-      // Effect's default ping timeout (one 5s interval) drops a socket whose call is
-      // quiet for 5s, such as a `start` that clones the repository.
-      RpcClient.layerProtocolSocket({ retryTransientErrors: true, pingTimeout: "15 seconds" }).pipe(
-        Layer.provide(
-          Layer.mergeAll(Socket.layerWebSocket(socketUrl(id)), RpcSerialization.layerJson),
-        ),
-        Layer.provide(Socket.layerWebSocketConstructorGlobal),
-      ),
-    );
-    return yield* RpcClient.make(AgentRpcs).pipe(Effect.provideContext(protocol));
-  });
+/** The harness's API (`HarnessRpcs`): one client for every session. */
+class Api extends Context.Service<Api, Client>()("harness/Api") {}
 
-type Client = Effect.Success<ReturnType<typeof connect>>;
+const ApiLive = Layer.effect(Api, RpcClient.make(HarnessRpcs)).pipe(
+  Layer.provide(RpcClient.layerProtocolHttp({ url: API_URL })),
+  Layer.provide(Layer.mergeAll(RpcSerialization.layerNdjson, FetchHttpClient.layer)),
+);
 
-const runtime = ManagedRuntime.make(Layer.empty);
+const runtime = ManagedRuntime.make(ApiLive);
 
 export interface SessionSnapshot {
   readonly transcript: AI.Transcript;
@@ -89,7 +76,7 @@ const open = (id: string, model: string | undefined) => {
   const live: Live = { snapshot: initial, client: runtime.runSync(Deferred.make<Client>()), scope };
   sessions.set(id, live);
   const program = Effect.gen(function* () {
-    const client = yield* connect(id);
+    const client = yield* Api;
     const info = yield* client.start(model ? { sessionId: id, model } : { sessionId: id });
     yield* Deferred.succeed(live.client, client);
     update(id, (s) => ({
@@ -164,27 +151,16 @@ export const agents = {
   resume: (id: string) => call(id, (c) => c.resume({ sessionId: id })),
   /** Works for any session, open in this tab or not (it never starts the machine). */
   settle: (id: string): Promise<Machine> =>
-    fetch(`${API_URL}/agents/${encodeURIComponent(id)}/settle`, { method: "POST" }).then((res) =>
-      res.ok ? res.json() : res.text().then((text) => Promise.reject(new Error(text))),
-    ),
+    runtime.runPromise(Api.use((api) => api.settle({ sessionId: id }))),
 };
 
 //#region sessions
 
-export interface ListedSession {
-  readonly id: string;
-  /** Its machine: running, suspended, or unknown (unreachable). */
-  readonly state: Machine["state"] | "unknown";
-  /** Its agent's state (idle, running, …), as last recorded. */
-  readonly agent?: AI.SessionInfo["state"];
-  readonly costUsd?: number;
-  /** When it was settled (archived, its machine stopped). */
-  readonly settledAt?: number;
-}
+export type { ListedSession };
 
 /** Every session (newest first), from the server: the same list in any browser. */
 export const listSessions = (): Promise<ReadonlyArray<ListedSession>> =>
-  fetch(`${API_URL}/agents`).then((res) => (res.ok ? res.json() : []));
+  runtime.runPromise(Api.use((api) => api.list())).catch((): ReadonlyArray<ListedSession> => []);
 
 //#endregion
 

@@ -1,39 +1,44 @@
+import { SessionError } from "alchemy/AI";
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as Layer from "effect/Layer";
+import * as RpcClientError from "effect/rpc/RpcClientError";
+import * as RpcSerialization from "effect/rpc/RpcSerialization";
+import * as RpcServer from "effect/rpc/RpcServer";
+import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import { Agent } from "./Agent.ts";
+import { HarnessRpcs, type ListedSession } from "./HarnessRpcs.ts";
 import { Sessions, SESSIONS_INDEX } from "./Sessions.ts";
-
-const encoder = new TextEncoder();
 
 /** The web UI is served from another origin. */
 const cors = {
   "access-control-allow-origin": "*",
-  "access-control-allow-methods": "GET, POST, OPTIONS",
-  "access-control-allow-headers": "content-type, last-event-id",
+  "access-control-allow-methods": "POST, OPTIONS",
+  "access-control-allow-headers": "content-type",
 };
 
+/** The call reached no Durable Object (as opposed to the session's own errors). */
+const isRpcClientError = <E>(error: E): error is Extract<E, RpcClientError.RpcClientError> =>
+  Schema.is(RpcClientError.RpcClientError)(error);
+
+const unreachable = (error: RpcClientError.RpcClientError) =>
+  SessionError.make({ message: `the session's agent could not be reached: ${error.message}` });
+
+/** A Durable Object that can't be reached fails the call as the session's error. */
+const reachable = <A, E, R>(self: Effect.Effect<A, E, R>) =>
+  self.pipe(Effect.catchIf(isRpcClientError<E>, (error) => error.pipe(unreachable, Effect.fail)));
+
+const reachableStream = <A, E, R>(self: Stream.Stream<A, E, R>) =>
+  self.pipe(Stream.catchIf(isRpcClientError<E>, (error) => error.pipe(unreachable, Stream.fail)));
+
 /**
- * A small HTTP API over many coding agents:
- *
- *   GET  /agents                          every session, newest first, with its machine's state
- *   POST /agents/:id          { prompt }  start the session (idempotent) and run a turn → result
- *                                         (`?wait=false` returns as soon as the turn starts)
- *   POST /agents/:id/steer    { prompt }  redirect the running turn
- *   POST /agents/:id/interrupt            stop the running turn
- *   POST /agents/:id/suspend              stop its machine (its work saved)
- *   POST /agents/:id/resume               start its machine again
- *   POST /agents/:id/settle               stop its machine and archive it
- *   POST /agents/:id/model    { model }   switch models mid-session
- *   GET  /agents/:id                      session info (state, model, usage)
- *   GET  /agents/:id/events?after=N       server-sent events, resumable by cursor
- *   GET  /agents/:id/rpc                  `AgentRpcs` over a WebSocket (Effect RPC)
- *
- * `:id` is the issue: each has its own Durable Object + container, and its
- * session (here, one per issue) is named after it. For a browser, connect
- * straight to the DO over a hibernating WebSocket with `agents.fetch(id, request)`.
+ * The harness's API: `HarnessRpcs` (Effect RPC over HTTP, NDJSON so streams
+ * work). Each call names its session and goes to that session's Durable
+ * Object (one per issue, with its own container); `list` reads the
+ * session index.
  */
 export default Cloudflare.Worker(
   "CodingAgents",
@@ -42,114 +47,139 @@ export default Cloudflare.Worker(
   Effect.gen(function* () {
     const agents = yield* Agent;
     const sessions = yield* Sessions;
+
+    /** The session's Durable Object. */
+    const agent = (sessionId: string) => agents.getByName(sessionId);
+
+    const handlers = HarnessRpcs.toLayer({
+      // Each session with its agent's and machine's state, from the
+      // session's records (no machine is started).
+      list: () =>
+        sessions
+          .getByName(SESSIONS_INDEX)
+          .list()
+          .pipe(
+            Effect.flatMap((listed) =>
+              Effect.forEach(
+                listed,
+                (session) =>
+                  agent(session.id).pipe(
+                    Effect.flatMap((client) => client.summary({ sessionId: session.id })),
+                    Effect.map((summary): ListedSession => ({
+                      ...session,
+                      state: summary.machine,
+                      ...(summary.session
+                        ? { agent: summary.session.state, costUsd: summary.session.usage.costUsd }
+                        : {}),
+                    })),
+                    // Unreachable, or still on an older version: list it anyway.
+                    Effect.catchCause(() =>
+                      Effect.succeed<ListedSession>({ ...session, state: "unknown" }),
+                    ),
+                  ),
+                { concurrency: 16 },
+              ),
+            ),
+            Effect.orElseSucceed((): ReadonlyArray<ListedSession> => []),
+          ),
+      start: (payload) =>
+        agent(payload.sessionId).pipe(
+          Effect.flatMap((client) => client.start(payload)),
+          reachable,
+        ),
+      prompt: (payload) =>
+        agent(payload.sessionId).pipe(
+          Effect.flatMap((client) => client.prompt(payload)),
+          reachable,
+        ),
+      steer: (payload) =>
+        agent(payload.sessionId).pipe(
+          Effect.flatMap((client) => client.steer(payload)),
+          reachable,
+        ),
+      interrupt: (payload) =>
+        agent(payload.sessionId).pipe(
+          Effect.flatMap((client) => client.interrupt(payload)),
+          reachable,
+        ),
+      setModel: (payload) =>
+        agent(payload.sessionId).pipe(
+          Effect.flatMap((client) => client.setModel(payload)),
+          reachable,
+        ),
+      respond: (payload) =>
+        agent(payload.sessionId).pipe(
+          Effect.flatMap((client) => client.respond(payload)),
+          reachable,
+        ),
+      result: (payload) =>
+        agent(payload.sessionId).pipe(
+          Effect.flatMap((client) => client.result(payload)),
+          reachable,
+        ),
+      events: (payload) =>
+        Stream.unwrap(
+          Effect.map(agent(payload.sessionId), (client) => client.events(payload)),
+        ).pipe(reachableStream),
+      info: (payload) =>
+        agent(payload.sessionId).pipe(
+          Effect.flatMap((client) => client.info(payload)),
+          reachable,
+        ),
+      terminal: (payload) =>
+        Stream.unwrap(
+          Effect.map(agent(payload.sessionId), (client) => client.terminal(payload)),
+        ).pipe(reachableStream),
+      machine: (payload) =>
+        agent(payload.sessionId).pipe(
+          Effect.flatMap((client) => client.machine(payload)),
+          reachable,
+        ),
+      summary: (payload) =>
+        agent(payload.sessionId).pipe(
+          Effect.flatMap((client) => client.summary(payload)),
+          reachable,
+        ),
+      settle: (payload) =>
+        agent(payload.sessionId).pipe(
+          Effect.flatMap((client) => client.settle(payload)),
+          reachable,
+        ),
+      suspend: (payload) =>
+        agent(payload.sessionId).pipe(
+          Effect.flatMap((client) => client.suspend(payload)),
+          reachable,
+        ),
+      resume: (payload) =>
+        agent(payload.sessionId).pipe(
+          Effect.flatMap((client) => client.resume(payload)),
+          reachable,
+        ),
+      terminalInput: (payload) =>
+        agent(payload.sessionId).pipe(
+          Effect.flatMap((client) => client.terminalInput(payload)),
+          reachable,
+        ),
+      terminalResize: (payload) =>
+        agent(payload.sessionId).pipe(
+          Effect.flatMap((client) => client.terminalResize(payload)),
+          reachable,
+        ),
+    });
+
     return {
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;
-        if (request.method === "OPTIONS") return HttpServerResponse.empty({ status: 204 });
-        const url = new URL(request.url, "http://agents");
-        if (request.method === "GET" && url.pathname === "/agents") {
-          // Each session with its agent's and machine's state, from the
-          // session's records (no machine is started).
-          const listed = yield* sessions.getByName(SESSIONS_INDEX).list();
-          return yield* HttpServerResponse.json(
-            yield* Effect.forEach(
-              listed,
-              (session) =>
-                agents.getByName(session.id).pipe(
-                  Effect.flatMap((agent) => agent.summary({ sessionId: session.id })),
-                  Effect.map((summary) => ({
-                    ...session,
-                    state: summary.machine,
-                    ...(summary.session
-                      ? {
-                          agent: summary.session.state,
-                          costUsd: summary.session.usage.costUsd,
-                        }
-                      : {}),
-                  })),
-                  // Unreachable, or still on an older version: list it anyway.
-                  Effect.catchCause(() =>
-                    Effect.succeed({ ...session, state: "unknown" as const }),
-                  ),
-                ),
-              { concurrency: 16 },
-            ),
-          );
+        if (request.method === "OPTIONS") {
+          return HttpServerResponse.empty({ status: 204, headers: cors });
         }
-        const match =
-          /^\/agents\/([\w-]+)(?:\/(rpc|steer|interrupt|events|model|settle|suspend|resume))?$/.exec(
-            url.pathname,
-          );
-        if (!match) return HttpServerResponse.text("POST /agents/:id { prompt }", { status: 404 });
-        const [, id, action] = match;
-
-        if (action === "rpc") {
-          // Effect RPC (`AgentRpcs`) over a hibernating WebSocket,
-          // straight to the session's Durable Object.
-          return yield* agents.fetch(id!, request);
-        }
-        if (action === "events") {
-          // `EventSource` reconnects with `Last-Event-ID` (our cursor).
-          const after = Number(
-            request.headers["last-event-id"] ?? url.searchParams.get("after") ?? 0,
-          );
-          // The body is read after this handler returns, so the stream opens
-          // (and owns) its own connection to the agent.
-          const events = Stream.unwrap(
-            Effect.map(agents.getByName(id!), (agent) => agent.events({ sessionId: id!, after })),
-          ).pipe(Stream.scoped);
-          return HttpServerResponse.stream(
-            events.pipe(
-              Stream.map((event) =>
-                encoder.encode(`id: ${event.cursor}\ndata: ${JSON.stringify(event)}\n\n`),
-              ),
-            ),
-            { contentType: "text/event-stream" },
-          );
-        }
-        const agent = yield* agents.getByName(id!);
-        if (request.method === "GET" && action === undefined) {
-          return yield* HttpServerResponse.json(yield* agent.info({ sessionId: id! }));
-        }
-        if (action === "suspend") {
-          return yield* HttpServerResponse.json(yield* agent.suspend({ sessionId: id! }));
-        }
-        if (action === "resume") {
-          return yield* HttpServerResponse.json(yield* agent.resume({ sessionId: id! }));
-        }
-        if (action === "settle") {
-          return yield* HttpServerResponse.json(yield* agent.settle({ sessionId: id! }));
-        }
-        if (action === "interrupt") {
-          yield* agent.interrupt({ sessionId: id! });
-          return HttpServerResponse.empty({ status: 202 });
-        }
-        if (action === "model") {
-          const { model } = (yield* request.json) as { model: string };
-          yield* agent.setModel({ sessionId: id!, model });
-          return HttpServerResponse.empty({ status: 202 });
-        }
-        const { prompt } = (yield* request.json) as { prompt: string };
-        if (action === "steer") {
-          yield* agent.steer({ sessionId: id!, prompt });
-          return HttpServerResponse.empty({ status: 202 });
-        }
-        yield* agent.start({ sessionId: id! });
-        const turn = yield* agent.prompt({ sessionId: id!, prompt });
-        if (url.searchParams.get("wait") === "false") return yield* HttpServerResponse.json(turn);
-        const result = yield* agent.result({ sessionId: id!, turnId: turn.turnId });
-        return yield* HttpServerResponse.json(result);
-      }).pipe(
-        Effect.scoped,
-        Effect.catchCause((cause) =>
-          Effect.succeed(HttpServerResponse.text(String(cause), { status: 500 })),
-        ),
-        // A WebSocket upgrade must pass through untouched: rebuilding the
-        // response to add headers would drop its socket.
-        Effect.map((response) =>
-          response.status === 101 ? response : HttpServerResponse.setHeaders(response, cors),
-        ),
-      ),
+        // The server is built per request, in the request's scope (its
+        // handlers reach the Durable Objects with this request's context).
+        const rpc = yield* RpcServer.toHttpEffect(HarnessRpcs).pipe(
+          Effect.provide(Layer.mergeAll(handlers, RpcSerialization.layerNdjson)),
+        );
+        return HttpServerResponse.setHeaders(yield* rpc, cors);
+      }),
     };
   }),
 );
