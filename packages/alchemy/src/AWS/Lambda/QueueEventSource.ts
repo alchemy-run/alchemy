@@ -22,7 +22,7 @@ export const isSQSEvent = (event: any): event is lambda.SQSEvent =>
 export const QueueEventSource = Layer.effect(
   SQSQueueEventSource,
   Effect.gen(function* () {
-    const host = yield* Lambda.Function;
+    const host = yield* Lambda.eventSourceHost("AWS.Lambda.QueueEventSource");
     const Mapping = yield* EventSourceMapping;
 
     return Effect.fn(function* <StreamReq = never, Req = never>(

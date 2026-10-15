@@ -31,6 +31,7 @@ type WorkerHost = Resource<
 const isEnvHost = (host: ResourceLike | undefined): host is EnvHost =>
   host?.Type === "Neon.Function" ||
   host?.Type === "AWS.Lambda.Function" ||
+  host?.Type === "AWS.Lambda.WebFunction" ||
   host?.Type === "Prisma.Compute" ||
   host?.Type === "Cloudflare.Container";
 const isWorkerHost = (host: ResourceLike | undefined): host is WorkerHost =>
