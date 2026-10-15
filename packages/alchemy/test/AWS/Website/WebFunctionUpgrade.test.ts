@@ -211,6 +211,20 @@ for (const upgrade of cases) {
             ),
           );
 
+          // Keep the stack entries out of the app's type-check: the current
+          // one imports the whole workspace source.
+          const tsconfigPath = path.join(dir, "tsconfig.json");
+          if (yield* fs.exists(tsconfigPath)) {
+            const tsconfig = JSON.parse(yield* fs.readFileString(tsconfigPath));
+            yield* fs.writeFileString(
+              tsconfigPath,
+              JSON.stringify({
+                ...tsconfig,
+                exclude: [...(tsconfig.exclude ?? []), "alchemy.run.ts", "alchemy.current.run.ts"],
+              }),
+            );
+          }
+
           // ── Phase 1: deploy with the published version ────────────────────
           yield* run({ cmd: "bun", args: upgrade.install, cwd: dir });
           yield* run({
