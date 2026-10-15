@@ -74,6 +74,12 @@ export interface RuntimeProps {
    */
   environmentVariables?: Record<string, string>;
   /**
+   * Runtime platform version, e.g. `"V2"` for snapshot-restored microVMs.
+   * When omitted, AgentCore's default (`"V1"`) applies on create and an
+   * existing runtime keeps its current platform version.
+   */
+  platformVersion?: string;
+  /**
    * Tags to apply to the runtime. Merged with internal Alchemy tags.
    */
   tags?: Record<string, string>;
@@ -271,6 +277,7 @@ export const RuntimeProvider = () =>
                 requestHeaderConfiguration: props.requestHeaderConfiguration,
                 lifecycleConfiguration: props.lifecycleConfiguration,
                 environmentVariables: props.environmentVariables,
+                platformVersion: props.platformVersion,
                 tags: desiredTags,
               })
               .pipe(
@@ -311,7 +318,9 @@ export const RuntimeProvider = () =>
                 JSON.stringify(props.protocolConfiguration)) ||
             (props.lifecycleConfiguration !== undefined &&
               JSON.stringify(runtime.lifecycleConfiguration ?? null) !==
-                JSON.stringify(props.lifecycleConfiguration));
+                JSON.stringify(props.lifecycleConfiguration)) ||
+            (props.platformVersion !== undefined &&
+              runtime.platformVersion !== props.platformVersion);
           if (drifted) {
             yield* control
               .updateAgentRuntime({
@@ -325,6 +334,8 @@ export const RuntimeProvider = () =>
                 requestHeaderConfiguration: props.requestHeaderConfiguration,
                 lifecycleConfiguration: props.lifecycleConfiguration,
                 environmentVariables: props.environmentVariables,
+                // Unset keeps the observed version, so unrelated updates never move the platform.
+                platformVersion: props.platformVersion ?? runtime.platformVersion,
               })
               .pipe(retryWhileConflict);
             runtime = (yield* waitForSettled(runtime.agentRuntimeId)) ?? runtime;
