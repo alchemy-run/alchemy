@@ -48,38 +48,37 @@ export const makeMachine = (
     }),
   );
 
-  return (options: { readonly stats?: boolean } = {}) =>
-    Effect.gen(function* () {
-      const running = yield* sandbox.running.pipe(Effect.orElseSucceed(() => false));
-      const base: Machine = {
-        state: transition() ?? (running ? "running" : "suspended"),
-        platform: "Cloudflare Container",
-        instance: INSTANCE,
-        ...SPECS,
-        ...(location ? { location } : {}),
-      };
-      if (!running || !options.stats) return base;
-      const facts = yield* read.pipe(Effect.orElseSucceed(() => ({}) as Record<string, string>));
-      const number = (key: string) => (facts[key] ? Number(facts[key]) : undefined);
-      if (facts.colo) location = facts.loc ? `${facts.colo} (${facts.loc})` : facts.colo;
-      const memoryTotal = number("mem_total");
-      const memoryAvailable = number("mem_available");
-      const diskTotal = number("disk_total");
-      return {
-        ...base,
-        ...(number("cpus") ? { vcpus: number("cpus")! } : {}),
-        ...(memoryTotal ? { memoryBytes: memoryTotal } : {}),
-        ...(diskTotal ? { diskBytes: diskTotal } : {}),
-        ...(location ? { location } : {}),
-        ...(memoryTotal !== undefined && memoryAvailable !== undefined
-          ? {
-              usage: {
-                memoryUsedBytes: memoryTotal - memoryAvailable,
-                diskUsedBytes: number("disk_used") ?? 0,
-                uptimeSeconds: Math.round(number("uptime") ?? 0),
-              },
-            }
-          : {}),
-      } satisfies Machine;
-    });
+  return Effect.fn(function* (options: { readonly stats?: boolean } = {}) {
+    const running = yield* sandbox.running.pipe(Effect.orElseSucceed(() => false));
+    const base: Machine = {
+      state: transition() ?? (running ? "running" : "suspended"),
+      platform: "Cloudflare Container",
+      instance: INSTANCE,
+      ...SPECS,
+      ...(location ? { location } : {}),
+    };
+    if (!running || !options.stats) return base;
+    const facts = yield* read.pipe(Effect.orElseSucceed(() => ({}) as Record<string, string>));
+    const number = (key: string) => (facts[key] ? Number(facts[key]) : undefined);
+    if (facts.colo) location = facts.loc ? `${facts.colo} (${facts.loc})` : facts.colo;
+    const memoryTotal = number("mem_total");
+    const memoryAvailable = number("mem_available");
+    const diskTotal = number("disk_total");
+    return {
+      ...base,
+      ...(number("cpus") ? { vcpus: number("cpus")! } : {}),
+      ...(memoryTotal ? { memoryBytes: memoryTotal } : {}),
+      ...(diskTotal ? { diskBytes: diskTotal } : {}),
+      ...(location ? { location } : {}),
+      ...(memoryTotal !== undefined && memoryAvailable !== undefined
+        ? {
+            usage: {
+              memoryUsedBytes: memoryTotal - memoryAvailable,
+              diskUsedBytes: number("disk_used") ?? 0,
+              uptimeSeconds: Math.round(number("uptime") ?? 0),
+            },
+          }
+        : {}),
+    } satisfies Machine;
+  });
 };

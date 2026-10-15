@@ -43,57 +43,54 @@ export const makeTerminals = (sandbox: SandboxClient, options: { readonly cwd: s
     shell.history = cut === -1 ? "" : history.slice(cut + 1);
   };
 
-  const start = (key: string, cols: number, rows: number) =>
-    Effect.gen(function* () {
-      const scope = yield* Scope.make();
-      const child = yield* sandbox
-        .exec(["bash", "-l"], {
-          pty: { cols, rows },
-          stdin: "pipe",
-          stdout: "pipe",
-          cwd: options.cwd,
-          env: { TERM: "xterm-256color", COLORTERM: "truecolor" },
-        })
-        .pipe(Scope.provide(scope));
-      const shell: Shell = {
-        scope,
-        input: yield* Queue.unbounded<string>(),
-        output: yield* PubSub.unbounded<string>(),
-        resize: (c, r) => child.resize(c, r).pipe(Effect.ignore),
-        history: "",
-      };
-      const encoder = new TextEncoder();
-      // Keystrokes → the shell's stdin.
-      if (child.stdin) {
-        yield* Stream.fromQueue(shell.input).pipe(
-          Stream.map((data) => encoder.encode(data)),
-          Stream.run(child.stdin),
-          Effect.ignore,
-          Effect.forkIn(scope),
-        );
-      }
-      // The shell's output → every client, until it exits.
-      yield* (child.stdout ?? Stream.empty).pipe(
-        Stream.decodeText,
-        Stream.runForEach((chunk) =>
-          Effect.sync(() => remember(shell, chunk)).pipe(
-            Effect.andThen(PubSub.publish(shell.output, chunk)),
-          ),
-        ),
+  const start = Effect.fn(function* (key: string, cols: number, rows: number) {
+    const scope = yield* Scope.make();
+    const child = yield* sandbox
+      .exec(["bash", "-l"], {
+        pty: { cols, rows },
+        stdin: "pipe",
+        stdout: "pipe",
+        cwd: options.cwd,
+        env: { TERM: "xterm-256color", COLORTERM: "truecolor" },
+      })
+      .pipe(Scope.provide(scope));
+    const shell: Shell = {
+      scope,
+      input: yield* Queue.unbounded<string>(),
+      output: yield* PubSub.unbounded<string>(),
+      resize: (c, r) => child.resize(c, r).pipe(Effect.ignore),
+      history: "",
+    };
+    const encoder = new TextEncoder();
+    // Keystrokes → the shell's stdin.
+    if (child.stdin) {
+      yield* Stream.fromQueue(shell.input).pipe(
+        Stream.map((data) => encoder.encode(data)),
+        Stream.run(child.stdin),
         Effect.ignore,
-        Effect.ensuring(
-          Effect.suspend(() => {
-            if (shells.get(key) === shell) shells.delete(key);
-            return PubSub.shutdown(shell.output).pipe(
-              Effect.andThen(Scope.close(scope, Exit.void)),
-            );
-          }),
-        ),
         Effect.forkIn(scope),
       );
-      shells.set(key, shell);
-      return shell;
-    });
+    }
+    // The shell's output → every client, until it exits.
+    yield* (child.stdout ?? Stream.empty).pipe(
+      Stream.decodeText,
+      Stream.runForEach((chunk) =>
+        Effect.sync(() => remember(shell, chunk)).pipe(
+          Effect.andThen(PubSub.publish(shell.output, chunk)),
+        ),
+      ),
+      Effect.ignore,
+      Effect.ensuring(
+        Effect.suspend(() => {
+          if (shells.get(key) === shell) shells.delete(key);
+          return PubSub.shutdown(shell.output).pipe(Effect.andThen(Scope.close(scope, Exit.void)));
+        }),
+      ),
+      Effect.forkIn(scope),
+    );
+    shells.set(key, shell);
+    return shell;
+  });
 
   /** The shell for `key`, started if it isn't running. */
   const shell = (key: string, cols: number, rows: number) =>

@@ -163,14 +163,13 @@ export class Agent extends Cloudflare.RpcDurableObject<Agent>()(
               return { machine: m.state, ...(session ? { session } : {}) };
             }),
           ),
-        settle: ({ sessionId }) =>
-          Effect.gen(function* () {
-            // Settled at once; stopping the machine (checkpoint, snapshot)
-            // takes a while, and must not be cancelled if the caller leaves.
-            yield* sessions.getByName(SESSIONS_INDEX).settle(sessionId);
-            yield* stopInBackground;
-            return yield* machine();
-          }),
+        settle: Effect.fn(function* ({ sessionId }) {
+          // Settled at once; stopping the machine (checkpoint, snapshot)
+          // takes a while, and must not be cancelled if the caller leaves.
+          yield* sessions.getByName(SESSIONS_INDEX).settle(sessionId);
+          yield* stopInBackground;
+          return yield* machine();
+        }),
         suspend: () => stopInBackground.pipe(Effect.andThen(machine())),
         resume: () => Effect.scoped(claude).pipe(Effect.andThen(machine({ stats: true }))),
         terminalInput: ({ sessionId, data }) => terminals.input(sessionId, data),
