@@ -182,6 +182,21 @@ const aurora = yield* AWS.RDS.Aurora("Database", {
 
 Each migration and its row in `__alchemy_migrations` commit in one transaction, authenticated with the cluster's master secret. The Data API runs one statement per call, so keep drizzle-kit's default `--> statement-breakpoint` separators. A database previously migrated by drizzle-kit is adopted on first deploy. Editing or deleting an applied migration fails the deploy; add a new migration instead.
 
+To keep the Data API off, deploy an `AWS.RDS.MigrationRunner` into the cluster's private subnets and pass it as `migrationsTransport`. Alchemy then invokes that Lambda, and it connects to the writer from inside the VPC:
+
+```typescript
+const runner = yield* AWS.RDS.MigrationRunner("MigrationRunner", {
+  subnetIds: network.privateSubnetIds,
+  securityGroupIds: [runnerSecurityGroup.groupId],
+});
+const aurora = yield* AWS.RDS.Aurora("Database", {
+  // ...
+  dataApi: false,
+  migrations: "./migrations",
+  migrationsTransport: runner,
+});
+```
+
 ## Run the integration test
 
 ```sh

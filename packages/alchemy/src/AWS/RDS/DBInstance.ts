@@ -13,7 +13,6 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import {
   diffMigrations,
-  MigrationError,
   migrationsAttrs,
   migrationsInputOf,
   stampedOf,
@@ -29,7 +28,7 @@ import {
 } from "../IAM/Policy.ts";
 import { reapLogGroupsByPrefix } from "../Logs/reapLogGroups.ts";
 import type { Providers } from "../Providers.ts";
-import { runDataApiMigrations } from "./DataApiMigrations.ts";
+import { runDBInstanceMigrations, type MigrationsTransport } from "./Migrations.ts";
 
 export interface DBInstanceProps {
   /**
@@ -302,27 +301,33 @@ export interface DBInstanceProps {
    */
   finalDBSnapshotIdentifier?: string;
   /**
-   * SQL migrations to apply to the cluster's database on deploy, over the
-   * RDS Data API once this instance is available. Accepts a directory path,
-   * a `Drizzle.Schema` resource, or `{ dir, table? }`. Aurora PostgreSQL and
-   * Aurora MySQL cluster members only: the cluster needs
-   * `enableHttpEndpoint: true`, and only one instance per cluster (the
-   * writer) should declare migrations. MySQL commits DDL implicitly, so on
-   * Aurora MySQL a migration's DDL is not rolled back if a later statement
-   * fails.
+   * SQL migrations to apply on deploy, once this instance is available.
+   * Accepts a directory path, a `Drizzle.Schema` resource, or
+   * `{ dir, table? }`. Supports PostgreSQL, MySQL and MariaDB engines. On
+   * an Aurora cluster member the migrations target the cluster's database;
+   * declare them on one instance per cluster (the writer).
    *
    * Bookkeeping always lives in Alchemy's `__alchemy_migrations` table. A
    * database previously migrated by drizzle-kit or Prisma is adopted by a
-   * one-way conversion on first deploy. The Data API runs one statement per
-   * call: put each statement in its own file or separate statements with
-   * `--> statement-breakpoint` (drizzle-kit's default). Deleting the
-   * instance never touches the database.
+   * one-way conversion on first deploy. Each migration commits with its
+   * bookkeeping row in one transaction; MySQL and MariaDB commit DDL
+   * implicitly, so their DDL is not rolled back if a later statement fails.
+   * Deleting the instance never touches the database.
    */
   migrations?: MigrationsInput;
   /**
+   * How `migrations` reach the database: `"data-api"` (Aurora clusters with
+   * `enableHttpEndpoint: true`; the Data API runs one statement per call, so
+   * separate statements with `--> statement-breakpoint`), `"direct"` (a
+   * connection from the deploying machine, which needs a network route to
+   * the endpoint), or an `AWS.RDS.MigrationRunner` Lambda inside the VPC.
+   * @default "data-api" when the instance's Aurora cluster has the Data API enabled, otherwise "direct"
+   */
+  migrationsTransport?: MigrationsTransport;
+  /**
    * ARN of the Secrets Manager secret (JSON with `username` and `password`)
-   * the Data API authenticates with when applying `migrations`.
-   * @default the cluster's RDS-managed master user secret
+   * that `migrations` authenticate with.
+   * @default `masterUsername` + `masterUserPassword` when set (direct and Lambda transports), otherwise the RDS-managed master user secret
    */
   migrationsSecretArn?: string;
 }
@@ -912,6 +917,41 @@ export interface DBInstance extends Resource<
  * Migrations run over the cluster's Data API once the instance is
  * available, so the deploying machine needs no VPC access. Declare them on
  * one instance per cluster.
+ *
+ * **Example:** Migrate a publicly reachable instance directly
+ * ```typescript
+ * const db = yield* DBInstance("Db", {
+ *   engine: "postgres",
+ *   dbInstanceClass: "db.t4g.micro",
+ *   allocatedStorage: 20,
+ *   dbName: "app",
+ *   masterUsername: "app",
+ *   manageMasterUserPassword: true,
+ *   publiclyAccessible: true,
+ *   migrations: "./migrations",
+ *   migrationsTransport: "direct",
+ * });
+ * ```
+ *
+ * **Example:** Migrate a private instance through an in-VPC runner
+ * ```typescript
+ * const runner = yield* AWS.RDS.MigrationRunner("MigrationRunner", {
+ *   subnetIds: network.privateSubnetIds,
+ *   securityGroupIds: [runnerSecurityGroup.groupId],
+ * });
+ * const db = yield* DBInstance("Db", {
+ *   engine: "mysql",
+ *   dbInstanceClass: "db.t4g.micro",
+ *   allocatedStorage: 20,
+ *   dbName: "app",
+ *   masterUsername: "app",
+ *   manageMasterUserPassword: true,
+ *   dbSubnetGroupName: subnetGroup.dbSubnetGroupName,
+ *   vpcSecurityGroupIds: [databaseSecurityGroup.groupId],
+ *   migrations: "./migrations",
+ *   migrationsTransport: runner,
+ * });
+ * ```
  *
  * ### Monitoring & Logs
  * **Example:** Enhanced monitoring + log export
@@ -2314,18 +2354,16 @@ export const DBInstanceProvider = () =>
           // Sync migrations — the shared pipeline skips already-applied ones.
           const migrationsInput = migrationsInputOf(news);
           const migrations = migrationsInput
-            ? yield* Effect.gen(function* () {
-                if (!observed.DBClusterIdentifier) {
-                  return yield* new MigrationError({
-                    message: `DB instance '${identifier}' declares migrations but is not an Aurora cluster member; migrations run over the cluster's Data API`,
-                  });
-                }
-                return yield* runDataApiMigrations({
-                  dbClusterIdentifier: observed.DBClusterIdentifier,
-                  secretArn: news.migrationsSecretArn,
-                  input: migrationsInput,
-                  stamped: stampedOf(output),
-                });
+            ? yield* runDBInstanceMigrations({
+                instance: managedSecret.instance,
+                input: migrationsInput,
+                stamped: stampedOf(output),
+                transport: news.migrationsTransport,
+                secretArn: news.migrationsSecretArn,
+                credentials:
+                  news.masterUsername && news.masterUserPassword
+                    ? { username: news.masterUsername, password: news.masterUserPassword }
+                    : undefined,
               })
             : undefined;
 
