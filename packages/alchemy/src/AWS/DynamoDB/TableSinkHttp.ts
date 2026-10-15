@@ -1,7 +1,7 @@
 import type * as DynamoDB from "@distilled.cloud/aws/dynamodb";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { makeBatchedSink } from "../internal/BatchedSink.ts";
+import { makeBatchedSink } from "../../Util/BatchedSink.ts";
 import { BatchWriteItem } from "./BatchWriteItem.ts";
 import { grantTables } from "./BindingHttp.ts";
 import type { Table } from "./Table.ts";

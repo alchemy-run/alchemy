@@ -32,12 +32,11 @@ import type { Database as ApiDatabase } from "@/Prisma/Types";
 import * as Provider from "@/Provider";
 import { ResourceContext } from "@/ResourceContext.ts";
 import { RuntimeContext } from "@/RuntimeContext";
-import { Self } from "@/Self";
 import { Stack, type StackSpec } from "@/Stack";
 import { Stage } from "@/Stage";
 import { inMemoryState } from "@/State/InMemoryState";
 import { PlatformServices } from "@/Util/PlatformServices";
-import { resourceContext } from "../Utils/ResourceContext.ts";
+import { resourceContext } from "../Util/ResourceContext.ts";
 import {
   type Captured,
   conflict,
@@ -671,7 +670,6 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
     "ConnectBinding resolves bound connection outputs at runtime",
     () => {
       const stored: Record<string, Output.Output> = {};
-      let capturedBindingEnv: Record<string, Output.Output> | undefined;
       const runtime = {
         Type: "Prisma.Compute",
         id: "App",
@@ -687,18 +685,6 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
           if (!output) return Effect.die(`missing runtime binding ${key}`);
           return Output.evaluate(output, {}) as Effect.Effect<T>;
         },
-      };
-      const host = {
-        Type: "Prisma.Compute",
-        LogicalId: "App",
-        FQN: "App",
-        bind: (...args: unknown[]) =>
-          args[0] instanceof Array
-            ? (binding: { env?: Record<string, Output.Output> }) =>
-                Effect.sync(() => {
-                  capturedBindingEnv = binding.env;
-                })
-            : Effect.void,
       };
       const escapedPooledConnectionString = "__ALCHEMY_PRISMA_CONNECTION_VALUE__:prisma://pooled";
       const connection = {
@@ -718,11 +704,12 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
       return Effect.gen(function* () {
         const db = yield* Connect(connection);
         const keys = connectEnvKeys(connection);
-        const encodedEnv = yield* Output.evaluate(capturedBindingEnv ?? {}, {}) as Effect.Effect<
+        // Bound through the host's RuntimeContext under the documented keys,
+        // whatever the host type.
+        expect(Object.keys(stored).sort()).toEqual(Object.values(keys).sort());
+        const encodedEnv = yield* Output.evaluate(stored, {}) as Effect.Effect<
           Record<string, unknown>
         >;
-
-        expect(Object.keys(stored)).toEqual([]);
         expect(encodedEnv[keys.accelerateConnectionString]).toEqual(expect.any(String));
         expect(encodedEnv[keys.user]).toEqual(expect.any(String));
         expect(yield* db.connectionId).toBe("connection-1");
@@ -734,20 +721,9 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
         expect(yield* db.accelerateConnectionString).toBeUndefined();
         expect(yield* db.user).toBeNull();
         expect(Redacted.value((yield* db.password)!)).toBe("password");
-        expect(Object.keys(stored)).toEqual(
-          expect.arrayContaining([
-            "PRISMA_API_CONNECTION_CONNECTION_ID",
-            "PRISMA_API_CONNECTION_DIRECT_CONNECTION_STRING",
-            "PRISMA_API_CONNECTION_POOLED_CONNECTION_STRING",
-            "PRISMA_API_CONNECTION_ACCELERATE_CONNECTION_STRING",
-            "PRISMA_API_CONNECTION_USER",
-            "PRISMA_API_CONNECTION_PASSWORD",
-          ]),
-        );
       }).pipe(
         Effect.provide(ConnectBinding),
         Effect.provide(Layer.succeed(RuntimeContext, runtime)),
-        Effect.provide(Layer.succeed(Self, host)),
         Effect.provide(
           Layer.succeed(
             ConfigProvider.ConfigProvider,
@@ -793,8 +769,8 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
         password: Output.asOutput(Redacted.make("password")),
       } as PrismaConnection;
 
-      // The deploy-time host dispatch is guarded by `__ALCHEMY_RUNTIME__`,
-      // which bundles fold to `true` — simulate that so no Self is needed.
+      // Bundles fold `__ALCHEMY_RUNTIME__` to `true`; simulate the deployed
+      // runtime, where no deploy-time host (Self) exists.
       const wasRuntime = globalThis.__ALCHEMY_RUNTIME__;
       globalThis.__ALCHEMY_RUNTIME__ = true;
       return Effect.gen(function* () {
@@ -822,7 +798,7 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
   );
 
   it.effect(
-    "Prisma.Compute records Connection.bind env on platform bindings",
+    "Prisma.Compute carries Connect outputs in its env through RuntimeContext",
     () => {
       const stack: Omit<StackSpec, "output"> = {
         name: "prisma-compute-binding-test",
@@ -855,26 +831,27 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
         );
 
         const keys = connectEnvKeys(connection);
-        const binding = stack.bindings[app.FQN]?.[0];
-        const env = yield* Output.evaluate(binding?.data.env ?? {}, {});
+        const env = (yield* Output.evaluate(
+          (app.Props as { env?: Record<string, unknown> }).env ?? {},
+          {},
+        )) as Record<string, string | Redacted.Redacted<string>>;
+        // Compute's RuntimeContext.set JSON-packs values; secrets stay Redacted.
+        const unpack = (value: string | Redacted.Redacted<string> | undefined) =>
+          Redacted.isRedacted(value)
+            ? Redacted.make(JSON.parse(Redacted.value(value)).value as string)
+            : value === undefined
+              ? undefined
+              : (JSON.parse(value) as string);
 
-        expect(binding?.sid).toBe("Connection");
-        expect(Object.keys(env)).toEqual(
-          expect.arrayContaining([
-            keys.connectionId,
-            keys.databaseId,
-            keys.directConnectionString,
-            keys.pooledConnectionString,
-            keys.password,
-          ]),
-        );
-        expect(env[keys.connectionId]).toBe("connection-1");
-        expect(env[keys.databaseId]).toBe("database-1");
-        expect(redactedValue(env[keys.directConnectionString] ?? undefined)).toBe("postgres://api");
-        expect(redactedValue(env[keys.pooledConnectionString] ?? undefined)).toBe(
+        expect(stack.bindings[app.FQN]).toBeUndefined();
+        expect(Object.keys(env)).toEqual(expect.arrayContaining(Object.values(keys)));
+        expect(unpack(env[keys.connectionId])).toBe("connection-1");
+        expect(unpack(env[keys.databaseId])).toBe("database-1");
+        expect(redactedValue(unpack(env[keys.directConnectionString]))).toBe("postgres://api");
+        expect(redactedValue(unpack(env[keys.pooledConnectionString]))).toBe(
           "prisma+postgres://api",
         );
-        expect(redactedValue(env[keys.password] ?? undefined)).toBe("password");
+        expect(redactedValue(unpack(env[keys.password]))).toBe("password");
       }).pipe(
         Effect.provide(inMemoryState()),
         Effect.provide(
@@ -895,181 +872,6 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
       );
     },
     { tags: ["provider:prisma:compute", "provider:prisma:connect", "provider:prisma:connection"] },
-  );
-
-  it.effect(
-    "Connection.bind records env for AWS Lambda function hosts",
-    () => {
-      const stored: Record<string, Output.Output> = {};
-      let capturedBindingEnv: Record<string, Output.Output> | undefined;
-      const runtime = {
-        Type: "AWS.Lambda.Function",
-        id: "Api",
-        env: stored,
-        set: (id: string, output: Output.Output) =>
-          Effect.sync(() => {
-            const key = id.replaceAll(/[^a-zA-Z0-9]/g, "_");
-            stored[key] = output;
-            return key;
-          }),
-        get: <T>(key: string): Effect.Effect<T> => {
-          const output = stored[key];
-          if (!output) return Effect.die(`missing runtime binding ${key}`);
-          return Output.evaluate(output, {}) as Effect.Effect<T>;
-        },
-      };
-      const host = {
-        Type: "AWS.Lambda.Function",
-        LogicalId: "Api",
-        FQN: "Api",
-        bind: (...args: unknown[]) =>
-          args[0] instanceof Array
-            ? (binding: { env?: Record<string, Output.Output> }) =>
-                Effect.sync(() => {
-                  capturedBindingEnv = binding.env;
-                })
-            : Effect.void,
-      };
-      const connection = {
-        Type: "Prisma.Connection",
-        LogicalId: "Connection",
-        FQN: "Connection",
-        connectionId: Output.asOutput("connection-1"),
-        databaseId: Output.asOutput("database-1"),
-        directConnectionString: Output.asOutput(Redacted.make("postgres://api")),
-        pooledConnectionString: Output.asOutput(undefined),
-        accelerateConnectionString: Output.asOutput(undefined),
-        host: Output.asOutput("db.example.test"),
-        user: Output.asOutput("api"),
-        password: Output.asOutput(Redacted.make("password")),
-      } as PrismaConnection;
-
-      return Effect.gen(function* () {
-        const db = yield* Connect(connection);
-        const keys = connectEnvKeys(connection);
-        const env = yield* Output.evaluate(capturedBindingEnv ?? {}, {}) as Effect.Effect<
-          Record<string, unknown>
-        >;
-
-        expect(Object.keys(env)).toEqual(
-          expect.arrayContaining([
-            keys.connectionId,
-            keys.databaseId,
-            keys.directConnectionString,
-            keys.password,
-          ]),
-        );
-        expect(env[keys.connectionId]).toBe("connection-1");
-        expect(env[keys.databaseId]).toBe("database-1");
-        expect(
-          redactedValue(
-            env[keys.directConnectionString] as string | Redacted.Redacted<string> | undefined,
-          ),
-        ).toBe("postgres://api");
-        expect(
-          redactedValue(env[keys.password] as string | Redacted.Redacted<string> | undefined),
-        ).toBe("password");
-        expect(Redacted.value(yield* db.databaseUrl)).toBe("postgres://api");
-      }).pipe(
-        Effect.provide(ConnectBinding),
-        Effect.provide(inMemoryState()),
-        Effect.provide(Layer.succeed(RuntimeContext, runtime)),
-        Effect.provide(Layer.succeed(Self, host)),
-        Effect.provide(
-          Layer.succeed(
-            ConfigProvider.ConfigProvider,
-            ConfigProvider.fromUnknown({ ALCHEMY_PHASE: "runtime" }),
-          ),
-        ),
-      );
-    },
-    { tags: ["provider:prisma:connect", "provider:prisma:connection"] },
-  );
-
-  it.effect(
-    "Connection.bind records native text bindings for Workers",
-    () => {
-      const workerEnv: Record<string, string> = {};
-      let capturedBindings: unknown[] | undefined;
-      const runtime = {
-        Type: "Cloudflare.Worker",
-        id: "Worker",
-        env: {},
-        set: (id: string) => Effect.succeed(id.replaceAll(/[^a-zA-Z0-9]/g, "_")),
-        get: <T>(key: string): Effect.Effect<T> => {
-          const value = workerEnv[key];
-          if (value === undefined) {
-            return Effect.die(`missing worker binding ${key}`);
-          }
-          return Effect.succeed(value as T);
-        },
-      };
-      const host = {
-        Type: "Cloudflare.Worker",
-        LogicalId: "Worker",
-        FQN: "Worker",
-        bind: (...args: unknown[]) =>
-          args[0] instanceof Array
-            ? (binding: {
-                bindings?: Output.Output<{ type: string; name: string; text: string }>[];
-              }) =>
-                Effect.sync(() => {
-                  capturedBindings = binding.bindings;
-                })
-            : Effect.void,
-      };
-      const connection = {
-        Type: "Prisma.Connection",
-        LogicalId: "Connection",
-        FQN: "Connection",
-        connectionId: Output.asOutput("connection-1"),
-        databaseId: Output.asOutput("database-1"),
-        directConnectionString: Output.asOutput(Redacted.make("postgres://api")),
-        pooledConnectionString: Output.asOutput(undefined),
-        accelerateConnectionString: Output.asOutput(undefined),
-        host: Output.asOutput("db.example.test"),
-        user: Output.asOutput("api"),
-        password: Output.asOutput(Redacted.make("password")),
-      } as PrismaConnection;
-
-      return Effect.gen(function* () {
-        const db = yield* Connect(connection);
-        const keys = connectEnvKeys(connection);
-        const bindings = (yield* Output.evaluate(capturedBindings ?? [], {})) as Array<{
-          type: string;
-          name: string;
-          text: string;
-        }>;
-
-        for (const binding of bindings) {
-          workerEnv[binding.name] = binding.text;
-        }
-
-        expect(bindings).toEqual(
-          expect.arrayContaining([
-            { type: "plain_text", name: keys.connectionId, text: "connection-1" },
-            { type: "plain_text", name: keys.databaseId, text: "database-1" },
-            { type: "secret_text", name: keys.directConnectionString, text: "postgres://api" },
-            { type: "secret_text", name: keys.password, text: "password" },
-          ]),
-        );
-        expect("connectionString" in db).toBe(false);
-        expect(Redacted.value(yield* db.databaseUrl)).toBe("postgres://api");
-        expect(Redacted.value((yield* db.password)!)).toBe("password");
-      }).pipe(
-        Effect.provide(ConnectBinding),
-        Effect.provide(inMemoryState()),
-        Effect.provide(Layer.succeed(RuntimeContext, runtime)),
-        Effect.provide(Layer.succeed(Self, host)),
-        Effect.provide(
-          Layer.succeed(
-            ConfigProvider.ConfigProvider,
-            ConfigProvider.fromUnknown({ ALCHEMY_PHASE: "runtime" }),
-          ),
-        ),
-      );
-    },
-    { tags: ["provider:prisma:connect", "provider:prisma:connection"] },
   );
 
   it.effect(

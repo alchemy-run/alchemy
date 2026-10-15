@@ -2,7 +2,7 @@ import type * as Kinesis from "@distilled.cloud/aws/kinesis";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Binding from "../../Binding.ts";
-import { makeBatchedSink } from "../internal/BatchedSink.ts";
+import { makeBatchedSink } from "../../Util/BatchedSink.ts";
 import { isBindingHost } from "../Lambda/Function.ts";
 import { PutRecords } from "./PutRecords.ts";
 import type { Stream } from "./Stream.ts";

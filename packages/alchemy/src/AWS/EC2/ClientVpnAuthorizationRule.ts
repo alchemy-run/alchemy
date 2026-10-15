@@ -5,7 +5,7 @@ import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import { canonicalCidr } from "../../Utils/ip-address.ts";
+import { canonicalCidr } from "../../Util/ip-address.ts";
 import type { Providers } from "../Providers.ts";
 import type { ClientVpnEndpointId } from "./ClientVpnEndpoint.ts";
 import { retryClientVpn } from "./ClientVpnWait.ts";

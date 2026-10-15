@@ -10,6 +10,7 @@ import * as Cloudflare from "../../Alchemist/routes/cloudflare.ts";
 import * as CloudflareToken from "../../Alchemist/routes/cloudflareToken.ts";
 import type { CreatedToken } from "../../Alchemist/routes/cloudflareToken.ts";
 import * as CliKit from "../../Cli/CliKit/index.ts";
+// oxlint-disable-next-line alchemy/package-boundaries -- package split phase 2: provider CLI subcommand; becomes plugin `cli`
 import { STATE_STORE_SCRIPT_NAME } from "../../Cloudflare/StateStore/Api.ts";
 import { loadConfigProvider } from "../../Util/ConfigProvider.ts";
 import { formatLocalTimestamp } from "../Format.ts";

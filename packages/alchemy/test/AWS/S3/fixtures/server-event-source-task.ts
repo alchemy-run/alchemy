@@ -2,7 +2,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
 import * as AWS from "@/AWS";
-import { S3BucketEventSource } from "@/Server/S3BucketEventSource.ts";
+import { S3BucketEventSource } from "@/AWS/Server/S3BucketEventSource.ts";
 
 export const INCOMING_PREFIX = "incoming/";
 export const INCOMING_SUFFIX = ".txt";

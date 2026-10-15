@@ -4,10 +4,10 @@ import * as Effect from "effect/Effect";
 import * as Ref from "effect/Ref";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-import { BatchRetryExhaustedError, makeBatchedSink } from "@/AWS/internal/BatchedSink.ts";
+import { BatchRetryExhaustedError, makeBatchedSink } from "@/Util/BatchedSink.ts";
 
 /**
- * Pure tests of the shared batch-sink engine (`AWS/internal/BatchedSink.ts`)
+ * Pure tests of the shared batch-sink engine (`Util/BatchedSink.ts`)
  * with an injected `send`. Live end-to-end coverage of the three rebased
  * sinks (SQS `QueueSink`, SNS `TopicSink`, Kinesis `StreamSink`) lives in
  * their fixture tests; partial-failure classification cannot be forced
