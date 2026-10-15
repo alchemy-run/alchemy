@@ -159,6 +159,11 @@ interface ParsedJSDoc {
   hasBindingTag: boolean;
   /** `@layer` — a Layer factory providing a Context service. */
   hasLayerTag: boolean;
+  /**
+   * `@primitive` — a building block exported as a module's `make` (e.g.
+   * `Domain.Event`). Its page is named after the file, not the export.
+   */
+  hasPrimitiveTag: boolean;
   /** `@provides <Service.Tag>` — service tags the Layer satisfies. */
   provides: string[];
   /** `@peer <package>` — optional peer dependencies the Layer needs. */
@@ -202,6 +207,7 @@ function parseJSDoc(node: Node, markers?: MarkerContext): ParsedJSDoc {
       hasResourceTag: false,
       hasBindingTag: false,
       hasLayerTag: false,
+      hasPrimitiveTag: false,
       provides: [],
       peers: [],
       category: "",
@@ -218,6 +224,7 @@ function parseJSDoc(node: Node, markers?: MarkerContext): ParsedJSDoc {
   let hasResourceTag = false;
   let hasBindingTag = false;
   let hasLayerTag = false;
+  let hasPrimitiveTag = false;
   let category = "";
   let product = "";
   let sawTag = false;
@@ -297,6 +304,9 @@ function parseJSDoc(node: Node, markers?: MarkerContext): ParsedJSDoc {
         case "layer":
           hasLayerTag = true;
           break;
+        case "primitive":
+          hasPrimitiveTag = true;
+          break;
         case "provides":
           if (value) provides.push(value);
           break;
@@ -348,6 +358,7 @@ function parseJSDoc(node: Node, markers?: MarkerContext): ParsedJSDoc {
     hasResourceTag,
     hasBindingTag,
     hasLayerTag,
+    hasPrimitiveTag,
     provides,
     peers,
     category,
@@ -474,10 +485,13 @@ export function findTaggedPrimary(
 
   for (const node of candidates) {
     const doc = parseJSDoc(node, markers);
-    if (!doc.hasResourceTag && !doc.hasBindingTag && !doc.hasLayerTag) {
+    if (!doc.hasResourceTag && !doc.hasBindingTag && !doc.hasLayerTag && !doc.hasPrimitiveTag) {
       continue;
     }
-    const name = declName(node);
+    // A primitive is its module's `make`; the page is named after the module.
+    const name = doc.hasPrimitiveTag
+      ? path.basename(sourceFile.fileName).replace(/\.tsx?$/, "")
+      : declName(node);
     if (!name) continue;
     const category = doc.category;
     const product = doc.product;
@@ -512,6 +526,7 @@ export function findTaggedPrimary(
       hasResourceTag: doc.hasResourceTag,
       hasBindingTag: doc.hasBindingTag,
       hasLayerTag: doc.hasLayerTag,
+      hasPrimitiveTag: doc.hasPrimitiveTag,
       provides: doc.provides,
       peers: doc.peers,
     };

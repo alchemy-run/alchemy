@@ -1,6 +1,8 @@
 ---
 name: prepare-release
 description: Prepare an alchemy release by converging the live test suite — nuke + clear:state the testing account, run every test through a tag-driven `--plan` (unit → per-provider live in parallel → local), triage failures as they stream in, fan out one fix agent per failing/leaking service, census leaks, and loop until two consecutive rounds are green and clean. Fixes land as one alchemy PR plus at most one distilled PR and one floci PR. Use for "prepare a release", "/prepare-release", "release hardening run", "run the full suite before release", optionally scoped ("/prepare-release aws cloudflare").
+metadata:
+  internal: true
 ---
 
 # Prepare a release

@@ -6,9 +6,9 @@ const roots = [
   path.join(import.meta.dir, "../packages/better-auth/src"),
 ];
 
-const pageTag = /^\s*\*\s+@(resource|binding|layer)\b/;
+const pageTag = /^\s*\*\s+@(resource|binding|layer|primitive)\b/;
 const generatorTag =
-  /^\s*\*\s+@(resource|binding|layer|product|category|group|label|provides|peer)\b/;
+  /^\s*\*\s+@(resource|binding|layer|primitive|product|category|group|label|provides|peer)\b/;
 const sectionTag = /^(\s*\*\s+)@section(?:\s+(.*))?$/;
 const exampleTag = /^(\s*\*\s+)@example(?:\s+(.*))?$/;
 
