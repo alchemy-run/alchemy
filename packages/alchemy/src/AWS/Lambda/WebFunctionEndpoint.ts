@@ -105,13 +105,26 @@ export interface WebFunctionEndpoint extends Resource<
 const WebFunctionEndpointResource = Resource<WebFunctionEndpoint>(WebFunctionEndpointTypeId);
 
 /** Yield a `function` declaration so the endpoint references the resource. */
+/** The settings Lambda limits, as numbers (Outputs resolve at deploy). */
+const checkEndpointProps = (id: string, props: WebFunctionEndpointProps) =>
+  validateWebFunctionSettings(`AWS.Lambda.WebFunctionEndpoint "${id}"`, {
+    rateLimit: typeof props.rateLimit === "number" ? props.rateLimit : undefined,
+    maxEnvironments: typeof props.maxEnvironments === "number" ? props.maxEnvironments : undefined,
+  });
+
 const resolveEndpointProps = (
+  id: string,
   props: WebFunctionEndpointProps | Effect.Effect<WebFunctionEndpointProps, never, Providers>,
 ): Effect.Effect<WebFunctionEndpointProps, never, Providers> =>
   Effect.gen(function* () {
     const resolved = Effect.isEffect(props) ? yield* props : props;
     if (globalThis.__ALCHEMY_RUNTIME__) return resolved;
     const fn = Effect.isEffect(resolved.function) ? yield* resolved.function : resolved.function;
+    // Declaration props can't fail: surface the invalid value as a defect,
+    // which still stops the plan with its message.
+    yield* checkEndpointProps(id, resolved).pipe(
+      Effect.catchTag("WebFunctionInvalidConfig", (e) => Effect.die(e)),
+    );
     return { ...resolved, function: fn };
   });
 
@@ -176,7 +189,7 @@ export const WebFunctionEndpoint: typeof WebFunctionEndpointResource = Object.as
   (
     id: string,
     props: WebFunctionEndpointProps | Effect.Effect<WebFunctionEndpointProps, never, Providers>,
-  ) => WebFunctionEndpointResource(id, resolveEndpointProps(props)),
+  ) => WebFunctionEndpointResource(id, resolveEndpointProps(id, props)),
   WebFunctionEndpointResource,
 );
 
@@ -245,6 +258,8 @@ export const WebFunctionEndpointProvider = () =>
           return endpoint === undefined ? undefined : toAttributes(functionName, endpoint);
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
+          // Values that were Outputs at plan are resolved now.
+          yield* checkEndpointProps(id, news);
           const functionName = functionOf(news).functionName;
           const endpointName = output?.endpointName ?? nameOf(id, news);
           const previous = yield* getEndpoint(functionName, endpointName);

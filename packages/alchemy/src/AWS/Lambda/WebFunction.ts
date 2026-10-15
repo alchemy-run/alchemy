@@ -11,6 +11,7 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { deepEqual, havePropsChanged, isResolved, stripEffects } from "../../Diff.ts";
+import * as Output from "../../Output.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { Platform, type Main, type PlatformProps } from "../../Platform.ts";
 import type { LogLine, LogsInput } from "../../Provider.ts";
@@ -454,6 +455,41 @@ export type WebFunctionRuntimeContext = Omit<HostRuntimeContext, "run">;
  *
  * @resource
  */
+/** `vpc` and `regions` together: VPC egress needs a single-Region endpoint. */
+const requireHomeRegion = (
+  id: string,
+  vpc: WebFunctionVpc | undefined,
+  regions: string[] | undefined,
+) =>
+  vpc !== undefined && regions !== undefined && regions.length > 0
+    ? Effect.fail(
+        new WebFunctionVpcRequiresHomeRegion({
+          functionId: id,
+          message: `AWS.Lambda.WebFunction "${id}": \`vpc\` can't be combined with \`regions\`: Lambda routes VPC egress only for single-Region endpoints`,
+        }),
+      )
+    : Effect.void;
+
+/** The settings Lambda limits, as numbers (Outputs resolve at deploy). */
+const checkWebFunctionProps = (id: string, props: WebFunctionProps) =>
+  Effect.gen(function* () {
+    const number = (value: unknown) => (typeof value === "number" ? value : undefined);
+    yield* requireHomeRegion(
+      id,
+      props.vpc,
+      Array.isArray(props.regions) ? props.regions : undefined,
+    );
+    yield* validateWebFunctionSettings(`AWS.Lambda.WebFunction "${id}"`, {
+      rateLimit: number(props.rateLimit),
+      maxEnvironments: number(props.maxEnvironments),
+      maxConcurrencyPerEnvironment: number(props.maxConcurrencyPerEnvironment),
+      timeoutSeconds:
+        props.timeout === undefined || Output.isOutput(props.timeout)
+          ? undefined
+          : toTimeoutSeconds(props.timeout),
+    });
+  });
+
 export const WebFunction: Platform<
   WebFunction,
   WebFunctionServices,
@@ -462,6 +498,12 @@ export const WebFunction: Platform<
   {},
   WebFunctionProps
 > = Platform(WebFunctionTypeId, {
+  // Check limits where the function is declared, so a first deploy fails
+  // at plan too (the provider's diff only runs once state exists).
+  transformProps: (id: string, props: WebFunctionProps) =>
+    globalThis.__ALCHEMY_RUNTIME__
+      ? Effect.succeed(props)
+      : checkWebFunctionProps(id, props).pipe(Effect.as(props)),
   createRuntimeContext: (id: string): WebFunctionRuntimeContext => {
     // No `run`: environments exist only while HTTP traffic keeps them warm,
     // so background loops (e.g. queue pollers via `ServerHost`) would stop
@@ -656,20 +698,6 @@ export const WebFunctionProvider = () =>
               securityGroupIds: [...new Set(all.flatMap((v) => v.securityGroupIds))].sort(),
             };
       };
-
-      const requireHomeRegion = (
-        id: string,
-        vpc: WebFunctionVpc | undefined,
-        regions: string[] | undefined,
-      ) =>
-        vpc !== undefined && regions !== undefined && regions.length > 0
-          ? Effect.fail(
-              new WebFunctionVpcRequiresHomeRegion({
-                functionId: id,
-                message: `AWS.Lambda.WebFunction "${id}": \`vpc\` can't be combined with \`regions\`: Lambda routes VPC egress only for single-Region endpoints`,
-              }),
-            )
-          : Effect.void;
 
       /** Name shared by the egress connector and its operator role. */
       const egressName = (id: string) =>
@@ -1004,13 +1032,7 @@ export const WebFunctionProvider = () =>
               ? ({ ...desired, exports: stripEffects(desired.exports) } as typeof desired)
               : desired;
           if (!isResolved(news)) return;
-          yield* requireHomeRegion(id, news.vpc, news.regions);
-          yield* validateWebFunctionSettings(`AWS.Lambda.WebFunction "${id}"`, {
-            rateLimit: news.rateLimit,
-            maxEnvironments: news.maxEnvironments,
-            maxConcurrencyPerEnvironment: news.maxConcurrencyPerEnvironment,
-            timeoutSeconds: news.timeout === undefined ? undefined : toTimeoutSeconds(news.timeout),
-          });
+          yield* checkWebFunctionProps(id, news);
           // Creating, or adopted without prior props: reconcile converges.
           if (!output || !olds) return undefined;
           // Generated names are engine-owned; only an explicit functionName
@@ -1087,6 +1109,8 @@ export const WebFunctionProvider = () =>
           return (yield* hasAlchemyTags(id, tags)) ? attrs : Unowned(attrs);
         }),
         reconcile: Effect.fn(function* ({ id, news, output, bindings, session }) {
+          // Values that were Outputs at plan are resolved now.
+          yield* checkWebFunctionProps(id, news);
           const names = yield* createNames(id, news.functionName);
           // Prefer deployed identifiers over regenerated ones.
           const functionName = output?.functionName ?? names.functionName;

@@ -565,8 +565,8 @@ test.provider(
     Effect.gen(function* () {
       const planError = <A, E, R>(declaration: Effect.Effect<A, E, R>) =>
         stack.plan(declaration).pipe(
-          Effect.flip,
-          Effect.map((error) => String(error)),
+          Effect.exit,
+          Effect.map((exit) => (exit._tag === "Failure" ? String(Cause.squash(exit.cause)) : "")),
         );
       const fn = (props: Partial<AWS.Lambda.WebFunctionProps>) =>
         AWS.Lambda.WebFunction("Invalid", {
@@ -598,6 +598,15 @@ test.provider(
           }),
         ),
       ).toContain("rateLimit 2500 is not allowed");
+
+      expect(
+        yield* planError(
+          fn({
+            vpc: { subnetIds: ["subnet-0"], securityGroupIds: ["sg-0"] },
+            regions: ["us-east-1"],
+          }),
+        ),
+      ).toContain("`vpc` can't be combined with `regions`");
 
       // Valid boundaries plan cleanly.
       const ok = yield* stack.plan(
