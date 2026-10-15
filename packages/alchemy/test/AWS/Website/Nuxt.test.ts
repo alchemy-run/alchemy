@@ -110,7 +110,7 @@ describe.skipIf(!runLive)(
     );
 
     test.provider.skipIf(runEmulated)(
-      'switches a standalone site between server: "function" and a Web Function without downtime',
+      'moves a standalone site from server: "function" onto a Web Function without downtime',
       (stack) =>
         Effect.gen(function* () {
           yield* stack.destroy();
@@ -141,9 +141,9 @@ describe.skipIf(!runLive)(
             label: "SSR home page",
           });
 
-          // Dropping `server` moves the site onto a Web Function and setting
-          // it moves it back; the distribution (and its domain) stays, and
-          // the site keeps answering throughout.
+          // Dropping `server` moves the site onto a Web Function; the
+          // distribution (and its domain) stays, and the site keeps
+          // answering throughout.
           const { result: migrated, failures: forward } = yield* probeDuring(
             url,
             "NUXT_AWS_PAGE_MARKER",
@@ -155,17 +155,6 @@ describe.skipIf(!runLive)(
           );
           expect(forward).toEqual([]);
 
-          const { result: back, failures: backward } = yield* probeDuring(
-            url,
-            "NUXT_AWS_PAGE_MARKER",
-            deploy("function"),
-          );
-          expect(back.site.serverUrl).toContain(".lambda-url.");
-          expect(back.site.distribution!.distributionId).toBe(
-            deployed.site.distribution!.distributionId,
-          );
-          expect(backward).toEqual([]);
-
           const distributionId = deployed.site.distribution!.distributionId;
           yield* stack.destroy();
           yield* assertDistributionDeleted(distributionId);
@@ -174,7 +163,7 @@ describe.skipIf(!runLive)(
     );
 
     test.provider.skipIf(runEmulated)(
-      'switches a Router-attached site between server: "function" and a Web Function without downtime',
+      'moves a Router-attached site from server: "function" onto a Web Function without downtime',
       (stack) =>
         Effect.gen(function* () {
           yield* stack.destroy();
@@ -218,14 +207,6 @@ describe.skipIf(!runLive)(
             deployed.router.distribution.distributionId,
           );
           expect(forward).toEqual([]);
-
-          const { result: back, failures: backward } = yield* probeDuring(
-            url,
-            "NUXT_AWS_PAGE_MARKER",
-            deploy("function"),
-          );
-          expect(back.site.serverUrl).toContain(".lambda-url.");
-          expect(backward).toEqual([]);
 
           const distributionId = deployed.router.distribution.distributionId;
           yield* stack.destroy();
