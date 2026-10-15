@@ -15,12 +15,12 @@ import * as Stream from "effect/Stream";
 import * as Binding from "../../Binding.ts";
 import {
   EgressGatewayError,
+  fromMintReply,
   MINT_INVOKE,
   type MintInvoke,
-  type MintInvokeReply,
   type MintResult,
 } from "../../Egress/Gateway.ts";
-import { EgressNotServed, type EgressRef } from "../../Egress/Kind.ts";
+import type { EgressNotServed, EgressRef } from "../../Egress/Kind.ts";
 import type { Output } from "../../Output.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
 import { hostAwsAccess, regionFromArn, withRuntimeCredentials } from "./BindingHttp.ts";
@@ -91,20 +91,6 @@ export const makeLambdaGatewayMint = (
         if (response.FunctionError !== undefined) {
           return yield* failed(`${response.FunctionError}: ${body}`);
         }
-        const reply = yield* Effect.try({
-          try: () => JSON.parse(body) as MintInvokeReply,
-          catch: (cause) => failed("its answer is not JSON", cause),
-        });
-        if (reply && "refused" in reply) {
-          return yield* new EgressNotServed({
-            message: reply.refused.message,
-            gateway: id,
-            ...(reply.refused.egress !== undefined ? { egress: reply.refused.egress } : {}),
-          });
-        }
-        if (!reply || !("minted" in reply) || typeof reply.minted?.grant !== "string") {
-          return yield* failed(`it answered something that isn't a grant: ${body.slice(0, 200)}`);
-        }
-        return reply.minted;
+        return yield* fromMintReply(id, body);
       });
   });
