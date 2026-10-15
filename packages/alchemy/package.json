@@ -39,6 +39,7 @@
     "./Anthropic": "./src/Anthropic/index.ts",
     "./OpenAI": "./src/OpenAI/index.ts",
     "./OpenCode": "./src/OpenCode/index.ts",
+    "./Workflows": "./src/Workflows.ts",
     "./Auth": "./src/Auth/index.ts",
     "./Alchemist": "./src/Alchemist/index.ts",
     "./AWS": "./src/AWS/index.ts",
@@ -144,6 +145,11 @@
         "types": "./lib/OpenCode/index.d.ts",
         "bun": "./src/OpenCode/index.ts",
         "default": "./lib/OpenCode/index.js"
+      },
+      "./Workflows": {
+        "types": "./lib/Workflows.d.ts",
+        "bun": "./src/Workflows.ts",
+        "default": "./lib/Workflows.js"
       },
       "./Auth": {
         "types": "./lib/Auth/index.d.ts",

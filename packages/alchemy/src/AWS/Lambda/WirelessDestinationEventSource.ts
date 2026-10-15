@@ -51,7 +51,7 @@ export const WirelessDestinationEventSource = Layer.effect(
   // @effect-diagnostics-next-line missingEffectContext:off
   Effect.gen(function* () {
     // this layer can only be used in a Lambda Function
-    const host = yield* Lambda.Function;
+    const host = yield* Lambda.eventSourceHost("AWS.Lambda.WirelessDestinationEventSource");
     const Rule = yield* TopicRule;
     const Permission = yield* LambdaPermission;
 

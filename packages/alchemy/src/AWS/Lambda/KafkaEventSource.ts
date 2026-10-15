@@ -29,7 +29,7 @@ const groupArnGlob = (clusterArn: string) => `${clusterArn.replace(":cluster/", 
 export const KafkaEventSource = Layer.effect(
   MSKKafkaEventSource,
   Effect.gen(function* () {
-    const host = yield* Lambda.Function;
+    const host = yield* Lambda.eventSourceHost("AWS.Lambda.KafkaEventSource");
     const Mapping = yield* EventSourceMapping;
 
     return Effect.fn(function* <StreamReq = never, Req = never>(

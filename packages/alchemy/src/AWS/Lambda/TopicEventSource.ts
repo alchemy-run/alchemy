@@ -22,7 +22,7 @@ export const isSNSEvent = (event: any): event is lambda.SNSEvent =>
 export const TopicEventSource = Layer.effect(
   SNSTopicEventSource,
   Effect.gen(function* () {
-    const host = yield* Lambda.Function;
+    const host = yield* Lambda.eventSourceHost("AWS.Lambda.TopicEventSource");
     const Permission = yield* LambdaPermission;
     const Subscription = yield* SNSSubscription;
 

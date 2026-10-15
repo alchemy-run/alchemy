@@ -209,6 +209,7 @@ type ConnectWorkerBindingHost = Resource<
 const supportsConnectEnvBinding = (host: ResourceLike | undefined): host is ConnectEnvBindingHost =>
   host?.Type === "Prisma.Compute" ||
   host?.Type === "AWS.Lambda.Function" ||
+  host?.Type === "AWS.Lambda.WebFunction" ||
   host?.Type === "Cloudflare.Container";
 
 const supportsConnectWorkerBinding = (
