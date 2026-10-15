@@ -7,14 +7,14 @@ import * as Path from "effect/Path";
 import * as Schedule from "effect/Schedule";
 import * as pathe from "pathe";
 /**
- * Cross-version upgrade test for moving AWS framework sites onto Lambda Web
+ * Cross-version upgrade tests for moving AWS framework sites onto Lambda Web
  * Functions.
  *
- * A temp project deploys a Nuxt site with the PUBLISHED alchemy and
+ * A temp project deploys a site with the PUBLISHED alchemy and
  * frontend-frameworks 2.0.0-beta.81 (SSR on a Lambda Function URL), then the
  * CURRENT workspace version re-deploys over the same local state. The site
- * must move onto a Web Function and keep its CloudFront distribution, and
- * the old function must be deleted.
+ * must move onto Web Functions and keep its CloudFront distribution, and
+ * the old functions must be deleted.
  */
 import * as AWS from "@/AWS";
 import * as Test from "@/Test/Alchemy";
@@ -29,11 +29,7 @@ const STAGE = "wfupgrade";
 
 const repoRoot = pathe.resolve(import.meta.dirname, "../../../../..");
 const workspaceCli = pathe.join(repoRoot, "packages/alchemy/bin/alchemy.js");
-const fixtureDir = pathe.resolve(import.meta.dirname, "fixtures", "nuxt-app");
-// Under the alchemy package so `nuxt` resolves from the workspace's
-// node_modules; `alchemy` and `@alchemy.run/frontend-frameworks` resolve
-// from the temp project's own node_modules first.
-const tempRoot = pathe.resolve(import.meta.dirname, "../../../.tmp");
+const fixtures = pathe.resolve(import.meta.dirname, "fixtures");
 
 /**
  * Run a command to completion without blocking the runner's event loop.
@@ -64,8 +60,50 @@ const run = (options: { cmd: string; args: string[]; cwd: string }) =>
     return Effect.sync(() => child.kill("SIGKILL"));
   });
 
+interface UpgradeCase {
+  readonly framework: "Nuxt" | "Nextjs";
+  readonly fixture: string;
+  readonly entries: string[];
+  /**
+   * Where the temp project lives. Nuxt clones under the alchemy package so
+   * `nuxt` resolves from the workspace; Next.js clones outside the repo
+   * (OpenNext traces a monorepo's symlink store wrong) and installs its own
+   * dependencies.
+   */
+  readonly tempRoot: string | undefined;
+  readonly install: string[];
+  readonly marker: string;
+  /** State rows of the old Lambda Functions and their Web Function successors. */
+  readonly moved: ReadonlyArray<{ readonly from: string; readonly to: string }>;
+}
+
+const cases: UpgradeCase[] = [
+  {
+    framework: "Nuxt",
+    fixture: "nuxt-app",
+    entries: [".gitignore", "nuxt.config.ts", "app", "server", "public"],
+    tempRoot: pathe.resolve(import.meta.dirname, "../../../.tmp"),
+    // Peers (nuxt, astro, ...) resolve from the workspace above.
+    install: ["install", "--omit", "peer"],
+    marker: "NUXT_AWS_PAGE_MARKER",
+    moved: [{ from: "Site__Server", to: "Site__WebServer" }],
+  },
+  {
+    framework: "Nextjs",
+    fixture: "nextjs-app",
+    entries: [".gitignore", "package.json", "next.config.ts", "tsconfig.json", "app", "public"],
+    tempRoot: undefined,
+    install: ["install", "--linker=hoisted", "--omit", "peer"],
+    marker: "NEXTJS_AWS_PAGE_MARKER",
+    moved: [
+      { from: "Site__Server", to: "Site__WebServer" },
+      { from: "Site__ImageOptimization", to: "Site__WebImageOptimization" },
+    ],
+  },
+];
+
 /** The stack program, valid for both versions. */
-const stackProgram = (alchemyImport: string, awsImport: string) =>
+const stackProgram = (framework: string, alchemyImport: string, awsImport: string) =>
   [
     `import * as Alchemy from "${alchemyImport}";`,
     `import * as AWS from "${awsImport}";`,
@@ -73,7 +111,7 @@ const stackProgram = (alchemyImport: string, awsImport: string) =>
     "export default Alchemy.Stack(",
     `  "${STACK}",`,
     "  { providers: AWS.providers(), state: Alchemy.localState() },",
-    '  AWS.Website.Nuxt("Site", {',
+    `  AWS.Website.${framework}("Site", {`,
     "    forceDestroy: true,",
     '    invalidation: { paths: "all", wait: true },',
     "  }),",
@@ -81,133 +119,145 @@ const stackProgram = (alchemyImport: string, awsImport: string) =>
     "",
   ].join("\n");
 
-test.provider.skipIf(!!process.env.FAST)(
-  `a Nuxt site deployed by ${PUBLISHED} moves onto a Web Function and keeps its distribution`,
-  () =>
-    Effect.gen(function* () {
-      const fs = yield* FileSystem.FileSystem;
-      const path = yield* Path.Path;
+for (const upgrade of cases) {
+  test.provider.skipIf(!!process.env.FAST)(
+    `a ${upgrade.framework} site deployed by ${PUBLISHED} moves onto Web Functions and keeps its distribution`,
+    () =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
 
-      const dir = yield* cloneFixture(fixtureDir, {
-        prefix: "alchemy-wf-upgrade-",
-        tempRoot,
-        entries: [".gitignore", "nuxt.config.ts", "app", "server", "public"],
-      });
-      const stateFile = (fqn: string) =>
-        // LocalState layout: .alchemy/state/<stack>/<stage>/<encodeFqn>.json
-        path.join(dir, ".alchemy", "state", STACK, STAGE, `${fqn}.json`);
-      const readRow = (fqn: string) =>
-        fs.readFileString(stateFile(fqn)).pipe(Effect.map((raw) => JSON.parse(raw)));
+        const dir = yield* cloneFixture(path.join(fixtures, upgrade.fixture), {
+          prefix: `alchemy-wf-upgrade-${upgrade.fixture}-`,
+          tempRoot: upgrade.tempRoot,
+          entries: upgrade.entries,
+        });
+        const stateFile = (fqn: string) =>
+          // LocalState layout: .alchemy/state/<stack>/<stage>/<encodeFqn>.json
+          path.join(dir, ".alchemy", "state", STACK, STAGE, `${fqn}.json`);
+        const readRow = (fqn: string) =>
+          fs.readFileString(stateFile(fqn)).pipe(Effect.map((raw) => JSON.parse(raw)));
 
-      // Destroy whatever this attempt deployed even when a step fails. The
-      // published CLI is the fallback for a state the current version
-      // cannot load.
-      const destroy = run({
-        cmd: "bun",
-        args: [workspaceCli, "destroy", "./alchemy.current.run.ts", "--stage", STAGE, "--yes"],
-        cwd: dir,
-      }).pipe(
-        Effect.catch(() =>
-          run({
-            cmd: "bun",
-            args: ["node_modules/alchemy/bin/cli.js", "destroy", "--stage", STAGE, "--yes"],
-            cwd: dir,
-          }),
-        ),
-      );
-      const cleanup = destroy.pipe(
-        Effect.ignore,
-        Effect.andThen(fs.remove(dir, { recursive: true }).pipe(Effect.ignore)),
-      );
+        // Destroy whatever this attempt deployed even when a step fails. The
+        // published CLI is the fallback for a state the current version
+        // cannot load.
+        const destroy = run({
+          cmd: "bun",
+          args: [workspaceCli, "destroy", "./alchemy.current.run.ts", "--stage", STAGE, "--yes"],
+          cwd: dir,
+        }).pipe(
+          Effect.catch(() =>
+            run({
+              cmd: "bun",
+              args: ["node_modules/alchemy/bin/cli.js", "destroy", "--stage", STAGE, "--yes"],
+              cwd: dir,
+            }),
+          ),
+        );
+        const cleanup = destroy.pipe(
+          Effect.ignore,
+          Effect.andThen(fs.remove(dir, { recursive: true }).pipe(Effect.ignore)),
+        );
 
-      yield* Effect.gen(function* () {
-        // ── Fixture ─────────────────────────────────────────────────────────
-        yield* fs.writeFileString(
-          path.join(dir, "package.json"),
-          JSON.stringify(
-            {
-              name: "web-function-upgrade-fixture",
-              private: true,
-              type: "module",
-              dependencies: {
-                alchemy: PUBLISHED,
-                "@alchemy.run/frontend-frameworks": PUBLISHED,
+        yield* Effect.gen(function* () {
+          // ── Fixture ───────────────────────────────────────────────────────
+          // The fixture's own dependencies (if any) plus the published pair.
+          const fixturePackage = yield* fs.readFileString(path.join(dir, "package.json")).pipe(
+            Effect.map((raw) => JSON.parse(raw) as { dependencies?: Record<string, string> }),
+            Effect.orElseSucceed(() => ({}) as { dependencies?: Record<string, string> }),
+          );
+          yield* fs.writeFileString(
+            path.join(dir, "package.json"),
+            JSON.stringify(
+              {
+                ...fixturePackage,
+                name: "web-function-upgrade-fixture",
+                private: true,
+                type: "module",
+                dependencies: {
+                  ...fixturePackage.dependencies,
+                  alchemy: PUBLISHED,
+                  "@alchemy.run/frontend-frameworks": PUBLISHED,
+                },
               },
-            },
-            null,
-            2,
-          ),
-        );
-        yield* fs.writeFileString(
-          path.join(dir, "alchemy.run.ts"),
-          stackProgram("alchemy", "alchemy/AWS"),
-        );
-        // Current-version entry: the WORKSPACE sources by absolute path.
-        yield* fs.writeFileString(
-          path.join(dir, "alchemy.current.run.ts"),
-          stackProgram(
-            pathe.join(repoRoot, "packages/alchemy/src/index.ts"),
-            pathe.join(repoRoot, "packages/alchemy/src/AWS/index.ts"),
-          ),
-        );
+              null,
+              2,
+            ),
+          );
+          yield* fs.writeFileString(
+            path.join(dir, "alchemy.run.ts"),
+            stackProgram(upgrade.framework, "alchemy", "alchemy/AWS"),
+          );
+          // Current-version entry: the WORKSPACE sources by absolute path.
+          yield* fs.writeFileString(
+            path.join(dir, "alchemy.current.run.ts"),
+            stackProgram(
+              upgrade.framework,
+              pathe.join(repoRoot, "packages/alchemy/src/index.ts"),
+              pathe.join(repoRoot, "packages/alchemy/src/AWS/index.ts"),
+            ),
+          );
 
-        // ── Phase 1: deploy with the published version ──────────────────────
-        // Peers (nuxt, astro, ...) resolve from the workspace above.
-        yield* run({ cmd: "bun", args: ["install", "--omit", "peer"], cwd: dir });
-        yield* run({
-          cmd: "bun",
-          args: ["node_modules/alchemy/bin/cli.js", "deploy", "--stage", STAGE, "--yes"],
-          cwd: dir,
-        });
+          // ── Phase 1: deploy with the published version ────────────────────
+          yield* run({ cmd: "bun", args: upgrade.install, cwd: dir });
+          yield* run({
+            cmd: "bun",
+            args: ["node_modules/alchemy/bin/cli.js", "deploy", "--stage", STAGE, "--yes"],
+            cwd: dir,
+          });
 
-        const oldServer = yield* readRow("Site__Server");
-        expect(oldServer.attr.functionUrl).toContain(".lambda-url.");
-        const before = yield* readRow("Site__Distribution");
-        const distributionId: string = before.attr.distributionId;
-        const siteUrl = `https://${before.attr.domainName}`;
-        yield* expectUrlContains(`${siteUrl}/`, "NUXT_AWS_PAGE_MARKER", {
-          timeout: "180 seconds",
-          label: "SSR page from the published version",
-        });
+          for (const { from } of upgrade.moved) {
+            expect((yield* readRow(from)).attr.functionUrl).toContain(".lambda-url.");
+          }
+          const before = yield* readRow("Site__Distribution");
+          const distributionId: string = before.attr.distributionId;
+          const siteUrl = `https://${before.attr.domainName}`;
+          yield* expectUrlContains(`${siteUrl}/`, upgrade.marker, {
+            timeout: "180 seconds",
+            label: "SSR page from the published version",
+          });
 
-        // ── Phase 2: re-deploy with the CURRENT workspace version ───────────
-        // The upgrade a user runs bumps both packages together.
-        const linked = path.join(dir, "node_modules", "@alchemy.run", "frontend-frameworks");
-        yield* fs.remove(linked, { recursive: true });
-        yield* fs.symlink(path.join(repoRoot, "packages/frontend-frameworks"), linked);
-        yield* run({
-          cmd: "bun",
-          args: [workspaceCli, "deploy", "./alchemy.current.run.ts", "--stage", STAGE, "--yes"],
-          cwd: dir,
-        });
+          // ── Phase 2: re-deploy with the CURRENT workspace version ─────────
+          // The upgrade a user runs bumps both packages together.
+          const linked = path.join(dir, "node_modules", "@alchemy.run", "frontend-frameworks");
+          yield* fs.remove(linked, { recursive: true });
+          yield* fs.symlink(path.join(repoRoot, "packages/frontend-frameworks"), linked);
+          yield* run({
+            cmd: "bun",
+            args: [workspaceCli, "deploy", "./alchemy.current.run.ts", "--stage", STAGE, "--yes"],
+            cwd: dir,
+          });
 
-        // The server moved onto a Web Function and the old function is gone.
-        const webServer = yield* readRow("Site__WebServer");
-        expect(webServer.attr.domainName).toContain(".lambda-web.");
-        expect(yield* fs.exists(stateFile("Site__Server"))).toBe(false);
+          // Each server moved onto a Web Function and the old function is gone.
+          for (const { from, to } of upgrade.moved) {
+            expect((yield* readRow(to)).attr.domainName).toContain(".lambda-web.");
+            expect(yield* fs.exists(stateFile(from))).toBe(false);
+          }
 
-        // THE assertion: same distribution, same URL, still serving.
-        const after = yield* readRow("Site__Distribution");
-        expect(after.attr.distributionId).toEqual(distributionId);
-        yield* expectUrlContains(`${siteUrl}/`, "NUXT_AWS_PAGE_MARKER", {
-          timeout: "180 seconds",
-          label: "SSR page after the upgrade",
-        });
+          // THE assertion: same distribution, same URL, still serving.
+          const after = yield* readRow("Site__Distribution");
+          expect(after.attr.distributionId).toEqual(distributionId);
+          yield* expectUrlContains(`${siteUrl}/`, upgrade.marker, {
+            timeout: "180 seconds",
+            label: "SSR page after the upgrade",
+          });
 
-        // ── Cleanup ─────────────────────────────────────────────────────────
-        yield* destroy;
-        yield* cloudfront.getDistribution({ Id: distributionId }).pipe(
-          Effect.flatMap(() => Effect.fail(new Error("DistributionStillExists"))),
-          Effect.catchTag("NoSuchDistribution", () => Effect.void),
-          Effect.retry({
-            while: (error) => error instanceof Error && error.message === "DistributionStillExists",
-            schedule: Schedule.max([Schedule.fixed("10 seconds"), Schedule.recurs(60)]),
-          }),
-        );
-      }).pipe(Effect.ensuring(cleanup));
-    }),
-  {
-    tags: ["provider:aws", "provider:aws:cloudfront", "provider:aws:website", "live"],
-    timeout: 2_400_000,
-  },
-);
+          // ── Cleanup ───────────────────────────────────────────────────────
+          yield* destroy;
+          yield* cloudfront.getDistribution({ Id: distributionId }).pipe(
+            Effect.flatMap(() => Effect.fail(new Error("DistributionStillExists"))),
+            Effect.catchTag("NoSuchDistribution", () => Effect.void),
+            Effect.retry({
+              while: (error) =>
+                error instanceof Error && error.message === "DistributionStillExists",
+              schedule: Schedule.max([Schedule.fixed("10 seconds"), Schedule.recurs(60)]),
+            }),
+          );
+        }).pipe(Effect.ensuring(cleanup));
+      }),
+    {
+      tags: ["provider:aws", "provider:aws:cloudfront", "provider:aws:website", "live"],
+      timeout: 2_400_000,
+    },
+  );
+}
