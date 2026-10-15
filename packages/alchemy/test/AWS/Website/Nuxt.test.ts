@@ -107,7 +107,7 @@ describe.skipIf(!runLive)(
     );
 
     test.provider.skipIf(runEmulated)(
-      'server: "function" deploys SSR on a streaming Lambda Function URL',
+      'server: "function" deploys SSR on a Lambda Function URL, then moves to a Web Function',
       (stack) =>
         Effect.gen(function* () {
           yield* stack.destroy();
@@ -134,6 +134,27 @@ describe.skipIf(!runLive)(
           yield* expectUrlContains(`${deployed.site.url!}/`, "NUXT_AWS_PAGE_MARKER", {
             timeout: "180 seconds",
             label: "SSR home page",
+          });
+
+          // Dropping `server` moves the site onto a Web Function; the
+          // distribution (and its domain) stays.
+          const migrated = yield* stack.deploy(
+            Effect.gen(function* () {
+              const site = yield* AWS.Website.Nuxt("NuxtFunctionSite", {
+                rootDir,
+                forceDestroy: true,
+                invalidation: { paths: "all", wait: true },
+              });
+              return { site };
+            }),
+          );
+          expect(migrated.site.serverUrl).toContain(".lambda-web.");
+          expect(migrated.site.distribution!.distributionId).toBe(
+            deployed.site.distribution!.distributionId,
+          );
+          yield* expectUrlContains(`${migrated.site.url!}/`, "NUXT_AWS_PAGE_MARKER", {
+            timeout: "180 seconds",
+            label: "SSR home page after moving to a Web Function",
           });
 
           const distributionId = deployed.site.distribution!.distributionId;
