@@ -197,10 +197,10 @@ const serializeHead = (
  * bytes after it; leaves the socket paused, so nothing is lost before the
  * caller splices it. `undefined` for a malformed, oversized or abandoned head.
  */
-const readHead = (socket: net.Socket) =>
-  Effect.callback<{ head: RequestHead; rest: Buffer } | undefined>((resume) => {
+const readRawHead = (socket: net.Socket) =>
+  Effect.callback<{ head: string; rest: Buffer } | undefined>((resume) => {
     let buffered = Buffer.alloc(0);
-    const finish = (result: { head: RequestHead; rest: Buffer } | undefined) => {
+    const finish = (result: { head: string; rest: Buffer } | undefined) => {
       socket.pause();
       socket.off("data", onData);
       socket.off("close", onClose);
@@ -213,8 +213,10 @@ const readHead = (socket: net.Socket) =>
         if (buffered.length > MAX_HEAD) finish(undefined);
         return;
       }
-      const head = parseHead(buffered.subarray(0, end).toString("latin1"));
-      finish(head && { head, rest: buffered.subarray(end + 4) });
+      finish({
+        head: buffered.subarray(0, end).toString("latin1"),
+        rest: buffered.subarray(end + 4),
+      });
     };
     const onClose = () => finish(undefined);
     socket.on("data", onData);
@@ -223,6 +225,29 @@ const readHead = (socket: net.Socket) =>
   }).pipe(
     Effect.timeoutOrElse({ duration: HEAD_TIMEOUT, orElse: () => Effect.succeed(undefined) }),
   );
+
+/** A request head off `socket` (see {@link readRawHead}). */
+const readHead = (socket: net.Socket) =>
+  readRawHead(socket).pipe(
+    Effect.map((raw) => {
+      const head = raw && parseHead(raw.head);
+      return head ? { head, rest: raw.rest } : undefined;
+    }),
+  );
+
+/**
+ * A response head with `Connection: close` (and no keep-alive headers): the
+ * proxy serves one request per connection, so the client must not send a
+ * second one on it, whatever the upstream offered.
+ */
+const closingResponseHead = (head: string): Buffer => {
+  const [status = "HTTP/1.1 502 Bad Gateway", ...lines] = head.split("\r\n");
+  const kept = lines.filter((line) => {
+    const name = line.slice(0, line.indexOf(":")).trim().toLowerCase();
+    return name !== "connection" && name !== "keep-alive" && name !== "proxy-connection";
+  });
+  return Buffer.from(`${[status, ...kept, "Connection: close"].join("\r\n")}\r\n\r\n`, "latin1");
+};
 
 /** Resolves when the socket has closed (immediately if it already has). */
 const awaitClose = (socket: net.Socket) =>
@@ -303,6 +328,31 @@ const splice = (a: net.Socket, b: net.Socket) =>
     });
     yield* Effect.raceFirst(awaitClose(a), awaitClose(b));
     yield* Effect.all([awaitClose(a), awaitClose(b)]).pipe(Effect.timeout(LINGER), Effect.ignore);
+  });
+
+/**
+ * One request from `client` to `upstream` (its head already written): the
+ * body streams up, the response head comes back with `Connection: close`,
+ * then the response body streams down until either side closes.
+ */
+const forward = (client: net.Socket, upstream: net.Socket, rest: Buffer) =>
+  Effect.gen(function* () {
+    yield* Effect.sync(() => {
+      if (rest.length > 0) upstream.write(rest);
+      client.pipe(upstream);
+    });
+    const response = yield* readRawHead(upstream);
+    if (!response) return yield* respond(client, "502 Bad Gateway");
+    yield* Effect.sync(() => {
+      client.write(closingResponseHead(response.head));
+      if (response.rest.length > 0) client.write(response.rest);
+      upstream.pipe(client);
+    });
+    yield* Effect.raceFirst(awaitClose(client), awaitClose(upstream));
+    yield* Effect.all([awaitClose(client), awaitClose(upstream)]).pipe(
+      Effect.timeout(LINGER),
+      Effect.ignore,
+    );
   });
 
 const respond = (socket: net.Socket, status: string) =>
@@ -394,8 +444,7 @@ export const serveEgressProxy = (
             serializeHead(`${head.method} ${head.target} HTTP/1.1`, rewriteHeaders(head)),
           );
         }
-        if (rest.length > 0) upstream.write(rest);
-        yield* splice(client, upstream);
+        yield* forward(client, upstream, rest);
       }).pipe(Effect.scoped);
 
     // One loopback TLS server per CA generation and routed `host:port`,
@@ -468,16 +517,15 @@ export const serveEgressProxy = (
           Number(url.port) || 80,
         ).pipe(Effect.option);
         if (upstream._tag === "None") return yield* respond(client, "502 Bad Gateway");
-        yield* Effect.sync(() => {
+        yield* Effect.sync(() =>
           upstream.value.write(
             serializeHead(
               `${head.method} ${url.pathname}${url.search} HTTP/1.1`,
               rewriteHeaders(head, { set: { Host: url.host } }),
             ),
-          );
-          if (rest.length > 0) upstream.value.write(rest);
-        });
-        yield* splice(client, upstream.value);
+          ),
+        );
+        yield* forward(client, upstream.value, rest);
       });
 
     const handleClient = (socket: net.Socket) =>

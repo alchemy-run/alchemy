@@ -256,6 +256,67 @@ layer(PlatformServices, { excludeTestServices: true })("Egress.Proxy", (it) => {
     );
 
     it.effect(
+      "a client that keeps its connection alive still gets every request through",
+      () =>
+        Effect.gen(function* () {
+          // A gateway that keeps every connection open, whatever the request asked.
+          const targets: string[] = [];
+          const server = net.createServer((socket) => {
+            socket.on("error", () => {});
+            let buffered = "";
+            socket.on("data", (chunk) => {
+              buffered += chunk.toString("latin1");
+              const end = buffered.indexOf("\r\n\r\n");
+              if (end === -1) return;
+              const target = /^x-alchemy-target: (.*)$/im.exec(buffered.slice(0, end))?.[1] ?? "";
+              buffered = buffered.slice(end + 4);
+              targets.push(target);
+              const body = `gateway:${target}`;
+              socket.write(
+                `HTTP/1.1 200 OK\r\nContent-Length: ${body.length}\r\nConnection: keep-alive\r\n\r\n${body}`,
+              );
+            });
+          });
+          const gatewayPort = yield* Effect.acquireRelease(
+            Effect.callback<number>((resume) => {
+              server.listen(0, "127.0.0.1", () =>
+                resume(Effect.succeed((server.address() as net.AddressInfo).port)),
+              );
+            }),
+            () => Effect.sync(() => server.close()),
+          );
+          const { proxy, bundle } = yield* startProxy([
+            {
+              host: "api.github.com",
+              gateway: { id: "work", url: `http://127.0.0.1:${gatewayPort}/` },
+              grant: "g1",
+            },
+          ]);
+          // One curl, two URLs: curl reuses the connection unless the
+          // response says Connection: close (the proxy serves one request each).
+          const result = yield* run("curl", [
+            "-sS",
+            "--max-time",
+            "20",
+            "--proxy",
+            proxy.url,
+            "--cacert",
+            bundle,
+            "-w",
+            " [%{http_code}]\n",
+            "https://api.github.com/one",
+            "https://api.github.com/two",
+          ]);
+          expect(result.stderr).toBe("");
+          expect(result.stdout).toBe(
+            "gateway:https://api.github.com/one [200]\ngateway:https://api.github.com/two [200]\n",
+          );
+          expect(targets).toEqual(["https://api.github.com/one", "https://api.github.com/two"]);
+        }),
+      { timeout: 60_000 },
+    );
+
+    it.effect(
       "routes a host by path; an unmatched path goes straight out",
       () =>
         Effect.gen(function* () {
