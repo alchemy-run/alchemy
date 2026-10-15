@@ -348,11 +348,15 @@ const forward = (client: net.Socket, upstream: net.Socket, rest: Buffer) =>
       if (response.rest.length > 0) client.write(response.rest);
       upstream.pipe(client);
     });
-    yield* Effect.raceFirst(awaitClose(client), awaitClose(upstream));
-    yield* Effect.all([awaitClose(client), awaitClose(upstream)]).pipe(
-      Effect.timeout(LINGER),
-      Effect.ignore,
+    const first = yield* Effect.raceFirst(
+      Effect.as(awaitClose(client), "client" as const),
+      Effect.as(awaitClose(upstream), "upstream" as const),
     );
+    // The client went away: nobody will read the rest, so release the
+    // upstream now (left open, it would hold the gateway's request).
+    if (first === "client") return yield* Effect.sync(() => upstream.destroy());
+    // The upstream finished: give the client time to drain what's left.
+    yield* awaitClose(client).pipe(Effect.timeout(LINGER), Effect.ignore);
   });
 
 const respond = (socket: net.Socket, status: string) =>
@@ -431,6 +435,11 @@ export const serveEgressProxy = (
                   Authorization: `Macaroon ${route.grant}`,
                   "x-alchemy-target": `https://${authority}${head.target}`,
                   "x-alchemy-method": head.method,
+                  // Sent as a POST: a request without a body (a GET) must say so.
+                  ...(header(head, "content-length") === undefined &&
+                  header(head, "transfer-encoding") === undefined
+                    ? { "Content-Length": "0" }
+                    : {}),
                 },
               }),
             ),

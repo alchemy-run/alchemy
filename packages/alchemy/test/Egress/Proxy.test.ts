@@ -3,6 +3,7 @@ import * as net from "node:net";
 import * as tls from "node:tls";
 import { describe, expect, layer } from "alchemy-test";
 import * as Context from "effect/Context";
+import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as FileSystem from "effect/FileSystem";
@@ -251,6 +252,65 @@ layer(PlatformServices, { excludeTestServices: true })("Egress.Proxy", (it) => {
               method: "GET",
             },
           ]);
+        }),
+      { timeout: 60_000 },
+    );
+
+    it.effect(
+      "a bodiless request says Content-Length: 0, and a client abort releases the gateway",
+      () =>
+        Effect.gen(function* () {
+          // A gateway that records each request's head, then streams forever.
+          const heads: string[] = [];
+          const closed = yield* Deferred.make<void>();
+          const server = net.createServer((socket) => {
+            socket.on("error", () => {});
+            socket.on("close", () => Effect.runSync(Deferred.succeed(closed, undefined)));
+            let buffered = "";
+            socket.on("data", (chunk) => {
+              buffered += chunk.toString("latin1");
+              const end = buffered.indexOf("\r\n\r\n");
+              if (end === -1 || heads.length > 0) return;
+              heads.push(buffered.slice(0, end));
+              socket.write("HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n");
+              const tick = setInterval(() => socket.write("1\r\nx\r\n"), 50);
+              socket.on("close", () => clearInterval(tick));
+            });
+          });
+          const gatewayPort = yield* Effect.acquireRelease(
+            Effect.callback<number>((resume) => {
+              server.listen(0, "127.0.0.1", () =>
+                resume(Effect.succeed((server.address() as net.AddressInfo).port)),
+              );
+            }),
+            () => Effect.sync(() => server.close()),
+          );
+          const { proxy, bundle } = yield* startProxy([
+            {
+              host: "api.github.com",
+              gateway: { id: "work", url: `http://127.0.0.1:${gatewayPort}/` },
+              grant: "g1",
+            },
+          ]);
+          // curl gives up after 2 seconds of a response that never ends.
+          yield* run("curl", [
+            "-sS",
+            "--max-time",
+            "2",
+            "--proxy",
+            proxy.url,
+            "--cacert",
+            bundle,
+            "-o",
+            "/dev/null",
+            "https://api.github.com/stream",
+          ]);
+          expect(heads).toHaveLength(1);
+          expect(heads[0]).toMatch(/^POST /);
+          expect(heads[0]).toMatch(/^content-length: 0$/im);
+          // The proxy drops the gateway connection once its client is gone,
+          // rather than leaving the gateway streaming to nobody.
+          yield* Deferred.await(closed).pipe(Effect.timeout("3 seconds"));
         }),
       { timeout: 60_000 },
     );
