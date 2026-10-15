@@ -6,7 +6,7 @@ import * as GitHub from "@/GitHub/index.ts";
 import * as Alchemy from "@/index.ts";
 import MicrovmEgressSandboxLive from "./box.runtime.ts";
 import { MicrovmSandboxGateway } from "./gateway.ts";
-import MicrovmSandboxGatewayWorker from "./gateway.worker.ts";
+import MicrovmSandboxGatewayWeb from "./gateway.web.ts";
 import MicrovmSandboxWorker from "./worker.ts";
 
 export const providers = Layer.mergeAll(
@@ -18,7 +18,7 @@ export const state = Alchemy.localState();
 
 /**
  * A Cloudflare Worker + Durable Object that owns a sandbox on AWS Lambda
- * MicroVMs, granted GitHub egress through a Cloudflare-hosted gateway.
+ * MicroVMs, granted GitHub egress through a gateway on a Lambda Web Function.
  */
 export default Alchemy.Stack(
   "MicrovmSandboxStack",
@@ -30,7 +30,7 @@ export default Alchemy.Stack(
     Effect.provide(
       Layer.mergeAll(
         MicrovmEgressSandboxLive,
-        MicrovmSandboxGateway.host(MicrovmSandboxGatewayWorker),
+        MicrovmSandboxGateway.host(MicrovmSandboxGatewayWeb),
       ),
     ),
   ),
