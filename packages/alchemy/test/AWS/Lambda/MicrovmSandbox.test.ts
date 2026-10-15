@@ -55,6 +55,13 @@ describe.skipIf(skip).sequential("AWS Lambda MicroVM sandbox", () => {
   const sh = (script: string) =>
     Effect.map(call("/sh", script), (body) => JSON.parse(body) as Shell);
 
+  /** Run a shell script with `sandbox.exec` (the MicroVM must be running). */
+  const exec = (script: string) =>
+    Effect.map(
+      call(`/exec?script=${encodeURIComponent(script)}`, ""),
+      (body) => JSON.parse(body) as Shell,
+    );
+
   /** `key=value` lines of a script's stdout. */
   const fields = (shell: Shell) =>
     Object.fromEntries(
@@ -171,9 +178,8 @@ describe.skipIf(skip).sequential("AWS Lambda MicroVM sandbox", () => {
       // A throttled fetch of REPO_A's pack (far more than 64 KB/s for 40 s,
       // ~6 renewals) alongside 20 requests over 45+ seconds (3 ttls): none
       // is refused or reset, with no retry.
-      const result = fields(
-        yield* sh(
-          `(
+      const shell = yield* exec(
+        `(
             sha=$(git ls-remote "https://github.com/${REPO_A}" HEAD | cut -f1)
             printf '0032want %s\\n00000009done\\n' "$sha" | curl -sS --limit-rate 64k --max-time 40 -X POST \\
               -H 'Content-Type: application/x-git-upload-pack-request' --data-binary @- \\
@@ -184,7 +190,7 @@ describe.skipIf(skip).sequential("AWS Lambda MicroVM sandbox", () => {
           s=$(date +%s); fails=0
           for i in 1 2 3 4 5 6 7 8 9 10; do
             for r in ${REPO_A} ${REPO_B}; do
-              out=$(git ls-remote "https://github.com/$r" HEAD 2>&1) || { fails=$((fails + 1)); echo "failed $r: $(echo "$out" | tail -1)" >&2; }
+              t=$(date +%s); out=$(GIT_CURL_VERBOSE=1 git ls-remote "https://github.com/$r" HEAD 2>&1) || { fails=$((fails + 1)); echo "failed $r after $(( $(date +%s) - t ))s at $(( $(date +%s) - s ))s:" >&2; echo "$out" | grep -E "^(<|>) (HTTP|CONNECT|Connection|Host|content-length)|Connected|error|fatal|Recv|Send|Proxy|SSL" | head -20 >&2; }
             done
             sleep 4
           done
@@ -192,8 +198,10 @@ describe.skipIf(skip).sequential("AWS Lambda MicroVM sandbox", () => {
           echo "fails=$fails"; echo "loop=$(( $(date +%s) - s ))"
           cat /tmp/pack.out
           echo "via=$(grep -ci '^x-alchemy-test-gateway:' /tmp/pack.h)"`,
-        ),
       );
+      const result = fields(shell);
+      if (result.fails !== "0")
+        console.log(`RENEWAL stdout:\n${shell.stdout}\nRENEWAL stderr:\n${shell.stderr}`);
       expect(result.fails).toBe("0");
       expect(Number(result.loop)).toBeGreaterThanOrEqual(45);
       expect(result).toMatchObject({ code: "200", exit: "28", via: "1" });
