@@ -5,6 +5,50 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
+/**
+ * Live settings the org PUT would otherwise reset when they are not declared
+ * (Cloudflare asks for the full existing MFA configuration on every update).
+ * They are sent back unchanged; declared props override them.
+ * `serviceTokenInactivity` is left out: Cloudflare rejects the observed
+ * `{ enabled: false }` shape (12062 invalid_org_config).
+ */
+const PRESERVED = [
+  "allowAuthenticateViaWarp",
+  "autoRedirectToIdentity",
+  "customPages",
+  "denyUnmatchedRequests",
+  "denyUnmatchedRequestsExemptedZoneNames",
+  "isUiReadOnly",
+  "loginDesign",
+  "mfaConfig",
+  "mfaPivKeyRequirements",
+  "mfaRequiredForAllApps",
+  "sessionDuration",
+  "strictServiceTokenAuth",
+  "uiReadOnlyToggleReason",
+  "userSeatExpirationInactiveTime",
+  "warpAuthSessionDuration",
+] as const;
+
+const withoutNulls = (value: unknown): unknown =>
+  Array.isArray(value)
+    ? value
+    : value && typeof value === "object"
+      ? Object.fromEntries(
+          Object.entries(value)
+            .filter(([, v]) => v !== null && v !== undefined)
+            .map(([k, v]) => [k, withoutNulls(v)]),
+        )
+      : value;
+
+/** The observed, undeclared settings to send back on update. */
+export const preservedSettings = (observed: Record<string, unknown> | undefined) =>
+  withoutNulls(
+    Object.fromEntries(
+      PRESERVED.filter((key) => observed?.[key] != null).map((key) => [key, observed![key]]),
+    ),
+  ) as Partial<zeroTrust.UpdateOrganizationForAccountRequest>;
+
 export type OrganizationProps = {
   /**
    * The unique subdomain assigned to your Zero Trust organization, e.g.
@@ -267,6 +311,7 @@ export const OrganizationProvider = () =>
       // idempotent.
       const updated = yield* zeroTrust.updateOrganizationForAccount({
         accountId,
+        ...preservedSettings(observed as Record<string, unknown> | undefined),
         authDomain: news.authDomain,
         name: desiredName,
         ...(news.sessionDuration !== undefined ? { sessionDuration: news.sessionDuration } : {}),
