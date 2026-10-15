@@ -50,11 +50,7 @@ export class Terminals extends Context.Service<
       rows: number,
     ) => Effect.Effect<void, never, RuntimeContext>;
   }
->()("harness/Terminals") {
-  /** Shells in `Sandbox`'s container, started in `cwd`. */
-  static readonly layer = (options: { readonly cwd: string }) =>
-    Layer.effect(Terminals, makeTerminals(options));
-}
+>()("harness/Terminals") {}
 
 const makeTerminals = Effect.fn(function* (options: { readonly cwd: string }) {
   const sandbox = yield* Sandbox;
@@ -153,3 +149,7 @@ const makeTerminals = Effect.fn(function* (options: { readonly cwd: string }) {
       Effect.suspend(() => shells.get(key)?.resize(cols, rows) ?? Effect.void),
   });
 });
+
+/** {@link Terminals} over `Sandbox`'s container: shells start in `cwd`. */
+export const TerminalsLive = (options: { readonly cwd: string }) =>
+  Layer.effect(Terminals, makeTerminals(options));

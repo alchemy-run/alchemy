@@ -8,7 +8,7 @@ import { AgentGateway } from "./Gateway.ts";
 import { makeMachine, SIZE } from "./Machine.ts";
 import { Sandbox, WORKSPACE } from "./Sandbox.ts";
 import { Sessions, SESSIONS_INDEX } from "./Sessions.ts";
-import { Terminals } from "./Terminals.ts";
+import { Terminals, TerminalsLive } from "./Terminals.ts";
 
 /**
  * One Durable Object per issue, serving this app's `AgentRpcs`. Every call
@@ -176,5 +176,5 @@ export class Agent extends Cloudflare.RpcDurableObject<Agent>()(
         terminalResize: ({ sessionId, cols, rows }) => terminals.resize(sessionId, cols, rows),
       });
     });
-  }).pipe(Effect.provide(Terminals.layer({ cwd: WORKSPACE }))),
+  }).pipe(Effect.provide(TerminalsLive({ cwd: WORKSPACE }))),
 ) {}
