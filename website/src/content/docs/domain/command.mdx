@@ -118,8 +118,12 @@ export class WithdrawMoney extends Domain.Command("WithdrawMoney", {
   events: [MoneyWithdrawn],
   rejects: [NotOpen, NotOwner, Frozen, InsufficientFunds, DailyLimitExceeded],
   reply: { balance: Cents },
+  // Recorded on every span the withdrawal passes through; nothing else from it is.
+  attributes: (cmd) => ({ "bank.amount": cmd.amount }),
 }) {}
 ```
+
+`attributes` chooses what its spans record; see [Observability](/domain/observability).
 
 Middleware runs in order, and any of it can stop the command with its own error, like `Unauthorized`. What it provides, such as who the caller is, travels with the command to the aggregate, where `decide` reads it to authorize the change. See [Sessions and middleware](/domain/sessions).
 

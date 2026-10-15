@@ -17,7 +17,7 @@ Work in this order. Each step has a reference file with templates.
 2. **Lay out the monorepo**: a domain package, a server package, a web package, with one kind-suffixed file per block. See [references/layout.md](references/layout.md).
 3. **Write each block** from its template. See [references/building-blocks.md](references/building-blocks.md).
 4. **Specify behavior with stories** before and while you implement it. See [references/testing.md](references/testing.md).
-5. **Host the model** on Cloudflare from the server package, and deploy with one alchemy stack. See [references/hosting.md](references/hosting.md).
+5. **Host the model** on Cloudflare from the server package, export its traces, and deploy with one alchemy stack. See [references/hosting.md](references/hosting.md).
 6. **Drive it from foldkit** in the web package. See [references/frontend.md](references/frontend.md).
 
 ## From requirements to building blocks
@@ -56,6 +56,7 @@ A rule that spans aggregates never becomes a cross-aggregate transaction. Give t
 - A handler resolves its dependencies once in `toLayer` and requires nothing per call.
 - Build one Layer and provide it once (`Layer.mergeAll`, `Layer.provide`). Never chain `Effect.provide`.
 - Never `throw`. Fail with tagged errors (`Domain.Rejection`, `Schema.TaggedError`).
+- Tracing is automatic. Record payload values only through a declaration's `attributes`, or with `Effect.annotateCurrentSpan` in an effectful handler. Make secrets `Schema.Redacted`, so they never reach a trace or a log.
 - Test what the model does, through stories: events, replies, rejections, views and saga outcomes. Don't test a saga's internal steps.
 
 ## Checklist for a change

@@ -57,6 +57,18 @@ Clients that `watch` or read `events` open a WebSocket per read, with `Domain.pr
 
 The root `alchemy.run.ts` yields the server Worker and the foldkit website (see [layout.md](layout.md)). Deploy with `alchemy deploy`, develop with `alchemy dev`, and tear down with `alchemy destroy`.
 
+## Observability
+
+Every command, event and reaction is traced automatically:
+- `Domain.send` and `Domain.decide` spans for commands, with a span event per committed event.
+- `Domain.policy` and `Domain.view` spans that continue the trace of the commit they react to.
+- `Domain.saga` and `Domain.projection` spans that start their own trace and link back to their cause.
+- `Domain.external` spans for external system calls.
+
+All of them carry `domain.correlation_id`, the first command of the flow, which finds a whole flow across traces. Export with a telemetry Layer in the Worker's single `Effect.provide`, e.g. `Layer.mergeAll(BankLive, Cloudflare.Telemetry())` or `Axiom.Telemetry(...)`.
+
+Metrics: `domain.commands`, `domain.command.duration`, `domain.events`, `domain.lag` (commit to handling), `domain.runs`, `domain.projection.batch_size`, `domain.external.calls`. Turn off view spans with `Bank.layer(handlers, { telemetry: { views: false } })`.
+
 ## Pitfalls
 
 - Durable Object calls right after a fresh deploy can briefly hit alchemy's placeholder script. The Domain platform retries its own calls, so make test readiness probes retry the first real request.

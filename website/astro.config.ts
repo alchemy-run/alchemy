@@ -1547,6 +1547,7 @@ export default defineConfig({
               items: [
                 { label: "Cloudflare Durable Objects", link: "/domain/cloudflare" },
                 { label: "In memory", link: "/domain/in-memory" },
+                { label: "Observability", link: "/domain/observability" },
               ],
             },
             { ...providerResourcesEntry("Domain"), label: "Reference" },
