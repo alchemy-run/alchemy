@@ -124,37 +124,37 @@ export const attributesOf = (cls: unknown, value: unknown): Record<string, unkno
 
 const ms = Metric.exponentialBoundaries({ start: 1, factor: 2, count: 22 });
 
-/** Commands handled, by `domain.aggregate`, `domain.command` and `domain.outcome`. @internal */
+/** Commands handled, by `domain.aggregate`, `domain.command` and `domain.outcome`. */
 export const commands = Metric.counter("domain.commands", {
   description: "Commands handled by aggregates",
   incremental: true,
 });
-/** How long an aggregate took to decide and commit a command, in milliseconds. @internal */
+/** How long an aggregate took to decide and commit a command, in milliseconds. */
 export const commandDuration = Metric.histogram("domain.command.duration", {
   description: "Milliseconds to decide and commit a command",
   boundaries: ms,
 });
-/** Events committed, by `domain.aggregate` and `domain.event`. @internal */
+/** Events committed, by `domain.aggregate` and `domain.event`. */
 export const events = Metric.counter("domain.events", {
   description: "Events committed by aggregates",
   incremental: true,
 });
-/** Milliseconds from an event's commit to a reaction handling it, by `domain.consumer`. @internal */
+/** Milliseconds from an event's commit to a reaction handling it, by `domain.consumer`. */
 export const lag = Metric.histogram("domain.lag", {
   description: "Milliseconds from commit to handling, per consumer",
   boundaries: ms,
 });
-/** Reaction runs, by `domain.kind`, `domain.consumer` and `domain.outcome`. @internal */
+/** Reaction runs, by `domain.kind`, `domain.consumer` and `domain.outcome`. */
 export const runs = Metric.counter("domain.runs", {
   description: "Policy, view, projection and saga runs",
   incremental: true,
 });
-/** Inputs per projection batch. @internal */
+/** Inputs per projection batch. */
 export const batchSize = Metric.histogram("domain.projection.batch_size", {
   description: "Inputs per projection batch",
   boundaries: Metric.exponentialBoundaries({ start: 1, factor: 2, count: 12 }),
 });
-/** External system calls, by `domain.system`, `domain.operation` and `domain.outcome`. @internal */
+/** External system calls, by `domain.system`, `domain.operation` and `domain.outcome`. */
 export const externalCalls = Metric.counter("domain.external.calls", {
   description: "Calls to external systems",
   incremental: true,
