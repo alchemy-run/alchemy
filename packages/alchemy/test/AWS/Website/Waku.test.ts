@@ -33,7 +33,7 @@ describe.skipIf(!runLive || runEmulated)(
   { tags: ["provider:aws", "provider:aws:cloudfront", "provider:aws:website", "live"] },
   () => {
     test.provider(
-      "deploys RSC SSR on a streaming Lambda URL with S3 assets behind CloudFront",
+      "deploys RSC SSR on a Lambda Web Function with S3 assets behind CloudFront",
       (stack) =>
         Effect.gen(function* () {
           yield* stack.destroy();
