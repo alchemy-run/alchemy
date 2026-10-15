@@ -130,13 +130,19 @@ export type Postgres = Resource<
     /** Internal MPG cluster hash id, if the API returned one. */
     mpgdClusterId: string | undefined;
     /**
-     * Direct (non-PgBouncer) Postgres URI. Use this for migrations and
-     * session-scoped features. Pass to `Drizzle.Postgres` from a laptop
-     * Action; from a {@link Service} prefer {@link ConnectPostgres}.
+     * Redacted direct (non-PgBouncer) Postgres URI. Use this for
+     * migrations and session-scoped features. Pass to `Drizzle.Postgres`
+     * from a laptop Action; from a {@link Service} prefer
+     * {@link ConnectPostgres}. Empty until Fly returns the cluster's
+     * credentials, and on clusters found by `list`.
      */
-    connectionUri: string;
-    /** Pooled PgBouncer URI. Prefer {@link ConnectPostgres} from a Service. */
-    pooledConnectionUri: string;
+    connectionUri: Redacted.Redacted<string>;
+    /**
+     * Redacted pooled PgBouncer URI. Prefer {@link ConnectPostgres} from a
+     * Service. Empty until Fly returns the cluster's credentials, and on
+     * clusters found by `list`.
+     */
+    pooledConnectionUri: Redacted.Redacted<string>;
     migrationsDir: string | undefined;
     migrationsTable: string | undefined;
     migrationsHashes: Record<string, string>;
@@ -280,6 +286,21 @@ export type Postgres = Resource<
  * });
  * ```
  *
+ * ### Pass the URI to a website
+ * `connectionUri` and `pooledConnectionUri` are `Redacted`. Unwrap one
+ * where a plain string is expected.
+ *
+ * **Example:** Website env
+ * ```typescript
+ * import * as Output from "alchemy/Output";
+ * import * as Redacted from "effect/Redacted";
+ *
+ * const site = yield* Fly.Website.Nextjs("Site", {
+ *   rootDir: "./apps/web",
+ *   env: { DATABASE_URL: Output.map(db.connectionUri, Redacted.value) },
+ * });
+ * ```
+ *
  * @resource
  * @product Postgres
  */
@@ -324,11 +345,14 @@ export const unwrapSensitive = (
   return Redacted.isRedacted(value) ? Redacted.value(value) : value;
 };
 
+const redact = (value: string | undefined): Redacted.Redacted<string> | undefined =>
+  value !== undefined && value.length > 0 ? Redacted.make(value) : undefined;
+
 type AttrFallback = {
   name?: string;
   orgSlug?: string;
-  connectionUri?: string;
-  pooledConnectionUri?: string;
+  connectionUri?: Redacted.Redacted<string>;
+  pooledConnectionUri?: Redacted.Redacted<string>;
   migrationsDir?: string | undefined;
   migrationsTable?: string | undefined;
   migrationsHashes?: Record<string, string>;
@@ -351,8 +375,10 @@ const toAttrs = (
   engine: cluster.engine,
   replicas: cluster.replicas,
   mpgdClusterId: cluster.mpgd_cluster_id,
-  connectionUri: directUri(cluster, credentials) ?? fallback?.connectionUri ?? "",
-  pooledConnectionUri: credentialsUri(credentials) ?? fallback?.pooledConnectionUri ?? "",
+  connectionUri:
+    redact(directUri(cluster, credentials)) ?? fallback?.connectionUri ?? Redacted.make(""),
+  pooledConnectionUri:
+    redact(credentialsUri(credentials)) ?? fallback?.pooledConnectionUri ?? Redacted.make(""),
   migrationsDir: fallback?.migrationsDir,
   migrationsTable: fallback?.migrationsTable,
   migrationsHashes: fallback?.migrationsHashes ?? {},
