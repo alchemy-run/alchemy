@@ -1,5 +1,7 @@
+import * as NodeNet from "node:net";
 import { describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
+import { vi } from "vitest";
 import * as Port from "../../internal/Port.ts";
 import * as PortHelpers from "../helpers/port.ts";
 
@@ -23,7 +25,7 @@ describe("Port.find", () => {
 
   it.effect("skips a port in use and returns the next available one", () =>
     Effect.gen(function* () {
-      const occupied = yield* PortHelpers.occupy(0);
+      const occupied = yield* PortHelpers.occupy(0, "127.0.0.1");
       const ports = yield* Port.make({ cache: false });
       const next = yield* ports.find(occupied.port);
       expect(next).toBeGreaterThan(occupied.port);
@@ -81,4 +83,21 @@ describe("Port.viteSupportsPortZero", () => {
     expect(Port.viteSupportsPortZero("")).toBe(false);
     expect(Port.viteSupportsPortZero("next")).toBe(false);
   });
+});
+
+describe("Port.check", () => {
+  it.effect("probes only loopback addresses", () =>
+    Effect.gen(function* () {
+      const ports = yield* Port.make({ cache: false });
+      const listen = vi.spyOn(NodeNet.Server.prototype, "listen");
+      try {
+        yield* ports.check(Number(process.env.PORT ?? 0));
+        expect(
+          listen.mock.calls.map(([options]) => (options as NodeNet.ListenOptions).host),
+        ).toEqual(["localhost", "127.0.0.1", "::1", "0000:0000:0000:0000:0000:0000:0000:0001"]);
+      } finally {
+        listen.mockRestore();
+      }
+    }),
+  );
 });
