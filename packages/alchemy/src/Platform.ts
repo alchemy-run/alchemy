@@ -126,7 +126,10 @@ export type PlatformServices =
   | ProviderCollectionLike
   | Stack
   | StackServices
-  | Stage;
+  | Stage
+  // Every platform provides its instance as the generic `Self` (see `make`),
+  // which host-agnostic bindings (e.g. Cloudflare `*Http`) name tokens after.
+  | Self;
 
 /** A platform declaration's logical identity, readable without yielding it. */
 export interface PlatformIdentity<Id extends string = string> {
