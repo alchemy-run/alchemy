@@ -1,6 +1,9 @@
 import * as cloudfront from "@distilled.cloud/aws/cloudfront";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
+import * as HttpClient from "effect/http/HttpClient";
+import * as Ref from "effect/Ref";
 import * as Schedule from "effect/Schedule";
 import * as pathe from "pathe";
 import * as AWS from "@/AWS";
@@ -107,7 +110,7 @@ describe.skipIf(!runLive)(
     );
 
     test.provider.skipIf(runEmulated)(
-      'server: "function" deploys SSR on a Lambda Function URL, then moves to a Web Function',
+      'switches a standalone site between server: "function" and a Web Function without downtime',
       (stack) =>
         Effect.gen(function* () {
           yield* stack.destroy();
@@ -117,47 +120,114 @@ describe.skipIf(!runLive)(
             tempRoot,
             entries: fixtureEntries,
           });
+          const deploy = (server: "function" | undefined) =>
+            stack.deploy(
+              Effect.gen(function* () {
+                const site = yield* AWS.Website.Nuxt("NuxtFunctionSite", {
+                  rootDir,
+                  ...(server ? { server } : {}),
+                  forceDestroy: true,
+                  invalidation: { paths: "all", wait: true },
+                });
+                return { site };
+              }),
+            );
 
-          const deployed = yield* stack.deploy(
-            Effect.gen(function* () {
-              const site = yield* AWS.Website.Nuxt("NuxtFunctionSite", {
-                rootDir,
-                server: "function",
-                forceDestroy: true,
-                invalidation: { paths: "all", wait: true },
-              });
-              return { site };
-            }),
-          );
-
+          const deployed = yield* deploy("function");
           expect(deployed.site.serverUrl).toContain(".lambda-url.");
-          yield* expectUrlContains(`${deployed.site.url!}/`, "NUXT_AWS_PAGE_MARKER", {
+          const url = `${deployed.site.url!}/`;
+          yield* expectUrlContains(url, "NUXT_AWS_PAGE_MARKER", {
             timeout: "180 seconds",
             label: "SSR home page",
           });
 
-          // Dropping `server` moves the site onto a Web Function; the
-          // distribution (and its domain) stays.
-          const migrated = yield* stack.deploy(
-            Effect.gen(function* () {
-              const site = yield* AWS.Website.Nuxt("NuxtFunctionSite", {
-                rootDir,
-                forceDestroy: true,
-                invalidation: { paths: "all", wait: true },
-              });
-              return { site };
-            }),
+          // Dropping `server` moves the site onto a Web Function and setting
+          // it moves it back; the distribution (and its domain) stays, and
+          // the site keeps answering throughout.
+          const { result: migrated, failures: forward } = yield* probeDuring(
+            url,
+            "NUXT_AWS_PAGE_MARKER",
+            deploy(undefined),
           );
           expect(migrated.site.serverUrl).toContain(".lambda-web.");
           expect(migrated.site.distribution!.distributionId).toBe(
             deployed.site.distribution!.distributionId,
           );
-          yield* expectUrlContains(`${migrated.site.url!}/`, "NUXT_AWS_PAGE_MARKER", {
-            timeout: "180 seconds",
-            label: "SSR home page after moving to a Web Function",
-          });
+          expect(forward).toEqual([]);
+
+          const { result: back, failures: backward } = yield* probeDuring(
+            url,
+            "NUXT_AWS_PAGE_MARKER",
+            deploy("function"),
+          );
+          expect(back.site.serverUrl).toContain(".lambda-url.");
+          expect(back.site.distribution!.distributionId).toBe(
+            deployed.site.distribution!.distributionId,
+          );
+          expect(backward).toEqual([]);
 
           const distributionId = deployed.site.distribution!.distributionId;
+          yield* stack.destroy();
+          yield* assertDistributionDeleted(distributionId);
+        }),
+      { timeout: 2_400_000 },
+    );
+
+    test.provider.skipIf(runEmulated)(
+      'switches a Router-attached site between server: "function" and a Web Function without downtime',
+      (stack) =>
+        Effect.gen(function* () {
+          yield* stack.destroy();
+
+          const rootDir = yield* cloneFixture(fixtureDir, {
+            prefix: "alchemy-nuxt-aws-router-switch-",
+            tempRoot,
+            entries: fixtureEntries,
+          });
+          const deploy = (server: "function" | undefined) =>
+            stack.deploy(
+              Effect.gen(function* () {
+                const router = yield* AWS.Website.Router("FrontDoor", {
+                  invalidation: { paths: "all", wait: true },
+                });
+                const site = yield* AWS.Website.Nuxt("NuxtSite", {
+                  rootDir,
+                  ...(server ? { server } : {}),
+                  forceDestroy: true,
+                  domain: { router },
+                });
+                return { router, site };
+              }),
+            );
+
+          const deployed = yield* deploy("function");
+          expect(deployed.site.serverUrl).toContain(".lambda-url.");
+          const url = `${deployed.router.url as string}/`;
+          yield* expectUrlContains(url, "NUXT_AWS_PAGE_MARKER", {
+            timeout: "600 seconds",
+            label: "SSR via router",
+          });
+
+          const { result: migrated, failures: forward } = yield* probeDuring(
+            url,
+            "NUXT_AWS_PAGE_MARKER",
+            deploy(undefined),
+          );
+          expect(migrated.site.serverUrl).toContain(".lambda-web.");
+          expect(migrated.router.distribution.distributionId).toBe(
+            deployed.router.distribution.distributionId,
+          );
+          expect(forward).toEqual([]);
+
+          const { result: back, failures: backward } = yield* probeDuring(
+            url,
+            "NUXT_AWS_PAGE_MARKER",
+            deploy("function"),
+          );
+          expect(back.site.serverUrl).toContain(".lambda-url.");
+          expect(backward).toEqual([]);
+
+          const distributionId = deployed.router.distribution.distributionId;
           yield* stack.destroy();
           yield* assertDistributionDeleted(distributionId);
         }),
@@ -253,3 +323,30 @@ const assertDistributionDeleted = (distributionId: string) =>
       schedule: Schedule.max([Schedule.fixed("10 seconds"), Schedule.recurs(60)]),
     }),
   );
+
+/**
+ * Run `effect` while requesting `url` once a second, and report every
+ * request that did not return the page (status and time).
+ */
+const probeDuring = <A, E, R>(url: string, marker: string, effect: Effect.Effect<A, E, R>) =>
+  Effect.gen(function* () {
+    const client = yield* HttpClient.HttpClient;
+    const failures = yield* Ref.make<string[]>([]);
+    const once = client.get(url).pipe(
+      Effect.flatMap((response) =>
+        Effect.map(response.text, (body) =>
+          response.status === 200 && body.includes(marker) ? undefined : `${response.status}`,
+        ),
+      ),
+      Effect.catch((error) => Effect.succeed(`error ${String(error)}`)),
+      Effect.flatMap((failure) =>
+        failure === undefined
+          ? Effect.void
+          : Ref.update(failures, (all) => [...all, `${new Date().toISOString()} ${failure}`]),
+      ),
+    );
+    const prober = yield* Effect.forkChild(once.pipe(Effect.repeat(Schedule.spaced("1 second"))));
+    const result = yield* effect;
+    yield* Fiber.interrupt(prober);
+    return { result, failures: yield* Ref.get(failures) };
+  });
