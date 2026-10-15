@@ -151,6 +151,12 @@ export interface FrameworkSiteConfig {
    */
   install?: ReadonlyArray<string>;
   /**
+   * Deploy the Node target's server directory as-is instead of bundling
+   * its serve entry, for servers that read files beside themselves at
+   * runtime (Octane's SSR `index.html`).
+   */
+  webPrebuilt?: boolean;
+  /**
    * Framework-specific build options forwarded to the integration (e.g.
    * `{ kit }`, `{ nuxt }`, `{ astro }`). Must be JSON-serializable.
    */
@@ -273,6 +279,7 @@ export const makeFrameworkSite = Effect.fn("AWS.Website.FrameworkSite")(function
     // async Web Function. Assets stay in S3 behind the edge router.
     const server = yield* WebFunction("WebServer", {
       main: build.serverEntry as unknown as string,
+      ...(config.webPrebuilt ? { bundle: false as const } : {}),
       authType: "ApplicationManaged",
       env: props.env,
       timeout: props.timeout ?? Duration.seconds(30),

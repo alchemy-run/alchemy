@@ -81,4 +81,6 @@ export const Octane = (id: string, props: InputProps<OctaneProps> = {}) =>
     framework: OCTANE_FRAMEWORK_SPECIFIER,
     target: OCTANE_AWS_TARGET_SPECIFIER,
     webTarget: OCTANE_WEB_TARGET_SPECIFIER,
+    // The SSR entry reads `index.html` beside itself at runtime.
+    webPrebuilt: true,
   }).pipe(Namespace.push(id));
