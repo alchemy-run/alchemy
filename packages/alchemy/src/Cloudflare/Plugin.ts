@@ -2,20 +2,29 @@ import * as Plugin from "../Plugin.ts";
 
 export default Plugin.make({
   name: "cloudflare",
-  auth: () => import("./Auth/AuthProvider.ts").then((module) => module.CloudflareAuth),
+  auth: Plugin.lazy(
+    () => import("./Auth/AuthProvider.ts"),
+    (module) => module.CloudflareAuth,
+  ),
   stateStores: {
     cloudflare: {
       description: "State-store Worker in the profile's Cloudflare account",
-      layer: () =>
-        import("./StateStore/State.ts").then(
-          (module) =>
-            ({ name }) =>
-              module.state({ name }),
-        ),
-      lifecycle: () => import("./Alchemist/StateStore.ts").then((module) => module.lifecycle),
+      layer: Plugin.lazy(
+        () => import("./StateStore/State.ts"),
+        (module) =>
+          ({ name }) =>
+            module.state({ name }),
+      ),
+      lifecycle: Plugin.lazy(
+        () => import("./Alchemist/StateStore.ts"),
+        (module) => module.lifecycle,
+      ),
     },
   },
   cli: {
-    provider: () => import("./Cli.ts").then((module) => module.cloudflareCommand),
+    provider: Plugin.lazy(
+      () => import("./Cli.ts"),
+      (module) => module.cloudflareCommand,
+    ),
   },
 });

@@ -2,5 +2,8 @@ import * as Plugin from "../Plugin.ts";
 
 export default Plugin.make({
   name: "fly",
-  auth: () => import("./AuthProvider.ts").then((module) => module.FlyAuth),
+  auth: Plugin.lazy(
+    () => import("./AuthProvider.ts"),
+    (module) => module.FlyAuth,
+  ),
 });

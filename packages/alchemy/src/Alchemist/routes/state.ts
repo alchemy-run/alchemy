@@ -59,14 +59,7 @@ export const store = Effect.fn("Alchemist.state.store")(function* (source: State
     const config = ConfigProvider.layer(
       withProfileOverride(yield* loadConfigProvider(Option.fromNullishOr(envFile)), profile),
     );
-    const layer = yield* Effect.tryPromise({
-      try: backend.layer,
-      catch: (cause) =>
-        new Plugin.PluginError({
-          message: `Could not load state backend '${source.backend}'`,
-          cause,
-        }),
-    });
+    const layer = yield* backend.layer;
     return yield* Effect.flatten(State.State).pipe(
       // Fresh: the store registers its auth into this registry even when the
       // process already built the provider's layers for another one.
@@ -107,16 +100,7 @@ const lifecycleOperation = <K extends keyof Plugin.StateStoreLifecycle>(
 ) =>
   Effect.gen(function* () {
     const store = yield* findBackend(backend);
-    const lifecycle = store.lifecycle
-      ? yield* Effect.tryPromise({
-          try: store.lifecycle,
-          catch: (cause) =>
-            new Plugin.PluginError({
-              message: `Could not load the lifecycle of state backend '${backend}'`,
-              cause,
-            }),
-        })
-      : undefined;
+    const lifecycle = store.lifecycle ? yield* store.lifecycle : undefined;
     const run = lifecycle?.[operation];
     if (run === undefined) {
       return yield* new Plugin.PluginError({

@@ -53,7 +53,25 @@ export interface Plugin {
   readonly testServices?: Lazy<TestServices>;
 }
 
-type Lazy<A> = () => Promise<A>;
+/**
+ * A field loaded when used, so importing a plugin module stays cheap. Build
+ * one with {@link lazy}.
+ */
+export type Lazy<A> = Effect.Effect<A, PluginError>;
+
+/**
+ * A {@link Lazy} field from a module of the provider's, imported on first
+ * use:
+ *
+ * ```ts
+ * auth: Plugin.lazy(() => import("./AuthProvider.ts"), (module) => module.AwsAuth),
+ * ```
+ */
+export const lazy = <M, A>(load: () => Promise<M>, pick: (module: M) => A): Lazy<A> =>
+  Effect.tryPromise({
+    try: load,
+    catch: (cause) => new PluginError({ message: "Could not import a plugin module", cause }),
+  }).pipe(Effect.map(pick));
 
 export interface StateStore {
   readonly description: string;
@@ -308,9 +326,10 @@ export const stateStores = Effect.fn("Plugin.stateStores")(function* () {
 });
 
 /** Load one lazy field, failing with a {@link PluginError} naming the plugin. */
-export const resolve = <A>(plugin: Plugin, field: string, thunk: Lazy<A>) =>
-  Effect.tryPromise({
-    try: thunk,
-    catch: (cause) =>
-      new PluginError({ message: `Could not load ${field} of plugin ${plugin.name}`, cause }),
-  });
+export const resolve = <A>(plugin: Plugin, field: string, value: Lazy<A>) =>
+  value.pipe(
+    Effect.mapError(
+      (cause) =>
+        new PluginError({ message: `Could not load ${field} of plugin ${plugin.name}`, cause }),
+    ),
+  );

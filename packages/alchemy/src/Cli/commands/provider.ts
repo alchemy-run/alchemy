@@ -2,7 +2,7 @@ import { Command, Flag } from "effect/cli";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Provider from "../../Alchemist/routes/provider.ts";
-import type * as Plugin from "../../Plugin.ts";
+import * as Plugin from "../../Plugin.ts";
 import { CliKit } from "../CliKit/CliKit.ts";
 import { setExitCode } from "./errors.ts";
 import { config, envFile, profile } from "./flags.ts";
@@ -60,8 +60,12 @@ export const providerCommand = async (plugins: ReadonlyArray<Plugin.Plugin>) =>
     Command.withDescription("Manage cloud provider prerequisites and utilities"),
     Command.withSubcommands([
       checkEnvCommand,
-      ...(await Promise.all(
-        plugins.flatMap((plugin) => plugin.cli?.provider ?? []).map((load) => load()),
+      ...(await Effect.runPromise(
+        Effect.forEach(plugins, (plugin) =>
+          plugin.cli?.provider
+            ? Plugin.resolve(plugin, "cli.provider", plugin.cli.provider)
+            : Effect.succeed(undefined),
+        ).pipe(Effect.map((commands) => commands.filter((command) => command !== undefined))),
       )),
     ]),
   );

@@ -2,5 +2,8 @@ import * as Plugin from "../Plugin.ts";
 
 export default Plugin.make({
   name: "hetzner",
-  auth: () => import("./AuthProvider.ts").then((module) => module.HetznerAuth),
+  auth: Plugin.lazy(
+    () => import("./AuthProvider.ts"),
+    (module) => module.HetznerAuth,
+  ),
 });
