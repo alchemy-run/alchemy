@@ -24,13 +24,15 @@ export interface VinextProps extends FrameworkSiteProps {}
 
 /**
  * Deploy a [vinext](https://vinext.dev) App Router application to AWS: the RSC
- * server on a streaming Lambda Function URL, static assets in S3, and a
- * CloudFront distribution whose edge router serves uploaded files from S3
- * and forwards everything else to the server.
+ * server on a Lambda Web Function, static assets in S3, and a CloudFront
+ * distribution whose edge router serves uploaded files from S3 and
+ * forwards everything else to the server. Set `server: "function"` to run
+ * it on a streaming Lambda Function URL instead, for Regions without Web
+ * Functions.
  *
  * ISR / `"use cache"` persistence is an S3 bucket (not Cloudflare KV).
  * This resource provisions the bucket, sets `CACHE_BUCKET_NAME`, and
- * grants the Lambda Get/Put/Delete/List. Alchemy injects the S3 data-cache
+ * grants the server Get/Put/Delete/List. Alchemy injects the S3 data-cache
  * adapter during the build; no Alchemy plugin is needed in `vite.config.ts`.
  * A dedicated cache bucket keeps the graph acyclic (the asset bucket
  * is bound to CloudFront).

@@ -13,16 +13,18 @@ export const devDeps = "@alchemy.run/frontend-frameworks @opennextjs/aws";
 AWS using the [OpenNext](https://opennext.js.org/aws) serverless
 topology:
 
-- the Next server on a Lambda Function URL with response streaming
+- the Next server on a [Lambda Web Function](/aws/compute/web-functions),
+  serving many requests per environment and streaming responses
 - static assets and the prerender cache in S3, served through
   CloudFront's edge router
-- a dedicated image-optimization Lambda behind `/_next/image`
+- a dedicated image optimizer, also on a Web Function, behind
+  `/_next/image`
 - ISR wiring: an SQS revalidation queue with a consumer Lambda and a
   DynamoDB tag-cache table
 
 App Router and Pages Router both work — server components, API
 routes, middleware, server actions, dynamic segments, streaming SSR,
-and `getServerSideProps` pages all run in the Lambda.
+and `getServerSideProps` pages all run on the server.
 
 ## Install
 
@@ -39,17 +41,19 @@ are enough:
 Your `next.config.*` is loaded and honored as-is — the build runs a
 real `next build`, and Alchemy never rewrites the file. An
 `open-next.config.ts` is optional: when the project has none, a
-minimal default with the streaming server wrapper is generated for
-you. Keep your own file next to `next.config.*` to customize the
-OpenNext build:
+minimal default is generated for you. On Web Functions the server and
+the image optimizer use OpenNext's `node` wrapper, a plain Node HTTP
+server. Keep your own file next to `next.config.*` to customize the
+OpenNext build, with the `node` wrapper on both:
 
 ```typescript
 // open-next.config.ts
 export default {
   default: {
-    override: {
-      wrapper: "aws-lambda-streaming",
-    },
+    override: { wrapper: "node", converter: "node" },
+  },
+  imageOptimization: {
+    override: { wrapper: "node", converter: "node" },
   },
 };
 ```
@@ -89,7 +93,7 @@ export default Alchemy.Stack(
 ```
 
 Statically-rendered pages are served from the S3 prerender cache;
-dynamic pages and route handlers stream from the server Lambda;
+dynamic pages and route handlers stream from the server;
 `next/image` requests are handled by the dedicated optimizer.
 
 See
@@ -111,13 +115,13 @@ export const Website = AWS.Website.Nextjs("Website", {
 });
 ```
 
-The values are set on the server Lambda at deploy time and injected
+The values are set on the server at deploy time and injected
 into the dev server's process environment under `alchemy dev`, so
 server code reads the same values in both modes.
 
 ## Read the environment in server code
 
-The OpenNext server runs in a plain Node Lambda, so route handlers,
+The OpenNext server is a plain Node server, so route handlers,
 server components, and server actions read the environment from
 `process.env`:
 
@@ -142,8 +146,28 @@ provisions the OpenNext cache infrastructure for you:
 There is no cache configuration to write — the resource wires
 OpenNext's standard cache environment (`CACHE_BUCKET_NAME`,
 `CACHE_DYNAMO_TABLE`, `REVALIDATION_QUEUE_URL`) onto the server
-Lambda automatically, so OpenNext's default S3 / DynamoDB / SQS
-overrides just work.
+automatically, so OpenNext's default S3 / DynamoDB / SQS overrides just
+work. Every environment shares that cache, so a page revalidated in one
+is fresh in all of them.
+
+## Run on a Lambda Function
+
+Web Functions run in a subset of Regions. Elsewhere, set
+`server: "function"`: the server and the image optimizer run on Lambda
+Functions behind Function URLs, built with OpenNext's
+`aws-lambda-streaming` wrapper, and tuned with `memorySize`,
+`architecture`, and `runtime`:
+
+```diff lang="typescript"
+// alchemy.run.ts
+export const Website = AWS.Website.Nextjs("Website", {
++  server: "function",
++  memorySize: 2048,
+});
+```
+
+A generated `open-next.config.ts` switches wrappers with `server`; a
+config you wrote must use the wrapper that matches.
 
 ## Local dev
 

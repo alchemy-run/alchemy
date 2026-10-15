@@ -157,16 +157,19 @@ export interface NextjsProps {
 
 /**
  * Deploy a Next.js application to AWS with the OpenNext
- * (`@opennextjs/aws`) serverless topology: the SSR server on a streaming
- * Lambda Function URL, static assets in S3 behind CloudFront's KV-manifest
- * edge router, the ISR/fetch cache in a dedicated S3 bucket, a dedicated
- * image optimization Lambda routed at `/_next/image`, and ISR revalidation
- * through an SQS FIFO queue plus a DynamoDB tag-cache table.
+ * (`@opennextjs/aws`) serverless topology: the SSR server on a Lambda Web
+ * Function (OpenNext's `node` wrapper), static assets in S3 behind
+ * CloudFront's KV-manifest edge router, the ISR/fetch cache in a dedicated
+ * S3 bucket, a dedicated image optimizer (also a Web Function) routed at
+ * `/_next/image`, and ISR revalidation through an SQS FIFO queue, consumed
+ * by a Lambda Function, plus a DynamoDB tag-cache table. Set
+ * `server: "function"` to run the server and image optimizer on streaming
+ * Lambda Function URLs instead.
  *
  * The build runs through `@alchemy.run/frontend-frameworks/nextjs/aws` (the
  * `@opennextjs/aws` pipeline) — both it and `@opennextjs/aws` must be
  * installed in your project. When the project has no `open-next.config.ts`,
- * a minimal default with the streaming server wrapper is generated.
+ * a minimal default with the wrapper for the chosen `server` is generated.
  *
  * During `alchemy dev` the site is Next's own dev server (`next dev`) and
  * no cloud resources are declared; `Alchemy.remote()` opts back into the
