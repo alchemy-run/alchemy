@@ -27,18 +27,22 @@ import type { Providers } from "../Providers.ts";
 import type { FunctionBuildOptions, FunctionZipProps } from "./Function.ts";
 import { makeFunctionBundler, type FunctionBundleOptions } from "./FunctionBundle.ts";
 import type { NetworkConnectorProps } from "./NetworkConnector.ts";
+import { createConnector, getConnector, syncConnector } from "./NetworkConnectorLifecycle.ts";
 import {
-  createConnector,
-  getConnector,
-  syncConnector,
-  waitForDeleted,
-} from "./NetworkConnectorLifecycle.ts";
+  connectorOfRevision,
+  deleteConnectorAndRole,
+  deleteOperatorRole,
+  EGRESS_POLICY,
+  releaseEgressConnector,
+  sameConnector,
+} from "./WebFunctionEgress.ts";
 import {
   activeRevisionId,
   createEndpointConfig,
   deleteEndpoint,
   getEndpoint,
   syncEndpoint,
+  validateWebFunctionSettings,
   WebFunctionFailed,
   WebFunctionNotReady,
   type WebFunctionAuthType,
@@ -59,9 +63,6 @@ const PREBUILT_ENTRY_FILE = "__alchemy_web_entry.mjs";
 
 /** Inline policy denying the execution role `logs:CreateLogGroup` on its own groups. */
 const LOG_GROUP_GUARD_POLICY = "AlchemyDenyLogGroupCreate";
-
-/** Inline policy on the egress operator role. */
-const EGRESS_POLICY = "AlchemyWebFunctionEgress";
 
 const DEFAULT_TIMEOUT_SECONDS = 30;
 const DEFAULT_MAX_CONCURRENCY = 64;
@@ -776,25 +777,9 @@ export const WebFunctionProvider = () =>
        */
       const deleteEgress = Effect.fn(function* (id: string, session: ScopedPlanStatusSession) {
         const name = yield* egressName(id);
-        const connector = yield* getConnector(name);
-        if (connector !== undefined) {
-          yield* lambdacore
-            .deleteNetworkConnector({ Identifier: connector.Id })
-            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
-          yield* waitForDeleted(connector.Id, session);
-        }
-        yield* iam
-          .deleteRolePolicy({ RoleName: name, PolicyName: EGRESS_POLICY })
-          .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void));
-        yield* iam.deleteRole({ RoleName: name }).pipe(
-          Effect.catchTag("NoSuchEntityException", () => Effect.void),
-          Effect.retry({
-            while: (e) =>
-              e._tag === "DeleteConflictException" || e._tag === "ConcurrentModificationException",
-            schedule: Schedule.spaced("2 seconds"),
-            times: 10,
-          }),
-        );
+        yield* deleteConnectorAndRole(name, session);
+        // The role can outlive a connector whose create failed.
+        yield* deleteOperatorRole(name);
       });
 
       const getFunction = (functionName: string) =>
@@ -1020,6 +1005,12 @@ export const WebFunctionProvider = () =>
               : desired;
           if (!isResolved(news)) return;
           yield* requireHomeRegion(id, news.vpc, news.regions);
+          yield* validateWebFunctionSettings(`AWS.Lambda.WebFunction "${id}"`, {
+            rateLimit: news.rateLimit,
+            maxEnvironments: news.maxEnvironments,
+            maxConcurrencyPerEnvironment: news.maxConcurrencyPerEnvironment,
+            timeoutSeconds: news.timeout === undefined ? undefined : toTimeoutSeconds(news.timeout),
+          });
           // Creating, or adopted without prior props: reconcile converges.
           if (!output || !olds) return undefined;
           // Generated names are engine-owned; only an explicit functionName
@@ -1229,12 +1220,30 @@ export const WebFunctionProvider = () =>
 
           // Sync the built-in endpoint onto the revision. A renamed endpoint is
           // a new endpoint: create it, then remove the previous one.
+          const previousRevisionId = observedEndpoint
+            ? activeRevisionId(observedEndpoint)
+            : undefined;
           const settled = yield* syncEndpoint({
             functionName,
             spec: endpoint,
             revisionId,
             session,
           });
+          // Moving off a revision whose egress connector the new one no
+          // longer uses (e.g. `vpc` removed) may leave it unused.
+          if (previousRevisionId !== undefined && previousRevisionId !== revisionId) {
+            const previousConnector = yield* connectorOfRevision(functionName, previousRevisionId);
+            if (
+              previousConnector !== undefined &&
+              !sameConnector(previousConnector, egressNetworkConnectorArn)
+            ) {
+              yield* releaseEgressConnector({
+                functionName,
+                connectorArn: previousConnector,
+                session,
+              });
+            }
+          }
           const previousEndpointName = output?.endpointName;
           if (
             previousEndpointName !== undefined &&

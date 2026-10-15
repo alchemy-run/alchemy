@@ -19,6 +19,7 @@ import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import type * as rolldown from "rolldown";
 import { Unowned } from "../../AdoptPolicy.ts";
+import * as Binding from "../../Binding.ts";
 import type * as Bundle from "../../Bundle/Bundle.ts";
 import type { PackageInstall } from "../../Bundle/InstalledPackages.ts";
 import { deepEqual, havePropsChanged, isResolved, stripEffects } from "../../Diff.ts";
@@ -571,6 +572,30 @@ export interface Function extends Resource<
   },
   Providers
 > {}
+
+/** An event source was used inside a Lambda Web Function. */
+export class EventSourceRequiresFunction extends Data.TaggedError("EventSourceRequiresFunction")<{
+  eventSource: string;
+  message: string;
+}> {}
+
+/**
+ * The `AWS.Lambda.Function` an event source attaches to. A Lambda Web
+ * Function only receives HTTP and can't be an event source target, so name
+ * the problem there instead of failing with a missing-service error (the
+ * typed API already rejects it; this covers untyped JavaScript).
+ */
+export const eventSourceHost = (eventSource: string) =>
+  Effect.flatMap(Binding.Host, (host) =>
+    host?.Type === "AWS.Lambda.WebFunction"
+      ? Effect.die(
+          new EventSourceRequiresFunction({
+            eventSource,
+            message: `${eventSource} needs an AWS.Lambda.Function, but "${host.LogicalId}" is an AWS.Lambda.WebFunction, which only receives HTTP. Consume the event source from an AWS.Lambda.Function instead.`,
+          }),
+        )
+      : Function,
+  );
 
 export type FunctionServices =
   | Credentials

@@ -43,6 +43,80 @@ export interface WebFunctionEndpointSpec {
   description?: string;
 }
 
+/** A setting is outside the range Lambda accepts. */
+export class WebFunctionInvalidConfig extends Data.TaggedError("WebFunctionInvalidConfig")<{
+  resourceId: string;
+  setting: string;
+  message: string;
+}> {}
+
+/**
+ * Check settings against Lambda's limits at plan time, so a bad value fails
+ * before anything is created instead of mid-deploy.
+ */
+export const validateWebFunctionSettings = (
+  resourceId: string,
+  settings: {
+    rateLimit?: number;
+    maxEnvironments?: number;
+    maxConcurrencyPerEnvironment?: number;
+    timeoutSeconds?: number;
+  },
+): Effect.Effect<void, WebFunctionInvalidConfig> => {
+  const invalid = (setting: string, message: string) =>
+    Effect.fail(
+      new WebFunctionInvalidConfig({
+        resourceId,
+        setting,
+        message: `"${resourceId}": ${message}`,
+      }),
+    );
+  const { rateLimit, maxEnvironments, maxConcurrencyPerEnvironment, timeoutSeconds } = settings;
+  if (rateLimit !== undefined) {
+    const step = rateLimit <= 1000 ? 100 : 1000;
+    if (
+      !Number.isInteger(rateLimit) ||
+      rateLimit < 0 ||
+      rateLimit > 10_000 ||
+      rateLimit % step !== 0
+    ) {
+      const lower = Math.max(0, Math.floor(rateLimit / step) * step);
+      const upper = Math.min(10_000, Math.ceil(rateLimit / step) * step);
+      return invalid(
+        "rateLimit",
+        `rateLimit ${rateLimit} is not allowed: use 0–1,000 in steps of 100 or 1,000–10,000 in steps of 1,000 (e.g. ${lower} or ${upper}).`,
+      );
+    }
+  }
+  if (
+    maxEnvironments !== undefined &&
+    (!Number.isInteger(maxEnvironments) || maxEnvironments < 2 || maxEnvironments > 10_000)
+  ) {
+    return invalid(
+      "maxEnvironments",
+      `maxEnvironments ${maxEnvironments} is not allowed: use a whole number from 2 to 10,000.`,
+    );
+  }
+  if (
+    maxConcurrencyPerEnvironment !== undefined &&
+    (!Number.isInteger(maxConcurrencyPerEnvironment) ||
+      maxConcurrencyPerEnvironment < 1 ||
+      maxConcurrencyPerEnvironment > 128)
+  ) {
+    return invalid(
+      "maxConcurrencyPerEnvironment",
+      `maxConcurrencyPerEnvironment ${maxConcurrencyPerEnvironment} is not allowed: use a whole number from 1 to 128.`,
+    );
+  }
+  if (timeoutSeconds !== undefined && (timeoutSeconds < 3 || timeoutSeconds > 900)) {
+    return invalid(
+      "timeout",
+      `timeout of ${timeoutSeconds} seconds is not allowed: use 3 seconds to 15 minutes.`,
+    );
+  }
+  return Effect.void;
+};
+
 export type WebFunctionEndpointType = "HomeRegion" | "MultiRegion";
 
 export const endpointTypeOf = (regions: readonly string[] | undefined): WebFunctionEndpointType =>

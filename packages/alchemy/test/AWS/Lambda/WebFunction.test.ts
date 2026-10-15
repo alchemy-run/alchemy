@@ -7,6 +7,7 @@ import * as RDSData from "@distilled.cloud/aws/rds-data";
 import { expect } from "alchemy-test";
 import * as Cause from "effect/Cause";
 import * as Clock from "effect/Clock";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
@@ -345,7 +346,9 @@ test.provider(
 
       expect(
         yield* failure(stack.plan(EventSourceWeb.pipe(Effect.provide(EventSourceWebLive)))),
-      ).toContain("AWS.Lambda.Function");
+      ).toContain(
+        'AWS.Lambda.QueueEventSource needs an AWS.Lambda.Function, but "EventSourceWeb" is an AWS.Lambda.WebFunction',
+      );
       expect(
         yield* failure(stack.plan(BackgroundLoopWeb.pipe(Effect.provide(BackgroundLoopWebLive)))),
       ).toContain("ServerHost");
@@ -371,13 +374,20 @@ test.provider.skipIf(!!process.env.FAST)(
               availabilityZones: 2,
             });
             const sg = yield* AWS.EC2.SecurityGroup("WebVpcSg", { vpcId: network.vpcId });
-            return yield* AWS.Lambda.WebFunction("VpcFunction", {
+            const fn = yield* AWS.Lambda.WebFunction("VpcFunction", {
               main: asyncFetchMain,
               authType: "ApplicationManaged",
               ...(withVpc
                 ? { vpc: { subnetIds: network.privateSubnetIds, securityGroupIds: [sg.groupId] } }
                 : {}),
             });
+            // A second endpoint: when `vpc` is removed it moves after the
+            // built-in one, so it is the one that releases the connector.
+            const extra = yield* AWS.Lambda.WebFunctionEndpoint("VpcExtra", {
+              function: fn,
+              authType: "ApplicationManaged",
+            });
+            return { fn, extraUrl: extra.url };
           }),
         );
 
@@ -387,10 +397,10 @@ test.provider.skipIf(!!process.env.FAST)(
           Effect.map((body) => body as { ok: boolean; addresses?: string[]; error?: string }),
         );
 
-      const before = yield* deploy(false);
+      const { fn: before } = yield* deploy(false);
       expect((yield* dns(before.url)).ok).toBe(false);
 
-      const after = yield* deploy(true);
+      const { fn: after, extraUrl } = yield* deploy(true);
       expect(after.revisionId).not.toBe(before.revisionId);
       const resolved = yield* dns(after.url).pipe(
         Effect.repeat({ schedule: Schedule.spaced("3 seconds"), until: (r) => r.ok, times: 20 }),
@@ -425,15 +435,29 @@ test.provider.skipIf(!!process.env.FAST)(
         .pipe(Effect.flip);
       expect(String(multiRegion)).toContain("WebFunctionVpcRequiresHomeRegion");
 
-      yield* stack.destroy();
-      yield* expectFunctionDeleted(after.functionName, after.roleName);
-      const connectorGone = yield* lambdacore.getNetworkConnector({ Identifier: connectorId }).pipe(
+      const connectorGone = lambdacore.getNetworkConnector({ Identifier: connectorId }).pipe(
         Effect.map(() => false),
         Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(true)),
       );
-      expect(connectorGone).toBe(true);
+      const operatorRole = connector.OperatorRole!.split("/").pop()!;
+      const operatorRoleGone = iam.getRole({ RoleName: operatorRole }).pipe(
+        Effect.map(() => false),
+        Effect.catchTag("NoSuchEntityException", () => Effect.succeed(true)),
+      );
+      expect((yield* dns(extraUrl)).ok).toBe(true);
+
+      // Removing `vpc` releases the connector and its operator role in the
+      // same deploy, once no endpoint serves a revision that uses it.
+      const { fn: removed, extraUrl: removedExtraUrl } = yield* deploy(false);
+      expect(yield* connectorGone).toBe(true);
+      expect(yield* operatorRoleGone).toBe(true);
+      expect((yield* dns(removed.url)).ok).toBe(false);
+      expect((yield* dns(removedExtraUrl)).ok).toBe(false);
+
+      yield* stack.destroy();
+      yield* expectFunctionDeleted(after.functionName, after.roleName);
     }).pipe(Effect.onError(() => stack.destroy().pipe(Effect.ignore))),
-  { tags: [...tags, "provider:aws:ec2"], timeout: 900_000 },
+  { tags: [...tags, "provider:aws:ec2"], timeout: 1_500_000 },
 );
 
 // Slow: the endpoint replicates the revision to every Region.
@@ -533,4 +557,53 @@ test.provider.skipIf(!!process.env.FAST)(
       yield* expectFunctionDeleted(api.functionName, api.roleName);
     }).pipe(Effect.onError(() => stack.destroy().pipe(Effect.ignore))),
   { tags: [...tags, "provider:aws:rds", "provider:aws:ec2"], timeout: 2_700_000 },
+);
+
+test.provider(
+  "out-of-range settings fail at plan",
+  (stack) =>
+    Effect.gen(function* () {
+      const planError = <A, E, R>(declaration: Effect.Effect<A, E, R>) =>
+        stack.plan(declaration).pipe(
+          Effect.flip,
+          Effect.map((error) => String(error)),
+        );
+      const fn = (props: Partial<AWS.Lambda.WebFunctionProps>) =>
+        AWS.Lambda.WebFunction("Invalid", {
+          main: asyncFetchMain,
+          authType: "ApplicationManaged",
+          ...props,
+        });
+
+      expect(yield* planError(fn({ rateLimit: 1500 }))).toContain("rateLimit 1500 is not allowed");
+      expect(yield* planError(fn({ rateLimit: 150 }))).toContain("e.g. 100 or 200");
+      expect(yield* planError(fn({ maxEnvironments: 1 }))).toContain(
+        "maxEnvironments 1 is not allowed",
+      );
+      expect(yield* planError(fn({ maxConcurrencyPerEnvironment: 129 }))).toContain(
+        "maxConcurrencyPerEnvironment 129 is not allowed",
+      );
+      expect(yield* planError(fn({ timeout: Duration.minutes(20) }))).toContain(
+        "timeout of 1200 seconds is not allowed",
+      );
+      expect(
+        yield* planError(
+          Effect.gen(function* () {
+            const api = yield* fn({});
+            return yield* AWS.Lambda.WebFunctionEndpoint("InvalidEndpoint", {
+              function: api,
+              authType: "ApplicationManaged",
+              rateLimit: 2500,
+            });
+          }),
+        ),
+      ).toContain("rateLimit 2500 is not allowed");
+
+      // Valid boundaries plan cleanly.
+      const ok = yield* stack.plan(
+        fn({ rateLimit: 0, maxEnvironments: 2, maxConcurrencyPerEnvironment: 128 }),
+      );
+      expect(ok.resources.Invalid).toMatchObject({ action: "create" });
+    }),
+  { tags, timeout: 60_000 },
 );

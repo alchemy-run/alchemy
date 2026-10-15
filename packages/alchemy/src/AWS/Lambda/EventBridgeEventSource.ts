@@ -108,7 +108,7 @@ export const isEventBridgeEvent = (event: any): event is lambda.EventBridgeEvent
 export const EventSource = Layer.effect(
   EventBridgeEventSource,
   Effect.gen(function* () {
-    const host = yield* Lambda.Function;
+    const host = yield* Lambda.eventSourceHost("AWS.Lambda.EventBridgeEventSource");
 
     return Effect.fn(function* <Detail = unknown, StreamReq = never, Req = never>(
       descriptor: {

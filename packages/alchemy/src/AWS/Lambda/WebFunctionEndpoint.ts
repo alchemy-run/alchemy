@@ -3,6 +3,7 @@ import { deepEqual, isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import type { Providers } from "../Providers.ts";
+import { connectorOfRevision, releaseEgressConnector, sameConnector } from "./WebFunctionEgress.ts";
 import {
   activeRevisionId,
   deleteEndpoint,
@@ -10,6 +11,7 @@ import {
   getEndpoint,
   syncEndpoint,
   toEndpointName,
+  validateWebFunctionSettings,
   type WebFunctionAuthType,
 } from "./WebFunctionEndpointSync.ts";
 
@@ -214,6 +216,10 @@ export const WebFunctionEndpointProvider = () =>
         stables: ["functionName", "endpointName", "endpointArn"],
         diff: Effect.fn(function* ({ id, olds, news, output }) {
           if (!isResolved(news)) return;
+          yield* validateWebFunctionSettings(`AWS.Lambda.WebFunctionEndpoint "${id}"`, {
+            rateLimit: news.rateLimit,
+            maxEnvironments: news.maxEnvironments,
+          });
           if (!output || !olds) return undefined;
           // A different function, name, type, or Region set is a different
           // endpoint (and URL). The name is shared with the old endpoint on
@@ -241,6 +247,8 @@ export const WebFunctionEndpointProvider = () =>
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const functionName = functionOf(news).functionName;
           const endpointName = output?.endpointName ?? nameOf(id, news);
+          const previous = yield* getEndpoint(functionName, endpointName);
+          const previousRevisionId = previous ? activeRevisionId(previous) : undefined;
           const endpoint = yield* syncEndpoint({
             functionName,
             spec: {
@@ -254,6 +262,23 @@ export const WebFunctionEndpointProvider = () =>
             revisionId: functionOf(news).revisionId,
             session,
           });
+          // Moving off a revision whose egress connector the new one no
+          // longer uses (e.g. `vpc` removed) may leave it unused.
+          const revisionId = functionOf(news).revisionId;
+          if (previousRevisionId !== undefined && previousRevisionId !== revisionId) {
+            const previousConnector = yield* connectorOfRevision(functionName, previousRevisionId);
+            const currentConnector = yield* connectorOfRevision(functionName, revisionId);
+            if (
+              previousConnector !== undefined &&
+              !sameConnector(previousConnector, currentConnector)
+            ) {
+              yield* releaseEgressConnector({
+                functionName,
+                connectorArn: previousConnector,
+                session,
+              });
+            }
+          }
           yield* session.note(`https://${endpoint.domainName}`);
           return toAttributes(functionName, endpoint);
         }),
