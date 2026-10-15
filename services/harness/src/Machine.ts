@@ -1,6 +1,6 @@
 import type { SandboxClient } from "alchemy/AI";
 import * as Effect from "effect/Effect";
-import type { Machine } from "./rpcs.ts";
+import type { Machine } from "./Rpcs.ts";
 
 /** The sandbox size sessions run on. */
 export const SIZE = "large";

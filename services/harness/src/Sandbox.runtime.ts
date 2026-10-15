@@ -1,14 +1,14 @@
 import * as Anthropic from "alchemy/Anthropic";
 import * as Cloudflare from "alchemy/Cloudflare";
 import { Dockerfile } from "alchemy/Docker";
-import { INSTANCE } from "./machine.ts";
+import { INSTANCE } from "./Machine.ts";
 import { Sandbox, WORKSPACE } from "./Sandbox.ts";
 
 /**
  * The program a session's container runs: Claude Code, working in a checkout
  * of Alchemy. The image only holds the toolchain; the checkout is prepared
  * at runtime (see Agent.ts). It holds no credentials — the egress gateway
- * (gateway.worker.ts) adds them to its requests.
+ * (Gateway.aws.ts) adds them to its requests.
  */
 export default Cloudflare.Containers.Sandbox(
   Sandbox,

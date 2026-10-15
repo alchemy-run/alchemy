@@ -8,19 +8,19 @@ HTTP ──▶ Worker ──▶ Agent (Durable Object, one per issue) ──▶ 
 ```
 
 - `src/Sandbox.runtime.ts` — the container program. `Anthropic.ClaudeCodeServer` installs the official Agent SDK (and the unmodified `claude` binary) into the image and serves sessions on the container port. The image holds only the toolchain.
-- `src/gateway.ts`, `src/gateway.worker.ts` — the egress gateway (`AgentGateway`): which hosts a container may reach, and the Worker that holds the model API key and your GitHub login and adds them to its requests.
-- `src/rpcs.ts` — this app's API (`AgentRpcs`), shared by the Durable Object and the web UI.
-- `src/Agent.ts` — one Durable Object per issue, serving `AgentRpcs`. It starts the session's container with egress from `AgentGateway` (`Anthropic.Egress`, `GitHub.Egress`), so the container holds no credentials: the gateway (`src/gateway.worker.ts`) checks each request and adds them. It clones the repository into a container that has none; `Cloudflare.Containers.Harness` checkpoints the session's work into the Durable Object after every turn and keeps its history there, so a session resumes on any container.
-- `src/worker.ts` — the HTTP API.
+- `src/Gateway.ts`, `src/Gateway.aws.ts` — the egress gateway (`AgentGateway`): which hosts a container may reach, and the Lambda Web Function (in four Regions) that holds the model API key and your GitHub login and adds them to its requests.
+- `src/Rpcs.ts` — this app's API (`AgentRpcs`), shared by the Durable Object and the web UI.
+- `src/Agent.ts` — one Durable Object per issue, serving `AgentRpcs`. It starts the session's container with egress from `AgentGateway` (`Anthropic.Egress`, `GitHub.Egress`), so the container holds no credentials: the gateway (`src/Gateway.aws.ts`) checks each request and adds them. It clones the repository into a container that has none; `Cloudflare.Containers.Harness` checkpoints the session's work into the Durable Object after every turn and keeps its history there, so a session resumes on any container.
+- `src/Worker.ts` — the HTTP API.
 
 ## Develop and deploy
 
 Each session works in a shallow clone of [alchemy-run/alchemy](https://github.com/alchemy-run/alchemy); the agent installs dependencies when it needs them. `git` and `gh` act as your GitHub login (the stack's GitHub auth profile), limited to pushing `agent/**` branches:
 
 ```sh
-export ANTHROPIC_API_KEY=sk-ant-...   # read by the Worker, never the container
+export ANTHROPIC_API_KEY=sk-ant-...   # read by the gateway, never the container
 bun alchemy dev      # Worker + DO in workerd, the container in local Docker
-bun alchemy deploy   # Cloudflare Containers
+bun alchemy deploy   # Cloudflare Containers; the gateway on AWS Lambda
 ```
 
 ## Use it

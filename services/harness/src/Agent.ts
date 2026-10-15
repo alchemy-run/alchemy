@@ -3,19 +3,19 @@ import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
 import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
-import { AgentGateway } from "./gateway.ts";
-import { makeMachine, SIZE } from "./machine.ts";
-import { AgentRpcs } from "./rpcs.ts";
+import { AgentGateway } from "./Gateway.ts";
+import { makeMachine, SIZE } from "./Machine.ts";
+import { AgentRpcs } from "./Rpcs.ts";
 import { Sandbox, WORKSPACE } from "./Sandbox.ts";
 import { Sessions, SESSIONS_INDEX } from "./Sessions.ts";
-import { makeTerminals } from "./terminals.ts";
+import { makeTerminals } from "./Terminals.ts";
 
 /**
  * One Durable Object per issue, serving this app's `AgentRpcs`. Every call
  * names its session, so one issue can run several.
  *
  * The session's container holds no credentials: its requests to the model
- * API and GitHub go to the egress gateway (gateway.worker.ts), which checks
+ * API and GitHub go to the egress gateway (Gateway.aws.ts), which checks
  * them and adds the model API key and your GitHub login. Its history and its work (the
  * checkout, checkpointed after every turn) live in this Durable Object, so
  * the session picks up where it left off on any container.
