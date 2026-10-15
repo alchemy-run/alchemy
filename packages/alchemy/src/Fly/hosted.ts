@@ -17,7 +17,9 @@ import {
 import { findCwdForBundle, getStableContextDir, resolveMainPath } from "../Bundle/TempRoot.ts";
 import type { Docker } from "../Docker/Docker.ts";
 import { safeHttpEffect } from "../Http.ts";
+import * as Output from "../Output.ts";
 import type { ResourceBinding } from "../Resource.ts";
+import { packEnvValueKeepRedacted } from "../RuntimeContext.ts";
 import { createContainerRuntimeContext, type HostRuntimeContext } from "../Server/Process.ts";
 import {
   copyExtraFiles,
@@ -58,7 +60,15 @@ export const createFlyHostRuntimeContext =
         boots ? { shape: { ...shape, fetch: shape?.fetch ?? wrapped } } : options,
       ) as Effect.Effect<void, never, any>;
     };
-    return Object.assign(base, { serve });
+    // Keep the `Redacted` wrapper outside the packed string so the Service
+    // reconcile can store those values as App secrets instead of Machine env.
+    const set: HostRuntimeContext["set"] = (bindingId, output) =>
+      Effect.sync(() => {
+        const key = bindingId.replaceAll(/[^a-zA-Z0-9]/g, "_");
+        base.env[key] = output.pipe(Output.map(packEnvValueKeepRedacted));
+        return key;
+      });
+    return Object.assign(base, { serve, set });
   };
 
 export const FLY_REGISTRY = "registry.fly.io";
@@ -179,10 +189,13 @@ export const collectBindingState = (bindings: readonly ResourceBinding<ServiceBi
   const active = bindings.filter(
     (binding: ResourceBinding<ServiceBinding> & { action?: string }) => binding.action !== "delete",
   );
-  const env = toEnvRecord(
-    active
-      .map((binding) => binding?.data?.env)
-      .reduce<Record<string, any>>((acc, value) => ({ ...acc, ...value }), {}),
+  const merged = active
+    .map((binding) => binding?.data?.env)
+    .reduce<Record<string, any>>((acc, value) => ({ ...acc, ...value }), {});
+  const env = toEnvRecord(merged);
+  // Bound `Config` values and Redacted outputs, still packed for the runtime.
+  const secrets = toEnvRecord(
+    Object.fromEntries(Object.entries(merged).filter(([, value]) => Redacted.isRedacted(value))),
   );
   const mounts: DiskSpec[] = [];
   const seen = new Set<string>();
@@ -246,7 +259,7 @@ export const collectBindingState = (bindings: readonly ResourceBinding<ServiceBi
       });
     }
   }
-  return { env, mounts, redis, buckets, postgres, targets };
+  return { env, secrets, mounts, redis, buckets, postgres, targets };
 };
 
 /**
