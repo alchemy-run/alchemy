@@ -558,6 +558,8 @@ import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Layer from "effect/Layer";
+import * as OtlpSerialization from "effect/observability/OtlpSerialization";
+import * as OtlpTracer from "effect/observability/OtlpTracer";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as Socket from "effect/socket/Socket";
@@ -606,7 +608,21 @@ const BankConnection = Layer.unwrap(
       Layer.provide(Socket.layerWebSocketConstructorGlobal),
     );
   }),
-).pipe(Layer.provide(FetchHttpClient.layer));
+);
+
+/**
+ * The app's spans, exported to its own origin, where the bank Worker relays
+ * them on. foldkit traces every Command, and each Api call carries the trace
+ * on, so a click and everything it causes on the server is one trace.
+ */
+const Tracing = OtlpTracer.layer({
+  url: `${location.origin}/api/telemetry/v1/traces`,
+  resource: { serviceName: "bank-web" },
+}).pipe(Layer.provide(OtlpSerialization.layerJson));
+
+const Resources = Layer.mergeAll(BankConnection, Tracing).pipe(
+  Layer.provide(FetchHttpClient.layer),
+);
 
 Runtime.run(
   Runtime.makeApplication({
@@ -616,7 +632,7 @@ Runtime.run(
     update,
     view,
     subscriptions,
-    resources: BankConnection,
+    resources: Resources,
     container: document.getElementById("root"),
   }),
   {

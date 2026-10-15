@@ -7,6 +7,7 @@ import { SupportApi } from "@bank/domain/SupportApi.api";
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as DomainCloudflare from "alchemy/Domain/Cloudflare";
 import * as Stripe from "alchemy/Stripe";
+import * as Telemetry from "alchemy/Telemetry";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
@@ -60,6 +61,13 @@ export default class BankWorker extends Cloudflare.Worker<BankWorker>()(
         }
         return yield* HttpServerResponse.json(yield* ledger.forAccount(accountId));
       });
+    // The app's own telemetry, collected here and forwarded with the bank's
+    // credentials, so no ingest token reaches a browser. Signed-in users only.
+    const telemetry = Telemetry.relay({
+      authorize: Effect.map(HttpServerRequest, (request) =>
+        Option.isSome(actorOf(request.headers)),
+      ),
+    });
     // Claims POST /webhooks/stripe and provisions the Stripe webhook endpoint.
     yield* StripeSettlements;
     return {
@@ -71,6 +79,7 @@ export default class BankWorker extends Cloudflare.Worker<BankWorker>()(
         if (path === "/api/session") return yield* sessionRoute;
         const ledgerPath = LEDGER.exec(path);
         if (ledgerPath) return yield* ledgerRoute(decodeURIComponent(ledgerPath[1]!));
+        if (path.startsWith("/api/telemetry/")) return yield* telemetry;
         if (path.startsWith("/api")) return yield* customerApi.fetch;
         if (path.startsWith("/support")) return yield* supportApi.fetch;
         return HttpServerResponse.text("Not Found", { status: 404 });

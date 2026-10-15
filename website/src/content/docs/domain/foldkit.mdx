@@ -205,6 +205,10 @@ Runtime.run(
 
 `Domain.protocolWebSocket` sends commands over HTTP and opens a WebSocket for each watch. See [Sessions and middleware](/domain/sessions) for the sign-in route and the one-origin Worker.
 
+## Trace it
+
+foldkit wraps every Command in a span, and a tracer in `resources` exports them. Each Api call carries the trace on, so one trace runs from a click through everything it causes on the server. See [Observability](/domain/observability#trace-the-browser).
+
 ## Test the app's update
 
 foldkit stories test `update` without a server. Resolve each command with the message it would produce.

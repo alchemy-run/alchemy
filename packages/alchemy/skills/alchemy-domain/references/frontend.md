@@ -80,6 +80,29 @@ export const subscriptions = Subscription.make<Model, Message, Bank>()((entry) =
 
 Watch state with `View.watch(key)`, and watch emitted events with `View.events(key)` (e.g. statement lines). A failed `validate` ends the watch with its rejection.
 
+## Tracing from the browser
+
+foldkit wraps every Command in a span, and Api calls carry the trace to the server (live reads too). Put a tracer in `resources` that exports to the app's own origin, and collect it in the server Worker with `Telemetry.relay`, which forwards it with the server's credentials:
+
+```ts
+// packages/web/src/entry.ts
+const Tracing = OtlpTracer.layer({
+  url: `${location.origin}/api/telemetry/v1/traces`,
+  resource: { serviceName: "bank-web" },
+}).pipe(Layer.provide(OtlpSerialization.layerJson));
+const Resources = Layer.mergeAll(BankConnection, Tracing).pipe(Layer.provide(FetchHttpClient.layer));
+
+// packages/server/src/BankWorker.ts
+import * as Telemetry from "alchemy/Telemetry";
+const telemetry = Telemetry.relay({
+  authorize: Effect.map(HttpServerRequest, (r) => Option.isSome(actorOf(r.headers))),   // signed-in only
+  // route: (signal, configured) => Effect.succeed(configured),                       // choose destinations
+});
+if (path.startsWith("/api/telemetry/")) return yield* telemetry;
+```
+
+Never put an ingest token in the browser. Workers Observability can't receive browser spans, so relay them to an OTLP destination (Axiom, a collector).
+
 ## Optimistic updates and offline
 
 - **Optimistic UI.** Send each command with a `commandId` the app chooses, and show it as pending. The view event carrying that `commandId` confirms it, and a typed rejection marks it rejected. Show the server's balance plus every unacknowledged line, so nothing is ever rolled back.

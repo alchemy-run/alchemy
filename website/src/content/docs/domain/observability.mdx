@@ -33,6 +33,37 @@ Domain.send Account.WithdrawMoney           the Worker, where the Api received i
 
 Each event carries the span that committed it, so the policies and views that react to it continue the same trace, however long the delivery took.
 
+## Trace the browser
+
+foldkit traces every Command it runs, and every Api call carries the caller's trace on, so the browser can start the trace: a click, the commands it sends, and everything they cause on the server. Give the app a tracer that exports to its own origin:
+
+```typescript title="packages/web/src/entry.ts"
+const Tracing = OtlpTracer.layer({
+  url: `${location.origin}/api/telemetry/v1/traces`,
+  resource: { serviceName: "bank-web" },
+}).pipe(Layer.provide(OtlpSerialization.layerJson));
+```
+
+## Collect it through your Worker
+
+`Telemetry.relay` receives the browser's spans in your own Worker and forwards them to wherever the Worker's telemetry goes, with the Worker's credentials. No ingest token reaches a browser, and only signed-in users may send:
+
+```typescript title="packages/server/src/BankWorker.ts"
+const telemetry = Telemetry.relay({
+  authorize: Effect.map(HttpServerRequest, (request) =>
+    Option.isSome(actorOf(request.headers)),
+  ),
+});
+```
+
+Mount it under the Api's path, so the app's Worker forwards it like any other call:
+
+```typescript title="packages/server/src/BankWorker.ts"
+if (path.startsWith("/api/telemetry/")) return yield* telemetry;
+```
+
+`route` decides where each batch goes: the Worker's own destinations, a separate dataset for browser traces, or anywhere else. Cloudflare Workers Observability only records a Worker's own spans, so send browser spans to an OTLP destination such as Axiom.
+
 ## See every outcome
 
 A decide span records how the command ended in `domain.outcome`: `accepted`, or the tag of its rejection. A rejection is an answer, not a failure, so its span ends cleanly; only a defect marks a span as failed.
