@@ -427,16 +427,14 @@ export const targetId = (target: unknown): string =>
     : String(target);
 
 /**
- * The policy run in progress: which policy, for which key, and deterministic
- * command ids for its sends, so a re-run of the same trigger is deduplicated
- * by the target aggregate.
+ * Deterministic command ids for sends made while a policy handles a trigger,
+ * so a re-run of the same trigger is deduplicated by the target aggregate.
  *
  * @internal
  */
-export class PolicyRun extends Context.Service<
-  PolicyRun,
-  { readonly policy: string; readonly key: Ref; readonly next: () => string }
->()("alchemy/Domain/PolicyRun") {}
+export class PolicyRun extends Context.Service<PolicyRun, { readonly next: () => string }>()(
+  "alchemy/Domain/PolicyRun",
+) {}
 
 /**
  * The command id for a send: the caller's; inside a saga step, the step's

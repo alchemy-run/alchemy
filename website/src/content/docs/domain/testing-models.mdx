@@ -128,13 +128,7 @@ Story.resolve("a-2", FraudCheck.score, { risk: 0.1 }),
 Story.resolve("a-1", FraudCheck.score, { risk: 0.95 }),
 ```
 
-Calls with the same arguments are told apart by who made them, a policy or saga and the key it ran for:
-
-```typescript
-Story.expectCall("a-1", FraudCheck.score, { amount: 60_000 }, { by: FraudReview, key: a1 }),
-```
-
-A story fails when a name or an answer could fit more than one call, so it never answers the wrong one.
+When several waiting calls match, `expectCall` names the earliest one made. A `resolve` without a name fails if more than one call is waiting, so a story never answers the wrong one.
 
 ## Move the clock
 

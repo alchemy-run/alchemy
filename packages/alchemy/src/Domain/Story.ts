@@ -7,12 +7,10 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import type { DurableDeferred, WorkflowEngine } from "effect/workflow";
-import { CurrentActivity } from "../WorkflowEncoding.ts";
 import * as Aggregate from "./Aggregate.ts";
 import type * as ExternalSystem from "./ExternalSystem.ts";
 import * as InMemory from "./InMemory.ts";
 import * as Model from "./Model.ts";
-import type * as Policy from "./Policy.ts";
 import type * as Saga from "./Saga.ts";
 import type * as DomainStream from "./Stream.ts";
 import type * as View from "./View.ts";
@@ -74,7 +72,6 @@ export type Step =
       readonly tag: string | undefined;
       readonly op: ExternalSystem.Op;
       readonly args: unknown;
-      readonly from: CallFrom | undefined;
     }
   | {
       readonly _tag: "Resolve";
@@ -188,28 +185,17 @@ const streamed = <S extends DomainStream.Any>(
 });
 
 /**
- * Who made an external system call: the policy or saga, and the key it ran
- * for. Narrows `expectCall` when calls with the same arguments come from
- * different places.
- */
-export interface CallFrom {
-  readonly by?: Policy.Any | Saga.Any;
-  readonly key?: Aggregate.Ref | string;
-}
-
-/**
  * An external system call matching these (partial) arguments is waiting.
  * With a tag first, the tag names that call, so a later `resolve` can answer
- * exactly it. Fails if no pending call matches, or if several do; `from`
- * narrows the match to calls made by one policy or saga, for one key.
+ * exactly it; when several match, it names the earliest one made.
  */
 const expectCall: {
-  <Args>(op: ExternalSystem.Op<Args, any>, args: Partial<Args>, from?: CallFrom): Step;
-  <Args>(tag: string, op: ExternalSystem.Op<Args, any>, args: Partial<Args>, from?: CallFrom): Step;
+  <Args>(op: ExternalSystem.Op<Args, any>, args: Partial<Args>): Step;
+  <Args>(tag: string, op: ExternalSystem.Op<Args, any>, args: Partial<Args>): Step;
 } = (...a: ReadonlyArray<any>): Step =>
   typeof a[0] === "string"
-    ? { _tag: "ExpectCall", tag: a[0], op: a[1], args: a[2], from: a[3] }
-    : { _tag: "ExpectCall", tag: undefined, op: a[0], args: a[1], from: a[2] };
+    ? { _tag: "ExpectCall", tag: a[0], op: a[1], args: a[2] }
+    : { _tag: "ExpectCall", tag: undefined, op: a[0], args: a[1] };
 
 /**
  * Answer an external system call. With a tag first, answers the call
@@ -314,30 +300,7 @@ interface PendingCall {
   readonly deferred: Deferred.Deferred<unknown>;
   /** The name `expectCall` gave it, if any. */
   tag: string | undefined;
-  /** The policy or saga that made it, and the key it ran for. */
-  readonly by: string | undefined;
-  readonly key: string | undefined;
 }
-
-/** Where an external system call came from: a saga step, or a policy run. */
-const callOrigin = Effect.gen(function* () {
-  const activity = yield* Effect.serviceOption(CurrentActivity);
-  if (Option.isSome(activity)) {
-    return { by: activity.value.workflow, key: activity.value.executionId };
-  }
-  const run = yield* Effect.serviceOption(Aggregate.PolicyRun);
-  if (Option.isSome(run)) return { by: run.value.policy, key: String(run.value.key.id) };
-  return { by: undefined, key: undefined };
-});
-
-const nameOf = (by: Policy.Any | Saga.Any) =>
-  "policyName" in by ? (by as Policy.Any).policyName : (by as Saga.Any).sagaName;
-
-const fromMatches = (from: CallFrom | undefined, call: PendingCall) =>
-  from === undefined ||
-  ((from.by === undefined || nameOf(from.by) === call.by) &&
-    (from.key === undefined ||
-      (typeof from.key === "string" ? from.key : String(from.key.id)) === call.key));
 
 /** Options for {@link make}. */
 interface StoryOptions<Policies, LE, LR, Systems> {
@@ -405,14 +368,12 @@ const make =
                 platform.control.suspended(
                   Effect.gen(function* () {
                     const deferred = yield* Deferred.make<unknown>();
-                    const origin = yield* callOrigin;
                     calls.push({
                       system: system.systemName,
                       op,
                       args,
                       deferred,
                       tag: undefined,
-                      ...origin,
                     });
                     return yield* Deferred.await(deferred);
                   }),
@@ -644,24 +605,18 @@ const make =
             case "ExpectCall": {
               const name = `${s.op.system}.${s.op.op}`;
               const pending = calls.filter((c) => c.system === s.op.system && c.op === s.op.op);
-              const matching = pending.filter(
-                (c) => c.tag === undefined && partial(s.args, c.args) && fromMatches(s.from, c),
-              );
-              if (matching.length === 0) {
+              // Calls are kept in the order they were made: a tag names the earliest match.
+              const match = pending.find((c) => c.tag === undefined && partial(s.args, c.args));
+              if (!match) {
                 return yield* fail(
-                  `no pending call to ${name} matches ${show(s.args)}${s.from ? " from there" : ""}; pending: ${show(pending.map((c) => ({ args: c.args, by: c.by, key: c.key })))}`,
-                );
-              }
-              if (matching.length > 1) {
-                return yield* fail(
-                  `${matching.length} pending calls to ${name} match ${show(s.args)}; narrow the arguments, or say which policy or saga made it with { by, key }`,
+                  `no pending call to ${name} matches ${show(s.args)}; pending: ${show(pending.map((c) => c.args))}`,
                 );
               }
               if (s.tag !== undefined) {
                 if (calls.some((c) => c.tag === s.tag)) {
                   return yield* fail(`"${s.tag}" already names a pending call`);
                 }
-                matching[0]!.tag = s.tag;
+                match.tag = s.tag;
               }
               break;
             }

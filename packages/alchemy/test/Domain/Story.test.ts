@@ -278,14 +278,14 @@ describe("Domain Story", () => {
     ),
   );
 
-  it.effect("tells identical calls apart by who made them", () =>
+  it.effect("tags identical calls in the order they were made", () =>
     story(
       Story.given(c1, new Incremented({ by: 10, total: 10 })),
       Story.given(c2, new Incremented({ by: 10, total: 10 })),
       Story.when(c1, new Increment({ by: 6 })),
       Story.when(c2, new Increment({ by: 6 })),
-      Story.expectCall("c2", Approval.check, { total: 16 }, { by: CapWhenLarge, key: c2 }),
-      Story.expectCall("c1", Approval.check, { total: 16 }, { by: CapWhenLarge, key: c1 }),
+      Story.expectCall("c1", Approval.check, { total: 16 }),
+      Story.expectCall("c2", Approval.check, { total: 16 }),
       Story.resolve("c1", Approval.check, { ok: false }),
       Story.resolve("c2", Approval.check, { ok: true }),
       Story.then(c1, new Incremented({ by: 6, total: 16 })),
@@ -304,23 +304,6 @@ describe("Domain Story", () => {
       Effect.flip,
       Effect.map((failure) =>
         expect(String((failure as any).message)).toContain("2 pending calls to Approval.check"),
-      ),
-    ),
-  );
-
-  it.effect("identical calls can't be tagged without saying who made them", () =>
-    story(
-      Story.given(c1, new Incremented({ by: 10, total: 10 })),
-      Story.given(c2, new Incremented({ by: 10, total: 10 })),
-      Story.when(c1, new Increment({ by: 6 })),
-      Story.when(c2, new Increment({ by: 6 })),
-      Story.expectCall("c1", Approval.check, { total: 16 }),
-    ).pipe(
-      Effect.flip,
-      Effect.map((failure) =>
-        expect(String((failure as any).message)).toContain(
-          "2 pending calls to Approval.check match",
-        ),
       ),
     ),
   );
