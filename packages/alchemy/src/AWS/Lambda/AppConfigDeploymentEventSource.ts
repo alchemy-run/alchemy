@@ -87,7 +87,7 @@ export const AppConfigDeploymentEventSource = Layer.effect(
   // `never`.
   // @effect-diagnostics-next-line missingEffectContext:off
   Effect.gen(function* () {
-    const host = yield* Lambda.Function;
+    const host = yield* Lambda.eventSourceHost("AWS.Lambda.AppConfigDeploymentEventSource");
     const InvokeRole = yield* Role;
     const DeploymentExtension = yield* Extension;
     const DeploymentExtensionAssociation = yield* ExtensionAssociation;

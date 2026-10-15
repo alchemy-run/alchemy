@@ -2,6 +2,7 @@ import type { Credentials } from "@distilled.cloud/aws/Credentials";
 import { Region } from "@distilled.cloud/aws/Region";
 import * as s3 from "@distilled.cloud/aws/s3";
 import * as Context from "effect/Context";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import type { HttpClient } from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
@@ -261,5 +262,72 @@ export const ensureAssetsBucketTags = Effect.fn(function* (bucketName: string) {
         Value: tag.Value!,
       })),
     },
+  });
+});
+
+/** The assets bucket carries a bucket policy that is not valid JSON. */
+export class AssetsBucketPolicyInvalid extends Data.TaggedError("AssetsBucketPolicyInvalid")<{
+  bucketName: string;
+  message: string;
+}> {}
+
+/**
+ * Policy statement id granting Lambda read access to Web Function code.
+ */
+export const LAMBDA_WEB_CODE_ACCESS_SID = "AlchemyLambdaWebFunctionCode";
+
+/**
+ * Prepare the assets bucket to serve `AWS.Lambda.WebFunction` code. Lambda
+ * reads a Web Function's deployment package from S3 itself, pinned to an
+ * object version, so the bucket needs versioning and a bucket policy that
+ * lets the Lambda service principal read `lambda/*` for this account's Web
+ * Function revisions. Both are observed first and only written when
+ * missing, so concurrent deploys converge on the same configuration.
+ */
+export const ensureLambdaWebCodeAccess = Effect.fn(function* (bucketName: string) {
+  const { accountId } = yield* AWSEnvironment.current;
+
+  const versioning = yield* s3.getBucketVersioning({ Bucket: bucketName });
+  if (versioning.Status !== "Enabled") {
+    yield* s3.putBucketVersioning({
+      Bucket: bucketName,
+      VersioningConfiguration: { Status: "Enabled" },
+    });
+  }
+
+  const statement = {
+    Sid: LAMBDA_WEB_CODE_ACCESS_SID,
+    Effect: "Allow",
+    Principal: { Service: "lambda.amazonaws.com" },
+    Action: ["s3:GetObject", "s3:GetObjectVersion"],
+    Resource: `arn:aws:s3:::${bucketName}/lambda/*`,
+    Condition: {
+      StringEquals: { "aws:SourceAccount": accountId },
+      ArnLike: { "aws:SourceArn": `arn:aws:lambda:*:${accountId}:web-function/*/revision/*` },
+    },
+  };
+  const observed = yield* s3.getBucketPolicy({ Bucket: bucketName }).pipe(
+    Effect.map((response) => response.Policy),
+    Effect.catchTag("NoSuchBucketPolicy", () => Effect.succeed(undefined)),
+    Effect.flatMap((policy) =>
+      policy === undefined
+        ? Effect.succeed(undefined)
+        : Effect.try({
+            try: () => JSON.parse(policy) as { Version?: string; Statement?: unknown[] },
+            catch: (cause) => new AssetsBucketPolicyInvalid({ bucketName, message: String(cause) }),
+          }),
+    ),
+  );
+  const statements = (observed?.Statement ?? []) as Array<{ Sid?: string }>;
+  const existing = statements.find((s) => s.Sid === LAMBDA_WEB_CODE_ACCESS_SID);
+  if (existing !== undefined && JSON.stringify(existing) === JSON.stringify(statement)) {
+    return;
+  }
+  yield* s3.putBucketPolicy({
+    Bucket: bucketName,
+    Policy: JSON.stringify({
+      Version: observed?.Version ?? "2012-10-17",
+      Statement: [...statements.filter((s) => s.Sid !== LAMBDA_WEB_CODE_ACCESS_SID), statement],
+    }),
   });
 });

@@ -32,7 +32,7 @@ export const TopicRuleEventSource = Layer.effect(
   IoTTopicRuleEventSource,
   // @effect-diagnostics-next-line missingEffectContext:off
   Effect.gen(function* () {
-    const host = yield* Lambda.Function;
+    const host = yield* Lambda.eventSourceHost("AWS.Lambda.TopicRuleEventSource");
     const Rule = yield* TopicRule;
     const Permission = yield* LambdaPermission;
 

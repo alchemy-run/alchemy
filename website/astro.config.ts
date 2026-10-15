@@ -580,6 +580,7 @@ export default defineConfig({
                   link: "/cloudflare/compute/container-lifecycle",
                 },
                 { label: "Workflows", link: "/cloudflare/compute/workflows" },
+                { label: "Effect workflows", link: "/cloudflare/compute/effect-workflows" },
               ],
             },
             {
@@ -779,6 +780,8 @@ export default defineConfig({
                   link: "/aws/compute/choosing-a-runtime",
                 },
                 { label: "Lambda", link: "/aws/compute/lambda" },
+                { label: "Lambda Web Functions", link: "/aws/compute/web-functions" },
+                { label: "Effect workflows", link: "/aws/compute/effect-workflows" },
                 { label: "ECS", link: "/aws/compute/ecs" },
                 { label: "EC2", link: "/aws/compute/ec2" },
                 { label: "EKS", link: "/aws/compute/eks" },

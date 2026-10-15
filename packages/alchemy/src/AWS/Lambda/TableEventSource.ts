@@ -23,7 +23,7 @@ export const isDynamoDBStreamEvent = (event: any): event is lambda.DynamoDBStrea
 export const TableEventSource = Layer.effect(
   DynamoDBTableEventSource,
   Effect.gen(function* () {
-    const host = yield* Lambda.Function;
+    const host = yield* Lambda.eventSourceHost("AWS.Lambda.TableEventSource");
     const Mapping = yield* EventSourceMapping;
 
     return Effect.fn(function* <Data = unknown, StreamReq = never, Req = never>(
