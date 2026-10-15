@@ -7,8 +7,8 @@ import * as Layer from "effect/Layer";
 import { Path } from "effect/Path";
 // Each has a host on either cloud: Gateway.cf.ts / Gateway.aws.ts,
 // Sandbox.cf.ts / Sandbox.aws.ts.
-import AgentGatewayAws from "./src/Gateway.aws.ts";
-import { AgentGateway } from "./src/Gateway.ts";
+import GatewayAws from "./src/Gateway.aws.ts";
+import { Gateway } from "./src/Gateway.ts";
 import SandboxLive from "./src/Sandbox.cf.ts";
 import CodingAgents from "./src/Worker.ts";
 
@@ -31,6 +31,6 @@ export default Alchemy.Stack(
     return { api: api.url.as<string>(), web: web.url.as<string>() };
   }).pipe(
     // The sandbox's host, and the Web Function that serves its egress gateway.
-    Effect.provide(Layer.mergeAll(SandboxLive, AgentGateway.host(AgentGatewayAws))),
+    Effect.provide(Layer.mergeAll(SandboxLive, Gateway.host(GatewayAws))),
   ),
 );

@@ -4,7 +4,7 @@ import * as Effect from "effect/Effect";
 import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import { AgentRpcs } from "./AgentRpcs.ts";
-import { AgentGateway } from "./Gateway.ts";
+import { Gateway } from "./Gateway.ts";
 import { makeMachine, SIZE } from "./Machine.ts";
 import { Sandbox, WORKSPACE } from "./Sandbox.ts";
 import { Sessions, SESSIONS_INDEX } from "./Sessions.ts";
@@ -25,7 +25,7 @@ export class Agent extends Cloudflare.RpcDurableObject<Agent>()(
   { schema: AgentRpcs },
   Effect.gen(function* () {
     // Grants for the model and GitHub, minted (and renewed) by the gateway.
-    const { model, repo } = yield* AgentGateway;
+    const { model, repo } = yield* Gateway;
     const harness = yield* Cloudflare.Containers.Harness(Sandbox, { workspace: WORKSPACE });
     const sandbox = yield* Sandbox;
 
