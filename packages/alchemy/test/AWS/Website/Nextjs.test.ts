@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import * as cloudfront from "@distilled.cloud/aws/cloudfront";
+import * as S3 from "@distilled.cloud/aws/s3";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
@@ -103,12 +104,19 @@ describe.skipIf(!runLive || runEmulated)(
             const url = deployed.site.url! as string;
             expect(url).toMatch(/^https:\/\//);
             expect(deployed.site.serverUrl).toBeDefined();
-            expect(deployed.site.imageUrl).toBeDefined();
-            expect(deployed.site.revalidationQueue).toBeDefined();
-            expect(deployed.site.tagCacheTable).toBeDefined();
-            const host = server === "web-function" ? ".lambda-web." : ".lambda-url.";
-            expect(deployed.site.serverUrl).toContain(host);
-            expect(deployed.site.imageUrl).toContain(host);
+            if (server === "web-function") {
+              // Next's standalone server does it all: no image function, no
+              // revalidation queue or tag table.
+              expect(deployed.site.serverUrl).toContain(".lambda-web.");
+              expect(deployed.site.imageFunction).toBeUndefined();
+              expect(deployed.site.revalidationQueue).toBeUndefined();
+              expect(deployed.site.tagCacheTable).toBeUndefined();
+            } else {
+              expect(deployed.site.serverUrl).toContain(".lambda-url.");
+              expect(deployed.site.imageUrl).toContain(".lambda-url.");
+              expect(deployed.site.revalidationQueue).toBeDefined();
+              expect(deployed.site.tagCacheTable).toBeDefined();
+            }
             yield* Effect.log(`site url: ${url} | server url: ${deployed.site.serverUrl}`);
 
             // The Lambda Function URL serves the SSR page directly — isolates
@@ -158,6 +166,47 @@ describe.skipIf(!runLive || runEmulated)(
             );
             expect(imageResponse.status).toBe(200);
             expect(imageResponse.headers["content-type"] ?? "").toMatch(/^image\//);
+
+            if (server === "web-function") {
+              // ISR through the S3 cache handler: the prerendered page is
+              // served from the cache until revalidatePath expires it, then
+              // rendered again. Straight to the server: CloudFront may hold
+              // the page for its s-maxage.
+              const serverUrl = deployed.site.serverUrl as string;
+              const generated = HttpClient.get(`${serverUrl}/isr`).pipe(
+                Effect.flatMap((response) => response.text),
+                Effect.map((body) => /generated:(\d+):/.exec(body)?.[1]),
+                Effect.filterOrFail(
+                  (stamp): stamp is string => stamp !== undefined,
+                  () => new Error("no ISR timestamp"),
+                ),
+                Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 30 }),
+              );
+              const first = yield* generated;
+              expect(yield* generated).toBe(first);
+              const revalidated = yield* HttpClient.post(`${serverUrl}/api/revalidate`).pipe(
+                Effect.flatMap((response) => response.json),
+              );
+              expect(revalidated).toEqual({ revalidated: true });
+              const second = yield* generated.pipe(
+                Effect.repeat({
+                  schedule: Schedule.spaced("2 seconds"),
+                  until: (stamp) => stamp !== first,
+                  times: 15,
+                }),
+              );
+              expect(second).not.toBe(first);
+              expect(yield* generated).toBe(second);
+
+              // Out-of-band: the entries and the tag manifest are in S3.
+              const objects = yield* S3.listObjectsV2({
+                Bucket: deployed.site.cacheBucket!.bucketName,
+                Prefix: "_cache/",
+              });
+              const keys = (objects.Contents ?? []).map((object) => object.Key ?? "");
+              expect(keys).toContain("_cache/tags.json");
+              expect(keys.some((key) => key.startsWith("_cache/entries/"))).toBe(true);
+            }
 
             const distributionId = deployed.site.distribution!.distributionId;
 
