@@ -1,9 +1,8 @@
 import * as TSQ from "@distilled.cloud/aws/timestream-query";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Binding from "../../Binding.ts";
 import * as Output from "../../Output.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import {
   ExecuteScheduledQuery,
   type ExecuteScheduledQueryRequest,
@@ -18,33 +17,28 @@ export const ExecuteScheduledQueryHttp = Layer.effect(
   Effect.gen(function* () {
     // Yield-first captures the operations' services (Credentials/Region/
     // HttpClient) at layer init so the runtime callable is requirement-free.
-    const executeScheduledQuery = yield* TSQ.executeScheduledQuery;
-    const describeEndpoints = yield* TSQ.describeEndpoints;
+    const executeScheduledQuery = yield* AWSBindings.withCredentials(TSQ.executeScheduledQuery);
+    const describeEndpoints = yield* AWSBindings.withCredentials(TSQ.describeEndpoints);
     const withQueryEndpoint = withEndpoint(discover("query", describeEndpoints({})));
     return Effect.fn(function* (scheduledQuery: ScheduledQuery) {
       const ScheduledQueryArn = yield* scheduledQuery.scheduledQueryArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, AWS.Timestream.ExecuteScheduledQuery(${scheduledQuery}))`(
+        yield* AWSBindings.bind`AWS.Timestream.ExecuteScheduledQuery(${scheduledQuery})`({
+          policyStatements: [
             {
-              policyStatements: [
-                {
-                  Effect: "Allow",
-                  Action: ["timestream:ExecuteScheduledQuery"],
-                  Resource: [Output.interpolate`${scheduledQuery.scheduledQueryArn}`],
-                },
-                // Endpoint discovery is required and is not scoped to a
-                // resource.
-                {
-                  Effect: "Allow",
-                  Action: ["timestream:DescribeEndpoints"],
-                  Resource: ["*"],
-                },
-              ],
+              Effect: "Allow",
+              Action: ["timestream:ExecuteScheduledQuery"],
+              Resource: [Output.interpolate`${scheduledQuery.scheduledQueryArn}`],
             },
-          );
-        }
+            // Endpoint discovery is required and is not scoped to a
+            // resource.
+            {
+              Effect: "Allow",
+              Action: ["timestream:DescribeEndpoints"],
+              Resource: ["*"],
+            },
+          ],
+        });
       }
       return Effect.fn(`AWS.Timestream.ExecuteScheduledQuery(${scheduledQuery.LogicalId})`)(
         function* (request: ExecuteScheduledQueryRequest) {

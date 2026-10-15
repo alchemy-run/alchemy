@@ -4,9 +4,11 @@
  * handler this returns — see {@link ./Process.ts} for why the entry is a
  * shim.
  */
+/* oxlint-disable alchemy/package-boundaries -- package split phase 3: per-cloud runtime bootstrap; moves into its provider */
 import * as Credentials from "@distilled.cloud/aws/Credentials";
 import * as Endpoint from "@distilled.cloud/aws/Endpoint";
 import * as Region from "@distilled.cloud/aws/Region";
+/* oxlint-enable alchemy/package-boundaries */
 import { layer as nodeServicesLayer } from "@effect/platform-node/NodeServices";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
@@ -16,6 +18,7 @@ import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
 import { MinimumLogLevel } from "effect/References";
 import * as Scope from "effect/Scope";
+// oxlint-disable-next-line alchemy/package-boundaries -- package split phase 3: per-cloud runtime bootstrap; moves into its provider
 import { registerLambdaExtension } from "../../AWS/Lambda/RuntimeExtension.ts";
 import { reifyBoundConfigProvider } from "../../Runtime.ts";
 import { entrypointLayer, entrypointTag, stackFromEnv } from "./Process.ts";

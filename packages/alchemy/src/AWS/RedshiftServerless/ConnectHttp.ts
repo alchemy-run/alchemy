@@ -2,11 +2,10 @@ import * as serverless from "@distilled.cloud/aws/redshift-serverless";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
-import * as Binding from "../../Binding.ts";
 import * as Output from "../../Output.ts";
 import { toWireSeconds } from "../../Util/Duration.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import { formatSqlConnectionUrl } from "../Connection/internal.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
 import { Connect, connectEnvPrefix, type ConnectOptions } from "./Connect.ts";
 import type { Workgroup } from "./Workgroup.ts";
 
@@ -26,7 +25,7 @@ const unwrap = (value: string | Redacted.Redacted<string> | undefined): string |
 export const ConnectHttp = Layer.effect(
   Connect,
   Effect.gen(function* () {
-    const getCredentials = yield* serverless.getCredentials;
+    const getCredentials = yield* AWSBindings.withCredentials(serverless.getCredentials);
 
     return Effect.fn(function* (workgroup: Workgroup, options: ConnectOptions = {}) {
       const WorkgroupName = yield* workgroup.workgroupName;
@@ -34,24 +33,21 @@ export const ConnectHttp = Layer.effect(
       const Port = yield* workgroup.endpointPort;
 
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          const prefix = connectEnvPrefix(workgroup.LogicalId);
-          yield* host.bind`Allow(${host}, AWS.RedshiftServerless.Connect(${workgroup}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: ["redshift-serverless:GetCredentials"],
-                Resource: [workgroup.workgroupArn],
-              },
-            ],
-            env: {
-              [`${prefix}_HOST`]: workgroup.endpointAddress,
-              // Lambda environment variables are strings — stringify the port.
-              [`${prefix}_PORT`]: Output.interpolate`${workgroup.endpointPort}`,
+        const prefix = connectEnvPrefix(workgroup.LogicalId);
+        yield* AWSBindings.bind`AWS.RedshiftServerless.Connect(${workgroup})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: ["redshift-serverless:GetCredentials"],
+              Resource: [workgroup.workgroupArn],
             },
-          });
-        }
+          ],
+          env: {
+            [`${prefix}_HOST`]: workgroup.endpointAddress,
+            // Lambda environment variables are strings — stringify the port.
+            [`${prefix}_PORT`]: Output.interpolate`${workgroup.endpointPort}`,
+          },
+        });
       }
 
       const database = options.database ?? DEFAULT_DATABASE;

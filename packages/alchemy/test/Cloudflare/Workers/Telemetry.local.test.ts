@@ -95,7 +95,7 @@ test.provider(
         ["otel-event-flush.worker", 2],
         ["otel-event-flush.child", 1],
         ["otel-event-flush.rpc", 1],
-        ["http.server GET", 3],
+        ["GET", 3],
       ] as const) {
         expect(
           collector.requests.filter((batch) => batch.body.includes(`"name":"${name}"`)),
@@ -207,11 +207,7 @@ for (const scenario of [
         const names = yield* Effect.sync(() =>
           collector.requests.flatMap((batch) => traceSpanNames(batch.body)).sort(),
         );
-        expect(names).toEqual([
-          "http.server GET",
-          "otel-event-flush.rpc",
-          "otel-event-flush.worker",
-        ]);
+        expect(names).toEqual(["GET", "otel-event-flush.rpc", "otel-event-flush.worker"]);
         expect(rpcBatch.closedAt).toBeTypeOf("number");
         expect(response.receivedAt).toBeLessThan(rpcBatch.closedAt!);
         expect(rpcBatch.completed).toBe(scenario.delivered);

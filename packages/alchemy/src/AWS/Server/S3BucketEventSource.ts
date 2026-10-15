@@ -1,12 +1,12 @@
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
-import type { Bucket } from "../AWS/S3/Bucket.ts";
-import type { BucketNotification, NotificationsProps } from "../AWS/S3/BucketNotifications.ts";
-import * as S3 from "../AWS/S3/index.ts";
-import { normalizeBucketNotification } from "../AWS/S3/normalizeBucketNotification.ts";
-import type { S3EventType } from "../AWS/S3/S3Event.ts";
-import * as SQS from "../AWS/SQS/index.ts";
+import type { Bucket } from "../S3/Bucket.ts";
+import type { BucketNotification, NotificationsProps } from "../S3/BucketNotifications.ts";
+import * as S3 from "../S3/index.ts";
+import { normalizeBucketNotification } from "../S3/normalizeBucketNotification.ts";
+import type { S3EventType } from "../S3/S3Event.ts";
+import * as SQS from "../SQS/index.ts";
 import { SQSQueueEventSource } from "./SQSQueueEventSource.ts";
 
 /** @binding */
@@ -15,6 +15,8 @@ export const S3BucketEventSource = Layer.effect(
   Effect.gen(function* () {
     const Queue = yield* SQS.Queue;
 
+    // Cast below: the service type erases `process`'s requirements, so every
+    // event source implementation casts its client.
     return Effect.fn(function* <Events extends S3EventType[], StreamReq = never, Req = never>(
       bucket: Bucket,
       props: NotificationsProps<Events>,

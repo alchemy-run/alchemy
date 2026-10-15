@@ -1,7 +1,6 @@
 import * as Effect from "effect/Effect";
-import * as Binding from "../../Binding.ts";
 import * as Output from "../../Output.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { Monitor } from "./Monitor.ts";
 
 /**
@@ -44,26 +43,23 @@ export const makeInternetMonitorMonitorHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (monitor: Monitor) {
       const MonitorName = yield* monitor.monitorName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}(${monitor}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                // Health events (and other per-monitor entities) are
-                // addressed as sub-resources of the monitor ARN, e.g.
-                // `{monitorArn}/health-event/{eventId}`.
-                Resource: [monitor.monitorArn, Output.interpolate`${monitor.monitorArn}/*`],
-              },
-            ],
-          });
-        }
+        yield* AWSBindings.bind`${options.tag}(${monitor})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              // Health events (and other per-monitor entities) are
+              // addressed as sub-resources of the monitor ARN, e.g.
+              // `{monitorArn}/health-event/{eventId}`.
+              Resource: [monitor.monitorArn, Output.interpolate`${monitor.monitorArn}/*`],
+            },
+          ],
+        });
       }
       return Effect.fn(`${options.tag}(${monitor.LogicalId})`)(function* (
         request?: Omit<I, "MonitorName">,
@@ -91,22 +87,19 @@ export const makeInternetMonitorAccountHttpBinding = <I, A, E, R>(options: {
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}())`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: ["*"],
-              },
-            ],
-          });
-        }
+        yield* AWSBindings.bind`${options.tag}()`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: ["*"],
+            },
+          ],
+        });
       }
       return Effect.fn(options.tag)(function* (request?: I) {
         return yield* op((request ?? {}) as I);

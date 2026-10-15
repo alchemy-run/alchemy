@@ -1,6 +1,7 @@
 import * as rum from "@distilled.cloud/aws/rum";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { AppMonitor } from "./AppMonitor.ts";
 import { bindRumAppMonitorPolicy } from "./BindingHttp.ts";
 import { PutRumEvents, type PutRumEventsRequest } from "./PutRumEvents.ts";
@@ -13,7 +14,7 @@ import { PutRumEvents, type PutRumEventsRequest } from "./PutRumEvents.ts";
 export const PutRumEventsHttp = Layer.effect(
   PutRumEvents,
   Effect.gen(function* () {
-    const op = yield* rum.putRumEvents;
+    const op = yield* AWSBindings.withCredentials(rum.putRumEvents);
 
     return Effect.fn(function* (monitor: AppMonitor) {
       const monitorId = yield* monitor.appMonitorId;

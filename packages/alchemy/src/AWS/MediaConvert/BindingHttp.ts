@@ -1,7 +1,6 @@
 import * as Effect from "effect/Effect";
-import * as Binding from "../../Binding.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
 
 /**
  * Shared HTTP scaffolding for the AWS Elemental MediaConvert runtime
@@ -41,37 +40,34 @@ export const makeMediaConvertHttpBinding = <I, A, E, R>(options: {
   passRole?: boolean;
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          const policyStatements: PolicyStatement[] = [
-            {
-              Effect: "Allow",
-              Action: [...options.iamActions],
-              // Job ARNs are server-assigned at runtime; queue/preset/template
-              // references inside a job are resolved by the service.
-              Resource: ["*"],
-            },
-          ];
-          if (options.passRole) {
-            policyStatements.push({
-              Effect: "Allow",
-              Action: ["iam:PassRole"],
-              Resource: ["*"],
-              Condition: {
-                StringEquals: {
-                  "iam:PassedToService": "mediaconvert.amazonaws.com",
-                },
+        const policyStatements: PolicyStatement[] = [
+          {
+            Effect: "Allow",
+            Action: [...options.iamActions],
+            // Job ARNs are server-assigned at runtime; queue/preset/template
+            // references inside a job are resolved by the service.
+            Resource: ["*"],
+          },
+        ];
+        if (options.passRole) {
+          policyStatements.push({
+            Effect: "Allow",
+            Action: ["iam:PassRole"],
+            Resource: ["*"],
+            Condition: {
+              StringEquals: {
+                "iam:PassedToService": "mediaconvert.amazonaws.com",
               },
-            });
-          }
-          yield* host.bind`Allow(${host}, AWS.MediaConvert.${options.capability}())`({
-            policyStatements,
+            },
           });
         }
+        yield* AWSBindings.bind`AWS.MediaConvert.${options.capability}()`({
+          policyStatements,
+        });
       }
       return Effect.fn(`AWS.MediaConvert.${options.capability}`)(function* (request?: I) {
         return yield* op((request ?? {}) as I);

@@ -143,6 +143,11 @@ export interface LaunchTemplate extends Resource<
      */
     policyName?: string;
     /**
+     * Name of the instance profile launched instances use; the managed one
+     * when Alchemy manages IAM.
+     */
+    instanceProfileName?: string;
+    /**
      * Whether Alchemy manages the instance profile/role for the hosted
      * program.
      */
@@ -377,6 +382,7 @@ export const LaunchTemplateProvider = () =>
           roleArn: runtime.roleArn,
           roleName: runtime.roleName,
           policyName: runtime.policyName,
+          instanceProfileName: runtime.instanceProfileName,
           managedIam: runtime.managedIam,
           runtimeUnitName: runtime.runtimeUnitName,
           assetPrefix: runtime.assetPrefix,
@@ -427,6 +433,7 @@ export const LaunchTemplateProvider = () =>
                 roleArn: output?.roleArn,
                 roleName: output?.roleName,
                 policyName: output?.policyName,
+                instanceProfileName: output?.instanceProfileName,
                 managedIam: output?.managedIam,
                 runtimeUnitName: output?.runtimeUnitName,
                 assetPrefix: output?.assetPrefix,

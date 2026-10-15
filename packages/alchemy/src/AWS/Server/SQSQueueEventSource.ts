@@ -1,9 +1,9 @@
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
-import * as SQS from "../AWS/SQS/index.ts";
-import { toWireSeconds } from "../Util/Duration.ts";
-import { ServerHost } from "./Process.ts";
+import { ServerHost } from "../../Server/Process.ts";
+import { toWireSeconds } from "../../Util/Duration.ts";
+import * as SQS from "../SQS/index.ts";
 
 export const SQSQueueEventSource = Layer.effect(
   SQS.QueueEventSource,
@@ -13,6 +13,8 @@ export const SQSQueueEventSource = Layer.effect(
     const ReceiveMessage = yield* SQS.ReceiveMessage;
     const DeleteMessageBatch = yield* SQS.DeleteMessageBatch;
 
+    // Cast below: the service type erases `process`'s requirements, so every
+    // event source implementation casts its client.
     return Effect.fn(function* <StreamReq = never, Req = never>(
       queue: SQS.Queue,
       props: SQS.MessagesProps,

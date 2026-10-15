@@ -24,6 +24,7 @@
  */
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+// oxlint-disable-next-line alchemy/package-boundaries -- package split phase 3: Git is built on Cloudflare (plus S3 blobs, Lambda hasher); becomes integration subpaths
 import * as Lambda from "../../AWS/Lambda/Function.ts";
 import { handleHashEvent, isHashEvent } from "./LambdaEvent.ts";
 

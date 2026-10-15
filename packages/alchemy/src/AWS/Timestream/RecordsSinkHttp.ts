@@ -1,10 +1,9 @@
 import type * as TSW from "@distilled.cloud/aws/timestream-write";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Binding from "../../Binding.ts";
 import * as Output from "../../Output.ts";
-import { makeBatchedSink } from "../internal/BatchedSink.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
+import { makeBatchedSink } from "../../Util/BatchedSink.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import { RecordsSink, type RecordsSinkProps, type RecordsSinkRecord } from "./RecordsSink.ts";
 import type { Table } from "./Table.ts";
 import { WriteRecords } from "./WriteRecords.ts";
@@ -31,26 +30,23 @@ export const RecordsSinkHttp = Layer.effect(
 
     return Effect.fn(function* (table: Table, props?: RecordsSinkProps) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, AWS.Timestream.RecordsSink(${table}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: ["timestream:WriteRecords"],
-                Resource: [Output.interpolate`${table.tableArn}`],
-              },
-              // Timestream requires endpoint discovery; the ingest endpoint
-              // is resolved at runtime via DescribeEndpoints, which is not
-              // scoped to a resource.
-              {
-                Effect: "Allow",
-                Action: ["timestream:DescribeEndpoints"],
-                Resource: ["*"],
-              },
-            ],
-          });
-        }
+        yield* AWSBindings.bind`AWS.Timestream.RecordsSink(${table})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: ["timestream:WriteRecords"],
+              Resource: [Output.interpolate`${table.tableArn}`],
+            },
+            // Timestream requires endpoint discovery; the ingest endpoint
+            // is resolved at runtime via DescribeEndpoints, which is not
+            // scoped to a resource.
+            {
+              Effect: "Allow",
+              Action: ["timestream:DescribeEndpoints"],
+              Resource: ["*"],
+            },
+          ],
+        });
       }
       const write = yield* writeRecords(table);
       const commonAttributes = props?.commonAttributes;

@@ -1,7 +1,8 @@
 import * as DynamoDB from "@distilled.cloud/aws/dynamodb";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { grantTables, signed, tablesRegion } from "./BindingHttp.ts";
+import * as AWSBindings from "../AWSBindings.ts";
+import { grantTables, tablesRegion } from "./BindingHttp.ts";
 import {
   ExecuteTransaction,
   type ExecuteTransactionRequest,
@@ -13,7 +14,7 @@ export const ExecuteTransactionHttp = Layer.effect(
   Effect.gen(function* () {
     return Effect.fn(function* (...tables: ExecuteTransactionTables) {
       const sortedTables = [...tables].sort((a, b) => a.LogicalId.localeCompare(b.LogicalId));
-      const access = yield* grantTables(
+      yield* grantTables(
         `AWS.DynamoDB.ExecuteTransaction(${sortedTables.map((table) => table.LogicalId).join(", ")})`,
         () => [
           {
@@ -28,11 +29,14 @@ export const ExecuteTransactionHttp = Layer.effect(
           },
         ],
       );
-      const region = yield* tablesRegion(access, sortedTables);
+      const executeTransaction = yield* AWSBindings.withCredentials(
+        DynamoDB.executeTransaction,
+        tablesRegion(sortedTables),
+      );
       return Effect.fn(`AWS.DynamoDB.ExecuteTransaction(${tables})`)(function* (
         request: ExecuteTransactionRequest,
       ) {
-        return yield* signed(access, region, DynamoDB.executeTransaction(request));
+        return yield* executeTransaction(request);
       });
     });
   }),

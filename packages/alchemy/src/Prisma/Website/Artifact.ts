@@ -53,7 +53,7 @@ export interface WebsiteArtifact extends Resource<
 export const WebsiteArtifact = Resource<WebsiteArtifact>("Prisma.WebsiteArtifact");
 
 const MAX_ENTRIES = 50_000;
-const MAX_BYTES = 256 * 1024 * 1024;
+const MAX_BYTES = 768 * 1024 * 1024;
 const MAX_FILE_BYTES = 128 * 1024 * 1024;
 const excluded = (relative: string) =>
   relative

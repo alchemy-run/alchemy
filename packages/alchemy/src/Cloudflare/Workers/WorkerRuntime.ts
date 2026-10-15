@@ -3,6 +3,7 @@ import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
+import { fromCloudflareFetcher, type Fetcher } from "../Fetcher.ts";
 import { resolveAccessContext, type WorkerExecutionContextAccess } from "./WorkerAccess.ts";
 
 export const WorkerTypeId = "Cloudflare.Worker";
@@ -30,6 +31,91 @@ export interface WorkerExecutionContextCache {
     options: cf.CachePurgeOptions,
   ): Effect.Effect<cf.CachePurgeResult, CachePurgeError, RuntimeContext>;
 }
+
+/**
+ * Raised by `ctx.exports.Name(...)` when this Worker has no loopback for the named
+ * entrypoint: the name is not an entrypoint exported by the Worker's main
+ * module, or `ctx.exports` is unavailable (the `disable_ctx_exports`
+ * compatibility flag).
+ */
+export class EntrypointUnavailableError extends Data.TaggedError("EntrypointUnavailableError")<{
+  message: string;
+  entrypoint: string;
+}> {}
+
+/**
+ * Options for minting a loopback stub to one of this Worker's own
+ * entrypoints. See {@link WorkerExecutionContext} `exports`.
+ */
+export interface EntrypointOptions {
+  /**
+   * Properties the target entrypoint reads from `ctx.props` — via
+   * `WorkerExecutionContext.props` in an Effect Worker. Must be
+   * structured-cloneable.
+   */
+  props?: Record<string, unknown>;
+}
+
+/**
+ * Mint a {@link Fetcher} for an entrypoint of this Worker from workerd's
+ * `exports` loopback (`ctx.exports[name]({ props })`), shared by
+ * {@link WorkerExecutionContext} and `DurableObjectState`.
+ * @internal
+ */
+export const getLoopbackEntrypoint = (
+  exports: cf.ExecutionContext["exports"] | undefined,
+  name = "default",
+  options?: EntrypointOptions,
+): Effect.Effect<Fetcher, EntrypointUnavailableError> =>
+  Effect.suspend(() => {
+    const loopback = (exports as Record<string, unknown> | undefined)?.[name];
+    if (typeof loopback !== "function") {
+      return Effect.fail(
+        new EntrypointUnavailableError({
+          entrypoint: name,
+          message:
+            exports === undefined
+              ? `ctx.exports is not available, so entrypoint "${name}" cannot be ` +
+                "minted — remove the `disable_ctx_exports` compatibility flag."
+              : `"${name}" is not a WorkerEntrypoint exported by this Worker's main module.`,
+        }),
+      );
+    }
+    return Effect.succeed(
+      fromCloudflareFetcher(
+        (loopback as (opts: { props?: Record<string, unknown> }) => cf.Fetcher)({
+          props: options?.props ?? {},
+        }),
+      ),
+    );
+  });
+
+/**
+ * This Worker's own entrypoints, by export name (`default` for the Worker's
+ * own Effect handlers): the Effect view of workerd's `ctx.exports`. Calling
+ * one mints a stub that delivers `props` as the target's `ctx.props`.
+ */
+export type EntrypointExports = {
+  readonly [name: string]: (
+    options?: EntrypointOptions,
+  ) => Effect.Effect<Fetcher, EntrypointUnavailableError, RuntimeContext>;
+};
+
+/**
+ * Build {@link EntrypointExports} over a lookup of workerd's `exports`
+ * (resolved when an entry is called, not when it is read).
+ * @internal
+ */
+export const makeEntrypointExports = (
+  call: (
+    name: string,
+    options?: EntrypointOptions,
+  ) => Effect.Effect<Fetcher, EntrypointUnavailableError, RuntimeContext>,
+): EntrypointExports =>
+  new Proxy({} as EntrypointExports, {
+    get: (_, name) =>
+      typeof name === "string" ? (options?: EntrypointOptions) => call(name, options) : undefined,
+  });
 
 export class WorkerExecutionContext extends Context.Service<
   WorkerExecutionContext,
@@ -59,6 +145,23 @@ export class WorkerExecutionContext extends Context.Service<
      */
     readonly access: Effect.Effect<WorkerExecutionContextAccess | undefined, never, RuntimeContext>;
     /**
+     * The properties this invocation was called with (`ctx.props`): the
+     * `props` of the service binding or loopback stub the caller went
+     * through, e.g. `Cloudflare.WorkerEntrypoint(worker, { props })` or
+     * {@link exports}. An empty object for an external request.
+     */
+    readonly props: Effect.Effect<Record<string, unknown>, never, RuntimeContext>;
+    /**
+     * This Worker's own entrypoints (workerd's `ctx.exports`):
+     * `yield* ctx.exports.default({ props })` mints a stub to the Worker's
+     * own Effect handlers that delivers `props` as the target's `ctx.props`;
+     * `ctx.exports.Name(...)` targets a named `WorkerEntrypoint`. The
+     * {@link Fetcher} can be passed to APIs that route traffic to a Worker
+     * entrypoint, such as a container's `interceptOutboundHttps` or a
+     * dynamic Worker's `globalOutbound`; its `raw` is the native `Fetcher`.
+     */
+    readonly exports: EntrypointExports;
+    /**
      * The raw workerd ExecutionContext, for interop with async APIs.
      */
     readonly raw: cf.ExecutionContext;
@@ -71,6 +174,10 @@ export const fromExecutionContext = (
 ): WorkerExecutionContext["Service"] => ({
   raw: ctx,
   access: Effect.sync(() => resolveAccessContext(ctx, env)),
+  props: Effect.sync(() => (ctx.props as Record<string, unknown> | undefined) ?? {}),
+  exports: makeEntrypointExports((name, options) =>
+    getLoopbackEntrypoint(ctx.exports, name, options),
+  ),
   waitUntil: <A, E, R>(effect: Effect.Effect<A, E, R>) =>
     Effect.gen(function* () {
       const context = yield* Effect.context<R>();
@@ -133,6 +240,21 @@ export const deferredExecutionContext: WorkerExecutionContext["Service"] = {
       liveExecutionContext.pipe(
         Effect.flatMap((live) => live.cache.purge(options)),
       ) as Effect.Effect<cf.CachePurgeResult, CachePurgeError, RuntimeContext>,
+  },
+  exports: makeEntrypointExports(
+    (name, options) =>
+      // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- defers to the live per-event context the bridge provides via RuntimeContext
+      liveExecutionContext.pipe(
+        Effect.flatMap((live) => live.exports[name](options)),
+      ) as Effect.Effect<Fetcher, EntrypointUnavailableError, RuntimeContext>,
+  ),
+  get props() {
+    // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- defers to the live per-event context the bridge provides via RuntimeContext
+    return liveExecutionContext.pipe(Effect.flatMap((live) => live.props)) as Effect.Effect<
+      Record<string, unknown>,
+      never,
+      RuntimeContext
+    >;
   },
   // A getter so this module-level literal doesn't eagerly reference
   // `liveExecutionContext` before its declaration below.

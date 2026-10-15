@@ -1,6 +1,5 @@
 import * as Effect from "effect/Effect";
-import * as Binding from "../../Binding.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { IdMappingWorkflow } from "./IdMappingWorkflow.ts";
 import type { MatchingWorkflow } from "./MatchingWorkflow.ts";
 
@@ -23,23 +22,20 @@ export const makeWorkflowHttpBinding = <I extends { workflowName: string }, A, E
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (workflow: MatchingWorkflow | IdMappingWorkflow) {
       const WorkflowName = yield* workflow.workflowName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}(${workflow}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: [workflow.workflowArn],
-              },
-            ],
-          });
-        }
+        yield* AWSBindings.bind`${options.tag}(${workflow})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: [workflow.workflowArn],
+            },
+          ],
+        });
       }
       return Effect.fn(`${options.tag}(${workflow.LogicalId})`)(function* (
         request: Omit<I, "workflowName">,

@@ -35,6 +35,7 @@
     ".": "./src/index.ts",
     "./*": "./src/*.ts",
     "./AI": "./src/AI/index.ts",
+    "./Workflows": "./src/Workflows.ts",
     "./Auth": "./src/Auth/index.ts",
     "./Alchemist": "./src/Alchemist/index.ts",
     "./AWS": "./src/AWS/index.ts",
@@ -43,6 +44,7 @@
     "./AWS/Endpoint": "./src/AWS/Endpoint.ts",
     "./AWS/Region": "./src/AWS/Region.ts",
     "./AWS/Lambda/*": "./src/AWS/Lambda/*.ts",
+    "./AWS/Server/*": "./src/AWS/Server/*.ts",
     "./Command": "./src/Command/index.ts",
     "./Construct": "./src/Construct/index.ts",
     "./Bundle": "./src/Bundle/index.ts",
@@ -118,6 +120,11 @@
         "bun": "./src/AI/index.ts",
         "default": "./lib/AI/index.js"
       },
+      "./Workflows": {
+        "types": "./lib/Workflows.d.ts",
+        "bun": "./src/Workflows.ts",
+        "default": "./lib/Workflows.js"
+      },
       "./Auth": {
         "types": "./lib/Auth/index.d.ts",
         "bun": "./src/Auth/index.ts",
@@ -157,6 +164,11 @@
         "types": "./lib/AWS/Lambda/*.d.ts",
         "bun": "./src/AWS/Lambda/*.ts",
         "default": "./lib/AWS/Lambda/*.js"
+      },
+      "./AWS/Server/*": {
+        "types": "./lib/AWS/Server/*.d.ts",
+        "bun": "./src/AWS/Server/*.ts",
+        "default": "./lib/AWS/Server/*.js"
       },
       "./Command": {
         "types": "./lib/Command/index.d.ts",
