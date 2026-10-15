@@ -9,7 +9,7 @@ HTTP ──▶ Worker ──▶ Agent (Durable Object, one per issue) ──▶ 
 
 - `src/Sandbox.runtime.ts` — the container program. `Anthropic.ClaudeCodeServer` installs the official Agent SDK (and the unmodified `claude` binary) into the image and serves sessions on the container port. The image holds only the toolchain.
 - `src/Gateway.ts`, `src/Gateway.aws.ts` — the egress gateway (`AgentGateway`): which hosts a container may reach, and the Lambda Web Function (in four Regions) that holds the model API key and your GitHub login and adds them to its requests.
-- `src/Rpcs.ts` — this app's API (`AgentRpcs`), shared by the Durable Object and the web UI.
+- `src/AgentRpcs.ts` — this app's API (`AgentRpcs`), shared by the Durable Object and the web UI.
 - `src/Agent.ts` — one Durable Object per issue, serving `AgentRpcs`. It starts the session's container with egress from `AgentGateway` (`Anthropic.Egress`, `GitHub.Egress`), so the container holds no credentials: the gateway (`src/Gateway.aws.ts`) checks each request and adds them. It clones the repository into a container that has none; `Cloudflare.Containers.Harness` checkpoints the session's work into the Durable Object after every turn and keeps its history there, so a session resumes on any container.
 - `src/Worker.ts` — the HTTP API.
 

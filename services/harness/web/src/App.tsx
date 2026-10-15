@@ -18,7 +18,7 @@ import {
   XIcon,
 } from "lucide-react";
 import { useEffect, useState } from "react";
-import type { Machine } from "../../src/Rpcs.ts";
+import type { Machine } from "../../src/AgentRpcs.ts";
 import {
   agents,
   type ListedSession,

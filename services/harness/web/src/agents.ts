@@ -12,7 +12,7 @@ import * as Scope from "effect/Scope";
 import * as Socket from "effect/socket/Socket";
 import * as Stream from "effect/Stream";
 import { useSyncExternalStore } from "react";
-import { AgentRpcs, type Machine } from "../../src/Rpcs.ts";
+import { AgentRpcs, type Machine } from "../../src/AgentRpcs.ts";
 
 const API_URL = (import.meta.env.VITE_API_URL as string | undefined) ?? "http://localhost:1338";
 
