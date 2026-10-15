@@ -28,6 +28,7 @@ import type * as HttpClientResponse from "effect/http/HttpClientResponse";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
+import * as Socket from "effect/socket/Socket";
 import {
   SandboxError,
   type SandboxClient,
@@ -36,6 +37,7 @@ import {
   type SandboxPort,
   type SandboxStartOptions,
 } from "../../AI/Sandbox.ts";
+import { execOverSocket } from "../../AI/SandboxExec.ts";
 import { type Callback, makeCallback } from "../../Callback.ts";
 import { onAlarmCallbacksReady } from "../../Cloudflare/Workers/AlarmCallback.ts";
 import { DurableObjectState } from "../../Cloudflare/Workers/DurableObjectState.ts";
@@ -479,13 +481,43 @@ const makeMicrovmSandboxClient = (
     running: Effect.map(Effect.flatMap(load, live), (vm) => vm !== undefined),
     start,
     setEgress,
-    exec: () =>
-      Effect.fail(
-        new SandboxError({
-          message:
-            "exec is not supported on AWS Lambda MicroVM sandboxes: run commands from the sandbox's program and call it with httpClient(port).",
-        }),
-      ),
+    exec: (cmd, options) =>
+      Effect.gen(function* () {
+        const vm = yield* Effect.flatMap(load, live);
+        if (vm === undefined) {
+          return yield* new SandboxError({
+            message: "exec needs a running sandbox: call start first.",
+          });
+        }
+        // The bootstrap's exec server, on the control port, behind the bearer secret.
+        const headers = yield* authHeaders(vm, MICROVM_SANDBOX_CONTROL_PORT);
+        const socket = yield* Socket.fromWebSocket(
+          Effect.acquireRelease(
+            Effect.tryPromise({
+              try: () =>
+                fetch(`https://${vm.endpoint}/exec`, {
+                  headers: {
+                    ...headers,
+                    Upgrade: "websocket",
+                    Authorization: `Bearer ${vm.secret}`,
+                  },
+                }).then((response) => {
+                  const ws = (response as unknown as { webSocket?: cf.WebSocket }).webSocket;
+                  if (!ws)
+                    return Promise.reject(new Error(`exec upgrade answered ${response.status}`));
+                  ws.accept();
+                  return ws as unknown as Socket.WebSocketLike;
+                }),
+              catch: (cause) =>
+                new Socket.SocketError({
+                  reason: new Socket.SocketOpenError({ kind: "Unknown", cause }),
+                }),
+            }),
+            (ws) => Effect.sync(() => ws.close(1000)),
+          ),
+        );
+        return yield* execOverSocket(socket, cmd, options);
+      }),
     getTcpPort,
     httpClient: (port) =>
       Effect.succeed(

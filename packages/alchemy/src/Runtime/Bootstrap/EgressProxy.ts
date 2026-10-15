@@ -1,20 +1,3 @@
-/**
- * Start the in-sandbox egress proxy (Egress/Proxy.ts) before the program
- * when the image was built with egress support (`ALCHEMY_EGRESS_PROXY`).
- * The first route table arrives in `ALCHEMY_EGRESS_ROUTES`; the owner
- * replaces it at run time through the control endpoint, authenticated with
- * `ALCHEMY_EGRESS_CONTROL_SECRET`.
- *
- * On an AWS Lambda MicroVM (`ALCHEMY_EGRESS_RUN_HOOK`) the process is
- * snapshotted at build time, so nothing per-run can be in its env: the
- * secret, the first table and the program's env arrive in the `/run`
- * lifecycle hook, which the control endpoint answers — and so is the
- * proxy's CA, minted there so no two MicroVMs of one image share it (see
- * {@link serveSandboxEgress}).
- *
- * Everything the program starts (git, gh, a harness CLI) inherits
- * `HTTPS_PROXY` and a CA bundle that trusts the proxy's per-sandbox CA.
- */
 import * as net from "node:net";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -33,6 +16,24 @@ import {
 } from "../../Egress/Proxy.ts";
 import { type Route, Routes } from "../../Egress/Route.ts";
 import { trustEnv, writeTrustBundle } from "../../Egress/Trust.ts";
+/**
+ * Start the in-sandbox egress proxy (Egress/Proxy.ts) before the program
+ * when the image was built with egress support (`ALCHEMY_EGRESS_PROXY`).
+ * The first route table arrives in `ALCHEMY_EGRESS_ROUTES`; the owner
+ * replaces it at run time through the control endpoint, authenticated with
+ * `ALCHEMY_EGRESS_CONTROL_SECRET`.
+ *
+ * On an AWS Lambda MicroVM (`ALCHEMY_EGRESS_RUN_HOOK`) the process is
+ * snapshotted at build time, so nothing per-run can be in its env: the
+ * secret, the first table and the program's env arrive in the `/run`
+ * lifecycle hook, which the control endpoint answers — and so is the
+ * proxy's CA, minted there so no two MicroVMs of one image share it (see
+ * {@link serveSandboxEgress}).
+ *
+ * Everything the program starts (git, gh, a harness CLI) inherits
+ * `HTTPS_PROXY` and a CA bundle that trusts the proxy's per-sandbox CA.
+ */
+import { serveExec } from "./ExecServer.ts";
 
 /** Set at deploy time on images that run the proxy. */
 export const EGRESS_PROXY_SWITCH = "ALCHEMY_EGRESS_PROXY";
@@ -171,6 +172,7 @@ export const serveSandboxEgress = (
       );
       const proxy = yield* serveEgressProxy({ port: options.proxyPort, routes });
       const control = yield* serveEgressControl({
+        exec: serveExec,
         host: controlHost,
         port: options.controlPort,
         routes,
@@ -215,6 +217,7 @@ export const serveSandboxEgress = (
       return { proxy };
     }
     const control = yield* serveEgressControl({
+      exec: serveExec,
       host: controlHost,
       port: options.controlPort,
       routes,

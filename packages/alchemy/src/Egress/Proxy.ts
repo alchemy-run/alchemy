@@ -55,6 +55,7 @@ import * as Ref from "effect/Ref";
 import * as Schema from "effect/Schema";
 import type * as Scope from "effect/Scope";
 import * as ScopedCache from "effect/ScopedCache";
+import type * as Socket from "effect/socket/Socket";
 import * as SubscriptionRef from "effect/SubscriptionRef";
 import { httpServer } from "../Util/PlatformServices.ts";
 import type { CaError, LocalCa } from "./LocalCa.ts";
@@ -519,6 +520,11 @@ export interface EgressControlOptions {
    * the program's environment) arrives in the `/run` hook's payload.
    */
   readonly hooks?: EgressControlHooks;
+  /**
+   * Serve `GET /exec` (a WebSocket, behind the same secret) with this
+   * handler: one process per socket (`Runtime/Bootstrap/ExecServer.ts`).
+   */
+  readonly exec?: (socket: Socket.Socket) => Effect.Effect<void, never, Scope.Scope>;
 }
 
 /** The MicroVM lifecycle hooks the control endpoint answers (`/aws/lambda-microvms/runtime/v1/*`). */
@@ -612,7 +618,13 @@ export const serveEgressControl = (
         if (expected === undefined || !safeEqual(request.headers.authorization ?? "", expected)) {
           return HttpServerResponse.empty({ status: 401 });
         }
-        if (request.method !== "PUT" || request.url.split("?")[0] !== "/routes") {
+        if (options.exec && request.method === "GET" && path === "/exec") {
+          const socket = yield* request.upgrade.pipe(Effect.option);
+          if (socket._tag === "None") return HttpServerResponse.empty({ status: 426 });
+          yield* options.exec(socket.value).pipe(Effect.scoped);
+          return HttpServerResponse.empty();
+        }
+        if (request.method !== "PUT" || path !== "/routes") {
           return HttpServerResponse.empty({ status: 404 });
         }
         const table = yield* request.json.pipe(Effect.flatMap(decodeRoutes), Effect.option);

@@ -194,8 +194,9 @@ const memoryInMiB = (memory: MicrovmSandboxMemory) => Math.round(Number.parseFlo
  * in its storage. A MicroVM resumes from a snapshot taken at build time, so
  * the secret, the first route table and the program's environment
  * (placeholder credentials, `start({ env })`) arrive in the `/run`
- * lifecycle hook's payload. `exec` is not supported: run commands from the
- * program.
+ * lifecycle hook's payload. `exec` opens a WebSocket to the same control
+ * port (`GET /exec`, same token and secret), served by the bootstrap: stdin,
+ * stdout, stderr, exit code and `kill` work as on any host; a pty doesn't.
  *
  * ### Closing the internet <!-- api-prose -->
  * With egress, `start` defaults to `enableInternet: false`: the in-sandbox
