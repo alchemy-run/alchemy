@@ -6,7 +6,7 @@ import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
 import { AuthProviders } from "../../Auth/AuthProvider.ts";
 import { withProfileOverride } from "../../Auth/Resolve.ts";
-import type { StateStoreLifecycle, StateStoreTarget } from "../../Plugin.ts";
+import type { StateStoreImpl, StateStoreLifecycle, StateStoreTarget } from "../../Plugin.ts";
 import { loadConfigProvider } from "../../Util/ConfigProvider.ts";
 import { deleteAllObjects } from "../Bootstrap.ts";
 import { AWSEnvironment } from "../Environment.ts";
@@ -14,6 +14,7 @@ import {
   createStateBucketName,
   provisionStateBucket,
   stateBucketExists,
+  state,
   stateEnvironment,
 } from "../StateStore/State.ts";
 
@@ -94,3 +95,6 @@ export const lifecycle: StateStoreLifecycle = {
       return { deleted: deleted ? [bucketName] : [] };
     }),
 };
+
+/** The state store this provider's plugin registers. */
+export const stateStore: StateStoreImpl = { layer: state, lifecycle };

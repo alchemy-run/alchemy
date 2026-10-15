@@ -106,21 +106,29 @@ export const lazy = <M, A>(load: () => Promise<M>, pick: (module: M) => A): Lazy
   }).pipe(Effect.map(pick));
 
 export interface StateStore {
+  /** Shown when listing stores; no provider code loads to show it. */
   readonly description: string;
+  /** The store itself, loaded when it's used. */
+  readonly load: Lazy<StateStoreImpl>;
+}
+
+export interface StateStoreImpl {
   /**
-   * The store's `State` layer, for the named store or the default one.
-   * Built under the requested profile's config with an `AuthProviders`
-   * registry in context.
+   * The store's `State` layer, for the named store or the default one: the
+   * provider's own `state` function. Built under the requested profile's
+   * config with an `AuthProviders` registry in context.
    */
-  readonly layer: Lazy<
-    (options: { readonly name?: string }) => Layer.Layer<State, PluginFailure, StateStoreServices>
-  >;
-  /**
-   * Provisioning for a store that is infrastructure of its own, such as
-   * Cloudflare's state-store Worker. Omit it for a store that needs none,
-   * like AWS's S3 store, which creates its bucket on first use.
-   */
-  readonly lifecycle?: Lazy<StateStoreLifecycle>;
+  readonly layer: (
+    options: StateStoreOptions,
+  ) => Layer.Layer<State, PluginFailure, StateStoreServices>;
+  /** Provisioning, teardown and logs, for the operations the store supports. */
+  readonly lifecycle?: StateStoreLifecycle;
+}
+
+/** The options every state store's `state(...)` takes. */
+export interface StateStoreOptions {
+  /** A store other than the account's default. */
+  readonly name?: string;
 }
 
 /** Which store, profile and `.env` a state-store operation acts under. */

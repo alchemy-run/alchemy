@@ -65,7 +65,7 @@ export const store = Effect.fn("Alchemist.state.store")(function* (source: State
     const config = ConfigProvider.layer(
       withProfileOverride(yield* loadConfigProvider(Option.fromNullishOr(envFile)), profile),
     );
-    const layer = yield* backend.layer;
+    const { layer } = yield* backend.load;
     const context = yield* Layer.build(
       // Fresh: the store registers its auth into this registry even when the
       // process already built the provider's layers for another one.
@@ -113,8 +113,7 @@ const lifecycleOperation = <K extends keyof Plugin.StateStoreLifecycle>(
       });
     }
     const store = yield* findBackend(backend);
-    const lifecycle = store.lifecycle ? yield* store.lifecycle : undefined;
-    const run = lifecycle?.[operation];
+    const run = (yield* store.load).lifecycle?.[operation];
     if (run === undefined) {
       return yield* new Plugin.PluginError({
         message: `State backend '${backend}' does not support ${operation}.`,

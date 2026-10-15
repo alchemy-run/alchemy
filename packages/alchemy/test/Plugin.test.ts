@@ -238,7 +238,7 @@ const layer = Layer.effect(
 
 export default {
   name: "scoped-store",
-  stateStores: { scoped: { description: "Scoped", layer: Effect.succeed(() => layer) } },
+  stateStores: { scoped: { description: "Scoped", load: Effect.succeed({ layer: () => layer }) } },
 };
 `,
   );

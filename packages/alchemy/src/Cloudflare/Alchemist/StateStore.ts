@@ -9,7 +9,7 @@ import type { LogEntry } from "../../Alchemist/routes/logs.ts";
 import type { Target } from "../../Alchemist/Session.ts";
 import { AuthProviders } from "../../Auth/AuthProvider.ts";
 import { resolveProfileName, withProfileOverride } from "../../Auth/Resolve.ts";
-import type { StateStoreLifecycle, StateStoreTarget } from "../../Plugin.ts";
+import type { StateStoreImpl, StateStoreLifecycle, StateStoreTarget } from "../../Plugin.ts";
 import { loadConfigProvider } from "../../Util/ConfigProvider.ts";
 import { fileLogger } from "../../Util/FileLogger.ts";
 import * as CloudflareAccess from "../Access.ts";
@@ -18,7 +18,11 @@ import * as CloudflareEnvironment from "../CloudflareEnvironment.ts";
 import * as CloudflareCredentials from "../Credentials.ts";
 import { CloudflareLogs } from "../Logs.ts";
 import { STATE_STORE_SCRIPT_NAME } from "../StateStore/Api.ts";
-import { bootstrap as bootstrapStateStore, teardownStateStore } from "../StateStore/State.ts";
+import {
+  bootstrap as bootstrapStateStore,
+  state,
+  teardownStateStore,
+} from "../StateStore/State.ts";
 
 export interface StateTarget extends Target {
   /** State-store worker to act on. @default the managed state-store worker */
@@ -193,3 +197,6 @@ export const lifecycle: StateStoreLifecycle = {
   logs: ({ limit, since, ...input }) => stateLogs({ ...target(input), limit, since }),
   tailLogs: (input) => tailStateLogs(target(input)),
 };
+
+/** The state store this provider's plugin registers. */
+export const stateStore: StateStoreImpl = { layer: state, lifecycle };

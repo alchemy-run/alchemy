@@ -9,15 +9,9 @@ export default Plugin.make({
   stateStores: {
     aws: {
       description: "S3 state store in the profile's AWS account",
-      layer: Plugin.lazy(
-        () => import("./StateStore/State.ts"),
-        (module) =>
-          ({ name }) =>
-            module.state({ name }),
-      ),
-      lifecycle: Plugin.lazy(
+      load: Plugin.lazy(
         () => import("./Alchemist/StateStore.ts"),
-        (module) => module.lifecycle,
+        (module) => module.stateStore,
       ),
     },
   },
