@@ -62,12 +62,6 @@ export interface StateStore {
 export interface Cli {
   /** A subcommand of `alchemy provider`, named after the provider. */
   readonly provider?: Lazy<AnyCommand>;
-  /** Top-level commands, loaded only when invoked. */
-  readonly commands?: ReadonlyArray<{
-    readonly name: string;
-    readonly description: string;
-    readonly load: Lazy<AnyCommand>;
-  }>;
 }
 
 // Any command, whatever its name, errors and the CLI services it runs under.

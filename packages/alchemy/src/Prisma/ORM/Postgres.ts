@@ -166,7 +166,7 @@ export interface PostgresDatabase<C extends AnyPostgresContract, E = never, R = 
  * const users = yield* db.orm.public.User.select("id", "email").all();
  * ```
  *
- * Run `alchemy prisma generate` with `withEffect` registered in the ORM
+ * Run `alchemy provider prisma generate` with `withEffect` registered in the ORM
  * configuration. The factory delegates to this runtime with Prisma's emitted
  * `Contract` type and `contractJson`; query behavior and cleanup are identical.
  * Generated `schemas.ts` can be imported independently of this client.

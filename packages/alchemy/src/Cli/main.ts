@@ -43,32 +43,32 @@ const commandMetadata = [
 
 type CommandName = (typeof commandMetadata)[number][0];
 
-// A broken plugin shouldn't take the whole CLI down: warn and run without
-// plugins. Commands that need them (auth, `state --backend`) fail with the
-// plugin error when they load them again.
-const plugins = await Effect.runPromise(
-  Plugin.load().pipe(
-    Effect.catch((error) =>
-      Effect.sync(() => {
-        console.error(`warning: ${error.message}`);
-        return [] as ReadonlyArray<Plugin.Plugin>;
-      }),
-    ),
-    Effect.provide(PlatformServices),
-  ),
-);
-const pluginCommands = plugins.flatMap((plugin) => plugin.cli?.commands ?? []);
-
-const placeholderCommand = (name: string, description: string) =>
+const placeholderCommand = (name: CommandName, description: string) =>
   Command.make(name, {}, () => Effect.void).pipe(
     Command.withDescription(description),
     name === "unsafe" ? Command.unlisted : (command) => command,
   );
 
+// A broken plugin shouldn't take the whole CLI down: warn and run without
+// plugins. Commands that need them (auth, `state --backend`) fail with the
+// plugin error when they load them again.
+const loadPlugins = () =>
+  Effect.runPromise(
+    Plugin.load().pipe(
+      Effect.catch((error) =>
+        Effect.sync(() => {
+          console.error(`warning: ${error.message}`);
+          return [] as ReadonlyArray<Plugin.Plugin>;
+        }),
+      ),
+      Effect.provide(PlatformServices),
+    ),
+  );
+
 const loadCommand = async (name: CommandName) => {
   switch (name) {
     case "provider":
-      return (await import("./commands/provider.ts")).providerCommand(plugins);
+      return (await import("./commands/provider.ts")).providerCommand(await loadPlugins());
     case "deploy":
       return (await import("./commands/deploy.ts")).deployCommand;
     case "dev":
@@ -108,21 +108,13 @@ const requestedCommand = argv.find((value): value is CommandName =>
   commandNames.has(value as CommandName),
 );
 const loadEveryCommand = argv.includes("--completions");
-const requestedPluginCommand = argv.find((value) =>
-  pluginCommands.some((command) => command.name === value),
-);
-const commands = await Promise.all([
-  ...commandMetadata.map(([name, description]) =>
+const commands = await Promise.all(
+  commandMetadata.map(([name, description]) =>
     loadEveryCommand || name === requestedCommand
       ? loadCommand(name)
       : placeholderCommand(name, description),
   ),
-  ...pluginCommands.map((command) =>
-    loadEveryCommand || command.name === requestedPluginCommand
-      ? command.load()
-      : placeholderCommand(command.name, command.description),
-  ),
-]);
+);
 
 /**
  * `--no-input` forces plain, prompt-free output regardless of TTY or env

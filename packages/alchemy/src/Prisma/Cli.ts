@@ -30,6 +30,7 @@ const generateCommand = Command.make(
       const result = yield* exec(
         ChildProcess.make(process.execPath, [
           bin,
+          "provider",
           "prisma",
           "generate",
           "--config",

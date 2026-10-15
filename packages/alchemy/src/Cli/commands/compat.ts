@@ -9,6 +9,7 @@ export const compatibilityCommands = {
   sync: "alchemy drift --repair",
   aws: "alchemy provider aws",
   cloudflare: "alchemy provider cloudflare",
+  prisma: "alchemy provider prisma",
 } as const;
 
 export type CompatibilityCommand = keyof typeof compatibilityCommands;
