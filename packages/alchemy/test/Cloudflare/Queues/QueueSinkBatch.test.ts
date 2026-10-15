@@ -41,6 +41,19 @@ const run = <A>(stream: Stream.Stream<A>, client: WriteQueueClient) =>
     Effect.provideService(RuntimeContext, {} as never),
   );
 
+// Synchronous only: restore before the test yields so other fibers cannot see
+// the replacement. This exercises no_nodejs_compat without a second deployment.
+const withBuffer = <A>(value: unknown, run: () => A): A => {
+  const descriptor = Object.getOwnPropertyDescriptor(globalThis, "Buffer");
+  try {
+    Object.defineProperty(globalThis, "Buffer", { value, configurable: true });
+    return run();
+  } finally {
+    if (descriptor) Object.defineProperty(globalThis, "Buffer", descriptor);
+    else Reflect.deleteProperty(globalThis, "Buffer");
+  }
+};
+
 describe("Cloudflare QueueSink batching", { tags: ["unit", "local"] }, () => {
   it("packs at most 100 messages per batch, preserving order", () => {
     const bodies = Array.from({ length: 250 }, (_, i) => i);
@@ -64,6 +77,85 @@ describe("Cloudflare QueueSink batching", { tags: ["unit", "local"] }, () => {
     expect(messageSize({ a: 1 })).toBe(7 + 100);
     expect(messageSize(undefined)).toBe(100);
   });
+
+  for (const native of [true, false]) {
+    it(`measures Unicode JSON exactly with ${native ? "native" : "web fallback"} byte length`, () => {
+      const originalBuffer = globalThis.Buffer;
+      const encoder = new TextEncoder();
+      let nativeCalls = 0;
+      const buffer = native
+        ? {
+            byteLength(value: string, encoding: "utf8") {
+              expect(encoding).toBe("utf8");
+              nativeCalls++;
+              return originalBuffer.byteLength(value, encoding);
+            },
+          }
+        : undefined;
+      withBuffer(buffer, () => {
+        const bodies = [
+          "",
+          'ASCII with "quotes", \\ and \u0000\n',
+          "é漢字🌦️",
+          "\ud800",
+          "\udfff",
+          "\ud800x\udfff",
+          "\ud800\udfff",
+          { "clé🔑": ["😀", "\ud800", "\udfff", null, 123] },
+          "東京🌦️".repeat(10_000),
+        ];
+        for (const body of bodies) {
+          expect(messageSize(body)).toBe(encoder.encode(JSON.stringify(body)).length + 100);
+        }
+        expect(nativeCalls).toBe(native ? bodies.length : 0);
+
+        let toJsonCalls = 0;
+        expect(
+          messageSize({
+            toJSON() {
+              toJsonCalls++;
+              return "é😀";
+            },
+          }),
+        ).toBe(encoder.encode(JSON.stringify("é😀")).length + 100);
+        expect(toJsonCalls).toBe(1);
+
+        const cyclic: { self?: unknown } = {};
+        cyclic.self = cyclic;
+        const callsBeforeUnsupported = nativeCalls;
+        for (const body of [
+          undefined,
+          () => undefined,
+          Symbol("body"),
+          1n,
+          cyclic,
+          {
+            toJSON() {
+              throw new Error("not serializable");
+            },
+          },
+          { toJSON: () => undefined },
+        ]) {
+          expect(messageSize(body)).toBe(100);
+        }
+        expect(nativeCalls).toBe(callsBeforeUnsupported);
+      });
+    });
+
+    it(`packs Unicode messages at the exact byte boundary with ${native ? "native" : "web fallback"} byte length`, () => {
+      withBuffer(native ? globalThis.Buffer : undefined, () => {
+        // Two messages: JSON quotes (4) + metadata (200) + 4 bytes per é pair.
+        const body = "é".repeat((MAX_BATCH_BYTES - 204) / 4);
+        expect(messageSize(body) * 2).toBe(MAX_BATCH_BYTES);
+        expect(packQueueSinkBatches([body, body, "next"]).map((batch) => batch.length)).toEqual([
+          2, 1,
+        ]);
+        expect(packQueueSinkBatches([`${body}é`, `${body}é`]).map((batch) => batch.length)).toEqual(
+          [1, 1],
+        );
+      });
+    });
+  }
 
   it("ships an oversized message alone", () => {
     const huge = "x".repeat(MAX_BATCH_BYTES);
