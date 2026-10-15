@@ -101,8 +101,9 @@ const cases: UpgradeCase[] = [
     install: ["install", "--linker=hoisted", "--omit", "peer"],
     peers: {
       effect: "4.0.4",
-      "@effect/platform-node": "4.0.4",
-      "@effect/platform-bun": "4.0.4",
+      // Patch releases of the platform packages track `effect`'s.
+      "@effect/platform-node": "~4.0.0",
+      "@effect/platform-bun": "~4.0.0",
     },
     marker: "NEXTJS_AWS_PAGE_MARKER",
     moved: [
