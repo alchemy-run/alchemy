@@ -201,7 +201,9 @@ const services = Layer.mergeAll(
   // merges with them. Listed as `mergeAll` siblings, whichever came last
   // would win the `CurrentLoggers` slot and silently drop the other.
   Layer.provideMerge(TelemetryLive, Layer.provide(GlobalLogLive, PlatformServices)),
-);
+  // Plugin commands may require every `Plugin.CliServices` service; the cast
+  // on `main` below would hide one missing here.
+) satisfies Layer.Layer<Plugin.CliServices, unknown, unknown>;
 
 const program = Effect.gen(function* () {
   yield* logRunHeader;

@@ -37,7 +37,8 @@ const findBackend = Effect.fn(function* (backend: string) {
 });
 
 /**
- * Resolve the state service a source addresses. The tree operations
+ * Resolve the state service a source addresses, in the caller's `Scope`: the
+ * store's resources live until that scope closes. The tree operations
  * (`State.listState`, `State.readState`, `State.deleteState`) take `State`
  * from context — provide the resolved service (or {@link layer}) to run
  * them against the chosen store:
@@ -50,8 +51,13 @@ const findBackend = Effect.fn(function* (backend: string) {
  * ```
  */
 export const store = Effect.fn("Alchemist.state.store")(function* (source: StateSource) {
+  // The store's layer is built in the caller's `Scope`: a store holding a
+  // connection or client keeps it until the caller is done with the store.
   if (source.backend === "local") {
-    return yield* Effect.provide(Effect.flatten(State.State), State.localState());
+    return yield* Effect.provide(
+      Effect.flatten(State.State),
+      yield* Layer.build(State.localState()),
+    );
   }
   if (source.backend !== "configured") {
     const { name, profile, envFile } = source as Plugin.StateStoreTarget;
@@ -60,13 +66,15 @@ export const store = Effect.fn("Alchemist.state.store")(function* (source: State
       withProfileOverride(yield* loadConfigProvider(Option.fromNullishOr(envFile)), profile),
     );
     const layer = yield* backend.layer;
-    return yield* Effect.flatten(State.State).pipe(
+    const context = yield* Layer.build(
       // Fresh: the store registers its auth into this registry even when the
       // process already built the provider's layers for another one.
-      Effect.provide(Layer.fresh(layer({ name }))),
-      Effect.provide(Layer.succeed(AuthProviders, {} satisfies AuthProviders["Service"])),
-      Effect.provide(config),
+      Layer.fresh(layer({ name })).pipe(
+        Layer.provide(Layer.succeed(AuthProviders, {} satisfies AuthProviders["Service"])),
+        Layer.provide(config),
+      ),
     );
+    return yield* Effect.provide(Effect.flatten(State.State), context);
   }
   // The configured store lives in the stack entrypoint; this is the one
   // command that can also work without one.

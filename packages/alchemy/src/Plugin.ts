@@ -3,15 +3,23 @@ import type * as Command from "effect/cli/Command";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import type { HttpClient } from "effect/http/HttpClient";
 import type * as HttpClientRequest from "effect/http/HttpClientRequest";
 import type * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 import type * as Stream from "effect/Stream";
 import type { LogEntry } from "./Alchemist/routes/logs.ts";
-import type { Services } from "./Alchemist/Runtime.ts";
+import type { AlchemyContext } from "./AlchemyContext.ts";
+import type { ArtifactStore } from "./Artifacts.ts";
+import type { AuthProviders } from "./Auth/AuthProvider.ts";
+import type { CredentialsStore } from "./Auth/Credentials.ts";
+import type { ProfileStore } from "./Auth/Profile.ts";
+import type { CliKit } from "./Cli/CliKit/CliKit.ts";
+import type { Interaction } from "./Interaction.ts";
 import type { State } from "./State/State.ts";
 import { UserFacingError } from "./UserFacingError.ts";
+import type { PlatformServices } from "./Util/PlatformServices.ts";
 
 /**
  * What a provider contributes to Alchemy outside a stack: the parts the CLI,
@@ -37,7 +45,7 @@ export interface Plugin {
    * Registers the provider's `AuthProvider` into `AuthProviders`, so
    * `alchemy profile` and login work without a stack that uses the provider.
    */
-  readonly auth?: Lazy<Layer.Layer<never, never, any>>;
+  readonly auth?: Lazy<Layer.Layer<never, never, AuthServices>>;
   /**
    * State stores reachable from a profile alone, keyed by the name
    * `alchemy state --backend <name>` addresses them by.
@@ -52,6 +60,31 @@ export interface Plugin {
   readonly testServices?: Lazy<TestServices>;
 }
 
+/**
+ * The services every host of plugin code provides: the CLI and the Alchemist
+ * API both run it under them. A plugin supplies anything else it needs
+ * itself, so a field can never require a service no host provides.
+ */
+export type HostServices =
+  | PlatformServices
+  | HttpClient
+  | AlchemyContext
+  | ProfileStore
+  | CredentialsStore
+  | ArtifactStore
+  | Interaction;
+
+/** What an auth layer runs under: the host's services and the registry it registers into. */
+export type AuthServices = HostServices | AuthProviders;
+
+/** What a state store's layer runs under: the host's services and an auth registry. */
+export type StateStoreServices = HostServices | AuthProviders;
+
+/** What a CLI command runs under: the host's services and the terminal. */
+export type CliServices = HostServices | CliKit;
+
+/** A plugin's own failure: any tagged error. */
+export type PluginFailure = { readonly _tag: string };
 /**
  * A field loaded when used, so importing a plugin module stays cheap. Build
  * one with {@link lazy}.
@@ -79,7 +112,9 @@ export interface StateStore {
    * Built under the requested profile's config with an `AuthProviders`
    * registry in context.
    */
-  readonly layer: Lazy<(options: { readonly name?: string }) => Layer.Layer<State, any, any>>;
+  readonly layer: Lazy<
+    (options: { readonly name?: string }) => Layer.Layer<State, PluginFailure, StateStoreServices>
+  >;
   /**
    * Provisioning for a store that is infrastructure of its own, such as
    * Cloudflare's state-store Worker. Omit it for a store that needs none,
@@ -107,19 +142,19 @@ export interface StateStoreLifecycle {
       /** Redeploy an existing store instead of adopting it. */
       readonly force?: boolean;
     },
-  ) => Effect.Effect<StateStoreBootstrap, StateStoreLifecycleError, Services>;
+  ) => Effect.Effect<StateStoreBootstrap, StateStoreLifecycleError, HostServices>;
   /** Delete the store and its backing resources. Idempotent. */
   readonly teardown?: (
     input: StateStoreTarget,
-  ) => Effect.Effect<StateStoreTeardown, StateStoreLifecycleError, Services>;
+  ) => Effect.Effect<StateStoreTeardown, StateStoreLifecycleError, HostServices>;
   /** The store's past log entries, oldest first. */
   readonly logs?: (
     input: StateStoreTarget & { readonly limit?: number; readonly since?: Date },
-  ) => Effect.Effect<ReadonlyArray<LogEntry>, StateStoreLifecycleError, Services>;
+  ) => Effect.Effect<ReadonlyArray<LogEntry>, StateStoreLifecycleError, HostServices>;
   /** The store's log entries as they happen. */
   readonly tailLogs?: (
     input: StateStoreTarget,
-  ) => Stream.Stream<LogEntry, StateStoreLifecycleError, Services>;
+  ) => Stream.Stream<LogEntry, StateStoreLifecycleError, HostServices>;
 }
 
 export interface StateStoreBootstrap {
@@ -134,7 +169,7 @@ export interface StateStoreTeardown {
 }
 
 /** Lifecycle errors are the store's own; any tagged error will do. */
-export type StateStoreLifecycleError = { readonly _tag: string };
+export type StateStoreLifecycleError = PluginFailure;
 
 export interface Cli {
   /**
@@ -149,11 +184,11 @@ export interface Cli {
 }
 
 // Any command, whatever its name, errors and the CLI services it runs under.
-export type AnyCommand = Command.Command<any, any, any, any, any>;
+export type AnyCommand = Command.Command<any, any, any, PluginFailure, CliServices>;
 
 export interface TestServices {
   /** Provided to test bodies and stack programs, closest wins. */
-  readonly layer: Layer.Layer<any, any, never>;
+  readonly layer: Layer.Layer<any, PluginFailure, never>;
   /** Rewrites the test's outbound HTTP, e.g. onto the emulator's gateway. */
   readonly mapRequest?: (
     request: HttpClientRequest.HttpClientRequest,

@@ -1,8 +1,10 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { describe, expect, it, layer } from "alchemy-test";
 import * as Command from "effect/cli/Command";
+import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Alchemist from "@/Alchemist/index.ts";
 import { providerCommand } from "@/Cli/commands/provider.ts";
@@ -19,11 +21,20 @@ interface Dependency {
  * A project in a temp directory, outside the repo, so a dependency's plugin
  * only loads when it's resolved from the dependency itself.
  */
-const project = (dependencies: Readonly<Record<string, Dependency>>) =>
+const project = (
+  dependencies: Readonly<Record<string, Dependency>>,
+  options: { readonly directory?: string } = {},
+) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
-    const root = yield* fs.makeTempDirectoryScoped({ prefix: "alchemy-plugin-" });
+    if (options.directory !== undefined) {
+      yield* fs.makeDirectory(options.directory, { recursive: true });
+    }
+    const root = yield* fs.makeTempDirectoryScoped({
+      prefix: "alchemy-plugin-",
+      directory: options.directory,
+    });
     yield* fs.writeFileString(
       path.join(root, "package.json"),
       JSON.stringify({
@@ -180,7 +191,84 @@ const pluginErrorMessage = (error: { readonly _tag: string }) => {
   return (error as Plugin.PluginError).message;
 };
 
+/** Run with the process in `directory`, as the CLI would run in a project. */
+const inDirectory = <A, E, R>(directory: string, effect: Effect.Effect<A, E, R>) =>
+  Effect.acquireUseRelease(
+    Effect.sync(() => {
+      const previous = process.cwd();
+      process.chdir(directory);
+      return previous;
+    }),
+    () => effect,
+    (previous) => Effect.sync(() => process.chdir(previous)),
+  );
+
+declare global {
+  var __scopedStoreState: "open" | "closed" | undefined;
+}
+
+/**
+ * A plugin whose state store holds a resource its layer's finalizer closes.
+ * It imports `effect` and alchemy's `State`, so it lives under this package.
+ */
+const scopedStorePlugin = Effect.gen(function* () {
+  const path = yield* Path.Path;
+  const state = path.resolve(import.meta.dirname, "../src/State/State.ts");
+  return pluginPackage(
+    "scoped-store",
+    `import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { State } from ${JSON.stringify(state)};
+
+const layer = Layer.effect(
+  State,
+  Effect.acquireRelease(
+    Effect.sync(() => {
+      globalThis.__scopedStoreState = "open";
+      return Effect.succeed({
+        listStacks: () =>
+          globalThis.__scopedStoreState === "open"
+            ? Effect.succeed(["open"])
+            : Effect.die(new Error("the store's client is closed")),
+      });
+    }),
+    () => Effect.sync(() => void (globalThis.__scopedStoreState = "closed")),
+  ),
+);
+
+export default {
+  name: "scoped-store",
+  stateStores: { scoped: { description: "Scoped", layer: Effect.succeed(() => layer) } },
+};
+`,
+  );
+});
+
 layer(Alchemist.layer())("Alchemist.State lifecycle", (it) => {
+  it.effect(
+    "a store's resources stay open until the caller's scope closes",
+    () =>
+      Effect.gen(function* () {
+        const path = yield* Path.Path;
+        const root = yield* project(
+          { "scoped-store": yield* scopedStorePlugin },
+          { directory: path.resolve(import.meta.dirname, "../.alchemy/test-plugins") },
+        );
+        const stacks = yield* inDirectory(
+          root,
+          Effect.scoped(
+            Effect.flatMap(Alchemist.State.store({ backend: "scoped" }), (store) =>
+              store.listStacks(),
+            ),
+          ),
+        );
+        expect(stacks).toEqual(["open"]);
+        expect(globalThis.__scopedStoreState).toBe("closed");
+      }).pipe(Effect.scoped),
+    // Exclusive: changes the process's working directory.
+    { exclusive: true },
+  );
+
   it.effect("rejects an unknown backend", () =>
     Effect.gen(function* () {
       const error = yield* Effect.flip(Alchemist.State.bootstrap({ backend: "nope" }));
@@ -255,4 +343,24 @@ describe("alchemy provider", () => {
       ),
     { exclusive: true },
   );
+});
+
+describe("Plugin contract", () => {
+  it("rejects a field requiring a service no host provides", () => {
+    class PrivateClient extends Context.Service<PrivateClient, { readonly id: string }>()(
+      "PrivateClient",
+    ) {}
+    const plugin = Plugin.make({
+      name: "needs-private-client",
+      // @ts-expect-error PrivateClient is not a host service; the plugin must supply it.
+      auth: Effect.succeed(
+        Layer.effectDiscard(
+          Effect.gen(function* () {
+            yield* PrivateClient;
+          }),
+        ),
+      ),
+    });
+    expect(plugin.name).toBe("needs-private-client");
+  });
 });
