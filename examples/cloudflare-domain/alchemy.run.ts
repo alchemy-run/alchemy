@@ -1,9 +1,9 @@
+import BankWorker from "@bank/server/BankWorker";
 import * as Alchemy from "alchemy";
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Stripe from "alchemy/Stripe";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import BankWorker from "./src/BankWorker.ts";
 
 export default Alchemy.Stack(
   "CloudflareDomainExample",
@@ -16,7 +16,8 @@ export default Alchemy.Stack(
     // The foldkit app, built with Vite. Its Worker serves the build and
     // forwards /api to the bank, so the app and the Api share one origin.
     const app = yield* Cloudflare.Website.Foldkit("BankApp", {
-      main: "src/web/worker.ts",
+      rootDir: "packages/web",
+      main: "src/worker.ts",
       env: { BANK: bank },
       assets: { runWorkerFirst: ["/api", "/api/*"] },
     });

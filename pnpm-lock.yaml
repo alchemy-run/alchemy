@@ -1816,15 +1816,18 @@ importers:
 
   examples/cloudflare-domain:
     dependencies:
-      '@cloudflare/workers-types':
-        specifier: 5.20261012.1
-        version: 5.20261012.1
+      '@bank/domain':
+        specifier: workspace:*
+        version: link:packages/domain
+      '@bank/server':
+        specifier: workspace:*
+        version: link:packages/server
+      '@bank/web':
+        specifier: workspace:*
+        version: link:packages/web
       '@distilled.cloud/stripe':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/stripe
-      '@effect/platform-browser':
-        specifier: 4.0.4
-        version: 4.0.4(effect@4.0.4)
       '@effect/platform-bun':
         specifier: 'catalog:'
         version: 4.0.4(effect@4.0.4)
@@ -1834,6 +1837,65 @@ importers:
       alchemy:
         specifier: workspace:*
         version: link:../../packages/alchemy
+      effect:
+        specifier: 4.0.4
+        version: 4.0.4
+
+  examples/cloudflare-domain/packages/domain:
+    dependencies:
+      alchemy:
+        specifier: workspace:*
+        version: link:../../../../packages/alchemy
+      effect:
+        specifier: 4.0.4
+        version: 4.0.4
+    devDependencies:
+      '@effect/vitest':
+        specifier: 'catalog:'
+        version: 4.0.4(effect@4.0.4)(vitest@5.0.4(@types/node@26.6.5)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1)))
+      vitest:
+        specifier: 'catalog:'
+        version: 5.0.4(@types/node@26.6.5)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))
+
+  examples/cloudflare-domain/packages/server:
+    dependencies:
+      '@bank/domain':
+        specifier: workspace:*
+        version: link:../domain
+      '@cloudflare/workers-types':
+        specifier: 5.20261012.1
+        version: 5.20261012.1
+      '@distilled.cloud/stripe':
+        specifier: workspace:*
+        version: link:../../../../submodules/distilled/packages/stripe
+      '@effect/platform-node':
+        specifier: 'catalog:'
+        version: 4.0.4(effect@4.0.4)(redis@6.2.1)
+      alchemy:
+        specifier: workspace:*
+        version: link:../../../../packages/alchemy
+      effect:
+        specifier: 4.0.4
+        version: 4.0.4
+    devDependencies:
+      '@effect/vitest':
+        specifier: 'catalog:'
+        version: 4.0.4(effect@4.0.4)(vitest@5.0.4(@types/node@26.6.5)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1)))
+      vitest:
+        specifier: 'catalog:'
+        version: 5.0.4(@types/node@26.6.5)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))
+
+  examples/cloudflare-domain/packages/web:
+    dependencies:
+      '@bank/domain':
+        specifier: workspace:*
+        version: link:../domain
+      '@effect/platform-browser':
+        specifier: 4.0.4
+        version: 4.0.4(effect@4.0.4)
+      alchemy:
+        specifier: workspace:*
+        version: link:../../../../packages/alchemy
       effect:
         specifier: 4.0.4
         version: 4.0.4

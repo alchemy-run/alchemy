@@ -17,11 +17,11 @@ import * as Schedule from "effect/Schedule";
 import * as Socket from "effect/socket/Socket";
 import * as Stream from "effect/Stream";
 import Stack from "../alchemy.run.ts";
-import { CustomerDashboard } from "../src/Customer/CustomerDashboard.ts";
-import { CustomerId } from "../src/Customer/CustomerId.ts";
-import { CustomerApi } from "../src/CustomerApi/CustomerApi.ts";
-import { sessionClient } from "../src/Session.ts";
-import { mfa, register, transfer } from "./flows.ts";
+import { CustomerId } from "../packages/domain/src/Customer/Customer.id.ts";
+import { CustomerDashboard } from "../packages/domain/src/Customer/CustomerDashboard.view.ts";
+import { CustomerApi } from "../packages/domain/src/CustomerApi.api.ts";
+import { sessionClient } from "../packages/domain/src/Session.middleware.ts";
+import { mfa, register, transfer } from "../packages/server/test/flows.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Layer.mergeAll(Cloudflare.providers(), Stripe.providers()),
