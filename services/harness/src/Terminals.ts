@@ -1,11 +1,14 @@
 import type { RuntimeContext } from "alchemy";
-import { type SandboxClient, SessionError } from "alchemy/AI";
+import { SessionError } from "alchemy/AI";
+import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import * as Layer from "effect/Layer";
 import * as PubSub from "effect/PubSub";
 import * as Queue from "effect/Queue";
 import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
+import { Sandbox } from "./Sandbox.ts";
 
 /** Output kept for clients that (re)connect: enough to redraw a screen or two. */
 const HISTORY_BYTES = 64 * 1024;
@@ -26,11 +29,35 @@ const failure = (cause: unknown) =>
   });
 
 /**
- * Shells in a container, one per key, on a real terminal (a pty). A shell
- * outlives the clients watching it: they come and go, and each one that
- * connects gets the recent output first.
+ * Shells in the session's container, one per key, on a real terminal (a
+ * pty). A shell outlives the clients watching it: they come and go, and
+ * each one that connects gets the recent output first.
  */
-export const makeTerminals = (sandbox: SandboxClient, options: { readonly cwd: string }) => {
+export class Terminals extends Context.Service<
+  Terminals,
+  {
+    /** A shell's output: the recent history, then live until it exits. */
+    readonly output: (
+      key: string,
+      cols: number,
+      rows: number,
+    ) => Stream.Stream<string, SessionError, RuntimeContext>;
+    /** Keystrokes for a running shell. */
+    readonly input: (key: string, data: string) => Effect.Effect<void, SessionError>;
+    readonly resize: (
+      key: string,
+      cols: number,
+      rows: number,
+    ) => Effect.Effect<void, never, RuntimeContext>;
+  }
+>()("harness/Terminals") {
+  /** Shells in `Sandbox`'s container, started in `cwd`. */
+  static readonly layer = (options: { readonly cwd: string }) =>
+    Layer.effect(Terminals, makeTerminals(options));
+}
+
+const makeTerminals = Effect.fn(function* (options: { readonly cwd: string }) {
+  const sandbox = yield* Sandbox;
   const shells = new Map<string, Shell>();
 
   const remember = (shell: Shell, chunk: string) => {
@@ -101,9 +128,8 @@ export const makeTerminals = (sandbox: SandboxClient, options: { readonly cwd: s
         : start(key, cols, rows);
     });
 
-  return {
-    /** A shell's output: the recent history, then live until it exits. */
-    output: (key: string, cols: number, rows: number) =>
+  return Terminals.of({
+    output: (key, cols, rows) =>
       Stream.unwrap(
         Effect.gen(function* () {
           const s = yield* shell(key, cols, rows);
@@ -115,7 +141,7 @@ export const makeTerminals = (sandbox: SandboxClient, options: { readonly cwd: s
         }),
       ).pipe(Stream.scoped, Stream.mapError(failure)),
 
-    input: (key: string, data: string) =>
+    input: (key, data) =>
       Effect.suspend(() => {
         const s = shells.get(key);
         return s
@@ -123,7 +149,7 @@ export const makeTerminals = (sandbox: SandboxClient, options: { readonly cwd: s
           : Effect.fail(failure("no shell is running"));
       }),
 
-    resize: (key: string, cols: number, rows: number) =>
+    resize: (key, cols, rows) =>
       Effect.suspend(() => shells.get(key)?.resize(cols, rows) ?? Effect.void),
-  };
-};
+  });
+});

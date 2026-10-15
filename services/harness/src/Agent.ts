@@ -8,7 +8,7 @@ import { AgentGateway } from "./Gateway.ts";
 import { makeMachine, SIZE } from "./Machine.ts";
 import { Sandbox, WORKSPACE } from "./Sandbox.ts";
 import { Sessions, SESSIONS_INDEX } from "./Sessions.ts";
-import { makeTerminals } from "./Terminals.ts";
+import { Terminals } from "./Terminals.ts";
 
 /**
  * One Durable Object per issue, serving this app's `AgentRpcs`. Every call
@@ -54,7 +54,7 @@ export class Agent extends Cloudflare.RpcDurableObject<Agent>()(
       ),
     );
 
-    const terminals = makeTerminals(sandbox, { cwd: WORKSPACE });
+    const terminals = yield* Terminals;
     const sessions = yield* Sessions;
     /** A start or stop in progress: reported as the machine's state meanwhile. */
     let transition: "starting" | "suspending" | undefined;
@@ -176,5 +176,5 @@ export class Agent extends Cloudflare.RpcDurableObject<Agent>()(
         terminalResize: ({ sessionId, cols, rows }) => terminals.resize(sessionId, cols, rows),
       });
     });
-  }),
+  }).pipe(Effect.provide(Terminals.layer({ cwd: WORKSPACE }))),
 ) {}
