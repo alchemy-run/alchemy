@@ -19,8 +19,7 @@ import {
 } from "./Customer/UsernameReservation.policy.ts";
 import { DailyOutflow } from "./Fraud/DailyOutflow.view.ts";
 import { FraudReview, FraudReviewLive } from "./Fraud/FraudReview.policy.ts";
-import { Ledger } from "./Ledger/Ledger.projection.ts";
-import { LedgerLive } from "./Ledger/Ledger.projection.ts";
+import { Ledger, LedgerLive } from "./Ledger/Ledger.projection.ts";
 import { SettlementRefund, SettlementRefundLive } from "./Settlement/SettlementRefund.policy.ts";
 import { AccountTransfers } from "./Transfer/AccountTransfers.view.ts";
 import { ExecuteTransfer, ExecuteTransferLive } from "./Transfer/ExecuteTransfer.saga.ts";
