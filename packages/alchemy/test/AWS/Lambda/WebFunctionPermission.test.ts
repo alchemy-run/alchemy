@@ -7,7 +7,7 @@ import * as Effect from "effect/Effect";
 import * as AWS from "@/AWS";
 import * as Test from "@/Test/Alchemy";
 
-const asyncFetchMain = fileURLToPath(new URL("./fixtures/web/async-fetch.ts", import.meta.url));
+const asyncServerMain = fileURLToPath(new URL("./fixtures/web/async-server.ts", import.meta.url));
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -36,7 +36,7 @@ test.provider(
         stack.deploy(
           Effect.gen(function* () {
             const api = yield* AWS.Lambda.WebFunction("Granted", {
-              main: asyncFetchMain,
+              main: asyncServerMain,
               authType: "IamAuth",
             });
             const permissions: Partial<
@@ -88,7 +88,7 @@ test.provider(
         .deploy(
           Effect.gen(function* () {
             const api = yield* AWS.Lambda.WebFunction("Public", {
-              main: asyncFetchMain,
+              main: asyncServerMain,
               authType: "ApplicationManaged",
             });
             return yield* AWS.Lambda.WebFunctionPermission("Grant", {

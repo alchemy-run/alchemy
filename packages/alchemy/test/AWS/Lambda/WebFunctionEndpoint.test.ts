@@ -8,7 +8,7 @@ import * as AWS from "@/AWS";
 import * as Test from "@/Test/Alchemy";
 import EffectWebFunctionLive, { EffectWebFunction } from "./fixtures/web/effect-web.ts";
 
-const asyncFetchMain = fileURLToPath(new URL("./fixtures/web/async-fetch.ts", import.meta.url));
+const asyncServerMain = fileURLToPath(new URL("./fixtures/web/async-server.ts", import.meta.url));
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -46,7 +46,7 @@ test.provider(
         stack.deploy(
           Effect.gen(function* () {
             const api = yield* AWS.Lambda.WebFunction("Doors", {
-              main: asyncFetchMain,
+              main: asyncServerMain,
               authType: "ApplicationManaged",
               env: { GREETING: options.greeting },
             });
@@ -109,7 +109,7 @@ test.provider(
       const multiRegion = yield* stack.plan(
         Effect.gen(function* () {
           const fn = yield* AWS.Lambda.WebFunction("Doors", {
-            main: asyncFetchMain,
+            main: asyncServerMain,
             authType: "ApplicationManaged",
             env: { GREETING: "two" },
           });

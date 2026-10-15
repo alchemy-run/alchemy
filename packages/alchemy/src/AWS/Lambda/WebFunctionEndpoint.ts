@@ -170,17 +170,14 @@ const resolveEndpointProps = (
  * ### Routing by endpoint
  * **Example:** Serve only webhook routes on the public endpoint
  * ```typescript
- * // src/server.ts
- * export default {
- *   async fetch(request: Request) {
- *     const endpoint = request.headers.get("lambda-web-endpoint-name");
- *     const { pathname } = new URL(request.url);
- *     if (endpoint === "Webhooks" && !pathname.startsWith("/webhooks/")) {
- *       return new Response("Not Found", { status: 404 });
- *     }
- *     return new Response("ok");
- *   },
- * };
+ * // src/server.ts (a Hono app)
+ * app.use(async (c, next) => {
+ *   const endpoint = c.req.header("lambda-web-endpoint-name");
+ *   if (endpoint === "Webhooks" && !c.req.path.startsWith("/webhooks/")) {
+ *     return c.notFound();
+ *   }
+ *   await next();
+ * });
  * ```
  *
  * @resource

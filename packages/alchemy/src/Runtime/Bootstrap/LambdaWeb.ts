@@ -23,9 +23,24 @@ import { MinimumLogLevel } from "effect/References";
 import * as Scope from "effect/Scope";
 import { NodeHttpServer } from "../../Http.ts";
 import { reifyBoundConfigProvider } from "../../Runtime.ts";
-import { lambdaHttpEndpoint } from "./LambdaWebEnv.ts";
 import { ManagedHttpShutdown } from "./ManagedHttpShutdown.ts";
 import { entrypointLayer, resolveProgram, runProcess, stackFromEnv } from "./Process.ts";
+
+/**
+ * The `host:port` Lambda routes requests to, or `127.0.0.1:3000` when
+ * `AWS_LAMBDA_HTTP_ENDPOINT` is unset (local runs).
+ */
+const lambdaHttpEndpoint = () => {
+  const value = process.env.AWS_LAMBDA_HTTP_ENDPOINT;
+  const separator = value?.lastIndexOf(":") ?? -1;
+  if (value === undefined || separator <= 0) {
+    return { host: "127.0.0.1", port: 3000 };
+  }
+  return {
+    host: value.slice(0, separator).replace(/^\[(.*)\]$/, "$1"),
+    port: Number(value.slice(separator + 1)),
+  };
+};
 
 /**
  * Lambda sends `SIGTERM` and terminates the environment 1 second later.

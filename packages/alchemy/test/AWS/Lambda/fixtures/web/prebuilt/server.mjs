@@ -1,11 +1,13 @@
 // A prebuilt server deployed as-is (`bundle: false`), like a framework's
-// standalone output. It reads the conventional PORT / HOSTNAME variables.
+// standalone output. Lambda starts this file; it listens where Lambda says.
 import * as http from "node:http";
 import { greeting } from "./greeting.mjs";
+
+const [host, port] = (process.env.AWS_LAMBDA_HTTP_ENDPOINT ?? "localhost:3000").split(":");
 
 http
   .createServer((_req, res) => {
     res.writeHead(200, { "content-type": "text/plain" });
-    res.end(`${greeting} on ${process.env.HOSTNAME}:${process.env.PORT}`);
+    res.end(`${greeting} on ${host}:${port}`);
   })
-  .listen(Number(process.env.PORT ?? 3000), process.env.HOSTNAME ?? "127.0.0.1");
+  .listen(Number(port), host);

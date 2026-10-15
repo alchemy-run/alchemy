@@ -140,16 +140,20 @@ export default class Api extends AWS.Lambda.WebFunction<Api>()(
 
 ## Bring an existing server
 
-You don't need Effect. Point `main` at a module that default-exports a
-`fetch` method, the shape Hono and Cloudflare Workers use:
+You don't need Effect. Point `main` at your own Node server, such as a Hono
+app. Alchemy bundles it as it is, with no wrapper and no Effect runtime.
+Listen on the address Lambda passes in `AWS_LAMBDA_HTTP_ENDPOINT`:
 
 ```typescript
 // src/server.ts
-export default {
-  async fetch(request: Request) {
-    return new Response(`Hello from ${new URL(request.url).pathname}`);
-  },
-};
+import { serve } from "@hono/node-server";
+import { Hono } from "hono";
+
+const app = new Hono();
+app.get("/", (c) => c.text(`Hello from ${c.req.path}`));
+
+const [hostname, port] = (process.env.AWS_LAMBDA_HTTP_ENDPOINT ?? "localhost:3000").split(":");
+serve({ fetch: app.fetch, hostname, port: Number(port) });
 ```
 
 ```typescript
@@ -171,8 +175,7 @@ export default Alchemy.Stack(
 );
 ```
 
-A server that listens on its own works too. Listen on `PORT` and `HOST`,
-which Alchemy sets to the address Lambda expects:
+Express, Fastify and plain `node:http` work the same way:
 
 ```typescript
 // src/server.ts
@@ -180,11 +183,14 @@ import express from "express";
 
 const app = express();
 app.get("/", (_req, res) => res.send("Hello from Express"));
-app.listen(Number(process.env.PORT), process.env.HOST!);
+
+const [host, port] = (process.env.AWS_LAMBDA_HTTP_ENDPOINT ?? "localhost:3000").split(":");
+app.listen(Number(port), host);
 ```
 
 For a framework's standalone build output, set `bundle: false` to deploy
-the directory as it is:
+the directory as it is. Lambda starts `main`, so it must listen on
+`AWS_LAMBDA_HTTP_ENDPOINT` too:
 
 ```typescript
 const site = yield* AWS.Lambda.WebFunction("Site", {
@@ -358,16 +364,13 @@ routes:
 
 ```typescript
 // src/server.ts
-export default {
-  async fetch(request: Request) {
-    const endpoint = request.headers.get("lambda-web-endpoint-name");
-    const { pathname } = new URL(request.url);
-    if (endpoint === "Webhooks" && !pathname.startsWith("/webhooks/")) {
-      return new Response("Not Found", { status: 404 });
-    }
-    return new Response("ok");
-  },
-};
+app.use(async (c, next) => {
+  const endpoint = c.req.header("lambda-web-endpoint-name");
+  if (endpoint === "Webhooks" && !c.req.path.startsWith("/webhooks/")) {
+    return c.notFound();
+  }
+  await next();
+});
 ```
 
 ## Shutdown

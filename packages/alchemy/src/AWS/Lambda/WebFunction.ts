@@ -59,9 +59,6 @@ const DEFAULT_ENDPOINT_NAME = "default";
 /** Entry file inside the archive (see `zipCode`). */
 const ENTRY_FILE = "index.mjs";
 
-/** Address shim written into prebuilt (`bundle: false`) archives. */
-const PREBUILT_ENTRY_FILE = "__alchemy_web_entry.mjs";
-
 /** Inline policy denying the execution role `logs:CreateLogGroup` on its own groups. */
 const LOG_GROUP_GUARD_POLICY = "AlchemyDenyLogGroupCreate";
 
@@ -92,19 +89,16 @@ export interface WebFunctionProps extends PlatformProps {
    * Entry module of the web server.
    *
    * With an Effect implementation (the class form), Alchemy serves the
-   * returned `fetch` handler. Without one, `main` is an ordinary Node
-   * module that either starts its own server on `process.env.PORT` /
-   * `process.env.HOST` (Express, Fastify, `@hono/node-server`, …) or
-   * default-exports an object with a Web-standard `fetch(request)` method
-   * (Hono, the Cloudflare Worker shape), which Alchemy serves.
+   * returned `fetch` handler. Without one, `main` is your own Node server
+   * and is bundled as-is: it must listen on the `host:port` Lambda passes
+   * in `AWS_LAMBDA_HTTP_ENDPOINT`.
    */
   main: string;
   /**
    * Set to `false` to skip bundling and deploy `main`'s directory as-is,
    * e.g. a framework's standalone server output (`.output/server`,
-   * Next.js `.next/standalone`). Alchemy adds a small entry that exports
-   * Lambda's listen address as `PORT` / `HOST` / `HOSTNAME` /
-   * `NITRO_PORT` / `NITRO_HOST` and then imports `main`.
+   * Next.js `.next/standalone`). Lambda starts `main`, which must listen
+   * on `AWS_LAMBDA_HTTP_ENDPOINT`.
    * @default true
    */
   bundle?: false;
@@ -336,33 +330,41 @@ export type WebFunctionRuntimeContext = Omit<HostRuntimeContext, "run">;
  * ```
  *
  * ### Async Web Functions
- * Point `main` at an ordinary Node server. No Effect runtime is included.
+ * Point `main` at your own Node server. Alchemy bundles it as-is, with no
+ * Effect runtime and no wrapper. Listen on the `host:port` Lambda passes in
+ * `AWS_LAMBDA_HTTP_ENDPOINT`.
  *
- * **Example:** A `fetch` export (Hono, Cloudflare Worker shape)
+ * **Example:** Hono
+ * ```typescript
+ * // src/server.ts
+ * import { serve } from "@hono/node-server";
+ * import { Hono } from "hono";
+ *
+ * const app = new Hono();
+ * app.get("/", (c) => c.text("Hello from Hono"));
+ *
+ * const [hostname, port] = (process.env.AWS_LAMBDA_HTTP_ENDPOINT ?? "localhost:3000").split(":");
+ * serve({ fetch: app.fetch, hostname, port: Number(port) });
+ * ```
+ *
  * ```typescript
  * // alchemy.run.ts
  * const api = yield* AWS.Lambda.WebFunction("Api", {
  *   main: "./src/server.ts",
  *   authType: "ApplicationManaged",
  * });
- *
- * // src/server.ts
- * export default {
- *   async fetch(request: Request) {
- *     return new Response(`Hello from ${new URL(request.url).pathname}`);
- *   },
- * };
  * ```
  *
- * **Example:** A server that listens on its own (Express)
+ * **Example:** Express
  * ```typescript
  * // src/server.ts
  * import express from "express";
  *
  * const app = express();
  * app.get("/", (_req, res) => res.send("Hello from Express"));
- * // Alchemy mirrors Lambda's listen address into PORT and HOST.
- * app.listen(Number(process.env.PORT), process.env.HOST!);
+ *
+ * const [host, port] = (process.env.AWS_LAMBDA_HTTP_ENDPOINT ?? "localhost:3000").split(":");
+ * app.listen(Number(port), host);
  * ```
  *
  * **Example:** A framework's standalone server output
@@ -526,46 +528,11 @@ import entrypoint from ${JSON.stringify(importPath)};
 bootstrap(entrypoint);
 `;
 
-/**
- * Generated entry for async web functions: mirror the listen address into
- * `PORT` / `HOST` before `main` evaluates, then serve a `fetch` export if
- * the module has one.
- */
-const asyncEntry = (importPath: string) => `
-import { listenAddress } from "alchemy/Runtime/Bootstrap/LambdaWebEnv";
-import * as entrypoint from ${JSON.stringify(importPath)};
-import { serve } from "alchemy/Runtime/Bootstrap/LambdaWebAsync";
-
-serve(entrypoint, listenAddress);
-`;
-
-/** Address shim for a prebuilt directory; it cannot import `alchemy`. */
-const prebuiltEntry = (mainFile: string) => `
-const endpoint = process.env.AWS_LAMBDA_HTTP_ENDPOINT;
-if (endpoint) {
-  const separator = endpoint.lastIndexOf(":");
-  const host = endpoint.slice(0, separator);
-  const port = endpoint.slice(separator + 1);
-  process.env.PORT = port;
-  process.env.HOST = host;
-  process.env.HOSTNAME = host;
-  process.env.NITRO_PORT = port;
-  process.env.NITRO_HOST = host;
-}
-await import(${JSON.stringify(`./${mainFile}`)});
-`;
-
 const mainBasename = (main: string) =>
   main.slice(Math.max(main.lastIndexOf("/"), main.lastIndexOf("\\")) + 1);
 
-const bundleOptions = (props: WebFunctionProps): FunctionBundleOptions => ({
-  entry: (importPath, isExternal) =>
-    isExternal ? asyncEntry(importPath) : effectEntry(importPath),
-  prebuiltFiles:
-    props.bundle === false
-      ? [{ path: PREBUILT_ENTRY_FILE, content: prebuiltEntry(mainBasename(props.main)) }]
-      : undefined,
-});
+/** Only the Effect form gets a generated entry; async servers ship as-is. */
+const bundleOptions: FunctionBundleOptions = { entry: effectEntry };
 
 /** The bundler reads the Event Function zip props; Web Functions run on Arm64. */
 const toZipProps = (props: WebFunctionProps): FunctionZipProps =>
@@ -601,7 +568,7 @@ export const WebFunctionProvider = () =>
       };
 
       const bundle = (id: string, props: WebFunctionProps) =>
-        bundleCode(id, toZipProps(props), bundleOptions(props));
+        bundleCode(id, toZipProps(props), bundleOptions);
 
       const createNames = Effect.fn(function* (id: string, functionName: string | undefined) {
         return {
@@ -1174,7 +1141,7 @@ export const WebFunctionProvider = () =>
                 ...(nodeOptions ? { NODE_OPTIONS: nodeOptions } : {}),
                 ...alchemyEnv,
                 AWS_LAMBDA_NODEJS_ENTRYPOINT:
-                  news.bundle === false ? PREBUILT_ENTRY_FILE : ENTRY_FILE,
+                  news.bundle === false ? mainBasename(news.main) : ENTRY_FILE,
               },
             },
           };

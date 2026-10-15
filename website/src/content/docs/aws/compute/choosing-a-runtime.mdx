@@ -47,8 +47,8 @@ web app, start with a Lambda Web Function instead.
 
 For anything that answers HTTP, a
 [`WebFunction`](/providers/aws/lambda#webfunction) runs your server on
-Lambda. Bring an Effect `fetch` handler, a `fetch` export like Hono, or an
-Express-style server.
+Lambda. Bring an Effect `fetch` handler or your own server (Hono, Express,
+Fastify), which Alchemy deploys unchanged.
 
 Responses stream. A Web Function sends each chunk as your handler
 produces it, so token-by-token AI responses and server-sent events just

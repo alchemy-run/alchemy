@@ -25,8 +25,7 @@ import {
 } from "./fixtures/web/not-http.ts";
 import RdsWebFunctionLive, { RdsWebFunction, RdsWebInfra } from "./fixtures/web/rds-web.ts";
 
-const asyncFetchMain = fileURLToPath(new URL("./fixtures/web/async-fetch.ts", import.meta.url));
-const asyncListenMain = fileURLToPath(new URL("./fixtures/web/async-listen.ts", import.meta.url));
+const asyncServerMain = fileURLToPath(new URL("./fixtures/web/async-server.ts", import.meta.url));
 const prebuiltMain = fileURLToPath(new URL("./fixtures/web/prebuilt/server.mjs", import.meta.url));
 
 const { test } = Test.make({ providers: AWS.providers() });
@@ -105,14 +104,14 @@ const expectFunctionDeleted = (functionName: string, roleName: string) =>
   });
 
 test.provider(
-  "async fetch export: create, update, delete",
+  "async server deployed as-is: create, update, delete",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
 
       const declare = (props: Partial<AWS.Lambda.WebFunctionProps>) =>
-        AWS.Lambda.WebFunction("AsyncFetch", {
-          main: asyncFetchMain,
+        AWS.Lambda.WebFunction("AsyncServer", {
+          main: asyncServerMain,
           authType: "ApplicationManaged",
           ...props,
         });
@@ -123,7 +122,9 @@ test.provider(
 
       const root = yield* send(HttpClientRequest.get(created.url));
       expect(yield* root.text).toBe("greeting=hello");
-      expect(root.headers["x-fixture"]).toBe("async-fetch");
+      expect(root.headers["x-fixture"]).toBe("async-server");
+      // The server runs unwrapped: nothing set listen variables for it.
+      expect(root.headers["x-port-env"]).toBe("unset");
       expect(root.headers["lambda-web-request-id"]).toBeTruthy();
 
       const echo = yield* send(
@@ -151,7 +152,7 @@ test.provider(
 
       // Re-planning unchanged props is a noop.
       const plan = yield* stack.plan(declare({ env: { GREETING: "hello" } }));
-      expect(plan.resources.AsyncFetch).toMatchObject({ action: "noop" });
+      expect(plan.resources.AsyncServer).toMatchObject({ action: "noop" });
 
       // Update: new env + concurrency create a revision; the endpoint
       // shifts to it and picks up the rate limit.
@@ -222,30 +223,6 @@ test.provider(
 );
 
 test.provider(
-  "async server that listens on its own",
-  (stack) =>
-    Effect.gen(function* () {
-      yield* stack.destroy();
-
-      const fn = yield* stack.deploy(
-        AWS.Lambda.WebFunction("AsyncListen", {
-          main: asyncListenMain,
-          authType: "ApplicationManaged",
-          // Fixtures live inside the `alchemy` package, which the bundler
-          // marks pure: its top-level `listen()` call would be dropped.
-          build: { pure: false },
-        }),
-      );
-      const body = yield* getText(`${fn.url}/hello`);
-      expect(body).toMatch(/^listening on .+:\d+ path=\/hello$/);
-
-      yield* stack.destroy();
-      yield* expectFunctionDeleted(fn.functionName, fn.roleName);
-    }).pipe(Effect.onError(() => stack.destroy().pipe(Effect.ignore))),
-  { tags, timeout: 240_000 },
-);
-
-test.provider(
   "Effect fetch handler with bindings and streaming",
   (stack) =>
     Effect.gen(function* () {
@@ -306,7 +283,7 @@ test.provider(
       yield* stack.destroy();
 
       const declaration = AWS.Lambda.WebFunction("Rejected", {
-        main: asyncFetchMain,
+        main: asyncServerMain,
         authType: "ApplicationManaged",
         // Reserved for Lambda: CreateWebFunction rejects the revision after
         // the execution role already exists.
@@ -375,7 +352,7 @@ test.provider.skipIf(!!process.env.FAST)(
             });
             const sg = yield* AWS.EC2.SecurityGroup("WebVpcSg", { vpcId: network.vpcId });
             const fn = yield* AWS.Lambda.WebFunction("VpcFunction", {
-              main: asyncFetchMain,
+              main: asyncServerMain,
               authType: "ApplicationManaged",
               ...(withVpc
                 ? { vpc: { subnetIds: network.privateSubnetIds, securityGroupIds: [sg.groupId] } }
@@ -426,7 +403,7 @@ test.provider.skipIf(!!process.env.FAST)(
       const multiRegion = yield* stack
         .plan(
           AWS.Lambda.WebFunction("VpcFunction", {
-            main: asyncFetchMain,
+            main: asyncServerMain,
             authType: "ApplicationManaged",
             vpc: { subnetIds: ["subnet-0"], securityGroupIds: ["sg-0"] },
             regions: ["us-east-1"],
@@ -470,7 +447,7 @@ test.provider.skipIf(!!process.env.FAST)(
       const deploy = (regions: string[] | undefined) =>
         stack.deploy(
           AWS.Lambda.WebFunction("Global", {
-            main: asyncFetchMain,
+            main: asyncServerMain,
             authType: "ApplicationManaged",
             env: { GREETING: "global" },
             ...(regions ? { regions } : {}),
@@ -570,7 +547,7 @@ test.provider(
         );
       const fn = (props: Partial<AWS.Lambda.WebFunctionProps>) =>
         AWS.Lambda.WebFunction("Invalid", {
-          main: asyncFetchMain,
+          main: asyncServerMain,
           authType: "ApplicationManaged",
           ...props,
         });
