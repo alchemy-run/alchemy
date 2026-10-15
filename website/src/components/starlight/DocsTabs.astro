@@ -31,8 +31,8 @@ const current = activeTab(Astro.url.pathname);
     }
 
     {/* One hover dropdown per hub category (single-hub categories
-        share "More"); the group you're in is underlined and its current hub
-        is highlighted inside. */}
+        share "More"); the group you're in is underlined and names the
+        current hub ("Clouds · AWS"). */}
     {
       DOCS_TAB_GROUPS.map((group) => {
         const activeHere = groupTabs(group).some((tab) => tab.label === current.label);
@@ -44,6 +44,7 @@ const current = activeTab(Astro.url.pathname);
               aria-haspopup="true"
             >
               {group.label}
+              {activeHere && <span class="alc-tabs__trigger-current">{current.label}</span>}
               <svg
                 class="alc-tabs__chevron"
                 aria-hidden="true"
@@ -150,6 +151,13 @@ const current = activeTab(Astro.url.pathname);
   }
   .alc-tabs__trigger {
     user-select: none;
+  }
+  /* "Clouds · AWS" — names the hub you're in without a tab per hub. */
+  .alc-tabs__trigger-current::before {
+    content: "·";
+    margin-inline-end: 7px;
+    color: var(--alc-fg-4);
+    font-weight: 400;
   }
   /* Menus open on hover and collapse as soon as the pointer leaves the
      trigger + menu. Keyboard users open them by tabbing in (:focus-visible
