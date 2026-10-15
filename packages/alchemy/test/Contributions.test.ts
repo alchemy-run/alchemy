@@ -7,6 +7,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Alchemist from "@/Alchemist/index.ts";
+import * as CliKit from "@/Cli/CliKit/index.ts";
 import { providerCommand } from "@/Cli/commands/provider.ts";
 import * as Contributions from "@/Contributions.ts";
 
@@ -65,193 +66,197 @@ const contributingPackage = (name: string, provider: string): Dependency => ({
   files: { "Contributions.js": provider },
 });
 
-layer(NodeServices.layer)("Contributions.load", (it) => {
-  it.effect("loads alchemy's own providers and a dependency's", () =>
-    Effect.gen(function* () {
-      const root = yield* project({
-        "fake-provider": contributingPackage(
-          "fake-provider",
-          `export default { name: "fake", stateStores: { fake: { description: "Fake store" } } };`,
-        ),
-      });
-      const providers = yield* Contributions.load(root);
-      const names = providers.map((provider) => provider.name);
-      expect(names).toEqual(expect.arrayContaining(["aws", "cloudflare", "prisma", "fake"]));
-      expect(
-        providers.find((provider) => provider.name === "fake")?.stateStores?.fake?.description,
-      ).toBe("Fake store");
-    }).pipe(Effect.scoped),
-  );
-
-  it.effect("skips dependencies without providers and ones not installed", () =>
-    Effect.gen(function* () {
-      const root = yield* project({
-        "plain-package": { manifest: { exports: { ".": "./index.js" } } },
-        "not-installed": {},
-      });
-      const own = yield* Contributions.load(process.cwd());
-      const providers = yield* Contributions.load(root);
-      expect(providers.map((provider) => provider.name)).toEqual(
-        own.map((provider) => provider.name),
-      );
-    }).pipe(Effect.scoped),
-  );
-
-  it.effect("a dependency's provider replaces alchemy's own of the same name", () =>
-    Effect.gen(function* () {
-      const root = yield* project({
-        "aws-package": contributingPackage(
-          "aws-package",
-          `export default { name: "aws", from: "aws-package" };`,
-        ),
-      });
-      const aws = (yield* Contributions.load(root)).filter((provider) => provider.name === "aws");
-      expect(aws).toHaveLength(1);
-      expect(aws[0]).toMatchObject({ from: "aws-package" });
-    }).pipe(Effect.scoped),
-  );
-
-  it.effect("skips a second dependency provider with a taken name", () =>
-    Effect.gen(function* () {
-      const root = yield* project({
-        "first-acme": contributingPackage(
-          "first-acme",
-          `export default { name: "acme", from: "first" };`,
-        ),
-        "second-acme": contributingPackage(
-          "second-acme",
-          `export default { name: "acme", from: "second" };`,
-        ),
-      });
-      const acme = (yield* Contributions.load(root)).filter((provider) => provider.name === "acme");
-      expect(acme).toHaveLength(1);
-      expect(acme[0]).toMatchObject({ from: "first" });
-    }).pipe(Effect.scoped),
-  );
-
-  it.effect("skips a provider that fails to load, keeping the others", () =>
-    Effect.gen(function* () {
-      const root = yield* project({
-        "no-default": contributingPackage(
-          "no-default",
-          `export const provider = { name: "nope" };`,
-        ),
-        "fake-provider": contributingPackage("fake-provider", `export default { name: "fake" };`),
-      });
-      const names = (yield* Contributions.load(root)).map((provider) => provider.name);
-      expect(names).toContain("fake");
-      expect(names).toContain("aws");
-      expect(names).not.toContain("nope");
-    }).pipe(Effect.scoped),
-  );
-  it.effect("resolves a dependency's provider with import conditions", () =>
-    Effect.gen(function* () {
-      const root = yield* project({
-        "import-only": {
-          manifest: {
-            exports: { "./Contributions": { import: "./Contributions.js" } },
-            alchemy: { contributes: ["import-only/Contributions"] },
-          },
-          files: { "Contributions.js": `export default { name: "import-only" };` },
-        },
-        dual: {
-          manifest: {
-            exports: {
-              "./Contributions": { require: "./Contributions.cjs", import: "./Contributions.js" },
-            },
-            alchemy: { contributes: ["dual/Contributions"] },
-          },
-          files: {
-            "Contributions.js": `export default { name: "dual-esm" };`,
-            "Contributions.cjs": `module.exports = { default: { name: "dual-cjs" } };`,
-          },
-        },
-      });
-      const names = (yield* Contributions.load(root)).map((provider) => provider.name);
-      expect(names).toContain("import-only");
-      expect(names).toContain("dual-esm");
-      expect(names).not.toContain("dual-cjs");
-    }).pipe(Effect.scoped),
-  );
-
-  it.effect("skips a provider whose specifier names another package", () =>
-    Effect.gen(function* () {
-      const root = yield* project({
-        borrower: {
-          manifest: { alchemy: { contributes: ["fake-provider/Contributions"] } },
-        },
-      });
-      const own = yield* Contributions.load(process.cwd());
-      const providers = yield* Contributions.load(root);
-      expect(providers.map((provider) => provider.name)).toEqual(
-        own.map((provider) => provider.name),
-      );
-    }).pipe(Effect.scoped),
-  );
-
-  const storeNames = (dependencies: Record<string, string>) =>
-    Effect.gen(function* () {
-      const root = yield* project(
-        Object.fromEntries(
-          Object.entries(dependencies).map(([name, source]) => [
-            name,
-            contributingPackage(name, source),
-          ]),
-        ),
-      );
-      return yield* inDirectory(root, Contributions.stateStores());
-    });
-
-  it.effect(
-    "a provider contributes several state stores",
-    () =>
+describe("Contributions.load", { tags: ["unit", "local"] }, () =>
+  layer(NodeServices.layer)((it) => {
+    it.effect("loads alchemy's own providers and a dependency's", () =>
       Effect.gen(function* () {
-        const stores = yield* storeNames({
-          "multi-store": `export default { name: "multi", stateStores: {
+        const root = yield* project({
+          "fake-provider": contributingPackage(
+            "fake-provider",
+            `export default { name: "fake", stateStores: { fake: { description: "Fake store" } } };`,
+          ),
+        });
+        const providers = yield* Contributions.load(root);
+        const names = providers.map((provider) => provider.name);
+        expect(names).toEqual(expect.arrayContaining(["aws", "cloudflare", "prisma", "fake"]));
+        expect(
+          providers.find((provider) => provider.name === "fake")?.stateStores?.fake?.description,
+        ).toBe("Fake store");
+      }).pipe(Effect.scoped),
+    );
+
+    it.effect("skips dependencies without providers and ones not installed", () =>
+      Effect.gen(function* () {
+        const root = yield* project({
+          "plain-package": { manifest: { exports: { ".": "./index.js" } } },
+          "not-installed": {},
+        });
+        const own = yield* Contributions.load(process.cwd());
+        const providers = yield* Contributions.load(root);
+        expect(providers.map((provider) => provider.name)).toEqual(
+          own.map((provider) => provider.name),
+        );
+      }).pipe(Effect.scoped),
+    );
+
+    it.effect("a dependency's provider replaces alchemy's own of the same name", () =>
+      Effect.gen(function* () {
+        const root = yield* project({
+          "aws-package": contributingPackage(
+            "aws-package",
+            `export default { name: "aws", from: "aws-package" };`,
+          ),
+        });
+        const aws = (yield* Contributions.load(root)).filter((provider) => provider.name === "aws");
+        expect(aws).toHaveLength(1);
+        expect(aws[0]).toMatchObject({ from: "aws-package" });
+      }).pipe(Effect.scoped),
+    );
+
+    it.effect("skips a second dependency provider with a taken name", () =>
+      Effect.gen(function* () {
+        const root = yield* project({
+          "first-acme": contributingPackage(
+            "first-acme",
+            `export default { name: "acme", from: "first" };`,
+          ),
+          "second-acme": contributingPackage(
+            "second-acme",
+            `export default { name: "acme", from: "second" };`,
+          ),
+        });
+        const acme = (yield* Contributions.load(root)).filter(
+          (provider) => provider.name === "acme",
+        );
+        expect(acme).toHaveLength(1);
+        expect(acme[0]).toMatchObject({ from: "first" });
+      }).pipe(Effect.scoped),
+    );
+
+    it.effect("skips a provider that fails to load, keeping the others", () =>
+      Effect.gen(function* () {
+        const root = yield* project({
+          "no-default": contributingPackage(
+            "no-default",
+            `export const provider = { name: "nope" };`,
+          ),
+          "fake-provider": contributingPackage("fake-provider", `export default { name: "fake" };`),
+        });
+        const names = (yield* Contributions.load(root)).map((provider) => provider.name);
+        expect(names).toContain("fake");
+        expect(names).toContain("aws");
+        expect(names).not.toContain("nope");
+      }).pipe(Effect.scoped),
+    );
+    it.effect("resolves a dependency's provider with import conditions", () =>
+      Effect.gen(function* () {
+        const root = yield* project({
+          "import-only": {
+            manifest: {
+              exports: { "./Contributions": { import: "./Contributions.js" } },
+              alchemy: { contributes: ["import-only/Contributions"] },
+            },
+            files: { "Contributions.js": `export default { name: "import-only" };` },
+          },
+          dual: {
+            manifest: {
+              exports: {
+                "./Contributions": { require: "./Contributions.cjs", import: "./Contributions.js" },
+              },
+              alchemy: { contributes: ["dual/Contributions"] },
+            },
+            files: {
+              "Contributions.js": `export default { name: "dual-esm" };`,
+              "Contributions.cjs": `module.exports = { default: { name: "dual-cjs" } };`,
+            },
+          },
+        });
+        const names = (yield* Contributions.load(root)).map((provider) => provider.name);
+        expect(names).toContain("import-only");
+        expect(names).toContain("dual-esm");
+        expect(names).not.toContain("dual-cjs");
+      }).pipe(Effect.scoped),
+    );
+
+    it.effect("skips a provider whose specifier names another package", () =>
+      Effect.gen(function* () {
+        const root = yield* project({
+          borrower: {
+            manifest: { alchemy: { contributes: ["fake-provider/Contributions"] } },
+          },
+        });
+        const own = yield* Contributions.load(process.cwd());
+        const providers = yield* Contributions.load(root);
+        expect(providers.map((provider) => provider.name)).toEqual(
+          own.map((provider) => provider.name),
+        );
+      }).pipe(Effect.scoped),
+    );
+
+    const storeNames = (dependencies: Record<string, string>) =>
+      Effect.gen(function* () {
+        const root = yield* project(
+          Object.fromEntries(
+            Object.entries(dependencies).map(([name, source]) => [
+              name,
+              contributingPackage(name, source),
+            ]),
+          ),
+        );
+        return yield* inDirectory(root, Contributions.stateStores());
+      });
+
+    it.effect(
+      "a provider contributes several state stores",
+      () =>
+        Effect.gen(function* () {
+          const stores = yield* storeNames({
+            "multi-store": `export default { name: "multi", stateStores: {
             "multi-kv": { description: "KV" },
             "multi-sql": { description: "SQL" },
           } };`,
-        });
-        expect(stores.get("multi-kv")?.provider.name).toBe("multi");
-        expect(stores.get("multi-sql")?.store.description).toBe("SQL");
-        expect(stores.get("aws")?.provider.name).toBe("aws");
-      }).pipe(Effect.scoped),
-    // Exclusive: changes the process's working directory.
-    { exclusive: true },
-  );
+          });
+          expect(stores.get("multi-kv")?.provider.name).toBe("multi");
+          expect(stores.get("multi-sql")?.store.description).toBe("SQL");
+          expect(stores.get("aws")?.provider.name).toBe("aws");
+        }).pipe(Effect.scoped),
+      // Exclusive: changes the process's working directory.
+      { exclusive: true },
+    );
 
-  it.effect(
-    "two providers contributing one state store name is an error",
-    () =>
-      Effect.gen(function* () {
-        const error = yield* Effect.flip(
-          storeNames({
-            "aws-store": `export default { name: "other", stateStores: { aws: { description: "S3" } } };`,
-          }),
-        );
-        expect(contributionErrorMessage(error)).toBe(
-          "aws and other both contribute a state store named aws",
-        );
-      }).pipe(Effect.scoped),
-    { exclusive: true },
-  );
+    it.effect(
+      "two providers contributing one state store name is an error",
+      () =>
+        Effect.gen(function* () {
+          const error = yield* Effect.flip(
+            storeNames({
+              "aws-store": `export default { name: "other", stateStores: { aws: { description: "S3" } } };`,
+            }),
+          );
+          expect(contributionErrorMessage(error)).toBe(
+            "aws and other both contribute a state store named aws",
+          );
+        }).pipe(Effect.scoped),
+      { exclusive: true },
+    );
 
-  it.effect(
-    "a state store named after a backend alchemy reserves is an error",
-    () =>
-      Effect.gen(function* () {
-        const error = yield* Effect.flip(
-          storeNames({
-            "local-store": `export default { name: "other", stateStores: { local: { description: "Local" } } };`,
-          }),
-        );
-        expect(contributionErrorMessage(error)).toBe(
-          "other and alchemy both contribute a state store named local",
-        );
-      }).pipe(Effect.scoped),
-    { exclusive: true },
-  );
-});
+    it.effect(
+      "a state store named after a backend alchemy reserves is an error",
+      () =>
+        Effect.gen(function* () {
+          const error = yield* Effect.flip(
+            storeNames({
+              "local-store": `export default { name: "other", stateStores: { local: { description: "Local" } } };`,
+            }),
+          );
+          expect(contributionErrorMessage(error)).toBe(
+            "other and alchemy both contribute a state store named local",
+          );
+        }).pipe(Effect.scoped),
+      { exclusive: true },
+    );
+  }),
+);
 
 /** The message of the `ContributionError` a lifecycle route failed with. */
 const contributionErrorMessage = (error: unknown) => {
@@ -314,50 +319,54 @@ export default {
   );
 });
 
-layer(Alchemist.layer())("Alchemist.State lifecycle", (it) => {
-  it.effect(
-    "a store's resources stay open until the caller's scope closes",
-    () =>
-      Effect.gen(function* () {
-        const path = yield* Path.Path;
-        const root = yield* project(
-          { "scoped-store": yield* scopedStoreContributions },
-          { directory: path.resolve(import.meta.dirname, "../.alchemy/test-providers") },
-        );
-        const stacks = yield* inDirectory(
-          root,
-          Effect.scoped(
-            Effect.flatMap(
-              Alchemist.State.store({ _tag: "Provider", backend: "scoped-store" }),
-              (store) => store.listStacks(),
+describe("Alchemist.State lifecycle", { tags: ["unit", "local"] }, () =>
+  layer(Alchemist.layer())((it) => {
+    it.effect(
+      "a store's resources stay open until the caller's scope closes",
+      () =>
+        Effect.gen(function* () {
+          const path = yield* Path.Path;
+          const root = yield* project(
+            { "scoped-store": yield* scopedStoreContributions },
+            { directory: path.resolve(import.meta.dirname, "../.alchemy/test-providers") },
+          );
+          const stacks = yield* inDirectory(
+            root,
+            Effect.scoped(
+              Effect.flatMap(
+                Alchemist.State.store({ _tag: "Provider", backend: "scoped-store" }),
+                (store) => store.listStacks(),
+              ),
             ),
-          ),
+          );
+          expect(stacks).toEqual(["open"]);
+          expect(globalThis.__scopedStoreState).toBe("closed");
+        }).pipe(Effect.scoped),
+      // Exclusive: changes the process's working directory.
+      { exclusive: true },
+    );
+
+    it.effect("rejects an unknown backend", () =>
+      Effect.gen(function* () {
+        const error = yield* Effect.flip(
+          Alchemist.State.bootstrap({ _tag: "Provider", backend: "nope" }),
         );
-        expect(stacks).toEqual(["open"]);
-        expect(globalThis.__scopedStoreState).toBe("closed");
-      }).pipe(Effect.scoped),
-    // Exclusive: changes the process's working directory.
-    { exclusive: true },
-  );
+        expect(contributionErrorMessage(error)).toBe(
+          "Unknown state backend 'nope'. Available: local, configured, aws, cloudflare.",
+        );
+      }),
+    );
 
-  it.effect("rejects an unknown backend", () =>
-    Effect.gen(function* () {
-      const error = yield* Effect.flip(
-        Alchemist.State.bootstrap({ _tag: "Provider", backend: "nope" }),
-      );
-      expect(contributionErrorMessage(error)).toBe(
-        "Unknown state backend 'nope'. Available: local, configured, aws, cloudflare.",
-      );
-    }),
-  );
-
-  it.effect("rejects an operation the backend doesn't have", () =>
-    Effect.gen(function* () {
-      const error = yield* Effect.flip(Alchemist.State.logs({ _tag: "Provider", backend: "aws" }));
-      expect(contributionErrorMessage(error)).toBe("State backend 'aws' does not support logs.");
-    }),
-  );
-});
+    it.effect("rejects an operation the backend doesn't have", () =>
+      Effect.gen(function* () {
+        const error = yield* Effect.flip(
+          Alchemist.State.logs({ _tag: "Provider", backend: "aws" }),
+        );
+        expect(contributionErrorMessage(error)).toBe("State backend 'aws' does not support logs.");
+      }),
+    );
+  }),
+);
 
 const cliContributions = (
   name: string,
@@ -374,13 +383,13 @@ const workingCli = cliContributions(
   Effect.succeed(Command.make("working", {}, () => Effect.void)),
 );
 
-describe("alchemy provider", () => {
+describe("alchemy provider", { tags: ["unit", "local"] }, () => {
   it.live("a provider whose CLI fails to load doesn't block another's", () =>
     Effect.gen(function* () {
       const command = yield* Effect.promise(() => providerCommand([brokenCli, workingCli]));
       const run = (args: ReadonlyArray<string>) =>
         Command.runWith(command, { version: "test" })(args).pipe(
-          Effect.provide(NodeServices.layer),
+          Effect.provide(Layer.mergeAll(Alchemist.layer(), CliKit.layer({ input: false }))),
         );
       yield* run(["working"]);
       const error = yield* Effect.flip(run(["broken"]));
@@ -389,7 +398,7 @@ describe("alchemy provider", () => {
   );
 });
 
-describe("Contributions contract", () => {
+describe("Contributions contract", { tags: ["unit", "local"] }, () => {
   it("rejects a field requiring a service no host provides", () => {
     class PrivateClient extends Context.Service<PrivateClient, { readonly id: string }>()(
       "PrivateClient",

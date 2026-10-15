@@ -49,11 +49,8 @@ const teardownStateBucket = Effect.fn("AWS.state.teardown")(function* (name?: st
   return { bucketName, deleted: true };
 });
 
-/**
- * The AWS environment of the profile core runs the operation under. Fresh,
- * like the store's own layer, so it reads that profile's credentials.
- */
-const environment = Layer.fresh(stateEnvironment());
+/** The AWS environment of the profile core runs the operation under. */
+const environment = stateEnvironment();
 
 /**
  * The S3 state store's lifecycle, for `Alchemist.State` and `alchemy state`.

@@ -127,7 +127,10 @@ it.live(
         expect(scoped.accountId).toBe(STAGING_ACCOUNT);
       }),
     ),
-  { tags: ["unit", "local"], exclusive: true },
+  {
+    tags: ["unit", "provider:cloudflare", "provider:cloudflare:statestore", "local"],
+    exclusive: true,
+  },
 );
 
 it.live(
@@ -147,7 +150,10 @@ it.live(
         expect(scoped.accountId).toBe(DEFAULT_ACCOUNT);
       }),
     ),
-  { tags: ["unit", "local"], exclusive: true },
+  {
+    tags: ["unit", "provider:cloudflare", "provider:cloudflare:statestore", "local"],
+    exclusive: true,
+  },
 );
 
 it.live(
@@ -177,5 +183,8 @@ it.live(
         }
       }),
     ),
-  { tags: ["unit", "local"], exclusive: true },
+  {
+    tags: ["unit", "provider:cloudflare", "provider:cloudflare:statestore", "local"],
+    exclusive: true,
+  },
 );

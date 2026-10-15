@@ -16,12 +16,8 @@ import { flociServices } from "./FlociServices.ts";
 const rewriteVirtualHostToFloci = (
   request: HttpClientRequest.HttpClientRequest,
 ): HttpClientRequest.HttpClientRequest => {
-  let url: URL;
-  try {
-    url = new URL(request.url);
-  } catch {
-    return request;
-  }
+  if (!URL.canParse(request.url)) return request;
+  const url = new URL(request.url);
   if (
     !/\.s3-website-[a-z0-9-]+\.amazonaws\.com$/i.test(url.hostname) &&
     !/\.appsync-api\.[a-z0-9-]+\.amazonaws\.com$/i.test(url.hostname) &&

@@ -24,19 +24,15 @@ import {
 
 /**
  * The profile, Cloudflare account and clients a store's lifecycle operation
- * runs with, under the profile config and auth registry core provides. Fresh,
- * so it reads that profile's credentials even when the process already built
- * Cloudflare's layers for another one.
+ * runs with, under the profile config and auth registry core provides.
  */
 export const stateStoreScope = Effect.fn(function* (name: string | undefined) {
   if (name !== undefined) yield* Provisioning.storeName(name);
-  const layer = Layer.fresh(
-    Layer.mergeAll(
-      CloudflareCredentials.fromAuthProvider(),
-      CloudflareEnvironment.fromProfile(),
-      CloudflareAccess.AccessLive,
-      Logger.layer([fileLogger("cloudflare.txt")], { mergeWithExisting: true }),
-    ),
+  const layer = Layer.mergeAll(
+    CloudflareCredentials.fromAuthProvider(),
+    CloudflareEnvironment.fromProfile(),
+    CloudflareAccess.AccessLive,
+    Logger.layer([fileLogger("cloudflare-state-store.log")], { mergeWithExisting: true }),
   );
   const { accountId } = yield* Effect.flatten(CloudflareEnvironment.CloudflareEnvironment).pipe(
     Effect.provide(layer),

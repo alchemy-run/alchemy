@@ -55,12 +55,7 @@ const placeholderCommand = (name: CommandName, description: string) =>
 const loadContributions = () =>
   Effect.runPromise(
     Contributions.load().pipe(
-      Effect.catch((error) =>
-        Effect.as(
-          Effect.sync(() => console.error(`warning: ${error.message}`)),
-          [],
-        ),
-      ),
+      Effect.catch((error) => Effect.as(Effect.logWarning(error.message), [])),
       Effect.provide(PlatformServices),
     ),
   );
@@ -201,9 +196,7 @@ const services = Layer.mergeAll(
   // merges with them. Listed as `mergeAll` siblings, whichever came last
   // would win the `CurrentLoggers` slot and silently drop the other.
   Layer.provideMerge(TelemetryLive, Layer.provide(GlobalLogLive, PlatformServices)),
-  // Contributed commands may require every `Contributions.CliServices` service; the cast
-  // on `main` below would hide one missing here.
-) satisfies Layer.Layer<Contributions.CliServices, unknown, unknown>;
+);
 
 const program = Effect.gen(function* () {
   yield* logRunHeader;

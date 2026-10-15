@@ -81,5 +81,9 @@ test.provider(
       expect(yield* bucketExists(bucket)).toBe(false);
     }),
   // Exclusive: sets `CI` on the process.
-  { timeout: 180_000, exclusive: true },
+  {
+    tags: ["provider:aws", "provider:aws:s3", "provider:aws:statestore", "live"],
+    timeout: 180_000,
+    exclusive: true,
+  },
 );

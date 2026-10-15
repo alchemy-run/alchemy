@@ -10,6 +10,14 @@ import * as State from "../../State/index.ts";
 import { loadConfigProvider } from "../../Util/ConfigProvider.ts";
 import { open, StackEntrypointError, type Target } from "../Session.ts";
 
+/**
+ * Build a provider's layers from scratch: the process may already have built
+ * them (credentials, auth registration) for another profile, and layers are
+ * memoized process-wide.
+ */
+const isolated = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+  Effect.provideServiceEffect(effect, Layer.CurrentMemoMap, Layer.makeMemoMap);
+
 /** Which store a state request addresses. */
 export type StateSource =
   /** `.alchemy/` on this machine, ignoring whatever the project configures. */
@@ -60,9 +68,7 @@ export const providerContext = Effect.fn(function* (
   const auth = provider.auth
     ? yield* Contributions.resolve(provider, "auth", provider.auth)
     : Layer.empty;
-  // Fresh: the provider's auth registers into this registry even when the
-  // process already built it for another one.
-  return Layer.fresh(auth).pipe(
+  return auth.pipe(
     Layer.provideMerge(Layer.succeed(AuthProviders, {} satisfies AuthProviders["Service"])),
     Layer.provideMerge(config),
   );
@@ -93,10 +99,8 @@ export const store = Effect.fn("Alchemist.state.store")(function* (source: State
       const { provider, store } = yield* findBackend(source.backend);
       const { layer } = yield* store.load;
       const context = yield* Layer.build(
-        Layer.fresh(layer({ name: source.name })).pipe(
-          Layer.provide(yield* providerContext(provider, source)),
-        ),
-      );
+        layer({ name: source.name }).pipe(Layer.provide(yield* providerContext(provider, source))),
+      ).pipe(isolated);
       return yield* Effect.provide(Effect.flatten(State.State), context);
     }
     case "Configured": {
@@ -150,13 +154,16 @@ export const bootstrap = Effect.fn("Alchemist.state.bootstrap")(function* (
   source: ProviderSource & { readonly force?: boolean },
 ) {
   const { run, context } = yield* lifecycleOperation(source, "bootstrap");
-  return yield* run({ name: source.name, force: source.force }).pipe(Effect.provide(context));
+  return yield* run({ name: source.name, force: source.force }).pipe(
+    Effect.provide(context),
+    isolated,
+  );
 });
 
 /** Delete a state store and its backing resources. */
 export const teardown = Effect.fn("Alchemist.state.teardown")(function* (source: ProviderSource) {
   const { run, context } = yield* lifecycleOperation(source, "teardown");
-  return yield* run({ name: source.name }).pipe(Effect.provide(context));
+  return yield* run({ name: source.name }).pipe(Effect.provide(context), isolated);
 });
 
 /** Past log entries from a state store, oldest first. */
@@ -166,6 +173,7 @@ export const logs = Effect.fn("Alchemist.state.logs")(function* (
   const { run, context } = yield* lifecycleOperation(source, "logs");
   return yield* run({ name: source.name, limit: source.limit, since: source.since }).pipe(
     Effect.provide(context),
+    isolated,
   );
 });
 
@@ -173,6 +181,9 @@ export const logs = Effect.fn("Alchemist.state.logs")(function* (
 export const tailLogs = (source: ProviderSource) =>
   Stream.unwrap(
     Effect.map(lifecycleOperation(source, "tailLogs"), ({ run, context }) =>
-      run({ name: source.name }).pipe(Stream.provide(context)),
+      run({ name: source.name }).pipe(
+        Stream.provide(context),
+        Stream.provideServiceEffect(Layer.CurrentMemoMap, Layer.makeMemoMap),
+      ),
     ),
   );

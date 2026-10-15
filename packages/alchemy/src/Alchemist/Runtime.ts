@@ -5,7 +5,6 @@ import { AlchemyContextLive } from "../AlchemyContext.ts";
 import { ArtifactStore, createArtifactStore } from "../Artifacts.ts";
 import { CredentialsStoreLive } from "../Auth/Credentials.ts";
 import { ProfileStoreLive } from "../Auth/Profile.ts";
-import type { HostServices } from "../Contributions.ts";
 import * as Interaction from "../Interaction.ts";
 import { PlatformServices } from "../Util/PlatformServices.ts";
 import { routeCacheLayer } from "./Session.ts";
@@ -39,5 +38,4 @@ export const layer = () =>
     Layer.succeed(ArtifactStore, createArtifactStore()),
     routeCacheLayer,
     Interaction.layerNonInteractive(),
-    // Provider contributions run under `Contributions.HostServices`; all of it must be here.
-  ) satisfies Layer.Layer<HostServices, unknown, unknown>;
+  );

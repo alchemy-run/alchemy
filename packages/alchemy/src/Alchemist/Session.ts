@@ -323,15 +323,10 @@ const contributedAuth = Effect.fn("contributedAuth")(function* () {
   const layers = yield* Effect.forEach(
     yield* Contributions.load(),
     (provider) =>
-      provider.auth
-        ? Contributions.resolve(provider, "auth", provider.auth)
-        : Effect.succeed(undefined),
+      provider.auth ? Contributions.resolve(provider, "auth", provider.auth) : Effect.void,
     { concurrency: "unbounded" },
   );
-  return layers.reduce<Layer.Layer<never, never, any>>(
-    (merged, layer) => (layer === undefined ? merged : Layer.merge(merged, layer)),
-    Layer.empty,
-  );
+  return Layer.mergeAll(Layer.empty, ...layers.filter((layer) => layer !== undefined));
 });
 
 const buildContributedAuthProviders = Effect.fn("buildContributedAuthProviders")(

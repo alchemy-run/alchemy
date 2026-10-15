@@ -268,18 +268,7 @@ export const state = (options: S3StateOptions = {}) =>
 
       return yield* Effect.cached(make);
     }),
-  ).pipe(
-    // Fresh per call: these derive from the environment below, and shared
-    // (memoized) instances built for another environment in the same run
-    // would shadow an `AWSEnvironment` provided to this layer.
-    Layer.provideMerge(Layer.fresh(AwsRegion.fromEnvironment)),
-    Layer.provideMerge(Layer.fresh(AwsCredentials.fromEnvironment)),
-    Layer.provideMerge(Layer.fresh(Endpoint.fromEnvironment)),
-    Layer.provideMerge(providedOrDefault()),
-    Layer.provideMerge(AwsAuth),
-    Layer.provideMerge(CredentialsStoreLive),
-    Layer.orDie,
-  );
+  ).pipe(Layer.provideMerge(stateEnvironment()), Layer.orDie);
 
 /**
  * Construct an S3-backed {@link StateService}.
@@ -899,6 +888,9 @@ const ensureStateBucket = (bucket: string, region: string, options: S3StateOptio
 
 /** The profile's AWS environment, resolved the way {@link state} resolves it. */
 export const stateEnvironment = () =>
+  // Fresh per call: these derive from the environment below, and shared
+  // (memoized) instances built for another environment in the same run
+  // would shadow an `AWSEnvironment` provided to this layer.
   Layer.fresh(AwsRegion.fromEnvironment).pipe(
     Layer.provideMerge(Layer.fresh(AwsCredentials.fromEnvironment)),
     Layer.provideMerge(Layer.fresh(Endpoint.fromEnvironment)),

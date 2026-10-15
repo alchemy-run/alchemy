@@ -112,5 +112,9 @@ test.provider(
       expect(yield* defaultStacks()).toEqual(before);
     }),
   // Exclusive: sets `CI` on the process.
-  { timeout: 300_000, exclusive: true },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:statestore", "live"],
+    timeout: 300_000,
+    exclusive: true,
+  },
 );
