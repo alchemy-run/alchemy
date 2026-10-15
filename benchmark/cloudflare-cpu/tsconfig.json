@@ -1,0 +1,8 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "include": ["*.ts", "src/**/*.ts", "deep/*.ts"],
+  "compilerOptions": {
+    "rootDir": "."
+  },
+  "references": [{ "path": "../../packages/alchemy/tsconfig.json" }]
+}

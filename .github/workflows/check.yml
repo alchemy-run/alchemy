@@ -71,6 +71,9 @@ jobs:
       - name: Test CLI launcher
         run: timeout 240 pnpm test test/Cli/launcher.test.ts test/Cli/exitCodes.test.ts --retry 0 --concurrency 1
 
+      - name: Test Cloudflare CPU collectors
+        run: timeout 60 python3 -m unittest discover -s benchmark/cloudflare-cpu/tests -v
+
       - name: Check API JSDocs
         run: pnpm docs:check-jsdoc
 

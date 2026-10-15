@@ -503,6 +503,9 @@
     { "path": "./examples/neon-website-waku/tsconfig.json" },
     {
       "path": "./benchmark/container/tsconfig.json"
+    },
+    {
+      "path": "./benchmark/cloudflare-cpu/tsconfig.json"
     }
   ],
   "compilerOptions": {

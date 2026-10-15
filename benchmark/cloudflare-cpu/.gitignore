@@ -1,0 +1,24 @@
+# Local observations can include request metadata. Publish reviewed results explicitly.
+evidence/
+raw/
+*-latency.json
+*-observer.json
+*-versions*.json
+*-deployments*.json
+*-tail.jsonl
+*-cpu.json
+*-summary.json
+*-profile-error.json
+*.pprof
+*.pprof.gz
+*.log
+*.bak
+__pycache__/
+*.py[cod]
+*.tsbuildinfo
+dist/
+lib/
+.alchemy/
+
+!results/
+!results/**
