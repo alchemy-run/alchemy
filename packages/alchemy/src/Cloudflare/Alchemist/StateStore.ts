@@ -9,6 +9,7 @@ import type { LogEntry } from "../../Alchemist/routes/logs.ts";
 import type { Target } from "../../Alchemist/Session.ts";
 import { AuthProviders } from "../../Auth/AuthProvider.ts";
 import { resolveProfileName, withProfileOverride } from "../../Auth/Resolve.ts";
+import type { StateStoreLifecycle } from "../../Plugin.ts";
 import { loadConfigProvider } from "../../Util/ConfigProvider.ts";
 import { fileLogger } from "../../Util/FileLogger.ts";
 import * as CloudflareAccess from "../Access.ts";
@@ -171,3 +172,17 @@ export const tailStateLogs = (input: StateTarget) =>
       );
     }),
   );
+
+/** The state-store Worker's lifecycle, for `Alchemist.State` and `alchemy state`. */
+export const lifecycle: StateStoreLifecycle = {
+  bootstrap: (input) =>
+    bootstrap(input).pipe(
+      Effect.map(({ status, workerName, accountId, stateStoreVersion }) => ({
+        status,
+        summary: `State-store Worker '${workerName}' ${status} in account ${accountId} (version ${stateStoreVersion}).`,
+      })),
+    ),
+  teardown: (input) => teardown(input).pipe(Effect.map(({ deleted }) => ({ deleted }))),
+  logs: stateLogs,
+  tailLogs: tailStateLogs,
+};

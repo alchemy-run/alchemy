@@ -2,6 +2,7 @@ import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as Stream from "effect/Stream";
 import { AuthProviders } from "../../Auth/AuthProvider.ts";
 import { withProfileOverride } from "../../Auth/Resolve.ts";
 import * as Plugin from "../../Plugin.ts";
@@ -20,6 +21,20 @@ export type StateSource =
   | ({ readonly backend: string } & Pick<Target, "profile" | "envFile">)
   /** Whatever the project's entrypoint configures. */
   | ({ readonly backend: "configured" } & Target);
+
+/** A plugin's state store by `--backend` name. */
+const findBackend = Effect.fn(function* (name: string) {
+  const stores = yield* Plugin.stateStores();
+  const backend = stores.get(name);
+  if (backend === undefined) {
+    return yield* new Plugin.PluginError({
+      message: `Unknown state backend '${name}'. Available: local, configured${[...stores.keys()]
+        .map((store) => `, ${store}`)
+        .join("")}.`,
+    });
+  }
+  return backend;
+});
 
 /**
  * Resolve the state service a source addresses. The tree operations
@@ -40,17 +55,7 @@ export const store = Effect.fn("Alchemist.state.store")(function* (source: State
   }
   if (source.backend !== "configured") {
     const { profile, envFile } = source as Pick<Target, "profile" | "envFile">;
-    const stores = yield* Plugin.stateStores();
-    const backend = stores.get(source.backend);
-    if (backend === undefined) {
-      return yield* new Plugin.PluginError({
-        message: `Unknown state backend '${source.backend}'. Available: local, configured${[
-          ...stores.keys(),
-        ]
-          .map((name) => `, ${name}`)
-          .join("")}.`,
-      });
-    }
+    const backend = yield* findBackend(source.backend);
     const config = ConfigProvider.layer(
       withProfileOverride(yield* loadConfigProvider(Option.fromNullishOr(envFile)), profile),
     );
@@ -87,3 +92,62 @@ export const store = Effect.fn("Alchemist.state.store")(function* (source: State
 /** The chosen store as a `State` layer. */
 export const layer = (source: StateSource) =>
   Layer.effect(State.State, Effect.map(store(source), Effect.succeed));
+
+/** Which plugin state store a lifecycle request addresses. */
+export interface LifecycleTarget extends Plugin.StateStoreTarget {
+  /** A plugin state store's `--backend` name, e.g. `"cloudflare"`. */
+  readonly backend: string;
+}
+
+const lifecycleOperation = <K extends keyof Plugin.StateStoreLifecycle>(
+  backend: string,
+  operation: K,
+) =>
+  Effect.gen(function* () {
+    const store = yield* findBackend(backend);
+    const lifecycle = store.lifecycle
+      ? yield* Effect.tryPromise({
+          try: store.lifecycle,
+          catch: (cause) =>
+            new Plugin.PluginError({
+              message: `Could not load the lifecycle of state backend '${backend}'`,
+              cause,
+            }),
+        })
+      : undefined;
+    const run = lifecycle?.[operation];
+    if (run === undefined) {
+      return yield* new Plugin.PluginError({
+        message: `State backend '${backend}' has no ${operation}: it needs no provisioning.`,
+      });
+    }
+    return run as NonNullable<Plugin.StateStoreLifecycle[K]>;
+  });
+
+/** Provision (or adopt) a plugin's state store. */
+export const bootstrap = Effect.fn("Alchemist.state.bootstrap")(function* ({
+  backend,
+  ...input
+}: LifecycleTarget & { readonly force?: boolean }) {
+  return yield* (yield* lifecycleOperation(backend, "bootstrap"))(input);
+});
+
+/** Delete a plugin's state store and its backing resources. */
+export const teardown = Effect.fn("Alchemist.state.teardown")(function* ({
+  backend,
+  ...input
+}: LifecycleTarget) {
+  return yield* (yield* lifecycleOperation(backend, "teardown"))(input);
+});
+
+/** Past log entries from a plugin's state store, oldest first. */
+export const logs = Effect.fn("Alchemist.state.logs")(function* ({
+  backend,
+  ...input
+}: LifecycleTarget & { readonly limit?: number; readonly since?: Date }) {
+  return yield* (yield* lifecycleOperation(backend, "logs"))(input);
+});
+
+/** Live log entries from a plugin's state store. */
+export const tailLogs = ({ backend, ...input }: LifecycleTarget) =>
+  Stream.unwrap(Effect.map(lifecycleOperation(backend, "tailLogs"), (tail) => tail(input)));

@@ -3,6 +3,7 @@ import * as Argument from "effect/cli/Argument";
 import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
+import * as Stream from "effect/Stream";
 import * as AlchemistState from "../../Alchemist/routes/state.ts";
 import type { StateSource } from "../../Alchemist/routes/state.ts";
 import * as CliKit from "../../Cli/CliKit/index.ts";
@@ -11,9 +12,10 @@ import {
   stateExplorerScreen,
   type StateExplorerSource,
 } from "../components/view/StateExplorer.tsx";
+import { formatLocalTimestamp } from "../Format.ts";
 import { confirmOrDecline } from "./confirm.ts";
 import { failWithHelp, UserInputError } from "./errors.ts";
-import { envFile, profile, yes } from "./flags.ts";
+import { envFile, parseSince, profile, yes } from "./flags.ts";
 import { instrumentCommand } from "./instrument.ts";
 
 const backend = Flag.String("backend").pipe(
@@ -236,6 +238,110 @@ const nukeCommand = Command.make(
   Command.unlisted,
 );
 
+/** Lifecycle commands address a plugin's state store, never the configured one. */
+const lifecycleBackend = Flag.String("backend").pipe(
+  Flag.withDescription("State store to act on (e.g. cloudflare)"),
+);
+
+const lifecycleTarget = (args: {
+  readonly backend: string;
+  readonly profile: string | undefined;
+  readonly envFile: Option.Option<string>;
+}) => ({
+  backend: args.backend,
+  profile: args.profile,
+  envFile: Option.getOrUndefined(args.envFile),
+});
+
+const bootstrapCommand = Command.make(
+  "bootstrap",
+  {
+    envFile,
+    profile,
+    backend: lifecycleBackend,
+    force: Flag.Boolean("force").pipe(
+      Flag.withDescription("Redeploy an existing state store instead of adopting it"),
+      Flag.withDefault(false),
+    ),
+  },
+  instrumentCommand("state.bootstrap")(
+    Effect.fn(function* ({ force, ...args }) {
+      const result = yield* AlchemistState.bootstrap({ ...lifecycleTarget(args), force });
+      yield* CliKit.accessors.output.success(result.summary);
+    }),
+  ),
+).pipe(Command.withDescription("Provision (or adopt) a state store"));
+
+const teardownCommand = Command.make(
+  "teardown",
+  { envFile, profile, backend: lifecycleBackend, yes },
+  instrumentCommand("state.teardown")(
+    Effect.fn(function* ({ yes: approved, ...args }) {
+      yield* confirmOrDecline({
+        yes: approved,
+        message: `Tear down the ${args.backend} state store and its backing resources?`,
+        confirmLabel: "Destroy",
+        cancelLabel: "Cancel",
+      });
+      const result = yield* AlchemistState.teardown(lifecycleTarget(args));
+      yield* CliKit.accessors.output.success(
+        result.deleted.length === 0 ? "Nothing to delete" : `Deleted ${result.deleted.join(", ")}`,
+      );
+    }),
+  ),
+).pipe(Command.withDescription("Delete a state store and its backing resources"), Command.unlisted);
+
+const logsCommand = Command.make(
+  "logs",
+  {
+    envFile,
+    profile,
+    backend: lifecycleBackend,
+    tail: Flag.Boolean("tail").pipe(
+      Flag.withAlias("t"),
+      Flag.withDescription("Stream logs as they happen instead of fetching past entries"),
+      Flag.withDefault(false),
+    ),
+    limit: Flag.Int("limit").pipe(
+      Flag.withDescription("Number of log entries to fetch (ignored with --tail)"),
+      Flag.withDefault(100),
+    ),
+    since: Flag.String("since").pipe(
+      Flag.withDescription("Fetch logs since this time (e.g. '1h', '30m', '2024-01-01T00:00:00Z')"),
+      Flag.optional,
+      Flag.map(Option.getOrUndefined),
+    ),
+  },
+  instrumentCommand("state.logs")(
+    Effect.fn(function* ({ tail, limit, since, ...args }) {
+      const target = lifecycleTarget(args);
+      const format = (entry: {
+        timestamp: Date;
+        message: string;
+        resource: { logicalId: string };
+      }) =>
+        `${formatLocalTimestamp(entry.timestamp)} [${entry.resource.logicalId}] ${entry.message}`;
+      if (tail) {
+        yield* CliKit.accessors.output.info(`Tailing the ${args.backend} state store...`);
+        yield* AlchemistState.tailLogs(target).pipe(
+          Stream.runForEach((entry) => Console.log(format(entry))),
+        );
+        return;
+      }
+      const entries = yield* AlchemistState.logs({
+        ...target,
+        limit,
+        since: since ? yield* parseSince(since) : undefined,
+      });
+      if (entries.length === 0) {
+        yield* Console.log(`(no log entries for the ${args.backend} state store)`);
+        return;
+      }
+      for (const entry of entries) yield* Console.log(format(entry));
+    }),
+  ),
+).pipe(Command.withDescription("Fetch or stream a state store's own logs"));
+
 const unsafeCommand = Command.make("unsafe", {}).pipe(
   Command.withDescription("Destructive state operations"),
   Command.withSubcommands([nukeCommand]),
@@ -255,5 +361,13 @@ export const stateCommand = Command.make(
   ),
 ).pipe(
   Command.withDescription("Inspect and manage deployment state"),
-  Command.withSubcommands([listCommand, readCommand, deleteCommand, unsafeCommand]),
+  Command.withSubcommands([
+    listCommand,
+    readCommand,
+    deleteCommand,
+    bootstrapCommand,
+    teardownCommand,
+    logsCommand,
+    unsafeCommand,
+  ]),
 );

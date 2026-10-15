@@ -6,6 +6,9 @@ import type * as HttpClientRequest from "effect/http/HttpClientRequest";
 import type * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
+import type * as Stream from "effect/Stream";
+import type { LogEntry } from "./Alchemist/routes/logs.ts";
+import type { Services } from "./Alchemist/Runtime.ts";
 import type { State } from "./State/State.ts";
 import { UserFacingError } from "./UserFacingError.ts";
 
@@ -57,7 +60,56 @@ export interface StateStore {
    * with an `AuthProviders` registry in context.
    */
   readonly layer: Lazy<Layer.Layer<State, any, any>>;
+  /**
+   * Provisioning for a store that is infrastructure of its own, such as
+   * Cloudflare's state-store Worker. Omit it for a store that needs none,
+   * like AWS's S3 store, which creates its bucket on first use.
+   */
+  readonly lifecycle?: Lazy<StateStoreLifecycle>;
 }
+
+/** Which profile and `.env` a state-store operation acts under. */
+export interface StateStoreTarget {
+  /** Falls back to the active profile. */
+  readonly profile?: string;
+  readonly envFile?: string;
+}
+
+export interface StateStoreLifecycle {
+  /** Provision the store, or adopt it when it exists. Idempotent. */
+  readonly bootstrap?: (
+    input: StateStoreTarget & {
+      /** Redeploy an existing store instead of adopting it. */
+      readonly force?: boolean;
+    },
+  ) => Effect.Effect<StateStoreBootstrap, StateStoreLifecycleError, Services>;
+  /** Delete the store and its backing resources. Idempotent. */
+  readonly teardown?: (
+    input: StateStoreTarget,
+  ) => Effect.Effect<StateStoreTeardown, StateStoreLifecycleError, Services>;
+  /** The store's past log entries, oldest first. */
+  readonly logs?: (
+    input: StateStoreTarget & { readonly limit?: number; readonly since?: Date },
+  ) => Effect.Effect<ReadonlyArray<LogEntry>, StateStoreLifecycleError, Services>;
+  /** The store's log entries as they happen. */
+  readonly tailLogs?: (
+    input: StateStoreTarget,
+  ) => Stream.Stream<LogEntry, StateStoreLifecycleError, Services>;
+}
+
+export interface StateStoreBootstrap {
+  readonly status: "created" | "adopted" | "redeployed";
+  /** One line for the user, e.g. which Worker in which account. */
+  readonly summary: string;
+}
+
+export interface StateStoreTeardown {
+  /** What was deleted, e.g. Worker names. */
+  readonly deleted: ReadonlyArray<string>;
+}
+
+/** Lifecycle errors are the store's own; any tagged error will do. */
+export type StateStoreLifecycleError = { readonly _tag: string };
 
 export interface Cli {
   /** A subcommand of `alchemy provider`, named after the provider. */

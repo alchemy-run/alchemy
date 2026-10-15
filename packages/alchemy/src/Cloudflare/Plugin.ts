@@ -7,6 +7,7 @@ export default Plugin.make({
     cloudflare: {
       description: "State-store Worker in the profile's Cloudflare account",
       layer: () => import("./StateStore/State.ts").then((module) => module.state()),
+      lifecycle: () => import("./Alchemist/StateStore.ts").then((module) => module.lifecycle),
     },
   },
   cli: {
