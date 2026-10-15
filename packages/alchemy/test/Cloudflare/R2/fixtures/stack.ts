@@ -1,6 +1,7 @@
 import * as Effect from "effect/Effect";
 import * as Cloudflare from "@/Cloudflare";
 import * as Alchemy from "@/index.ts";
+import { TestBucket } from "./bucket.ts";
 import ReadBindingWorker from "./read-binding.ts";
 import ReadHttpWorker from "./read-http.ts";
 import ReadWriteBindingWorker from "./readwrite-binding.ts";
@@ -22,6 +23,7 @@ export default Alchemy.Stack(
   "R2BindingStack",
   { providers: Cloudflare.providers(), state: Cloudflare.state() },
   Effect.gen(function* () {
+    const bucket = yield* TestBucket;
     const readBinding = yield* ReadBindingWorker;
     const writeBinding = yield* WriteBindingWorker;
     const readWriteBinding = yield* ReadWriteBindingWorker;
@@ -29,6 +31,15 @@ export default Alchemy.Stack(
     const writeHttp = yield* WriteHttpWorker;
     const readWriteHttp = yield* ReadWriteHttpWorker;
     return {
+      bucketName: bucket.bucketName,
+      workerNames: [
+        readBinding.workerName,
+        writeBinding.workerName,
+        readWriteBinding.workerName,
+        readHttp.workerName,
+        writeHttp.workerName,
+        readWriteHttp.workerName,
+      ],
       readBinding: readBinding.url.as<string>(),
       writeBinding: writeBinding.url.as<string>(),
       readWriteBinding: readWriteBinding.url.as<string>(),
