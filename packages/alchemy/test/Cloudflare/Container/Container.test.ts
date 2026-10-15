@@ -431,6 +431,32 @@ describe.sequential(
     );
 
     test(
+      "keeps an attached application whose bindings were never recorded",
+      Effect.gen(function* () {
+        const first = yield* stack;
+        assert(first.app.durableObjects?.namespaceId);
+        const state = yield* yield* State;
+        const containerRow = yield* state.get(containerKey);
+        assert(containerRow?.status === "created" || containerRow?.status === "updated");
+        // What a deploy that adopted the application and then failed leaves
+        // behind: the observed application, attachment included, and no
+        // recorded bindings.
+        yield* state.set({ ...containerKey, value: { ...containerRow, bindings: [] } });
+        yield* Effect.gen(function* () {
+          const plan = yield* AttachmentStack.pipe(
+            Effect.flatMap((stack) => Plan.make(stack).pipe(Effect.provide(stack.services))),
+          );
+          expect(plan.resources.AttachmentContainer.action).not.toBe("replace");
+          const next = yield* deploy(AttachmentStack);
+          expect(next.app.applicationId).toBe(first.app.applicationId);
+        }).pipe(
+          Effect.ensuring(state.set({ ...containerKey, value: containerRow }).pipe(Effect.orDie)),
+        );
+      }).pipe(Effect.provide(services)),
+      { timeout: 120_000, retry: 0 },
+    );
+
+    test(
       "recovers an interrupted create with an unresolved Worker attachment",
       Effect.gen(function* () {
         const first = yield* stack;

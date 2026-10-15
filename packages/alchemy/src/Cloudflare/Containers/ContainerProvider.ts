@@ -1228,7 +1228,13 @@ export const LiveContainerProvider = () =>
           const hasUnresolvedAttachment =
             !hasDurableObjects &&
             newBindings.some((binding) => binding.data.durableObjects !== undefined);
-          const hadDurableObjects = (yield* getDurableObjects(oldBindings)) !== undefined;
+          // The application's observed attachment outranks the recorded
+          // bindings: an adopted application whose first reconcile failed has
+          // its attachment in `output` but no bindings recorded yet, and reading
+          // only the bindings would replace (delete) the live application.
+          const hadDurableObjects =
+            output?.durableObjects !== undefined ||
+            (yield* getDurableObjects(oldBindings)) !== undefined;
           if (!hasUnresolvedAttachment && hasDurableObjects !== hadDurableObjects) {
             return { action: "replace" } as const;
           }
