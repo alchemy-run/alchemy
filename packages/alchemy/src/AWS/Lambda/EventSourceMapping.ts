@@ -882,14 +882,11 @@ const retryTransient: <A, R, Err>(self: Effect.Effect<A, Err, R>) => Effect.Effe
   });
 
 const retryPermissionsPropagation = Effect.retry({
-  while: (e: any) =>
-    e._tag === "InvalidParameterValueException" &&
-    (e.message?.includes("The function execution role does not have permissions to call") ||
-      e.message?.includes("cannot be assumed by Lambda") ||
-      e.message?.includes("Please add Lambda as a Trusted Entity") ||
-      e.message?.includes("Cannot access stream") ||
-      e.message?.includes("Please ensure the role can perform the GetRecords")),
+  while: (e: { _tag: string }) =>
+    e._tag === "ExecutionRoleNotAssumable" || e._tag === "ExecutionRoleMissingPermissions",
   schedule: Schedule.max([Schedule.exponential(100), Schedule.recurs(30)]),
-}) as <A, R, Err>(self: Effect.Effect<A, Err, R>) => Effect.Effect<A, Err, R>;
+}) as <A, R, Err extends { _tag: string }>(
+  self: Effect.Effect<A, Err, R>,
+) => Effect.Effect<A, Err, R>;
 
 const sanitizeAwsTagValue = (value: string) => value.replace(/[^\p{L}\p{Z}\p{N}_.:/=+\-@]/gu, "-");

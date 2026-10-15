@@ -780,6 +780,7 @@ export default defineConfig({
                   link: "/aws/compute/choosing-a-runtime",
                 },
                 { label: "Lambda", link: "/aws/compute/lambda" },
+                { label: "Lambda Web Functions", link: "/aws/compute/web-functions" },
                 { label: "Effect workflows", link: "/aws/compute/effect-workflows" },
                 { label: "ECS", link: "/aws/compute/ecs" },
                 { label: "EC2", link: "/aws/compute/ec2" },

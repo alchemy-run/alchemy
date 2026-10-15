@@ -47,7 +47,7 @@ import * as Lambda from "./Function.ts";
 export const ScheduleEventSource = Layer.effect(
   SchedulerScheduleEventSource,
   Effect.gen(function* () {
-    const host = yield* Lambda.Function;
+    const host = yield* Lambda.eventSourceHost("AWS.Lambda.ScheduleEventSource");
 
     return Effect.fn(function* <Req = never>(
       descriptor: ScheduleDescriptor,

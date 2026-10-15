@@ -74,7 +74,7 @@ export const LogGroupEventSource = Layer.effect(
   // `never`.
   // @effect-diagnostics-next-line missingEffectContext:off
   Effect.gen(function* () {
-    const host = yield* Lambda.Function;
+    const host = yield* Lambda.eventSourceHost("AWS.Lambda.LogGroupEventSource");
     const Permission = yield* LambdaPermission;
     const Filter = yield* SubscriptionFilter;
 
