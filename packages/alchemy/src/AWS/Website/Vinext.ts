@@ -100,6 +100,11 @@ export const Vinext = (id: string, propsIn: InputProps<VinextProps> = {}) =>
         name: "Vinext",
         framework: VINEXT_AWS_FRAMEWORK_SPECIFIER,
         target: VINEXT_AWS_TARGET_SPECIFIER,
+        // The same self-contained `dist/server` (S3 data cache included),
+        // served by a Node HTTP server instead of a Lambda handler.
+        webTarget: VINEXT_AWS_TARGET_SPECIFIER,
+        webOptions: { server: "web-function" },
+        webPrebuilt: true,
       },
     );
     if (site.server !== undefined) {

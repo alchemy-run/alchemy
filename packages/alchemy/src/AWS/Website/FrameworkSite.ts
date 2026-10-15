@@ -151,6 +151,10 @@ export interface FrameworkSiteConfig {
    */
   install?: ReadonlyArray<string>;
   /**
+   * Build options for `server: "web-function"`, merged over `options`.
+   */
+  webOptions?: Record<string, unknown>;
+  /**
    * Deploy the Node target's server directory as-is instead of bundling
    * its serve entry, for servers that read files beside themselves at
    * runtime (Octane's SSR `index.html`).
@@ -221,7 +225,7 @@ export const makeFrameworkSite = Effect.fn("AWS.Website.FrameworkSite")(function
     target: onWebFunction ? config.webTarget! : config.target,
     root: props.rootDir,
     env: props.env,
-    options: config.options,
+    options: onWebFunction ? { ...config.options, ...config.webOptions } : config.options,
     memo: props.memo,
     dev,
   });
