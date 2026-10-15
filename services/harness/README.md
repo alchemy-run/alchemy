@@ -7,10 +7,10 @@ HTTP ──▶ Worker ──▶ Agent (Durable Object, one per issue) ──▶ 
                      AgentRpcs                                 Claude Code
 ```
 
-- `src/Sandbox.cf.ts` — the container program. `Anthropic.ClaudeCodeServer` installs the official Agent SDK (and the unmodified `claude` binary) into the image and serves sessions on the container port. The image holds only the toolchain.
-- `src/Gateway.ts`, `src/Gateway.aws.ts` — the egress gateway (`AgentGateway`): which hosts a container may reach, and the Lambda Web Function (in four Regions) that holds the model API key and your GitHub login and adds them to its requests.
+- `src/Sandbox.ts`, `src/Sandbox.impl.ts` — the machine Claude Code runs in, and its program. `Anthropic.ClaudeCodeServer` installs the official Agent SDK (and the unmodified `claude` binary) into the image and serves sessions on the machine's port. The image holds only the toolchain. Hosted by `src/Sandbox.cf.ts` (a Cloudflare Container, the default) or `src/Sandbox.aws.ts` (an AWS Lambda MicroVM).
+- `src/Gateway.ts`, `src/Gateway.impl.ts` — the egress gateway (`AgentGateway`): which hosts a machine may reach, and the model API key and your GitHub login it adds to their requests. Hosted by `src/Gateway.aws.ts` (a Lambda Web Function in four Regions, the default) or `src/Gateway.cf.ts` (a Cloudflare Worker).
 - `src/AgentRpcs.ts` — this app's API (`AgentRpcs`), shared by the Durable Object and the web UI.
-- `src/Agent.ts` — one Durable Object per issue, serving `AgentRpcs`. It starts the session's container with egress from `AgentGateway` (`Anthropic.Egress`, `GitHub.Egress`), so the container holds no credentials: the gateway (`src/Gateway.aws.ts`) checks each request and adds them. It clones the repository into a container that has none; `Cloudflare.Containers.Harness` checkpoints the session's work into the Durable Object after every turn and keeps its history there, so a session resumes on any container.
+- `src/Agent.ts` — one Durable Object per issue, serving `AgentRpcs`. It starts the session's container with egress from `AgentGateway` (`Anthropic.Egress`, `GitHub.Egress`), so the container holds no credentials: the gateway checks each request and adds them. It clones the repository into a container that has none; `Cloudflare.Containers.Harness` checkpoints the session's work into the Durable Object after every turn and keeps its history there, so a session resumes on any container.
 - `src/Worker.ts` — the HTTP API.
 
 ## Develop and deploy

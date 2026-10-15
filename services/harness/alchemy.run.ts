@@ -5,6 +5,8 @@ import * as GitHub from "alchemy/GitHub";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { Path } from "effect/Path";
+// Each has a host on either cloud: Gateway.cf.ts / Gateway.aws.ts,
+// Sandbox.cf.ts / Sandbox.aws.ts.
 import AgentGatewayAws from "./src/Gateway.aws.ts";
 import { AgentGateway } from "./src/Gateway.ts";
 import SandboxLive from "./src/Sandbox.cf.ts";
