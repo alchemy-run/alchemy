@@ -1840,6 +1840,28 @@ importers:
       effect:
         specifier: 4.0.4
         version: 4.0.4
+    devDependencies:
+      '@cloudflare/workers-types':
+        specifier: 5.20261012.1
+        version: 5.20261012.1
+      '@effect/platform-browser':
+        specifier: 4.0.4
+        version: 4.0.4(effect@4.0.4)
+      '@effect/vitest':
+        specifier: 'catalog:'
+        version: 4.0.4(effect@4.0.4)(vitest@5.0.4(@types/node@26.6.5)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1)))
+      '@foldkit/vite-plugin':
+        specifier: 'catalog:'
+        version: 0.26.0(effect@4.0.4)(foldkit@0.165.0(@effect/platform-browser@4.0.4(effect@4.0.4))(effect@4.0.4))(redis@6.2.1)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))
+      foldkit:
+        specifier: 'catalog:'
+        version: 0.165.0(@effect/platform-browser@4.0.4(effect@4.0.4))(effect@4.0.4)
+      vite:
+        specifier: 'catalog:'
+        version: 8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1)
+      vitest:
+        specifier: 'catalog:'
+        version: 5.0.4(@types/node@26.6.5)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))
 
   examples/cloudflare-domain/packages/domain:
     dependencies:
