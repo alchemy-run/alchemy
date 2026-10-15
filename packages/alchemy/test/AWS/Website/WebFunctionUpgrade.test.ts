@@ -72,6 +72,11 @@ interface UpgradeCase {
    */
   readonly tempRoot: string | undefined;
   readonly install: string[];
+  /**
+   * Peers the published alchemy needs when nothing above the temp project
+   * provides them, pinned to the workspace's Effect.
+   */
+  readonly peers?: Record<string, string>;
   readonly marker: string;
   /** State rows of the old Lambda Functions and their Web Function successors. */
   readonly moved: ReadonlyArray<{ readonly from: string; readonly to: string }>;
@@ -94,6 +99,11 @@ const cases: UpgradeCase[] = [
     entries: [".gitignore", "package.json", "next.config.ts", "tsconfig.json", "app", "public"],
     tempRoot: undefined,
     install: ["install", "--linker=hoisted", "--omit", "peer"],
+    peers: {
+      effect: "4.0.4",
+      "@effect/platform-node": "4.0.4",
+      "@effect/platform-bun": "4.0.4",
+    },
     marker: "NEXTJS_AWS_PAGE_MARKER",
     moved: [
       { from: "Site__Server", to: "Site__WebServer" },
@@ -176,9 +186,11 @@ for (const upgrade of cases) {
                 type: "module",
                 dependencies: {
                   ...fixturePackage.dependencies,
+                  ...upgrade.peers,
                   alchemy: PUBLISHED,
                   "@alchemy.run/frontend-frameworks": PUBLISHED,
                 },
+                ...(upgrade.peers?.effect ? { overrides: { effect: upgrade.peers.effect } } : {}),
               },
               null,
               2,
