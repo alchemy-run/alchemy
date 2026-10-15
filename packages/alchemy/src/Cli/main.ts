@@ -56,10 +56,10 @@ const loadContributions = () =>
   Effect.runPromise(
     Contributions.load().pipe(
       Effect.catch((error) =>
-        Effect.sync(() => {
-          console.error(`warning: ${error.message}`);
-          return [] as ReadonlyArray<Contributions.Contributions>;
-        }),
+        Effect.as(
+          Effect.sync(() => console.error(`warning: ${error.message}`)),
+          [],
+        ),
       ),
       Effect.provide(PlatformServices),
     ),

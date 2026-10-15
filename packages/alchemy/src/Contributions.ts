@@ -7,6 +7,7 @@ import type { HttpClient } from "effect/http/HttpClient";
 import type * as HttpClientRequest from "effect/http/HttpClientRequest";
 import type * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
+import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
 import type * as Stream from "effect/Stream";
 import type { AlchemyContext } from "./AlchemyContext.ts";
@@ -223,7 +224,7 @@ const readManifest = Effect.fn(function* (file: string) {
   if (!(yield* fs.exists(file))) return undefined;
   const text = yield* fs.readFileString(file);
   return yield* Effect.try({
-    try: () => JSON.parse(text) as unknown,
+    try: (): unknown => JSON.parse(text),
     catch: (cause) => new ContributionError({ message: `Invalid JSON in ${file}`, cause }),
   }).pipe(
     Effect.flatMap(Schema.decodeUnknownEffect(Manifest)),
@@ -287,15 +288,16 @@ const exportTarget = (target: unknown, star: string): string | undefined => {
 /** A package's own subpath (`"."`, `"./Contributions"`) through its `exports` map. */
 const packageExport = (exports: unknown, main: string | undefined, subpath: string) => {
   if (exports === undefined) return subpath === "." ? (main ?? "./index.js") : subpath;
-  const map =
-    typeof exports === "object" &&
-    exports !== null &&
-    !Array.isArray(exports) &&
-    Object.keys(exports).some((key) => key.startsWith("."))
-      ? (exports as Record<string, unknown>)
-      : { ".": exports };
-  if (subpath in map) return exportTarget(map[subpath], "");
-  for (const [pattern, target] of Object.entries(map)) {
+  const entries =
+    typeof exports === "object" && exports !== null && !Array.isArray(exports)
+      ? Object.entries(exports)
+      : [];
+  // Subpath keys, or the package's one export ("exports": "./index.js").
+  const map = new Map<string, unknown>(
+    entries.some(([key]) => key.startsWith(".")) ? entries : [[".", exports]],
+  );
+  if (map.has(subpath)) return exportTarget(map.get(subpath), "");
+  for (const [pattern, target] of map) {
     const star = pattern.indexOf("*");
     if (star === -1) continue;
     const prefix = pattern.slice(0, star);
@@ -334,19 +336,21 @@ const resolveDeclared = ({ specifier, manifest }: Declared) =>
     return pathToFileURL(path.join(manifest.directory, target)).href;
   });
 
+/** A module's default export as contributions; only the name is checked. */
+const isContributions = (value: unknown): value is Contributions =>
+  Predicate.hasProperty(value, "name") && typeof value.name === "string";
+
 const importContributions = (declared: Declared) =>
   Effect.flatMap(resolveDeclared(declared), (url) =>
     Effect.tryPromise({
-      try: () => import(url) as Promise<{ readonly default?: unknown }>,
+      try: (): Promise<{ readonly default?: unknown }> => import(url),
       catch: (cause) =>
         new ContributionError({ message: `Could not import ${declared.specifier}`, cause }),
     }),
   ).pipe(
     Effect.flatMap((module) =>
-      typeof module.default === "object" &&
-      module.default !== null &&
-      typeof (module.default as Contributions).name === "string"
-        ? Effect.succeed(module.default as Contributions)
+      isContributions(module.default)
+        ? Effect.succeed(module.default)
         : Effect.fail(
             new ContributionError({
               message: `${declared.specifier} has no default export`,
@@ -414,7 +418,7 @@ const discover = Effect.fn("Contributions.discover")(function* (cwd: string) {
 });
 
 /** `--backend` names alchemy handles itself, so no provider may take them. */
-export const RESERVED_BACKENDS = ["local", "configured"] as const;
+export const RESERVED_BACKENDS: ReadonlyArray<string> = ["local", "configured"];
 
 const loaded = new Map<string, Effect.Effect<ReadonlyArray<Contributions>, ContributionError>>();
 
@@ -448,7 +452,7 @@ export const stateStores = Effect.fn("Contributions.stateStores")(function* () {
   for (const provider of yield* load()) {
     for (const [backend, store] of Object.entries(provider.stateStores ?? {})) {
       // A state backend name addresses one store, so two providers can't share it.
-      const owner = (RESERVED_BACKENDS as ReadonlyArray<string>).includes(backend)
+      const owner = RESERVED_BACKENDS.includes(backend)
         ? "alchemy"
         : stores.get(backend)?.provider.name;
       if (owner !== undefined) {

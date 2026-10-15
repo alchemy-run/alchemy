@@ -68,12 +68,10 @@ const StoredStateStores = Schema.Union([
 ]);
 
 const readStores = (store: CredentialsStoreService, profile: string) =>
-  Effect.map(store.read(profile, CREDENTIALS_FILE, StoredStateStores), (file) =>
-    file === undefined
-      ? {}
-      : "stores" in file
-        ? file.stores
-        : ({ [DEFAULT_STORE]: file } as Record<string, StoredStateStoreCredentials>),
+  Effect.map(
+    store.read(profile, CREDENTIALS_FILE, StoredStateStores),
+    (file): Record<string, StoredStateStoreCredentials> =>
+      file === undefined ? {} : "stores" in file ? file.stores : { [DEFAULT_STORE]: file },
   );
 
 /** One state store's cached credentials, if any. */

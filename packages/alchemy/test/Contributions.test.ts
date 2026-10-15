@@ -1,5 +1,5 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { describe, expect, it, layer } from "alchemy-test";
+import { assert, describe, expect, it, layer } from "alchemy-test";
 import * as Command from "effect/cli/Command";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -107,7 +107,7 @@ layer(NodeServices.layer)("Contributions.load", (it) => {
       });
       const aws = (yield* Contributions.load(root)).filter((provider) => provider.name === "aws");
       expect(aws).toHaveLength(1);
-      expect((aws[0] as { from?: string }).from).toBe("aws-package");
+      expect(aws[0]).toMatchObject({ from: "aws-package" });
     }).pipe(Effect.scoped),
   );
 
@@ -124,7 +124,8 @@ layer(NodeServices.layer)("Contributions.load", (it) => {
         ),
       });
       const acme = (yield* Contributions.load(root)).filter((provider) => provider.name === "acme");
-      expect(acme.map((provider) => (provider as { from?: string }).from)).toEqual(["first"]);
+      expect(acme).toHaveLength(1);
+      expect(acme[0]).toMatchObject({ from: "first" });
     }).pipe(Effect.scoped),
   );
 
@@ -254,8 +255,8 @@ layer(NodeServices.layer)("Contributions.load", (it) => {
 
 /** The message of the `ContributionError` a lifecycle route failed with. */
 const contributionErrorMessage = (error: unknown) => {
-  expect(error).toBeInstanceOf(Contributions.ContributionError);
-  return (error as Contributions.ContributionError).message;
+  assert(error instanceof Contributions.ContributionError);
+  return error.message;
 };
 
 /** Run with the process in `directory`, as the CLI would run in a project. */

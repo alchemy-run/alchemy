@@ -127,7 +127,7 @@ const lifecycleOperation = Effect.fn(function* <K extends keyof Contributions.St
   source: ProviderSource,
   operation: K,
 ) {
-  if ((Contributions.RESERVED_BACKENDS as ReadonlyArray<string>).includes(source.backend)) {
+  if (Contributions.RESERVED_BACKENDS.includes(source.backend)) {
     return yield* new Contributions.ContributionError({
       message: `The ${source.backend} state store has no ${operation}; pass --backend with a provider's store.`,
     });
@@ -140,7 +140,7 @@ const lifecycleOperation = Effect.fn(function* <K extends keyof Contributions.St
     });
   }
   return {
-    run: run as NonNullable<Contributions.StateStoreLifecycle[K]>,
+    run,
     context: yield* providerContext(provider, source),
   };
 });

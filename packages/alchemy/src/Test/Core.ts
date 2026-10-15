@@ -378,7 +378,8 @@ const provideTestServices = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
   // Test services override services already present in R.
   testServicesLayer === undefined
     ? effect
-    : (Effect.provide(effect, testServicesLayer) as unknown as Effect.Effect<A, E, R>);
+    : // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- the layer overrides services already present in R
+      (Effect.provide(effect, testServicesLayer) as Effect.Effect<A, E, R>);
 
 const testHttp = Layer.effect(
   HttpClient.HttpClient,
