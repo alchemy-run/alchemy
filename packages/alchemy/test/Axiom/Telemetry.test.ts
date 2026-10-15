@@ -105,7 +105,14 @@ test.provider.skipIf(!hasAxiomCreds)(
       );
       expect(body).toContain("otel-axiom-e2e");
       expect(body).toContain("axiom.child-span");
-      expect(body).toContain("http.server GET");
+      // The HttpMiddleware tracer's server span for the request: Effect's
+      // default name, the request method.
+      const spans = yield* Effect.try(
+        () => (JSON.parse(body) as { matches: { data: { name: string; kind: string } }[] }).matches,
+      );
+      expect(spans.map((match) => match.data)).toContainEqual(
+        expect.objectContaining({ name: "GET", kind: "server" }),
+      );
 
       // Metrics export as OTLP protobuf (Axiom rejects JSON on /v1/metrics
       // with 415) and route with X-Axiom-Metrics-Dataset. Metrics datasets
