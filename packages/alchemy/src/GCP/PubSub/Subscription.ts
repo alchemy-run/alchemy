@@ -80,6 +80,49 @@ export type SubscriptionPushConfig = {
   oidcToken?: SubscriptionOidcToken;
 };
 
+export type SubscriptionBigQueryConfig = {
+  /**
+   * Table that receives the messages, as
+   * `{projectId}.{datasetId}.{tableId}`. Pub/Sub checks at create time
+   * that the table exists and that the writer can write to it, so grant
+   * the writer `roles/bigquery.dataEditor` on the table first. A fresh
+   * grant can take up to a minute to reach Pub/Sub; until then, create
+   * fails with a missing-permissions error and a later deploy succeeds.
+   */
+  table: string;
+  /**
+   * Write message fields to the table's columns using the topic's schema.
+   * Cannot be combined with `useTableSchema`.
+   * @default false
+   */
+  useTopicSchema?: boolean;
+  /**
+   * Write JSON message fields to the table's columns using the table's
+   * schema. Cannot be combined with `useTopicSchema`.
+   * @default false
+   */
+  useTableSchema?: boolean;
+  /**
+   * Also write `subscription_name`, `message_id`, `publish_time`, and
+   * `attributes` to columns of the same names.
+   * @default false
+   */
+  writeMetadata?: boolean;
+  /**
+   * With `useTopicSchema` or `useTableSchema`, drop message fields that
+   * are not in the table schema instead of failing the write.
+   * @default false
+   */
+  dropUnknownFields?: boolean;
+  /**
+   * Service account that writes to BigQuery. Defaults to the project's
+   * Pub/Sub service agent
+   * (`service-{projectNumber}@gcp-sa-pubsub.iam.gserviceaccount.com`).
+   * The deployer needs `iam.serviceAccounts.actAs` on it.
+   */
+  serviceAccountEmail?: string;
+};
+
 export type SubscriptionProps = {
   /**
    * Subscription id (the `{subscription}` segment of
@@ -157,6 +200,11 @@ export type SubscriptionProps = {
    * subscription.
    */
   pushConfig?: SubscriptionPushConfig;
+  /**
+   * Write messages straight to a BigQuery table. Cannot be combined with
+   * `pushConfig`.
+   */
+  bigqueryConfig?: SubscriptionBigQueryConfig;
 };
 
 export type Subscription = Resource<
@@ -195,6 +243,8 @@ export type Subscription = Resource<
     deadLetterPolicy: SubscriptionDeadLetterPolicy | undefined;
     /** Push config, if this is a push subscription. */
     pushConfig: SubscriptionPushConfig | undefined;
+    /** BigQuery config, if this is a BigQuery subscription. */
+    bigqueryConfig: SubscriptionBigQueryConfig | undefined;
   },
   never,
   Providers
@@ -237,6 +287,42 @@ export type Subscription = Resource<
  *   const acknowledge = yield* GCP.PubSub.Acknowledge(subscription);
  *   yield* acknowledge({ body: { ackIds } });
  * }
+ * ```
+ *
+ * ### Writing to BigQuery
+ * **Example:** Write messages and their metadata to a table
+ * ```typescript
+ * const topic = yield* GCP.PubSub.Topic("impressions", {});
+ * const dataset = yield* GCP.BigQuery.Dataset("raw", {});
+ * const table = yield* GCP.BigQuery.Table("impression_event", {
+ *   datasetId: dataset.datasetId,
+ *   schema: [
+ *     { name: "subscription_name", type: "STRING" },
+ *     { name: "message_id", type: "STRING" },
+ *     { name: "publish_time", type: "TIMESTAMP" },
+ *     { name: "data", type: "STRING" },
+ *     { name: "attributes", type: "STRING" },
+ *   ],
+ * });
+ * // Pub/Sub writes as the project's Pub/Sub service agent.
+ * const writer = yield* GCP.IAM.Member("impressions-writer", {
+ *   kind: "bigquery.table",
+ *   name: table.name,
+ *   role: "roles/bigquery.dataEditor",
+ *   member: "serviceAccount:service-123456789012@gcp-sa-pubsub.iam.gserviceaccount.com",
+ * });
+ * const subscription = yield* GCP.PubSub.Subscription("impressions-bigquery", {
+ *   topic: topic.name,
+ *   bigqueryConfig: {
+ *     // Deriving the table from the grant creates the subscription after
+ *     // it: Pub/Sub checks the writer's access at create time.
+ *     table: Output.map(writer.name, (name) => {
+ *       const [, project, , datasetId, , tableId] = name.split("/");
+ *       return `${project}.${datasetId}.${tableId}`;
+ *     }),
+ *     writeMetadata: true,
+ *   },
+ * });
  * ```
  *
  * @resource
@@ -297,6 +383,20 @@ const toPushConfig = (
   };
 };
 
+const toBigQueryConfig = (
+  config: pubsub.BigQueryConfig | undefined,
+): SubscriptionBigQueryConfig | undefined => {
+  if (config?.table === undefined || config.table === "") return undefined;
+  return {
+    table: config.table,
+    useTopicSchema: config.useTopicSchema === true,
+    useTableSchema: config.useTableSchema === true,
+    writeMetadata: config.writeMetadata === true,
+    dropUnknownFields: config.dropUnknownFields === true,
+    serviceAccountEmail: config.serviceAccountEmail,
+  };
+};
+
 const toAttrs = (subscription: pubsub.Subscription, project: string) => {
   const name = subscription.name ?? "";
   return {
@@ -316,6 +416,7 @@ const toAttrs = (subscription: pubsub.Subscription, project: string) => {
     retryPolicy: subscription.retryPolicy,
     deadLetterPolicy: subscription.deadLetterPolicy,
     pushConfig: toPushConfig(subscription.pushConfig),
+    bigqueryConfig: toBigQueryConfig(subscription.bigqueryConfig),
   };
 };
 
@@ -432,6 +533,23 @@ const pushChanged = (
   );
 };
 
+const sameFlag = (left: boolean | undefined, right: boolean | undefined) =>
+  (left ?? false) === (right ?? false);
+
+const bigqueryChanged = (
+  desired: SubscriptionBigQueryConfig | undefined,
+  observed: pubsub.BigQueryConfig | undefined,
+) =>
+  desired !== undefined &&
+  !(
+    sameOptionalString(desired.table, observed?.table) &&
+    sameFlag(desired.useTopicSchema, observed?.useTopicSchema) &&
+    sameFlag(desired.useTableSchema, observed?.useTableSchema) &&
+    sameFlag(desired.writeMetadata, observed?.writeMetadata) &&
+    sameFlag(desired.dropUnknownFields, observed?.dropUnknownFields) &&
+    sameOptionalString(desired.serviceAccountEmail, observed?.serviceAccountEmail)
+  );
+
 const toCreateBody = (
   topicName: string,
   news: SubscriptionProps,
@@ -470,6 +588,9 @@ const toCreateBody = (
   }
   if (news.pushConfig !== undefined) {
     body.pushConfig = news.pushConfig;
+  }
+  if (news.bigqueryConfig !== undefined) {
+    body.bigqueryConfig = news.bigqueryConfig;
   }
   return body;
 };
@@ -593,6 +714,7 @@ export const SubscriptionProvider = () =>
       const retriesChanged = retryChanged(news.retryPolicy, current.retryPolicy);
       const deadLettersChanged = deadLetterChanged(news.deadLetterPolicy, current.deadLetterPolicy);
       const pushConfigChanged = pushChanged(news.pushConfig, current.pushConfig);
+      const bigqueryConfigChanged = bigqueryChanged(news.bigqueryConfig, current.bigqueryConfig);
 
       if (
         labelsChanged ||
@@ -603,7 +725,8 @@ export const SubscriptionProvider = () =>
         expChanged ||
         retriesChanged ||
         deadLettersChanged ||
-        pushConfigChanged
+        pushConfigChanged ||
+        bigqueryConfigChanged
       ) {
         current = yield* pubsub
           .patchProjectsSubscriptions({
@@ -622,6 +745,7 @@ export const SubscriptionProvider = () =>
                 retryPolicy: news.retryPolicy ?? current.retryPolicy,
                 deadLetterPolicy: news.deadLetterPolicy ?? current.deadLetterPolicy,
                 pushConfig: news.pushConfig ?? current.pushConfig,
+                bigqueryConfig: news.bigqueryConfig ?? current.bigqueryConfig,
               },
               updateMask: [
                 labelsChanged ? "labels" : undefined,
@@ -633,6 +757,7 @@ export const SubscriptionProvider = () =>
                 retriesChanged ? "retryPolicy" : undefined,
                 deadLettersChanged ? "deadLetterPolicy" : undefined,
                 pushConfigChanged ? "pushConfig" : undefined,
+                bigqueryConfigChanged ? "bigqueryConfig" : undefined,
               ]
                 .filter((field): field is string => field !== undefined)
                 .join(","),
