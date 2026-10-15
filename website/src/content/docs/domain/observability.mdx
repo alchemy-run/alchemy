@@ -7,13 +7,15 @@ A model records what it does as it does it. Every command, every event it commit
 
 ## Export the traces
 
-A hosted model records into whatever tracer the runtime provides. On Cloudflare, give the Worker a telemetry Layer, in the same `Effect.provide` as the rest:
+A hosted model records into whatever tracer the runtime provides. Send it to an OpenTelemetry backend, such as Axiom, Honeycomb or your own collector, to see each flow as one connected trace. The bank declares its Axiom datasets and an ingest token next to its Worker:
 
-```typescript
-Effect.provide(Layer.mergeAll(BankLive, Cloudflare.Telemetry()))
+```typescript title="packages/server/src/Observability.ts"
+return Axiom.Telemetry({ token: ingest, traces, logs, serviceName: "bank" });
 ```
 
-`Cloudflare.Telemetry()` sends spans to Workers Observability. `Axiom.Telemetry` and `Alchemy.Telemetry.layerOtlp` send them anywhere else. Without a telemetry Layer, nothing is recorded and nothing is paid for.
+and provides that Layer to the Worker, with the rest of what it hosts. `Alchemy.Telemetry.layerOtlp` does the same for any OTLP endpoint.
+
+`Cloudflare.Telemetry()` shows a Worker's spans in Cloudflare's dashboard instead, with no backend to run. Cloudflare starts a new trace for every Worker and Durable Object event, so a flow that crosses objects shows up as separate traces, joined only by `domain.correlation_id`, and spans from a browser can't be added.
 
 ## Follow a command
 

@@ -3,6 +3,7 @@ import { expect } from "bun:test";
 // correct bundle (the Effect entrypoint is not detected under Vite's transform).
 import { CreatePaymentIntent } from "@distilled.cloud/stripe/stripe";
 import * as Alchemy from "alchemy";
+import * as Axiom from "alchemy/Axiom";
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Domain from "alchemy/Domain";
 import * as Stripe from "alchemy/Stripe";
@@ -24,7 +25,7 @@ import { sessionClient } from "../packages/domain/src/Session.middleware.ts";
 import { mfa, register, transfer } from "../packages/server/test/flows.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
-  providers: Layer.mergeAll(Cloudflare.providers(), Stripe.providers()),
+  providers: Layer.mergeAll(Cloudflare.providers(), Stripe.providers(), Axiom.providers()),
   state: Alchemy.localState(),
 });
 

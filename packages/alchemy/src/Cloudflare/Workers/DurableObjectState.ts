@@ -1,6 +1,7 @@
 import type * as cf from "@cloudflare/workers-types";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
 import { fromDurableObjectStorage, type DurableObjectStorage } from "./DurableObjectStorage.ts";
 import { fromWebSocket, type WebSocket } from "./WebSocket.ts";
@@ -90,6 +91,19 @@ export class DurableObjectState extends Context.Service<
   }
 >()("Cloudflare.DurableObjectState") {}
 
+/**
+ * Told of every promise the current event hands to `waitUntil`, so the event
+ * keeps its telemetry open until that work settles. Provided per event by
+ * the bridge, and read from the calling fiber, so it works for state
+ * captured when the object was constructed too.
+ *
+ * @internal
+ */
+export class BackgroundWork extends Context.Service<
+  BackgroundWork,
+  (promise: Promise<unknown>) => void
+>()("Cloudflare.DurableObjectState/BackgroundWork") {}
+
 export const fromDurableObjectState = (
   state: cf.DurableObjectState,
 ): DurableObjectState["Service"] => ({
@@ -105,9 +119,12 @@ export const fromDurableObjectState = (
       const context = yield* Effect.context<R>();
       // Register the promise with workerd un-awaited — waitUntil extends the
       // event's lifetime without blocking the caller.
-      yield* Effect.sync(() =>
-        state.waitUntil(Effect.runPromise(effect.pipe(Effect.provide(context)))),
-      );
+      const track = yield* Effect.serviceOption(BackgroundWork);
+      yield* Effect.sync(() => {
+        const promise = Effect.runPromise(effect.pipe(Effect.provide(context)));
+        if (Option.isSome(track)) track.value(promise);
+        state.waitUntil(promise);
+      });
     }),
   blockConcurrencyWhile: <T, R = never>(callback: () => Effect.Effect<T, never, R>) =>
     Effect.gen(function* () {

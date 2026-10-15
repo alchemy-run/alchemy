@@ -1,5 +1,6 @@
 import BankWorker from "@bank/server/BankWorker";
 import * as Alchemy from "alchemy";
+import * as Axiom from "alchemy/Axiom";
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Stripe from "alchemy/Stripe";
 import * as Effect from "effect/Effect";
@@ -8,7 +9,7 @@ import * as Layer from "effect/Layer";
 export default Alchemy.Stack(
   "CloudflareDomainExample",
   {
-    providers: Layer.mergeAll(Cloudflare.providers(), Stripe.providers()),
+    providers: Layer.mergeAll(Cloudflare.providers(), Stripe.providers(), Axiom.providers()),
     state: Alchemy.localState(),
   },
   Effect.gen(function* () {

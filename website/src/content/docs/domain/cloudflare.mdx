@@ -29,6 +29,7 @@ import * as Option from "effect/Option";
 import { SiftFraudCheck } from "./Fraud/SiftFraudCheck.ts";
 import { D1LedgerStore } from "./Ledger/D1LedgerStore.ts";
 import { MfaChallengeLive } from "./MfaChallenge.ts";
+import { Observability } from "./Observability.ts";
 import { actorOf, SessionLive, sessionRoute } from "./Session.ts";
 import { StripePayments } from "./Settlement/StripePayments.ts";
 import { StripeSettlements } from "./Settlement/StripeSettlements.ts";
@@ -38,7 +39,12 @@ import { StripeSettlements } from "./Settlement/StripeSettlements.ts";
  * Bank hosted on Durable Objects, with the ledger in D1. Swap
  * `DomainCloudflare.DurableObjects` for `Domain.InMemory` and nothing else changes.
  */
-const BankLive = Layer.mergeAll(SessionLive, MfaChallengeLive, Stripe.ConsumeEventsLive).pipe(
+const BankLive = Layer.mergeAll(
+  SessionLive,
+  MfaChallengeLive,
+  Stripe.ConsumeEventsLive,
+  Observability,
+).pipe(
   Layer.provideMerge(Bank.layer(BankHandlers)),
   Layer.provideMerge(D1LedgerStore),
   Layer.provide(
@@ -110,6 +116,7 @@ Each aggregate, view and policy becomes a Durable Object class on this Worker wh
 // alchemy.run.ts
 import BankWorker from "@bank/server/BankWorker";
 import * as Alchemy from "alchemy";
+import * as Axiom from "alchemy/Axiom";
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Stripe from "alchemy/Stripe";
 import * as Effect from "effect/Effect";
@@ -118,7 +125,7 @@ import * as Layer from "effect/Layer";
 export default Alchemy.Stack(
   "CloudflareDomainExample",
   {
-    providers: Layer.mergeAll(Cloudflare.providers(), Stripe.providers()),
+    providers: Layer.mergeAll(Cloudflare.providers(), Stripe.providers(), Axiom.providers()),
     state: Alchemy.localState(),
   },
   Effect.gen(function* () {

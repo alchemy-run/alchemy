@@ -65,7 +65,7 @@ Every command, event and reaction is traced automatically:
 - `Domain.saga` and `Domain.projection` spans that start their own trace and link back to their cause.
 - `Domain.external` spans for external system calls.
 
-All of them carry `domain.correlation_id`, the first command of the flow, which finds a whole flow across traces. Export with a telemetry Layer in the Worker's single `Effect.provide`, e.g. `Layer.mergeAll(BankLive, Cloudflare.Telemetry())` or `Axiom.Telemetry(...)`.
+All of them carry `domain.correlation_id`, the first command of the flow, which finds a whole flow across traces. Export to an OpenTelemetry backend to see each flow as one connected trace: declare an `Axiom.Dataset` per signal and an `Axiom.ApiToken` that may ingest into them, and add `Axiom.Telemetry({ token, traces, logs })` to the Worker's single `Effect.provide` (or `Alchemy.Telemetry.layerOtlp` for any OTLP endpoint). Name datasets per stage. `Cloudflare.Telemetry()` shows spans in Cloudflare's dashboard instead, but Cloudflare starts a new trace per Worker or Durable Object event, so flows don't connect and browser spans can't be added.
 
 Metrics: `domain.commands`, `domain.command.duration`, `domain.events`, `domain.lag` (commit to handling), `domain.runs`, `domain.projection.batch_size`, `domain.external.calls`. Turn off view spans with `Bank.layer(handlers, { telemetry: { views: false } })`.
 

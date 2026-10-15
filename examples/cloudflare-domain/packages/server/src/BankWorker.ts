@@ -16,6 +16,7 @@ import * as Option from "effect/Option";
 import { SiftFraudCheck } from "./Fraud/SiftFraudCheck.ts";
 import { D1LedgerStore } from "./Ledger/D1LedgerStore.ts";
 import { MfaChallengeLive } from "./MfaChallenge.ts";
+import { Observability } from "./Observability.ts";
 import { actorOf, SessionLive, sessionRoute } from "./Session.ts";
 import { StripePayments } from "./Settlement/StripePayments.ts";
 import { StripeSettlements } from "./Settlement/StripeSettlements.ts";
@@ -25,7 +26,12 @@ import { StripeSettlements } from "./Settlement/StripeSettlements.ts";
  * Bank hosted on Durable Objects, with the ledger in D1. Swap
  * `DomainCloudflare.DurableObjects` for `Domain.InMemory` and nothing else changes.
  */
-const BankLive = Layer.mergeAll(SessionLive, MfaChallengeLive, Stripe.ConsumeEventsLive).pipe(
+const BankLive = Layer.mergeAll(
+  SessionLive,
+  MfaChallengeLive,
+  Stripe.ConsumeEventsLive,
+  Observability,
+).pipe(
   Layer.provideMerge(Bank.layer(BankHandlers)),
   Layer.provideMerge(D1LedgerStore),
   Layer.provide(
