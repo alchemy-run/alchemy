@@ -64,11 +64,6 @@ export interface StateStore {
    */
   readonly layer: Lazy<(options: { readonly name?: string }) => Layer.Layer<State, any, any>>;
   /**
-   * Whether the provider can address more than the default store per
-   * account, through {@link StateStoreTarget.name}.
-   */
-  readonly supportsNames?: boolean;
-  /**
    * Provisioning for a store that is infrastructure of its own, such as
    * Cloudflare's state-store Worker. Omit it for a store that needs none,
    * like AWS's S3 store, which creates its bucket on first use.
@@ -79,8 +74,8 @@ export interface StateStore {
 /** Which store, profile and `.env` a state-store operation acts under. */
 export interface StateStoreTarget {
   /**
-   * A store other than the account's default, e.g. an S3 bucket name. Only
-   * for stores that declare {@link StateStore.supportsNames}.
+   * A store other than the account's default: an S3 bucket, a state-store
+   * Worker. Every state store must support more than one per account.
    */
   readonly name?: string;
   /** Falls back to the active profile. */

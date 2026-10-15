@@ -12,7 +12,6 @@ export default Plugin.make({
             ({ name }) =>
               module.state({ name }),
         ),
-      supportsNames: true,
       lifecycle: () => import("./Alchemist/StateStore.ts").then((module) => module.lifecycle),
     },
   },

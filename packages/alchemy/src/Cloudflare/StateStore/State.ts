@@ -38,8 +38,9 @@ import * as CloudflareEnvironment from "../CloudflareEnvironment.ts";
 import { EdgeSessionError, createEdgeSession } from "../EdgeSession.ts";
 import Api, { STATE_STORE_SCRIPT_NAME, STATE_STORE_VERSION } from "./Api.ts";
 import {
-  credentialsFile,
-  StoredStateStoreCredentials,
+  deleteStoreCredentials,
+  readStoreCredentials,
+  writeStoreCredentials,
   isStateStoreCredentialsStale,
 } from "./CredentialsFile.ts";
 import {
@@ -195,11 +196,7 @@ export const state = (options: CloudflareStateOptions = {}) =>
 
         const { accountId } = yield* yield* CloudflareEnvironment.CloudflareEnvironment;
 
-        const credentials = yield* credStore.read(
-          profileName,
-          credentialsFile(scriptName),
-          StoredStateStoreCredentials,
-        );
+        const credentials = yield* readStoreCredentials(credStore, profileName, scriptName);
         if (credentials) {
           // The cached `url`/`authToken` are minted per-account (the `url`
           // encodes the account via its workers.dev subdomain). If the
@@ -212,7 +209,7 @@ export const state = (options: CloudflareStateOptions = {}) =>
               `Cloudflare State Store credentials were minted for a different ` +
                 `Cloudflare account; re-deriving for the current account.`,
             );
-            yield* credStore.delete(profileName, credentialsFile(scriptName)).pipe(Effect.ignore);
+            yield* deleteStoreCredentials(credStore, profileName, scriptName).pipe(Effect.ignore);
           } else {
             return yield* ensureLatest(credentials);
           }
@@ -315,12 +312,7 @@ export const bootstrap = (options: BootstrapOptions = {}) =>
         if (!isCI) {
           // we don't write credentials in CI because the file system is ephemeral
           const store = yield* CredentialsStore;
-          yield* store.write(
-            profileName,
-            credentialsFile(scriptName),
-            StoredStateStoreCredentials,
-            credentials,
-          );
+          yield* writeStoreCredentials(store, profileName, scriptName, credentials);
         }
         const { matches, expected, observed } = yield* checkStateStoreVersion(url, scriptName);
         const httpState = yield* makeCloudflareStateStore({ url, authToken });
@@ -463,7 +455,7 @@ export const teardownStateStore = (options: TeardownOptions = {}) =>
 
     // 3. Drop the locally cached state-store credentials for this profile.
     const credStore = yield* CredentialsStore;
-    yield* credStore.delete(profileName, credentialsFile(scriptName)).pipe(Effect.ignore);
+    yield* deleteStoreCredentials(credStore, profileName, scriptName).pipe(Effect.ignore);
 
     yield* Interaction.accessors.output.success(
       `Cloudflare State Store '${scriptName}' torn down.`,
@@ -724,11 +716,7 @@ export const loginWithCloudflare = Effect.fn("state_store.login", {
 
     if (!force) {
       // try and read from the cached credentials first if not forcing (force will always refresh)
-      const credentials = yield* credStore.read(
-        profileName,
-        credentialsFile(scriptName),
-        StoredStateStoreCredentials,
-      );
+      const credentials = yield* readStoreCredentials(credStore, profileName, scriptName);
       // Ignore a cache minted for a different account (or a legacy file with
       // no `accountId`) — reusing it would hand back the wrong account's
       // state-store URL. Fall through to re-derive against `accountId`.
@@ -780,21 +768,14 @@ export const loginWithCloudflare = Effect.fn("state_store.login", {
 
         if (!isCI) {
           // 4. Persist credentials for subsequent invocations.
-          yield* credStore
-            .write(
-              profileName,
-              credentialsFile(scriptName),
-              StoredStateStoreCredentials,
-              credentials,
-            )
-            .pipe(
-              Effect.mapError((e) =>
-                AuthError.make({
-                  message: "Failed to write credentials",
-                  cause: e,
-                }),
-              ),
-            );
+          yield* writeStoreCredentials(credStore, profileName, scriptName, credentials).pipe(
+            Effect.mapError((e) =>
+              AuthError.make({
+                message: "Failed to write credentials",
+                cause: e,
+              }),
+            ),
+          );
         }
 
         return credentials;
@@ -1019,11 +1000,7 @@ const writeCredentials = (url: string, authToken: string, scriptName: string) =>
     const profileName = yield* currentProfileName;
     const credStore = yield* CredentialsStore;
     const { accountId } = yield* yield* CloudflareEnvironment.CloudflareEnvironment;
-    yield* credStore.write(profileName, credentialsFile(scriptName), StoredStateStoreCredentials, {
-      url,
-      authToken,
-      accountId,
-    });
+    yield* writeStoreCredentials(credStore, profileName, scriptName, { url, authToken, accountId });
   });
 
 const isWorkersPreviewConfigurationError = (error: unknown) =>

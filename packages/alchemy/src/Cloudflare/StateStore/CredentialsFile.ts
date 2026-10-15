@@ -1,4 +1,6 @@
+import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
+import type { CredentialsStoreService } from "../../Auth/Credentials.ts";
 
 /**
  * Filename (under `~/.alchemy/credentials/{profile}/`) used to cache the
@@ -11,13 +13,6 @@ import * as Schema from "effect/Schema";
  * (`StateStore/State.ts` -> `Providers.ts` -> `Auth/AuthProvider.ts`).
  */
 export const CREDENTIALS_FILE = "cloudflare-state-store";
-
-/**
- * The cache file of one state store: the default store keeps
- * {@link CREDENTIALS_FILE}, a named store's is suffixed with its name.
- */
-export const credentialsFile = (storeName: string) =>
-  storeName === "alchemy-state-store" ? CREDENTIALS_FILE : `${CREDENTIALS_FILE}-${storeName}`;
 
 /**
  * On-disk shape of the cached Cloudflare state-store credentials.
@@ -56,3 +51,58 @@ export const isStateStoreCredentialsStale = (
   credentials: StoredStateStoreCredentials,
   currentAccountId: string,
 ): boolean => credentials.accountId == null || credentials.accountId !== currentAccountId;
+
+/** The default state store's name; a legacy file holds its credentials alone. */
+const DEFAULT_STORE = "alchemy-state-store";
+
+/**
+ * Every state store's cached credentials for a profile, by store name, in
+ * the one {@link CREDENTIALS_FILE}: deleting the file (on `profile edit`,
+ * logout, or an account change) clears them all. A legacy file holds the
+ * default store's credentials alone.
+ */
+const StoredStateStores = Schema.Union([
+  Schema.Struct({ stores: Schema.Record(Schema.String, StoredStateStoreCredentials) }),
+  StoredStateStoreCredentials,
+]);
+
+const readStores = (store: CredentialsStoreService, profile: string) =>
+  Effect.map(store.read(profile, CREDENTIALS_FILE, StoredStateStores), (file) =>
+    file === undefined
+      ? {}
+      : "stores" in file
+        ? file.stores
+        : ({ [DEFAULT_STORE]: file } as Record<string, StoredStateStoreCredentials>),
+  );
+
+/** One state store's cached credentials, if any. */
+export const readStoreCredentials = (
+  store: CredentialsStoreService,
+  profile: string,
+  storeName: string,
+) => Effect.map(readStores(store, profile), (stores) => stores[storeName]);
+
+/** Cache one state store's credentials beside the profile's other stores. */
+export const writeStoreCredentials = (
+  store: CredentialsStoreService,
+  profile: string,
+  storeName: string,
+  credentials: StoredStateStoreCredentials,
+) =>
+  Effect.flatMap(readStores(store, profile), (stores) =>
+    store.write(profile, CREDENTIALS_FILE, StoredStateStores, {
+      stores: { ...stores, [storeName]: credentials },
+    }),
+  );
+
+/** Drop one state store's cached credentials; the file goes with the last. */
+export const deleteStoreCredentials = (
+  store: CredentialsStoreService,
+  profile: string,
+  storeName: string,
+) =>
+  Effect.flatMap(readStores(store, profile), ({ [storeName]: _, ...rest }) =>
+    Object.keys(rest).length === 0
+      ? store.delete(profile, CREDENTIALS_FILE)
+      : store.write(profile, CREDENTIALS_FILE, StoredStateStores, { stores: rest }),
+  );

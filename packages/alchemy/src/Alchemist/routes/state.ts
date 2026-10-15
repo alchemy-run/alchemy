@@ -22,23 +22,15 @@ export type StateSource =
   /** Whatever the project's entrypoint configures. */
   | ({ readonly backend: "configured" } & Target);
 
-/**
- * A plugin's state store by `--backend` name, checking it can address the
- * named store when one is given.
- */
-const findBackend = Effect.fn(function* (backend: string, name?: string) {
+/** A plugin's state store by `--backend` name. */
+const findBackend = Effect.fn(function* (backend: string) {
   const stores = yield* Plugin.stateStores();
   const store = stores.get(backend);
   if (store === undefined) {
     return yield* new Plugin.PluginError({
       message: `Unknown state backend '${backend}'. Available: local, configured${[...stores.keys()]
-        .map((store) => `, ${store}`)
+        .map((name) => `, ${name}`)
         .join("")}.`,
-    });
-  }
-  if (name !== undefined && !store.supportsNames) {
-    return yield* new Plugin.PluginError({
-      message: `State backend '${backend}' has only the default store; it does not take a name.`,
     });
   }
   return store;
@@ -63,7 +55,7 @@ export const store = Effect.fn("Alchemist.state.store")(function* (source: State
   }
   if (source.backend !== "configured") {
     const { name, profile, envFile } = source as Plugin.StateStoreTarget;
-    const backend = yield* findBackend(source.backend, name);
+    const backend = yield* findBackend(source.backend);
     const config = ConfigProvider.layer(
       withProfileOverride(yield* loadConfigProvider(Option.fromNullishOr(envFile)), profile),
     );
@@ -110,11 +102,11 @@ export interface LifecycleTarget extends Plugin.StateStoreTarget {
 }
 
 const lifecycleOperation = <K extends keyof Plugin.StateStoreLifecycle>(
-  { backend, name }: LifecycleTarget,
+  { backend }: LifecycleTarget,
   operation: K,
 ) =>
   Effect.gen(function* () {
-    const store = yield* findBackend(backend, name);
+    const store = yield* findBackend(backend);
     const lifecycle = store.lifecycle
       ? yield* Effect.tryPromise({
           try: store.lifecycle,
