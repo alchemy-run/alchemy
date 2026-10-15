@@ -66,6 +66,33 @@ it.effect("deposits into an open account and replies with the balance", () =>
 );
 ```
 
+## Build it with your coding agent
+
+The `alchemy-domain` skill teaches a coding agent how to turn requirements into a model, lay out the project, test it with stories, host it on Cloudflare and drive it from foldkit.
+
+Ship it with your dependencies, so the skill always matches the alchemy version you have installed:
+
+```sh
+bun add -d skills-npm
+bunx skills-npm setup
+```
+
+`setup` adds a `prepare` script. Every install then links the skills your packages ship into each coding agent's skills folder.
+
+Or install it from GitHub, for any agent:
+
+```sh
+npx skills add alchemy-run/alchemy --skill alchemy-domain
+```
+
+In Claude Code, it's also a plugin:
+
+```text
+/plugin install alchemy --marketplace alchemy-run/alchemy
+```
+
+A skill installed from GitHub follows the repository's main branch, so update it when you upgrade alchemy.
+
 ## Where to start
 
 **New to domain-driven design?** [What is Domain-Driven Design?](/domain/what-is-ddd) introduces the ideas one at a time, with the bank as the example.

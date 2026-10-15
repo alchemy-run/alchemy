@@ -26,6 +26,7 @@
     "!bin/register-dev-mode.js",
     "lib",
     "src",
+    "skills",
     "NOTICE",
     "THIRD_PARTY_LICENSES.md"
   ],
