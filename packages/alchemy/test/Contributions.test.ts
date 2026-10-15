@@ -71,15 +71,15 @@ layer(NodeServices.layer)("Contributions.load", (it) => {
       const root = yield* project({
         "fake-provider": contributingPackage(
           "fake-provider",
-          `export default { name: "fake", stateStore: { description: "Fake store" } };`,
+          `export default { name: "fake", stateStores: { fake: { description: "Fake store" } } };`,
         ),
       });
       const providers = yield* Contributions.load(root);
       const names = providers.map((provider) => provider.name);
       expect(names).toEqual(expect.arrayContaining(["aws", "cloudflare", "prisma", "fake"]));
-      expect(providers.find((provider) => provider.name === "fake")?.stateStore?.description).toBe(
-        "Fake store",
-      );
+      expect(
+        providers.find((provider) => provider.name === "fake")?.stateStores?.fake?.description,
+      ).toBe("Fake store");
     }).pipe(Effect.scoped),
   );
 
@@ -188,15 +188,67 @@ layer(NodeServices.layer)("Contributions.load", (it) => {
     }).pipe(Effect.scoped),
   );
 
-  it.effect("skips a provider named after a backend alchemy reserves", () =>
+  const storeNames = (dependencies: Record<string, string>) =>
     Effect.gen(function* () {
-      const root = yield* project({
-        "local-store": contributingPackage("local-store", `export default { name: "local" };`),
-      });
-      const names = (yield* Contributions.load(root)).map((provider) => provider.name);
-      expect(names).not.toContain("local");
-      expect(names).toContain("aws");
-    }).pipe(Effect.scoped),
+      const root = yield* project(
+        Object.fromEntries(
+          Object.entries(dependencies).map(([name, source]) => [
+            name,
+            contributingPackage(name, source),
+          ]),
+        ),
+      );
+      return yield* inDirectory(root, Contributions.stateStores());
+    });
+
+  it.effect(
+    "a provider contributes several state stores",
+    () =>
+      Effect.gen(function* () {
+        const stores = yield* storeNames({
+          "multi-store": `export default { name: "multi", stateStores: {
+            "multi-kv": { description: "KV" },
+            "multi-sql": { description: "SQL" },
+          } };`,
+        });
+        expect(stores.get("multi-kv")?.provider.name).toBe("multi");
+        expect(stores.get("multi-sql")?.store.description).toBe("SQL");
+        expect(stores.get("aws")?.provider.name).toBe("aws");
+      }).pipe(Effect.scoped),
+    // Exclusive: changes the process's working directory.
+    { exclusive: true },
+  );
+
+  it.effect(
+    "two providers contributing one state store name is an error",
+    () =>
+      Effect.gen(function* () {
+        const error = yield* Effect.flip(
+          storeNames({
+            "aws-store": `export default { name: "other", stateStores: { aws: { description: "S3" } } };`,
+          }),
+        );
+        expect(contributionErrorMessage(error)).toBe(
+          "aws and other both contribute a state store named aws",
+        );
+      }).pipe(Effect.scoped),
+    { exclusive: true },
+  );
+
+  it.effect(
+    "a state store named after a backend alchemy reserves is an error",
+    () =>
+      Effect.gen(function* () {
+        const error = yield* Effect.flip(
+          storeNames({
+            "local-store": `export default { name: "other", stateStores: { local: { description: "Local" } } };`,
+          }),
+        );
+        expect(contributionErrorMessage(error)).toBe(
+          "other and alchemy both contribute a state store named local",
+        );
+      }).pipe(Effect.scoped),
+    { exclusive: true },
   );
 });
 
@@ -253,7 +305,9 @@ const layer = Layer.effect(
 
 export default {
   name: "scoped-store",
-  stateStore: { description: "Scoped", load: Effect.succeed({ layer: () => layer }) },
+  stateStores: {
+    "scoped-store": { description: "Scoped", load: Effect.succeed({ layer: () => layer }) },
+  },
 };
 `,
   );

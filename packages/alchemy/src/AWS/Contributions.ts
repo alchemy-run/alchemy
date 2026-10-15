@@ -6,12 +6,14 @@ export default Contributions.make({
     () => import("./AuthProvider.ts"),
     (module) => module.AwsAuth,
   ),
-  stateStore: {
-    description: "S3 state store in the profile's AWS account",
-    load: Contributions.lazy(
-      () => import("./Alchemist/StateStore.ts"),
-      (module) => module.stateStore,
-    ),
+  stateStores: {
+    aws: {
+      description: "S3 state store in the profile's AWS account",
+      load: Contributions.lazy(
+        () => import("./Alchemist/StateStore.ts"),
+        (module) => module.stateStore,
+      ),
+    },
   },
   cli: {
     provider: {

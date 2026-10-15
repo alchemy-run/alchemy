@@ -6,12 +6,14 @@ export default Contributions.make({
     () => import("./Auth/AuthProvider.ts"),
     (module) => module.CloudflareAuth,
   ),
-  stateStore: {
-    description: "State-store Worker in the profile's Cloudflare account",
-    load: Contributions.lazy(
-      () => import("./Alchemist/StateStore.ts"),
-      (module) => module.stateStore,
-    ),
+  stateStores: {
+    cloudflare: {
+      description: "State-store Worker in the profile's Cloudflare account",
+      load: Contributions.lazy(
+        () => import("./Alchemist/StateStore.ts"),
+        (module) => module.stateStore,
+      ),
+    },
   },
   cli: {
     provider: {

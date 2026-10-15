@@ -47,10 +47,11 @@ export interface Contributions {
    */
   readonly auth?: Lazy<Layer.Layer<never, never, ContributionServices>>;
   /**
-   * The provider's state store, reachable from a profile alone as
-   * `alchemy state --backend <provider name>`.
+   * The provider's state stores by `--backend` name, e.g. `{ aws: ... }`,
+   * each reachable from a profile alone as `alchemy state --backend <name>`.
+   * Names are global: two providers contributing one name is an error.
    */
-  readonly stateStore?: StateStore;
+  readonly stateStores?: Readonly<Record<string, StateStore>>;
   /** CLI commands the provider adds. */
   readonly cli?: Cli;
   /**
@@ -388,7 +389,7 @@ const discover = Effect.fn("Contributions.discover")(function* (cwd: string) {
   // alchemy's own: the providers that still live in this package.
   for (const specifier of own?.alchemy?.contributes ?? []) declared.set(specifier, { specifier });
   // A provider that fails to load is skipped, never the rest; the first provider
-  // with a name wins, and `--backend` names alchemy reserves are taken.
+  // with a name wins.
   const providers = new Map<string, Contributions>();
   for (const declaration of declared.values()) {
     const provider = yield* importContributions(declaration).pipe(
@@ -400,10 +401,7 @@ const discover = Effect.fn("Contributions.discover")(function* (cwd: string) {
       ),
     );
     if (provider === undefined) continue;
-    if (
-      providers.has(provider.name) ||
-      (RESERVED_BACKENDS as ReadonlyArray<string>).includes(provider.name)
-    ) {
+    if (providers.has(provider.name)) {
       // Expected for alchemy's own copy of a provider that moved out.
       yield* (declaration.manifest ? Effect.logWarning : Effect.logDebug)(
         `Skipping ${declaration.specifier}: the name ${provider.name} is taken`,
@@ -441,14 +439,25 @@ export const load = Effect.fn("Contributions.load")(function* (cwd?: string) {
   return yield* cached;
 });
 
-/** Every provider's state store, by `--backend` (provider) name, with its provider. */
+/** Every provider's state stores, by `--backend` name, with their provider. */
 export const stateStores = Effect.fn("Contributions.stateStores")(function* () {
   const stores = new Map<
     string,
     { readonly provider: Contributions; readonly store: StateStore }
   >();
   for (const provider of yield* load()) {
-    if (provider.stateStore) stores.set(provider.name, { provider, store: provider.stateStore });
+    for (const [backend, store] of Object.entries(provider.stateStores ?? {})) {
+      // A state backend name addresses one store, so two providers can't share it.
+      const owner = (RESERVED_BACKENDS as ReadonlyArray<string>).includes(backend)
+        ? "alchemy"
+        : stores.get(backend)?.provider.name;
+      if (owner !== undefined) {
+        return yield* new ContributionError({
+          message: `${provider.name} and ${owner} both contribute a state store named ${backend}`,
+        });
+      }
+      stores.set(backend, { provider, store });
+    }
   }
   return stores;
 });
