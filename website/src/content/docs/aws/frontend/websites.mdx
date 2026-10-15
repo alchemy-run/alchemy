@@ -8,8 +8,9 @@ sidebar:
 
 Alchemy deploys frontends to AWS with a family of `AWS.Website`
 resources. Each one builds your project programmatically and deploys
-it as a serverless site — the SSR server on a streaming Lambda
-Function URL, static assets in a private S3 bucket, and a CloudFront
+it as a serverless site — the SSR server on a
+[Lambda Web Function](/aws/compute/web-functions), static assets in a
+private S3 bucket, and a CloudFront
 distribution whose edge router serves uploaded files from S3 and
 forwards everything else to the server — with no AWS-specific
 configuration: no CDK, no CloudFormation, no adapter setup. Your
@@ -31,7 +32,7 @@ integration on top.
 - [`Vinext`](/aws/frontend/vinext) — vinext (Next.js API on Vite)
   apps on a streaming Lambda; your `vite.config.ts` loads natively.
 - [`Nuxt`](/aws/frontend/nuxt) — Nuxt apps built through nitro's
-  `aws-lambda` preset; your `nuxt.config.ts` loads natively.
+  `node` preset; your `nuxt.config.ts` loads natively.
 - [`ReactRouter`](/aws/frontend/react-router) — React Router v7 in
   framework mode, built through your own `vite build`.
 - [`SvelteKit`](/aws/frontend/sveltekit) — SvelteKit apps with a
@@ -51,13 +52,50 @@ integration on top.
   sites (or a site plus an API), routed at the edge.
 
 Every resource shares the same surface: `domain` (ACM certificate +
-Route 53 records), server configuration (`memorySize`, `timeout`,
-`env`), `assets`, `edge` customizations, and `invalidation`.
+Route 53 records), server configuration (`timeout`, `env`,
+`maxConcurrencyPerEnvironment`, `maxEnvironments`), `assets`, `edge`
+customizations, and `invalidation`.
 All builds are memoized by content-hashing the input files — an
 unchanged project skips the build and deploy entirely. Under
 `alchemy dev`, every resource runs the framework's own dev server
 (native HMR) instead of deploying; `Alchemy.remote()` opts back into
 the full live deployment.
+
+## Serve from several Regions
+
+List extra Regions to run the server in each of them behind one global
+domain. CloudFront forwards to it, and each request reaches the nearest
+Region:
+
+```typescript
+const site = yield* AWS.Website.Nuxt("Website", {
+  regions: ["us-east-1", "eu-west-1"],
+});
+```
+
+The site's URL doesn't change when you add or remove Regions. `Nextjs`
+and `Vinext` keep their data caches in the home Region, so a server in
+another Region reaches back to it for cached pages; `regions` helps most
+for sites without a server-side cache.
+
+## Choose the server
+
+The SSR server runs on a Lambda Web Function: your framework's own Node
+server, serving many requests per environment and streaming each
+response. Web Functions run in a subset of Regions. Elsewhere, set
+`server: "function"` to run the server on a Lambda Function behind a
+streaming Function URL:
+
+```typescript
+const site = yield* AWS.Website.Nuxt("Website", {
+  server: "function",
+  memorySize: 2048,
+});
+```
+
+`memorySize`, `architecture`, and `runtime` apply only to
+`server: "function"`; a Web Function has a fixed 2 GB, Arm64 and
+Node.js 24.
 
 ## What's supported
 

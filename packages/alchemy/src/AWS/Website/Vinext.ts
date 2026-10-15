@@ -20,17 +20,19 @@ export const VINEXT_AWS_TARGET_SPECIFIER = "@alchemy.run/frontend-frameworks/vin
 /** Env var the S3 data-cache adapter reads for the ISR/fetch cache bucket. */
 export const VINEXT_CACHE_BUCKET_ENV = "CACHE_BUCKET_NAME";
 
-export interface VinextProps extends FrameworkSiteProps {}
+export type VinextProps = FrameworkSiteProps;
 
 /**
  * Deploy a [vinext](https://vinext.dev) App Router application to AWS: the RSC
- * server on a streaming Lambda Function URL, static assets in S3, and a
- * CloudFront distribution whose edge router serves uploaded files from S3
- * and forwards everything else to the server.
+ * server on a Lambda Web Function, static assets in S3, and a CloudFront
+ * distribution whose edge router serves uploaded files from S3 and
+ * forwards everything else to the server. Set `server: "function"` to run
+ * it on a streaming Lambda Function URL instead, for Regions without Web
+ * Functions.
  *
  * ISR / `"use cache"` persistence is an S3 bucket (not Cloudflare KV).
  * This resource provisions the bucket, sets `CACHE_BUCKET_NAME`, and
- * grants the Lambda Get/Put/Delete/List. Alchemy injects the S3 data-cache
+ * grants the server Get/Put/Delete/List. Alchemy injects the S3 data-cache
  * adapter during the build; no Alchemy plugin is needed in `vite.config.ts`.
  * A dedicated cache bucket keeps the graph acyclic (the asset bucket
  * is bound to CloudFront).
@@ -65,7 +67,7 @@ export interface VinextProps extends FrameworkSiteProps {}
  * @product Website
  * @category Frontend
  */
-export const Vinext = (id: string, propsIn: InputProps<VinextProps> = {}) =>
+export const Vinext = (id: string, propsIn: InputProps<VinextProps, "server"> = {}) =>
   Effect.gen(function* () {
     const props = propsIn as VinextProps;
     const ctx = yield* AlchemyContext;
@@ -100,6 +102,11 @@ export const Vinext = (id: string, propsIn: InputProps<VinextProps> = {}) =>
         name: "Vinext",
         framework: VINEXT_AWS_FRAMEWORK_SPECIFIER,
         target: VINEXT_AWS_TARGET_SPECIFIER,
+        // The same self-contained `dist/server` (S3 data cache included),
+        // served by a Node HTTP server instead of a Lambda handler.
+        webTarget: VINEXT_AWS_TARGET_SPECIFIER,
+        webOptions: { server: "web-function" },
+        webPrebuilt: true,
       },
     );
     if (site.server !== undefined) {
