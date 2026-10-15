@@ -118,7 +118,7 @@ const lifecycleOperation = <K extends keyof Plugin.StateStoreLifecycle>(
     const run = lifecycle?.[operation];
     if (run === undefined) {
       return yield* new Plugin.PluginError({
-        message: `State backend '${backend}' has no ${operation}: it needs no provisioning.`,
+        message: `State backend '${backend}' does not support ${operation}.`,
       });
     }
     return run as NonNullable<Plugin.StateStoreLifecycle[K]>;

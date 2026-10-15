@@ -871,3 +871,31 @@ const ensureStateBucket = (bucket: string, region: string, options: S3StateOptio
       schedule: Schedule.max([Schedule.spaced("2 seconds"), Schedule.recurs(10)]),
     }),
   );
+
+/** The profile's AWS environment, resolved the way {@link state} resolves it. */
+export const stateEnvironment = () =>
+  Layer.fresh(AwsRegion.fromEnvironment).pipe(
+    Layer.provideMerge(Layer.fresh(AwsCredentials.fromEnvironment)),
+    Layer.provideMerge(Layer.fresh(Endpoint.fromEnvironment)),
+    Layer.provideMerge(providedOrDefault()),
+    Layer.provideMerge(AwsAuth),
+    Layer.provideMerge(CredentialsStoreLive),
+  );
+
+/**
+ * Create the state bucket with its secure defaults, or converge an existing
+ * one to them: what first use of {@link state} does.
+ */
+export const provisionStateBucket = (
+  bucket: string,
+  region: string,
+): Effect.Effect<void, StateStoreError, S3Deps> =>
+  ensureStateBucket(bucket, region, {}).pipe(
+    Effect.mapError(
+      (cause) =>
+        new StateStoreError({
+          message: `Could not provision state bucket ${bucket}: ${cause._tag}`,
+          cause: cause instanceof Error ? cause : undefined,
+        }),
+    ),
+  );

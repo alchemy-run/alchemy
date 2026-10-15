@@ -48,7 +48,8 @@ export const destroyBootstrap = Effect.fn(function* () {
   };
 });
 
-const deleteAllObjects = Effect.fn(function* (bucketName: string) {
+/** Delete every object, version and delete marker in a bucket. */
+export const deleteAllObjects = Effect.fn(function* (bucketName: string) {
   let continuationToken: string | undefined;
   do {
     const listResponse = yield* s3.listObjectsV2({
