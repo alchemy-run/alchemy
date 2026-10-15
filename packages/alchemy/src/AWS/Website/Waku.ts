@@ -8,6 +8,9 @@ export const WAKU_FRAMEWORK_SPECIFIER = "@alchemy.run/frontend-frameworks/waku";
 /** The AWS Lambda deploy target for the Waku build. */
 export const WAKU_AWS_TARGET_SPECIFIER = "@alchemy.run/frontend-frameworks/waku/aws";
 
+/** The Node deploy target for the Lambda Web Function server (the default). */
+export const WAKU_WEB_TARGET_SPECIFIER = "@alchemy.run/frontend-frameworks/waku/node";
+
 export interface WakuProps extends FrameworkSiteProps {
   /**
    * Waku config overrides merged over the project's `waku.config.*`
@@ -38,9 +41,16 @@ export interface WakuProps extends FrameworkSiteProps {
 
 /**
  * Deploy a [Waku](https://waku.gg) application to AWS: the RSC server on a
- * streaming Lambda Function URL, static assets (SSG pages included) in S3,
- * and a CloudFront distribution whose edge router serves uploaded files
- * from S3 and forwards everything else to the server.
+ * Lambda Web Function, static assets (SSG pages included) in S3, and a
+ * CloudFront distribution whose edge router serves uploaded files from S3
+ * and forwards everything else to the server.
+ *
+ * The server runs on a Lambda Web Function: the framework's Node server
+ * (built with the `@alchemy.run/frontend-frameworks/waku/node` deploy
+ * target) serves many requests per environment and streams responses. Set
+ * `server: "function"` to use a Lambda Function behind a streaming Function
+ * URL instead, built with the `/aws` target below, for Regions without Web
+ * Functions.
  *
  * The build runs through `@alchemy.run/frontend-frameworks/waku` with the
  * `@alchemy.run/frontend-frameworks/waku/aws` deploy target (this package's fork
@@ -100,6 +110,7 @@ export const Waku = (id: string, props: InputProps<WakuProps> = {}) => {
     name: "Waku",
     framework: WAKU_FRAMEWORK_SPECIFIER,
     target: WAKU_AWS_TARGET_SPECIFIER,
+    webTarget: WAKU_WEB_TARGET_SPECIFIER,
     // Deploy-time waku config overrides, merged over the project's
     // `waku.config.*` by the integration (per-key; overrides win).
     options: p.waku !== undefined ? { waku: p.waku } : undefined,

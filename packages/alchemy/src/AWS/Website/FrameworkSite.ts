@@ -7,6 +7,7 @@ import * as Output from "../../Output.ts";
 import { ProviderModePolicy } from "../../ProviderMode.ts";
 import { Server, type ServerDevProps } from "../../Website/Server.ts";
 import { Function as LambdaFunction, type FunctionProps } from "../Lambda/Function.ts";
+import { WebFunction } from "../Lambda/WebFunction.ts";
 import { asRouterDomain, registerDevRouterRoute } from "./DevRouterRoute.ts";
 import {
   normalizeWebsiteDomain,
@@ -40,7 +41,27 @@ export interface FrameworkSiteProps {
    */
   env?: Record<string, any>;
   /**
-   * Memory allocated to the server function, in MB.
+   * What runs the SSR server. `"web-function"` is a Lambda Web Function:
+   * the framework's Node server handles many requests per environment and
+   * streams responses. `"function"` is a Lambda Function behind a
+   * streaming Function URL, for Regions without Web Functions.
+   * @default "web-function"
+   */
+  server?: "web-function" | "function";
+  /**
+   * Requests one Web Function environment serves at once (1–128). Only
+   * applies to `server: "web-function"`.
+   * @default 64
+   */
+  maxConcurrencyPerEnvironment?: number;
+  /**
+   * Maximum Web Function environments per Region (2–10,000). Only applies
+   * to `server: "web-function"`.
+   */
+  maxEnvironments?: number;
+  /**
+   * Memory allocated to the server function, in MB. Only applies to
+   * `server: "function"`; Web Functions have a fixed 2 GB.
    * @default 1024
    */
   memorySize?: number;
@@ -50,12 +71,14 @@ export interface FrameworkSiteProps {
    */
   timeout?: Duration.Duration;
   /**
-   * Server instruction set architecture.
+   * Server instruction set architecture. Only applies to
+   * `server: "function"`; Web Functions run on Arm64.
    * @default "x86_64"
    */
   architecture?: "x86_64" | "arm64";
   /**
-   * Lambda runtime for the server function.
+   * Lambda runtime for the server function. Only applies to
+   * `server: "function"`; Web Functions run Node.js 24.
    * @default "nodejs24.x"
    */
   runtime?: FunctionProps["runtime"];
@@ -114,8 +137,19 @@ export interface FrameworkSiteConfig {
   name: string;
   /** Framework-integration module specifier. */
   framework: string;
-  /** AWS deploy-target module specifier. */
+  /** AWS Lambda deploy-target module specifier (`server: "function"`). */
   target: string;
+  /**
+   * Node deploy-target module specifier (`server: "web-function"`). Its
+   * serve entry listens on `AWS_LAMBDA_HTTP_ENDPOINT`. Without one the
+   * site always uses a Lambda Function.
+   */
+  webTarget?: string;
+  /**
+   * Packages installed into the Web Function instead of bundled (the
+   * framework's runtime when its server can't be bundled).
+   */
+  install?: ReadonlyArray<string>;
   /**
    * Framework-specific build options forwarded to the integration (e.g.
    * `{ kit }`, `{ nuxt }`, `{ astro }`). Must be JSON-serializable.
@@ -174,9 +208,11 @@ export const makeFrameworkSite = Effect.fn("AWS.Website.FrameworkSite")(function
       ? { ...props.dev, host: props.dev?.host ?? "0.0.0.0" }
       : props.dev;
 
+  const onWebFunction =
+    config.webTarget !== undefined && (props.server ?? "web-function") === "web-function";
   const build = yield* Server("Build", {
     framework: config.framework,
-    target: config.target,
+    target: onWebFunction ? config.webTarget! : config.target,
     root: props.rootDir,
     env: props.env,
     options: config.options,
@@ -228,6 +264,31 @@ export const makeFrameworkSite = Effect.fn("AWS.Website.FrameworkSite")(function
       build,
       server: undefined,
       serverUrl: undefined,
+    };
+  }
+
+  if (onWebFunction) {
+    // The Node deploy target writes a complete server program
+    // (`serve-node.mjs`) that listens where Lambda says; bundle it like any
+    // async Web Function. Assets stay in S3 behind the edge router.
+    const server = yield* WebFunction("WebServer", {
+      main: build.serverEntry as unknown as string,
+      authType: "ApplicationManaged",
+      env: props.env,
+      timeout: props.timeout ?? Duration.seconds(30),
+      maxConcurrencyPerEnvironment: props.maxConcurrencyPerEnvironment,
+      maxEnvironments: props.maxEnvironments,
+      build:
+        config.install !== undefined && config.install.length > 0
+          ? { install: [...config.install] }
+          : undefined,
+    });
+    const site = yield* makeKvSite(id, siteProps, { serverHost: server.domainName });
+    return {
+      ...site,
+      build,
+      server,
+      serverUrl: server.url,
     };
   }
 

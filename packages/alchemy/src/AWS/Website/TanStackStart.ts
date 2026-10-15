@@ -9,13 +9,24 @@ export const TANSTACK_START_FRAMEWORK_SPECIFIER = "@alchemy.run/frontend-framewo
 export const TANSTACK_START_AWS_TARGET_SPECIFIER =
   "@alchemy.run/frontend-frameworks/tanstack-start/aws";
 
+/** The Node deploy target for the Lambda Web Function server (the default). */
+export const TANSTACK_START_WEB_TARGET_SPECIFIER =
+  "@alchemy.run/frontend-frameworks/tanstack-start/node";
+
 export interface TanStackStartProps extends FrameworkSiteProps {}
 
 /**
  * Deploy a [TanStack Start](https://tanstack.com/start) application to AWS:
- * the SSR server on a streaming Lambda Function URL, client assets in S3,
- * and a CloudFront distribution whose edge router serves uploaded files from
- * S3 and forwards everything else to the server.
+ * the SSR server on a Lambda Web Function, client assets in S3, and a
+ * CloudFront distribution whose edge router serves uploaded files from S3
+ * and forwards everything else to the server.
+ *
+ * The server runs on a Lambda Web Function: the framework's Node server
+ * (built with the `@alchemy.run/frontend-frameworks/tanstack-start/node` deploy
+ * target) serves many requests per environment and streams responses. Set
+ * `server: "function"` to use a Lambda Function behind a streaming Function
+ * URL instead, built with the `/aws` target below, for Regions without Web
+ * Functions.
  *
  * The build runs through
  * `@alchemy.run/frontend-frameworks/tanstack-start` with the
@@ -85,4 +96,5 @@ export const TanStackStart = (id: string, props: InputProps<TanStackStartProps> 
     name: "TanStackStart",
     framework: TANSTACK_START_FRAMEWORK_SPECIFIER,
     target: TANSTACK_START_AWS_TARGET_SPECIFIER,
+    webTarget: TANSTACK_START_WEB_TARGET_SPECIFIER,
   }).pipe(Namespace.push(id));

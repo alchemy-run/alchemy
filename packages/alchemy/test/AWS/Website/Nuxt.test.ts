@@ -34,7 +34,7 @@ describe.skipIf(!runLive)(
   { tags: ["provider:aws", "provider:aws:cloudfront", "provider:aws:website", "live"] },
   () => {
     test.provider.skipIf(runEmulated)(
-      "deploys SSR on a streaming Lambda URL with S3 assets behind CloudFront",
+      "deploys SSR on a Lambda Web Function with S3 assets behind CloudFront",
       (stack) =>
         Effect.gen(function* () {
           yield* stack.destroy();
@@ -59,6 +59,8 @@ describe.skipIf(!runLive)(
           const url = deployed.site.url! as string;
           expect(url).toMatch(/^https:\/\//);
           expect(deployed.site.serverUrl).toBeDefined();
+          // The server is a Lambda Web Function (the default).
+          expect(deployed.site.serverUrl).toContain(".lambda-web.");
           yield* Effect.log(`site url: ${url} | server url: ${deployed.site.serverUrl}`);
 
           // The Lambda Function URL serves the SSR page directly — isolates
@@ -100,6 +102,43 @@ describe.skipIf(!runLive)(
             yield* stack.destroy();
             yield* assertDistributionDeleted(distributionId);
           }
+        }),
+      { timeout: 2_400_000 },
+    );
+
+    test.provider.skipIf(runEmulated)(
+      'server: "function" deploys SSR on a streaming Lambda Function URL',
+      (stack) =>
+        Effect.gen(function* () {
+          yield* stack.destroy();
+
+          const rootDir = yield* cloneFixture(fixtureDir, {
+            prefix: "alchemy-nuxt-aws-fn-",
+            tempRoot,
+            entries: fixtureEntries,
+          });
+
+          const deployed = yield* stack.deploy(
+            Effect.gen(function* () {
+              const site = yield* AWS.Website.Nuxt("NuxtFunctionSite", {
+                rootDir,
+                server: "function",
+                forceDestroy: true,
+                invalidation: { paths: "all", wait: true },
+              });
+              return { site };
+            }),
+          );
+
+          expect(deployed.site.serverUrl).toContain(".lambda-url.");
+          yield* expectUrlContains(`${deployed.site.url!}/`, "NUXT_AWS_PAGE_MARKER", {
+            timeout: "180 seconds",
+            label: "SSR home page",
+          });
+
+          const distributionId = deployed.site.distribution!.distributionId;
+          yield* stack.destroy();
+          yield* assertDistributionDeleted(distributionId);
         }),
       { timeout: 2_400_000 },
     );

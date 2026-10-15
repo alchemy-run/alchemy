@@ -8,6 +8,9 @@ export const OCTANE_FRAMEWORK_SPECIFIER = "@alchemy.run/frontend-frameworks/octa
 /** The AWS Lambda deploy target for the Octane build. */
 export const OCTANE_AWS_TARGET_SPECIFIER = "@alchemy.run/frontend-frameworks/octane/aws";
 
+/** The Node deploy target for the Lambda Web Function server (the default). */
+export const OCTANE_WEB_TARGET_SPECIFIER = "@alchemy.run/frontend-frameworks/octane/node";
+
 export interface OctaneProps extends FrameworkSiteProps {
   /**
    * Project root directory (the directory containing `vite.config.ts` and
@@ -19,9 +22,16 @@ export interface OctaneProps extends FrameworkSiteProps {
 
 /**
  * Deploy an [OctaneJS](https://octanejs.dev) application to AWS: Octane's
- * SSR server on a streaming Lambda Function URL, static assets in S3, and a
- * CloudFront distribution whose edge router serves uploaded files from S3
- * and forwards everything else to the server.
+ * SSR server on a Lambda Web Function, static assets in S3, and a CloudFront
+ * distribution whose edge router serves uploaded files from S3 and forwards
+ * everything else to the server.
+ *
+ * The server runs on a Lambda Web Function: the framework's Node server
+ * (built with the `@alchemy.run/frontend-frameworks/octane/node` deploy
+ * target) serves many requests per environment and streams responses. Set
+ * `server: "function"` to use a Lambda Function behind a streaming Function
+ * URL instead, built with the `/aws` target below, for Regions without Web
+ * Functions.
  *
  * The build runs through `@alchemy.run/frontend-frameworks/octane` with the
  * `@alchemy.run/frontend-frameworks/octane/aws` deploy target — the project's
@@ -70,4 +80,5 @@ export const Octane = (id: string, props: InputProps<OctaneProps> = {}) =>
     name: "Octane",
     framework: OCTANE_FRAMEWORK_SPECIFIER,
     target: OCTANE_AWS_TARGET_SPECIFIER,
+    webTarget: OCTANE_WEB_TARGET_SPECIFIER,
   }).pipe(Namespace.push(id));

@@ -8,6 +8,9 @@ export const NUXT_FRAMEWORK_SPECIFIER = "@alchemy.run/frontend-frameworks/nuxt";
 /** The AWS Lambda deploy target for the Nuxt build. */
 export const NUXT_AWS_TARGET_SPECIFIER = "@alchemy.run/frontend-frameworks/nuxt/aws";
 
+/** The Node deploy target for the Lambda Web Function server (the default). */
+export const NUXT_WEB_TARGET_SPECIFIER = "@alchemy.run/frontend-frameworks/nuxt/node";
+
 export interface NuxtProps extends FrameworkSiteProps {
   /**
    * Nuxt config overrides merged over the project's own `nuxt.config.ts`
@@ -25,10 +28,17 @@ export interface NuxtProps extends FrameworkSiteProps {
 }
 
 /**
- * Deploy a Nuxt application to AWS: the nitro server on a streaming Lambda
- * Function URL, static assets (prerendered pages included) in S3, and a
+ * Deploy a Nuxt application to AWS: the nitro server on a Lambda Web
+ * Function, static assets (prerendered pages included) in S3, and a
  * CloudFront distribution whose edge router serves uploaded files from S3
  * and forwards everything else to the server.
+ *
+ * The server runs on a Lambda Web Function: the framework's Node server
+ * (built with the `@alchemy.run/frontend-frameworks/nuxt/node` deploy
+ * target) serves many requests per environment and streams responses. Set
+ * `server: "function"` to use a Lambda Function behind a streaming Function
+ * URL instead, built with the `/aws` target below, for Regions without Web
+ * Functions.
  *
  * The build runs through `@alchemy.run/frontend-frameworks/nuxt` with the
  * `@alchemy.run/frontend-frameworks/nuxt/aws` deploy target (nitro's `aws-lambda` preset,
@@ -94,6 +104,7 @@ export const Nuxt = (id: string, props: InputProps<NuxtProps> = {}) => {
     name: "Nuxt",
     framework: NUXT_FRAMEWORK_SPECIFIER,
     target: NUXT_AWS_TARGET_SPECIFIER,
+    webTarget: NUXT_WEB_TARGET_SPECIFIER,
     options: p.nuxt !== undefined ? { nuxt: p.nuxt } : undefined,
   }).pipe(Namespace.push(id));
 };

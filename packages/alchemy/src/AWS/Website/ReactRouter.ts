@@ -9,13 +9,24 @@ export const REACT_ROUTER_FRAMEWORK_SPECIFIER = "@alchemy.run/frontend-framework
 export const REACT_ROUTER_AWS_TARGET_SPECIFIER =
   "@alchemy.run/frontend-frameworks/react-router/aws";
 
+/** The Node deploy target for the Lambda Web Function server (the default). */
+export const REACT_ROUTER_WEB_TARGET_SPECIFIER =
+  "@alchemy.run/frontend-frameworks/react-router/node";
+
 export interface ReactRouterProps extends FrameworkSiteProps {}
 
 /**
  * Deploy a [React Router](https://reactrouter.com) v7 app (framework mode)
- * to AWS: the SSR server on a streaming Lambda Function URL, client assets
- * in S3, and a CloudFront distribution whose edge router serves uploaded
- * files from S3 and forwards everything else to the server.
+ * to AWS: the SSR server on a Lambda Web Function, client assets in S3, and
+ * a CloudFront distribution whose edge router serves uploaded files from S3
+ * and forwards everything else to the server.
+ *
+ * The server runs on a Lambda Web Function: the framework's Node server
+ * (built with the `@alchemy.run/frontend-frameworks/react-router/node` deploy
+ * target) serves many requests per environment and streams responses. Set
+ * `server: "function"` to use a Lambda Function behind a streaming Function
+ * URL instead, built with the `/aws` target below, for Regions without Web
+ * Functions.
  *
  * The build runs through
  * `@alchemy.run/frontend-frameworks/react-router` with the
@@ -91,4 +102,5 @@ export const ReactRouter = (id: string, props: InputProps<ReactRouterProps> = {}
     name: "ReactRouter",
     framework: REACT_ROUTER_FRAMEWORK_SPECIFIER,
     target: REACT_ROUTER_AWS_TARGET_SPECIFIER,
+    webTarget: REACT_ROUTER_WEB_TARGET_SPECIFIER,
   }).pipe(Namespace.push(id));
