@@ -9,7 +9,6 @@ import type * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 import type * as Stream from "effect/Stream";
-import type { LogEntry } from "./Alchemist/routes/logs.ts";
 import type { AlchemyContext } from "./AlchemyContext.ts";
 import type { ArtifactStore } from "./Artifacts.ts";
 import type { AuthProviders } from "./Auth/AuthProvider.ts";
@@ -45,12 +44,12 @@ export interface Plugin {
    * Registers the provider's `AuthProvider` into `AuthProviders`, so
    * `alchemy profile` and login work without a stack that uses the provider.
    */
-  readonly auth?: Lazy<Layer.Layer<never, never, AuthServices>>;
+  readonly auth?: Lazy<Layer.Layer<never, never, PluginServices>>;
   /**
-   * State stores reachable from a profile alone, keyed by the name
-   * `alchemy state --backend <name>` addresses them by.
+   * The provider's state store, reachable from a profile alone as
+   * `alchemy state --backend <plugin name>`.
    */
-  readonly stateStores?: Readonly<Record<string, StateStore>>;
+  readonly stateStore?: StateStore;
   /** CLI commands the provider adds. */
   readonly cli?: Cli;
   /**
@@ -74,17 +73,14 @@ export type HostServices =
   | ArtifactStore
   | Interaction;
 
-/** What an auth layer runs under: the host's services and the registry it registers into. */
-export type AuthServices = HostServices | AuthProviders;
-
-/** What a state store's layer runs under: the host's services and an auth registry. */
-export type StateStoreServices = HostServices | AuthProviders;
+/** What auth layers and state stores run under: the host's services and the auth registry. */
+export type PluginServices = HostServices | AuthProviders;
 
 /** What a CLI command runs under: the host's services and the terminal. */
 export type CliServices = HostServices | CliKit;
 
-/** A plugin's own failure: any tagged error. */
-export type PluginFailure = { readonly _tag: string };
+/** A plugin's own failure: any tagged error with a message for the user. */
+export type PluginFailure = { readonly _tag: string; readonly message: string };
 /**
  * A field loaded when used, so importing a plugin module stays cheap. Build
  * one with {@link lazy}.
@@ -113,34 +109,22 @@ export interface StateStore {
 }
 
 export interface StateStoreImpl {
-  /**
-   * The store's `State` layer, for the named store or the default one: the
-   * provider's own `state` function. Built under the requested profile's
-   * config with an `AuthProviders` registry in context.
-   */
-  readonly layer: (
-    options: StateStoreOptions,
-  ) => Layer.Layer<State, PluginFailure, StateStoreServices>;
+  /** The store's `State` layer: the provider's own `state` function. */
+  readonly layer: (options: StateStoreOptions) => Layer.Layer<State, PluginFailure, PluginServices>;
   /** Provisioning, teardown and logs, for the operations the store supports. */
   readonly lifecycle?: StateStoreLifecycle;
 }
 
 /** The options every state store's `state(...)` takes. */
 export interface StateStoreOptions {
-  /** A store other than the account's default. */
+  /** A store other than the account's default, by logical name. */
   readonly name?: string;
 }
 
-/** Which store, profile and `.env` a state-store operation acts under. */
+/** Which store a lifecycle operation acts on, under the profile core resolved. */
 export interface StateStoreTarget {
-  /**
-   * A store other than the account's default: an S3 bucket, a state-store
-   * Worker. Every state store must support more than one per account.
-   */
+  /** A store other than the account's default, by logical name. */
   readonly name?: string;
-  /** Falls back to the active profile. */
-  readonly profile?: string;
-  readonly envFile?: string;
 }
 
 export interface StateStoreLifecycle {
@@ -150,42 +134,45 @@ export interface StateStoreLifecycle {
       /** Redeploy an existing store instead of adopting it. */
       readonly force?: boolean;
     },
-  ) => Effect.Effect<StateStoreBootstrap, StateStoreLifecycleError, HostServices>;
+  ) => Effect.Effect<StateStoreBootstrap, PluginFailure, PluginServices>;
   /** Delete the store and its backing resources. Idempotent. */
   readonly teardown?: (
     input: StateStoreTarget,
-  ) => Effect.Effect<StateStoreTeardown, StateStoreLifecycleError, HostServices>;
+  ) => Effect.Effect<StateStoreTeardown, PluginFailure, PluginServices>;
   /** The store's past log entries, oldest first. */
   readonly logs?: (
     input: StateStoreTarget & { readonly limit?: number; readonly since?: Date },
-  ) => Effect.Effect<ReadonlyArray<LogEntry>, StateStoreLifecycleError, HostServices>;
+  ) => Effect.Effect<ReadonlyArray<StateStoreLogEntry>, PluginFailure, PluginServices>;
   /** The store's log entries as they happen. */
   readonly tailLogs?: (
     input: StateStoreTarget,
-  ) => Stream.Stream<LogEntry, StateStoreLifecycleError, HostServices>;
+  ) => Stream.Stream<StateStoreLogEntry, PluginFailure, PluginServices>;
 }
 
 export interface StateStoreBootstrap {
   readonly status: "created" | "adopted" | "redeployed";
-  /** One line for the user, e.g. which Worker in which account. */
-  readonly summary: string;
+  /** The store's physical name: its Worker, its bucket. */
+  readonly store: string;
+  /** Where it lives, e.g. `{ account: "…", region: "us-east-1" }`. */
+  readonly location: Readonly<Record<string, string>>;
 }
 
 export interface StateStoreTeardown {
-  /** What was deleted, e.g. Worker names. */
+  /** What was deleted, by physical name. */
   readonly deleted: ReadonlyArray<string>;
 }
 
-/** Lifecycle errors are the store's own; any tagged error will do. */
-export type StateStoreLifecycleError = PluginFailure;
+export interface StateStoreLogEntry {
+  readonly timestamp: Date;
+  readonly message: string;
+}
 
 export interface Cli {
   /**
-   * A subcommand of `alchemy provider`. Its name and description list it in
-   * help; the command itself loads only when it runs.
+   * The `alchemy provider <plugin name>` subcommand. Its description lists it
+   * in help; the command itself loads only when it runs.
    */
   readonly provider?: {
-    readonly name: string;
     readonly description: string;
     readonly load: Lazy<AnyCommand>;
   };
@@ -205,8 +192,8 @@ export interface TestServices {
   readonly env?: Readonly<Record<string, string>>;
 }
 
-/** Declare a plugin; the identity function, for inference. */
-export const make = (plugin: Plugin): Plugin => plugin;
+/** Declare a plugin; the identity function, keeping its literal type. */
+export const make = <const P extends Plugin>(plugin: P): P => plugin;
 
 export class PluginError extends Data.TaggedError("PluginError")<{
   readonly message: string;
@@ -366,12 +353,12 @@ const importPlugin = (declared: Declared) =>
 const discover = Effect.fn("Plugin.discover")(function* (cwd: string) {
   const path = yield* Path.Path;
   const declared = new Map<string, Declared>();
-  // alchemy's own: the providers that still live in this package.
   const own = yield* readManifest(
     yield* path.fromFileUrl(new URL("../package.json", import.meta.url)),
   );
-  for (const specifier of own?.alchemy?.plugins ?? []) declared.set(specifier, { specifier });
-  // The project's dependencies that declare plugins.
+  // The project's dependencies that declare plugins, before alchemy's own:
+  // the first plugin with a name wins, so a provider that moved into its own
+  // package replaces the copy still inside alchemy.
   const project = yield* readManifest(path.join(cwd, "package.json"));
   const dependencies = Object.keys({
     ...project?.dependencies,
@@ -394,31 +381,37 @@ const discover = Effect.fn("Plugin.discover")(function* (cwd: string) {
       });
     }
   }
-  const plugins = yield* Effect.forEach(declared.values(), importPlugin, {
-    concurrency: "unbounded",
-  });
-  const seen = new Set<string>();
-  // `--backend` names: alchemy's own, then each plugin's state stores.
-  const backends = new Map<string, string>(RESERVED_BACKENDS.map((name) => [name, "alchemy"]));
-  for (const plugin of plugins) {
-    if (seen.has(plugin.name)) {
-      return yield* new PluginError({ message: `Two plugins are named ${plugin.name}` });
+  // alchemy's own: the providers that still live in this package.
+  for (const specifier of own?.alchemy?.plugins ?? []) declared.set(specifier, { specifier });
+  // A plugin that fails to load is skipped, never the rest; the first plugin
+  // with a name wins, and `--backend` names alchemy reserves are taken.
+  const plugins = new Map<string, Plugin>();
+  for (const declaration of declared.values()) {
+    const plugin = yield* importPlugin(declaration).pipe(
+      Effect.catch((error) =>
+        Effect.as(
+          Effect.logWarning(`Skipping plugin ${declaration.specifier}: ${error.message}`),
+          undefined,
+        ),
+      ),
+    );
+    if (plugin === undefined) continue;
+    if (
+      plugins.has(plugin.name) ||
+      (RESERVED_BACKENDS as ReadonlyArray<string>).includes(plugin.name)
+    ) {
+      // Expected for alchemy's own copy of a provider that moved out.
+      yield* (declaration.manifest ? Effect.logWarning : Effect.logDebug)(
+        `Skipping plugin ${declaration.specifier}: the name ${plugin.name} is taken`,
+      );
+      continue;
     }
-    seen.add(plugin.name);
-    for (const backend of Object.keys(plugin.stateStores ?? {})) {
-      const owner = backends.get(backend);
-      if (owner !== undefined) {
-        return yield* new PluginError({
-          message: `Plugin ${plugin.name} registers state store '${backend}', which ${owner === "alchemy" ? "alchemy reserves" : `plugin ${owner} already registers`}`,
-        });
-      }
-      backends.set(backend, plugin.name);
-    }
+    plugins.set(plugin.name, plugin);
   }
-  return plugins;
+  return [...plugins.values()];
 });
 
-/** `--backend` names alchemy handles itself, never a plugin's state store. */
+/** `--backend` names alchemy handles itself, so no plugin may take them. */
 export const RESERVED_BACKENDS = ["local", "configured"] as const;
 
 const loaded = new Map<string, Effect.Effect<ReadonlyArray<Plugin>, PluginError>>();
@@ -444,13 +437,11 @@ export const load = Effect.fn("Plugin.load")(function* (cwd?: string) {
   return yield* cached;
 });
 
-/** Every plugin's state stores, by `--backend` name. */
+/** Every plugin's state store, by `--backend` (plugin) name, with its plugin. */
 export const stateStores = Effect.fn("Plugin.stateStores")(function* () {
-  const stores = new Map<string, StateStore>();
+  const stores = new Map<string, { readonly plugin: Plugin; readonly store: StateStore }>();
   for (const plugin of yield* load()) {
-    for (const [name, store] of Object.entries(plugin.stateStores ?? {})) {
-      stores.set(name, store);
-    }
+    if (plugin.stateStore) stores.set(plugin.name, { plugin, store: plugin.stateStore });
   }
   return stores;
 });

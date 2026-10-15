@@ -71,13 +71,13 @@ layer(NodeServices.layer)("Plugin.load", (it) => {
       const root = yield* project({
         "fake-plugin": pluginPackage(
           "fake-plugin",
-          `export default { name: "fake", stateStores: { fake: { description: "Fake store" } } };`,
+          `export default { name: "fake", stateStore: { description: "Fake store" } };`,
         ),
       });
       const plugins = yield* Plugin.load(root);
       const names = plugins.map((plugin) => plugin.name);
       expect(names).toEqual(expect.arrayContaining(["aws", "cloudflare", "prisma", "fake"]));
-      expect(plugins.find((plugin) => plugin.name === "fake")?.stateStores?.fake?.description).toBe(
+      expect(plugins.find((plugin) => plugin.name === "fake")?.stateStore?.description).toBe(
         "Fake store",
       );
     }).pipe(Effect.scoped),
@@ -95,23 +95,47 @@ layer(NodeServices.layer)("Plugin.load", (it) => {
     }).pipe(Effect.scoped),
   );
 
-  it.effect("fails when two plugins share a name", () =>
+  it.effect("a dependency's plugin replaces alchemy's own of the same name", () =>
     Effect.gen(function* () {
       const root = yield* project({
-        "second-aws": pluginPackage("second-aws", `export default { name: "aws" };`),
+        "aws-package": pluginPackage(
+          "aws-package",
+          `export default { name: "aws", from: "aws-package" };`,
+        ),
       });
-      const error = yield* Effect.flip(Plugin.load(root));
-      expect(error.message).toBe("Two plugins are named aws");
+      const aws = (yield* Plugin.load(root)).filter((plugin) => plugin.name === "aws");
+      expect(aws).toHaveLength(1);
+      expect((aws[0] as { from?: string }).from).toBe("aws-package");
     }).pipe(Effect.scoped),
   );
 
-  it.effect("fails when a plugin module has no default-exported plugin", () =>
+  it.effect("skips a second dependency plugin with a taken name", () =>
+    Effect.gen(function* () {
+      const root = yield* project({
+        "first-acme": pluginPackage(
+          "first-acme",
+          `export default { name: "acme", from: "first" };`,
+        ),
+        "second-acme": pluginPackage(
+          "second-acme",
+          `export default { name: "acme", from: "second" };`,
+        ),
+      });
+      const acme = (yield* Plugin.load(root)).filter((plugin) => plugin.name === "acme");
+      expect(acme.map((plugin) => (plugin as { from?: string }).from)).toEqual(["first"]);
+    }).pipe(Effect.scoped),
+  );
+
+  it.effect("skips a plugin that fails to load, keeping the others", () =>
     Effect.gen(function* () {
       const root = yield* project({
         "no-default": pluginPackage("no-default", `export const plugin = { name: "nope" };`),
+        "fake-plugin": pluginPackage("fake-plugin", `export default { name: "fake" };`),
       });
-      const error = yield* Effect.flip(Plugin.load(root));
-      expect(error.message).toBe("Plugin no-default/Plugin has no default-exported plugin");
+      const names = (yield* Plugin.load(root)).map((plugin) => plugin.name);
+      expect(names).toContain("fake");
+      expect(names).toContain("aws");
+      expect(names).not.toContain("nope");
     }).pipe(Effect.scoped),
   );
   it.effect("resolves a dependency's plugin with import conditions", () =>
@@ -142,51 +166,33 @@ layer(NodeServices.layer)("Plugin.load", (it) => {
     }).pipe(Effect.scoped),
   );
 
-  it.effect("fails when a plugin specifier names another package", () =>
+  it.effect("skips a plugin whose specifier names another package", () =>
     Effect.gen(function* () {
       const root = yield* project({
         borrower: {
           manifest: { alchemy: { plugins: ["fake-plugin/Plugin"] } },
         },
       });
-      const error = yield* Effect.flip(Plugin.load(root));
-      expect(error.message).toContain("must name that package (borrower)");
+      const own = yield* Plugin.load(process.cwd());
+      const plugins = yield* Plugin.load(root);
+      expect(plugins.map((plugin) => plugin.name)).toEqual(own.map((plugin) => plugin.name));
     }).pipe(Effect.scoped),
   );
 
-  it.effect("fails when a plugin registers a state store another plugin has", () =>
+  it.effect("skips a plugin named after a backend alchemy reserves", () =>
     Effect.gen(function* () {
       const root = yield* project({
-        "second-s3": pluginPackage(
-          "second-s3",
-          `export default { name: "second-s3", stateStores: { aws: { description: "S3 again" } } };`,
-        ),
+        "local-store": pluginPackage("local-store", `export default { name: "local" };`),
       });
-      const error = yield* Effect.flip(Plugin.load(root));
-      expect(error.message).toBe(
-        "Plugin second-s3 registers state store 'aws', which plugin aws already registers",
-      );
-    }).pipe(Effect.scoped),
-  );
-
-  it.effect("fails when a plugin registers a reserved state store name", () =>
-    Effect.gen(function* () {
-      const root = yield* project({
-        "local-store": pluginPackage(
-          "local-store",
-          `export default { name: "local-store", stateStores: { local: { description: "Mine" } } };`,
-        ),
-      });
-      const error = yield* Effect.flip(Plugin.load(root));
-      expect(error.message).toBe(
-        "Plugin local-store registers state store 'local', which alchemy reserves",
-      );
+      const names = (yield* Plugin.load(root)).map((plugin) => plugin.name);
+      expect(names).not.toContain("local");
+      expect(names).toContain("aws");
     }).pipe(Effect.scoped),
   );
 });
 
 /** The message of the `PluginError` a lifecycle route failed with. */
-const pluginErrorMessage = (error: { readonly _tag: string }) => {
+const pluginErrorMessage = (error: unknown) => {
   expect(error).toBeInstanceOf(Plugin.PluginError);
   return (error as Plugin.PluginError).message;
 };
@@ -238,7 +244,7 @@ const layer = Layer.effect(
 
 export default {
   name: "scoped-store",
-  stateStores: { scoped: { description: "Scoped", load: Effect.succeed({ layer: () => layer }) } },
+  stateStore: { description: "Scoped", load: Effect.succeed({ layer: () => layer }) },
 };
 `,
   );
@@ -257,8 +263,9 @@ layer(Alchemist.layer())("Alchemist.State lifecycle", (it) => {
         const stacks = yield* inDirectory(
           root,
           Effect.scoped(
-            Effect.flatMap(Alchemist.State.store({ backend: "scoped" }), (store) =>
-              store.listStacks(),
+            Effect.flatMap(
+              Alchemist.State.store({ _tag: "Plugin", backend: "scoped-store" }),
+              (store) => store.listStacks(),
             ),
           ),
         );
@@ -271,77 +278,47 @@ layer(Alchemist.layer())("Alchemist.State lifecycle", (it) => {
 
   it.effect("rejects an unknown backend", () =>
     Effect.gen(function* () {
-      const error = yield* Effect.flip(Alchemist.State.bootstrap({ backend: "nope" }));
+      const error = yield* Effect.flip(
+        Alchemist.State.bootstrap({ _tag: "Plugin", backend: "nope" }),
+      );
       expect(pluginErrorMessage(error)).toBe(
         "Unknown state backend 'nope'. Available: local, configured, aws, cloudflare.",
       );
     }),
   );
 
-  it.effect("rejects a lifecycle operation on alchemy's own backends", () =>
-    Effect.gen(function* () {
-      const error = yield* Effect.flip(Alchemist.State.bootstrap({ backend: "local" }));
-      expect(pluginErrorMessage(error)).toBe("State backend 'local' does not support bootstrap.");
-    }),
-  );
-
   it.effect("rejects an operation the backend doesn't have", () =>
     Effect.gen(function* () {
-      const error = yield* Effect.flip(Alchemist.State.logs({ backend: "aws" }));
+      const error = yield* Effect.flip(Alchemist.State.logs({ _tag: "Plugin", backend: "aws" }));
       expect(pluginErrorMessage(error)).toBe("State backend 'aws' does not support logs.");
     }),
   );
 });
 
-/** Run with `process.argv` set, as the CLI would be invoked. */
-const withArgv = <A, E, R>(argv: ReadonlyArray<string>, effect: Effect.Effect<A, E, R>) =>
-  Effect.acquireUseRelease(
-    Effect.sync(() => {
-      const previous = process.argv;
-      process.argv = [previous[0]!, previous[1]!, ...argv];
-      return previous;
-    }),
-    () => effect,
-    (previous) => Effect.sync(() => void (process.argv = previous)),
-  );
-
 const cliPlugin = (name: string, load: Plugin.Lazy<Plugin.AnyCommand>): Plugin.Plugin =>
-  Plugin.make({ name, cli: { provider: { name, description: `${name} commands`, load } } });
+  Plugin.make({ name, cli: { provider: { description: `${name} commands`, load } } });
 
 const brokenCli = cliPlugin(
   "broken",
   Effect.fail(new Plugin.PluginError({ message: "broken CLI failed to import" })),
 );
-const workingCli = cliPlugin("working", Effect.succeed(Command.make("working")));
+const workingCli = cliPlugin(
+  "working",
+  Effect.succeed(Command.make("working", {}, () => Effect.void)),
+);
 
 describe("alchemy provider", () => {
-  it.live(
-    "a provider whose CLI fails to load doesn't block another's",
-    () =>
-      withArgv(
-        ["provider", "working", "--help"],
-        Effect.promise(() => providerCommand([brokenCli, workingCli])),
-      ).pipe(Effect.map((command) => expect(command.name).toBe("provider"))),
-    { exclusive: true },
-  );
-
-  it.live(
-    "a provider whose CLI fails to load fails with its error when run",
-    () =>
-      withArgv(
-        ["provider", "broken"],
-        Effect.promise(() => providerCommand([brokenCli, workingCli])).pipe(
-          Effect.flatMap((command) =>
-            Effect.flip(
-              Command.runWith(command, { version: "test" })(["broken"]).pipe(
-                Effect.provide(NodeServices.layer),
-              ),
-            ),
-          ),
-          Effect.map((error) => expect(String(error)).toContain("broken CLI failed to import")),
-        ),
-      ),
-    { exclusive: true },
+  it.live("a provider whose CLI fails to load doesn't block another's", () =>
+    Effect.gen(function* () {
+      const command = yield* Effect.promise(() => providerCommand([brokenCli, workingCli]));
+      const run = (args: ReadonlyArray<string>) =>
+        Command.runWith(command, { version: "test" })(args).pipe(
+          Effect.provide(NodeServices.layer),
+        );
+      yield* run(["working"]);
+      const error = yield* Effect.flip(run(["broken"]));
+      expect(String(error)).toContain("broken CLI failed to import");
+    }),
   );
 });
 

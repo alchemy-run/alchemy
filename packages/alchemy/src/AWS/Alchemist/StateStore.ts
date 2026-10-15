@@ -1,13 +1,9 @@
 import * as s3 from "@distilled.cloud/aws/s3";
-import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
-import { AuthProviders } from "../../Auth/AuthProvider.ts";
-import { withProfileOverride } from "../../Auth/Resolve.ts";
-import type { StateStoreImpl, StateStoreLifecycle, StateStoreTarget } from "../../Plugin.ts";
-import { loadConfigProvider } from "../../Util/ConfigProvider.ts";
+import type { StateStoreImpl, StateStoreLifecycle } from "../../Plugin.ts";
+import * as Provisioning from "../../State/Provisioning.ts";
 import { deleteAllObjects } from "../Bootstrap.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import {
@@ -19,27 +15,28 @@ import {
 } from "../StateStore/State.ts";
 
 /**
- * Ensure the state bucket (by default the one for the environment's account
- * and region) with the settings first use would give it.
+ * Ensure a state bucket (by default the account's in this region) with the
+ * settings first use would give it.
  */
 const bootstrapStateBucket = Effect.fn("AWS.state.bootstrap")(function* (name?: string) {
   const { accountId, region } = yield* AWSEnvironment.current;
-  const bucketName = name ?? createStateBucketName(accountId, region);
+  if (name !== undefined) yield* Provisioning.storeName(name);
+  const bucketName = createStateBucketName(accountId, region, name);
   const existed = yield* stateBucketExists(bucketName);
   yield* provisionStateBucket(bucketName, region);
   return { accountId, region, bucketName, existed };
 });
 
 /**
- * Empty and delete the state bucket (by default the one for the environment's
- * account and region), every object version included. A missing bucket is not
- * an error.
+ * Empty and delete a state bucket (by default the account's in this region),
+ * every object version included. A missing bucket is not an error.
  */
 const teardownStateBucket = Effect.fn("AWS.state.teardown")(function* (name?: string) {
   const { accountId, region } = yield* AWSEnvironment.current;
-  const bucketName = name ?? createStateBucketName(accountId, region);
+  if (name !== undefined) yield* Provisioning.storeName(name);
+  const bucketName = createStateBucketName(accountId, region, name);
   if (!(yield* stateBucketExists(bucketName))) {
-    return { accountId, region, bucketName, deleted: false };
+    return { bucketName, deleted: false };
   }
   yield* deleteAllObjects(bucketName);
   yield* s3.deleteBucket({ Bucket: bucketName }).pipe(
@@ -49,26 +46,14 @@ const teardownStateBucket = Effect.fn("AWS.state.teardown")(function* (name?: st
       schedule: Schedule.max([Schedule.exponential(100), Schedule.recurs(10)]),
     }),
   );
-  return { accountId, region, bucketName, deleted: true };
+  return { bucketName, deleted: true };
 });
 
-/** The AWS environment of the target's alchemy profile. */
-const environment = Effect.fn(function* (target: StateStoreTarget) {
-  const config = ConfigProvider.layer(
-    withProfileOverride(
-      yield* loadConfigProvider(Option.fromNullishOr(target.envFile)),
-      target.profile,
-    ),
-  );
-  // Fresh: AWS auth registers into this registry even when the process
-  // already built the provider's layers for another one.
-  return Layer.fresh(
-    stateEnvironment().pipe(
-      Layer.provide(Layer.succeed(AuthProviders, {} satisfies AuthProviders["Service"])),
-      Layer.provide(config),
-    ),
-  );
-});
+/**
+ * The AWS environment of the profile core runs the operation under. Fresh,
+ * like the store's own layer, so it reads that profile's credentials.
+ */
+const environment = Layer.fresh(stateEnvironment());
 
 /**
  * The S3 state store's lifecycle, for `Alchemist.State` and `alchemy state`.
@@ -76,24 +61,20 @@ const environment = Effect.fn(function* (target: StateStoreTarget) {
  * needed to provision it ahead of time. S3 keeps no log stream to show.
  */
 export const lifecycle: StateStoreLifecycle = {
-  bootstrap: (input) =>
-    Effect.gen(function* () {
-      const { bucketName, accountId, region, existed } = yield* bootstrapStateBucket(
-        input.name,
-      ).pipe(Effect.provide(yield* environment(input)));
-      const status = existed ? ("adopted" as const) : ("created" as const);
-      return {
-        status,
-        summary: `State bucket '${bucketName}' ${status} in account ${accountId} (${region}).`,
-      };
-    }),
-  teardown: (input) =>
-    Effect.gen(function* () {
-      const { bucketName, deleted } = yield* teardownStateBucket(input.name).pipe(
-        Effect.provide(yield* environment(input)),
-      );
-      return { deleted: deleted ? [bucketName] : [] };
-    }),
+  bootstrap: ({ name }) =>
+    bootstrapStateBucket(name).pipe(
+      Effect.map(({ bucketName, accountId, region, existed }) => ({
+        status: existed ? ("adopted" as const) : ("created" as const),
+        store: bucketName,
+        location: { account: accountId, region },
+      })),
+      Effect.provide(environment),
+    ),
+  teardown: ({ name }) =>
+    teardownStateBucket(name).pipe(
+      Effect.map(({ bucketName, deleted }) => ({ deleted: deleted ? [bucketName] : [] })),
+      Effect.provide(environment),
+    ),
 };
 
 /** The state store this provider's plugin registers. */

@@ -6,18 +6,15 @@ export default Plugin.make({
     () => import("./AuthProvider.ts"),
     (module) => module.AwsAuth,
   ),
-  stateStores: {
-    aws: {
-      description: "S3 state store in the profile's AWS account",
-      load: Plugin.lazy(
-        () => import("./Alchemist/StateStore.ts"),
-        (module) => module.stateStore,
-      ),
-    },
+  stateStore: {
+    description: "S3 state store in the profile's AWS account",
+    load: Plugin.lazy(
+      () => import("./Alchemist/StateStore.ts"),
+      (module) => module.stateStore,
+    ),
   },
   cli: {
     provider: {
-      name: "aws",
       description: "Manage AWS provider prerequisites",
       load: Plugin.lazy(
         () => import("./Cli.ts"),

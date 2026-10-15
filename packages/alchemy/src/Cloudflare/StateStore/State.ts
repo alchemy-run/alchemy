@@ -13,7 +13,6 @@ import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { adopt } from "../../AdoptPolicy.ts";
-import { AlchemyContext } from "../../AlchemyContext.ts";
 import { AuthError } from "../../Auth/AuthProvider.ts";
 import { CredentialsStore } from "../../Auth/Credentials.ts";
 import { currentProfileName } from "../../Auth/Profile.ts";
@@ -31,7 +30,8 @@ import {
   type HttpStateStoreCredentials,
 } from "../../State/HttpStateStore.ts";
 import { makeLocalState } from "../../State/LocalState.ts";
-import { State, type StateService, type StateStoreError } from "../../State/State.ts";
+import * as Provisioning from "../../State/Provisioning.ts";
+import { State, type StateService, StateStoreError } from "../../State/State.ts";
 import { recordStateStoreInit, recordStateStoreOp } from "../../Telemetry/Metrics.ts";
 import * as Access from "../Access.ts";
 import * as CloudflareEnvironment from "../CloudflareEnvironment.ts";
@@ -56,84 +56,59 @@ const CI = Config.Boolean("CI").pipe(Config.withDefault(false));
 
 export interface CloudflareStateOptions {
   /**
-   * The state-store Worker to use instead of the account's default
-   * `alchemy-state-store`, for more than one store per account.
+   * A store other than the account's default `alchemy-state-store`, by
+   * logical name: its Worker is `alchemy-state-store-<name>`.
    */
   readonly name?: string;
 }
 
-/** `alchemy state bootstrap` for a store, as the user would type it. */
-const bootstrapCommand = (scriptName: string) =>
-  `alchemy state bootstrap --backend cloudflare${
-    scriptName === STATE_STORE_SCRIPT_NAME ? "" : ` --name ${scriptName}`
-  }`;
+/** The state-store Worker of a store: the default's, or `alchemy-state-store-<name>`. */
+export const stateStoreScriptName = (name: string | undefined) =>
+  name === undefined ? STATE_STORE_SCRIPT_NAME : `${STATE_STORE_SCRIPT_NAME}-${name}`;
 
 export const state = (options: CloudflareStateOptions = {}) =>
   Layer.effect(
     State,
     Effect.gen(function* () {
       const isCI = yield* CI;
-      const scriptName = options.name ?? STATE_STORE_SCRIPT_NAME;
+      const { name } = options;
+      const scriptName = stateStoreScriptName(name);
       const profileName = yield* currentProfileName;
       const localStage = `${profileName}_${scriptName}`;
       const credStore = yield* CredentialsStore;
-      // `deploy --yes` flows in here (via AlchemyContext.updateStateStore) to
-      // auto-accept an out-of-date state store upgrade instead of prompting.
-      // Optional so callers that don't provide AlchemyContext keep the prompt.
-      const autoUpdateStateStore =
-        Option.getOrUndefined(yield* Effect.serviceOption(AlchemyContext))?.updateStateStore ??
-        false;
       const context = yield* Effect.context<Effect.Services<typeof init>>();
+      const store: Provisioning.StoreRef = {
+        backend: "cloudflare",
+        name,
+        label: `Cloudflare State Store '${scriptName}'`,
+      };
 
       const init = Effect.gen(function* () {
-        // A store that isn't deployed yet: deploy it on first use, except in
-        // CI, where it must be provisioned ahead of the deploy.
-        const deployMissing = isCI
-          ? Effect.die(
-              AuthError.make({
-                message: `Cloudflare State Store '${scriptName}' not found. Run '${bootstrapCommand(scriptName)} --profile <your-ci-profile>' to deploy it first.`,
-              }),
-            )
-          : Interaction.accessors.output
-              .info(`Cloudflare State Store '${scriptName}' not found; deploying it.`)
-              .pipe(Effect.andThen(bootstrap({ workerName: scriptName, profile: profileName })));
+        if (name !== undefined) yield* Provisioning.storeName(name);
+        const deployMissing = Provisioning.deployMissing(
+          store,
+          bootstrap({ workerName: scriptName, profile: profileName }),
+        );
 
         if (yield* hasLocalStack(localStage)) {
-          // if there's still a local stack, then we need to finish the bootstrap
-          // TODO(sam): what if the local stack was
-          if (isCI) {
-            // Finishing it deploys the store, which CI never does implicitly;
-            // `alchemy state bootstrap` resumes it.
-            return yield* Effect.die(
-              AuthError.make({
-                message: `Cloudflare State Store '${scriptName}' has an unfinished bootstrap. Run '${bootstrapCommand(scriptName)} --profile <your-ci-profile>' to finish it first.`,
-              }),
-            );
-          }
+          // A local stack left behind is a bootstrap that didn't finish.
           const task = (yield* Interaction.Interaction).task;
-          return yield* task(
-            {
-              label: `Resuming Cloudflare State Store '${scriptName}' deployment`,
-            },
-            deployWithLocalState({
-              scriptName,
-              profileName,
-              isCI,
-              force: false,
-            }),
-          ).pipe(withStateBootstrapEvents(scriptName));
+          return yield* Provisioning.deployMissing(
+            { ...store, incomplete: true },
+            task(
+              { label: `Resuming Cloudflare State Store '${scriptName}' deployment` },
+              deployWithLocalState({ scriptName, profileName, isCI, force: false }),
+            ).pipe(withStateBootstrapEvents(scriptName)),
+          );
         }
 
         const ensureLatest = ({ url, authToken }: { url: string; authToken: string }) =>
           Effect.gen(function* () {
             const { matches, expected, observed } = yield* checkStateStoreVersion(url, scriptName);
-
             if (observed === undefined) return yield* deployMissing;
 
             const httpState = yield* ensureAccess({ url, authToken });
-            if (matches) {
-              return httpState;
-            }
+            if (matches) return httpState;
 
             // The store is out of date. Upgrade it in place.
             const upgrade = Effect.gen(function* () {
@@ -154,53 +129,22 @@ export const state = (options: CloudflareStateOptions = {}) =>
                 }),
               );
             }).pipe(withStateBootstrapEvents(scriptName));
-
-            if (autoUpdateStateStore) {
-              // `--yes`: upgrade automatically (also unblocks CI).
-              return yield* upgrade;
-            } else if (isCI) {
-              return yield* Effect.die(
-                AuthError.make({
-                  message:
-                    `Cloudflare State store is out of date ` +
-                    `(expected v${expected}, observed v${observed ?? "unknown"}). ` +
-                    `Run '${bootstrapCommand(scriptName)} --profile <your-ci-profile>' to upgrade it first, or pass --yes.`,
-                }),
-              );
-            } else {
-              const shouldDeploy = yield* Interaction.accessors.prompt.confirm({
-                message:
-                  `Cloudflare State Store '${scriptName}' is out of date ` +
-                  `(expected v${expected}, observed v${observed ?? "unknown"})`,
-                // Upgrading is the constructive happy path — default-yes.
-                initialValue: true,
-                confirmLabel: "Upgrade",
-                cancelLabel: "Cancel",
-              });
-              if (shouldDeploy) {
-                return yield* upgrade;
-              } else {
-                return yield* Effect.die(new Interaction.TerminalCancelled());
-              }
-            }
+            return yield* Provisioning.upgradeOutdated({ ...store, observed, expected }, upgrade);
           });
 
         const ensureAccess = (credentials: HttpStateStoreCredentials) =>
           Effect.gen(function* () {
-            const isAuth = yield* checkHttpStateStoreAuth(credentials);
-            if (!isAuth) {
-              // our token is wrong, force a refresh
-              const credentials = yield* loginWithCloudflare(profileName, true, scriptName);
-              if (!(yield* checkHttpStateStoreAuth(credentials))) {
-                return yield* Effect.die(
-                  AuthError.make({
-                    message: `Cloudflare State store authentication failed, after refreshing credentials.`,
-                  }),
-                );
-              }
+            if (yield* checkHttpStateStoreAuth(credentials)) {
               return yield* makeCloudflareStateStore(credentials);
             }
-            return yield* makeCloudflareStateStore(credentials);
+            // our token is wrong, force a refresh
+            const refreshed = yield* loginWithCloudflare(profileName, true, scriptName);
+            if (!(yield* checkHttpStateStoreAuth(refreshed))) {
+              return yield* new StateStoreError({
+                message: `${store.label} authentication failed, after refreshing credentials.`,
+              });
+            }
+            return yield* makeCloudflareStateStore(refreshed);
           });
 
         const { accountId } = yield* yield* CloudflareEnvironment.CloudflareEnvironment;

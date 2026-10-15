@@ -8,7 +8,6 @@ export default Plugin.make({
   ),
   cli: {
     provider: {
-      name: "prisma",
       description: "Prisma contract tooling",
       load: Plugin.lazy(
         () => import("./Cli.ts"),

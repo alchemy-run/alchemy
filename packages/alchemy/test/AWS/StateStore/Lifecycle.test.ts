@@ -37,17 +37,18 @@ test.provider(
   () =>
     Effect.gen(function* () {
       const { accountId, region } = yield* AWSEnvironment.current;
-      // Account-regional names, like the default store's; never the default.
-      const name = `alchemy-state-lifecycle-${accountId}-${region}-an`;
-      const target = { backend: "aws", name };
+      // Never the default store, which every other run on the account uses.
+      const name = "lifecycle";
+      const bucket = `alchemy-state-lifecycle-${accountId}-${region}-an`;
+      const target = { _tag: "Plugin", backend: "aws", name } as const;
       const alchemist = Alchemist.layer();
 
       yield* Alchemist.State.teardown(target).pipe(Effect.provide(alchemist));
 
       const created = yield* Alchemist.State.bootstrap(target).pipe(Effect.provide(alchemist));
       expect(created.status).toBe("created");
-      expect(yield* bucketExists(name)).toBe(true);
-      expect((yield* s3.getBucketVersioning({ Bucket: name })).Status).toBe("Enabled");
+      expect(yield* bucketExists(bucket)).toBe(true);
+      expect((yield* s3.getBucketVersioning({ Bucket: bucket })).Status).toBe("Enabled");
 
       const adopted = yield* Alchemist.State.bootstrap(target).pipe(Effect.provide(alchemist));
       expect(adopted.status).toBe("adopted");
@@ -56,8 +57,8 @@ test.provider(
       expect(yield* store.listStacks()).toEqual([]);
 
       const torn = yield* Alchemist.State.teardown(target).pipe(Effect.provide(alchemist));
-      expect(torn.deleted).toEqual([name]);
-      expect(yield* bucketExists(name)).toBe(false);
+      expect(torn.deleted).toEqual([bucket]);
+      expect(yield* bucketExists(bucket)).toBe(false);
 
       const again = yield* Alchemist.State.teardown(target).pipe(Effect.provide(alchemist));
       expect(again.deleted).toEqual([]);
@@ -77,7 +78,7 @@ test.provider(
           `Run 'alchemy state bootstrap --backend aws --name ${name}`,
         );
       }
-      expect(yield* bucketExists(name)).toBe(false);
+      expect(yield* bucketExists(bucket)).toBe(false);
     }),
   // Exclusive: sets `CI` on the process.
   { timeout: 180_000, exclusive: true },

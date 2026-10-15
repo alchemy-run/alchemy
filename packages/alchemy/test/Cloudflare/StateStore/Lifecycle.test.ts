@@ -46,12 +46,15 @@ test.provider(
       const environment = yield* yield* CloudflareEnvironment;
       const { accountId } = environment;
       // Never the default store, which every other run on the account uses.
-      const name = "alchemy-state-store-lifecycle";
-      const target = { backend: "cloudflare", name };
+      const name = "lifecycle";
+      const worker = "alchemy-state-store-lifecycle";
+      const target = { _tag: "Plugin", backend: "cloudflare", name } as const;
       const alchemist = Alchemist.layer();
       const defaultStacks = () =>
         Effect.flatMap(
-          Alchemist.State.store({ backend: "cloudflare" }).pipe(Effect.provide(alchemist)),
+          Alchemist.State.store({ _tag: "Plugin", backend: "cloudflare" }).pipe(
+            Effect.provide(alchemist),
+          ),
           (store) => store.listStacks(),
         );
 
@@ -60,7 +63,7 @@ test.provider(
 
       const created = yield* Alchemist.State.bootstrap(target).pipe(Effect.provide(alchemist));
       expect(created.status).toBe("created");
-      expect(yield* scriptExists(accountId, name)).toBe(true);
+      expect(yield* scriptExists(accountId, worker)).toBe(true);
 
       const adopted = yield* Alchemist.State.bootstrap(target).pipe(Effect.provide(alchemist));
       expect(adopted.status).toBe("adopted");
@@ -68,11 +71,11 @@ test.provider(
       // The named store holds only its own bootstrap stack.
       const store = yield* Alchemist.State.store(target).pipe(Effect.provide(alchemist));
       expect(yield* store.listStacks()).toEqual(["CloudflareStateStore"]);
-      expect(yield* store.listStages("CloudflareStateStore")).toEqual([name]);
+      expect(yield* store.listStages("CloudflareStateStore")).toEqual([worker]);
 
       const torn = yield* Alchemist.State.teardown(target).pipe(Effect.provide(alchemist));
-      expect(torn.deleted).toEqual([name]);
-      expect(yield* scriptExists(accountId, name)).toBe(false);
+      expect(torn.deleted).toEqual([worker]);
+      expect(yield* scriptExists(accountId, worker)).toBe(false);
 
       // In CI, a missing store fails instead of being deployed on first use.
       // CI reads Cloudflare credentials from the environment only. The
@@ -102,7 +105,7 @@ test.provider(
       );
       expect(Exit.isFailure(inCi)).toBe(true);
       if (Exit.isFailure(inCi)) expect(Cause.pretty(inCi.cause)).toContain(expected);
-      expect(yield* scriptExists(accountId, name)).toBe(false);
+      expect(yield* scriptExists(accountId, worker)).toBe(false);
 
       // The default store kept serving through all of it.
       expect(yield* scriptExists(accountId, "alchemy-state-store")).toBe(true);

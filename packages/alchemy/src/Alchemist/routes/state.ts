@@ -13,14 +13,19 @@ import { open, StackEntrypointError, type Target } from "../Session.ts";
 /** Which store a state request addresses. */
 export type StateSource =
   /** `.alchemy/` on this machine, ignoring whatever the project configures. */
-  | { readonly backend: "local" }
-  /**
-   * A plugin's state store by name (e.g. `"aws"`, `"cloudflare"`), without
-   * loading a project entrypoint.
-   */
-  | ({ readonly backend: string } & Plugin.StateStoreTarget)
+  | { readonly _tag: "Local" }
   /** Whatever the project's entrypoint configures. */
-  | ({ readonly backend: "configured" } & Target);
+  | ({ readonly _tag: "Configured" } & Target)
+  /** A plugin's state store, without loading a project entrypoint. */
+  | ({
+      readonly _tag: "Plugin";
+      readonly backend: string;
+      /** A store other than the account's default. */
+      readonly name?: string;
+    } & Pick<Target, "profile" | "envFile">);
+
+/** What lifecycle operations act on. */
+export type PluginSource = Extract<StateSource, { readonly _tag: "Plugin" }>;
 
 /** A plugin's state store by `--backend` name. */
 const findBackend = Effect.fn(function* (backend: string) {
@@ -37,6 +42,31 @@ const findBackend = Effect.fn(function* (backend: string) {
 });
 
 /**
+ * What a plugin's store runs under, its layer and lifecycle alike: the
+ * profile's config and an auth registry with the plugin's auth.
+ *
+ * @internal exported for tests.
+ */
+export const pluginContext = Effect.fn(function* (
+  plugin: Plugin.Plugin,
+  target: Pick<Target, "profile" | "envFile">,
+) {
+  const config = ConfigProvider.layer(
+    withProfileOverride(
+      yield* loadConfigProvider(Option.fromNullishOr(target.envFile)),
+      target.profile,
+    ),
+  );
+  const auth = plugin.auth ? yield* Plugin.resolve(plugin, "auth", plugin.auth) : Layer.empty;
+  // Fresh: the plugin's auth registers into this registry even when the
+  // process already built it for another one.
+  return Layer.fresh(auth).pipe(
+    Layer.provideMerge(Layer.succeed(AuthProviders, {} satisfies AuthProviders["Service"])),
+    Layer.provideMerge(config),
+  );
+});
+
+/**
  * Resolve the state service a source addresses, in the caller's `Scope`: the
  * store's resources live until that scope closes. The tree operations
  * (`State.listState`, `State.readState`, `State.deleteState`) take `State`
@@ -44,110 +74,103 @@ const findBackend = Effect.fn(function* (backend: string) {
  * them against the chosen store:
  *
  * ```ts
- * const state = yield* Alchemist.State.store({ backend: "local" });
+ * const state = yield* Alchemist.State.store({ _tag: "Local" });
  * const items = yield* State.listState({ path }).pipe(
  *   Effect.provideService(State.State, Effect.succeed(state)),
  * );
  * ```
  */
 export const store = Effect.fn("Alchemist.state.store")(function* (source: StateSource) {
-  // The store's layer is built in the caller's `Scope`: a store holding a
-  // connection or client keeps it until the caller is done with the store.
-  if (source.backend === "local") {
-    return yield* Effect.provide(
-      Effect.flatten(State.State),
-      yield* Layer.build(State.localState()),
-    );
-  }
-  if (source.backend !== "configured") {
-    const { name, profile, envFile } = source as Plugin.StateStoreTarget;
-    const backend = yield* findBackend(source.backend);
-    const config = ConfigProvider.layer(
-      withProfileOverride(yield* loadConfigProvider(Option.fromNullishOr(envFile)), profile),
-    );
-    const { layer } = yield* backend.load;
-    const context = yield* Layer.build(
-      // Fresh: the store registers its auth into this registry even when the
-      // process already built the provider's layers for another one.
-      Layer.fresh(layer({ name })).pipe(
-        Layer.provide(Layer.succeed(AuthProviders, {} satisfies AuthProviders["Service"])),
-        Layer.provide(config),
-      ),
-    );
-    return yield* Effect.provide(Effect.flatten(State.State), context);
-  }
-  // The configured store lives in the stack entrypoint; this is the one
-  // command that can also work without one.
-  const session = yield* open(source as Target).pipe(
-    Effect.catchIf(
-      (error): error is StackEntrypointError => error instanceof StackEntrypointError,
-      (error) =>
-        Effect.fail(
-          new StackEntrypointError({
-            message: `${error.message} For config-less state access pass --backend with a state store name.`,
-          }),
+  switch (source._tag) {
+    case "Local":
+      return yield* Effect.provide(
+        Effect.flatten(State.State),
+        yield* Layer.build(State.localState()),
+      );
+    case "Plugin": {
+      const { plugin, store } = yield* findBackend(source.backend);
+      const { layer } = yield* store.load;
+      const context = yield* Layer.build(
+        Layer.fresh(layer({ name: source.name })).pipe(
+          Layer.provide(yield* pluginContext(plugin, source)),
         ),
-    ),
-  );
-  return yield* Effect.provide(Effect.flatten(State.State), session.context);
+      );
+      return yield* Effect.provide(Effect.flatten(State.State), context);
+    }
+    case "Configured": {
+      // The configured store lives in the stack entrypoint; this is the one
+      // command that can also work without one.
+      const session = yield* open(source).pipe(
+        Effect.catchIf(
+          (error): error is StackEntrypointError => error instanceof StackEntrypointError,
+          (error) =>
+            Effect.fail(
+              new StackEntrypointError({
+                message: `${error.message} For config-less state access pass --backend with a state store name.`,
+              }),
+            ),
+        ),
+      );
+      return yield* Effect.provide(Effect.flatten(State.State), session.context);
+    }
+  }
 });
 
 /** The chosen store as a `State` layer. */
 export const layer = (source: StateSource) =>
   Layer.effect(State.State, Effect.map(store(source), Effect.succeed));
 
-/** Which plugin state store a lifecycle request addresses. */
-export interface LifecycleTarget extends Plugin.StateStoreTarget {
-  /** A plugin state store's `--backend` name, e.g. `"cloudflare"`. */
-  readonly backend: string;
-}
-
-const lifecycleOperation = <K extends keyof Plugin.StateStoreLifecycle>(
-  { backend }: LifecycleTarget,
+/** A plugin store's lifecycle operation, with the context to run it under. */
+const lifecycleOperation = Effect.fn(function* <K extends keyof Plugin.StateStoreLifecycle>(
+  source: PluginSource,
   operation: K,
-) =>
-  Effect.gen(function* () {
-    if ((Plugin.RESERVED_BACKENDS as ReadonlyArray<string>).includes(backend)) {
-      return yield* new Plugin.PluginError({
-        message: `State backend '${backend}' does not support ${operation}.`,
-      });
-    }
-    const store = yield* findBackend(backend);
-    const run = (yield* store.load).lifecycle?.[operation];
-    if (run === undefined) {
-      return yield* new Plugin.PluginError({
-        message: `State backend '${backend}' does not support ${operation}.`,
-      });
-    }
-    return run as NonNullable<Plugin.StateStoreLifecycle[K]>;
-  });
-
-/** Provision (or adopt) a plugin's state store. */
-export const bootstrap = Effect.fn("Alchemist.state.bootstrap")(function* ({
-  backend,
-  ...input
-}: LifecycleTarget & { readonly force?: boolean }) {
-  return yield* (yield* lifecycleOperation({ backend, ...input }, "bootstrap"))(input);
+) {
+  if ((Plugin.RESERVED_BACKENDS as ReadonlyArray<string>).includes(source.backend)) {
+    return yield* new Plugin.PluginError({
+      message: `The ${source.backend} state store has no ${operation}; pass --backend with a provider's store.`,
+    });
+  }
+  const { plugin, store } = yield* findBackend(source.backend);
+  const run = (yield* store.load).lifecycle?.[operation];
+  if (run === undefined) {
+    return yield* new Plugin.PluginError({
+      message: `State backend '${source.backend}' does not support ${operation}.`,
+    });
+  }
+  return {
+    run: run as NonNullable<Plugin.StateStoreLifecycle[K]>,
+    context: yield* pluginContext(plugin, source),
+  };
 });
 
-/** Delete a plugin's state store and its backing resources. */
-export const teardown = Effect.fn("Alchemist.state.teardown")(function* ({
-  backend,
-  ...input
-}: LifecycleTarget) {
-  return yield* (yield* lifecycleOperation({ backend, ...input }, "teardown"))(input);
+/** Provision (or adopt) a state store. */
+export const bootstrap = Effect.fn("Alchemist.state.bootstrap")(function* (
+  source: PluginSource & { readonly force?: boolean },
+) {
+  const { run, context } = yield* lifecycleOperation(source, "bootstrap");
+  return yield* run({ name: source.name, force: source.force }).pipe(Effect.provide(context));
 });
 
-/** Past log entries from a plugin's state store, oldest first. */
-export const logs = Effect.fn("Alchemist.state.logs")(function* ({
-  backend,
-  ...input
-}: LifecycleTarget & { readonly limit?: number; readonly since?: Date }) {
-  return yield* (yield* lifecycleOperation({ backend, ...input }, "logs"))(input);
+/** Delete a state store and its backing resources. */
+export const teardown = Effect.fn("Alchemist.state.teardown")(function* (source: PluginSource) {
+  const { run, context } = yield* lifecycleOperation(source, "teardown");
+  return yield* run({ name: source.name }).pipe(Effect.provide(context));
 });
 
-/** Live log entries from a plugin's state store. */
-export const tailLogs = ({ backend, ...input }: LifecycleTarget) =>
+/** Past log entries from a state store, oldest first. */
+export const logs = Effect.fn("Alchemist.state.logs")(function* (
+  source: PluginSource & { readonly limit?: number; readonly since?: Date },
+) {
+  const { run, context } = yield* lifecycleOperation(source, "logs");
+  return yield* run({ name: source.name, limit: source.limit, since: source.since }).pipe(
+    Effect.provide(context),
+  );
+});
+
+/** Live log entries from a state store. */
+export const tailLogs = (source: PluginSource) =>
   Stream.unwrap(
-    Effect.map(lifecycleOperation({ backend, ...input }, "tailLogs"), (tail) => tail(input)),
+    Effect.map(lifecycleOperation(source, "tailLogs"), ({ run, context }) =>
+      run({ name: source.name }).pipe(Stream.provide(context)),
+    ),
   );

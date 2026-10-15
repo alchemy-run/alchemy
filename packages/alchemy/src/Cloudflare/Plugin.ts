@@ -6,18 +6,15 @@ export default Plugin.make({
     () => import("./Auth/AuthProvider.ts"),
     (module) => module.CloudflareAuth,
   ),
-  stateStores: {
-    cloudflare: {
-      description: "State-store Worker in the profile's Cloudflare account",
-      load: Plugin.lazy(
-        () => import("./Alchemist/StateStore.ts"),
-        (module) => module.stateStore,
-      ),
-    },
+  stateStore: {
+    description: "State-store Worker in the profile's Cloudflare account",
+    load: Plugin.lazy(
+      () => import("./Alchemist/StateStore.ts"),
+      (module) => module.stateStore,
+    ),
   },
   cli: {
     provider: {
-      name: "cloudflare",
       description: "Manage Cloudflare provider prerequisites",
       load: Plugin.lazy(
         () => import("./Cli.ts"),

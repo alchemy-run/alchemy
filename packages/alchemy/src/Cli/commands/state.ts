@@ -5,8 +5,9 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
 import * as AlchemistState from "../../Alchemist/routes/state.ts";
-import type { StateSource } from "../../Alchemist/routes/state.ts";
+import type { PluginSource, StateSource } from "../../Alchemist/routes/state.ts";
 import * as CliKit from "../../Cli/CliKit/index.ts";
+import type { StateStoreLogEntry } from "../../Plugin.ts";
 import * as State from "../../State/index.ts";
 import {
   stateExplorerScreen,
@@ -60,20 +61,36 @@ type StateArgs = {
 
 const source = (args: StateArgs): StateSource =>
   args.backend === "local"
-    ? { backend: "local" }
+    ? { _tag: "Local" }
     : args.backend === "configured"
       ? {
-          backend: "configured",
+          _tag: "Configured",
           entrypoint: args.main,
           profile: args.profile,
           envFile: Option.getOrUndefined(args.envFile),
         }
       : {
+          _tag: "Plugin",
           backend: args.backend,
           name: args.name,
           profile: args.profile,
           envFile: Option.getOrUndefined(args.envFile),
         };
+
+/** Lifecycle commands act on a provider's state store. */
+const lifecycleBackend = Flag.String("backend").pipe(
+  Flag.withDescription("Provider state store to act on (e.g. aws, cloudflare)"),
+);
+
+const lifecycleSource = (
+  args: Pick<StateArgs, "envFile" | "profile" | "backend" | "name">,
+): PluginSource => ({
+  _tag: "Plugin",
+  backend: args.backend,
+  name: args.name,
+  profile: args.profile,
+  envFile: Option.getOrUndefined(args.envFile),
+});
 
 const normalizedPath = (path: string | undefined) => {
   const parts = (path ?? "").split("/").filter((part) => part !== "" && part !== ".");
@@ -249,23 +266,6 @@ const nukeCommand = Command.make(
   Command.unlisted,
 );
 
-/** Lifecycle commands address a plugin's state store, never the configured one. */
-const lifecycleBackend = Flag.String("backend").pipe(
-  Flag.withDescription("State store to act on (e.g. cloudflare)"),
-);
-
-const lifecycleTarget = (args: {
-  readonly backend: string;
-  readonly name: string | undefined;
-  readonly profile: string | undefined;
-  readonly envFile: Option.Option<string>;
-}) => ({
-  backend: args.backend,
-  name: args.name,
-  profile: args.profile,
-  envFile: Option.getOrUndefined(args.envFile),
-});
-
 const bootstrapCommand = Command.make(
   "bootstrap",
   {
@@ -280,8 +280,10 @@ const bootstrapCommand = Command.make(
   },
   instrumentCommand("state.bootstrap")(
     Effect.fn(function* ({ force, ...args }) {
-      const result = yield* AlchemistState.bootstrap({ ...lifecycleTarget(args), force });
-      yield* CliKit.accessors.output.success(result.summary);
+      const result = yield* AlchemistState.bootstrap({ ...lifecycleSource(args), force });
+      yield* CliKit.accessors.output.success(
+        `State store '${result.store}' ${result.status} (${Object.values(result.location).join(", ")})`,
+      );
     }),
   ),
 ).pipe(Command.withDescription("Provision (or adopt) a state store"));
@@ -297,7 +299,7 @@ const teardownCommand = Command.make(
         confirmLabel: "Destroy",
         cancelLabel: "Cancel",
       });
-      const result = yield* AlchemistState.teardown(lifecycleTarget(args));
+      const result = yield* AlchemistState.teardown(lifecycleSource(args));
       yield* CliKit.accessors.output.success(
         result.deleted.length === 0 ? "Nothing to delete" : `Deleted ${result.deleted.join(", ")}`,
       );
@@ -329,13 +331,9 @@ const logsCommand = Command.make(
   },
   instrumentCommand("state.logs")(
     Effect.fn(function* ({ tail, limit, since, ...args }) {
-      const target = lifecycleTarget(args);
-      const format = (entry: {
-        timestamp: Date;
-        message: string;
-        resource: { logicalId: string };
-      }) =>
-        `${formatLocalTimestamp(entry.timestamp)} [${entry.resource.logicalId}] ${entry.message}`;
+      const target = lifecycleSource(args);
+      const format = (entry: StateStoreLogEntry) =>
+        `${formatLocalTimestamp(entry.timestamp)} ${entry.message}`;
       if (tail) {
         yield* CliKit.accessors.output.info(`Tailing the ${args.backend} state store...`);
         yield* AlchemistState.tailLogs(target).pipe(

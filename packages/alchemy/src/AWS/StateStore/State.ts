@@ -3,7 +3,6 @@ import type { Credentials } from "@distilled.cloud/aws/Credentials";
 import type { Region } from "@distilled.cloud/aws/Region";
 import * as s3 from "@distilled.cloud/aws/s3";
 import * as Clock from "effect/Clock";
-import * as Config from "effect/Config";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import type { HttpClient } from "effect/http/HttpClient";
@@ -17,6 +16,7 @@ import * as Stream from "effect/Stream";
 import { CredentialsStoreLive } from "../../Auth/Credentials.ts";
 import { decodeFqn, encodeFqn } from "../../FQN.ts";
 import { STATE_STORE_VERSION } from "../../State/HttpStateApi.ts";
+import * as Provisioning from "../../State/Provisioning.ts";
 import {
   State,
   StateStoreError,
@@ -89,18 +89,22 @@ const amortizeCheck = (
 
 export interface S3StateOptions {
   /**
-   * Name of the S3 bucket that holds the state objects. The bucket is
-   * created on first use if it does not exist, except in CI, where it must
-   * be provisioned ahead with `alchemy state bootstrap --backend aws`.
+   * A store other than the account's default, by logical name: its bucket is
+   * `alchemy-state-<name>-<accountId>-<region>-an`. The bucket is created on
+   * first use, except in CI, where `alchemy state bootstrap --backend aws
+   * --name <name>` provisions it ahead.
    *
-   * The bucket is created in the account-regional namespace, so custom
-   * names must follow the `<prefix>-<accountId>-<region>-an` convention.
-   *
-   * @see https://docs.aws.amazon.com/AmazonS3/latest/userguide/gpbucketnamespaces.html#account-regional-gp-buckets
-   * @default `alchemy-state-{accountId}-{region}-an`
+   * @default the account's default store, `alchemy-state-<accountId>-<region>-an`
    */
   name?: string;
-  /** @deprecated Use {@link S3StateOptions.name}. */
+  /**
+   * A full bucket name instead of one derived from {@link S3StateOptions.name},
+   * e.g. an existing bucket. Created on first use like a named store's, in the
+   * account-regional namespace, so it must follow the
+   * `<prefix>-<accountId>-<region>-an` convention.
+   *
+   * @see https://docs.aws.amazon.com/AmazonS3/latest/userguide/gpbucketnamespaces.html#account-regional-gp-buckets
+   */
   bucketName?: string;
   /**
    * Key prefix within the bucket under which all state objects are
@@ -119,8 +123,6 @@ export interface S3StateOptions {
    */
   encryption?: BucketEncryption;
 }
-
-const CI = Config.Boolean("CI").pipe(Config.withDefault(false));
 
 /** Whether a state bucket exists. */
 export const stateBucketExists = (bucket: string) =>
@@ -313,18 +315,18 @@ export const makeS3State = (options: S3StateOptions = {}) =>
     const bucket = yield* Effect.cached(
       Effect.gen(function* () {
         const { accountId, region } = yield* AWSEnvironment.current;
-        const name = options.name ?? options.bucketName;
-        const bucketName = name ?? createStateBucketName(accountId, region);
-        // First use creates the bucket, except in CI: a deploy there must
-        // find the store provisioned rather than create one as a side effect.
-        if ((yield* CI) && !(yield* stateBucketExists(bucketName))) {
-          return yield* new StateStoreError({
-            message:
-              `S3 state bucket '${bucketName}' not found. Run 'alchemy state bootstrap ` +
-              `--backend aws${name ? ` --name ${name}` : ""} --profile <your-ci-profile>' to create it first.`,
-          });
-        }
-        yield* ensureStateBucket(bucketName, region, options);
+        if (options.name !== undefined) yield* Provisioning.storeName(options.name);
+        const bucketName =
+          options.bucketName ?? createStateBucketName(accountId, region, options.name);
+        const ensure = ensureStateBucket(bucketName, region, options);
+        // First use creates the bucket (except in CI); every use converges
+        // its settings.
+        yield* (yield* stateBucketExists(bucketName))
+          ? ensure
+          : Provisioning.deployMissing(
+              { backend: "aws", name: options.name, label: `S3 state bucket '${bucketName}'` },
+              ensure,
+            );
         return bucketName;
       }).pipe(Effect.provideContext(context), Effect.mapError(toError)),
     );
@@ -766,8 +768,8 @@ export const makeS3State = (options: S3StateOptions = {}) =>
  *
  * @see https://docs.aws.amazon.com/AmazonS3/latest/userguide/gpbucketnamespaces.html#account-regional-gp-buckets
  */
-export const createStateBucketName = (accountId: string, region: string) =>
-  `alchemy-state-${accountId}-${region}-an`.toLowerCase();
+export const createStateBucketName = (accountId: string, region: string, name?: string) =>
+  `alchemy-state-${name === undefined ? "" : `${name}-`}${accountId}-${region}-an`.toLowerCase();
 
 /**
  * Observe-then-ensure the state bucket: head it, create it if missing

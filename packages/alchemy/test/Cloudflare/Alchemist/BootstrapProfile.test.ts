@@ -4,14 +4,18 @@ import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
+import { pluginContext } from "@/Alchemist/routes/state.ts";
 import { AlchemyContext } from "@/AlchemyContext.ts";
+import { ArtifactStore, createArtifactStore } from "@/Artifacts.ts";
 import { CredentialsStoreLive } from "@/Auth/Credentials.ts";
 import { ProfileStore, ProfileStoreLive } from "@/Auth/Profile.ts";
 import { CredentialsUnavailable } from "@/Auth/Resolve.ts";
-import { resolveStateStoreScope } from "@/Cloudflare/Alchemist/StateStore.ts";
+import { stateStoreScope } from "@/Cloudflare/Alchemist/StateStore.ts";
 import * as Interaction from "@/Interaction.ts";
+import * as Plugin from "@/Plugin.ts";
 import { PlatformServices } from "@/Util/PlatformServices.ts";
 
 const STAGING_ACCOUNT = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
@@ -70,10 +74,26 @@ const withIsolatedHome = <A, E, R>(effect: (envFile: string) => Effect.Effect<A,
           Layer.succeed(AlchemyContext, { dotAlchemy: dir, dev: false, adopt: false }),
           Interaction.layerNonInteractive(),
           ConfigProvider.layer(ConfigProvider.fromUnknown({})),
+          FetchHttpClient.layer,
+          Layer.succeed(ArtifactStore, createArtifactStore()),
         ),
       ),
     );
   }).pipe(Effect.scoped, Effect.provide(PlatformServices));
+
+/**
+ * The Cloudflare store's scope as `alchemy state … --backend cloudflare`
+ * resolves it: under the context core builds from `--profile` and
+ * `--env-file`, with the plugin's auth registered.
+ */
+const resolveStateStoreScope = (target: { readonly profile?: string; readonly envFile: string }) =>
+  Effect.gen(function* () {
+    const cloudflare = (yield* Plugin.load()).find((plugin) => plugin.name === "cloudflare");
+    if (cloudflare === undefined) return yield* Effect.die(new Error("no cloudflare plugin"));
+    return yield* stateStoreScope(undefined).pipe(
+      Effect.provide(yield* pluginContext(cloudflare, target)),
+    );
+  });
 
 const storedToken = (accountId: string, apiToken: string) => ({
   method: "stored" as const,
