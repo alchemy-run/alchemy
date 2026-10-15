@@ -9,7 +9,7 @@ import type { LogEntry } from "../../Alchemist/routes/logs.ts";
 import type { Target } from "../../Alchemist/Session.ts";
 import { AuthProviders } from "../../Auth/AuthProvider.ts";
 import { resolveProfileName, withProfileOverride } from "../../Auth/Resolve.ts";
-import type { StateStoreLifecycle } from "../../Plugin.ts";
+import type { StateStoreLifecycle, StateStoreTarget } from "../../Plugin.ts";
 import { loadConfigProvider } from "../../Util/ConfigProvider.ts";
 import { fileLogger } from "../../Util/FileLogger.ts";
 import * as CloudflareAccess from "../Access.ts";
@@ -63,16 +63,20 @@ const services = Effect.fn(function* (target: StateTarget) {
       target.profile,
     ),
   );
-  return Layer.mergeAll(
-    Layer.provideMerge(
-      Layer.mergeAll(
-        CloudflareCredentials.fromAuthProvider(),
-        CloudflareEnvironment.fromProfile(),
-        CloudflareAccess.AccessLive,
-      ),
-      auth,
-    ).pipe(Layer.provideMerge(config)),
-    Logger.layer([fileLogger("cloudflare.txt")], { mergeWithExisting: true }),
+  // Fresh: Cloudflare auth registers into this route's own registry even when
+  // the process already built the provider's layers for another one.
+  return Layer.fresh(
+    Layer.mergeAll(
+      Layer.provideMerge(
+        Layer.mergeAll(
+          CloudflareCredentials.fromAuthProvider(),
+          CloudflareEnvironment.fromProfile(),
+          CloudflareAccess.AccessLive,
+        ),
+        auth,
+      ).pipe(Layer.provideMerge(config)),
+      Logger.layer([fileLogger("cloudflare.txt")], { mergeWithExisting: true }),
+    ),
   );
 });
 
@@ -174,15 +178,18 @@ export const tailStateLogs = (input: StateTarget) =>
   );
 
 /** The state-store Worker's lifecycle, for `Alchemist.State` and `alchemy state`. */
+/** A lifecycle target as this module's routes take it: the name is the Worker's. */
+const target = ({ name, ...input }: StateStoreTarget) => ({ ...input, workerName: name });
+
 export const lifecycle: StateStoreLifecycle = {
-  bootstrap: (input) =>
-    bootstrap(input).pipe(
+  bootstrap: ({ force, ...input }) =>
+    bootstrap({ ...target(input), force }).pipe(
       Effect.map(({ status, workerName, accountId, stateStoreVersion }) => ({
         status,
         summary: `State-store Worker '${workerName}' ${status} in account ${accountId} (version ${stateStoreVersion}).`,
       })),
     ),
-  teardown: (input) => teardown(input).pipe(Effect.map(({ deleted }) => ({ deleted }))),
-  logs: stateLogs,
-  tailLogs: tailStateLogs,
+  teardown: (input) => teardown(target(input)).pipe(Effect.map(({ deleted }) => ({ deleted }))),
+  logs: ({ limit, since, ...input }) => stateLogs({ ...target(input), limit, since }),
+  tailLogs: (input) => tailStateLogs(target(input)),
 };

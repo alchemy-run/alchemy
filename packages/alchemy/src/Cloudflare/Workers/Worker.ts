@@ -2703,7 +2703,7 @@ export const Worker: ResourceClassLike<Worker> &
       Req extends WorkerServices | Container.Application<any> | PlatformServices,
     >(
       id: Id,
-      props: InputProps<WorkerProps>,
+      props: InputProps<WorkerProps> | Effect.Effect<InputProps<WorkerProps>, ConfigError>,
       impl: Effect.Effect<Shape, ConfigError, Req>,
     ): Effect.Effect<
       Worker & Rpc<Shape>,

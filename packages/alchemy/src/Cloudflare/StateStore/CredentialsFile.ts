@@ -13,6 +13,13 @@ import * as Schema from "effect/Schema";
 export const CREDENTIALS_FILE = "cloudflare-state-store";
 
 /**
+ * The cache file of one state store: the default store keeps
+ * {@link CREDENTIALS_FILE}, a named store's is suffixed with its name.
+ */
+export const credentialsFile = (storeName: string) =>
+  storeName === "alchemy-state-store" ? CREDENTIALS_FILE : `${CREDENTIALS_FILE}-${storeName}`;
+
+/**
  * On-disk shape of the cached Cloudflare state-store credentials.
  *
  * Extends the generic `HttpStateStoreCredentials` (`{ url, authToken }`)

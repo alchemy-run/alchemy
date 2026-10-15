@@ -15,9 +15,9 @@ import { ReadSecret } from "../SecretsStore/ReadSecret.ts";
 import { ReadSecretBinding } from "../SecretsStore/ReadSecretBinding.ts";
 import { Worker } from "../Workers/Worker.ts";
 import Store from "./Store.ts";
-import { AuthToken } from "./Token.ts";
+import { AuthToken, DEFAULT_STATE_STORE_NAME, StateStoreName } from "./Token.ts";
 
-export const STATE_STORE_SCRIPT_NAME = "alchemy-state-store" as const;
+export const STATE_STORE_SCRIPT_NAME = DEFAULT_STATE_STORE_NAME;
 
 /**
  * Version of the deployed Cloudflare State Store worker contract.
@@ -97,14 +97,14 @@ export const STATE_STORE_VERSION = 7 as const;
  */
 export default Worker(
   "Api",
-  {
-    name: STATE_STORE_SCRIPT_NAME,
+  Effect.map(StateStoreName, (name) => ({
+    name,
     main: import.meta.url,
     workersDev: true,
     compatibility: {
       date: DEFAULT_COMPATIBILITY_DATE,
     },
-  },
+  })),
   Effect.gen(function* () {
     const remoteSecret = yield* ReadSecret(AuthToken);
     const store = yield* Store;

@@ -76,7 +76,9 @@ export const store = Effect.fn("Alchemist.state.store")(function* (source: State
         }),
     });
     return yield* Effect.flatten(State.State).pipe(
-      Effect.provide(layer({ name })),
+      // Fresh: the store registers its auth into this registry even when the
+      // process already built the provider's layers for another one.
+      Effect.provide(Layer.fresh(layer({ name }))),
       Effect.provide(Layer.succeed(AuthProviders, {} satisfies AuthProviders["Service"])),
       Effect.provide(config),
     );

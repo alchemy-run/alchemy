@@ -10,7 +10,7 @@ export default Plugin.make({
         import("./StateStore/State.ts").then(
           (module) =>
             ({ name }) =>
-              module.state({ bucketName: name }),
+              module.state({ name }),
         ),
       supportsNames: true,
       lifecycle: () => import("./Alchemist/StateStore.ts").then((module) => module.lifecycle),

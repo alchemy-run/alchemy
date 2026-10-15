@@ -1,12 +1,30 @@
 import * as s3 from "@distilled.cloud/aws/s3";
 import { expect } from "alchemy-test";
+import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as Alchemist from "@/Alchemist/index.ts";
 import * as AWS from "@/AWS";
 import { AWSEnvironment } from "@/AWS/Environment.ts";
 import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
+
+/** Run with `CI` set, as a CI deploy would. */
+const inCI = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+  Effect.acquireUseRelease(
+    Effect.sync(() => {
+      const previous = process.env.CI;
+      process.env.CI = "true";
+      return previous;
+    }),
+    () => effect,
+    (previous) =>
+      Effect.sync(() => {
+        if (previous === undefined) delete process.env.CI;
+        else process.env.CI = previous;
+      }),
+  );
 
 const bucketExists = (bucket: string) =>
   s3.headBucket({ Bucket: bucket }).pipe(
@@ -43,6 +61,24 @@ test.provider(
 
       const again = yield* Alchemist.State.teardown(target).pipe(Effect.provide(alchemist));
       expect(again.deleted).toEqual([]);
+
+      // In CI, a missing store fails instead of being created on first use.
+      const inCi = yield* inCI(
+        Effect.exit(
+          Alchemist.State.store(target).pipe(
+            Effect.flatMap((store) => store.listStacks()),
+            Effect.provide(alchemist),
+          ),
+        ),
+      );
+      expect(Exit.isFailure(inCi)).toBe(true);
+      if (Exit.isFailure(inCi)) {
+        expect(Cause.pretty(inCi.cause)).toContain(
+          `Run 'alchemy state bootstrap --backend aws --name ${name}`,
+        );
+      }
+      expect(yield* bucketExists(name)).toBe(false);
     }),
-  { timeout: 180_000 },
+  // Exclusive: sets `CI` on the process.
+  { timeout: 180_000, exclusive: true },
 );

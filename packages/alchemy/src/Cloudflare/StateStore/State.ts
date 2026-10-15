@@ -38,20 +38,41 @@ import * as CloudflareEnvironment from "../CloudflareEnvironment.ts";
 import { EdgeSessionError, createEdgeSession } from "../EdgeSession.ts";
 import Api, { STATE_STORE_SCRIPT_NAME, STATE_STORE_VERSION } from "./Api.ts";
 import {
-  CREDENTIALS_FILE,
+  credentialsFile,
   StoredStateStoreCredentials,
   isStateStoreCredentialsStale,
 } from "./CredentialsFile.ts";
-import { AuthToken, AuthTokenSecretName, EncryptionKeySecretName, TokenValue } from "./Token.ts";
+import {
+  AuthToken,
+  AuthTokenSecretName,
+  EncryptionKeySecretName,
+  StateStoreName,
+  stateStoreSecretName,
+  TokenValue,
+} from "./Token.ts";
 
 const CI = Config.Boolean("CI").pipe(Config.withDefault(false));
 
-export const state = () =>
+export interface CloudflareStateOptions {
+  /**
+   * The state-store Worker to use instead of the account's default
+   * `alchemy-state-store`, for more than one store per account.
+   */
+  readonly name?: string;
+}
+
+/** `alchemy state bootstrap` for a store, as the user would type it. */
+const bootstrapCommand = (scriptName: string) =>
+  `alchemy state bootstrap --backend cloudflare${
+    scriptName === STATE_STORE_SCRIPT_NAME ? "" : ` --name ${scriptName}`
+  }`;
+
+export const state = (options: CloudflareStateOptions = {}) =>
   Layer.effect(
     State,
     Effect.gen(function* () {
       const isCI = yield* CI;
-      const scriptName = STATE_STORE_SCRIPT_NAME;
+      const scriptName = options.name ?? STATE_STORE_SCRIPT_NAME;
       const profileName = yield* currentProfileName;
       const localStage = `${profileName}_${scriptName}`;
       const credStore = yield* CredentialsStore;
@@ -64,6 +85,18 @@ export const state = () =>
       const context = yield* Effect.context<Effect.Services<typeof init>>();
 
       const init = Effect.gen(function* () {
+        // A store that isn't deployed yet: deploy it on first use, except in
+        // CI, where it must be provisioned ahead of the deploy.
+        const deployMissing = isCI
+          ? Effect.die(
+              AuthError.make({
+                message: `Cloudflare State Store '${scriptName}' not found. Run '${bootstrapCommand(scriptName)} --profile <your-ci-profile>' to deploy it first.`,
+              }),
+            )
+          : Interaction.accessors.output
+              .info(`Cloudflare State Store '${scriptName}' not found; deploying it.`)
+              .pipe(Effect.andThen(bootstrap({ workerName: scriptName, profile: profileName })));
+
         if (yield* hasLocalStack(localStage)) {
           // if there's still a local stack, then we need to finish the bootstrap
           // TODO(sam): what if the local stack was
@@ -83,28 +116,9 @@ export const state = () =>
 
         const ensureLatest = ({ url, authToken }: { url: string; authToken: string }) =>
           Effect.gen(function* () {
-            const { matches, expected, observed } = yield* checkStateStoreVersion(url);
+            const { matches, expected, observed } = yield* checkStateStoreVersion(url, scriptName);
 
-            if (observed === undefined) {
-              const shouldDeploy =
-                autoUpdateStateStore ||
-                (yield* Interaction.accessors.prompt.confirm({
-                  message: `Cloudflare State Store '${scriptName}' is not available. Do you want to deploy it?`,
-                  // Deploying is the constructive happy path, not destructive
-                  // — keep default-yes despite the prompt-wide default-no.
-                  initialValue: true,
-                  confirmLabel: "Deploy",
-                  cancelLabel: "Cancel",
-                }));
-              if (shouldDeploy) {
-                return yield* bootstrap({
-                  workerName: scriptName,
-                  profile: profileName,
-                });
-              } else {
-                return yield* Effect.die(new Interaction.TerminalCancelled());
-              }
-            }
+            if (observed === undefined) return yield* deployMissing;
 
             const httpState = yield* ensureAccess({ url, authToken });
             if (matches) {
@@ -121,6 +135,7 @@ export const state = () =>
                 },
                 Effect.gen(function* () {
                   const stateStoreOptions = yield* deployStateStore({
+                    scriptName,
                     stage: scriptName,
                     state: httpState,
                     force: false,
@@ -139,7 +154,7 @@ export const state = () =>
                   message:
                     `Cloudflare State store is out of date ` +
                     `(expected v${expected}, observed v${observed ?? "unknown"}). ` +
-                    `Run 'alchemy state bootstrap --backend cloudflare --profile <your-ci-profile>' to upgrade it first, or pass --yes.`,
+                    `Run '${bootstrapCommand(scriptName)} --profile <your-ci-profile>' to upgrade it first, or pass --yes.`,
                 }),
               );
             } else {
@@ -165,7 +180,7 @@ export const state = () =>
             const isAuth = yield* checkHttpStateStoreAuth(credentials);
             if (!isAuth) {
               // our token is wrong, force a refresh
-              const credentials = yield* loginWithCloudflare(profileName, true);
+              const credentials = yield* loginWithCloudflare(profileName, true, scriptName);
               if (!(yield* checkHttpStateStoreAuth(credentials))) {
                 return yield* Effect.die(
                   AuthError.make({
@@ -182,7 +197,7 @@ export const state = () =>
 
         const credentials = yield* credStore.read(
           profileName,
-          CREDENTIALS_FILE,
+          credentialsFile(scriptName),
           StoredStateStoreCredentials,
         );
         if (credentials) {
@@ -197,34 +212,15 @@ export const state = () =>
               `Cloudflare State Store credentials were minted for a different ` +
                 `Cloudflare account; re-deriving for the current account.`,
             );
-            yield* credStore.delete(profileName, CREDENTIALS_FILE).pipe(Effect.ignore);
+            yield* credStore.delete(profileName, credentialsFile(scriptName)).pipe(Effect.ignore);
           } else {
             return yield* ensureLatest(credentials);
           }
         }
-        if (yield* isStateStoreServing(accountId)) {
-          return yield* ensureLatest(yield* loginWithCloudflare(profileName, false));
-        } else if (autoUpdateStateStore) {
-          // `--yes`: deploy the missing state store automatically (also in CI).
-          return yield* bootstrap();
-        } else if (isCI) {
-          return yield* Effect.die(
-            AuthError.make({
-              message: `Cloudflare State store not found. Run 'alchemy state bootstrap --backend cloudflare --profile <your-ci-profile>' to deploy it first, or pass --yes.`,
-            }),
-          );
-        } else {
-          const confirm = Interaction.accessors.prompt.confirm;
-          return yield* confirm({
-            message: "Cloudflare State Store not found. Do you want to deploy it?",
-            // Deploying is the constructive happy path — default-yes.
-            initialValue: true,
-          }).pipe(
-            Effect.flatMap((shouldDeploy) =>
-              shouldDeploy ? bootstrap() : Effect.die(new Interaction.TerminalCancelled()),
-            ),
-          );
+        if (yield* isStateStoreServing(accountId, scriptName)) {
+          return yield* ensureLatest(yield* loginWithCloudflare(profileName, false, scriptName));
         }
+        return yield* deployMissing;
       }).pipe(recordStateStoreInit, Effect.orDie);
 
       return yield* Effect.cached(init.pipe(Effect.provideContext(context)));
@@ -301,7 +297,7 @@ export const bootstrap = (options: BootstrapOptions = {}) =>
         );
       }
       const { accountId } = yield* yield* CloudflareEnvironment.CloudflareEnvironment;
-      if (yield* isStateStoreServing(accountId)) {
+      if (yield* isStateStoreServing(accountId, scriptName)) {
         // this is a regular update, let's check if it needs an update and refresh credentials
         if (!force) {
           yield* Interaction.accessors.output.info(
@@ -313,6 +309,7 @@ export const bootstrap = (options: BootstrapOptions = {}) =>
           profileName,
           // force refresh during
           true,
+          scriptName,
         );
         const { url, authToken } = credentials;
         if (!isCI) {
@@ -320,12 +317,12 @@ export const bootstrap = (options: BootstrapOptions = {}) =>
           const store = yield* CredentialsStore;
           yield* store.write(
             profileName,
-            CREDENTIALS_FILE,
+            credentialsFile(scriptName),
             StoredStateStoreCredentials,
             credentials,
           );
         }
-        const { matches, expected, observed } = yield* checkStateStoreVersion(url);
+        const { matches, expected, observed } = yield* checkStateStoreVersion(url, scriptName);
         const httpState = yield* makeCloudflareStateStore({ url, authToken });
         if (!matches || force) {
           return yield* interaction.task(
@@ -334,6 +331,7 @@ export const bootstrap = (options: BootstrapOptions = {}) =>
               detail: matches ? "forced" : `v${observed ?? "unknown"} → v${expected}`,
             },
             deployStateStore({
+              scriptName,
               stage: scriptName,
               state: httpState,
               force,
@@ -412,7 +410,10 @@ export const teardownStateStore = (options: TeardownOptions = {}) =>
     );
 
     // 2. Delete the secrets the state store created, plus any now-empty store.
-    const ourSecretNames = new Set<string>([AuthTokenSecretName, EncryptionKeySecretName]);
+    const ourSecretNames = new Set<string>([
+      stateStoreSecretName(AuthTokenSecretName, scriptName),
+      stateStoreSecretName(EncryptionKeySecretName, scriptName),
+    ]);
     const stores = yield* SecretsStore.listStores.items({ accountId }).pipe(
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
@@ -462,7 +463,7 @@ export const teardownStateStore = (options: TeardownOptions = {}) =>
 
     // 3. Drop the locally cached state-store credentials for this profile.
     const credStore = yield* CredentialsStore;
-    yield* credStore.delete(profileName, CREDENTIALS_FILE).pipe(Effect.ignore);
+    yield* credStore.delete(profileName, credentialsFile(scriptName)).pipe(Effect.ignore);
 
     yield* Interaction.accessors.output.success(
       `Cloudflare State Store '${scriptName}' torn down.`,
@@ -477,10 +478,12 @@ export const teardownStateStore = (options: TeardownOptions = {}) =>
   );
 
 const deployStateStore = ({
+  scriptName,
   stage,
   state,
   force,
 }: {
+  scriptName: string;
   stage: string;
   state: StateService;
   force?: boolean;
@@ -522,9 +525,11 @@ const deployStateStore = ({
       adopt(true),
       // TODO(sam): we should not need to do this, but types do complain. fix deploy
       Effect.provide(stateLayer),
+      // Names the Worker and its secrets after this store.
+      Effect.provideService(StateStoreName, scriptName),
     );
 
-    yield* writeCredentials(url, authToken);
+    yield* writeCredentials(url, authToken, scriptName);
 
     // Cloudflare's worker upload is eventually consistent: the deploy
     // call returns as soon as the script upload is accepted, but the
@@ -535,7 +540,7 @@ const deployStateStore = ({
     // adoption) end up talking to the old worker and may either
     // observe stale data or trip the staleness check and recurse into
     // another redeploy.
-    yield* waitForStateStoreVersion(url);
+    yield* waitForStateStoreVersion(url, scriptName);
     return { url, authToken };
   }).pipe(
     Effect.withSpan("state_store.deploy", {
@@ -562,12 +567,13 @@ const deployWithLocalState = ({
     const localStage = `${profileName}_${scriptName}`;
     const remoteStage = scriptName;
     const { authToken } = yield* deployStateStore({
+      scriptName,
       stage: localStage,
       state: localState,
       force,
     });
 
-    const { url } = yield* loginWithCloudflare(profileName, force);
+    const { url } = yield* loginWithCloudflare(profileName, force, scriptName);
     const httpState = yield* makeCloudflareStateStore({ url, authToken });
 
     yield* hoistBootstrapStack({
@@ -708,10 +714,10 @@ const hoistBootstrapStack = Effect.fn(function* ({
 export const loginWithCloudflare = Effect.fn("state_store.login", {
   attributes: {
     "alchemy.state_store.op": "login",
-    "alchemy.state_store.script_name": STATE_STORE_SCRIPT_NAME,
   },
 })(
-  function* (profileName: string, force: boolean) {
+  function* (profileName: string, force: boolean, scriptName: string = STATE_STORE_SCRIPT_NAME) {
+    yield* Effect.annotateCurrentSpan({ "alchemy.state_store.script_name": scriptName });
     const credStore = yield* CredentialsStore;
     const isCI = yield* CI;
     const { accountId } = yield* yield* CloudflareEnvironment.CloudflareEnvironment;
@@ -720,7 +726,7 @@ export const loginWithCloudflare = Effect.fn("state_store.login", {
       // try and read from the cached credentials first if not forcing (force will always refresh)
       const credentials = yield* credStore.read(
         profileName,
-        CREDENTIALS_FILE,
+        credentialsFile(scriptName),
         StoredStateStoreCredentials,
       );
       // Ignore a cache minted for a different account (or a legacy file with
@@ -747,9 +753,9 @@ export const loginWithCloudflare = Effect.fn("state_store.login", {
 
         // 2. Fetch the auth-token from Secrets Store with a temporary edge-preview worker.
         const authToken = yield* readSecretViaEdge(
-          STATE_STORE_SCRIPT_NAME,
+          scriptName,
           store.id,
-          AuthTokenSecretName,
+          stateStoreSecretName(AuthTokenSecretName, scriptName),
         ).pipe(
           Effect.retry({
             while: (error) =>
@@ -765,7 +771,7 @@ export const loginWithCloudflare = Effect.fn("state_store.login", {
 
         // 3. Derive the deployed worker URL.
         const { subdomain } = yield* workers.getSubdomain({ accountId });
-        const url = `https://${STATE_STORE_SCRIPT_NAME}.${subdomain}.workers.dev`;
+        const url = `https://${scriptName}.${subdomain}.workers.dev`;
         const credentials = {
           url,
           authToken: authToken.trim(),
@@ -775,7 +781,12 @@ export const loginWithCloudflare = Effect.fn("state_store.login", {
         if (!isCI) {
           // 4. Persist credentials for subsequent invocations.
           yield* credStore
-            .write(profileName, CREDENTIALS_FILE, StoredStateStoreCredentials, credentials)
+            .write(
+              profileName,
+              credentialsFile(scriptName),
+              StoredStateStoreCredentials,
+              credentials,
+            )
             .pipe(
               Effect.mapError((e) =>
                 AuthError.make({
@@ -824,16 +835,16 @@ const isStateStoreAvailable = (scriptName: string = "alchemy-state-store") =>
  * verified by checking the /version endpoint
  *
  */
-const isStateStoreServing = (accountId: string) =>
+const isStateStoreServing = (accountId: string, scriptName: string) =>
   Effect.gen(function* () {
     const url = yield* workers.getSubdomain({ accountId }).pipe(
       Effect.map(({ subdomain }) =>
-        subdomain ? `https://${STATE_STORE_SCRIPT_NAME}.${subdomain}.workers.dev` : undefined,
+        subdomain ? `https://${scriptName}.${subdomain}.workers.dev` : undefined,
       ),
       Effect.orElseSucceed(() => undefined),
     );
     if (url === undefined) return false;
-    const { observed } = yield* checkStateStoreVersion(url);
+    const { observed } = yield* checkStateStoreVersion(url, scriptName);
     return observed !== undefined;
   });
 
@@ -863,9 +874,9 @@ export class StateStoreVersionNotReady extends Data.TaggedError("StateStoreVersi
   }
 }
 
-const waitForStateStoreVersion = (url: string) =>
+const waitForStateStoreVersion = (url: string, scriptName: string) =>
   Effect.gen(function* () {
-    const { matches, expected, observed } = yield* checkStateStoreVersion(url);
+    const { matches, expected, observed } = yield* checkStateStoreVersion(url, scriptName);
     if (!matches) {
       return yield* new StateStoreVersionNotReady({ expected, observed });
     }
@@ -888,9 +899,9 @@ const waitForStateStoreVersion = (url: string) =>
 
 const checkStateStoreVersion = Effect.fn("state_store.check_version", {
   attributes: { "alchemy.state_store.op": "check_version" },
-})(function* (url: string) {
+})(function* (url: string, scriptName: string) {
   const client = yield* HttpApiClient.make(StateApi, { baseUrl: url });
-  const isAvailable = yield* Effect.cached(isStateStoreAvailable(STATE_STORE_SCRIPT_NAME));
+  const isAvailable = yield* Effect.cached(isStateStoreAvailable(scriptName));
   // The /version route may 404 transiently after a fresh deploy
   // while Cloudflare propagates the new script to the edge, and may
   // also surface transport-level blips on cold workers.dev hosts.
@@ -1003,12 +1014,12 @@ const readSecretViaEdge = (scriptName: string, storeId: string, secretName: stri
     }),
   );
 
-const writeCredentials = (url: string, authToken: string) =>
+const writeCredentials = (url: string, authToken: string, scriptName: string) =>
   Effect.gen(function* () {
     const profileName = yield* currentProfileName;
     const credStore = yield* CredentialsStore;
     const { accountId } = yield* yield* CloudflareEnvironment.CloudflareEnvironment;
-    yield* credStore.write(profileName, CREDENTIALS_FILE, StoredStateStoreCredentials, {
+    yield* credStore.write(profileName, credentialsFile(scriptName), StoredStateStoreCredentials, {
       url,
       authToken,
       accountId,

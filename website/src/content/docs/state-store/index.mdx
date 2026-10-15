@@ -78,9 +78,8 @@ encryption key kept in your account's Secrets Store.
 
 The first time you run `alchemy deploy`, `plan`, or `dev` against a
 stack configured with `Cloudflare.state()`, Alchemy can't find the
-state-store Worker on your account and pauses to ask permission
-before deploying it. Confirming kicks off a one-time deploy of the
-state-store and its supporting resources:
+state-store Worker on your account and deploys it, once, with its
+supporting resources:
 
 <StateStoreBootstrap client:visible />
 
@@ -99,7 +98,19 @@ What gets created:
 
 These resources are reused across every stack and stage that uses
 `Cloudflare.state()` on this account — no duplication per project.
-Subsequent runs detect the existing Worker and skip the prompt.
+Subsequent runs detect the existing Worker and use it.
+
+In CI (`CI=true`) a missing store fails the run instead: a deploy there
+should find its store provisioned, not create one as a side effect.
+Provision it once ahead of time:
+
+```sh
+alchemy state bootstrap --backend cloudflare --profile <your-ci-profile>
+```
+
+`AWS.state()` behaves the same way: it creates its S3 bucket on first
+use, except in CI, where `alchemy state bootstrap --backend aws`
+provisions it.
 
 ### Where credentials live
 
@@ -110,15 +121,24 @@ CI, set `CI=true`; the credentials are resolved from the Secrets
 Store on every run via a short-lived edge-preview Worker, so nothing
 needs to be persisted to disk.
 
-### Customizing the worker name
+### More than one store per account
 
-By default the state-store Worker is named `alchemy-state-store`.
-Pass `workerName` to use a separate state store — for example, when
-you want a dedicated store per Cloudflare account or per team:
+By default the state-store Worker is named `alchemy-state-store`. Pass
+`name` for a separate store, for example one per team. It gets its own
+Worker, its own secrets in the Secrets Store, and its own cached
+credentials:
 
 ```typescript
-state: Cloudflare.state({ workerName: "alchemy-state-store-team-a" }),
+state: Cloudflare.state({ name: "alchemy-state-store-team-a" }),
 ```
+
+Address it from the CLI with `--name`:
+
+```sh
+alchemy state list --backend cloudflare --name alchemy-state-store-team-a
+```
+
+`AWS.state({ name })` does the same with an S3 bucket name.
 
 ## Postgres state store
 

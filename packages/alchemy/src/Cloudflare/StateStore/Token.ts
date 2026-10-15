@@ -1,3 +1,4 @@
+import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import { Random } from "../../Random.ts";
 import * as Secret from "../SecretsStore/Secret.ts";
@@ -9,6 +10,28 @@ import { Store as SecretsStore } from "../SecretsStore/SecretsStore.ts";
  * already exists on the account, or creates one if none exists.
  */
 export const Store = SecretsStore("StateStoreSecrets");
+
+/** The default state store's Worker name. */
+export const DEFAULT_STATE_STORE_NAME = "alchemy-state-store" as const;
+
+/**
+ * Which state store a deploy builds: its Worker's name. The default store
+ * keeps the original Worker and secret names, so existing deploys don't move.
+ * Inside the deployed Worker it reads as the default; the runtime never needs
+ * its own name.
+ */
+export const StateStoreName = Context.Reference<string>("alchemy/Cloudflare/StateStoreName", {
+  defaultValue: () => DEFAULT_STATE_STORE_NAME,
+});
+
+/**
+ * A state store's secret name in the account-wide Secrets Store: the
+ * default store's is `base`, a named store's is suffixed with its name.
+ */
+export const stateStoreSecretName = (base: string, storeName: string) =>
+  storeName === DEFAULT_STATE_STORE_NAME
+    ? base
+    : `${base}_${storeName.replace(/[^A-Za-z0-9_]/g, "_")}`;
 
 /**
  * The randomly generated bearer token value. Generated once on create
@@ -32,7 +55,7 @@ export const AuthToken = Effect.gen(function* () {
   const store = yield* Store;
   const random = yield* TokenValue;
   return yield* Secret.Secret(AuthTokenSecretName, {
-    name: AuthTokenSecretName,
+    name: stateStoreSecretName(AuthTokenSecretName, yield* StateStoreName),
     store,
     value: random.text,
   });
@@ -60,7 +83,7 @@ export const EncryptionKey = Effect.gen(function* () {
   const store = yield* Store;
   const random = yield* EncryptionKeyValue;
   return yield* Secret.Secret("StateStoreEncryptionKey", {
-    name: EncryptionKeySecretName,
+    name: stateStoreSecretName(EncryptionKeySecretName, yield* StateStoreName),
     store,
     value: random.text,
   });

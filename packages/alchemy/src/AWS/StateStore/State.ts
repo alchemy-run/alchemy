@@ -3,6 +3,7 @@ import type { Credentials } from "@distilled.cloud/aws/Credentials";
 import type { Region } from "@distilled.cloud/aws/Region";
 import * as s3 from "@distilled.cloud/aws/s3";
 import * as Clock from "effect/Clock";
+import * as Config from "effect/Config";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import type { HttpClient } from "effect/http/HttpClient";
@@ -89,7 +90,8 @@ const amortizeCheck = (
 export interface S3StateOptions {
   /**
    * Name of the S3 bucket that holds the state objects. The bucket is
-   * created on first use if it does not exist.
+   * created on first use if it does not exist, except in CI, where it must
+   * be provisioned ahead with `alchemy state bootstrap --backend aws`.
    *
    * The bucket is created in the account-regional namespace, so custom
    * names must follow the `<prefix>-<accountId>-<region>-an` convention.
@@ -97,6 +99,8 @@ export interface S3StateOptions {
    * @see https://docs.aws.amazon.com/AmazonS3/latest/userguide/gpbucketnamespaces.html#account-regional-gp-buckets
    * @default `alchemy-state-{accountId}-{region}-an`
    */
+  name?: string;
+  /** @deprecated Use {@link S3StateOptions.name}. */
   bucketName?: string;
   /**
    * Key prefix within the bucket under which all state objects are
@@ -115,6 +119,15 @@ export interface S3StateOptions {
    */
   encryption?: BucketEncryption;
 }
+
+const CI = Config.Boolean("CI").pipe(Config.withDefault(false));
+
+/** Whether a state bucket exists. */
+export const stateBucketExists = (bucket: string) =>
+  s3.headBucket({ Bucket: bucket }).pipe(
+    Effect.as(true),
+    Effect.catchTag(["NotFound", "NoSuchBucket"], () => Effect.succeed(false)),
+  );
 
 /** Context required by the distilled S3 operations. */
 type S3Deps = Credentials | HttpClient | Region;
@@ -183,7 +196,7 @@ const withoutSdkDebugLogs = Effect.updateService(References.MinimumLogLevel, (le
  *   {
  *     providers: AWS.providers(),
  *     state: AWS.state({
- *       bucketName: "my-company-state",
+ *       name: "my-company-state",
  *       prefix: "alchemy",
  *       encryption: {
  *         sseAlgorithm: "aws:kms",
@@ -209,7 +222,7 @@ const withoutSdkDebugLogs = Effect.updateService(References.MinimumLogLevel, (le
  *   "my-stack",
  *   {
  *     providers: AWS.providers().pipe(Layer.provide(environment)),
- *     state: AWS.state({ bucketName: "my-company-state" }).pipe(Layer.provide(environment)),
+ *     state: AWS.state({ name: "my-company-state" }).pipe(Layer.provide(environment)),
  *   },
  *   Effect.gen(function* () {
  *     // ...
@@ -300,7 +313,17 @@ export const makeS3State = (options: S3StateOptions = {}) =>
     const bucket = yield* Effect.cached(
       Effect.gen(function* () {
         const { accountId, region } = yield* AWSEnvironment.current;
-        const bucketName = options.bucketName ?? createStateBucketName(accountId, region);
+        const name = options.name ?? options.bucketName;
+        const bucketName = name ?? createStateBucketName(accountId, region);
+        // First use creates the bucket, except in CI: a deploy there must
+        // find the store provisioned rather than create one as a side effect.
+        if ((yield* CI) && !(yield* stateBucketExists(bucketName))) {
+          return yield* new StateStoreError({
+            message:
+              `S3 state bucket '${bucketName}' not found. Run 'alchemy state bootstrap ` +
+              `--backend aws${name ? ` --name ${name}` : ""} --profile <your-ci-profile>' to create it first.`,
+          });
+        }
         yield* ensureStateBucket(bucketName, region, options);
         return bucketName;
       }).pipe(Effect.provideContext(context), Effect.mapError(toError)),

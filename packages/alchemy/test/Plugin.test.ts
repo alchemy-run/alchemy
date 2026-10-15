@@ -125,15 +125,4 @@ layer(Alchemist.layer())("Alchemist.State lifecycle", (it) => {
       expect(pluginErrorMessage(error)).toBe("State backend 'aws' does not support logs.");
     }),
   );
-
-  it.effect("rejects a name for a backend with only the default store", () =>
-    Effect.gen(function* () {
-      const error = yield* Effect.flip(
-        Alchemist.State.bootstrap({ backend: "cloudflare", name: "second-store" }),
-      );
-      expect(pluginErrorMessage(error)).toBe(
-        "State backend 'cloudflare' has only the default store; it does not take a name.",
-      );
-    }),
-  );
 });

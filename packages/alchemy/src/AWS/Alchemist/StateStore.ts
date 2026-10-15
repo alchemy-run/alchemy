@@ -13,14 +13,9 @@ import { AWSEnvironment } from "../Environment.ts";
 import {
   createStateBucketName,
   provisionStateBucket,
+  stateBucketExists,
   stateEnvironment,
 } from "../StateStore/State.ts";
-
-const stateBucketExists = (bucket: string) =>
-  s3.headBucket({ Bucket: bucket }).pipe(
-    Effect.as(true),
-    Effect.catchTag(["NotFound", "NoSuchBucket"], () => Effect.succeed(false)),
-  );
 
 /**
  * Ensure the state bucket (by default the one for the environment's account
@@ -64,9 +59,13 @@ const environment = Effect.fn(function* (target: StateStoreTarget) {
       target.profile,
     ),
   );
-  return stateEnvironment().pipe(
-    Layer.provide(Layer.succeed(AuthProviders, {} satisfies AuthProviders["Service"])),
-    Layer.provide(config),
+  // Fresh: AWS auth registers into this registry even when the process
+  // already built the provider's layers for another one.
+  return Layer.fresh(
+    stateEnvironment().pipe(
+      Layer.provide(Layer.succeed(AuthProviders, {} satisfies AuthProviders["Service"])),
+      Layer.provide(config),
+    ),
   );
 });
 
