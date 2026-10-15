@@ -98,6 +98,7 @@ describe.skipIf(skip).sequential("AWS Lambda MicroVM sandbox", () => {
       echo "via$name=$(grep -ci '^x-alchemy-test-gateway:' /tmp/h)"
     done
     git ls-remote "https://github.com/${REPO_A}" HEAD >/dev/null 2>&1 && echo gitA=1
+    git ls-remote https://github.com/cli/cli HEAD 2>&1 | grep -q "error: 403" && echo gitOther=403
     echo "token=$GH_TOKEN"
     echo "mem=$(grep MemTotal /proc/meminfo | tr -s ' ' | cut -d' ' -f2)"
     echo "gh=$(command -v gh)"
@@ -122,9 +123,11 @@ describe.skipIf(skip).sequential("AWS Lambda MicroVM sandbox", () => {
       expect(result).toMatchObject({ statusA: "200", viaA: "1", statusB: "200", viaB: "1" });
       expect(Number(result.limitA)).toBeGreaterThan(60);
       expect(result.gitA).toBe("1");
-      // Anything else goes straight out, with the placeholder: GitHub refuses it.
-      expect(result).toMatchObject({ statusother: "401", viaother: "0" });
-      // With egress and no `enableInternet`, hosts without a route are refused.
+      // With egress and no `enableInternet`, only granted requests leave:
+      // another repository on a routed host and a host without a route are
+      // both refused by the proxy, never sent.
+      expect(result).toMatchObject({ statusother: "403", viaother: "0" });
+      expect(result.gitOther).toBe("403");
       expect(result.internet).toBe("403");
       smallMemory = Number(result.mem);
     }),

@@ -420,6 +420,38 @@ layer(PlatformServices, { excludeTestServices: true })("Egress.Proxy", (it) => {
     );
 
     it.effect(
+      "git on a routed host, outside its paths: direct with internet on, 403 with it off",
+      () =>
+        Effect.gen(function* () {
+          const gateway = yield* fakeGateway("answer");
+          const routes = [
+            {
+              host: "github.com",
+              paths: ["/a/**"],
+              gateway: { id: "work", url: gateway.url },
+              grant: "g",
+            },
+          ];
+          const lsRemote = (proxyUrl: string, bundle: string) =>
+            run("git", ["ls-remote", "https://github.com/cli/cli", "HEAD"], {
+              HTTPS_PROXY: proxyUrl,
+              GIT_SSL_CAINFO: bundle,
+              GIT_TERMINAL_PROMPT: "0",
+            });
+          const on = yield* startProxy(routes);
+          const direct = yield* lsRemote(on.proxy.url, on.bundle);
+          expect(direct.stderr).toBe("");
+          expect(direct.stdout).toMatch(/^[0-9a-f]{40}\tHEAD\n$/);
+          const off = yield* startProxy(routes, { internet: false });
+          const refused = yield* lsRemote(off.proxy.url, off.bundle);
+          expect(refused.code).not.toBe(0);
+          expect(refused.stderr).toContain("403");
+          expect(gateway.seen).toEqual([]);
+        }),
+      { timeout: 90_000 },
+    );
+
+    it.effect(
       "tunnels an unrouted host without decrypting it",
       () =>
         Effect.gen(function* () {

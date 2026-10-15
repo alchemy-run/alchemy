@@ -13,8 +13,9 @@ import * as tls from "node:tls";
  *   unmatched path on a routed host is sent straight to the real host.
  * - `CONNECT` for any other host: a plain TCP tunnel, never decrypted.
  * - Absolute-form `http://` requests: forwarded directly.
- * - With `internet` off, hosts without a route are refused (`403`), both
- *   tunnels and plain HTTP: only the egress gateways are reachable.
+ * - With `internet` off, hosts without a route and paths outside a routed
+ *   host's routes are refused (`403`), tunnels and plain HTTP alike: only
+ *   the egress gateways are reachable.
  *
  * Bodies stream both ways (a large git push never sits in memory).
  *
@@ -445,7 +446,9 @@ export const serveEgressProxy = (
             ),
           );
         } else {
-          // A routed host, but not this path: straight out, untouched.
+          // A routed host, but not this path: straight out, untouched, when
+          // the internet is allowed; refused like an unrouted host when not.
+          if (!(yield* Ref.get(internet))) return yield* respond(client, "403 Forbidden");
           const connected = yield* connect(host, port, { servername: host }).pipe(Effect.option);
           if (connected._tag === "None") return yield* respond(client, "502 Bad Gateway");
           upstream = connected.value;
