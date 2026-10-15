@@ -91,5 +91,7 @@ export const MigrationRunner = (id: string, props: MigrationRunnerProps) =>
     },
     timeout: props.timeout ?? Duration.minutes(15),
     memorySize: props.memorySize ?? 512,
-    build: { install: ["pg", "mysql2"] },
+    // Exact pins: the runner's drivers must not depend on the deploying
+    // project's lockfile, which usually lists neither package.
+    build: { install: { pg: "8.23.1", mysql2: "3.24.5" } },
   });
