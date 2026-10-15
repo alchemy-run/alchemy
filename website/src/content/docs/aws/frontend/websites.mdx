@@ -61,6 +61,23 @@ unchanged project skips the build and deploy entirely. Under
 (native HMR) instead of deploying; `Alchemy.remote()` opts back into
 the full live deployment.
 
+## Serve from several Regions
+
+List extra Regions to run the server in each of them behind one global
+domain. CloudFront forwards to it, and each request reaches the nearest
+Region:
+
+```typescript
+const site = yield* AWS.Website.Nuxt("Website", {
+  regions: ["us-east-1", "eu-west-1"],
+});
+```
+
+The site's URL doesn't change when you add or remove Regions. `Nextjs`
+and `Vinext` keep their data caches in the home Region, so a server in
+another Region reaches back to it for cached pages; `regions` helps most
+for sites without a server-side cache.
+
 ## Choose the server
 
 The SSR server runs on a Lambda Web Function: your framework's own Node

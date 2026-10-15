@@ -17,6 +17,7 @@ import { Bucket } from "../S3/Bucket.ts";
 import { Queue } from "../SQS/Queue.ts";
 import { AssetDeployment } from "./AssetDeployment.ts";
 import { asRouterDomain, registerDevRouterRoute } from "./DevRouterRoute.ts";
+import { checkWebsiteRegions } from "./FrameworkSite.ts";
 import {
   normalizeWebsiteDomain,
   type WebsiteAssetsConfig,
@@ -75,6 +76,15 @@ export interface NextjsProps {
    * `server: "web-function"`.
    */
   maxEnvironments?: number;
+  /**
+   * Additional AWS Regions to serve the SSR server from. The server's Web
+   * Function gets one global domain that routes each request to the
+   * nearest Region, and CloudFront forwards to it. The
+   * ISR cache, tag table and revalidation queue stay in the home Region. Only applies to
+   * `server: "web-function"`. Changing it gives the server a new domain;
+   * the site's URL stays the same.
+   */
+  regions?: string[];
   /**
    * Memory allocated to the server function, in MB. Only applies to
    * `server: "function"`; Web Functions have a fixed 2 GB.
@@ -212,6 +222,7 @@ export interface NextjsProps {
 export const Nextjs = Effect.fn("AWS.Website.Nextjs")(
   function* (id: string, propsIn: InputProps<NextjsProps> = {}) {
     const props = propsIn as NextjsProps;
+    yield* checkWebsiteRegions(`AWS.Website.Nextjs "${id}"`, props);
     const ctx = yield* AlchemyContext;
     const remoted = yield* ProviderModePolicy;
     // Mirrors the other Website composites: during `alchemy dev` the site
@@ -340,6 +351,7 @@ export const Nextjs = Effect.fn("AWS.Website.Nextjs")(
           timeout: props.timeout ?? Duration.seconds(30),
           maxConcurrencyPerEnvironment: props.maxConcurrencyPerEnvironment,
           maxEnvironments: props.maxEnvironments,
+          regions: props.regions,
           env: serverEnv,
         })
       : yield* LambdaFunction("Server", {
@@ -447,6 +459,7 @@ export const Nextjs = Effect.fn("AWS.Website.Nextjs")(
           bundle: false,
           authType: "ApplicationManaged",
           timeout: Duration.seconds(25),
+          regions: props.regions,
           env: { BUCKET_NAME: bucket.bucketName },
         })
       : yield* LambdaFunction("ImageOptimization", {

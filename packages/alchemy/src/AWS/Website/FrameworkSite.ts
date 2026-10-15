@@ -1,3 +1,4 @@
+import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import { AlchemyContext } from "../../AlchemyContext.ts";
@@ -59,6 +60,14 @@ export interface FrameworkSiteProps {
    * to `server: "web-function"`.
    */
   maxEnvironments?: number;
+  /**
+   * Additional AWS Regions to serve the SSR server from. The server's Web
+   * Function gets one global domain that routes each request to the
+   * nearest Region, and CloudFront forwards to it. Only applies to
+   * `server: "web-function"`. Changing it gives the server a new domain;
+   * the site's URL stays the same.
+   */
+  regions?: string[];
   /**
    * Memory allocated to the server function, in MB. Only applies to
    * `server: "function"`; Web Functions have a fixed 2 GB.
@@ -131,6 +140,25 @@ export interface FrameworkSiteProps {
   tags?: Record<string, string>;
 }
 
+/** `regions` serves a Web Function from several Regions; a Lambda Function can't. */
+export class WebsiteRegionsRequireWebFunction extends Data.TaggedError(
+  "WebsiteRegionsRequireWebFunction",
+)<{ site: string; message: string }> {}
+
+/** Fail at plan when `regions` is combined with `server: "function"`. */
+export const checkWebsiteRegions = (
+  site: string,
+  props: { server?: "web-function" | "function"; regions?: string[] },
+) =>
+  props.server === "function" && props.regions !== undefined && props.regions.length > 0
+    ? Effect.die(
+        new WebsiteRegionsRequireWebFunction({
+          site,
+          message: `"${site}": regions needs the Web Function server. Remove server: "function", or remove regions.`,
+        }),
+      )
+    : Effect.void;
+
 /** Per-framework wiring for {@link makeFrameworkSite}. */
 export interface FrameworkSiteConfig {
   /** Display name used in error messages (e.g. `"SvelteKit"`). */
@@ -200,6 +228,7 @@ export const makeFrameworkSite = Effect.fn("AWS.Website.FrameworkSite")(function
   // need concrete values — passing an `Output` for those specific
   // fields is unsupported, same as on the Cloudflare side.
   const props = propsIn as FrameworkSiteProps;
+  yield* checkWebsiteRegions(`AWS.Website.${config.name} "${id}"`, props);
   const ctx = yield* AlchemyContext;
   const remoted = yield* ProviderModePolicy;
   const isLocal = ctx.dev && remoted !== true;
@@ -289,6 +318,7 @@ export const makeFrameworkSite = Effect.fn("AWS.Website.FrameworkSite")(function
       timeout: props.timeout ?? Duration.seconds(30),
       maxConcurrencyPerEnvironment: props.maxConcurrencyPerEnvironment,
       maxEnvironments: props.maxEnvironments,
+      regions: props.regions,
       build:
         config.install !== undefined && config.install.length > 0
           ? { install: [...config.install] }

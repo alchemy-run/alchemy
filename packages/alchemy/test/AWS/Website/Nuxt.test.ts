@@ -1,5 +1,6 @@
 import * as cloudfront from "@distilled.cloud/aws/cloudfront";
 import { describe, expect } from "alchemy-test";
+import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as HttpClient from "effect/http/HttpClient";
@@ -110,7 +111,7 @@ describe.skipIf(!runLive)(
     );
 
     test.provider.skipIf(runEmulated)(
-      'moves a standalone site from server: "function" onto a Web Function without downtime',
+      'moves a standalone site from server: "function" onto a Web Function, then several Regions, without downtime',
       (stack) =>
         Effect.gen(function* () {
           yield* stack.destroy();
@@ -120,12 +121,12 @@ describe.skipIf(!runLive)(
             tempRoot,
             entries: fixtureEntries,
           });
-          const deploy = (server: "function" | undefined) =>
+          const deploy = (props: { server?: "function"; regions?: string[] }) =>
             stack.deploy(
               Effect.gen(function* () {
                 const site = yield* AWS.Website.Nuxt("NuxtFunctionSite", {
                   rootDir,
-                  ...(server ? { server } : {}),
+                  ...props,
                   forceDestroy: true,
                   invalidation: { paths: "all", wait: true },
                 });
@@ -133,7 +134,7 @@ describe.skipIf(!runLive)(
               }),
             );
 
-          const deployed = yield* deploy("function");
+          const deployed = yield* deploy({ server: "function" });
           expect(deployed.site.serverUrl).toContain(".lambda-url.");
           const url = `${deployed.site.url!}/`;
           yield* expectUrlContains(url, "NUXT_AWS_PAGE_MARKER", {
@@ -147,13 +148,26 @@ describe.skipIf(!runLive)(
           const { result: migrated, failures: forward } = yield* probeDuring(
             url,
             "NUXT_AWS_PAGE_MARKER",
-            deploy(undefined),
+            deploy({}),
           );
           expect(migrated.site.serverUrl).toContain(".lambda-web.");
           expect(migrated.site.distribution!.distributionId).toBe(
             deployed.site.distribution!.distributionId,
           );
           expect(forward).toEqual([]);
+
+          // Adding Regions gives the server one global domain; CloudFront
+          // moves to it and the site's URL stays.
+          const { result: global, failures: regional } = yield* probeDuring(
+            url,
+            "NUXT_AWS_PAGE_MARKER",
+            deploy({ regions: ["us-east-1"] }),
+          );
+          expect(global.site.serverUrl).toContain(".lambda-web.global.");
+          expect(global.site.distribution!.distributionId).toBe(
+            deployed.site.distribution!.distributionId,
+          );
+          expect(regional).toEqual([]);
 
           const distributionId = deployed.site.distribution!.distributionId;
           yield* stack.destroy();
@@ -331,3 +345,18 @@ const probeDuring = <A, E, R>(url: string, marker: string, effect: Effect.Effect
     yield* Fiber.interrupt(prober);
     return { result, failures: yield* Ref.get(failures) };
   });
+
+test.provider(
+  'regions with server: "function" fails at plan',
+  (stack) =>
+    Effect.gen(function* () {
+      const exit = yield* stack
+        .plan(AWS.Website.Nuxt("RegionsOnFunction", { server: "function", regions: ["us-east-1"] }))
+        .pipe(Effect.exit);
+      expect(exit._tag).toBe("Failure");
+      expect(exit._tag === "Failure" ? String(Cause.squash(exit.cause)) : "").toContain(
+        "regions needs the Web Function server",
+      );
+    }),
+  { tags: ["provider:aws", "provider:aws:website"] },
+);
