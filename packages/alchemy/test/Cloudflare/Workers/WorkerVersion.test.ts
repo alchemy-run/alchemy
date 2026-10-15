@@ -69,6 +69,10 @@ describe.concurrent(
               );
               expect(deployment?.versions).toHaveLength(1);
               expect(deployment?.versions[0].percentage).toEqual(100);
+              expect(worker.deploymentId).toBeDefined();
+              expect(worker.versionId).toBeDefined();
+              expect(worker.deploymentId).toEqual(deployment?.id);
+              expect(worker.versionId).toEqual(deployment?.versions[0].versionId);
               expect(version.annotations?.workersTag).toEqual(tag);
               expect(version.annotations?.workersMessage).toEqual(message);
             }

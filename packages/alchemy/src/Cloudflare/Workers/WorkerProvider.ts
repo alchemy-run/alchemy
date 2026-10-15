@@ -4267,6 +4267,15 @@ export const LiveWorkerProvider = () =>
           desiredCrons.length > 0 || previousCrons.length > 0
             ? yield* reconcileCrons(name, desiredCrons, previousCrons, session)
             : [];
+        if (!dispatchNamespace && versionId === undefined) {
+          const { deployments } = yield* workers.listScriptDeployments({
+            accountId,
+            scriptName: name,
+          });
+          const active = deployments[0];
+          deploymentId = active?.id;
+          versionId = active?.versions.find((version) => version.percentage === 100)?.versionId;
+        }
         return {
           // The immutable script ID. The gradual-rollout branch deploys via
           // the versions API (no script PUT response), and rows persisted by
