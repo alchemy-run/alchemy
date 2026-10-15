@@ -7,7 +7,8 @@ import { join, relative, resolve } from "node:path";
  *
  * Dedicated `*.local.test.ts` files are excluded — those already set
  * `Test.make({ dev: true })` and some use `Alchemy.remote()` for out-of-band
- * live checks, which this env would redirect onto the emulator.
+ * live checks, which this env would redirect onto the emulator. Suites for
+ * live-only resources (`liveOnlySuites`) are excluded too.
  *
  * Extra alchemy-test args are forwarded (`-t`, `--retry`, paths, …).
  * `--list` prints selected files without starting tests or touching Floci.
@@ -155,6 +156,18 @@ for (let i = 0; i < args.length; i++) {
   paths.push(arg);
 }
 
+/**
+ * Suites inside a dualized service folder whose resources stay live-only
+ * (registered without `flociDual` in Providers.ts). This runner points every
+ * AWS client at the emulator, so they cannot reach the AWS service they test.
+ */
+const liveOnlySuites = new Set([
+  // Floci does not emulate Lambda Web Functions.
+  "Lambda/WebFunction.test.ts",
+  "Lambda/WebFunctionEndpoint.test.ts",
+  "Lambda/WebFunctionPermission.test.ts",
+]);
+
 const allowedRoots = dualizedServices()
   .map((service) => join(awsTestRoot, service))
   .filter((dir) => existsSync(dir));
@@ -179,6 +192,7 @@ for (const root of requestedRoots) {
   const glob = new Glob("**/*.test.ts");
   for await (const file of glob.scan(root)) {
     if (file.endsWith(".local.test.ts")) continue;
+    if (liveOnlySuites.has(relative(awsTestRoot, join(root, file)))) continue;
     files.push(relative(alchemyRoot, join(root, file)));
   }
 }
