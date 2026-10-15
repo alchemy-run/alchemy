@@ -1,5 +1,8 @@
+import * as Cause from "effect/Cause";
+import * as Channel from "effect/Channel";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
+import * as Stream from "effect/Stream";
 import * as Cloudflare from "@/Cloudflare";
 import { applySqlMigrations } from "@/Cloudflare/Workers/SqlMigrationsApply.ts";
 import * as Drizzle from "@/Drizzle/Cloudflare.ts";
@@ -24,6 +27,150 @@ const tables = (state: State) =>
   state.storage.sql
     .exec<{ name: string }>("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name")
     .pipe(Effect.flatMap((cursor) => cursor.toArray()));
+
+const cursorMethods = (state: State) =>
+  Effect.gen(function* () {
+    const sql = state.storage.sql;
+    yield* sql.exec("CREATE TABLE IF NOT EXISTS cursor_values (value INTEGER PRIMARY KEY)");
+    yield* sql.exec("DELETE FROM cursor_values");
+    const insert = sql.exec("INSERT INTO cursor_values VALUES (1), (2), (3)");
+    const count = () =>
+      sql
+        .exec<{ count: number }>("SELECT count(*) AS count FROM cursor_values")
+        .pipe(Effect.flatMap((cursor) => cursor.one()));
+    const beforeInsert = yield* count();
+    // A write takes effect when exec runs, even when its cursor is discarded.
+    yield* insert;
+    const afterInsert = yield* count();
+
+    const cursor = yield* sql.exec<{ value: number }>(
+      "SELECT value FROM cursor_values ORDER BY value",
+    );
+    const { next, toArray, one, raw, rowsRead, rowsWritten } = cursor;
+    const columns = cursor.columnNames;
+    const stableMembers =
+      next === cursor.next &&
+      toArray === cursor.toArray &&
+      one === cursor.one &&
+      raw === cursor.raw &&
+      rowsRead === cursor.rowsRead &&
+      rowsWritten === cursor.rowsWritten;
+    const readsBefore = yield* rowsRead;
+    const first = yield* next();
+    const readsAfterFirst = yield* rowsRead;
+    const second = yield* next();
+    const last = yield* one();
+    const readsAfterAll = yield* rowsRead;
+    return {
+      beforeInsert: beforeInsert.count,
+      afterInsert: afterInsert.count,
+      stableMembers,
+      columns,
+      sameColumnsAfterConsumption: columns === cursor.columnNames,
+      first,
+      second,
+      last,
+      exhausted: yield* next(),
+      remaining: yield* toArray(),
+      rawRemaining: yield* Stream.runCollect(raw()),
+      reads: [readsBefore, readsAfterFirst, readsAfterAll],
+      writes: yield* rowsWritten,
+    };
+  });
+
+const cursorStreams = (state: State) =>
+  Effect.gen(function* () {
+    const sql = state.storage.sql;
+    // Cross a Stream chunk boundary while retaining only a few rows.
+    const cursor = yield* sql.exec<{ value: number }>(
+      "WITH RECURSIVE numbers(value) AS (SELECT 0 UNION ALL SELECT value + 1 FROM numbers WHERE value < 4999) SELECT value FROM numbers",
+    );
+    const stream = cursor.pipe(
+      Stream.filter((row) => row.value % 1000 === 0),
+      Stream.map((row) => row.value),
+    );
+    // Building a Stream must leave consumption to the eventual consumer.
+    const first = yield* cursor.next();
+    const values = yield* Stream.runCollect(stream);
+    const repeated = yield* Stream.runCollect(stream);
+
+    const channelCursor = yield* sql.exec<{ value: number }>(
+      "SELECT 1 AS value UNION ALL SELECT 2 UNION ALL SELECT 3",
+    );
+    const channel = Stream.toChannel(channelCursor);
+    const sameChannel = channel === Stream.toChannel(channelCursor);
+    const channelFirst = yield* channelCursor.next();
+    const channelValues = (yield* Channel.runCollect(channel)).flat();
+    const channelRepeated = yield* Stream.runCollect(Stream.fromChannel(channel));
+
+    const rawCursor = yield* sql.exec<{
+      value: number;
+      label: string | null;
+      bytes: ArrayBuffer;
+    }>("SELECT 1 AS value, 'first' AS label, X'01' AS bytes UNION ALL SELECT 2, NULL, X'000102ff'");
+    const { raw } = rawCursor;
+    const rawStream = raw<[number, string | null, ArrayBuffer]>();
+    const rawFirst = yield* rawCursor.next();
+    const rawValues = yield* rawStream.pipe(
+      Stream.map(([value, label, bytes]) => [value, label, Array.from(new Uint8Array(bytes))]),
+      Stream.runCollect,
+    );
+    return {
+      first,
+      values,
+      repeated,
+      sameChannel,
+      channelFirst,
+      channelValues,
+      channelRepeated,
+      rawFirst: rawFirst.value?.value,
+      rawValues,
+      rawRemaining: yield* rawCursor.toArray(),
+    };
+  });
+
+const defects = <A, R>(effect: Effect.Effect<A, never, R>) =>
+  effect.pipe(
+    Effect.matchCause({
+      onFailure: (cause) =>
+        cause.reasons.map((reason) => ({
+          tag: reason._tag,
+          name:
+            Cause.isDieReason(reason) && reason.defect instanceof Error ? reason.defect.name : null,
+          message:
+            Cause.isDieReason(reason) && reason.defect instanceof Error
+              ? reason.defect.message
+              : null,
+        })),
+      onSuccess: () => [],
+    }),
+  );
+
+const cursorErrors = (state: State) =>
+  Effect.gen(function* () {
+    const sql = state.storage.sql;
+    const failures = [];
+    for (const query of [
+      "SELECT 1 AS value WHERE 0",
+      "SELECT 1 AS value UNION ALL SELECT 2",
+      "SELECT FROM",
+    ]) {
+      failures.push({
+        wrapped: yield* defects(sql.exec(query).pipe(Effect.flatMap((cursor) => cursor.one()))),
+        native: yield* defects(Effect.sync(() => sql.raw.exec(query).one())),
+      });
+    }
+    return {
+      failures,
+      recovered: yield* sql
+        .exec<{ value: number }>("SELECT 7 AS value")
+        .pipe(Effect.flatMap((cursor) => cursor.one())),
+    };
+  });
+
+export type CursorMethods = Effect.Success<ReturnType<typeof cursorMethods>>;
+export type CursorStreams = Effect.Success<ReturnType<typeof cursorStreams>>;
+export type CursorErrors = Effect.Success<ReturnType<typeof cursorErrors>>;
 
 export class MigratedObject extends Cloudflare.DurableObject<MigratedObject>()(
   "SqlMigratedObject",
@@ -71,6 +218,9 @@ export class MigratedObject extends Cloudflare.DurableObject<MigratedObject>()(
 
       return {
         inspect,
+        cursorMethods: () => cursorMethods(state),
+        cursorStreams: () => cursorStreams(state),
+        cursorErrors: () => cursorErrors(state),
         addUser: (name: string) => db.insert(users).values({ name }).pipe(Effect.asVoid),
         repeat: () =>
           Effect.gen(function* () {
