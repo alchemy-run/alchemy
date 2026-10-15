@@ -125,6 +125,24 @@ describe.skipIf(skip).sequential("AWS Lambda MicroVM sandbox", () => {
   );
 
   test(
+    "exec runs a command in the running MicroVM: stdin, stdout, stderr, exit code",
+    Effect.gen(function* () {
+      const script = encodeURIComponent("cat; echo; echo err >&2; id -un; exit 7");
+      const result = JSON.parse(yield* call(`/exec?script=${script}`, "hello")) as {
+        pid: number;
+        exitCode: number;
+        stdout: string;
+        stderr: string;
+      };
+      expect(result.pid).toBeGreaterThan(0);
+      expect(result.stdout).toBe("hello\nroot\n");
+      expect(result.stderr).toBe("err\n");
+      expect(result.exitCode).toBe(7);
+    }),
+    options,
+  );
+
+  test(
     "setEgress narrows the running MicroVM without restarting it",
     Effect.gen(function* () {
       const before = yield* debug;

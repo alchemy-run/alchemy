@@ -1,5 +1,6 @@
 import * as Effect from "effect/Effect";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import * as Stream from "effect/Stream";
 import * as Cloudflare from "@/Cloudflare";
 import { MicrovmEgressSandbox } from "./box.ts";
 import { MicrovmSandboxGateway, REPO_A, REPO_B } from "./gateway.ts";
@@ -48,6 +49,20 @@ export class MicrovmSandboxObject extends Cloudflare.DurableObject<MicrovmSandbo
             ),
             Effect.map((body) => body as unknown as Shell),
           ),
+        /** `sandbox.exec`: the script through `sh -c`, with `input` on stdin. */
+        exec: (script: string, input: string) =>
+          Effect.gen(function* () {
+            const process = yield* sandbox.exec(["sh", "-c", script], { stdin: "pipe" });
+            yield* Stream.make(new TextEncoder().encode(input)).pipe(Stream.run(process.stdin!));
+            const output = yield* process.output();
+            const decoder = new TextDecoder();
+            return {
+              pid: process.pid,
+              exitCode: output.exitCode,
+              stdout: decoder.decode(output.stdout),
+              stderr: decoder.decode(output.stderr),
+            };
+          }).pipe(Effect.scoped),
         running: () => sandbox.running,
         /** What's stored, without the control secret. */
         debug: () =>

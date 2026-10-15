@@ -7,7 +7,8 @@ import { MicrovmSandboxObject } from "./object.ts";
 /**
  * POST /start?size=&ttl=  start the sandbox (or re-apply to the running one)
  * POST /narrow            narrow it to REPO_A
- * POST /sh                run the body as a shell script
+ * POST /sh                run the body as a shell script (inside the program)
+ * POST /exec?script=      sandbox.exec the script, with the body on stdin
  * GET  /running           whether the MicroVM runs
  * GET  /debug             what the Durable Object stores
  * POST /stop              stop the sandbox
@@ -34,6 +35,10 @@ export default class MicrovmSandboxWorker extends Cloudflare.Worker<MicrovmSandb
             return HttpServerResponse.text("narrowed");
           case "/sh":
             return yield* HttpServerResponse.json(yield* object.sh(yield* request.text));
+          case "/exec":
+            return yield* HttpServerResponse.json(
+              yield* object.exec(url.searchParams.get("script") ?? "true", yield* request.text),
+            );
           case "/running":
             return yield* HttpServerResponse.json(yield* object.running());
           case "/debug":
