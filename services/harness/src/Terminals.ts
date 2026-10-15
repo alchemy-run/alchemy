@@ -24,7 +24,7 @@ interface Shell {
 }
 
 const failure = (cause: unknown) =>
-  new SessionError({
+  SessionError.make({
     message: `terminal: ${cause instanceof Error ? cause.message : String(cause)}`,
   });
 

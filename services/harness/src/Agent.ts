@@ -43,14 +43,14 @@ export class Agent extends Cloudflare.RpcDurableObject<Agent>()(
         ]);
         const { exitCode, stderr } = yield* child.output();
         if (exitCode !== 0) {
-          return yield* new SessionError({
+          return yield* SessionError.make({
             message: `cloning the workspace failed: ${new TextDecoder().decode(stderr)}`,
           });
         }
       }),
     ).pipe(
       Effect.catchTag("SandboxError", (cause) =>
-        Effect.fail(new SessionError({ message: cause.message })),
+        Effect.fail(SessionError.make({ message: cause.message })),
       ),
     );
 
@@ -153,7 +153,7 @@ export class Agent extends Cloudflare.RpcDurableObject<Agent>()(
         // A shell in the session's container (started, with its workspace).
         terminal: ({ sessionId, cols, rows }) =>
           Stream.unwrap(
-            Effect.scoped(claude).pipe(Effect.as(terminals.output(sessionId, cols, rows))),
+            claude.pipe(Effect.scoped, Effect.as(terminals.output(sessionId, cols, rows))),
           ),
         machine: ({ stats }) => machine({ stats }),
         summary: ({ sessionId }) =>

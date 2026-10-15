@@ -25,14 +25,16 @@ export class Sessions extends Cloudflare.DurableObject<Sessions>()(
     // the table, and every later call reuses that result.
     const ensure = yield* Effect.cached(
       Effect.gen(function* () {
-        yield* sql.exec(
-          "CREATE TABLE IF NOT EXISTS sessions (id TEXT PRIMARY KEY, created_at INTEGER NOT NULL)",
-        );
+        yield* sql
+          .exec(
+            "CREATE TABLE IF NOT EXISTS sessions (id TEXT PRIMARY KEY, created_at INTEGER NOT NULL)",
+          )
+          .pipe(Effect.asVoid);
         const columns = yield* sql
           .exec<{ name: string }>("PRAGMA table_info(sessions)")
           .pipe(Effect.flatMap((cursor) => cursor.toArray()));
         if (!columns.some((column) => column.name === "settled_at")) {
-          yield* sql.exec("ALTER TABLE sessions ADD COLUMN settled_at INTEGER");
+          yield* sql.exec("ALTER TABLE sessions ADD COLUMN settled_at INTEGER").pipe(Effect.asVoid);
         }
       }),
     );

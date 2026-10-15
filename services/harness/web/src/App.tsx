@@ -127,7 +127,8 @@ const useSessionIds = () => {
   const add = (id: string) => setCreated((prev) => [id, ...prev.filter((x) => x !== id)]);
   const refresh = () => setRefreshes((n) => n + 1);
   const markSettled = (id: string) => setSettled((prev) => ({ ...prev, [id]: Date.now() }));
-  const unmarkSettled = (id: string) => setSettled(({ [id]: _, ...rest }) => rest);
+  const unmarkSettled = (id: string) =>
+    setSettled((prev) => Object.fromEntries(Object.entries(prev).filter(([key]) => key !== id)));
   // Once the server lists a session as settled, it alone decides (so a new
   // prompt that unsettles it shows at once).
   useEffect(() => {
