@@ -1,10 +1,9 @@
 import * as eventbridge from "@distilled.cloud/aws/eventbridge";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Binding from "../../Binding.ts";
 import * as Output from "../../Output.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import { AWSEnvironment } from "../Environment.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
 import type { EventBus } from "./EventBus.ts";
 import { PutEvents, type PutEventsRequest } from "./PutEvents.ts";
 
@@ -17,35 +16,32 @@ import { PutEvents, type PutEventsRequest } from "./PutEvents.ts";
 export const PutEventsHttp = Layer.effect(
   PutEvents,
   Effect.gen(function* () {
-    const putEvents = yield* eventbridge.putEvents;
+    const putEvents = yield* AWSBindings.withCredentials(eventbridge.putEvents);
 
     return Effect.fn(function* (bus?: EventBus) {
       const EventBusName = bus ? yield* bus.eventBusName : undefined;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          const { accountId, region } = yield* AWSEnvironment.current as unknown as Effect.Effect<{
-            accountId: string;
-            region: string;
-          }>;
-          // Pass the ARN as an unresolved Output — binding data is resolved
-          // by the engine before the host reconciles. Eagerly yielding here
-          // (during plan) produces a deferred object that serializes into an
-          // invalid IAM policy (MalformedPolicyDocumentException).
-          const resource = bus
-            ? Output.interpolate`${bus.eventBusArn}`
-            : (`arn:aws:events:${region}:${accountId}:event-bus/default` as const);
+        const { accountId, region } = yield* AWSEnvironment.current as unknown as Effect.Effect<{
+          accountId: string;
+          region: string;
+        }>;
+        // Pass the ARN as an unresolved Output — binding data is resolved
+        // by the engine before the host reconciles. Eagerly yielding here
+        // (during plan) produces a deferred object that serializes into an
+        // invalid IAM policy (MalformedPolicyDocumentException).
+        const resource = bus
+          ? Output.interpolate`${bus.eventBusArn}`
+          : (`arn:aws:events:${region}:${accountId}:event-bus/default` as const);
 
-          yield* host.bind`Allow(${host}, AWS.EventBridge.PutEvents(${bus ?? "default"}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: ["events:PutEvents"],
-                Resource: [resource],
-              },
-            ],
-          });
-        }
+        yield* AWSBindings.bind`AWS.EventBridge.PutEvents(${bus ?? "default"})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: ["events:PutEvents"],
+              Resource: [resource],
+            },
+          ],
+        });
       }
       return Effect.fn(`AWS.EventBridge.PutEvents(${bus?.LogicalId})`)(function* (
         request: PutEventsRequest,

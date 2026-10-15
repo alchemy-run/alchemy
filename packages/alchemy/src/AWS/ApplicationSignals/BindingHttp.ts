@@ -1,7 +1,6 @@
 import * as Effect from "effect/Effect";
-import * as Binding from "../../Binding.ts";
 import * as Output from "../../Output.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { ServiceLevelObjective } from "./ServiceLevelObjective.ts";
 
 /**
@@ -28,22 +27,19 @@ export const makeApplicationSignalsAccountHttpBinding = <I, A, E, R>(options: {
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}())`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: ["*"],
-              },
-            ],
-          });
-        }
+        yield* AWSBindings.bind`${options.tag}()`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: ["*"],
+            },
+          ],
+        });
       }
       return Effect.fn(options.tag)(function* (request: I) {
         return yield* op(request);
@@ -66,23 +62,20 @@ export const makeSloIdHttpBinding = <I extends { Id: string }, A, E, R>(options:
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (slo: ServiceLevelObjective) {
       const SloArn = yield* slo.sloArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}(${slo}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: [Output.interpolate`${slo.sloArn}`],
-              },
-            ],
-          });
-        }
+        yield* AWSBindings.bind`${options.tag}(${slo})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: [Output.interpolate`${slo.sloArn}`],
+            },
+          ],
+        });
       }
       return Effect.fn(`${options.tag}(${slo.LogicalId})`)(function* (request?: Omit<I, "Id">) {
         return yield* op({
@@ -115,32 +108,29 @@ export const makeSloBatchHttpBinding = <I extends { SloIds: string[] }, A, E, R>
   accountActions?: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (slo: ServiceLevelObjective) {
       const SloArn = yield* slo.sloArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}(${slo}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: [Output.interpolate`${slo.sloArn}`],
-              },
-              ...(options.accountActions?.length
-                ? [
-                    {
-                      Effect: "Allow" as const,
-                      Action: [...options.accountActions],
-                      Resource: ["*"],
-                    },
-                  ]
-                : []),
-            ],
-          });
-        }
+        yield* AWSBindings.bind`${options.tag}(${slo})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: [Output.interpolate`${slo.sloArn}`],
+            },
+            ...(options.accountActions?.length
+              ? [
+                  {
+                    Effect: "Allow" as const,
+                    Action: [...options.accountActions],
+                    Resource: ["*"],
+                  },
+                ]
+              : []),
+          ],
+        });
       }
       return Effect.fn(`${options.tag}(${slo.LogicalId})`)(function* (request: Omit<I, "SloIds">) {
         return yield* op({

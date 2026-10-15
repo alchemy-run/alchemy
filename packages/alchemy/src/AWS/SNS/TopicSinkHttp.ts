@@ -1,9 +1,8 @@
 import type * as sns from "@distilled.cloud/aws/sns";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Binding from "../../Binding.ts";
 import { makeBatchedSink } from "../../Util/BatchedSink.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import { PublishBatch } from "./PublishBatch.ts";
 import type { Topic } from "./Topic.ts";
 import { TopicSink, type TopicSinkEntry } from "./TopicSink.ts";
@@ -36,18 +35,15 @@ export const TopicSinkHttp = Layer.effect(
 
     return Effect.fn(function* (topic: Topic) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, AWS.SNS.TopicSink(${topic}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: ["sns:Publish"],
-                Resource: [topic.topicArn],
-              },
-            ],
-          });
-        }
+        yield* AWSBindings.bind`AWS.SNS.TopicSink(${topic})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: ["sns:Publish"],
+              Resource: [topic.topicArn],
+            },
+          ],
+        });
       }
       const publish = yield* publishBatch(topic);
 

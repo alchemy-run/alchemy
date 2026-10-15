@@ -1,7 +1,6 @@
 import * as Effect from "effect/Effect";
-import * as Binding from "../../Binding.ts";
 import * as Output from "../../Output.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { KxEnvironment } from "./KxEnvironment.ts";
 
 /**
@@ -33,27 +32,24 @@ export const makeFinSpaceKxHttpBinding = <I extends { environmentId: string }, A
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* <K extends KxEnvironment>(environment: K) {
       // Outputs yield a DEFERRED effect — resolve again per invocation below.
       const EnvironmentId = yield* environment.environmentId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}(${environment}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: [
-                  Output.interpolate`${environment.environmentArn}`,
-                  Output.interpolate`${environment.environmentArn}/*`,
-                ],
-              },
-            ],
-          });
-        }
+        yield* AWSBindings.bind`${options.tag}(${environment})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: [
+                Output.interpolate`${environment.environmentArn}`,
+                Output.interpolate`${environment.environmentArn}/*`,
+              ],
+            },
+          ],
+        });
       }
       return Effect.fn(`${options.tag}(${environment.LogicalId})`)(function* (
         request?: Omit<I, "environmentId">,

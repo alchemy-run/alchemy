@@ -1,7 +1,6 @@
 import * as Effect from "effect/Effect";
-import * as Binding from "../../Binding.ts";
 import * as Output from "../../Output.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { Vault } from "./Vault.ts";
 
 /**
@@ -32,23 +31,20 @@ export const makeGlacierVaultHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (vault: Vault) {
       const vaultName = yield* vault.vaultName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}(${vault}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: [Output.interpolate`${vault.vaultArn}`],
-              },
-            ],
-          });
-        }
+        yield* AWSBindings.bind`${options.tag}(${vault})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: [Output.interpolate`${vault.vaultArn}`],
+            },
+          ],
+        });
       }
       return Effect.fn(`${options.tag}(${vault.LogicalId})`)(function* (
         request?: Omit<I, "accountId" | "vaultName">,

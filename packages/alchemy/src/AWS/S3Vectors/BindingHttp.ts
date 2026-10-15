@@ -1,3 +1,5 @@
+import * as s3vectors from "@distilled.cloud/aws/s3vectors";
+import * as Effect from "effect/Effect";
 /**
  * Shared scaffolding for the S3 Vectors data-plane HTTP bindings.
  *
@@ -10,10 +12,7 @@
  * - the runtime client methods inject the resolved `indexArn` into each
  *   distilled request.
  */
-import * as s3vectors from "@distilled.cloud/aws/s3vectors";
-import * as Effect from "effect/Effect";
-import * as Binding from "../../Binding.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { Index } from "./VectorIndex.ts";
 import type {
   GetVectorsRequest,
@@ -58,18 +57,15 @@ export const makeVectorsHttpBinding = <Client, R>(options: {
     return Effect.fn(function* <I extends Index>(index: I) {
       const IndexArn = yield* index.indexArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, AWS.S3Vectors.${options.name}(${index}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: [index.indexArn],
-              },
-            ],
-          });
-        }
+        yield* AWSBindings.bind`AWS.S3Vectors.${options.name}(${index})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: [index.indexArn],
+            },
+          ],
+        });
       }
       return makeClient(IndexArn, `AWS.S3Vectors.${options.name}(${index.LogicalId})`);
     });
@@ -77,9 +73,9 @@ export const makeVectorsHttpBinding = <Client, R>(options: {
 
 /** Layer-scoped builder of the read-level {@link ReadVectorsClient}. */
 export const makeReadVectorsClient = Effect.gen(function* () {
-  const queryVectors = yield* s3vectors.queryVectors;
-  const getVectors = yield* s3vectors.getVectors;
-  const listVectors = yield* s3vectors.listVectors;
+  const queryVectors = yield* AWSBindings.withCredentials(s3vectors.queryVectors);
+  const getVectors = yield* AWSBindings.withCredentials(s3vectors.getVectors);
+  const listVectors = yield* AWSBindings.withCredentials(s3vectors.listVectors);
 
   return (IndexArn: Effect.Effect<string>, label: string): ReadVectorsClient => ({
     query: Effect.fn(`${label}.query`)(function* (request: QueryVectorsRequest) {
@@ -99,8 +95,8 @@ export const makeReadVectorsClient = Effect.gen(function* () {
 
 /** Layer-scoped builder of the write-level {@link WriteVectorsClient}. */
 export const makeWriteVectorsClient = Effect.gen(function* () {
-  const putVectors = yield* s3vectors.putVectors;
-  const deleteVectors = yield* s3vectors.deleteVectors;
+  const putVectors = yield* AWSBindings.withCredentials(s3vectors.putVectors);
+  const deleteVectors = yield* AWSBindings.withCredentials(s3vectors.deleteVectors);
 
   return (IndexArn: Effect.Effect<string>, label: string): WriteVectorsClient => ({
     put: Effect.fn(`${label}.put`)(function* (request: PutVectorsRequest) {
