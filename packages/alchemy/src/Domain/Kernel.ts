@@ -1,4 +1,5 @@
 import * as Cause from "effect/Cause";
+import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
@@ -13,6 +14,7 @@ import type {
   AggregateKit,
   Delivery,
   EnvelopeJson,
+  HandleResult,
   Json,
   PolicyKit,
   ReceiptJson,
@@ -26,6 +28,7 @@ import type * as Policy from "./Policy.ts";
 import type * as Projection from "./Projection.ts";
 import * as RequestContext from "./RequestContext.ts";
 import type * as DomainStream from "./Stream.ts";
+import * as Telemetry from "./Telemetry.ts";
 import type * as View from "./View.ts";
 
 /**
@@ -88,19 +91,41 @@ const jsonCodec = (schema: Schema.Top): JsonCodec => {
 };
 
 /** @internal */
-export const encodeEnvelope = (envelope: Aggregate.Envelope): EnvelopeJson => ({
+export const encodeEnvelope = (
+  envelope: Aggregate.Envelope,
+  trace?: Telemetry.TraceJson,
+): EnvelopeJson => ({
   id: envelope.id,
   stream: envelope.stream,
   seq: envelope.seq,
   at: DateTime.toEpochMillis(envelope.at),
   commandId: envelope.commandId,
+  correlationId: envelope.correlationId,
+  ...(trace ? { trace } : {}),
 });
 
 /** @internal */
 export const decodeEnvelope = (json: EnvelopeJson): Aggregate.Envelope => ({
-  ...json,
+  id: json.id,
+  stream: json.stream,
+  seq: json.seq,
   at: DateTime.makeUnsafe(json.at),
+  commandId: json.commandId,
+  correlationId: json.correlationId ?? json.commandId,
 });
+
+/** The structural attributes of a delivery a reaction handles. */
+const deliveryAttributes = (delivery: Delivery): Record<string, unknown> => ({
+  "domain.source": delivery.source,
+  "domain.seq": delivery.seq,
+  "domain.event": delivery.tag,
+  "domain.command_id": delivery.envelope.commandId,
+  "domain.correlation_id": delivery.envelope.correlationId ?? delivery.envelope.commandId,
+});
+
+/** A reaction to one delivery continues the trace of the commit that caused it. */
+const parentOf = (delivery: Delivery) =>
+  delivery.envelope.trace ? Telemetry.spanOf(delivery.envelope.trace) : undefined;
 
 /**
  * The pure semantics shared by every platform: decide, evolve, reply,
@@ -150,7 +175,10 @@ export interface Kernel {
 /**
  * Build the kernel for a set of definitions. Validates tags and routing.
  */
-export const make = (definitions: Definitions): Kernel => {
+export const make = (
+  definitions: Definitions,
+  telemetry: Telemetry.Resolved = Telemetry.resolve(undefined),
+): Kernel => {
   // ---------------------------------------------------------------- events
   const eventCodecs = new Map<string, { readonly cls: Event.Any; readonly codec: JsonCodec }>();
   const registerEvent = (cls: Event.Any) => {
@@ -170,6 +198,9 @@ export const make = (definitions: Definitions): Kernel => {
   };
   const encodeEvent = (event: { readonly _tag: string }) => eventCodec(event._tag).encode(event);
   const decodeEvent = (json: Json) => eventCodec((json as { _tag: string })._tag).decode(json);
+  /** The span attributes an event's declaration adds. */
+  const eventAttributes = (event: { readonly _tag: string }) =>
+    Telemetry.attributesOf(eventCodecs.get(event._tag)?.cls, event);
 
   // ----------------------------------------------------- aggregate codecs
   interface AggregateCodecs {
@@ -526,6 +557,8 @@ export const make = (definitions: Definitions): Kernel => {
       now: DateTime.Utc,
       commandId: string,
       history: boolean,
+      correlationId: string = commandId,
+      trace?: Telemetry.TraceJson,
     ) => {
       const stream = `${aggregate.aggregateName}/${id}`;
       const events: Array<StoredEvent> = [];
@@ -544,6 +577,7 @@ export const make = (definitions: Definitions): Kernel => {
           seq: version + index + 1,
           at: now,
           commandId,
+          correlationId,
         };
         next = (def.evolve as Record<string, (...args: any[]) => unknown>)[event._tag](
           next,
@@ -552,7 +586,7 @@ export const make = (definitions: Definitions): Kernel => {
         );
         const stored: StoredEvent = {
           event: encodeEvent(event),
-          envelope: encodeEnvelope(envelope),
+          envelope: encodeEnvelope(envelope, trace),
         };
         events.push(stored);
         deliveries.push(
@@ -596,79 +630,148 @@ export const make = (definitions: Definitions): Kernel => {
         };
       },
       handle: (input) => {
-        const command = codecs.commands.get((input.command as { _tag: string })._tag);
-        if (!command)
-          throw new DefinitionError(
-            `${aggregate.aggregateName} does not handle '${(input.command as any)._tag}'`,
-          );
-        const decoded = command.codec.decode(input.command) as { readonly _tag: string };
-        const state = codecs.state.decode(input.state ?? codecs.initial);
-        const id = decodeId(input.id) as string;
-        const now = DateTime.makeUnsafe(input.now);
-        let decision = (def.decide as Record<string, (...args: any[]) => unknown>)[decoded._tag](
-          state,
-          decoded,
-          {
-            id,
-            now,
-          },
-        );
-        // An effectful decision reads the context the command was sent with.
-        if (Effect.isEffect(decision)) {
-          // The context is the decision's only requirement (enforced by `Aggregate.Decision`).
-          const exit = Effect.runSyncExit(
-            Effect.provideContext(
-              decision as Effect.Effect<unknown, unknown, never>,
-              RequestContext.restore(input.context),
-            ),
-          );
-          if (Exit.isSuccess(exit)) {
-            decision = exit.value;
-          } else {
-            const rejection = Cause.findErrorOption(exit.cause);
-            if (Option.isNone(rejection)) throw Cause.squash(exit.cause);
-            decision = rejection.value;
-          }
-        }
-        if (!Array.isArray(decision)) {
-          const rejection = decision as { readonly _tag: string };
-          const codec = codecs.rejections.get(rejection._tag);
-          if (!codec || !command.cls.rejects.some((r) => r.tag === rejection._tag)) {
-            throw new DefinitionError(
-              `${aggregate.aggregateName}.decide.${decoded._tag} returned '${rejection?._tag}', which ${decoded._tag} does not declare in rejects`,
-            );
-          }
-          return { _tag: "Rejected", rejection: codec.encode(rejection) };
-        }
-        for (const event of decision as ReadonlyArray<{ readonly _tag: string }>) {
-          if (!command.cls.events.some((e) => e.tag === event._tag)) {
-            throw new DefinitionError(
-              `${aggregate.aggregateName}.decide.${decoded._tag} returned '${event._tag}', which ${decoded._tag} does not declare in events`,
-            );
-          }
-        }
-        const { next, events, deliveries } = commit(
-          id,
-          state,
-          input.version,
-          decision,
-          now,
-          input.commandId,
-          false,
-        );
-        const replyFn = (def.reply as Record<string, (...args: any[]) => unknown> | undefined)?.[
-          decoded._tag
-        ];
-        const reply =
-          replyFn && command.reply ? command.reply.encode(replyFn(next, decision)) : null;
-        return {
-          _tag: "Accepted",
-          state: codecs.state.encode(next),
-          version: input.version + decision.length,
-          events,
-          reply,
-          deliveries,
+        const tag = (input.command as { readonly _tag: string })._tag;
+        const correlationId = input.correlationId ?? input.commandId;
+        const base = {
+          "domain.aggregate": aggregate.aggregateName,
+          "domain.command": tag,
+          "domain.id": String(input.id),
+          "domain.stream": `${aggregate.aggregateName}/${input.id}`,
+          "domain.command_id": input.commandId,
+          "domain.correlation_id": correlationId,
         };
+        const decideAndCommit = Effect.gen(function* () {
+          const command = codecs.commands.get(tag);
+          if (!command) {
+            return yield* Effect.die(
+              new DefinitionError(`${aggregate.aggregateName} does not handle '${tag}'`),
+            );
+          }
+          const decoded = command.codec.decode(input.command) as { readonly _tag: string };
+          yield* Effect.annotateCurrentSpan(Telemetry.attributesOf(command.cls, decoded));
+          const state = codecs.state.decode(input.state ?? codecs.initial);
+          const id = decodeId(input.id) as string;
+          const now = DateTime.makeUnsafe(input.now);
+          let decision = (def.decide as Record<string, (...args: any[]) => unknown>)[decoded._tag](
+            state,
+            decoded,
+            { id, now },
+          );
+          // An effectful decision runs here, inside the decide span, with the
+          // context the command was sent with (its only requirement, enforced
+          // by `Aggregate.Decision`).
+          if (Effect.isEffect(decision)) {
+            const exit = yield* Effect.exit(
+              Effect.provideContext(
+                decision as Effect.Effect<unknown, unknown, never>,
+                RequestContext.restore(input.context),
+              ),
+            );
+            if (Exit.isSuccess(exit)) {
+              decision = exit.value;
+            } else {
+              const rejection = Cause.findErrorOption(exit.cause);
+              if (Option.isNone(rejection))
+                return yield* Effect.failCause(exit.cause as Cause.Cause<never>);
+              decision = rejection.value;
+            }
+          }
+          if (!Array.isArray(decision)) {
+            const rejection = decision as { readonly _tag: string };
+            const codec = codecs.rejections.get(rejection._tag);
+            const declared = command.cls.rejects.find((r) => r.tag === rejection._tag);
+            if (!codec || !declared) {
+              return yield* Effect.die(
+                new DefinitionError(
+                  `${aggregate.aggregateName}.decide.${decoded._tag} returned '${rejection?._tag}', which ${decoded._tag} does not declare in rejects`,
+                ),
+              );
+            }
+            yield* Effect.annotateCurrentSpan({
+              "domain.outcome": rejection._tag,
+              ...Telemetry.attributesOf(declared, rejection),
+            });
+            return { _tag: "Rejected", rejection: codec.encode(rejection) } as HandleResult;
+          }
+          for (const event of decision as ReadonlyArray<{ readonly _tag: string }>) {
+            if (!command.cls.events.some((e) => e.tag === event._tag)) {
+              return yield* Effect.die(
+                new DefinitionError(
+                  `${aggregate.aggregateName}.decide.${decoded._tag} returned '${event._tag}', which ${decoded._tag} does not declare in events`,
+                ),
+              );
+            }
+          }
+          const trace = yield* Telemetry.currentTrace;
+          const { next, events, deliveries } = commit(
+            id,
+            state,
+            input.version,
+            decision,
+            now,
+            input.commandId,
+            false,
+            correlationId,
+            trace,
+          );
+          const replyFn = (def.reply as Record<string, (...args: any[]) => unknown> | undefined)?.[
+            decoded._tag
+          ];
+          const reply =
+            replyFn && command.reply ? command.reply.encode(replyFn(next, decision)) : null;
+          const decided = decision as ReadonlyArray<{ readonly _tag: string }>;
+          yield* Effect.annotateCurrentSpan({
+            "domain.outcome": "accepted",
+            "domain.events": decided.length,
+            "domain.version": input.version + decided.length,
+          });
+          const span = yield* Effect.orElseSucceed(Effect.currentSpan, () => undefined);
+          const at = BigInt(input.now) * 1_000_000n;
+          for (const [index, event] of decided.entries()) {
+            span?.event(event._tag, at, {
+              "domain.seq": input.version + index + 1,
+              ...eventAttributes(event),
+            });
+            yield* Telemetry.record(Telemetry.events, {
+              "domain.aggregate": aggregate.aggregateName,
+              "domain.event": event._tag,
+            });
+          }
+          return {
+            _tag: "Accepted",
+            state: codecs.state.encode(next),
+            version: input.version + decided.length,
+            events,
+            reply,
+            deliveries,
+          } as HandleResult;
+        });
+        return Effect.gen(function* () {
+          const started = yield* Effect.sync(() => Date.now());
+          const result = yield* decideAndCommit.pipe(
+            Effect.annotateLogs(base),
+            Effect.withSpan(`Domain.decide ${aggregate.aggregateName}.${tag}`, {
+              kind: "server",
+              attributes: base,
+              ...(input.trace && !input.link ? { parent: Telemetry.spanOf(input.trace) } : {}),
+              ...(input.trace && input.link
+                ? { links: [{ span: Telemetry.spanOf(input.trace), attributes: {} }] }
+                : {}),
+            }),
+          );
+          const outcome =
+            result._tag === "Accepted"
+              ? "accepted"
+              : ((result.rejection as { readonly _tag?: string })._tag ?? "rejected");
+          const tags = { "domain.aggregate": aggregate.aggregateName, "domain.command": tag };
+          yield* Telemetry.record(Telemetry.commands, { ...tags, "domain.outcome": outcome });
+          yield* Telemetry.record(
+            Telemetry.commandDuration,
+            tags,
+            (yield* Effect.sync(() => Date.now())) - started,
+          );
+          return result;
+        });
       },
     };
   };
@@ -700,6 +803,33 @@ export const make = (definitions: Definitions): Kernel => {
     return {
       name: view.viewName,
       deliver,
+      observe: (key, batch) => (effect) => {
+        if (!telemetry.views || batch.length === 0 || batch.every((d) => d.history)) return effect;
+        const traces = batch.flatMap((d) => (d.envelope.trace ? [d.envelope.trace] : []));
+        const single = batch.length === 1 && traces.length === 1;
+        const attributes = {
+          "domain.view": view.viewName,
+          "domain.key": key,
+          "domain.batch": batch.length,
+          ...(batch.length === 1 ? deliveryAttributes(batch[0]!) : {}),
+        };
+        return effect.pipe(
+          Effect.withSpan(`Domain.view ${view.viewName}`, {
+            kind: "consumer",
+            attributes,
+            ...(single
+              ? { parent: Telemetry.spanOf(traces[0]!) }
+              : { links: traces.map((t) => ({ span: Telemetry.spanOf(t), attributes: {} })) }),
+          }),
+          Effect.tap(() =>
+            Telemetry.record(Telemetry.runs, {
+              "domain.kind": "view",
+              "domain.consumer": view.viewName,
+              "domain.outcome": "ok",
+            }),
+          ),
+        );
+      },
       apply: (key, snapshot, batch) => {
         let current: unknown =
           codec && snapshot.state !== null ? codec.decode(snapshot.state) : null;
@@ -757,11 +887,12 @@ export const make = (definitions: Definitions): Kernel => {
                 seq,
                 at: envelope.at,
                 commandId: envelope.commandId,
+                correlationId: envelope.correlationId,
               };
               const entry: ViewEntry = {
                 seq,
                 event: encodeEvent(out),
-                envelope: encodeEnvelope(outEnvelope),
+                envelope: encodeEnvelope(outEnvelope, delivery.envelope.trace),
                 state: encodeState(current),
               };
               entries.push(entry);
@@ -802,16 +933,47 @@ export const make = (definitions: Definitions): Kernel => {
         const key = keyAggregate ? Aggregate.makeRef(keyAggregate, delivery.key) : source;
         const event = decodeEvent(delivery.event);
         const state = sourceState(upstream, delivery.state);
+        const attributes = {
+          "domain.policy": policy.policyName,
+          "domain.key": delivery.key,
+          ...deliveryAttributes(delivery),
+        };
+        const parent = parentOf(delivery);
         return Effect.forEach(
           delivery.routes ?? [undefined],
           (route) => {
             let n = 0;
             const prefix = `${delivery.source}:${delivery.seq}:${policy.policyName}${route === undefined ? "" : `:${route}`}`;
             return handler({ key, route, source, event, envelope, state }).pipe(
-              Effect.provideService(Aggregate.PolicyRun, { next: () => `${prefix}:${n++}` }),
+              Effect.provideContext(
+                Context.make(Aggregate.PolicyRun, { next: () => `${prefix}:${n++}` }).pipe(
+                  Context.add(Telemetry.Correlation, { id: envelope.correlationId }),
+                ),
+              ),
             );
           },
           { discard: true },
+        ).pipe(
+          Effect.tap(() =>
+            Effect.annotateCurrentSpan(eventAttributes(event as { readonly _tag: string })),
+          ),
+          Effect.onExit((exit) =>
+            Effect.gen(function* () {
+              const now = yield* Effect.sync(() => Date.now());
+              const tags = { "domain.kind": "policy", "domain.consumer": policy.policyName };
+              yield* Telemetry.record(Telemetry.lag, tags, now - delivery.envelope.at);
+              yield* Telemetry.record(Telemetry.runs, {
+                ...tags,
+                "domain.outcome": Exit.isSuccess(exit) ? "ok" : "failed",
+              });
+            }),
+          ),
+          Effect.annotateLogs(attributes),
+          Effect.withSpan(`Domain.policy ${policy.policyName}`, {
+            kind: "consumer",
+            attributes,
+            ...(parent ? { parent } : {}),
+          }),
         );
       },
     };
@@ -866,6 +1028,7 @@ export const make = (definitions: Definitions): Kernel => {
       seq,
       at: DateTime.makeUnsafe(0),
       commandId: "",
+      correlationId: "",
     };
     const keys: Array<string> = [];
     for (const subscriber of subscribers.get(aggregate)?.get(event._tag) ?? []) {

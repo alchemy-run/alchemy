@@ -2,6 +2,7 @@ import * as Context from "effect/Context";
 import * as DateTime from "effect/DateTime";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
@@ -12,6 +13,7 @@ import * as Command from "./Command.ts";
 import { matches } from "./Filter.ts";
 import * as Kernel from "./Kernel.ts";
 import {
+  type Accepted,
   type AggregateStore,
   type Delivery,
   Platform,
@@ -28,6 +30,7 @@ import * as Projection from "./Projection.ts";
 import * as RequestContext from "./RequestContext.ts";
 import * as Saga from "./Saga.ts";
 import type * as DomainStream from "./Stream.ts";
+import * as Telemetry from "./Telemetry.ts";
 import * as View from "./View.ts";
 import * as Watch from "./Watch.ts";
 
@@ -90,9 +93,11 @@ export interface ModelClass<Name extends string, Provided, Policies> {
    * Host every entity on the ambient {@link Platform}. The policy and
    * projection Layers (`handlers`) are built after the aggregates, views and
    * streams exist, so a handler can resolve them while it is constructed.
+   * `options` tune how it's hosted, such as what it records in traces.
    */
   layer<E = never, R = never>(
     handlers: Layer.Layer<Policies, E, R>,
+    options?: LayerOptions,
   ): Layer.Layer<Provided | Internals, E, Platform | Exclude<R, Provided>>;
 }
 
@@ -146,6 +151,12 @@ type ProvidedBy<
   | Saga.Identifier<G[number]>
   | Projection.ProgressIdentifier<J[number]>;
 
+/** How a model's `layer` hosts it: tuning that doesn't change what the model means. */
+export interface LayerOptions {
+  /** What the hosted model records in traces. See {@link Telemetry.Options}. */
+  readonly telemetry?: Telemetry.Options;
+}
+
 /** Every implementation a model's `layer` requires: its policies, projections and sagas. */
 type HandledBy<
   P extends ReadonlyArray<Policy.Any>,
@@ -177,20 +188,69 @@ export const make = <
     static readonly modelName: Name = name;
     static readonly definitions: Kernel.Definitions = definitions;
     static readonly sagas: ReadonlyArray<Saga.Any> = members.sagas ?? [];
-    static layer<E, R>(handlers: Layer.Layer<HandledBy<P, J, G>, E, R>) {
-      return Layer.effectContext(build(definitions, handlers, members.sagas ?? []));
+    static layer<E, R>(handlers: Layer.Layer<HandledBy<P, J, G>, E, R>, options?: LayerOptions) {
+      return Layer.effectContext(
+        build(definitions, handlers, members.sagas ?? [], Telemetry.resolve(options?.telemetry)),
+      );
     }
   } as unknown as ModelClass<Name, ProvidedBy<A, V, J, S, G>, HandledBy<P, J, G>>;
 };
+
+/**
+ * Trace one projection batch. A batch merges events from many commits, so it
+ * starts its own trace and links to each event's.
+ */
+const observeProjection =
+  (name: string, key: string, batch: ReadonlyArray<Accepted>) =>
+  <A, E, R>(effect: Effect.Effect<A, E, R>) => {
+    const tags = { "domain.kind": "projection", "domain.consumer": name };
+    const links = batch.flatMap(({ delivery }) =>
+      delivery.envelope.trace
+        ? [{ span: Telemetry.spanOf(delivery.envelope.trace), attributes: {} }]
+        : [],
+    );
+    const correlations = [
+      ...new Set(
+        batch.map(({ delivery }) => delivery.envelope.correlationId ?? delivery.envelope.commandId),
+      ),
+    ];
+    return effect.pipe(
+      Effect.onExit((exit) =>
+        Effect.gen(function* () {
+          const now = yield* Effect.sync(() => Date.now());
+          for (const { delivery } of batch) {
+            yield* Telemetry.record(Telemetry.lag, tags, now - delivery.envelope.at);
+          }
+          yield* Telemetry.record(Telemetry.batchSize, { "domain.consumer": name }, batch.length);
+          yield* Telemetry.record(Telemetry.runs, {
+            ...tags,
+            "domain.outcome": Exit.isSuccess(exit) ? "ok" : "failed",
+          });
+        }),
+      ),
+      Effect.withSpan(`Domain.projection ${name}`, {
+        kind: "consumer",
+        root: true,
+        links,
+        attributes: {
+          "domain.projection": name,
+          "domain.key": key,
+          "domain.batch": batch.length,
+          ...(correlations.length === 1 ? { "domain.correlation_id": correlations[0] } : {}),
+        },
+      }),
+    );
+  };
 
 const build = <A, E, R>(
   definitions: Kernel.Definitions,
   policies: Layer.Layer<A, E, R>,
   sagas: ReadonlyArray<Saga.Any>,
+  telemetry: Telemetry.Resolved,
 ) =>
   Effect.gen(function* () {
     const platform = yield* Platform;
-    const kernel = Kernel.make(definitions);
+    const kernel = Kernel.make(definitions, telemetry);
 
     const aggregateStores = new Map<string, AggregateStore>();
     const viewStores = new Map<string, ViewStore>();
@@ -316,7 +376,7 @@ const build = <A, E, R>(
               yield* Effect.forEach(writes, (store) => store.advance(key, checkpoints), {
                 discard: true,
               });
-            }),
+            }).pipe(observeProjection(projection.projectionName, key, batch)),
         }),
       );
     }
@@ -346,38 +406,90 @@ const aggregateClient = (
   kernel: Kernel.Kernel,
   aggregate: Aggregate.Any,
   store: AggregateStore,
-): Aggregate.ClientImpl => ({
-  send: (target, command, options) =>
+): Aggregate.ClientImpl => {
+  /** What a send carries besides the command: its id, context, flow and trace. */
+  const metaFor = (
+    target: unknown,
+    command: { readonly _tag: string },
+    options: Aggregate.SendOptions | undefined,
+    link: boolean,
+  ) =>
     Effect.gen(function* () {
       const commandId = yield* Aggregate.commandIdFor(options);
       const context = yield* RequestContext.capture;
-      const result = yield* store.send(
-        Aggregate.targetId(target),
-        kernel.encodeCommand(aggregate, command),
-        { commandId, context },
-      );
-      return result._tag === "Rejected"
-        ? yield* Effect.fail(kernel.decodeRejection(aggregate, result.rejection))
-        : kernel.decodeReceipt(aggregate, command._tag, result.receipt);
-    }),
-  schedule: (target, command, options) =>
-    Effect.gen(function* () {
-      const commandId = yield* Aggregate.commandIdFor(options);
-      const context = yield* RequestContext.capture;
-      yield* store.schedule(
-        Aggregate.targetId(target),
-        kernel.encodeCommand(aggregate, command),
-        { commandId, context },
-        options.at !== undefined
-          ? { at: DateTime.toEpochMillis(options.at) }
-          : { afterMillis: Duration.toMillis(Duration.fromInputUnsafe(options.after)) },
-      );
-    }),
-  state: (target) =>
-    store
-      .state(Aggregate.targetId(target))
-      .pipe(Effect.map(({ state }) => kernel.decodeState(aggregate, state))),
-});
+      const correlationId = yield* Telemetry.correlationFor(commandId);
+      yield* Effect.annotateCurrentSpan({
+        "domain.command_id": commandId,
+        "domain.correlation_id": correlationId,
+        ...Telemetry.attributesOf(command.constructor, command),
+      });
+      const trace = yield* Telemetry.currentTrace;
+      return {
+        id: Aggregate.targetId(target),
+        meta: {
+          commandId,
+          context,
+          correlationId,
+          ...(trace ? { trace } : {}),
+          ...(link ? { link } : {}),
+        },
+      };
+    });
+  const spanOptions = (target: unknown) => ({
+    kind: "client" as const,
+    attributes: {
+      "domain.aggregate": aggregate.aggregateName,
+      "domain.id": Aggregate.targetId(target),
+    },
+  });
+  return {
+    send: (target, command, options) =>
+      Effect.gen(function* () {
+        // The span records a rejection as an outcome; the caller still fails with it.
+        const result = yield* Effect.gen(function* () {
+          const { id, meta } = yield* metaFor(target, command, options, false);
+          const result = yield* store.send(id, kernel.encodeCommand(aggregate, command), meta);
+          yield* Effect.annotateCurrentSpan(
+            "domain.outcome",
+            result._tag === "Accepted"
+              ? "accepted"
+              : ((result.rejection as { readonly _tag?: string })._tag ?? "rejected"),
+          );
+          return result;
+        }).pipe(
+          Effect.withSpan(
+            `Domain.send ${aggregate.aggregateName}.${command._tag}`,
+            spanOptions(target),
+          ),
+        );
+        return result._tag === "Rejected"
+          ? yield* Effect.fail(kernel.decodeRejection(aggregate, result.rejection))
+          : kernel.decodeReceipt(aggregate, command._tag, result.receipt);
+      }),
+    schedule: (target, command, options) =>
+      Effect.gen(function* () {
+        // The command runs later, so its span links back here rather than continuing this trace.
+        const { id, meta } = yield* metaFor(target, command, options, true);
+        yield* store.schedule(
+          id,
+          kernel.encodeCommand(aggregate, command),
+          meta,
+          options.at !== undefined
+            ? { at: DateTime.toEpochMillis(options.at) }
+            : { afterMillis: Duration.toMillis(Duration.fromInputUnsafe(options.after)) },
+        );
+      }).pipe(
+        Effect.withSpan(
+          `Domain.schedule ${aggregate.aggregateName}.${command._tag}`,
+          spanOptions(target),
+        ),
+      ),
+    state: (target) =>
+      store
+        .state(Aggregate.targetId(target))
+        .pipe(Effect.map(({ state }) => kernel.decodeState(aggregate, state))),
+  };
+};
 
 const decodeSnapshot = (
   kernel: Kernel.Kernel,

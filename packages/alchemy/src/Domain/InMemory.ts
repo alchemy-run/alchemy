@@ -193,7 +193,7 @@ export const make = (
               const current = instance(id);
               const duplicate = current.receipts.get(meta.commandId);
               if (duplicate) return duplicate;
-              const result = kit.handle({
+              const result = yield* kit.handle({
                 id,
                 state: current.state,
                 version: current.version,
@@ -201,6 +201,9 @@ export const make = (
                 commandId: meta.commandId,
                 context: meta.context,
                 now: now(),
+                correlationId: meta.correlationId,
+                trace: meta.trace,
+                link: meta.link,
               });
               if (result._tag === "Rejected") return result satisfies SendResult;
               current.state = result.state;
@@ -331,7 +334,7 @@ export const make = (
                 }
                 yield* SubscriptionRef.set(current.snapshot, result.snapshot);
                 yield* enqueue(result.downstream, kit.deliver);
-              }),
+              }).pipe(kit.observe(key, deliveries)),
             ),
           read: (key) =>
             get(key).pipe(Effect.flatMap((current) => SubscriptionRef.get(current.snapshot))),

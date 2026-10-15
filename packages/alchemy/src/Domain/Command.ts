@@ -7,6 +7,7 @@ import type * as Event from "./Event.ts";
 import type { Data, Fields } from "./Event.ts";
 import * as Middleware from "./Middleware.ts";
 import type * as Rejection from "./Rejection.ts";
+import type * as Telemetry from "./Telemetry.ts";
 
 /**
  * Instance type of a Command class: its `_tag` plus its input.
@@ -94,6 +95,8 @@ export interface CommandClass<
   readonly middleware: Ms;
   /** The command as an Effect RPC, for exposing it in an Api. */
   readonly rpc: R;
+  /** Span attributes the command adds for its input, if it declares any. */
+  readonly attributes: Telemetry.Attributes<Instance<Tag, F>> | undefined;
 }
 
 interface Options {
@@ -103,6 +106,7 @@ interface Options {
   readonly events?: ReadonlyArray<Event.Any>;
   readonly rejects?: ReadonlyArray<Rejection.Any>;
   readonly reply?: Fields;
+  readonly attributes?: Telemetry.Attributes<any>;
 }
 
 const build = (tag: string, options: Options, rpc: Rpc.Any): unknown => {
@@ -120,6 +124,7 @@ const build = (tag: string, options: Options, rpc: Rpc.Any): unknown => {
     static readonly reply = options.reply ? Schema.Struct(options.reply) : undefined;
     static readonly middleware = options.middleware ?? [];
     static readonly rpc = rpc;
+    static readonly attributes = options.attributes;
   };
 };
 
@@ -213,6 +218,12 @@ export const make = <
     readonly rejects?: Rejects;
     /** The reply computed after the events are committed. */
     readonly reply?: Reply;
+    /**
+     * Span attributes to record for the command's input, on every span it
+     * passes through. Nothing from the input is recorded unless you return it
+     * here, and a `Redacted` value is recorded as `<redacted>`.
+     */
+    readonly attributes?: Telemetry.Attributes<Instance<Tag, F>>;
   },
 ): CommandClass<
   Tag,

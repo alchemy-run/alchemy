@@ -8,7 +8,7 @@ import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import type { DurableDeferred, WorkflowEngine } from "effect/workflow";
 import * as Aggregate from "./Aggregate.ts";
-import type * as ExternalSystem from "./ExternalSystem.ts";
+import * as ExternalSystem from "./ExternalSystem.ts";
 import * as InMemory from "./InMemory.ts";
 import * as Model from "./Model.ts";
 import type * as Saga from "./Saga.ts";
@@ -361,25 +361,28 @@ const make =
       const systemLayers = (options.externalSystems ?? []).map((system) =>
         Layer.succeed(
           system as Context.Key<unknown, unknown>,
-          Object.fromEntries(
-            Object.keys(system.ops).map((op) => [
-              op,
-              (args: unknown) =>
-                platform.control.suspended(
-                  Effect.gen(function* () {
-                    const deferred = yield* Deferred.make<unknown>();
-                    calls.push({
-                      system: system.systemName,
-                      op,
-                      args,
-                      deferred,
-                      tag: undefined,
-                    });
-                    return yield* Deferred.await(deferred);
-                  }),
-                ),
-            ]),
-          ),
+          ExternalSystem.observeOps(
+            system.systemName,
+            Object.fromEntries(
+              Object.keys(system.ops).map((op) => [
+                op,
+                (args: unknown) =>
+                  platform.control.suspended(
+                    Effect.gen(function* () {
+                      const deferred = yield* Deferred.make<unknown>();
+                      calls.push({
+                        system: system.systemName,
+                        op,
+                        args,
+                        deferred,
+                        tag: undefined,
+                      });
+                      return yield* Deferred.await(deferred);
+                    }),
+                  ),
+              ]),
+            ),
+          ) as never,
         ),
       );
       const systems = Layer.mergeAll(Layer.empty, ...systemLayers);

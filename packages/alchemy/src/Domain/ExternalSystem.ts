@@ -1,8 +1,42 @@
 import * as Context from "effect/Context";
-import type * as Effect from "effect/Effect";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 import type { Fields } from "./Event.ts";
+import * as Telemetry from "./Telemetry.ts";
+
+type OpImpl = (args: unknown) => Effect.Effect<unknown, unknown, unknown>;
+
+/**
+ * Trace every call to an external system: one client span per call, named
+ * after the system and operation, plus a call count by outcome.
+ *
+ * @internal
+ */
+export const observeOps = (
+  system: string,
+  impl: Readonly<Record<string, OpImpl>>,
+): Record<string, OpImpl> =>
+  Object.fromEntries(
+    Object.entries(impl).map(([op, call]) => [
+      op,
+      (args: unknown) =>
+        call(args).pipe(
+          Effect.onExit((exit) =>
+            Telemetry.record(Telemetry.externalCalls, {
+              "domain.system": system,
+              "domain.operation": op,
+              "domain.outcome": Exit.isSuccess(exit) ? "ok" : "failed",
+            }),
+          ),
+          Effect.withSpan(`Domain.external ${system}.${op}`, {
+            kind: "client",
+            attributes: { "domain.system": system, "domain.operation": op },
+          }),
+        ),
+    ]),
+  );
 
 /**
  * One operation of an external system: its arguments, success value and business errors.
@@ -113,7 +147,10 @@ export const make = <const Name extends string, const Ops extends Record<string,
     static toLayer<E, R>(
       build: Effect.Effect<Shape<Ops>, E, R>,
     ): Layer.Layer<ExternalSystemKey<Name>, E, R> {
-      return Layer.effect(Tag, build);
+      return Layer.effect(
+        Tag,
+        Effect.map(build, (impl) => observeOps(name, impl as Record<string, OpImpl>) as never),
+      );
     }
   };
   for (const op of Object.keys(ops)) {

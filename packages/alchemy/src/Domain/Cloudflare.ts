@@ -349,17 +349,18 @@ const aggregateObject = (kit: AggregateKit) =>
                 state: null,
                 version: 0,
               };
-              const result = yield* Effect.sync(() =>
-                kit.handle({
-                  id,
-                  state: current.state,
-                  version: current.version,
-                  command,
-                  commandId: meta.commandId,
-                  context: meta.context,
-                  now: Date.now(),
-                }),
-              );
+              const result = yield* kit.handle({
+                id,
+                state: current.state,
+                version: current.version,
+                command,
+                commandId: meta.commandId,
+                context: meta.context,
+                now: yield* Effect.sync(() => Date.now()),
+                correlationId: meta.correlationId,
+                trace: meta.trace,
+                link: meta.link,
+              });
               if (result._tag === "Rejected") return { sent: result as SendResult, kick: false };
               const sent: SendResult = {
                 _tag: "Accepted",
@@ -489,7 +490,7 @@ const viewObject = (kit: ViewKit) =>
                     }),
                   );
                   return result.downstream.length > 0;
-                }),
+                }).pipe(kit.observe(key, deliveries)),
               );
               if (kick) yield* outbox.kick;
             }),

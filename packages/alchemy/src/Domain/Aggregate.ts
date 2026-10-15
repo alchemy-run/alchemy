@@ -11,6 +11,7 @@ import type * as Middleware from "./Middleware.ts";
 import type * as Read from "./Read.ts";
 import type * as Rejection from "./Rejection.ts";
 import * as RequestContext from "./RequestContext.ts";
+import type * as Telemetry from "./Telemetry.ts";
 
 /**
  * Instance type produced by a class.
@@ -41,6 +42,11 @@ export interface Envelope<Id = string> {
   readonly at: DateTime.Utc;
   /** The id of the command that produced the event. */
   readonly commandId: string;
+  /**
+   * The id of the first command in the chain that led here: the same for a
+   * command, the events it records, and every reaction and command they cause.
+   */
+  readonly correlationId: string;
 }
 
 /**
@@ -180,6 +186,12 @@ export interface SendMeta {
   readonly commandId: string;
   /** The command context services the sender provided, encoded. */
   readonly context: RequestContext.Json;
+  /** The flow the command belongs to (see {@link Envelope.correlationId}). */
+  readonly correlationId?: string;
+  /** The span that sent the command, so the aggregate's span continues its trace. */
+  readonly trace?: Telemetry.TraceJson;
+  /** Link to `trace` instead of continuing it: the command runs later (scheduled). */
+  readonly link?: boolean;
 }
 
 type AnyHandlers = { readonly [tag: string]: (...args: never[]) => unknown };

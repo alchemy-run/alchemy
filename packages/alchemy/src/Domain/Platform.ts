@@ -6,6 +6,7 @@ import type * as Aggregate from "./Aggregate.ts";
 import type * as Policy from "./Policy.ts";
 import type * as Projection from "./Projection.ts";
 import type * as DomainStream from "./Stream.ts";
+import type { TraceJson } from "./Telemetry.ts";
 import type * as View from "./View.ts";
 
 /**
@@ -23,6 +24,10 @@ export interface EnvelopeJson {
   readonly seq: number;
   readonly at: number;
   readonly commandId: string;
+  /** Absent on events stored before correlation ids: the command id stands in. */
+  readonly correlationId?: string;
+  /** The span that committed the event, so its reactions continue or link to it. */
+  readonly trace?: TraceJson;
 }
 
 /**
@@ -106,6 +111,12 @@ export interface HandleInput {
   readonly context: Readonly<Record<string, Json>>;
   /** Epoch milliseconds. */
   readonly now: number;
+  /** The flow the command belongs to; the command id when it starts one. */
+  readonly correlationId?: string;
+  /** The span that sent the command. */
+  readonly trace?: TraceJson;
+  /** Link to `trace` instead of continuing it. */
+  readonly link?: boolean;
 }
 
 /**
@@ -148,7 +159,7 @@ export interface AggregateKit {
    * Decide, evolve, reply and route, purely. Throws only on a bug (an evolve
    * guard, an undecodable value); a platform turns that into a defect.
    */
-  readonly handle: (input: HandleInput) => HandleResult;
+  readonly handle: (input: HandleInput) => Effect.Effect<HandleResult>;
   /**
    * Fold already-decided events into state and route them, without running
    * `decide`. Used to seed history (story `given`).
@@ -287,6 +298,11 @@ export interface ViewKit {
   };
   /** Route a downstream delivery to its target's host. */
   readonly deliver: (delivery: Delivery) => Effect.Effect<void>;
+  /** Trace an `apply` of these deliveries to `key` (wrap the work that applies and persists them). */
+  readonly observe: (
+    key: string,
+    deliveries: ReadonlyArray<Delivery>,
+  ) => <A, E, R>(effect: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>;
   /**
    * What a subscriber of `key` receives, given its snapshot and the entries
    * emitted since (at least those after the subscription's cursor).

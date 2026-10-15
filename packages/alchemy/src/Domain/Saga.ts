@@ -1,12 +1,61 @@
+import * as EffectCause from "effect/Cause";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import type * as Scope from "effect/Scope";
 import { type DurableDeferred, Workflow, WorkflowEngine } from "effect/workflow";
 import { makeRun } from "../Workflows.ts";
 import { targetId } from "./Aggregate.ts";
 import type * as Rejection from "./Rejection.ts";
+import * as Telemetry from "./Telemetry.ts";
+
+/** The hidden payload field that carries a run's cause. */
+const CAUSE = "__cause";
+
+const RunCause = Schema.Struct({
+  correlationId: Schema.String,
+  trace: Schema.optional(
+    Schema.Struct({ traceId: Schema.String, spanId: Schema.String, sampled: Schema.Boolean }),
+  ),
+});
+
+/**
+ * Trace one run (one replay) of a saga. A run can last for days, so each
+ * starts its own trace and links to the span that started the saga; the
+ * correlation id carries the flow, and every command a step sends keeps it.
+ */
+const observeRun =
+  (name: string, executionId: string, cause: typeof RunCause.Type | undefined) =>
+  <A, E, R>(effect: Effect.Effect<A, E, R>) => {
+    const correlationId = cause?.correlationId ?? executionId;
+    const attributes = {
+      "domain.saga": name,
+      "domain.key": executionId,
+      "domain.correlation_id": correlationId,
+    };
+    return effect.pipe(
+      Effect.provideService(Telemetry.Correlation, { id: correlationId }),
+      Effect.onExit((exit) =>
+        Telemetry.record(Telemetry.runs, {
+          "domain.kind": "saga",
+          "domain.consumer": name,
+          "domain.outcome": Exit.isSuccess(exit)
+            ? "ok"
+            : Telemetry.outcomeOf(Option.getOrUndefined(EffectCause.findErrorOption(exit.cause))),
+        }),
+      ),
+      Effect.annotateLogs(attributes),
+      Effect.withSpan(`Domain.saga ${name}`, {
+        kind: "consumer",
+        root: true,
+        attributes,
+        links: cause?.trace ? [{ span: Telemetry.spanOf(cause.trace), attributes: {} }] : [],
+      }),
+    );
+  };
 
 type Fields = Schema.Struct.Fields;
 
@@ -206,7 +255,12 @@ export const make = <
 ): SagaClass<Name, K, I, R, Rejects> => {
   const rejects = definition.rejects ?? [];
   const workflow = Workflow.make(name, {
-    payload: { key: definition.key, ...definition.input } as PayloadFields<K, I>,
+    // The run's cause rides along, so every replay links back to it and keeps its flow.
+    payload: {
+      key: definition.key,
+      ...definition.input,
+      [CAUSE]: Schema.optional(RunCause),
+    } as unknown as PayloadFields<K, I>,
     idempotencyKey: (payload) => (payload as { readonly key: string }).key,
     success: (definition.result ? Schema.Struct(definition.result) : Schema.Void) as Schema.Top,
     error: (rejects.length > 0 ? Schema.Union(rejects) : Schema.Never) as Schema.Top,
@@ -227,7 +281,16 @@ export const make = <
     static toLayer<E, Req>(build: Effect.Effect<Handler<any, any, any, any>, E, Req>) {
       const register = Layer.unwrap(
         Effect.map(build, (handle) =>
-          workflow.toLayer((payload) => handle(payload as never) as Effect.Effect<any, any, any>),
+          workflow.toLayer((payload, executionId) => {
+            const { [CAUSE]: cause, ...rest } = payload as Record<string, unknown> & {
+              readonly [CAUSE]?: typeof RunCause.Type;
+            };
+            return observeRun(
+              name,
+              executionId,
+              cause,
+            )(handle(rest as never) as Effect.Effect<any, any, any>);
+          }),
         ),
       );
       return Layer.merge(register, Layer.succeed(Implementation, true as const));
@@ -326,9 +389,15 @@ export const client = (
     start: (key, input) =>
       Effect.gen(function* () {
         const executionId = targetId(key);
+        const trace = yield* Telemetry.currentTrace;
+        const correlation = yield* Telemetry.correlationFor(executionId);
         yield* engine.execute(workflow, {
           executionId,
-          payload: { ...(input as object), key: executionId },
+          payload: {
+            ...(input as object),
+            key: executionId,
+            [CAUSE]: { correlationId: correlation, ...(trace ? { trace } : {}) },
+          },
           discard: true,
         });
         return get(executionId);

@@ -1,4 +1,5 @@
 import * as Schema from "effect/Schema";
+import type * as Telemetry from "./Telemetry.ts";
 
 /**
  * Field map shared by every Domain message builder.
@@ -52,6 +53,14 @@ export interface Any extends Schema.Top {
 export const make = <const Tag extends string, const F extends Fields = {}>(
   tag: Tag,
   fields: F = {} as F,
+  options?: {
+    /**
+     * Span attributes to record for this event, on every span it passes
+     * through. Nothing from it is recorded unless you return it here, and a
+     * `Redacted` value is recorded as `<redacted>`.
+     */
+    readonly attributes?: Telemetry.Attributes<Instance<Tag, F>>;
+  },
 ): EventClass<Tag, F> => {
   // The base type is conditional on `Self`, so it is not a constructor until `make` returns.
   const Base: new (...args: any[]) => object = Schema.TaggedClass<Instance<Tag, F>>(tag)(
@@ -61,6 +70,7 @@ export const make = <const Tag extends string, const F extends Fields = {}>(
   return class extends Base {
     static readonly kind = "Event" as const;
     static readonly tag: Tag = tag;
+    static readonly attributes = options?.attributes;
   } as unknown as EventClass<Tag, F>;
 };
 
@@ -74,4 +84,6 @@ export interface EventClass<Tag extends string, F extends Fields> extends Schema
 > {
   readonly kind: "Event";
   readonly tag: Tag;
+  /** Span attributes the event adds, if it declares any. */
+  readonly attributes: Telemetry.Attributes<Instance<Tag, F>> | undefined;
 }
