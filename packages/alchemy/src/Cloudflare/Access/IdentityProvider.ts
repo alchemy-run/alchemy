@@ -1,7 +1,7 @@
 import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
-import type * as Redacted from "effect/Redacted";
+import * as Redacted from "effect/Redacted";
 import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
@@ -19,6 +19,21 @@ import {
   type ObservedIdp,
   toAttributes,
 } from "./IdentityProviderLookup.ts";
+
+/**
+ * Reveals `Redacted` values (OAuth client secrets) for the API body and the
+ * config comparison, so state and plan output keep them redacted while a
+ * rotated secret still counts as a change.
+ */
+const reveal = (value: unknown): unknown =>
+  Redacted.isRedacted(value)
+    ? Redacted.value(value)
+    : Array.isArray(value)
+      ? value.map(reveal)
+      : value && typeof value === "object"
+        ? Object.fromEntries(Object.entries(value).map(([k, v]) => [k, reveal(v)]))
+        : value;
+
 
 const TypeId = "Cloudflare.Access.IdentityProvider" as const;
 type TypeId = typeof TypeId;
@@ -70,7 +85,7 @@ export interface OAuthClientConfig {
    * diffs against the previously declared props rather than observed
    * cloud state.
    */
-  clientSecret: string;
+  clientSecret: string | Redacted.Redacted<string>;
 }
 
 /**
@@ -749,7 +764,7 @@ export const IdentityProviderProvider = () =>
         const created = yield* createIdp(zoneId, accountId, {
           name,
           type: news.type,
-          config: news.config ?? {},
+          config: reveal(news.config ?? {}) as IdentityProviderConfig,
           scimConfig: news.scimConfig,
           samlCertificateSetId: samlCertificateSetIdOf(news),
         });
@@ -762,14 +777,14 @@ export const IdentityProviderProvider = () =>
       //    declared props because Cloudflare masks secrets on read.
       const dirty =
         observed.name !== name ||
-        JSON.stringify(news.config ?? {}) !== JSON.stringify(olds?.config ?? null) ||
+        JSON.stringify(reveal(news.config ?? {})) !== JSON.stringify(reveal(olds?.config ?? null)) ||
         samlCertificateSetIdOf(news) !== samlCertificateSetIdOf(olds) ||
         (news.scimConfig !== undefined && !sameScim(observed.scimConfig, news.scimConfig));
       if (dirty) {
         const updated = yield* updateIdp(zoneId, accountId, observed.id ?? "", {
           name,
           type: news.type,
-          config: news.config ?? {},
+          config: reveal(news.config ?? {}) as IdentityProviderConfig,
           scimConfig: news.scimConfig,
           samlCertificateSetId: samlCertificateSetIdOf(news),
         });
