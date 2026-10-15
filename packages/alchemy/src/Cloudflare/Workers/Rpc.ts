@@ -4,6 +4,7 @@ import * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
 import { RpcClient, RpcSerialization, type Rpc, type RpcGroup } from "effect/rpc";
 import type * as RpcClientError from "effect/rpc/RpcClientError";
+import * as Schedule from "effect/Schedule";
 import {
   asEffectOrStream,
   decodeRpcResult,
@@ -13,6 +14,7 @@ import {
 } from "../../Rpc.ts";
 import { isYieldableEffect } from "../../Util/effect.ts";
 import { fromCloudflareFetcher } from "../Fetcher.ts";
+import { isPlaceholderReset } from "./Placeholder.ts";
 
 // The transport-agnostic RPC wire protocol (envelopes, error types, stream
 // encode/decode, `asEffectOrStream`, and the plain-`fetch` client/server) now
@@ -62,7 +64,17 @@ export const makeRpcStub = <Shape>(
             return yield* Effect.tryPromise({
               try: () => (stub as any)[prop](...args),
               catch: (cause) => new RpcCallError({ method: String(prop), cause }),
-            }).pipe(Effect.flatMap((value) => decodeRpcResult(value, revive)));
+            }).pipe(
+              // Right after a deploy, an object can still start on the
+              // placeholder script, which runs none of the real code and
+              // resets itself so the next call gets the deployed code.
+              Effect.retry({
+                while: (error) => isPlaceholderReset(error.cause),
+                schedule: Schedule.exponential("200 millis"),
+                times: 6,
+              }),
+              Effect.flatMap((value) => decodeRpcResult(value, revive)),
+            );
           }),
         );
     },
