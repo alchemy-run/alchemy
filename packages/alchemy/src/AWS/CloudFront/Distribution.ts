@@ -45,7 +45,12 @@ class DistributionPendingDeployment extends Data.TaggedError("DistributionPendin
  */
 export interface WebFunctionOriginTarget extends WebFunctionEndpointRef {
   domainName: string;
+  /** A `MultiRegion` endpoint's global domain needs SigV4A signatures. */
+  endpointType: string;
 }
+
+const signingProtocolFor = (endpointType: string) =>
+  endpointType === "MultiRegion" ? "sigv4a" : "sigv4";
 
 export interface DistributionOrigin {
   /**
@@ -623,6 +628,9 @@ const withWebFunctionOrigins = (
           description: `Signs requests from ${id} to Lambda Web Function origin ${origin.id}`,
           originType: "lambda",
           signingBehavior: "always-amz-auth",
+          signingProtocol: Output.isOutput(target.endpointType)
+            ? Output.map(target.endpointType as Output.Output<string>, signingProtocolFor)
+            : signingProtocolFor(target.endpointType),
         });
         const { webFunction: _webFunction, ...rest } = origin;
         return {

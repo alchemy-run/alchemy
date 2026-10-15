@@ -491,6 +491,60 @@ describe(
         }).pipe(Effect.onError(() => stack.destroy().pipe(Effect.ignore))),
       { tags: ["provider:aws:lambda"], timeout: DEPLOY_DELETE_TIMEOUT },
     );
+
+    test.provider.skipIf(!runLive)(
+      "webFunction origin: a multi-Region Web Function is signed with SigV4A",
+      (stack) =>
+        Effect.gen(function* () {
+          yield* stack.destroy();
+
+          const { api, distribution } = yield* stack.deploy(
+            Effect.gen(function* () {
+              const api = yield* AWS.Lambda.WebFunction("GlobalCdnOrigin", {
+                main: webFunctionMain,
+                authType: "IamAuth",
+                regions: ["us-east-1"],
+              });
+              const distribution = yield* Distribution("GlobalWebFunctionCdn", {
+                origins: [{ id: "api", webFunction: api }],
+                defaultCacheBehavior: { targetOriginId: "api" },
+              });
+              return { api, distribution };
+            }),
+          );
+          expect(api.endpointType).toBe("MultiRegion");
+          expect(api.domainName).toContain(".lambda-web.global.on.aws");
+
+          // The global domain only accepts SigV4A: with SigV4 every request
+          // through CloudFront is refused.
+          const viaCdn = yield* HttpClient.get(`https://${distribution.domainName}/`).pipe(
+            Effect.flatMap((response) =>
+              response.status === 200
+                ? response.json
+                : Effect.fail(new Error(`CloudFront returned ${response.status}`)),
+            ),
+            Effect.retry({
+              schedule: Schedule.max([Schedule.spaced("5 seconds"), Schedule.recurs(36)]),
+            }),
+          );
+          expect(viaCdn).toMatchObject({ message: "hello through cloudfront", method: "GET" });
+
+          // Out-of-band: the origin's access control signs with SigV4A.
+          const config = yield* cloudfront.getDistributionConfig({
+            Id: distribution.distributionId,
+          });
+          const originAccessControlId =
+            config.DistributionConfig!.Origins.Items[0]!.OriginAccessControlId!;
+          const control = yield* cloudfront.getOriginAccessControl({ Id: originAccessControlId });
+          expect(control.OriginAccessControl?.OriginAccessControlConfig?.SigningProtocol).toBe(
+            "sigv4a",
+          );
+
+          yield* stack.destroy();
+          yield* assertDistributionDeleted(distribution.distributionId);
+        }).pipe(Effect.onError(() => stack.destroy().pipe(Effect.ignore))),
+      { tags: ["provider:aws:lambda"], timeout: DEPLOY_DELETE_TIMEOUT },
+    );
   },
 );
 

@@ -286,6 +286,8 @@ distribution may call it, so requests to the function's own URL are
 refused. Requests pass through uncached with their method, query string,
 cookies and headers, including your app's own `Authorization` header.
 Set `cachePolicyId` on a behavior to cache a path, such as static assets.
+This works for a function with `regions` too: Alchemy signs requests to
+its global domain with SigV4A.
 
 ## Reach private resources
 

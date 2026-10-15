@@ -456,6 +456,7 @@ test.provider.skipIf(!!process.env.FAST)(
 
       const global = yield* deploy(["us-east-1"]);
       expect(global.domainName).toContain(".lambda-web.global.on.aws");
+      expect(global.endpointType).toBe("MultiRegion");
       const endpoint = yield* getEndpoint(global.functionName);
       expect(endpoint.endpointType).toBe("MultiRegion");
       expect([...endpoint.regions].sort()).toEqual(["us-east-1", "us-west-2"]);
@@ -469,6 +470,7 @@ test.provider.skipIf(!!process.env.FAST)(
       expect(home.functionName).toBe(global.functionName);
       expect(home.url).not.toBe(global.url);
       expect((yield* getEndpoint(home.functionName)).endpointType).toBe("HomeRegion");
+      expect(home.endpointType).toBe("HomeRegion");
       expect(yield* getText(home.url)).toBe("greeting=global");
 
       yield* stack.destroy();

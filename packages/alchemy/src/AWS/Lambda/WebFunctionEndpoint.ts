@@ -13,6 +13,7 @@ import {
   toEndpointName,
   validateWebFunctionSettings,
   type WebFunctionAuthType,
+  type WebFunctionEndpointType,
 } from "./WebFunctionEndpointSync.ts";
 
 export const WebFunctionEndpointTypeId = "AWS.Lambda.WebFunctionEndpoint" as const;
@@ -87,6 +88,11 @@ export interface WebFunctionEndpoint extends Resource<
     functionArn: string;
     /** Auth type of the endpoint. */
     authType: WebFunctionAuthType;
+    /**
+     * `HomeRegion`, or `MultiRegion` when `regions` is set: one global
+     * domain that routes each request to the nearest Region.
+     */
+    endpointType: WebFunctionEndpointType;
     /** Name of the endpoint. */
     endpointName: string;
     /** ARN of the endpoint, the resource for `lambda:InvokeWebFunctionEndpoint`. */
@@ -206,6 +212,7 @@ export const WebFunctionEndpointProvider = () =>
         endpoint: {
           functionArn: string;
           authType: string;
+          endpointType: string;
           endpointName: string;
           endpointArn: string;
           domainName: string;
@@ -215,6 +222,7 @@ export const WebFunctionEndpointProvider = () =>
         functionName,
         functionArn: endpoint.functionArn,
         authType: endpoint.authType as WebFunctionAuthType,
+        endpointType: endpoint.endpointType as WebFunctionEndpointType,
         endpointName: endpoint.endpointName,
         endpointArn: endpoint.endpointArn,
         domainName: endpoint.domainName,

@@ -41,6 +41,7 @@ import {
   activeRevisionId,
   createEndpointConfig,
   deleteEndpoint,
+  endpointTypeOf,
   getEndpoint,
   syncEndpoint,
   validateWebFunctionSettings,
@@ -48,6 +49,7 @@ import {
   WebFunctionNotReady,
   type WebFunctionAuthType,
   type WebFunctionEndpointSpec,
+  type WebFunctionEndpointType,
 } from "./WebFunctionEndpointSync.ts";
 
 export const WebFunctionTypeId = "AWS.Lambda.WebFunction" as const;
@@ -221,6 +223,11 @@ export interface WebFunction extends Resource<
     url: string;
     /** Auth type of the built-in endpoint. */
     authType: WebFunctionAuthType;
+    /**
+     * `HomeRegion`, or `MultiRegion` when `regions` is set: one global
+     * domain that routes each request to the nearest Region.
+     */
+    endpointType: WebFunctionEndpointType;
     /**
      * Revision created by the latest deploy. The built-in endpoint and every
      * `WebFunctionEndpoint` route all traffic to it.
@@ -931,6 +938,7 @@ export const WebFunctionProvider = () =>
         domainName: endpoint.domainName,
         url: `https://${endpoint.domainName}`,
         authType: endpoint.authType as WebFunctionAuthType,
+        endpointType: endpoint.endpointType as WebFunctionEndpointType,
         revisionId: activeRevisionId(endpoint),
         roleName: role.roleName,
         roleArn: role.roleArn,
@@ -1044,6 +1052,7 @@ export const WebFunctionProvider = () =>
               domainName: "",
               url: "",
               authType: olds?.authType ?? "IamAuth",
+              endpointType: endpointTypeOf(olds?.regions),
               revisionId: "",
               roleName,
               roleArn: role.Role.Arn,
@@ -1070,6 +1079,9 @@ export const WebFunctionProvider = () =>
               output?.authType ??
               olds?.authType ??
               "IamAuth") as WebFunctionAuthType,
+            endpointType: (endpoint?.endpointType ??
+              output?.endpointType ??
+              endpointTypeOf(olds?.regions)) as WebFunctionEndpointType,
             revisionId: endpoint ? activeRevisionId(endpoint) : (output?.revisionId ?? ""),
             roleName,
             roleArn: output?.roleArn ?? `arn:aws:iam::${accountId}:role/${roleName}`,
