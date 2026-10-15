@@ -7,7 +7,7 @@ import * as Layer from "effect/Layer";
 import { Path } from "effect/Path";
 import AgentGatewayAws from "./src/Gateway.aws.ts";
 import { AgentGateway } from "./src/Gateway.ts";
-import SandboxLive from "./src/Sandbox.runtime.ts";
+import SandboxLive from "./src/Sandbox.cf.ts";
 import CodingAgents from "./src/Worker.ts";
 
 export default Alchemy.Stack(

@@ -4,7 +4,7 @@ import * as GitHub from "alchemy/GitHub";
 
 /**
  * The machine Claude Code runs in. Declared bare (no host, no program) so
- * the Durable Object that yields it stays small; Sandbox.runtime.ts hosts it.
+ * the Durable Object that yields it stays small; Sandbox.cf.ts hosts it.
  * It accepts the model and GitHub egresses (`git` and `gh` are installed).
  */
 export class Sandbox extends AI.Sandbox<
