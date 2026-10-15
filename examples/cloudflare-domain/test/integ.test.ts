@@ -74,6 +74,17 @@ test(
     const sam = yield* customerClient(base, "c-1");
     const alex = yield* customerClient(base, "c-2");
 
+    // right after a deploy, Durable Objects can still answer with the placeholder
+    // script: wait until a read reaches one (any domain answer means it did)
+    yield* sam.CustomerDashboard.get(CustomerId.make("c-1")).pipe(
+      Effect.retry({
+        while: (e) => e._tag === "RpcClientError",
+        schedule: Schedule.spaced("1 second"),
+        times: 30,
+      }),
+      Effect.ignore,
+    );
+
     // a command, then a policy (MainAccountProvisioning) opens the account; the dashboard shows it
     const samMain = yield* register(sam, "c-1", "sam");
     const alexMain = yield* register(alex, "c-2", "alex");
