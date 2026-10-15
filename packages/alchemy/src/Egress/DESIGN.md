@@ -435,6 +435,17 @@ if (host.kind === "worker") {
   yield* worker.bind`EgressGateway(WorkGateway)`({
     bindings: [{ type: "service", name: "ALCHEMY_EGRESS_WorkGateway", service: host.workerName }],
   });
+} else if (host.kind === "web") {
+  // A Lambda Web Function: one endpoint for both. This Worker's own mint key
+  // goes into the gateway (which accepts every consumer's) and into this Worker.
+  const mintKey = yield* Random(`WorkGatewayMintKey${worker.LogicalId}`);
+  yield* host.bind`EgressGatewayMint(WorkGateway, ${worker.LogicalId})`({
+    env: { [`ALCHEMY_EGRESS_MINT_WorkGateway_${worker.LogicalId}`]: mintKey.text },
+  });
+  yield* worker.bind`EgressGateway(WorkGateway)`({
+    env: { ALCHEMY_EGRESS_WorkGateway_URL: host.url, ALCHEMY_EGRESS_WorkGateway_MINT_KEY: mintKey.text },
+  });
+  // mint: POST <url>/~alchemy/egress/mint, x-alchemy-mint-key: <key>
 } else {
   // A Lambda: invoked with IAM; the URL is for the sandbox's traffic.
   yield* worker.bind`EgressGateway(WorkGateway)`({
@@ -1045,7 +1056,8 @@ yield* sandbox.start({ size: "large", egress: [work.model, work.repo.narrow({ re
 2. alchemy/Egress  egress kinds as values with effectful constructors (GitHub, Anthropic, Http);
                    Egress.Gateway declaration + serve(effect) (mint, fetch); yield* Gateway
                    (narrow, for); Grant (WebCrypto); routes (host + path, conflicts);
-                   accepted kinds on AI.Sandbox; gateways on a Worker or on AWS Lambda
+                   accepted kinds on AI.Sandbox; gateways on a Worker, an AWS Lambda Function,
+                   or a multi-Region Lambda Web Function (mint over a per-consumer key)
 3. Cloudflare      AlchemyEgress relay entrypoint (mints grants lazily over the gateway's binding);
                    stored egress + per-host intercept diff; bugs 1–3; no hop through the Durable Object
 4. Hosts           harness servers yield { fetch }; Cloudflare.Containers.Sandbox(Sandbox, props, program)
@@ -1065,3 +1077,5 @@ yield* sandbox.start({ size: "large", egress: [work.model, work.repo.narrow({ re
 7. **A missed renewal fails closed:** if the Durable Object can't renew a MicroVM's grants for a whole `ttl`, that gateway's routes stop working until it can. On Cloudflare the relay mints its own grants, so nothing renews.
 8. **Isolate placement on Cloudflare:** concurrent intercepted requests mostly share one isolate (~270 MB/s, section 14). Enough for agents.
 9. **WebSocket RPC clients ping with room to spare:** effect@4.0.4's client checks its ping timeout (one 5s interval) before its first ping, so a call quiet for 5s (a `start` cloning a repository) drops a healthy socket. `Cloudflare.RpcWebSocketClient` defaults `pingTimeout` to 15s.
+10. **Git goes through a Web Function gateway, not a Worker:** a Worker's `fetch` to github.com shares Cloudflare's upstream connections, and while one response is read slowly (a throttled clone), the gateway's other GitHub requests stall for 5–30s. Measured side by side for 26 minutes: a Worker stalled 8 times in 3 of 28 rounds with a slow pack open, a Lambda Web Function 0 times, and neither without one; httpbin and npm, fetched from the stalling Worker at the same moment, never stalled. It happens with no alchemy code in the path (a plain Worker), with or without a token. A Web Function gateway keeps the personal access token server-side, as on any host.
+11. **Web Function `mint` uses a key, not `IamAuth`:** an `IamAuth` endpoint refused an IAM role in every form (SigV4 with service `lambda` or `lambda-web`, payload hashes, the role and the account granted with `WebFunctionPermission`), and the multi-Region domain only accepts SigV4A. So each consumer Worker binds a random mint key into the gateway, and `mint` is a POST on the public endpoint that needs one.

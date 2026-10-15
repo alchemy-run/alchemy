@@ -851,6 +851,41 @@ const makeClient = (
  * );
  * ```
  *
+ * ### Hosting a gateway on a Lambda Web Function
+ * A Web Function serves the same `serve` on its endpoint, from every Region
+ * in `regions` (one global domain, routed to the nearest Region). It keeps
+ * the GitHub egress off Cloudflare's shared connections to github.com, where
+ * one slowly read clone stalls the gateway's other GitHub requests. Each
+ * Worker that yields the gateway binds its own mint key into it, so `mint`
+ * stays closed to everyone else on the public endpoint. Raise `timeout`:
+ * a request through the gateway (a clone) runs as long as it takes.
+ *
+ * **Example:** A GitHub gateway in four Regions
+ * ```typescript
+ * // src/gateway.web.ts
+ * export default class WorkGatewayWeb extends AWS.Lambda.WebFunction<WorkGatewayWeb>()(
+ *   "WorkGatewayWeb",
+ *   {
+ *     main: import.meta.url,
+ *     authType: "ApplicationManaged",
+ *     regions: ["us-east-1", "eu-west-1", "ap-northeast-1"],
+ *     timeout: Duration.minutes(15),
+ *   },
+ *   WorkGateway.serve(
+ *     Effect.gen(function* () {
+ *       return {
+ *         repo: yield* GitHub.Egress({ token: GitHub.ProfileToken }),
+ *       };
+ *     }),
+ *   ),
+ * ) {}
+ * ```
+ *
+ * **Example:** Provide the Web Function as the gateway's host
+ * ```typescript
+ * Effect.provide(WorkGateway.host(WorkGatewayWeb));
+ * ```
+ *
  * ### Granting egresses
  * **Example:** Narrow an egress and choose whose credential it uses
  * ```typescript
