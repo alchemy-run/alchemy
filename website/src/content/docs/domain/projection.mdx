@@ -13,7 +13,7 @@ It shares the view's routing and ordering, and differs from a [policy](/domain/p
 
 A projection names its sources, the key that partitions it, and the events it consumes. The bank's ledger records every money movement on an account.
 
-```typescript title="src/Ledger/Ledger.ts"
+```typescript title="packages/domain/src/Ledger/Ledger.projection.ts"
 export class Ledger extends Domain.Projection("Ledger", {
   from: [Account],
   key: Account,
@@ -47,7 +47,7 @@ Add it to the model's `projections`, like a policy.
 
 The handler lives in a Layer, built once with everything it needs. It always receives a batch: an array of inputs for one key, in order.
 
-```typescript title="src/Ledger/LedgerLive.ts"
+```typescript title="packages/domain/src/Ledger/Ledger.projection.ts"
 export const LedgerLive = Ledger.toLayer(
   Effect.gen(function* () {
     const store = yield* LedgerStore;
@@ -72,9 +72,9 @@ Each input carries the `key` it was routed to, the `event`, its `envelope`, the 
 
 ## Depend on a store, not a database
 
-The projection asks for `LedgerStore`, a service you define, rather than a D1 binding. In production it's D1; in a story it's memory.
+The projection asks for `LedgerStore`, a service you define in the domain package, rather than a D1 binding. The server package provides it with D1; a story provides it with memory.
 
-```typescript title="src/Ledger/LedgerStore.ts"
+```typescript title="packages/domain/src/Ledger/LedgerStore.ts"
 export class LedgerStore extends Context.Service<
   LedgerStore,
   {
@@ -92,7 +92,7 @@ Its methods require `RuntimeContext`, because a database binding only exists ins
 
 Inputs arrive at least once. If a handler fails halfway, or its host restarts, the same inputs run again, so a write must be safe to repeat. The ledger keys each row by the event it came from, `stream:seq`, and ignores a row it already has.
 
-```typescript title="src/Ledger/LedgerStore.ts"
+```typescript title="packages/server/src/Ledger/D1LedgerStore.ts"
 "INSERT INTO ledger (id, account_id, kind, amount, balance_after, at) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT (id) DO NOTHING",
 ```
 
@@ -124,7 +124,7 @@ Within a key, events from one source stay in that source's order. Events from di
 
 Batching changes how a projection runs, not what it means, so it lives on the Layer. `batch: { size, wait }` hands the handler up to `size` inputs of one key at once, waiting up to `wait` for a batch to fill. Without it, each input is handled on its own, as soon as it arrives.
 
-```typescript title="src/Ledger/LedgerLive.ts"
+```typescript title="packages/domain/src/Ledger/Ledger.projection.ts"
 { batch: { size: 100, wait: "1 second" } },
 ```
 
@@ -158,12 +158,12 @@ A policy is the opposite. It acts on the world, through commands and external sy
 Your store is eventually consistent with the model. A caller who has just sent a command and wants to read the result from your store waits for the projection first.
 
 ```typescript
-// test/ledgerAfterWithdrawal.ts
+// packages/domain/test/ledgerAfterWithdrawal.ts
 import * as Effect from "effect/Effect";
-import { Account } from "../src/Account/Account.ts";
-import type { AccountId } from "../src/Account/AccountId.ts";
-import { WithdrawMoney } from "../src/Account/WithdrawMoney.ts";
-import { Ledger } from "../src/Ledger/Ledger.ts";
+import { Account } from "../src/Account/Account.aggregate.ts";
+import type { AccountId } from "../src/Account/Account.id.ts";
+import { WithdrawMoney } from "../src/Account/WithdrawMoney.command.ts";
+import { Ledger } from "../src/Ledger/Ledger.projection.ts";
 import { LedgerStore } from "../src/Ledger/LedgerStore.ts";
 
 export const ledgerAfterWithdrawal = Effect.fn(function* (accountId: AccountId) {
@@ -180,7 +180,7 @@ export const ledgerAfterWithdrawal = Effect.fn(function* (accountId: AccountId) 
 
 A projection's store is yours, so its API is too. The bank serves the ledger from a plain route on its Worker, authorizing the caller itself.
 
-```typescript title="src/BankWorker.ts"
+```typescript title="packages/server/src/BankWorker.ts"
 const summary = yield* summaries.query(Account.ref(accountId)).pipe(Effect.orDie);
 const owner = Option.getOrNull(summary)?.customerId;
 if (actor.value._tag === "Customer" && owner !== actor.value.customerId) {
@@ -196,7 +196,7 @@ To have the model serve a projection's output for you, with live updates and `va
 
 Projections run for real in a [story](/domain/story). Give the story a store you can read back.
 
-```typescript title="test/Bank.story.test.ts"
+```typescript title="packages/domain/test/Bank.story.test.ts"
 const ledger = memoryLedger();
 yield* ledgerStory(
   given(a1, opened(), new MoneyDeposited({ amount: 10_000, balanceAfter: 10_000 })),

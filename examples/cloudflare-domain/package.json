@@ -25,5 +25,14 @@
     "@effect/platform-node": "catalog:",
     "alchemy": "workspace:*",
     "effect": "catalog:"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "catalog:",
+    "@effect/platform-browser": "catalog:",
+    "@effect/vitest": "catalog:",
+    "@foldkit/vite-plugin": "catalog:",
+    "foldkit": "catalog:",
+    "vite": "catalog:",
+    "vitest": "catalog:"
   }
 }

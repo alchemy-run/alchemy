@@ -10,7 +10,7 @@ import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as Socket from "effect/socket/Socket";
 import { Runtime } from "foldkit";
-import { Flags, Intent, init, intentsKey, Model, subscriptions, update, view } from "./app.ts";
+import { Flags, Intent, init, intentsKey, Model, subscriptions, update, view } from "./Bank.ts";
 
 /**
  * The signed-in customer. A demo stand-in for a login: `?customer=c-2` picks

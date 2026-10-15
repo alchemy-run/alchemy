@@ -29,7 +29,7 @@ The same model runs in memory for tests and on Cloudflare Durable Objects in pro
 
 A command declares what it asks for and every way it can end:
 
-```typescript title="src/DepositMoney.ts"
+```typescript title="src/DepositMoney.command.ts"
 export class MoneyDeposited extends Domain.Event("MoneyDeposited", {
   amount: Schema.Int,
   balanceAfter: Schema.Int,
@@ -46,7 +46,7 @@ export class DepositMoney extends Domain.Command("DepositMoney", {
 
 The account aggregate decides it against its current state:
 
-```typescript title="src/Account.ts"
+```typescript title="src/Account.aggregate.ts"
 DepositMoney: (s, cmd) =>
   s._tag !== "Open"
     ? new NotOpen()

@@ -13,7 +13,7 @@ Aggregates hold only what their rules need. Views hold everything people want to
 
 The simplest view follows one aggregate. `AccountSummary` reads the account's events and keeps its owner and balance.
 
-```typescript title="src/AccountSummary.ts"
+```typescript title="src/AccountSummary.view.ts"
 export class AccountSummary extends Domain.View("AccountSummary", {
   from: [Account],
   key: Account,
@@ -52,9 +52,9 @@ A view is never updated in the same step as the aggregate. The account commits i
 So a view is always correct, but it can be a moment behind. Most screens never notice. One that has just sent a command and wants to show its result waits for the view to catch up, using the command's receipt.
 
 ```typescript
-// test/depositThenRead.ts
+// packages/server/test/depositThenRead.ts
 import * as Effect from "effect/Effect";
-import type { AccountId } from "../src/Account/AccountId.ts";
+import type { AccountId } from "@bank/domain/Account/Account.id";
 import type { CustomerClient } from "./flows.ts";
 
 export const depositThenRead = Effect.fn(function* (bank: CustomerClient, accountId: AccountId) {
@@ -72,7 +72,7 @@ export const depositThenRead = Effect.fn(function* (bank: CustomerClient, accoun
 
 A view can record events as it folds, which is how you build lists like a statement. Instead of `evolve`, `Statement` has `emit`: for each deposit or withdrawal, it records one `StatementLine`.
 
-```typescript title="src/Statement.ts"
+```typescript title="src/Statement.view.ts"
 export class Statement extends Domain.View("Statement", {
   from: [Account],
   key: Account,
@@ -111,14 +111,14 @@ A customer's dashboard shows every account they own, with each balance. No singl
 
 The dashboard is keyed by customer, but a summary's events come from accounts. `keyOf` tells the view which customer each one belongs to, using the summary's state after the event.
 
-```typescript title="src/Customer/CustomerDashboard.ts"
+```typescript title="packages/domain/src/Customer/CustomerDashboard.view.ts"
 keyOf: {
   AccountSummary: ({ state }) => (state?.customerId ? Customer.ref(state.customerId) : undefined),
 ```
 
 Returning `undefined` means the event belongs to no dashboard, like a summary for an account that hasn't been opened yet. The handler for those events receives the same state, and records that account's balance.
 
-```typescript title="src/Customer/CustomerDashboard.ts"
+```typescript title="packages/domain/src/Customer/CustomerDashboard.view.ts"
 AccountSummary: (d, _, { source, state }) => ({
   ...d,
   balances:
@@ -134,7 +134,7 @@ Some events matter to more than one key. A transfer request names two accounts, 
 
 `keyOf` can return named routes. Each route picks a key, and each has its own handler.
 
-```typescript title="src/Transfer/AccountTransfers.ts"
+```typescript title="packages/domain/src/Transfer/AccountTransfers.view.ts"
 keyOf: {
   TransferRequested: {
     out: ({ event }) => Account.ref(event.from),
@@ -154,9 +154,9 @@ One `TransferRequested` updates both accounts: the sender's as `out` and the rec
 Through an [Api](/domain/api), a view offers four reads for one key. `get` returns its current state, or `null` if nothing has happened to that key yet. `list` returns a page of its emitted events. `watch` streams the state now and after every change. `events` streams its emitted events, history first, then new ones as they're recorded.
 
 ```typescript
-// test/statementPage.ts
+// packages/server/test/statementPage.ts
 import * as Effect from "effect/Effect";
-import type { AccountId } from "../src/Account/AccountId.ts";
+import type { AccountId } from "@bank/domain/Account/Account.id";
 import type { CustomerClient } from "./flows.ts";
 
 export const statementPage = Effect.fn(function* (bank: CustomerClient, accountId: AccountId) {
@@ -171,7 +171,7 @@ A `where` filter narrows any read, like only deposits over a threshold. A filter
 
 A view that's exposed through an Api declares `middleware` to identify the caller, and `validate` to judge each read against the view's state.
 
-```typescript title="src/Account/AccountSummary.ts"
+```typescript title="packages/domain/src/Account/AccountSummary.view.ts"
 validate: Effect.fn(function* (_request, summary) {
   yield* mustOwn(summary?.customerId ?? null);
 }),

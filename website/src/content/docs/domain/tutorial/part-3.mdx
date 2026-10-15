@@ -10,7 +10,7 @@ Every new customer should get a main account. Model customers, then add a policy
 ## Name customer ids
 
 ```typescript
-// src/CustomerId.ts
+// src/Customer.id.ts
 import * as Schema from "effect/Schema";
 
 export const CustomerId = Schema.String.pipe(Schema.brand("CustomerId"));
@@ -21,10 +21,10 @@ Like the account, a customer has its own kind of id.
 ## Register a customer
 
 ```typescript
-// src/RegisterCustomer.ts
+// src/RegisterCustomer.command.ts
 import * as Domain from "alchemy/Domain";
 import * as Schema from "effect/Schema";
-import { CustomerId } from "./CustomerId.ts";
+import { CustomerId } from "./Customer.id.ts";
 
 export class CustomerRegistered extends Domain.Event("CustomerRegistered", {
   name: Schema.String,
@@ -45,11 +45,11 @@ export class RegisterCustomer extends Domain.Command("RegisterCustomer", {
 ## Model a customer
 
 ```typescript
-// src/Customer.ts
+// src/Customer.aggregate.ts
 import * as Domain from "alchemy/Domain";
 import * as Schema from "effect/Schema";
-import { CustomerId } from "./CustomerId.ts";
-import { AlreadyRegistered, CustomerRegistered, RegisterCustomer } from "./RegisterCustomer.ts";
+import { CustomerId } from "./Customer.id.ts";
+import { AlreadyRegistered, CustomerRegistered, RegisterCustomer } from "./RegisterCustomer.command.ts";
 
 export class Customer extends Domain.Aggregate("Customer", {
   id: CustomerId,
@@ -71,10 +71,10 @@ A customer is an aggregate with the same shape as the account: an id, the comman
 ## Declare the policy
 
 ```typescript
-// src/MainAccountProvisioning.ts
+// src/MainAccountProvisioning.policy.ts
 import * as Domain from "alchemy/Domain";
-import { Customer } from "./Customer.ts";
-import { CustomerRegistered } from "./RegisterCustomer.ts";
+import { Customer } from "./Customer.aggregate.ts";
+import { CustomerRegistered } from "./RegisterCustomer.command.ts";
 
 export class MainAccountProvisioning extends Domain.Policy("MainAccountProvisioning", {
   from: Customer,
@@ -87,19 +87,19 @@ A policy is "whenever this happens, do that". This one listens to customers, for
 ## Implement it
 
 ```diff lang="typescript"
-// src/MainAccountProvisioning.ts
+// src/MainAccountProvisioning.policy.ts
 import * as Domain from "alchemy/Domain";
 +import * as Effect from "effect/Effect";
-+import { Account } from "./Account.ts";
-+import { AccountId } from "./AccountId.ts";
-import { Customer } from "./Customer.ts";
-+import { OpenAccount } from "./OpenAccount.ts";
-import { CustomerRegistered } from "./RegisterCustomer.ts";
++import { Account } from "./Account.aggregate.ts";
++import { AccountId } from "./Account.id.ts";
+import { Customer } from "./Customer.aggregate.ts";
++import { OpenAccount } from "./OpenAccount.command.ts";
+import { CustomerRegistered } from "./RegisterCustomer.command.ts";
 
 ```
 
 ```diff lang="typescript"
-// src/MainAccountProvisioning.ts
+// src/MainAccountProvisioning.policy.ts
   on: [CustomerRegistered],
 }) {}
 +
@@ -122,15 +122,15 @@ A policy can see the same event twice. Its commands get ids derived from that ev
 ## Host the policy
 
 ```diff lang="typescript"
-// src/Bank.ts
-import { Account } from "./Account.ts";
-import { AccountSummary } from "./AccountSummary.ts";
-+import { Customer } from "./Customer.ts";
+// src/Bank.model.ts
+import { Account } from "./Account.aggregate.ts";
+import { AccountSummary } from "./AccountSummary.view.ts";
++import { Customer } from "./Customer.aggregate.ts";
 +import {
 +  MainAccountProvisioning,
 +  MainAccountProvisioningLive,
-+} from "./MainAccountProvisioning.ts";
-import { Statement } from "./Statement.ts";
++} from "./MainAccountProvisioning.policy.ts";
+import { Statement } from "./Statement.view.ts";
 
 export class Bank extends Domain.Model("Bank", {
 -  aggregates: [Account],
@@ -149,16 +149,16 @@ The model lists the policy, and `BankHandlers` is its implementation. You provid
 ```diff lang="typescript"
 // test/Account.test.ts
 import { Story } from "alchemy/Domain/Story";
-import { Account } from "../src/Account.ts";
--import { Bank } from "../src/Bank.ts";
-+import { Bank, BankHandlers } from "../src/Bank.ts";
-import { DepositMoney, MoneyDeposited } from "../src/DepositMoney.ts";
-import { NotOpen } from "../src/NotOpen.ts";
+import { Account } from "../src/Account.aggregate.ts";
+-import { Bank } from "../src/Bank.model.ts";
++import { Bank, BankHandlers } from "../src/Bank.model.ts";
+import { DepositMoney, MoneyDeposited } from "../src/DepositMoney.command.ts";
+import { NotOpen } from "../src/NotOpen.rejection.ts";
 ```
 
 ```diff lang="typescript"
 // test/Account.test.ts
-import { InsufficientFunds, WithdrawMoney } from "../src/WithdrawMoney.ts";
+import { InsufficientFunds, WithdrawMoney } from "../src/WithdrawMoney.command.ts";
 
 -const story = Story.make(Bank);
 +const story = Story.make(Bank, { layer: BankHandlers });
@@ -168,17 +168,17 @@ const account = Account.ref("a-1");
 
 ```diff lang="typescript"
 // test/views.test.ts
-import { Account } from "../src/Account.ts";
-import { AccountSummary } from "../src/AccountSummary.ts";
--import { Bank } from "../src/Bank.ts";
-+import { Bank, BankHandlers } from "../src/Bank.ts";
-import { DepositMoney } from "../src/DepositMoney.ts";
-import { AccountOpened } from "../src/OpenAccount.ts";
+import { Account } from "../src/Account.aggregate.ts";
+import { AccountSummary } from "../src/AccountSummary.view.ts";
+-import { Bank } from "../src/Bank.model.ts";
++import { Bank, BankHandlers } from "../src/Bank.model.ts";
+import { DepositMoney } from "../src/DepositMoney.command.ts";
+import { AccountOpened } from "../src/OpenAccount.command.ts";
 ```
 
 ```diff lang="typescript"
 // test/views.test.ts
-import { WithdrawMoney } from "../src/WithdrawMoney.ts";
+import { WithdrawMoney } from "../src/WithdrawMoney.command.ts";
 
 -const story = Story.make(Bank);
 +const story = Story.make(Bank, { layer: BankHandlers });
@@ -194,12 +194,12 @@ A story runs the whole model, policies included, so every story now takes `BankH
 // test/registration.test.ts
 import { it } from "@effect/vitest";
 import { Story } from "alchemy/Domain/Story";
-import { Account } from "../src/Account.ts";
-import { AccountSummary } from "../src/AccountSummary.ts";
-import { Bank, BankHandlers } from "../src/Bank.ts";
-import { Customer } from "../src/Customer.ts";
-import { AccountOpened } from "../src/OpenAccount.ts";
-import { CustomerRegistered, RegisterCustomer } from "../src/RegisterCustomer.ts";
+import { Account } from "../src/Account.aggregate.ts";
+import { AccountSummary } from "../src/AccountSummary.view.ts";
+import { Bank, BankHandlers } from "../src/Bank.model.ts";
+import { Customer } from "../src/Customer.aggregate.ts";
+import { AccountOpened } from "../src/OpenAccount.command.ts";
+import { CustomerRegistered, RegisterCustomer } from "../src/RegisterCustomer.command.ts";
 
 const story = Story.make(Bank, { layer: BankHandlers });
 const sam = Customer.ref("c-1");

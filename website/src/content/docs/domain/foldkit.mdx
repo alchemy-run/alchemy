@@ -10,7 +10,7 @@ description: Run domain commands from foldkit commands, watch views with subscri
 The app shows the signed-in customer's balance, opens their account, and deposits.
 
 ```typescript
-// src/web/App.ts
+// packages/web/src/App.ts
 import type * as Domain from "alchemy/Domain";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
@@ -18,10 +18,10 @@ import * as Stream from "effect/Stream";
 import { Command, Subscription, type Update } from "foldkit";
 import type { Document, HtmlBuilder } from "foldkit/html";
 import { defineMessageUnion } from "foldkit/message";
-import { AccountId, mainAccountId } from "../Account/AccountId.ts";
-import { CustomerId } from "../Customer/CustomerId.ts";
-import { Username } from "../Customer/Username.ts";
-import { CustomerApi } from "../CustomerApi/CustomerApi.ts";
+import { AccountId, mainAccountId } from "@bank/domain/Account/Account.id";
+import { CustomerId } from "@bank/domain/Customer/Customer.id";
+import { Username } from "@bank/domain/Customer/Username";
+import { CustomerApi } from "@bank/domain/CustomerApi.api";
 
 // The services the app's commands and subscriptions use: the bank client.
 type Bank = Domain.Api.ClientKey<"CustomerApi">;
@@ -153,7 +153,7 @@ The subscription watches the account's summary and turns each new state into `Go
 The client is a foldkit resource, built once for the app's life. Sign in first, then connect on the app's own origin.
 
 ```typescript
-// src/web/main.ts
+// packages/web/src/main.ts
 import * as Domain from "alchemy/Domain";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
@@ -162,8 +162,8 @@ import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Layer from "effect/Layer";
 import * as Socket from "effect/socket/Socket";
 import { Runtime } from "foldkit";
-import { CustomerId } from "../Customer/CustomerId.ts";
-import { CustomerApi } from "../CustomerApi/CustomerApi.ts";
+import { CustomerId } from "@bank/domain/Customer/Customer.id";
+import { CustomerApi } from "@bank/domain/CustomerApi.api";
 import { Flags, init, Model, subscriptions, update, view } from "./App.ts";
 
 const customerId = CustomerId.make(new URLSearchParams(location.search).get("customer") ?? "c-1");
@@ -210,12 +210,12 @@ Runtime.run(
 foldkit stories test `update` without a server. Resolve each command with the message it would produce.
 
 ```typescript
-// test/app.test.ts
+// packages/web/test/app.test.ts
 import { expect, test } from "@effect/vitest";
 import * as Story from "foldkit/story";
-import { AccountId } from "../src/Account/AccountId.ts";
-import { CustomerId } from "../src/Customer/CustomerId.ts";
-import { Deposit, Message, type Model, update } from "../src/web/App.ts";
+import { AccountId } from "@bank/domain/Account/Account.id";
+import { CustomerId } from "@bank/domain/Customer/Customer.id";
+import { Deposit, Message, type Model, update } from "../src/App.ts";
 
 const model: Model = {
   customerId: CustomerId.make("c-1"),

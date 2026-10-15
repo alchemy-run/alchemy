@@ -10,10 +10,10 @@ The account decides, but it doesn't answer questions. Add two views: a summary w
 ## Show the balance
 
 ```typescript
-// src/AccountSummary.ts
+// src/AccountSummary.view.ts
 import * as Domain from "alchemy/Domain";
 import * as Schema from "effect/Schema";
-import { Account } from "./Account.ts";
+import { Account } from "./Account.aggregate.ts";
 
 export class AccountSummary extends Domain.View("AccountSummary", {
   from: [Account],
@@ -33,10 +33,10 @@ A view folds events into state, one copy per key. `key: Account` gives every acc
 ## Host the view
 
 ```diff lang="typescript"
-// src/Bank.ts
+// src/Bank.model.ts
 import * as Domain from "alchemy/Domain";
-import { Account } from "./Account.ts";
-+import { AccountSummary } from "./AccountSummary.ts";
+import { Account } from "./Account.aggregate.ts";
++import { AccountSummary } from "./AccountSummary.view.ts";
 
 export class Bank extends Domain.Model("Bank", {
   aggregates: [Account],
@@ -50,12 +50,12 @@ export class Bank extends Domain.Model("Bank", {
 // test/views.test.ts
 import { it } from "@effect/vitest";
 import { Story } from "alchemy/Domain/Story";
-import { Account } from "../src/Account.ts";
-import { AccountSummary } from "../src/AccountSummary.ts";
-import { Bank } from "../src/Bank.ts";
-import { DepositMoney } from "../src/DepositMoney.ts";
-import { AccountOpened } from "../src/OpenAccount.ts";
-import { WithdrawMoney } from "../src/WithdrawMoney.ts";
+import { Account } from "../src/Account.aggregate.ts";
+import { AccountSummary } from "../src/AccountSummary.view.ts";
+import { Bank } from "../src/Bank.model.ts";
+import { DepositMoney } from "../src/DepositMoney.command.ts";
+import { AccountOpened } from "../src/OpenAccount.command.ts";
+import { WithdrawMoney } from "../src/WithdrawMoney.command.ts";
 
 const story = Story.make(Bank);
 const account = Account.ref("a-1");
@@ -75,7 +75,7 @@ it.effect("the summary follows the balance", () =>
 ## Describe a statement line
 
 ```typescript
-// src/Statement.ts
+// src/Statement.view.ts
 import * as Domain from "alchemy/Domain";
 import * as Schema from "effect/Schema";
 
@@ -91,16 +91,16 @@ A view can record events of its own. One `StatementLine` describes any movement 
 ## Emit a line for every movement
 
 ```diff lang="typescript"
-// src/Statement.ts
+// src/Statement.view.ts
 import * as Domain from "alchemy/Domain";
 import * as Schema from "effect/Schema";
-+import { Account } from "./Account.ts";
++import { Account } from "./Account.aggregate.ts";
 
 export class StatementLine extends Domain.Event("StatementLine", {
 ```
 
 ```diff lang="typescript"
-// src/Statement.ts
+// src/Statement.view.ts
   balance: Schema.Int,
 }) {}
 +
@@ -122,10 +122,10 @@ export class StatementLine extends Domain.Event("StatementLine", {
 ## Host the statement
 
 ```diff lang="typescript"
-// src/Bank.ts
-import { Account } from "./Account.ts";
-import { AccountSummary } from "./AccountSummary.ts";
-+import { Statement } from "./Statement.ts";
+// src/Bank.model.ts
+import { Account } from "./Account.aggregate.ts";
+import { AccountSummary } from "./AccountSummary.view.ts";
++import { Statement } from "./Statement.view.ts";
 
 export class Bank extends Domain.Model("Bank", {
   aggregates: [Account],
@@ -138,10 +138,10 @@ export class Bank extends Domain.Model("Bank", {
 
 ```diff lang="typescript"
 // test/views.test.ts
-import { DepositMoney } from "../src/DepositMoney.ts";
-import { AccountOpened } from "../src/OpenAccount.ts";
-+import { Statement } from "../src/Statement.ts";
-import { WithdrawMoney } from "../src/WithdrawMoney.ts";
+import { DepositMoney } from "../src/DepositMoney.command.ts";
+import { AccountOpened } from "../src/OpenAccount.command.ts";
++import { Statement } from "../src/Statement.view.ts";
+import { WithdrawMoney } from "../src/WithdrawMoney.command.ts";
 
 ```
 

@@ -26,7 +26,12 @@ Here every device accepts changes and the server only keeps a copy. Nothing can 
 The app below extends optimistic updates with a queue. Each line the server hasn't acknowledged is an intent, saved to `localStorage` under the customer's key.
 
 ```typescript
-// src/web/Bank.ts
+// packages/web/src/Bank.ts
+import { AccountId, mainAccountId } from "@bank/domain/Account/Account.id";
+import { StatementLine } from "@bank/domain/Account/Statement.view";
+import { CustomerId } from "@bank/domain/Customer/Customer.id";
+import { Username } from "@bank/domain/Customer/Username";
+import { CustomerApi } from "@bank/domain/CustomerApi.api";
 import type * as Domain from "alchemy/Domain";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -35,11 +40,6 @@ import * as Stream from "effect/Stream";
 import { Command, Subscription, type Update } from "foldkit";
 import type { Document, HtmlBuilder } from "foldkit/html";
 import { defineMessageUnion } from "foldkit/message";
-import { AccountId, mainAccountId } from "../Account/AccountId.ts";
-import { StatementLine } from "../Account/Statement.ts";
-import { CustomerId } from "../Customer/CustomerId.ts";
-import { Username } from "../Customer/Username.ts";
-import { CustomerApi } from "../CustomerApi/CustomerApi.ts";
 
 /** The bank client this app runs on, provided by the `resources` Layer in `entry.ts`. */
 type Bank = Domain.Api.ClientKey<"CustomerApi">;
@@ -549,7 +549,9 @@ The `connectivity` subscription turns the browser's `online` and `offline` event
 Every change to the intents saves them with `SaveIntents`. On the next page load, the entry point reads them back into `Flags`.
 
 ```typescript
-// src/web/entry.ts
+// packages/web/src/entry.ts
+import { CustomerId } from "@bank/domain/Customer/Customer.id";
+import { CustomerApi } from "@bank/domain/CustomerApi.api";
 import * as Domain from "alchemy/Domain";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
@@ -560,8 +562,6 @@ import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as Socket from "effect/socket/Socket";
 import { Runtime } from "foldkit";
-import { CustomerId } from "../Customer/CustomerId.ts";
-import { CustomerApi } from "../CustomerApi/CustomerApi.ts";
 import { Flags, Intent, init, intentsKey, Model, subscriptions, update, view } from "./Bank.ts";
 
 /**
@@ -638,7 +638,7 @@ Runtime.run(
 
 ## Test it
 
-The example's foldkit stories queue intents offline, send them in order once online, restore them on boot, and show a refused withdrawal no longer counting: see [`test/web.test.ts`](https://github.com/alchemy-run/alchemy/blob/main/examples/cloudflare-domain/test/web.test.ts).
+The example's foldkit stories queue intents offline, send them in order once online, restore them on boot, and show a refused withdrawal no longer counting: see [`packages/web/test/Bank.test.ts`](https://github.com/alchemy-run/alchemy/blob/main/examples/cloudflare-domain/packages/web/test/Bank.test.ts).
 
 :::note
 Start from [Optimistic updates](/domain/optimistic-updates) if you only need the app to feel instant online.

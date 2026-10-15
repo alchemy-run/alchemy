@@ -12,10 +12,10 @@ A saga that waits needs a deadline. A large transfer waits for a support agent's
 A scheduled command fires when nobody is waiting for its answer, so it never rejects. It reports a fact, and records nothing when the fact no longer applies.
 
 ```typescript
-// src/Transfer/ExpireTransfer.ts
+// packages/domain/src/Transfer/ExpireTransfer.command.ts
 import * as Domain from "alchemy/Domain";
-import { TransferFailed } from "./FailTransfer.ts";
-import { TransferId } from "./TransferId.ts";
+import { TransferFailed } from "./FailTransfer.command.ts";
+import { TransferId } from "./Transfer.id.ts";
 
 /**
  * The approval window closed. Scheduled by `TransferApprovalDeadline`; it
@@ -33,12 +33,12 @@ export class ExpireTransfer extends Domain.Command("ExpireTransfer", {
 A policy schedules the command when the waiting starts.
 
 ```typescript
-// src/Transfer/TransferApprovalDeadline.ts
+// packages/domain/src/Transfer/TransferApprovalDeadline.policy.ts
 import * as Domain from "alchemy/Domain";
 import * as Effect from "effect/Effect";
-import { ExpireTransfer } from "./ExpireTransfer.ts";
-import { TransferRequested } from "./RequestTransfer.ts";
-import { Transfer } from "./Transfer.ts";
+import { ExpireTransfer } from "./ExpireTransfer.command.ts";
+import { TransferRequested } from "./RequestTransfer.command.ts";
+import { Transfer } from "./Transfer.aggregate.ts";
 
 /** How long a support agent has to approve a large transfer. */
 export const APPROVAL_WINDOW = "24 hours";
@@ -89,7 +89,7 @@ Approval and expiry are both commands to the same transfer. One may come from a 
 
 The transfer handles one command at a time, so whichever arrives first changes its state, and its `decide` turns the other away. Approval is only accepted while the transfer is awaiting approval:
 
-```typescript title="src/Transfer/Transfer.ts"
+```typescript title="packages/domain/src/Transfer/Transfer.aggregate.ts"
 ApproveTransfer: Effect.fn(function* (s, _, { id }) {
   const approvedBy = yield* CurrentActor;
   if (approvedBy._tag !== "Agent") return yield* new NotPermitted();
@@ -98,7 +98,7 @@ ApproveTransfer: Effect.fn(function* (s, _, { id }) {
 
 Expiry fails the transfer only if it's still waiting, and records nothing otherwise:
 
-```typescript title="src/Transfer/Transfer.ts"
+```typescript title="packages/domain/src/Transfer/Transfer.aggregate.ts"
 ExpireTransfer: (s, _, { id }) =>
   s._tag === "AwaitingApproval"
     ? [new TransferFailed({ transferId: id, reason: "not approved in time" })]
@@ -111,7 +111,7 @@ So an approved transfer ignores its expiry, and an expired transfer rejects a la
 
 A story has its own clock. `Story.clock` moves it, and any scheduled command that's now due fires.
 
-```typescript title="test/deadlines.test.ts"
+```typescript title="packages/domain/test/deadlines.test.ts"
 // A minute before the deadline, nothing has happened.
 Story.clock("2026-01-02T08:59:00Z"),
 Story.then(transfer),

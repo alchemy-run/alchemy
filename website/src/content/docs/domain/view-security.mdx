@@ -10,11 +10,11 @@ A view is a security boundary, like a command. Its `validate` decides whether th
 Write who may read an account's data as one function, and use it in every view of an account.
 
 ```typescript
-// src/Account/mustOwn.ts
+// packages/domain/src/Account/mustOwn.ts
 import * as Effect from "effect/Effect";
-import { CurrentActor } from "../CurrentActor.ts";
-import type { CustomerId } from "../Customer/CustomerId.ts";
-import { NotOwner } from "./NotOwner.ts";
+import { CurrentActor } from "../CurrentActor.context.ts";
+import type { CustomerId } from "../Customer/Customer.id.ts";
+import { NotOwner } from "./NotOwner.rejection.ts";
 
 /**
  * Who may read an account's data: any agent, or the customer who owns the
@@ -31,16 +31,16 @@ export const mustOwn = Effect.fn(function* (owner: CustomerId | null) {
 `validate` gets the request and the key's state. It succeeds to allow the read, or fails with a rejection the view declares.
 
 ```typescript
-// src/Account/AccountSummary.ts
+// packages/domain/src/Account/AccountSummary.view.ts
 import * as Domain from "alchemy/Domain";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
-import { CustomerId } from "../Customer/CustomerId.ts";
+import { CustomerId } from "../Customer/Customer.id.ts";
 import { Cents } from "../Money.ts";
-import { Session } from "../Session.ts";
-import { Account } from "./Account.ts";
+import { Session } from "../Session.middleware.ts";
+import { Account } from "./Account.aggregate.ts";
 import { mustOwn } from "./mustOwn.ts";
-import { NotOwner } from "./NotOwner.ts";
+import { NotOwner } from "./NotOwner.rejection.ts";
 
 const setBalance = <V extends { balance: number }>(
   v: V,
@@ -93,17 +93,17 @@ The `Account` aggregate's `read` contract and the `Statement` view use the same 
 When the key itself says whose data it is, judge the key. A dashboard is keyed by customer, so only that customer, or an agent, may read it.
 
 ```typescript
-// src/Customer/CustomerDashboard.ts
+// packages/domain/src/Customer/CustomerDashboard.view.ts
 import * as Domain from "alchemy/Domain";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
-import { AccountId } from "../Account/AccountId.ts";
-import { AccountSummary } from "../Account/AccountSummary.ts";
-import { CurrentActor } from "../CurrentActor.ts";
-import { Forbidden } from "../Forbidden.ts";
+import { AccountId } from "../Account/Account.id.ts";
+import { AccountSummary } from "../Account/AccountSummary.view.ts";
+import { CurrentActor } from "../CurrentActor.context.ts";
+import { Forbidden } from "../Forbidden.rejection.ts";
 import { Cents } from "../Money.ts";
-import { Session } from "../Session.ts";
-import { Customer } from "./Customer.ts";
+import { Session } from "../Session.middleware.ts";
+import { Customer } from "./Customer.aggregate.ts";
 
 type Balances = Readonly<Record<AccountId, number>>;
 
@@ -170,18 +170,18 @@ export class CustomerDashboard extends Domain.View("CustomerDashboard", {
 A view decides who may read it, not which parts they may see. To show an audience different data, make another view. Support agents see an account's operational events; customers can't read them at all.
 
 ```typescript
-// src/Account/AccountActivity.ts
+// packages/domain/src/Account/AccountActivity.view.ts
 import * as Domain from "alchemy/Domain";
 import * as Effect from "effect/Effect";
-import { CurrentActor } from "../CurrentActor.ts";
-import { Forbidden } from "../Forbidden.ts";
-import { Session } from "../Session.ts";
-import { Account } from "./Account.ts";
-import { OwnerChanged } from "./ChangeOwner.ts";
-import { AccountClosed } from "./CloseAccount.ts";
-import { AccountFrozen } from "./FreezeAccount.ts";
-import { SettlementOnClosedAccount } from "./RecordSettlement.ts";
-import { RefundStranded } from "./RefundTransfer.ts";
+import { CurrentActor } from "../CurrentActor.context.ts";
+import { Forbidden } from "../Forbidden.rejection.ts";
+import { Session } from "../Session.middleware.ts";
+import { Account } from "./Account.aggregate.ts";
+import { OwnerChanged } from "./ChangeOwner.command.ts";
+import { AccountClosed } from "./CloseAccount.command.ts";
+import { AccountFrozen } from "./FreezeAccount.command.ts";
+import { SettlementOnClosedAccount } from "./RecordSettlement.command.ts";
+import { RefundStranded } from "./RefundTransfer.command.ts";
 
 /** Operational events for support tooling, passed through unchanged. Agents only. */
 export class AccountActivity extends Domain.View("AccountActivity", {
@@ -202,13 +202,13 @@ export class AccountActivity extends Domain.View("AccountActivity", {
 Expose it in the agents' Api only.
 
 ```typescript
-// src/SupportApi/SupportApi.ts
+// packages/domain/src/SupportApi.api.ts
 import * as Domain from "alchemy/Domain";
-import { AccountActivity } from "../Account/AccountActivity.ts";
-import { AccountSummary } from "../Account/AccountSummary.ts";
-import { ChangeOwner } from "../Account/ChangeOwner.ts";
-import { FreezeAccount } from "../Account/FreezeAccount.ts";
-import { ApproveTransfer } from "../Transfer/ApproveTransfer.ts";
+import { AccountActivity } from "./Account/AccountActivity.view.ts";
+import { AccountSummary } from "./Account/AccountSummary.view.ts";
+import { ChangeOwner } from "./Account/ChangeOwner.command.ts";
+import { FreezeAccount } from "./Account/FreezeAccount.command.ts";
+import { ApproveTransfer } from "./Transfer/ApproveTransfer.command.ts";
 
 /** What the support console reaches, over the same Bank. */
 export class SupportApi extends Domain.Api(

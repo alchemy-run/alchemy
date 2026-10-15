@@ -34,7 +34,7 @@ The bank's transfer is a saga: it debits one account, credits another, and refun
 
 A saga has a key, the input it starts with, and every way it can be refused. The key identifies one run: starting the saga again with the same transfer id returns the same run.
 
-```typescript title="src/Transfer/ExecuteTransfer.ts"
+```typescript title="packages/domain/src/Transfer/ExecuteTransfer.saga.ts"
 export class ExecuteTransfer extends Domain.Saga("ExecuteTransfer", {
   key: TransferId,
   input: {
@@ -52,7 +52,7 @@ export class ExecuteTransfer extends Domain.Saga("ExecuteTransfer", {
 
 Its Layer resolves the clients its steps use, then returns what each run does. Each step is an `Activity`: a named Effect whose result is stored. When the run replays, a finished step returns its stored result instead of running again.
 
-```typescript title="src/Transfer/ExecuteTransfer.ts"
+```typescript title="packages/domain/src/Transfer/ExecuteTransfer.saga.ts"
 yield* Activity.make({
   name: "credit",
   error: DestinationClosed,
@@ -70,7 +70,7 @@ A step that runs again is safe. A step can run twice: when it's retried, or when
 
 A step can carry a compensation: what to do if the run fails after the step succeeded. The debit's compensation refunds it.
 
-```typescript title="src/Transfer/ExecuteTransfer.ts"
+```typescript title="packages/domain/src/Transfer/ExecuteTransfer.saga.ts"
 yield* Activity.make({
   name: "debit",
   error: Schema.Union([NotOpen, NotOwner, Frozen, InsufficientFunds]),
@@ -109,7 +109,7 @@ Debit before you credit. If the credit then fails, the money is refunded, so it 
 
 The Transfer aggregate shows where every transfer stands, so the saga reports back to it. The last step completes the transfer:
 
-```typescript title="src/Transfer/ExecuteTransfer.ts"
+```typescript title="packages/domain/src/Transfer/ExecuteTransfer.saga.ts"
 yield* Activity.make({
   name: "complete",
   execute: transfers.send(key, new CompleteTransfer()),
@@ -118,7 +118,7 @@ yield* Activity.make({
 
 A failure is recorded by a finalizer. It's registered first, so it runs after every compensation:
 
-```typescript title="src/Transfer/ExecuteTransfer.ts"
+```typescript title="packages/domain/src/Transfer/ExecuteTransfer.saga.ts"
 yield* Workflow.addFinalizer((exit) =>
   Exit.isSuccess(exit)
     ? Effect.void
@@ -152,7 +152,7 @@ Start a saga from a policy, on the event that records the request. The command t
 
 `yield* ExecuteTransfer` gives the saga's client. `start` begins a run, or returns the one already started with that key, as a handle to the run. Policies run at least once, so key the saga by the aggregate it's about: a policy that runs twice still starts one transfer.
 
-```typescript title="src/Transfer/TransferExecution.ts"
+```typescript title="packages/domain/src/Transfer/TransferExecution.policy.ts"
 case "TransferRequested":
   yield* executions.start(source, {
     from: event.from,
@@ -166,7 +166,7 @@ case "TransferRequested":
 
 List the saga on the model, next to its aggregates and policies, and its Layer with the other handlers.
 
-```typescript title="src/Bank.ts"
+```typescript title="packages/domain/src/Bank.model.ts"
 sagas: [ExecuteTransfer],
 ```
 
@@ -178,7 +178,7 @@ sagas: [ExecuteTransfer],
 
 A run can wait as long as it needs to. A large transfer waits until the Transfer decides it: an agent approves it, or its approval window closes first. The saga waits on a `DurableDeferred`, and suspends until someone completes it.
 
-```typescript title="src/Transfer/ExecuteTransfer.ts"
+```typescript title="packages/domain/src/Transfer/ExecuteTransfer.saga.ts"
 if (needsApproval) {
   // The Transfer decides between approval and expiry; nothing to do if it expired.
   if ((yield* DurableDeferred.await(Decision)) === "expired") return;
@@ -187,7 +187,7 @@ if (needsApproval) {
 
 The policy passes on the decision with the run's `signal`. `get` returns the run with a key:
 
-```typescript title="src/Transfer/TransferExecution.ts"
+```typescript title="packages/domain/src/Transfer/TransferExecution.policy.ts"
 case "TransferApproved":
   return yield* executions.get(source).signal(Decision, "approved");
 ```
@@ -199,11 +199,11 @@ The Transfer decides the race between approval and expiry, so there's one source
 `TransferStatus` is a view of the transfer and both accounts. A client watches it to see the saga finish: the saga reports every step to the Transfer, so the view has everything a client should see.
 
 ```typescript
-// test/followTransfer.ts
+// packages/server/test/followTransfer.ts
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
-import { TransferId } from "../src/Transfer/TransferId.ts";
-import { TransferStatus } from "../src/Transfer/TransferStatus.ts";
+import { TransferId } from "@bank/domain/Transfer/Transfer.id";
+import { TransferStatus } from "@bank/domain/Transfer/TransferStatus.view";
 import type { CustomerClient } from "./flows.ts";
 
 export const followTransfer = Effect.fn(function* (bank: CustomerClient, transferId: string) {
@@ -231,7 +231,7 @@ A story runs the whole saga in memory: the request, every step, the compensation
 
 Test what a saga does, not how it's built: the commands its steps send show up as events on the aggregates, and `Story.saga` checks how the run ended, with the same status its run handle reads.
 
-```typescript title="test/transfers.test.ts"
+```typescript title="packages/domain/test/transfers.test.ts"
 Story.saga(ExecuteTransfer, transfer, { _tag: "Rejected", rejection: new DestinationClosed() }),
 ```
 

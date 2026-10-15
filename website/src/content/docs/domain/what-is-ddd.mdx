@@ -55,7 +55,7 @@ A **command** is a request to change something in the domain: open an account, d
 
 A command is only a request. It can be refused: a withdrawal from an account that doesn't hold enough money is turned down. So a command also declares the ways it can be refused.
 
-```typescript title="src/WithdrawMoney.ts"
+```typescript title="src/WithdrawMoney.command.ts"
 export class WithdrawMoney extends Domain.Command("WithdrawMoney", {
   target: AccountId,
   input: { amount: Schema.Int },
@@ -73,7 +73,7 @@ An **event** records something that has happened in the domain: an account was o
 
 Facts can't be refused or undone. If a deposit was a mistake, the bank doesn't erase it; it records a correction as a new event, and the history shows both. So where a command may or may not succeed, an event already has.
 
-```typescript title="src/WithdrawMoney.ts"
+```typescript title="src/WithdrawMoney.command.ts"
 export class MoneyWithdrawn extends Domain.Event("MoneyWithdrawn", {
   amount: Schema.Int,
   balanceAfter: Schema.Int,
@@ -111,7 +111,7 @@ That makes the size of an aggregate a design decision. It should contain exactly
 
 Here is the whole account: how it decides each command, and how each event changes its state.
 
-```typescript title="src/Account.ts"
+```typescript title="src/Account.aggregate.ts"
 export class Account extends Domain.Aggregate("Account", {
   id: AccountId,
   state: State,
@@ -200,7 +200,7 @@ The split lets each side do one job well. Aggregates stay small, holding only wh
 
 A **view**, also called a read model or projection, is the query side's unit. It reads events, folds them into state, and keeps that state current as new events arrive. The account summary below keeps an owner and a balance for every account.
 
-```typescript title="src/AccountSummary.ts"
+```typescript title="src/AccountSummary.view.ts"
 export class AccountSummary extends Domain.View("AccountSummary", {
   from: [Account],
   key: Account,
@@ -216,7 +216,7 @@ export class AccountSummary extends Domain.View("AccountSummary", {
 
 A client reads a view in one of two ways: fetch its current state once, or watch it for the state now and after every change.
 
-```typescript title="test/readSummary.ts"
+```typescript title="packages/server/test/readSummary.ts"
 const summary = yield* bank.AccountSummary.get(accountId); // once
 const changes = bank.AccountSummary.watch(accountId); // a stream of every change
 ```
@@ -225,7 +225,7 @@ Views are updated after events are recorded, not in the same step. A view is alw
 
 Not every read model belongs in the model's own storage. A search index, a reporting database or a data warehouse is built the same way, by consuming events, but lives in a store you choose. That's a **projection**: a read model the model feeds and you own. The bank's ledger copies every money movement into a database table:
 
-```typescript title="src/Ledger/Ledger.ts"
+```typescript title="packages/domain/src/Ledger/Ledger.projection.ts"
 export class Ledger extends Domain.Projection("Ledger", {
   from: [Account],
   key: Account,
@@ -263,7 +263,7 @@ A policy is triggered by an event, decides whether and how to act, and acts by s
 
 The main-account policy is declared with what triggers it, and implemented as a Layer that sends the command:
 
-```typescript title="src/MainAccountProvisioning.ts"
+```typescript title="src/MainAccountProvisioning.policy.ts"
 export class MainAccountProvisioning extends Domain.Policy("MainAccountProvisioning", {
   from: Customer,
   on: [CustomerRegistered],
@@ -350,7 +350,7 @@ Each concept on this page is a building block in `alchemy/Domain`. A bounded con
 
 A model lists its building blocks:
 
-```typescript title="src/Bank.ts"
+```typescript title="src/Bank.model.ts"
 export class Bank extends Domain.Model("Bank", {
   aggregates: [Account, Customer],
   views: [AccountSummary, Statement],

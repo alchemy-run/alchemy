@@ -10,7 +10,7 @@ Stories check your model. To check what a client can do and see through an Api, 
 `testClient` calls the Api in the same process, through its real middleware. Sign each client in with `sessionClient`, and check every outcome a caller can get.
 
 ```typescript
-// test/access.test.ts
+// packages/server/test/access.test.ts
 import { expect, it } from "@effect/vitest";
 import * as Domain from "alchemy/Domain";
 import * as Effect from "effect/Effect";
@@ -18,16 +18,17 @@ import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
 import type * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
-import { AccountId } from "../src/Account/AccountId.ts";
-import { Bank, BankHandlers } from "../src/Bank.ts";
-import { MemoryLedgerStore } from "../src/Ledger/LedgerStore.ts";
-import { CustomerId } from "../src/Customer/CustomerId.ts";
-import { CustomerApi } from "../src/CustomerApi/CustomerApi.ts";
+import { AccountId } from "@bank/domain/Account/Account.id";
+import { Bank, BankHandlers } from "@bank/domain/Bank.model";
+import { MemoryLedgerStore } from "@bank/domain/Ledger/LedgerStore";
+import { CustomerId } from "@bank/domain/Customer/Customer.id";
+import { CustomerApi } from "@bank/domain/CustomerApi.api";
 import { SiftFraudCheck } from "../src/Fraud/SiftFraudCheck.ts";
 import { MfaChallengeLive } from "../src/MfaChallenge.ts";
-import { SessionLive, sessionClient } from "../src/Session.ts";
+import { SessionLive } from "../src/Session.ts";
+import { sessionClient } from "@bank/domain/Session.middleware";
 import { StripePayments } from "../src/Settlement/StripePayments.ts";
-import { SupportApi } from "../src/SupportApi/SupportApi.ts";
+import { SupportApi } from "@bank/domain/SupportApi.api";
 import { register } from "./flows.ts";
 
 const World = Layer.mergeAll(SessionLive, MfaChallengeLive).pipe(
@@ -105,7 +106,13 @@ it.live("a watch ends with NotOwner when the account changes hands", () =>
 Serve the Api on a real HTTP server, and call it with the same client a script would use.
 
 ```typescript
-// test/HttpTransport.test.ts
+// packages/server/test/HttpTransport.test.ts
+import { Bank, BankHandlers } from "@bank/domain/Bank.model";
+import { CustomerId } from "@bank/domain/Customer/Customer.id";
+import { CustomerDashboard } from "@bank/domain/Customer/CustomerDashboard.view";
+import { CustomerApi } from "@bank/domain/CustomerApi.api";
+import { MemoryLedgerStore } from "@bank/domain/Ledger/LedgerStore";
+import { sessionClient } from "@bank/domain/Session.middleware";
 import * as NodeHttpServer from "@effect/platform-node/NodeHttpServer";
 import { expect, it } from "@effect/vitest";
 import * as Domain from "alchemy/Domain";
@@ -114,14 +121,9 @@ import * as HttpServer from "effect/http/HttpServer";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
-import { Bank, BankHandlers } from "../src/Bank.ts";
-import { CustomerDashboard } from "../src/Customer/CustomerDashboard.ts";
-import { CustomerId } from "../src/Customer/CustomerId.ts";
-import { CustomerApi } from "../src/CustomerApi/CustomerApi.ts";
 import { SiftFraudCheck } from "../src/Fraud/SiftFraudCheck.ts";
-import { MemoryLedgerStore } from "../src/Ledger/LedgerStore.ts";
 import { MfaChallengeLive } from "../src/MfaChallenge.ts";
-import { SessionLive, sessionClient } from "../src/Session.ts";
+import { SessionLive } from "../src/Session.ts";
 import { StripePayments } from "../src/Settlement/StripePayments.ts";
 import { register } from "./flows.ts";
 
@@ -162,14 +164,14 @@ it.live("the CustomerApi round-trips over HTTP, including a streamed watch", () 
 The example's integration test deploys the whole bank with `alchemy/Test/Bun` and drives it over the network. A client that isn't a browser can set headers on its WebSockets, so it sends `Authorization` on each live read, as it does on every call.
 
 ```typescript
-// test/liveClient.ts
+// packages/domain/test/liveClient.ts
 import * as Domain from "alchemy/Domain";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
 import * as Socket from "effect/socket/Socket";
-import { CustomerApi } from "../src/CustomerApi/CustomerApi.ts";
-import { sessionClient } from "../src/Session.ts";
+import { CustomerApi } from "../src/CustomerApi.api.ts";
+import { sessionClient } from "../src/Session.middleware.ts";
 
 export const customerClient = (url: string, customerId: string) => {
   const token = `customer:${customerId}`;

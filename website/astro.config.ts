@@ -1490,6 +1490,7 @@ export default defineConfig({
           items: [
             { label: "Overview", link: "/domain" },
             { label: "What is Domain-Driven Design?", link: "/domain/what-is-ddd" },
+            { label: "Project layout", link: "/domain/project-layout" },
             {
               label: "Tutorial",
               collapsed: false,

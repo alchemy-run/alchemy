@@ -10,24 +10,24 @@ Your model is tested with [stories](/domain/story): given some history, when a c
 Give `Story.make` your model, its policies' Layer, and the external systems its policies call.
 
 ```typescript
-// test/withdrawals.test.ts
+// packages/domain/test/withdrawals.test.ts
 import { it } from "@effect/vitest";
 import { Story } from "alchemy/Domain/Story";
-import { Account } from "../src/Account/Account.ts";
-import { AccountSummary } from "../src/Account/AccountSummary.ts";
-import { MoneyDeposited } from "../src/Account/DepositMoney.ts";
-import { InsufficientFunds } from "../src/Account/InsufficientFunds.ts";
-import { AccountOpened } from "../src/Account/OpenAccount.ts";
-import { Statement } from "../src/Account/Statement.ts";
-import { MoneyWithdrawn, WithdrawMoney } from "../src/Account/WithdrawMoney.ts";
+import { Account } from "../src/Account/Account.aggregate.ts";
+import { AccountSummary } from "../src/Account/AccountSummary.view.ts";
+import { MoneyDeposited } from "../src/Account/DepositMoney.command.ts";
+import { InsufficientFunds } from "../src/Account/InsufficientFunds.rejection.ts";
+import { AccountOpened } from "../src/Account/OpenAccount.command.ts";
+import { Statement } from "../src/Account/Statement.view.ts";
+import { MoneyWithdrawn, WithdrawMoney } from "../src/Account/WithdrawMoney.command.ts";
 import { customer } from "../src/Actor.ts";
 import * as Layer from "effect/Layer";
-import { Bank, BankHandlers } from "../src/Bank.ts";
+import { Bank, BankHandlers } from "../src/Bank.model.ts";
 import { MemoryLedgerStore } from "../src/Ledger/LedgerStore.ts";
-import { CurrentActor } from "../src/CurrentActor.ts";
-import { CustomerId } from "../src/Customer/CustomerId.ts";
-import { FraudCheck } from "../src/Fraud/FraudCheck.ts";
-import { Payments } from "../src/Settlement/Payments.ts";
+import { CurrentActor } from "../src/CurrentActor.context.ts";
+import { CustomerId } from "../src/Customer/Customer.id.ts";
+import { FraudCheck } from "../src/Fraud/FraudCheck.external.ts";
+import { Payments } from "../src/Settlement/Payments.external.ts";
 
 const story = Story.make(Bank, {
   layer: BankHandlers.pipe(Layer.provide(MemoryLedgerStore)),
@@ -77,22 +77,22 @@ Commands run as whoever `provide` says, as their middleware would. Here `asSam` 
 External system calls wait until you answer them, so you decide what the outside world says, and when.
 
 ```typescript
-// test/fraud.test.ts
+// packages/domain/test/fraud.test.ts
 import { it } from "@effect/vitest";
 import { Story } from "alchemy/Domain/Story";
-import { Account } from "../src/Account/Account.ts";
-import { MoneyDeposited } from "../src/Account/DepositMoney.ts";
-import { AccountFrozen } from "../src/Account/FreezeAccount.ts";
-import { AccountOpened } from "../src/Account/OpenAccount.ts";
-import { MoneyWithdrawn, WithdrawMoney } from "../src/Account/WithdrawMoney.ts";
+import { Account } from "../src/Account/Account.aggregate.ts";
+import { MoneyDeposited } from "../src/Account/DepositMoney.command.ts";
+import { AccountFrozen } from "../src/Account/FreezeAccount.command.ts";
+import { AccountOpened } from "../src/Account/OpenAccount.command.ts";
+import { MoneyWithdrawn, WithdrawMoney } from "../src/Account/WithdrawMoney.command.ts";
 import { customer, system } from "../src/Actor.ts";
 import * as Layer from "effect/Layer";
-import { Bank, BankHandlers } from "../src/Bank.ts";
+import { Bank, BankHandlers } from "../src/Bank.model.ts";
 import { MemoryLedgerStore } from "../src/Ledger/LedgerStore.ts";
-import { CurrentActor } from "../src/CurrentActor.ts";
-import { CustomerId } from "../src/Customer/CustomerId.ts";
-import { FraudCheck } from "../src/Fraud/FraudCheck.ts";
-import { Payments } from "../src/Settlement/Payments.ts";
+import { CurrentActor } from "../src/CurrentActor.context.ts";
+import { CustomerId } from "../src/Customer/Customer.id.ts";
+import { FraudCheck } from "../src/Fraud/FraudCheck.external.ts";
+import { Payments } from "../src/Settlement/Payments.external.ts";
 
 const story = Story.make(Bank, {
   layer: BankHandlers.pipe(Layer.provide(MemoryLedgerStore)),

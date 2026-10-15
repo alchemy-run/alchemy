@@ -31,7 +31,7 @@ It works in the other direction too: events from outside, like a webhook from St
 A `Domain.ExternalSystem` lists the calls you make to one outside system, with their arguments and results. It's an Effect service, like a `Context.Service`: policies `yield*` it, and a Layer implements it.
 
 ```typescript
-// src/Settlement/Payments.ts
+// packages/domain/src/Settlement/Payments.external.ts
 import * as Domain from "alchemy/Domain";
 import * as Schema from "effect/Schema";
 import { Cents } from "../Money.ts";
@@ -50,9 +50,9 @@ export class Payments extends Domain.ExternalSystem("Payments", {
 An adapter is a Layer that implements every call. Swap it for another vendor, or a fake, without touching the model.
 
 ```typescript
-// src/Settlement/StripePayments.ts
+// packages/server/src/Settlement/StripePayments.ts
+import { Payments } from "@bank/domain/Settlement/Payments.external";
 import * as Effect from "effect/Effect";
-import { Payments } from "./Payments.ts";
 
 /**
  * A stand-in adapter for a payment processor. Swap it for a Stripe HTTP
@@ -70,12 +70,12 @@ export const StripePayments = Payments.toLayer(
 A policy uses it like any other service. This one refunds money that settled on an account that had already closed.
 
 ```typescript
-// src/Settlement/SettlementRefund.ts
+// packages/domain/src/Settlement/SettlementRefund.policy.ts
 import * as Domain from "alchemy/Domain";
 import * as Effect from "effect/Effect";
-import { Account } from "../Account/Account.ts";
-import { SettlementOnClosedAccount } from "../Account/RecordSettlement.ts";
-import { Payments } from "./Payments.ts";
+import { Account } from "../Account/Account.aggregate.ts";
+import { SettlementOnClosedAccount } from "../Account/RecordSettlement.command.ts";
+import { Payments } from "./Payments.external.ts";
 
 /** Whenever money settles on a closed account, refund it. */
 export class SettlementRefund extends Domain.Policy("SettlementRefund", {
@@ -100,11 +100,11 @@ Provide the adapters where you host the model, next to the platform: see [Domain
 Money arrives from Stripe as webhook events. Each successful payment becomes a `RecordSettlement`, a command that reports a fact and so never rejects.
 
 ```typescript
-// src/Account/RecordSettlement.ts
+// packages/domain/src/Account/RecordSettlement.command.ts
 import * as Domain from "alchemy/Domain";
 import * as Schema from "effect/Schema";
 import { Cents } from "../Money.ts";
-import { AccountId } from "./AccountId.ts";
+import { AccountId } from "./Account.id.ts";
 
 export class SettlementReceived extends Domain.Event("SettlementReceived", {
   settlementId: Schema.String,
@@ -129,12 +129,12 @@ export class RecordSettlement extends Domain.Command("RecordSettlement", {
 `Stripe.consumeEvents` receives the webhooks, checks their signatures, and sends the command. The payment's id is the command id, so a webhook delivered twice settles once.
 
 ```typescript
-// src/Settlement/StripeSettlements.ts
+// packages/server/src/Settlement/StripeSettlements.ts
+import { Account } from "@bank/domain/Account/Account.aggregate";
+import { AccountId } from "@bank/domain/Account/Account.id";
+import { RecordSettlement } from "@bank/domain/Account/RecordSettlement.command";
 import * as Stripe from "alchemy/Stripe";
 import * as Effect from "effect/Effect";
-import { Account } from "../Account/Account.ts";
-import { AccountId } from "../Account/AccountId.ts";
-import { RecordSettlement } from "../Account/RecordSettlement.ts";
 
 /**
  * Card top-ups settle through Stripe. Every `payment_intent.succeeded` whose
@@ -170,19 +170,19 @@ export const StripeSettlements = Effect.gen(function* () {
 In a story, an external system call waits until you resolve it. `expectCall` checks what was asked, and `resolve` answers it. With several calls waiting, name each one; see [Answer several calls](/domain/testing-models#answer-several-calls).
 
 ```typescript
-// test/settlements.test.ts
+// packages/domain/test/settlements.test.ts
 import { it } from "@effect/vitest";
 import { Story } from "alchemy/Domain/Story";
-import { Account } from "../src/Account/Account.ts";
-import { AccountClosed } from "../src/Account/CloseAccount.ts";
-import { AccountOpened } from "../src/Account/OpenAccount.ts";
-import { RecordSettlement, SettlementOnClosedAccount } from "../src/Account/RecordSettlement.ts";
+import { Account } from "../src/Account/Account.aggregate.ts";
+import { AccountClosed } from "../src/Account/CloseAccount.command.ts";
+import { AccountOpened } from "../src/Account/OpenAccount.command.ts";
+import { RecordSettlement, SettlementOnClosedAccount } from "../src/Account/RecordSettlement.command.ts";
 import * as Layer from "effect/Layer";
-import { Bank, BankHandlers } from "../src/Bank.ts";
+import { Bank, BankHandlers } from "../src/Bank.model.ts";
 import { MemoryLedgerStore } from "../src/Ledger/LedgerStore.ts";
-import { CustomerId } from "../src/Customer/CustomerId.ts";
-import { FraudCheck } from "../src/Fraud/FraudCheck.ts";
-import { Payments } from "../src/Settlement/Payments.ts";
+import { CustomerId } from "../src/Customer/Customer.id.ts";
+import { FraudCheck } from "../src/Fraud/FraudCheck.external.ts";
+import { Payments } from "../src/Settlement/Payments.external.ts";
 
 const story = Story.make(Bank, {
   layer: BankHandlers.pipe(Layer.provide(MemoryLedgerStore)),

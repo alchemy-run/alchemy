@@ -12,7 +12,7 @@ Every command can carry a `commandId` you choose. The events it causes carry the
 ## Track each line's acknowledgement
 
 ```typescript
-// src/web/Deposits.ts
+// packages/web/src/Deposits.ts
 import type * as Domain from "alchemy/Domain";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
@@ -20,10 +20,10 @@ import * as Stream from "effect/Stream";
 import { Command, Subscription, type Update } from "foldkit";
 import type { Document, HtmlBuilder } from "foldkit/html";
 import { defineMessageUnion } from "foldkit/message";
-import { AccountId, mainAccountId } from "../Account/AccountId.ts";
-import { StatementLine } from "../Account/Statement.ts";
-import { CustomerId } from "../Customer/CustomerId.ts";
-import { CustomerApi } from "../CustomerApi/CustomerApi.ts";
+import { AccountId, mainAccountId } from "@bank/domain/Account/Account.id";
+import { StatementLine } from "@bank/domain/Account/Statement.view";
+import { CustomerId } from "@bank/domain/Customer/Customer.id";
+import { CustomerApi } from "@bank/domain/CustomerApi.api";
 
 type Bank = Domain.Api.ClientKey<"CustomerApi">;
 
@@ -209,12 +209,12 @@ A typed rejection, like `InsufficientFunds`, marks the line `rejected` with its 
 ## Test it
 
 ```typescript
-// test/deposits.test.ts
+// packages/web/test/deposits.test.ts
 import { expect, test } from "@effect/vitest";
 import * as Story from "foldkit/story";
-import { AccountId } from "../src/Account/AccountId.ts";
-import { StatementLine } from "../src/Account/Statement.ts";
-import { Message, type Model, Send, shownBalance, update } from "../src/web/Deposits.ts";
+import { AccountId } from "@bank/domain/Account/Account.id";
+import { StatementLine } from "@bank/domain/Account/Statement.view";
+import { Message, type Model, Send, shownBalance, update } from "../src/Deposits.ts";
 
 const model: Model = { accountId: AccountId.make("c-1-main"), session: "s", sent: 0, lines: [] };
 
@@ -251,5 +251,5 @@ test("a refused withdrawal stops counting", () =>
 ```
 
 :::note
-Keep working without a connection with [Offline and local first](/domain/local-first). The [bank example](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-domain/src/web) does both in one app.
+Keep working without a connection with [Offline and local first](/domain/local-first). The [bank example](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-domain/packages/web/src) does both in one app.
 :::

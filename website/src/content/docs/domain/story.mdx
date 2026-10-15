@@ -27,7 +27,7 @@ A story describes one piece of behavior in the business's own words: given this 
 
 This story says an overdraft is refused, and what the refusal reports:
 
-```typescript title="test/withdrawals.test.ts"
+```typescript title="packages/domain/test/withdrawals.test.ts"
 it.effect("an overdraft is rejected with the evidence", () =>
   story(
     Story.given(account, opened, new MoneyDeposited({ amount: 50, balanceAfter: 50 })),
@@ -44,7 +44,7 @@ it.effect("an overdraft is rejected with the evidence", () =>
 
 `Story.make` builds a runner from your model, so a story runs everything a command sets off. The aggregate decides, views update, and policies react and send their own commands.
 
-```typescript title="test/withdrawals.test.ts"
+```typescript title="packages/domain/test/withdrawals.test.ts"
 const story = Story.make(Bank, {
   layer: BankHandlers.pipe(Layer.provide(MemoryLedgerStore)),
   externalSystems: [FraudCheck, Payments],

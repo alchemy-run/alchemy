@@ -13,7 +13,7 @@ import {
   SaveIntents,
   shownBalance,
   update,
-} from "../src/app.ts";
+} from "../src/Bank.ts";
 
 const earlier: Line = {
   commandId: "earlier",

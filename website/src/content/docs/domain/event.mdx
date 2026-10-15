@@ -13,7 +13,7 @@ Events are the only thing an aggregate stores as its history. Its state, every v
 
 An event has a name and, usually, some data.
 
-```typescript title="src/WithdrawMoney.ts"
+```typescript title="src/WithdrawMoney.command.ts"
 export class MoneyWithdrawn extends Domain.Event("MoneyWithdrawn", {
   amount: Schema.Int,
   balanceAfter: Schema.Int,
@@ -26,7 +26,7 @@ Each field is a schema, so events are encoded the same way wherever they're stor
 
 Events are created in exactly one place: an aggregate's `decide` handler, as its answer to a command.
 
-```typescript title="src/Account.ts"
+```typescript title="src/Account.aggregate.ts"
 : [new MoneyWithdrawn({ amount: cmd.amount, balanceAfter: s.balance - cmd.amount })],
 ```
 
@@ -40,7 +40,7 @@ Put in the event what someone reading it later needs to understand it on its own
 
 The same goes for who did something and why. When a support agent freezes an account, the event records the agent and the reason, so the history explains itself.
 
-```typescript title="src/Account/FreezeAccount.ts"
+```typescript title="packages/domain/src/Account/FreezeAccount.command.ts"
 export class AccountFrozen extends Domain.Event("AccountFrozen", {
   reason: Schema.String,
   by: Actor,
@@ -51,7 +51,7 @@ export class AccountFrozen extends Domain.Event("AccountFrozen", {
 
 The aggregate turns each event into its next state with `evolve`. This is where an event's data takes effect.
 
-```typescript title="src/Account.ts"
+```typescript title="src/Account.aggregate.ts"
 evolve: {
   AccountOpened: (_, e) => ({ _tag: "Open" as const, owner: e.owner, balance: 0 }),
   MoneyDeposited: (s, e) => ({ ...mustBeOpen(s), balance: e.balanceAfter }),
@@ -67,7 +67,7 @@ When an event commits, it's stored inside an envelope that says where and when i
 
 `evolve` receives the envelope as its third argument, for state that depends on when something happened.
 
-```typescript title="src/Account.ts"
+```typescript title="src/Account.aggregate.ts"
 MoneyWithdrawn: (_, e, { at }) => ({
   balance: e.balanceAfter,
   lastWithdrawal: DateTime.formatIsoDateUtc(at),
@@ -102,10 +102,10 @@ A view can record events of its own as it folds, such as one `StatementLine` per
 A client can read an instance's history directly, then keep receiving new events as they're recorded.
 
 ```typescript
-// test/followAccount.ts
+// packages/server/test/followAccount.ts
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
-import type { AccountId } from "../src/Account/AccountId.ts";
+import type { AccountId } from "@bank/domain/Account/Account.id";
 import type { CustomerClient } from "./flows.ts";
 
 export const followAccount = Effect.fn(function* (bank: CustomerClient, accountId: AccountId) {

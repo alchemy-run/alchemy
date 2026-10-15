@@ -35,7 +35,7 @@ Every model has the same shape. Commands enter on the left and are decided by ag
 
 A model declares which aggregates, views, policies, projections and streams it contains. The commands and events come with them, since each aggregate declares the commands it handles and the events it records. The bank's model contains two aggregates, two views and one policy:
 
-```typescript title="src/Bank.ts"
+```typescript title="src/Bank.model.ts"
 export class Bank extends Domain.Model("Bank", {
   aggregates: [Account, Customer],
   views: [AccountSummary, Statement],
@@ -98,7 +98,7 @@ The caller gets a receipt with the stream and version the command committed at, 
 
 For a deposit into an open account, `decide` returns one `MoneyDeposited` event carrying the new balance:
 
-```typescript title="src/Account.ts"
+```typescript title="src/Account.aggregate.ts"
 DepositMoney: (s, cmd) =>
   s._tag !== "Open"
     ? new NotOpen()
@@ -152,9 +152,9 @@ A [policy](/domain/policy) is a business rule. It acts on each new event once, t
 A model lists what runs together. It can start as a single aggregate.
 
 ```typescript
-// src/Bank.ts
+// src/Bank.model.ts
 import * as Domain from "alchemy/Domain";
-import { Account } from "./Account.ts";
+import { Account } from "./Account.aggregate.ts";
 
 export class Bank extends Domain.Model("Bank", {
   aggregates: [Account],
@@ -164,10 +164,10 @@ export class Bank extends Domain.Model("Bank", {
 Adding a view to `views` is enough for the model to deliver the events it reads. You never wire an event to a view by hand.
 
 ```typescript
-// src/Bank.ts
+// src/Bank.model.ts
 import * as Domain from "alchemy/Domain";
-import { Account } from "./Account.ts";
-import { AccountSummary } from "./AccountSummary.ts";
+import { Account } from "./Account.aggregate.ts";
+import { AccountSummary } from "./AccountSummary.view.ts";
 
 export class Bank extends Domain.Model("Bank", {
   aggregates: [Account],
@@ -178,15 +178,15 @@ export class Bank extends Domain.Model("Bank", {
 A policy is declared in one place and implemented in another, because its implementation usually needs things from outside the model, like a client for another aggregate or a payment provider. The declaration goes in `policies`; the implementation is a Layer you keep beside it.
 
 ```typescript
-// src/Bank.ts
+// src/Bank.model.ts
 import * as Domain from "alchemy/Domain";
-import { Account } from "./Account.ts";
-import { AccountSummary } from "./AccountSummary.ts";
-import { Customer } from "./Customer.ts";
+import { Account } from "./Account.aggregate.ts";
+import { AccountSummary } from "./AccountSummary.view.ts";
+import { Customer } from "./Customer.aggregate.ts";
 import {
   MainAccountProvisioning,
   MainAccountProvisioningLive,
-} from "./MainAccountProvisioning.ts";
+} from "./MainAccountProvisioning.policy.ts";
 
 export class Bank extends Domain.Model("Bank", {
   aggregates: [Account, Customer],
@@ -205,7 +205,7 @@ A declaration doesn't run anything. `Bank.layer(BankHandlers)` turns it into a L
 // src/BankInMemory.ts
 import * as Domain from "alchemy/Domain";
 import * as Layer from "effect/Layer";
-import { Bank, BankHandlers } from "./Bank.ts";
+import { Bank, BankHandlers } from "./Bank.model.ts";
 
 export const BankInMemory = Bank.layer(BankHandlers).pipe(Layer.provide(Domain.InMemory));
 ```
@@ -219,10 +219,10 @@ Inside the hosted model, each aggregate and view is a service. `yield* Account` 
 ```typescript
 // src/depositAndRead.ts
 import * as Effect from "effect/Effect";
-import { Account } from "./Account.ts";
-import { AccountId } from "./AccountId.ts";
-import { AccountSummary } from "./AccountSummary.ts";
-import { DepositMoney } from "./DepositMoney.ts";
+import { Account } from "./Account.aggregate.ts";
+import { AccountId } from "./Account.id.ts";
+import { AccountSummary } from "./AccountSummary.view.ts";
+import { DepositMoney } from "./DepositMoney.command.ts";
 
 export const depositAndRead = Effect.gen(function* () {
   const accounts = yield* Account;
