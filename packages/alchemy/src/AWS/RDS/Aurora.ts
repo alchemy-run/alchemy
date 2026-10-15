@@ -3,7 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import type { Input } from "../../Input.ts";
 import * as Namespace from "../../Namespace.ts";
-import type { MigrationsInput } from "../../SQL/Migrations/index.ts";
+import { MigrationError, type MigrationsInput } from "../../SQL/Migrations/index.ts";
 import { toWireSeconds } from "../../Util/Duration.ts";
 import type { SecurityGroupId } from "../EC2/SecurityGroup.ts";
 import type { SubnetId } from "../EC2/Subnet.ts";
@@ -382,12 +382,16 @@ export const Aurora = (id: string, props: AuroraProps) =>
       const engine = props.engine ?? "aurora-postgresql";
       if (props.migrations && props.dataApi === false) {
         return yield* Effect.die(
-          `Aurora '${id}': "migrations" are applied over the Data API and require "dataApi" to be enabled.`,
+          new MigrationError({
+            message: `Aurora '${id}': "migrations" are applied over the Data API and require "dataApi" to be enabled.`,
+          }),
         );
       }
       if (props.migrations && engine !== "aurora-postgresql" && engine !== "aurora-mysql") {
         return yield* Effect.die(
-          `Aurora '${id}': "migrations" support the "aurora-postgresql" and "aurora-mysql" engines (got "${engine}").`,
+          new MigrationError({
+            message: `Aurora '${id}': "migrations" support the "aurora-postgresql" and "aurora-mysql" engines (got "${engine}").`,
+          }),
         );
       }
       const engineVersion = props.engineVersion;
