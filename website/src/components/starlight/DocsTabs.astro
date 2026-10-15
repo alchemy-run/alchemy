@@ -30,16 +30,21 @@ const current = activeTab(Astro.url.pathname);
       ))
     }
 
-    {/* One click-to-open dropdown per hub category (single-hub categories
-        share "More"); the group you're in is underlined and its current hub
-        is highlighted inside. */}
+    {/* One hover dropdown per hub category (single-hub categories
+        share "More"); the group you're in is underlined and names the
+        current hub ("Clouds · AWS"). */}
     {
       DOCS_TAB_GROUPS.map((group) => {
         const activeHere = groupTabs(group).some((tab) => tab.label === current.label);
         return (
-          <details class="alc-tabs__menu-root" name="alc-tabs-menu">
-            <summary class:list={["alc-tabs__tab", "alc-tabs__trigger", { "alc-tabs__tab--active": activeHere }]}>
+          <div class="alc-tabs__menu-root">
+            <button
+              type="button"
+              class:list={["alc-tabs__tab", "alc-tabs__trigger", { "alc-tabs__tab--active": activeHere }]}
+              aria-haspopup="true"
+            >
               {group.label}
+              {activeHere && <span class="alc-tabs__trigger-current">{current.label}</span>}
               <svg
                 class="alc-tabs__chevron"
                 aria-hidden="true"
@@ -54,7 +59,7 @@ const current = activeTab(Astro.url.pathname);
               >
                 <path d="m6 9 6 6 6-6" />
               </svg>
-            </summary>
+            </button>
             <div class="alc-tabs__menu">
               {group.sections.map((section) => (
                 <div class="alc-tabs__menu-section">
@@ -84,32 +89,13 @@ const current = activeTab(Astro.url.pathname);
                 </div>
               ))}
             </div>
-          </details>
+          </div>
         );
       })
     }
   </div>
 
 </nav>
-
-<script>
-  // Dropdowns are <details name="alc-tabs-menu"> (one open at a time);
-  // close them on outside click and Escape like a menu would.
-  const menus = () => document.querySelectorAll<HTMLDetailsElement>(".alc-tabs__menu-root");
-  document.addEventListener("click", (event) => {
-    for (const menu of menus()) {
-      if (menu.open && !menu.contains(event.target as Node)) menu.open = false;
-    }
-  });
-  document.addEventListener("keydown", (event) => {
-    if (event.key !== "Escape") return;
-    for (const menu of menus()) {
-      if (!menu.open) continue;
-      menu.open = false;
-      menu.querySelector("summary")?.focus();
-    }
-  });
-</script>
 
 <style>
   .alc-tabs {
@@ -164,20 +150,32 @@ const current = activeTab(Astro.url.pathname);
     align-items: stretch;
   }
   .alc-tabs__trigger {
-    list-style: none;
     user-select: none;
   }
-  .alc-tabs__trigger::marker,
-  .alc-tabs__trigger::-webkit-details-marker {
-    display: none;
+  /* "Clouds · AWS" — names the hub you're in without a tab per hub. */
+  .alc-tabs__trigger-current::before {
+    content: "·";
+    margin-inline-end: 7px;
+    color: var(--alc-fg-4);
+    font-weight: 400;
   }
-  .alc-tabs__menu-root[open] > .alc-tabs__trigger {
+  /* Menus open on hover and collapse as soon as the pointer leaves the
+     trigger + menu. Keyboard users open them by tabbing in (:focus-visible
+     only, so a mouse click doesn't pin a menu open after moving off). */
+  .alc-tabs__menu-root:hover > .alc-tabs__trigger,
+  .alc-tabs__menu-root:has(:focus-visible) > .alc-tabs__trigger {
     color: var(--alc-accent-deep);
   }
-  .alc-tabs__menu-root[open] .alc-tabs__chevron {
+  .alc-tabs__menu-root:hover .alc-tabs__chevron,
+  .alc-tabs__menu-root:has(:focus-visible) .alc-tabs__chevron {
     transform: rotateZ(180deg);
   }
+  .alc-tabs__menu-root:hover > .alc-tabs__menu,
+  .alc-tabs__menu-root:has(:focus-visible) > .alc-tabs__menu {
+    display: block;
+  }
   .alc-tabs__menu {
+    display: none;
     position: absolute;
     top: 100%;
     inset-inline-start: 0;

@@ -11,7 +11,7 @@
  * - "start" — always-visible tabs on the left: Alchemy itself (Core, CLI,
  *   Domain), not third-party providers.
  * - "hub"   — provider hubs, grouped by `category`. Desktop renders one
- *   click-to-open dropdown per category (single-hub categories share a
+ *   hover dropdown per category (single-hub categories share a
  *   "More" dropdown); the mobile drawer renders the same groups as
  *   headings. Adding a provider means adding one entry here.
  * - "end"   — meta sections pinned to the right (Reference, Blog, Compare).
