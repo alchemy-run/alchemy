@@ -17,7 +17,6 @@ import { Sessions, SESSIONS_INDEX } from "./Sessions.ts";
 const cors = {
   "access-control-allow-origin": "*",
   "access-control-allow-methods": "POST, OPTIONS",
-  "access-control-allow-headers": "content-type",
 };
 
 /** The call reached no Durable Object (as opposed to the session's own errors). */
@@ -171,7 +170,16 @@ export default Cloudflare.Worker(
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;
         if (request.method === "OPTIONS") {
-          return HttpServerResponse.empty({ status: 204, headers: cors });
+          // Allow what the browser asks for: Effect's HttpClient adds trace
+          // headers (`traceparent`, `b3`) to every RPC request.
+          return HttpServerResponse.empty({
+            status: 204,
+            headers: {
+              ...cors,
+              "access-control-allow-headers":
+                request.headers["access-control-request-headers"] ?? "content-type",
+            },
+          });
         }
         // The server is built per request, in the request's scope (its
         // handlers reach the Durable Objects with this request's context).
