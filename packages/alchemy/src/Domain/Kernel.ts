@@ -808,7 +808,11 @@ export const make = (definitions: Definitions): Kernel => {
             let n = 0;
             const prefix = `${delivery.source}:${delivery.seq}:${policy.policyName}${route === undefined ? "" : `:${route}`}`;
             return handler({ key, route, source, event, envelope, state }).pipe(
-              Effect.provideService(Aggregate.PolicyRun, { next: () => `${prefix}:${n++}` }),
+              Effect.provideService(Aggregate.PolicyRun, {
+                policy: policy.policyName,
+                key,
+                next: () => `${prefix}:${n++}`,
+              }),
             );
           },
           { discard: true },

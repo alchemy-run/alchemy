@@ -7,10 +7,12 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import type { DurableDeferred, WorkflowEngine } from "effect/workflow";
+import { CurrentActivity } from "../WorkflowEncoding.ts";
 import * as Aggregate from "./Aggregate.ts";
 import type * as ExternalSystem from "./ExternalSystem.ts";
 import * as InMemory from "./InMemory.ts";
 import * as Model from "./Model.ts";
+import type * as Policy from "./Policy.ts";
 import type * as Saga from "./Saga.ts";
 import type * as DomainStream from "./Stream.ts";
 import type * as View from "./View.ts";
@@ -67,8 +69,19 @@ export type Step =
       readonly key: Aggregate.Ref;
       readonly events: ReadonlyArray<{ readonly _tag: string }>;
     }
-  | { readonly _tag: "ExpectCall"; readonly op: ExternalSystem.Op; readonly args: unknown }
-  | { readonly _tag: "Resolve"; readonly op: ExternalSystem.Op; readonly value: unknown }
+  | {
+      readonly _tag: "ExpectCall";
+      readonly tag: string | undefined;
+      readonly op: ExternalSystem.Op;
+      readonly args: unknown;
+      readonly from: CallFrom | undefined;
+    }
+  | {
+      readonly _tag: "Resolve";
+      readonly tag: string | undefined;
+      readonly op: ExternalSystem.Op;
+      readonly value: unknown;
+    }
   | { readonly _tag: "Clock"; readonly at: string | number }
   | {
       readonly _tag: "Signal";
@@ -174,19 +187,42 @@ const streamed = <S extends DomainStream.Any>(
   events: events as ReadonlyArray<{ readonly _tag: string }>,
 });
 
-/** A policy called this external system operation with these (partial) arguments and is waiting. */
-const expectCall = <Args>(op: ExternalSystem.Op<Args, any>, args: Partial<Args>): Step => ({
-  _tag: "ExpectCall",
-  op,
-  args,
-});
+/**
+ * Who made an external system call: the policy or saga, and the key it ran
+ * for. Narrows `expectCall` when calls with the same arguments come from
+ * different places.
+ */
+export interface CallFrom {
+  readonly by?: Policy.Any | Saga.Any;
+  readonly key?: Aggregate.Ref | string;
+}
 
-/** Complete the oldest pending call to this external system operation. */
-const resolve = <Success>(op: ExternalSystem.Op<any, Success>, value: Success): Step => ({
-  _tag: "Resolve",
-  op,
-  value,
-});
+/**
+ * An external system call matching these (partial) arguments is waiting.
+ * With a tag first, the tag names that call, so a later `resolve` can answer
+ * exactly it. Fails if no pending call matches, or if several do; `from`
+ * narrows the match to calls made by one policy or saga, for one key.
+ */
+const expectCall: {
+  <Args>(op: ExternalSystem.Op<Args, any>, args: Partial<Args>, from?: CallFrom): Step;
+  <Args>(tag: string, op: ExternalSystem.Op<Args, any>, args: Partial<Args>, from?: CallFrom): Step;
+} = (...a: ReadonlyArray<any>): Step =>
+  typeof a[0] === "string"
+    ? { _tag: "ExpectCall", tag: a[0], op: a[1], args: a[2], from: a[3] }
+    : { _tag: "ExpectCall", tag: undefined, op: a[0], args: a[1], from: a[2] };
+
+/**
+ * Answer an external system call. With a tag first, answers the call
+ * `expectCall` tagged; without one, answers the only pending call to the
+ * operation, and fails if several are pending.
+ */
+const resolve: {
+  <Success>(op: ExternalSystem.Op<any, Success>, value: Success): Step;
+  <Success>(tag: string, op: ExternalSystem.Op<any, Success>, value: Success): Step;
+} = (...a: ReadonlyArray<any>): Step =>
+  typeof a[0] === "string"
+    ? { _tag: "Resolve", tag: a[0], op: a[1], value: a[2] }
+    : { _tag: "Resolve", tag: undefined, op: a[0], value: a[1] };
 
 /** Move the clock: later commands are stamped with it, and scheduled commands now due fire. */
 const clock = (at: string | number): Step => ({ _tag: "Clock", at });
@@ -276,8 +312,32 @@ interface PendingCall {
   readonly op: string;
   readonly args: unknown;
   readonly deferred: Deferred.Deferred<unknown>;
-  expected: boolean;
+  /** The name `expectCall` gave it, if any. */
+  tag: string | undefined;
+  /** The policy or saga that made it, and the key it ran for. */
+  readonly by: string | undefined;
+  readonly key: string | undefined;
 }
+
+/** Where an external system call came from: a saga step, or a policy run. */
+const callOrigin = Effect.gen(function* () {
+  const activity = yield* Effect.serviceOption(CurrentActivity);
+  if (Option.isSome(activity)) {
+    return { by: activity.value.workflow, key: activity.value.executionId };
+  }
+  const run = yield* Effect.serviceOption(Aggregate.PolicyRun);
+  if (Option.isSome(run)) return { by: run.value.policy, key: String(run.value.key.id) };
+  return { by: undefined, key: undefined };
+});
+
+const nameOf = (by: Policy.Any | Saga.Any) =>
+  "policyName" in by ? (by as Policy.Any).policyName : (by as Saga.Any).sagaName;
+
+const fromMatches = (from: CallFrom | undefined, call: PendingCall) =>
+  from === undefined ||
+  ((from.by === undefined || nameOf(from.by) === call.by) &&
+    (from.key === undefined ||
+      (typeof from.key === "string" ? from.key : String(from.key.id)) === call.key));
 
 /** Options for {@link make}. */
 interface StoryOptions<Policies, LE, LR, Systems> {
@@ -345,7 +405,15 @@ const make =
                 platform.control.suspended(
                   Effect.gen(function* () {
                     const deferred = yield* Deferred.make<unknown>();
-                    calls.push({ system: system.systemName, op, args, deferred, expected: false });
+                    const origin = yield* callOrigin;
+                    calls.push({
+                      system: system.systemName,
+                      op,
+                      args,
+                      deferred,
+                      tag: undefined,
+                      ...origin,
+                    });
                     return yield* Deferred.await(deferred);
                   }),
                 ),
@@ -574,20 +642,27 @@ const make =
               break;
             }
             case "ExpectCall": {
-              const call = calls.find(
-                (c) => c.system === s.op.system && c.op === s.op.op && !c.expected,
+              const name = `${s.op.system}.${s.op.op}`;
+              const pending = calls.filter((c) => c.system === s.op.system && c.op === s.op.op);
+              const matching = pending.filter(
+                (c) => c.tag === undefined && partial(s.args, c.args) && fromMatches(s.from, c),
               );
-              if (!call) {
+              if (matching.length === 0) {
                 return yield* fail(
-                  `no pending call to ${s.op.system}.${s.op.op}; pending: ${show(calls.map((c) => `${c.system}.${c.op}`))}`,
+                  `no pending call to ${name} matches ${show(s.args)}${s.from ? " from there" : ""}; pending: ${show(pending.map((c) => ({ args: c.args, by: c.by, key: c.key })))}`,
                 );
               }
-              if (!partial(s.args, call.args)) {
+              if (matching.length > 1) {
                 return yield* fail(
-                  `${s.op.system}.${s.op.op} was called with ${show(call.args)}, expected ${show(s.args)}`,
+                  `${matching.length} pending calls to ${name} match ${show(s.args)}; narrow the arguments, or say which policy or saga made it with { by, key }`,
                 );
               }
-              call.expected = true;
+              if (s.tag !== undefined) {
+                if (calls.some((c) => c.tag === s.tag)) {
+                  return yield* fail(`"${s.tag}" already names a pending call`);
+                }
+                matching[0]!.tag = s.tag;
+              }
               break;
             }
             case "Signal": {
@@ -621,9 +696,32 @@ const make =
               break;
             }
             case "Resolve": {
-              const index = calls.findIndex((c) => c.system === s.op.system && c.op === s.op.op);
-              if (index === -1) return yield* fail(`no pending call to ${s.op.system}.${s.op.op}`);
-              const [call] = calls.splice(index, 1);
+              const name = `${s.op.system}.${s.op.op}`;
+              let call: PendingCall | undefined;
+              if (s.tag !== undefined) {
+                call = calls.find((c) => c.tag === s.tag);
+                if (!call) {
+                  const tags = calls.flatMap((c) => (c.tag === undefined ? [] : [`"${c.tag}"`]));
+                  return yield* fail(
+                    `no pending call is named "${s.tag}"; named: ${tags.length > 0 ? tags.join(", ") : "none"}`,
+                  );
+                }
+                if (call.system !== s.op.system || call.op !== s.op.op) {
+                  return yield* fail(
+                    `"${s.tag}" names a call to ${call.system}.${call.op}, not ${name}`,
+                  );
+                }
+              } else {
+                const pending = calls.filter((c) => c.system === s.op.system && c.op === s.op.op);
+                if (pending.length === 0) return yield* fail(`no pending call to ${name}`);
+                if (pending.length > 1) {
+                  return yield* fail(
+                    `${pending.length} pending calls to ${name}; name each with expectCall("<tag>", ...) and resolve it by tag`,
+                  );
+                }
+                call = pending[0];
+              }
+              calls.splice(calls.indexOf(call!), 1);
               yield* Deferred.succeed(call!.deferred, s.value);
               yield* settle(step);
               break;
@@ -698,6 +796,14 @@ const make =
  * Story.expectCall(FraudCheck.score, { accountId: account.id, amount: 60_000 }),
  * Story.resolve(FraudCheck.score, { risk: 0.95 }),
  * Story.clock("2026-01-02T09:00:00Z"),
+ * ```
+ *
+ * **Example:** Name calls when several are waiting
+ * ```typescript
+ * Story.expectCall("a-1", FraudCheck.score, { accountId: a1.id }),
+ * Story.expectCall("a-2", FraudCheck.score, { accountId: a2.id }),
+ * Story.resolve("a-2", FraudCheck.score, { risk: 0.1 }),
+ * Story.resolve("a-1", FraudCheck.score, { risk: 0.95 }),
  * ```
  *
  * ### Sagas

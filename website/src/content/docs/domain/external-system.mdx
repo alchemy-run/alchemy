@@ -167,7 +167,7 @@ export const StripeSettlements = Effect.gen(function* () {
 
 ## Test external system calls
 
-In a story, an external system call waits until you resolve it. `expectCall` checks what was asked, and `resolve` answers it.
+In a story, an external system call waits until you resolve it. `expectCall` checks what was asked, and `resolve` answers it. With several calls waiting, name each one; see [Answer several calls](/domain/testing-models#answer-several-calls).
 
 ```typescript
 // test/settlements.test.ts

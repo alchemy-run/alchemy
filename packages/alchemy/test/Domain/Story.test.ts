@@ -263,6 +263,84 @@ describe("Domain Story", () => {
     ),
   );
 
+  it.effect("answers two pending calls by tag, in any order", () =>
+    story(
+      Story.given(c1, new Incremented({ by: 10, total: 10 })),
+      Story.given(c2, new Incremented({ by: 10, total: 10 })),
+      Story.when(c1, new Increment({ by: 6 })),
+      Story.when(c2, new Increment({ by: 10 })),
+      Story.expectCall("c1", Approval.check, { total: 16 }),
+      Story.expectCall("c2", Approval.check, { total: 20 }),
+      Story.resolve("c2", Approval.check, { ok: false }),
+      Story.resolve("c1", Approval.check, { ok: true }),
+      Story.then(c1, new Incremented({ by: 6, total: 16 }), new Capped()),
+      Story.then(c2, new Incremented({ by: 10, total: 20 })),
+    ),
+  );
+
+  it.effect("tells identical calls apart by who made them", () =>
+    story(
+      Story.given(c1, new Incremented({ by: 10, total: 10 })),
+      Story.given(c2, new Incremented({ by: 10, total: 10 })),
+      Story.when(c1, new Increment({ by: 6 })),
+      Story.when(c2, new Increment({ by: 6 })),
+      Story.expectCall("c2", Approval.check, { total: 16 }, { by: CapWhenLarge, key: c2 }),
+      Story.expectCall("c1", Approval.check, { total: 16 }, { by: CapWhenLarge, key: c1 }),
+      Story.resolve("c1", Approval.check, { ok: false }),
+      Story.resolve("c2", Approval.check, { ok: true }),
+      Story.then(c1, new Incremented({ by: 6, total: 16 })),
+      Story.then(c2, new Incremented({ by: 6, total: 16 }), new Capped()),
+    ),
+  );
+
+  it.effect("an untagged resolve with several pending calls fails", () =>
+    story(
+      Story.given(c1, new Incremented({ by: 10, total: 10 })),
+      Story.given(c2, new Incremented({ by: 10, total: 10 })),
+      Story.when(c1, new Increment({ by: 6 })),
+      Story.when(c2, new Increment({ by: 6 })),
+      Story.resolve(Approval.check, { ok: true }),
+    ).pipe(
+      Effect.flip,
+      Effect.map((failure) =>
+        expect(String((failure as any).message)).toContain("2 pending calls to Approval.check"),
+      ),
+    ),
+  );
+
+  it.effect("identical calls can't be tagged without saying who made them", () =>
+    story(
+      Story.given(c1, new Incremented({ by: 10, total: 10 })),
+      Story.given(c2, new Incremented({ by: 10, total: 10 })),
+      Story.when(c1, new Increment({ by: 6 })),
+      Story.when(c2, new Increment({ by: 6 })),
+      Story.expectCall("c1", Approval.check, { total: 16 }),
+    ).pipe(
+      Effect.flip,
+      Effect.map((failure) =>
+        expect(String((failure as any).message)).toContain(
+          "2 pending calls to Approval.check match",
+        ),
+      ),
+    ),
+  );
+
+  it.effect("resolving a tag no call has fails", () =>
+    story(
+      Story.given(c1, new Incremented({ by: 10, total: 10 })),
+      Story.when(c1, new Increment({ by: 6 })),
+      Story.expectCall("c1", Approval.check, { total: 16 }),
+      Story.resolve("c3", Approval.check, { ok: true }),
+    ).pipe(
+      Effect.flip,
+      Effect.map((failure) =>
+        expect(String((failure as any).message)).toContain(
+          'no pending call is named "c3"; named: "c1"',
+        ),
+      ),
+    ),
+  );
+
   it.effect("fails on an unasserted rejection", () =>
     story(Story.when(c1, new Increment({ by: 99 }))).pipe(
       Effect.flip,

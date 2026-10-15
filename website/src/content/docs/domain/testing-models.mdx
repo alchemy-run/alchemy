@@ -117,6 +117,25 @@ it.effect("a risky withdrawal freezes the account", () =>
 );
 ```
 
+## Answer several calls
+
+`resolve` answers the only call waiting on an operation. When several are waiting, name each one as you expect it, and answer it by name:
+
+```typescript
+Story.expectCall("a-1", FraudCheck.score, { accountId: a1.id }),
+Story.expectCall("a-2", FraudCheck.score, { accountId: a2.id }),
+Story.resolve("a-2", FraudCheck.score, { risk: 0.1 }),
+Story.resolve("a-1", FraudCheck.score, { risk: 0.95 }),
+```
+
+Calls with the same arguments are told apart by who made them, a policy or saga and the key it ran for:
+
+```typescript
+Story.expectCall("a-1", FraudCheck.score, { amount: 60_000 }, { by: FraudReview, key: a1 }),
+```
+
+A story fails when a name or an answer could fit more than one call, so it never answers the wrong one.
+
 ## Move the clock
 
 A story's clock starts at `2026-01-01T00:00:00Z`, and `Story.clock` moves it. Commands are stamped with it, so time-based rules like a daily limit are easy to test, and scheduled commands fire when it passes their time. See [Deadlines](/domain/deadlines).
