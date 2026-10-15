@@ -318,12 +318,20 @@ export const buildStackProviders = Effect.fn("buildStackProviders")(function* (
   return { authProviders, context, stackEffect };
 });
 
-/** Every provider's auth provider, merged into one registering layer. */
+/**
+ * Every provider's auth provider, merged into one registering layer. One
+ * provider whose auth fails to load is skipped with a warning, so it can't
+ * take every other provider's auth down with it.
+ */
 const contributedAuth = Effect.fn("contributedAuth")(function* () {
   const layers = yield* Effect.forEach(
     yield* Contributions.load(),
     (provider) =>
-      provider.auth ? Contributions.resolve(provider, "auth", provider.auth) : Effect.void,
+      provider.auth
+        ? Contributions.resolve(provider, "auth", provider.auth).pipe(
+            Effect.catch((error) => Effect.as(Effect.logWarning(error.message), undefined)),
+          )
+        : Effect.void,
     { concurrency: "unbounded" },
   );
   return Layer.mergeAll(Layer.empty, ...layers.filter((layer) => layer !== undefined));

@@ -248,6 +248,35 @@ const findDependencyManifest = Effect.fn(function* (dir: string, name: string) {
   }
 });
 
+/**
+ * The packages a project in `dir` can contribute providers from: the direct
+ * dependencies of every `package.json` from `dir` up (a workspace package and
+ * the monorepo root above it), plus every installed `@alchemy.run/*` package
+ * reachable from `dir`, which a monorepo root can import without listing.
+ */
+const candidatePackages = Effect.fn(function* (dir: string) {
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const names = new Set<string>();
+  let current = dir;
+  while (true) {
+    const manifest = yield* readManifest(path.join(current, "package.json"));
+    for (const name of Object.keys({ ...manifest?.dependencies, ...manifest?.devDependencies })) {
+      names.add(name);
+    }
+    const scope = path.join(current, "node_modules", PACKAGE_SCOPE);
+    if (yield* fs.exists(scope)) {
+      for (const entry of yield* fs.readDirectory(scope)) names.add(`${PACKAGE_SCOPE}/${entry}`);
+    }
+    const parent = path.dirname(current);
+    if (parent === current) return names;
+    current = parent;
+  }
+});
+
+/** The npm scope of alchemy's own provider packages. */
+const PACKAGE_SCOPE = "@alchemy.run";
+
 /** A provider specifier, and the manifest that declared it when not alchemy's own. */
 interface Declared {
   readonly specifier: string;
@@ -260,7 +289,10 @@ interface Declared {
   };
 }
 
-/** The conditions an ESM `import` resolves exports with, in priority order. */
+/**
+ * The conditions an ESM `import` matches. Node picks the first matching key in
+ * the `exports` object's own order, so only membership matters here.
+ */
 const importConditions = new Set(
   typeof Bun !== "undefined" ? ["bun", "import", "node", "default"] : ["import", "node", "default"],
 );
@@ -365,14 +397,10 @@ const discover = Effect.fn("Contributions.discover")(function* (cwd: string) {
   const own = yield* readManifest(
     yield* path.fromFileUrl(new URL("../package.json", import.meta.url)),
   );
-  // The project's dependencies that declare providers, before alchemy's own:
-  // the first provider with a name wins, so a provider that moved into its own
+  // The project's packages that declare providers, before alchemy's own: the
+  // first provider with a name wins, so a provider that moved into its own
   // package replaces the copy still inside alchemy.
-  const project = yield* readManifest(path.join(cwd, "package.json"));
-  const dependencies = Object.keys({
-    ...project?.dependencies,
-    ...project?.devDependencies,
-  }).filter((name) => name !== own?.name);
+  const dependencies = [...(yield* candidatePackages(cwd))].filter((name) => name !== own?.name);
   for (const name of dependencies) {
     const file = yield* findDependencyManifest(cwd, name);
     if (file === undefined) continue;

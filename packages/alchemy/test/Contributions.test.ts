@@ -91,7 +91,7 @@ describe("Contributions.load", { tags: ["unit", "local"] }, () =>
           "plain-package": { manifest: { exports: { ".": "./index.js" } } },
           "not-installed": {},
         });
-        const own = yield* Contributions.load(process.cwd());
+        const own = yield* Contributions.load(yield* project({}));
         const providers = yield* Contributions.load(root);
         expect(providers.map((provider) => provider.name)).toEqual(
           own.map((provider) => provider.name),
@@ -178,6 +178,49 @@ describe("Contributions.load", { tags: ["unit", "local"] }, () =>
       }).pipe(Effect.scoped),
     );
 
+    it.effect("discovers a provider declared by an ancestor package.json", () =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const root = yield* project({
+          "fake-provider": contributingPackage("fake-provider", `export default { name: "fake" };`),
+        });
+        const workspace = path.join(root, "apps", "infra");
+        yield* fs.makeDirectory(workspace, { recursive: true });
+        yield* fs.writeFileString(
+          path.join(workspace, "package.json"),
+          JSON.stringify({ name: "infra" }),
+        );
+        const names = (yield* Contributions.load(workspace)).map((provider) => provider.name);
+        expect(names).toContain("fake");
+      }).pipe(Effect.scoped),
+    );
+
+    it.effect("discovers an installed @alchemy.run package the project doesn't list", () =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const root = yield* project({});
+        const directory = path.join(root, "node_modules", "@alchemy.run", "fake");
+        yield* fs.makeDirectory(directory, { recursive: true });
+        yield* fs.writeFileString(
+          path.join(directory, "package.json"),
+          JSON.stringify({
+            name: "@alchemy.run/fake",
+            type: "module",
+            exports: { "./Contributions": "./Contributions.js" },
+            alchemy: { contributes: ["@alchemy.run/fake/Contributions"] },
+          }),
+        );
+        yield* fs.writeFileString(
+          path.join(directory, "Contributions.js"),
+          `export default { name: "fake" };`,
+        );
+        const names = (yield* Contributions.load(root)).map((provider) => provider.name);
+        expect(names).toContain("fake");
+      }).pipe(Effect.scoped),
+    );
+
     it.effect("skips a provider whose specifier names another package", () =>
       Effect.gen(function* () {
         const root = yield* project({
@@ -185,7 +228,7 @@ describe("Contributions.load", { tags: ["unit", "local"] }, () =>
             manifest: { alchemy: { contributes: ["fake-provider/Contributions"] } },
           },
         });
-        const own = yield* Contributions.load(process.cwd());
+        const own = yield* Contributions.load(yield* project({}));
         const providers = yield* Contributions.load(root);
         expect(providers.map((provider) => provider.name)).toEqual(
           own.map((provider) => provider.name),
@@ -352,7 +395,8 @@ describe("Alchemist.State lifecycle", { tags: ["unit", "local"] }, () =>
           Alchemist.State.bootstrap({ _tag: "Provider", backend: "nope" }),
         );
         expect(contributionErrorMessage(error)).toBe(
-          "Unknown state backend 'nope'. Available: local, configured, aws, cloudflare.",
+          "Unknown state backend 'nope'. Available: local, configured, aws, cloudflare. " +
+            "Install the package that provides it.",
         );
       }),
     );

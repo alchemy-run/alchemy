@@ -116,7 +116,7 @@ provisions it.
 
 After the bootstrap, Alchemy writes the state-store URL and bearer
 token to a credentials file under your Alchemy profile directory
-(`~/.alchemy/<profile>/cloudflare-state-store.json` by default). On
+(`~/.alchemy/profiles/<profile>/state-stores/cloudflare.json`). On
 CI, set `CI=true`; the credentials are resolved from the Secrets
 Store on every run via a short-lived edge-preview Worker, so nothing
 needs to be persisted to disk.
@@ -129,16 +129,18 @@ Worker, its own secrets in the Secrets Store, and its own cached
 credentials:
 
 ```typescript
-state: Cloudflare.state({ name: "alchemy-state-store-team-a" }),
+state: Cloudflare.state({ name: "team-a" }), // Worker alchemy-state-store-team-a
 ```
 
 Address it from the CLI with `--name`:
 
 ```sh
-alchemy state list --backend cloudflare --name alchemy-state-store-team-a
+alchemy state list --backend cloudflare --name team-a
 ```
 
-`AWS.state({ name })` does the same with an S3 bucket name.
+`AWS.state({ name })` does the same with a separate S3 bucket
+(`alchemy-state-<name>-<account>-<region>-an`). Pass `bucketName` to
+choose the full bucket name yourself.
 
 ## Postgres state store
 

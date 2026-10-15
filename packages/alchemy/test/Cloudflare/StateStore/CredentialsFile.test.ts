@@ -3,9 +3,12 @@ import { describe, expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import type { CredentialsStoreService } from "@/Auth/Credentials.ts";
+import { profileStateStoresDirPath } from "@/Auth/Paths.ts";
 import {
+  clearStoreCredentials,
   CREDENTIALS_FILE,
   deleteStoreCredentials,
+  LEGACY_CREDENTIALS_FILE,
   isStateStoreCredentialsStale,
   readStoreCredentials,
   writeStoreCredentials,
@@ -51,30 +54,39 @@ describe(
   },
 );
 
-/** A credentials store in memory, encoding through each schema like the disk store. */
+/**
+ * A credentials store in memory, encoding through each schema like the disk
+ * store. Files are keyed by directory, so a scoped store is its own folder.
+ */
 const memoryStore = () => {
   const files = new Map<string, unknown>();
-  const key = (profile: string, provider: string) => `${profile}/${provider}`;
-  const store: CredentialsStoreService = {
-    // Yields after reading, so concurrent read-modify-writes interleave as
-    // they can on disk.
-    read: (profile, provider, schema) =>
-      Effect.suspend(() => {
-        const encoded = files.get(key(profile, provider));
-        return encoded === undefined
-          ? Effect.succeed(undefined)
-          : Schema.decodeUnknownEffect(schema)(encoded).pipe(Effect.orDie);
-      }).pipe(Effect.tap(() => Effect.yieldNow)),
-    write: (profile, provider, schema, credentials) =>
-      Schema.encodeEffect(schema)(credentials).pipe(
-        Effect.orDie,
-        Effect.map((encoded) => void files.set(key(profile, provider), encoded)),
-      ),
-    delete: (profile, provider) => Effect.sync(() => void files.delete(key(profile, provider))),
-    deleteProfile: () => Effect.void,
+  const make = (dirFor: (profile: string) => string): CredentialsStoreService => {
+    const key = (profile: string, provider: string) => `${dirFor(profile)}/${provider}`;
+    return {
+      // Yields after reading, so concurrent read-modify-writes interleave as
+      // they can on disk.
+      read: (profile, provider, schema) =>
+        Effect.suspend(() => {
+          const encoded = files.get(key(profile, provider));
+          return encoded === undefined
+            ? Effect.succeed(undefined)
+            : Schema.decodeUnknownEffect(schema)(encoded).pipe(Effect.orDie);
+        }).pipe(Effect.tap(() => Effect.yieldNow)),
+      write: (profile, provider, schema, credentials) =>
+        Schema.encodeEffect(schema)(credentials).pipe(
+          Effect.orDie,
+          Effect.map((encoded) => void files.set(key(profile, provider), encoded)),
+        ),
+      delete: (profile, provider) => Effect.sync(() => void files.delete(key(profile, provider))),
+      deleteProfile: () => Effect.void,
+      scoped: make,
+    };
   };
-  return { store, files };
+  return { store: make((profile) => `credentials/${profile}`), files };
 };
+
+const LEGACY = `credentials/default/${LEGACY_CREDENTIALS_FILE}`;
+const CURRENT = `${profileStateStoresDirPath("default")}/${CREDENTIALS_FILE}`;
 
 const credentials = (url: string) => ({ url, authToken: "t", accountId: ACCOUNT_A });
 
@@ -82,21 +94,36 @@ describe(
   "state-store credentials by store name",
   { tags: ["unit", "provider:cloudflare", "provider:cloudflare:statestore", "local"] },
   () => {
-    it.effect("reads a legacy single-store file as the default store", () =>
+    it.effect("copies a legacy single-store file into the new file and leaves it in place", () =>
       Effect.gen(function* () {
         const { store, files } = memoryStore();
-        files.set(`default/${CREDENTIALS_FILE}`, credentials("https://a.workers.dev"));
+        files.set(LEGACY, credentials("https://a.workers.dev"));
         expect(yield* readStoreCredentials(store, "default", "alchemy-state-store")).toEqual(
           credentials("https://a.workers.dev"),
         );
         expect(yield* readStoreCredentials(store, "default", "team-a")).toBeUndefined();
+        expect(files.get(CURRENT)).toEqual({
+          stores: { "alchemy-state-store": credentials("https://a.workers.dev") },
+        });
+        expect(files.get(LEGACY)).toEqual(credentials("https://a.workers.dev"));
+      }).pipe(Effect.provide(NodeServices.layer)),
+    );
+
+    it.effect("ignores the legacy file once the new file exists", () =>
+      Effect.gen(function* () {
+        const { store, files } = memoryStore();
+        files.set(CURRENT, { stores: {} });
+        files.set(LEGACY, credentials("https://a.workers.dev"));
+        expect(
+          yield* readStoreCredentials(store, "default", "alchemy-state-store"),
+        ).toBeUndefined();
       }).pipe(Effect.provide(NodeServices.layer)),
     );
 
     it.effect("keeps every store beside the others in one file", () =>
       Effect.gen(function* () {
         const { store, files } = memoryStore();
-        files.set(`default/${CREDENTIALS_FILE}`, credentials("https://a.workers.dev"));
+        files.set(LEGACY, credentials("https://a.workers.dev"));
         yield* writeStoreCredentials(
           store,
           "default",
@@ -109,13 +136,13 @@ describe(
         expect(yield* readStoreCredentials(store, "default", "team-a")).toEqual(
           credentials("https://b.workers.dev"),
         );
-        expect([...files.keys()]).toEqual([`default/${CREDENTIALS_FILE}`]);
+        expect([...files.keys()].sort()).toEqual([LEGACY, CURRENT].sort());
       }).pipe(Effect.provide(NodeServices.layer)),
     );
 
-    it.effect("deleting one store keeps the others; the file goes with the last", () =>
+    it.effect("deleting one store keeps the others", () =>
       Effect.gen(function* () {
-        const { store, files } = memoryStore();
+        const { store } = memoryStore();
         yield* writeStoreCredentials(
           store,
           "default",
@@ -133,31 +160,25 @@ describe(
         expect(yield* readStoreCredentials(store, "default", "team-b")).toEqual(
           credentials("https://b.workers.dev"),
         );
-        yield* deleteStoreCredentials(store, "default", "team-b");
-        expect(files.size).toBe(0);
       }).pipe(Effect.provide(NodeServices.layer)),
     );
 
-    it.effect("deleting the file, as profile edit and logout do, clears every store", () =>
+    it.effect("clearing, as profile edit and logout do, drops every store for good", () =>
       Effect.gen(function* () {
-        const { store } = memoryStore();
-        yield* writeStoreCredentials(
-          store,
-          "default",
-          "alchemy-state-store",
-          credentials("https://a.workers.dev"),
-        );
+        const { store, files } = memoryStore();
+        files.set(LEGACY, credentials("https://a.workers.dev"));
         yield* writeStoreCredentials(
           store,
           "default",
           "team-a",
           credentials("https://b.workers.dev"),
         );
-        yield* store.delete("default", CREDENTIALS_FILE);
+        yield* clearStoreCredentials(store, "default");
         expect(
           yield* readStoreCredentials(store, "default", "alchemy-state-store"),
         ).toBeUndefined();
         expect(yield* readStoreCredentials(store, "default", "team-a")).toBeUndefined();
+        expect(files.get(LEGACY)).toEqual(credentials("https://a.workers.dev"));
       }).pipe(Effect.provide(NodeServices.layer)),
     );
 

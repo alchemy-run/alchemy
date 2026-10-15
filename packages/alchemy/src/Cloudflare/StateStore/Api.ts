@@ -33,6 +33,8 @@ export const STATE_STORE_SCRIPT_NAME = DEFAULT_STATE_STORE_NAME;
  * compare against this constant; a mismatch (or 404) triggers a
  * forced redeploy via the bootstrap flow.
  */
+// TODO: bump to 8 before release. The Worker's typed `StateStoreFailure`
+// responses and secret read retry change its runtime behaviour.
 export const STATE_STORE_VERSION = 7 as const;
 
 /**

@@ -30,7 +30,7 @@ All subcommands share these options:
 | Option              | Description                                                                                                                                    |
 | ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
 | `--backend <name>`  | `configured` (default) uses the stack's state layer; `local` reads `.alchemy/state`, including orphaned state after a failed bootstrap; a provider's store (`aws`, `cloudflare`) is reached from the profile alone, without a stack file |
-| `--name <name>`     | With a provider store, address one other than the account's default: an S3 bucket for `aws`, a state-store Worker for `cloudflare` |
+| `--name <name>`     | With a provider store, address one other than the account's default, by logical name (1-20 lowercase letters, digits and hyphens) |
 | `--profile <name>`  | Auth profile to use (defaults to `$ALCHEMY_PROFILE` or `default`)                                                                        |
 | `--env-file <path>` | Load environment variables from a file                                                                                                         |
 | `--config, -c <file>` | Stack entrypoint to resolve the state layer from (defaults to `alchemy.run.ts`)                                                              |
@@ -114,7 +114,7 @@ before CI uses the store), or to repair an interrupted bootstrap.
 
 - `cloudflare`: deploys the state-store Worker with its Secrets Store
   and auth-token secret. An existing Worker is adopted and its
-  credentials (`~/.alchemy/credentials/<profile>/cloudflare-state-store.json`)
+  credentials (`~/.alchemy/profiles/<profile>/state-stores/cloudflare.json`)
   are refreshed. A partial failure resumes from the leftover local state.
 - `aws`: creates the state bucket with versioning, encryption, a public
   access block and owner-enforced ownership, or converges an existing one
@@ -127,8 +127,8 @@ before CI uses the store), or to repair an interrupted bootstrap.
 ```sh
 alchemy state bootstrap --backend cloudflare
 alchemy state bootstrap --backend cloudflare --profile staging --force
-alchemy state bootstrap --backend aws --name my-state-123456789012-us-east-1-an
-alchemy state bootstrap --backend cloudflare --name alchemy-state-store-team-a
+alchemy state bootstrap --backend aws --name team-a
+alchemy state bootstrap --backend cloudflare --name team-a
 ```
 
 ## `state teardown`

@@ -43,7 +43,7 @@ const findBackend = Effect.fn(function* (backend: string) {
     return yield* new Contributions.ContributionError({
       message: `Unknown state backend '${backend}'. Available: local, configured${[...stores.keys()]
         .map((name) => `, ${name}`)
-        .join("")}.`,
+        .join("")}. Install the package that provides it.`,
     });
   }
   return store;
