@@ -20,20 +20,14 @@ export const resolveName = (id: string, name?: string) =>
   name ? Effect.succeed(name) : createPhysicalName({ id, maxLength: 64, delimiter: "-" });
 
 // A freshly-created IAM operator role (and its inline policies) takes a few
-// seconds to propagate before the Lambda service can assume/use it. The API
-// surfaces that as an InvalidParameterValueException, so retry it briefly
-// (same pattern as Function.ts's role-propagation retry). A genuinely
-// misconfigured role still fails once the bounded retry window elapses.
-export const isOperatorRolePropagationError = (e: { _tag: string; message?: string }) =>
-  e._tag === "InvalidParameterValueException" &&
-  ((e.message?.includes("unable to assume the provided NetworkConnectorOperatorRole") ?? false) ||
-    (e.message?.includes("invalid ConnectorOperatorRole permissions") ?? false));
+// seconds to propagate before Lambda can assume it. A genuinely misconfigured
+// role still fails once the bounded retry window elapses.
+export const isOperatorRolePropagationError = (e: { _tag: string }) =>
+  e._tag === "OperatorRoleNotAssumable";
 
 export const retryRolePropagation =
   (session: ScopedPlanStatusSession) =>
-  <A, E extends { _tag: string; message?: string }, R>(
-    self: Effect.Effect<A, E, R>,
-  ): Effect.Effect<A, E, R> =>
+  <A, E extends { _tag: string }, R>(self: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
     self.pipe(
       Effect.tapError((e) =>
         isOperatorRolePropagationError(e)

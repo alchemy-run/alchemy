@@ -1718,22 +1718,20 @@ export const FunctionProvider = () =>
         yield* Effect.logDebug(`creating function ${id}`);
         const waitStartedAt = Date.now();
 
-        const isRolePropagationError = <
-          E extends Lambda.UpdateFunctionCodeError | Lambda.CreateFunctionError,
-        >(
-          e: E,
+        // A just-created role (or its freshly attached policies, KMS grant
+        // principal, or security group) isn't visible to Lambda yet.
+        const isRolePropagationError = (
+          e:
+            | Lambda.CreateFunctionError
+            | Lambda.UpdateFunctionCodeError
+            | Lambda.UpdateFunctionConfigurationError,
         ) =>
-          e._tag === "InvalidParameterValueException" &&
-          (e.message?.includes("cannot be assumed by Lambda") ||
-            // Freshly attached AWSLambdaVPCAccessExecutionRole still
-            // propagating when a VPC-attached function is created/updated.
-            e.message?.includes("does not have permissions to call CreateNetworkInterface") ||
-            (e.message?.includes("KMS key is invalid for CreateGrant") &&
-              e.message?.includes("ARN does not refer to a valid principal")));
+          e._tag === "ExecutionRoleNotAssumable" ||
+          e._tag === "ExecutionRoleMissingVpcPermissions" ||
+          e._tag === "KmsGrantPrincipalNotReady";
 
         const isSecurityGroupPropagationError = (e: Lambda.CreateFunctionError) =>
-          e._tag === "InvalidParameterValueException" &&
-          e.message?.includes("InvalidGroup.NotFound");
+          e._tag === "SecurityGroupNotFound";
 
         const noteCreateDependencyWait = () =>
           session.note(
