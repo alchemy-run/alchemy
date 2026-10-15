@@ -10,7 +10,8 @@ import { WORKSPACE } from "./Sandbox.ts";
  */
 export const TOOLCHAIN = `
 FROM node:26-bookworm@sha256:a856ae5e25d498bbe5ec85fde88f00f5ed99908fda803ba39d7735ab8574f58c
-RUN corepack enable && npm install -g bun@1.3.13
+# Node 25+ doesn't bundle Corepack, which runs the repository's pinned pnpm.
+RUN npm install -g corepack@0.36.0 bun@1.3.13 && corepack enable
 RUN mkdir -p ${WORKSPACE}
 `;
 
