@@ -348,6 +348,10 @@ export class LifecycleWorkflow extends Cloudflare.Workflow<LifecycleWorkflow>()(
   }),
 ) {}
 
+class JournalUnavailable extends Data.TaggedError("JournalUnavailable")<{
+  cause: Error;
+}> {}
+
 class WorkflowControlUnavailable extends Data.TaggedError("WorkflowControlUnavailable")<{
   operation: string;
   cause: Error;
@@ -384,6 +388,24 @@ export default class LifecycleWorker extends Cloudflare.Worker<LifecycleWorker>(
       );
       return yield* retryWorkflowControl("get", workflow.get(id));
     });
+    // A read the test polls: Cloudflare can fail a Durable Object call with a
+    // transient "internal error; reference = <id>", and reading again is safe.
+    const readEntries = (id: string) =>
+      journals
+        .getByName(id)
+        .entries()
+        .pipe(
+          Effect.catchCause((cause) => {
+            const error = Cause.squash(cause);
+            return error instanceof Cloudflare.RpcCallError &&
+              error.cause instanceof Error &&
+              error.cause.message.startsWith("internal error")
+              ? Effect.fail(new JournalUnavailable({ cause: error.cause }))
+              : Effect.failCause(cause);
+          }),
+          Effect.retry({ schedule: Schedule.exponential("250 millis"), times: 4 }),
+          Effect.orDie,
+        );
     return {
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;
@@ -417,13 +439,13 @@ export default class LifecycleWorker extends Cloudflare.Worker<LifecycleWorker>(
           return HttpServerResponse.text("ok");
         }
         if (action === "journal") {
-          return yield* HttpServerResponse.json((yield* journals.getByName(value).entries()) ?? []);
+          return yield* HttpServerResponse.json((yield* readEntries(value)) ?? []);
         }
         if (action === "status") {
           const instance = yield* retryWorkflowControl("get", workflow.get(value));
           return yield* HttpServerResponse.json({
             ...(yield* retryWorkflowControl("status", instance.status())),
-            entries: (yield* journals.getByName(value).entries()) ?? [],
+            entries: (yield* readEntries(value)) ?? [],
           });
         }
         if (path === "/ready" && request.method === "GET") {
@@ -447,7 +469,10 @@ export default class LifecycleWorker extends Cloudflare.Worker<LifecycleWorker>(
                   error.cause.message ===
                     'The RPC receiver does not implement the method "entries".') ||
                   (error.cause.name === "Error" &&
-                    /^internal error; reference = [a-z0-9]+$/.test(error.cause.message)))
+                    /^internal error; reference = [a-z0-9]+$/.test(error.cause.message)) ||
+                  // The object still runs the deploy placeholder on this edge.
+                  (error.cause.name === "Error" &&
+                    error.cause.message.startsWith("Alchemy worker is being deployed")))
               ) {
                 return Effect.succeed(
                   HttpServerResponse.text("LifecycleJournal.entries not ready", {

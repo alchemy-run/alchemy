@@ -79,8 +79,13 @@ const probeWorkflow = Effect.fn(function* (url: string, className = "LifecycleWo
     // A brand-new script reaches Workflow hosts one at a time, and Cloudflare
     // exposes no propagation API. Only a probe may observe the script (or its
     // entrypoint) as absent; scenario instances never retry.
-    // An instance still queued after polling has not been picked up yet.
+    // An instance still queued after polling has not been picked up yet, and
+    // one that hit a Workflows "internal error; reference = <id>" says nothing
+    // about the script: both just mean "not ready yet".
     if (status.status === "queued") return false;
+    if (status.status === "errored" && status.error?.message?.startsWith("internal error")) {
+      return false;
+    }
     if (
       status.status === "errored" &&
       ((status.error?.name === "Error" && status.error.message === "Worker not found.") ||
@@ -383,9 +388,10 @@ describe.concurrent.each([
             // Native status() can reject during compensation; observe cleanup first.
             const journal = yield* request(`${url}/journal/${id}`).pipe(
               Effect.flatMap((body) => Effect.try(() => JSON.parse(body) as string[])),
+              // Workflows can take a while to pick up a new instance.
               Effect.repeat({
                 schedule: Schedule.spaced("2 seconds"),
-                times: 10,
+                times: 30,
                 until: (actual) => actual.includes(entries[entries.length - 1]),
               }),
             );
@@ -395,7 +401,7 @@ describe.concurrent.each([
             Effect.flatMap((body) => Effect.try(() => JSON.parse(body) as Status)),
             Effect.repeat({
               schedule: Schedule.spaced("2 seconds"),
-              times: 10,
+              times: 30,
               until: (status) => status.status === "complete" || status.status === "errored",
             }),
           );
@@ -435,7 +441,7 @@ describe.concurrent.each([
             expect(status.output).toEqual(entries);
           }
         }),
-        { tags: [...(dev ? ["local"] : ["live"])], timeout: 60_000 },
+        { tags: [...(dev ? ["local"] : ["live"])], timeout: 120_000 },
       );
     }
   },

@@ -67,11 +67,15 @@ export const makeRpcStub = <Shape>(
             }).pipe(
               // Right after a deploy, an object can still start on the
               // placeholder script, which runs none of the real code and
-              // resets itself so the next call gets the deployed code.
+              // resets itself so the next call gets the deployed code. The
+              // new code can take a while to reach every edge (~35s here).
               Effect.retry({
                 while: (error) => isPlaceholderReset(error.cause),
-                schedule: Schedule.exponential("200 millis"),
-                times: 6,
+                schedule: Schedule.min([
+                  Schedule.exponential("200 millis"),
+                  Schedule.spaced("2 seconds"),
+                ]),
+                times: 20,
               }),
               Effect.flatMap((value) => decodeRpcResult(value, revive)),
             );
