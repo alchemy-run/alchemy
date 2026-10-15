@@ -17,7 +17,7 @@ type Client = RpcClient.RpcClient<RpcGroup.Rpcs<typeof HarnessRpcs>, RpcClientEr
 export class Api extends Context.Service<Api, Client>()("harness/e2e/Api") {}
 
 const runtime = ManagedRuntime.make(
-  Layer.effect(Api, HarnessRpcs.pipe(RpcClient.make)).pipe(
+  Layer.effect(Api, RpcClient.make(HarnessRpcs)).pipe(
     Layer.provide(RpcClient.layerProtocolHttp({ url: API_URL })),
     Layer.provide(Layer.mergeAll(RpcSerialization.layerNdjson, FetchHttpClient.layer)),
   ),
