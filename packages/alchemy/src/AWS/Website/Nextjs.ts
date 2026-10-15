@@ -17,7 +17,12 @@ import { Bucket } from "../S3/Bucket.ts";
 import { Queue } from "../SQS/Queue.ts";
 import { AssetDeployment } from "./AssetDeployment.ts";
 import { asRouterDomain, registerDevRouterRoute } from "./DevRouterRoute.ts";
-import { checkWebsiteRegions } from "./FrameworkSite.ts";
+import {
+  checkWebsiteRegions,
+  siteEndpoint,
+  type FunctionServerProps,
+  type WebFunctionServerProps,
+} from "./FrameworkSite.ts";
 import {
   normalizeWebsiteDomain,
   type WebsiteAssetsConfig,
@@ -39,7 +44,8 @@ const NEXTJS_WEB_SERVE_ENTRY = "serve-node.mjs";
 /** The S3 key prefix the OpenNext ISR/fetch cache seed is uploaded under. */
 export const NEXTJS_CACHE_PREFIX = "_cache";
 
-export interface NextjsProps {
+/** Props shared by both server forms of {@link Nextjs}. */
+export interface NextjsBaseProps {
   /**
    * Project root directory (the directory containing `next.config.ts`).
    * @default "."
@@ -56,42 +62,6 @@ export interface NextjsProps {
    */
   dev?: ServerDevProps;
   /**
-   * What runs the SSR server and the image optimizer. `"web-function"`
-   * runs each on a Lambda Web Function with OpenNext's `node` wrapper:
-   * one environment serves many requests and responses stream.
-   * `"function"` runs them on Lambda Functions behind Function URLs, for
-   * Regions without Web Functions. ISR revalidation always runs on a Lambda
-   * Function, since it consumes an SQS queue.
-   * @default "web-function"
-   */
-  server?: "web-function" | "function";
-  /**
-   * Requests one server environment serves at once (1–128). Only applies
-   * to `server: "web-function"`.
-   * @default 64
-   */
-  maxConcurrencyPerEnvironment?: number;
-  /**
-   * Maximum server environments per Region (2–10,000). Only applies to
-   * `server: "web-function"`.
-   */
-  maxEnvironments?: number;
-  /**
-   * Additional AWS Regions to serve the SSR server from. The server's Web
-   * Function gets one global domain that routes each request to the
-   * nearest Region, and CloudFront forwards to it. The
-   * ISR cache, tag table and revalidation queue stay in the home Region. Only applies to
-   * `server: "web-function"`. Changing it gives the server a new domain;
-   * the site's URL stays the same.
-   */
-  regions?: string[];
-  /**
-   * Memory allocated to the server function, in MB. Only applies to
-   * `server: "function"`; Web Functions have a fixed 2 GB.
-   * @default 1024
-   */
-  memorySize?: number;
-  /**
    * Maximum server request duration.
    * @default 30 seconds
    */
@@ -101,26 +71,6 @@ export interface NextjsProps {
    * Values accept `Output`s (e.g. `API_URL: api.url`).
    */
   env?: Record<string, any>;
-  /**
-   * Server instruction set architecture.
-   * @default "x86_64"
-   */
-  architecture?: "x86_64" | "arm64";
-  /**
-   * Lambda runtime for the server function.
-   * @default "nodejs24.x"
-   */
-  runtime?: FunctionProps["runtime"];
-  /**
-   * Image optimization (Lambda) configuration.
-   */
-  imageOptimization?: {
-    /**
-     * Memory allocated to the image optimization function, in MB.
-     * @default 1536
-     */
-    memorySize?: number;
-  };
   /**
    * Static asset upload configuration.
    */
@@ -164,6 +114,33 @@ export interface NextjsProps {
    */
   tags?: Record<string, string>;
 }
+
+/**
+ * The server and the image optimizer on Lambda Functions behind Function
+ * URLs: for servers that need more than 2 GB of memory or x86_64, or
+ * Regions without Web Functions.
+ */
+export interface NextjsFunctionServerProps extends FunctionServerProps {
+  /**
+   * Image optimization (Lambda) configuration.
+   */
+  imageOptimization?: {
+    /**
+     * Memory allocated to the image optimization function, in MB.
+     * @default 1536
+     */
+    memorySize?: number;
+  };
+}
+
+/**
+ * Props for {@link Nextjs}. The SSR server and the image optimizer run on
+ * Lambda Web Functions with OpenNext's `node` wrapper by default (each
+ * environment serves many requests and responses stream); set
+ * `server: "function"` for Lambda Functions. ISR revalidation always runs
+ * on a Lambda Function, since it consumes an SQS queue.
+ */
+export type NextjsProps = NextjsBaseProps & (WebFunctionServerProps | NextjsFunctionServerProps);
 
 /**
  * Deploy a Next.js application to AWS with the OpenNext
@@ -220,7 +197,7 @@ export interface NextjsProps {
  */
 
 export const Nextjs = Effect.fn("AWS.Website.Nextjs")(
-  function* (id: string, propsIn: InputProps<NextjsProps> = {}) {
+  function* (id: string, propsIn: InputProps<NextjsProps, "server"> = {}) {
     const props = propsIn as NextjsProps;
     yield* checkWebsiteRegions(`AWS.Website.Nextjs "${id}"`, props);
     const ctx = yield* AlchemyContext;
@@ -349,9 +326,12 @@ export const Nextjs = Effect.fn("AWS.Website.Nextjs")(
           bundle: false,
           authType: "ApplicationManaged",
           timeout: props.timeout ?? Duration.seconds(30),
-          maxConcurrencyPerEnvironment: props.maxConcurrencyPerEnvironment,
-          maxEnvironments: props.maxEnvironments,
-          regions: props.regions,
+          ...(props.server === "function"
+            ? {}
+            : {
+                maxConcurrencyPerEnvironment: props.maxConcurrencyPerEnvironment,
+                maxEnvironments: props.maxEnvironments,
+              }),
           env: serverEnv,
         })
       : yield* LambdaFunction("Server", {
@@ -363,9 +343,9 @@ export const Nextjs = Effect.fn("AWS.Website.Nextjs")(
           // OpenNext's server-functions/default is a complete deployment unit
           // (entry + traced .next output + its own node_modules) — ship as-is.
           bundle: false,
-          runtime: props.runtime ?? "nodejs24.x",
-          architecture: props.architecture,
-          memorySize: props.memorySize ?? 1024,
+          runtime: (props.server === "function" ? props.runtime : undefined) ?? "nodejs24.x",
+          architecture: props.server === "function" ? props.architecture : undefined,
+          memorySize: (props.server === "function" ? props.memorySize : undefined) ?? 1024,
           timeout: props.timeout ?? Duration.seconds(30),
           env: serverEnv,
           functionUrl: {
@@ -459,7 +439,6 @@ export const Nextjs = Effect.fn("AWS.Website.Nextjs")(
           bundle: false,
           authType: "ApplicationManaged",
           timeout: Duration.seconds(25),
-          regions: props.regions,
           env: { BUCKET_NAME: bucket.bucketName },
         })
       : yield* LambdaFunction("ImageOptimization", {
@@ -469,7 +448,8 @@ export const Nextjs = Effect.fn("AWS.Website.Nextjs")(
           bundle: false,
           runtime: "nodejs24.x",
           architecture: "arm64",
-          memorySize: props.imageOptimization?.memorySize ?? 1536,
+          memorySize:
+            (props.server === "function" ? props.imageOptimization?.memorySize : undefined) ?? 1536,
           timeout: Duration.seconds(25),
           env: {
             BUCKET_NAME: bucket.bucketName,
@@ -498,15 +478,19 @@ export const Nextjs = Effect.fn("AWS.Website.Nextjs")(
       }
       return new URL(url).hostname;
     };
-    // A Web Function's endpoint domain, or a Function URL's host.
-    const hostOf = (fn: WebFunction | LambdaFunction): Input<string> =>
-      onWebFunction
-        ? (fn as WebFunction).domainName
-        : (Output.map(urlHost)((fn as LambdaFunction).functionUrl as any) as Input<string>);
-    const urlOf = (fn: WebFunction | LambdaFunction) =>
-      onWebFunction ? (fn as WebFunction).url : (fn as LambdaFunction).functionUrl;
-    const serverHost = hostOf(server);
-    const imageHost = hostOf(imageFunction);
+    // CloudFront reaches each server through its Web Function endpoint
+    // (one per Region set, see `siteEndpoint`), or its Function URL.
+    const webProps = props.server === "function" ? {} : props;
+    const serverEndpoint = onWebFunction
+      ? yield* siteEndpoint("ServerEndpoint", server as WebFunction, webProps)
+      : undefined;
+    const imageEndpoint = onWebFunction
+      ? yield* siteEndpoint("ImageEndpoint", imageFunction as WebFunction, webProps)
+      : undefined;
+    const functionUrlHost = (fn: WebFunction | LambdaFunction): Input<string> =>
+      Output.map(urlHost)((fn as LambdaFunction).functionUrl as any) as Input<string>;
+    const serverHost = serverEndpoint?.domainName ?? functionUrlHost(server);
+    const imageHost = imageEndpoint?.domainName ?? functionUrlHost(imageFunction);
 
     const siteProps: StaticSiteProps = {
       path: build.clientDir as unknown as string,
@@ -541,11 +525,11 @@ export const Nextjs = Effect.fn("AWS.Website.Nextjs")(
       cacheBucket,
       cacheFiles,
       imageFunction,
-      imageUrl: urlOf(imageFunction),
+      imageUrl: imageEndpoint?.url ?? (imageFunction as LambdaFunction).functionUrl,
       revalidationFunction,
       revalidationQueue,
       server,
-      serverUrl: urlOf(server),
+      serverUrl: serverEndpoint?.url ?? (server as LambdaFunction).functionUrl,
       tagCacheTable,
     };
   },

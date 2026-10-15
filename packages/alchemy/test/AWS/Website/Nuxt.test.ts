@@ -121,7 +121,7 @@ describe.skipIf(!runLive)(
             tempRoot,
             entries: fixtureEntries,
           });
-          const deploy = (props: { server?: "function"; regions?: string[] }) =>
+          const deploy = (props: { server: "function" } | { regions?: string[] }) =>
             stack.deploy(
               Effect.gen(function* () {
                 const site = yield* AWS.Website.Nuxt("NuxtFunctionSite", {
@@ -195,7 +195,7 @@ describe.skipIf(!runLive)(
                 });
                 const site = yield* AWS.Website.Nuxt("NuxtSite", {
                   rootDir,
-                  ...(server ? { server } : {}),
+                  ...(server === "function" ? { server: "function" as const } : {}),
                   forceDestroy: true,
                   domain: { router },
                 });
@@ -347,11 +347,17 @@ const probeDuring = <A, E, R>(url: string, marker: string, effect: Effect.Effect
   });
 
 test.provider(
-  'regions with server: "function" fails at plan',
+  'regions with server: "function" is a type error, and fails at plan in untyped JS',
   (stack) =>
     Effect.gen(function* () {
       const exit = yield* stack
-        .plan(AWS.Website.Nuxt("RegionsOnFunction", { server: "function", regions: ["us-east-1"] }))
+        .plan(
+          AWS.Website.Nuxt("RegionsOnFunction", {
+            server: "function",
+            // @ts-expect-error `regions` only exists on the Web Function server form.
+            regions: ["us-east-1"],
+          }),
+        )
         .pipe(Effect.exit);
       expect(exit._tag).toBe("Failure");
       expect(exit._tag === "Failure" ? String(Cause.squash(exit.cause)) : "").toContain(
@@ -360,3 +366,15 @@ test.provider(
     }),
   { tags: ["provider:aws", "provider:aws:website"] },
 );
+
+// Type-level: each server form only accepts its own props.
+export const _serverFormTypeChecks = () => [
+  AWS.Website.Nuxt("Web", { regions: ["us-east-1"], maxEnvironments: 10 }),
+  AWS.Website.Nuxt("Fn", { server: "function", memorySize: 4096, architecture: "x86_64" }),
+  // @ts-expect-error `memorySize` only exists on the `server: "function"` form.
+  AWS.Website.Nuxt("WebWithMemory", { memorySize: 4096 }),
+  // @ts-expect-error `maxEnvironments` only exists on the Web Function form.
+  AWS.Website.Nuxt("FnWithEnvironments", { server: "function", maxEnvironments: 10 }),
+  // @ts-expect-error `imageOptimization` only exists on the `server: "function"` form.
+  AWS.Website.Nextjs("NextWebWithImageMemory", { imageOptimization: { memorySize: 2048 } }),
+];

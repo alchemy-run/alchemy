@@ -11,7 +11,7 @@ export const NUXT_AWS_TARGET_SPECIFIER = "@alchemy.run/frontend-frameworks/nuxt/
 /** The Node deploy target for the Lambda Web Function server (the default). */
 export const NUXT_WEB_TARGET_SPECIFIER = "@alchemy.run/frontend-frameworks/nuxt/node";
 
-export interface NuxtProps extends FrameworkSiteProps {
+export type NuxtProps = FrameworkSiteProps<{
   /**
    * Nuxt config overrides merged over the project's own `nuxt.config.ts`
    * (the highest-priority c12 layer — a value here wins over the file).
@@ -25,7 +25,7 @@ export interface NuxtProps extends FrameworkSiteProps {
    * overridden here.
    */
   nuxt?: Record<string, unknown>;
-}
+}>;
 
 /**
  * Deploy a Nuxt application to AWS: the nitro server on a Lambda Web
@@ -98,7 +98,7 @@ export interface NuxtProps extends FrameworkSiteProps {
  *
  * @resource
  */
-export const Nuxt = (id: string, props: InputProps<NuxtProps> = {}) => {
+export const Nuxt = (id: string, props: InputProps<NuxtProps, "server"> = {}) => {
   const p = props as NuxtProps;
   return makeFrameworkSite(id, props, {
     name: "Nuxt",

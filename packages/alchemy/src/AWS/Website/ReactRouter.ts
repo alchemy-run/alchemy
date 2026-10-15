@@ -13,7 +13,7 @@ export const REACT_ROUTER_AWS_TARGET_SPECIFIER =
 export const REACT_ROUTER_WEB_TARGET_SPECIFIER =
   "@alchemy.run/frontend-frameworks/react-router/node";
 
-export interface ReactRouterProps extends FrameworkSiteProps {}
+export type ReactRouterProps = FrameworkSiteProps;
 
 /**
  * Deploy a [React Router](https://reactrouter.com) v7 app (framework mode)
@@ -97,7 +97,7 @@ export interface ReactRouterProps extends FrameworkSiteProps {}
  *
  * @resource
  */
-export const ReactRouter = (id: string, props: InputProps<ReactRouterProps> = {}) =>
+export const ReactRouter = (id: string, props: InputProps<ReactRouterProps, "server"> = {}) =>
   makeFrameworkSite(id, props, {
     name: "ReactRouter",
     framework: REACT_ROUTER_FRAMEWORK_SPECIFIER,

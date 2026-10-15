@@ -13,7 +13,7 @@ export const TANSTACK_START_AWS_TARGET_SPECIFIER =
 export const TANSTACK_START_WEB_TARGET_SPECIFIER =
   "@alchemy.run/frontend-frameworks/tanstack-start/node";
 
-export interface TanStackStartProps extends FrameworkSiteProps {}
+export type TanStackStartProps = FrameworkSiteProps;
 
 /**
  * Deploy a [TanStack Start](https://tanstack.com/start) application to AWS:
@@ -91,7 +91,7 @@ export interface TanStackStartProps extends FrameworkSiteProps {}
  *
  * @resource
  */
-export const TanStackStart = (id: string, props: InputProps<TanStackStartProps> = {}) =>
+export const TanStackStart = (id: string, props: InputProps<TanStackStartProps, "server"> = {}) =>
   makeFrameworkSite(id, props, {
     name: "TanStackStart",
     framework: TANSTACK_START_FRAMEWORK_SPECIFIER,

@@ -11,14 +11,14 @@ export const OCTANE_AWS_TARGET_SPECIFIER = "@alchemy.run/frontend-frameworks/oct
 /** The Node deploy target for the Lambda Web Function server (the default). */
 export const OCTANE_WEB_TARGET_SPECIFIER = "@alchemy.run/frontend-frameworks/octane/node";
 
-export interface OctaneProps extends FrameworkSiteProps {
+export type OctaneProps = FrameworkSiteProps<{
   /**
    * Project root directory (the directory containing `vite.config.ts` and
    * `octane.config.ts`).
    * @default "."
    */
   rootDir?: string;
-}
+}>;
 
 /**
  * Deploy an [OctaneJS](https://octanejs.dev) application to AWS: Octane's
@@ -75,7 +75,7 @@ export interface OctaneProps extends FrameworkSiteProps {
  *
  * @resource
  */
-export const Octane = (id: string, props: InputProps<OctaneProps> = {}) =>
+export const Octane = (id: string, props: InputProps<OctaneProps, "server"> = {}) =>
   makeFrameworkSite(id, props, {
     name: "Octane",
     framework: OCTANE_FRAMEWORK_SPECIFIER,

@@ -20,7 +20,7 @@ export const VINEXT_AWS_TARGET_SPECIFIER = "@alchemy.run/frontend-frameworks/vin
 /** Env var the S3 data-cache adapter reads for the ISR/fetch cache bucket. */
 export const VINEXT_CACHE_BUCKET_ENV = "CACHE_BUCKET_NAME";
 
-export interface VinextProps extends FrameworkSiteProps {}
+export type VinextProps = FrameworkSiteProps;
 
 /**
  * Deploy a [vinext](https://vinext.dev) App Router application to AWS: the RSC
@@ -67,7 +67,7 @@ export interface VinextProps extends FrameworkSiteProps {}
  * @product Website
  * @category Frontend
  */
-export const Vinext = (id: string, propsIn: InputProps<VinextProps> = {}) =>
+export const Vinext = (id: string, propsIn: InputProps<VinextProps, "server"> = {}) =>
   Effect.gen(function* () {
     const props = propsIn as VinextProps;
     const ctx = yield* AlchemyContext;

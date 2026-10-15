@@ -11,7 +11,7 @@ export const ASTRO_AWS_TARGET_SPECIFIER = "@alchemy.run/frontend-frameworks/astr
 /** The Node deploy target for the Lambda Web Function server (the default). */
 export const ASTRO_WEB_TARGET_SPECIFIER = "@alchemy.run/frontend-frameworks/astro/node";
 
-export interface AstroProps extends FrameworkSiteProps {
+export type AstroProps = FrameworkSiteProps<{
   // Astro is configured in YOUR `astro.config.*`, which loads natively —
   // this resource only deploys it. The `astro` bag is a deploy-time
   // overlay merged OVER the file for values a config file cannot hold
@@ -62,7 +62,7 @@ export interface AstroProps extends FrameworkSiteProps {
    * to `astro: { output: "static" }` sites.
    */
   spa?: boolean;
-}
+}>;
 
 /**
  * Deploy an [Astro](https://astro.build) application to AWS: the server
@@ -144,7 +144,7 @@ export interface AstroProps extends FrameworkSiteProps {
  *
  * @resource
  */
-export const Astro = (id: string, props: InputProps<AstroProps> = {}) => {
+export const Astro = (id: string, props: InputProps<AstroProps, "server"> = {}) => {
   const p = props as AstroProps;
   // Server output is the documented default: astro's own zero-config
   // default is `"static"`. The inline config merges OVER the project's

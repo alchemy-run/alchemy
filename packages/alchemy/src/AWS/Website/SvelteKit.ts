@@ -11,7 +11,7 @@ export const SVELTEKIT_AWS_TARGET_SPECIFIER = "@alchemy.run/frontend-frameworks/
 /** The Node deploy target for the Lambda Web Function server (the default). */
 export const SVELTEKIT_WEB_TARGET_SPECIFIER = "@alchemy.run/frontend-frameworks/sveltekit/node";
 
-export interface SvelteKitProps extends FrameworkSiteProps {
+export type SvelteKitProps = FrameworkSiteProps<{
   /**
    * SvelteKit config overrides for the `sveltekit(...)` plugin call, merged
    * over the options of the user's own call (these win). JSON-serializable
@@ -21,7 +21,7 @@ export interface SvelteKitProps extends FrameworkSiteProps {
    * always owned by alchemy.
    */
   kit?: Record<string, unknown>;
-}
+}>;
 
 /**
  * Deploy a SvelteKit application to AWS: kit's SSR server on a Lambda Web
@@ -90,7 +90,7 @@ export interface SvelteKitProps extends FrameworkSiteProps {
  *
  * @resource
  */
-export const SvelteKit = (id: string, props: InputProps<SvelteKitProps> = {}) => {
+export const SvelteKit = (id: string, props: InputProps<SvelteKitProps, "server"> = {}) => {
   const p = props as SvelteKitProps;
   return makeFrameworkSite(id, props, {
     name: "SvelteKit",

@@ -11,7 +11,7 @@ export const WAKU_AWS_TARGET_SPECIFIER = "@alchemy.run/frontend-frameworks/waku/
 /** The Node deploy target for the Lambda Web Function server (the default). */
 export const WAKU_WEB_TARGET_SPECIFIER = "@alchemy.run/frontend-frameworks/waku/node";
 
-export interface WakuProps extends FrameworkSiteProps {
+export type WakuProps = FrameworkSiteProps<{
   /**
    * Waku config overrides merged over the project's `waku.config.*`
    * (per-key; deploy-time values win). For values that vary by stage or
@@ -37,7 +37,7 @@ export interface WakuProps extends FrameworkSiteProps {
      */
     basePath?: string;
   };
-}
+}>;
 
 /**
  * Deploy a [Waku](https://waku.gg) application to AWS: the RSC server on a
@@ -104,7 +104,7 @@ export interface WakuProps extends FrameworkSiteProps {
  *
  * @resource
  */
-export const Waku = (id: string, props: InputProps<WakuProps> = {}) => {
+export const Waku = (id: string, props: InputProps<WakuProps, "server"> = {}) => {
   const p = props as WakuProps;
   return makeFrameworkSite(id, props, {
     name: "Waku",

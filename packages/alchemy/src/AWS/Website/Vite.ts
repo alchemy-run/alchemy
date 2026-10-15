@@ -1,6 +1,6 @@
 import type { InputProps } from "../../Input.ts";
 import * as Namespace from "../../Namespace.ts";
-import { makeFrameworkSite, type FrameworkSiteProps } from "./FrameworkSite.ts";
+import { makeFrameworkSite, type FrameworkSiteBaseProps } from "./FrameworkSite.ts";
 
 /** The framework-integration package that drives the Vite build. */
 export const VITE_FRAMEWORK_SPECIFIER = "@alchemy.run/frontend-frameworks/vite";
@@ -32,9 +32,9 @@ export interface ViteBuildConfig {
 }
 
 export interface ViteProps extends Omit<
-  FrameworkSiteProps,
+  FrameworkSiteBaseProps,
   // Assets-only: a plain Vite site never creates a server function.
-  "env" | "memorySize" | "timeout" | "architecture" | "runtime"
+  "env" | "timeout"
 > {
   /**
    * Environment variables for the production build. Vite inlines

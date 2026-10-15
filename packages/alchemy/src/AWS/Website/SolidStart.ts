@@ -11,7 +11,7 @@ export const SOLIDSTART_AWS_TARGET_SPECIFIER = "@alchemy.run/frontend-frameworks
 /** The Node deploy target for the Lambda Web Function server (the default). */
 export const SOLIDSTART_WEB_TARGET_SPECIFIER = "@alchemy.run/frontend-frameworks/solidstart/node";
 
-export interface SolidStartProps extends FrameworkSiteProps {
+export type SolidStartProps = FrameworkSiteProps<{
   /**
    * Nitro options forwarded into the nitro plugin the integration appends
    * (prerendering, route rules, storage, ...). `preset` is owned by the
@@ -25,7 +25,7 @@ export interface SolidStartProps extends FrameworkSiteProps {
    * which a config file cannot.
    */
   nitro?: Record<string, unknown>;
-}
+}>;
 
 /**
  * Deploy a [SolidStart](https://start.solidjs.com) application to AWS: the
@@ -96,7 +96,7 @@ export interface SolidStartProps extends FrameworkSiteProps {
  *
  * @resource
  */
-export const SolidStart = (id: string, props: InputProps<SolidStartProps> = {}) => {
+export const SolidStart = (id: string, props: InputProps<SolidStartProps, "server"> = {}) => {
   const p = props as SolidStartProps;
   return makeFrameworkSite(id, props, {
     name: "SolidStart",
