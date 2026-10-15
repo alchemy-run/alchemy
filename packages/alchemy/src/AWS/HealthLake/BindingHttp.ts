@@ -1,8 +1,7 @@
 import * as Effect from "effect/Effect";
-import * as Binding from "../../Binding.ts";
 import * as Output from "../../Output.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { Role } from "../IAM/Role.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
 import type { FHIRDatastore } from "./FHIRDatastore.ts";
 
 /**
@@ -37,23 +36,20 @@ export const makeHealthLakeDatastoreHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (datastore: FHIRDatastore) {
       const DatastoreId = yield* datastore.datastoreId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}(${datastore}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: [Output.interpolate`${datastore.datastoreArn}`],
-              },
-            ],
-          });
-        }
+        yield* AWSBindings.bind`${options.tag}(${datastore})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: [Output.interpolate`${datastore.datastoreArn}`],
+            },
+          ],
+        });
       }
       return Effect.fn(`${options.tag}(${datastore.LogicalId})`)(function* (
         request?: Omit<I, "DatastoreId">,
@@ -93,36 +89,33 @@ export const makeHealthLakeStartJobHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (datastore: FHIRDatastore, dataAccessRole: Role) {
       const DatastoreId = yield* datastore.datastoreId;
       const RoleArn = yield* dataAccessRole.roleArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}(${datastore}, ${dataAccessRole}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: [Output.interpolate`${datastore.datastoreArn}`],
-              },
-              // CRITICAL: without iam:PassRole on the data-access role,
-              // Start*Job fails only at runtime with an AccessDenied.
-              {
-                Effect: "Allow",
-                Action: ["iam:PassRole"],
-                Resource: [Output.interpolate`${dataAccessRole.roleArn}`],
-                Condition: {
-                  StringEquals: {
-                    "iam:PassedToService": "healthlake.amazonaws.com",
-                  },
+        yield* AWSBindings.bind`${options.tag}(${datastore}, ${dataAccessRole})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: [Output.interpolate`${datastore.datastoreArn}`],
+            },
+            // CRITICAL: without iam:PassRole on the data-access role,
+            // Start*Job fails only at runtime with an AccessDenied.
+            {
+              Effect: "Allow",
+              Action: ["iam:PassRole"],
+              Resource: [Output.interpolate`${dataAccessRole.roleArn}`],
+              Condition: {
+                StringEquals: {
+                  "iam:PassedToService": "healthlake.amazonaws.com",
                 },
               },
-            ],
-          });
-        }
+            },
+          ],
+        });
       }
       return Effect.fn(`${options.tag}(${datastore.LogicalId})`)(function* (
         request: Omit<I, "DatastoreId" | "DataAccessRoleArn"> & {

@@ -165,6 +165,11 @@ export interface NodeHttpServerOptions {
    * @default "0.0.0.0"
    */
   hostname?: string;
+  /**
+   * Port the Node HTTP server binds when the handler is served without an
+   * explicit port. Omit to read `PORT` (default `3000`).
+   */
+  port?: number;
 }
 
 export const NodeHttpServer = (serverOptions?: NodeHttpServerOptions) =>
@@ -178,7 +183,7 @@ export const NodeHttpServer = (serverOptions?: NodeHttpServerOptions) =>
       return {
         serve: (handler, options) =>
           Effect.gen(function* () {
-            const port = yield* resolvePort(options);
+            const port = yield* resolvePort({ port: options?.port ?? serverOptions?.port });
             const shutdown = yield* Effect.serviceOption(ManagedHttpShutdown);
             const managed = Option.getOrUndefined(shutdown);
             if (managed?.isStopping()) return yield* Effect.interrupt;

@@ -1,7 +1,6 @@
 import * as Effect from "effect/Effect";
-import * as Binding from "../../Binding.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
 import type { Group } from "./Group.ts";
 
 /**
@@ -36,35 +35,32 @@ export const makeResourceGroupsGroupHttpBinding = <I extends { Group?: string },
   supportingActions?: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (group: Group) {
       const GroupName = yield* group.groupName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          const supporting: PolicyStatement[] =
-            options.supportingActions !== undefined
-              ? [
-                  {
-                    Effect: "Allow",
-                    Action: [...options.supportingActions],
-                    // Member resources are arbitrary ARNs chosen per request.
-                    Resource: ["*"],
-                  },
-                ]
-              : [];
-          yield* host.bind`Allow(${host}, ${options.tag}(${group}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: [group.groupArn],
-              },
-              ...supporting,
-            ],
-          });
-        }
+        const supporting: PolicyStatement[] =
+          options.supportingActions !== undefined
+            ? [
+                {
+                  Effect: "Allow",
+                  Action: [...options.supportingActions],
+                  // Member resources are arbitrary ARNs chosen per request.
+                  Resource: ["*"],
+                },
+              ]
+            : [];
+        yield* AWSBindings.bind`${options.tag}(${group})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: [group.groupArn],
+            },
+            ...supporting,
+          ],
+        });
       }
       return Effect.fn(`${options.tag}(${group.LogicalId})`)(function* (
         request?: Omit<I, "Group" | "GroupName">,
@@ -90,22 +86,19 @@ export const makeResourceGroupsAccountHttpBinding = <I, A, E, R>(options: {
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}())`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: ["*"],
-              },
-            ],
-          });
-        }
+        yield* AWSBindings.bind`${options.tag}()`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: ["*"],
+            },
+          ],
+        });
       }
       return Effect.fn(options.tag)(function* (request?: I) {
         return yield* op((request ?? {}) as I);

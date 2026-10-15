@@ -6,6 +6,7 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
 import { AlchemyContext } from "../AlchemyContext.ts";
+// oxlint-disable-next-line alchemy/package-boundaries -- package split phase 3: Stripe webhooks on a Worker; becomes an integration subpath
 import { Worker, isWorkerEvent } from "../Cloudflare/Workers/Worker.ts";
 import * as Namespace from "../Namespace.ts";
 import * as Output from "../Output.ts";

@@ -1,9 +1,8 @@
 import * as keyspacesstreams from "@distilled.cloud/aws/keyspacesstreams";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Binding from "../../Binding.ts";
 import * as Output from "../../Output.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { Table } from "./Table.ts";
 import {
   TableStreams,
@@ -20,32 +19,29 @@ import {
 export const TableStreamsHttp = Layer.effect(
   TableStreams,
   Effect.gen(function* () {
-    const listStreams = yield* keyspacesstreams.listStreams;
-    const getStream = yield* keyspacesstreams.getStream;
-    const getShardIterator = yield* keyspacesstreams.getShardIterator;
-    const getRecords = yield* keyspacesstreams.getRecords;
+    const listStreams = yield* AWSBindings.withCredentials(keyspacesstreams.listStreams);
+    const getStream = yield* AWSBindings.withCredentials(keyspacesstreams.getStream);
+    const getShardIterator = yield* AWSBindings.withCredentials(keyspacesstreams.getShardIterator);
+    const getRecords = yield* AWSBindings.withCredentials(keyspacesstreams.getRecords);
 
     return Effect.fn(function* <T extends Table>(table: T) {
       const KeyspaceName = yield* table.keyspaceName;
       const TableName = yield* table.tableName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, AWS.Keyspaces.TableStreams(${table}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [
-                  "cassandra:GetRecords",
-                  "cassandra:GetShardIterator",
-                  "cassandra:GetStream",
-                  "cassandra:ListStreams",
-                ],
-                Resource: [table.tableArn, Output.interpolate`${table.tableArn}/stream/*`],
-              },
-            ],
-          });
-        }
+        yield* AWSBindings.bind`AWS.Keyspaces.TableStreams(${table})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [
+                "cassandra:GetRecords",
+                "cassandra:GetShardIterator",
+                "cassandra:GetStream",
+                "cassandra:ListStreams",
+              ],
+              Resource: [table.tableArn, Output.interpolate`${table.tableArn}/stream/*`],
+            },
+          ],
+        });
       }
       const logicalId = table.LogicalId;
       const client: TableStreamsClient = {

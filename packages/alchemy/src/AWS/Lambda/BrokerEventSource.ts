@@ -29,7 +29,7 @@ export const BrokerEventSource = Layer.effect(
   // whereas BrokerEventSourceService erases the requirement channel to `never`.
   // @effect-diagnostics-next-line missingEffectContext:off
   Effect.gen(function* () {
-    const host = yield* Lambda.Function;
+    const host = yield* Lambda.eventSourceHost("AWS.Lambda.BrokerEventSource");
     const Mapping = yield* EventSourceMapping;
 
     return Effect.fn(function* <Req = never>(

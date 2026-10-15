@@ -710,6 +710,9 @@ export const providers = () =>
         Lambda.MicrovmImage,
         Lambda.NetworkConnector,
         Lambda.Permission,
+        Lambda.WebFunction,
+        Lambda.WebFunctionEndpoint,
+        Lambda.WebFunctionPermission,
         LexV2.Bot,
         LexV2.BotAlias,
         LexV2.BotLocale,
@@ -1385,6 +1388,11 @@ export const providers = () =>
           // Dual: glue onto the (dual) Lambda Function — a live addPermission
           // against a floci function ARN fails with ResourceNotFoundException.
           flociDual(Lambda.Permission, () => Lambda.PermissionProvider()),
+          // Live-only: floci does not emulate Web Functions, so `alchemy dev`
+          // deploys them to AWS like any mode-agnostic provider.
+          Lambda.WebFunctionProvider(),
+          Lambda.WebFunctionEndpointProvider(),
+          Lambda.WebFunctionPermissionProvider(),
           flociDual(Logs.Destination, () => Logs.DestinationProvider()),
           flociDual(Logs.LogGroup, () => Logs.LogGroupProvider()),
           flociDual(Logs.LogStream, () => Logs.LogStreamProvider()),

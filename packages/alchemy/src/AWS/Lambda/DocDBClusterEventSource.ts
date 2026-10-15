@@ -21,7 +21,7 @@ export const isDocumentDBEvent = (
 export const DocDBClusterEventSource = Layer.effect(
   DocDBClusterEventSourceContract,
   Effect.gen(function* () {
-    const host = yield* Lambda.Function;
+    const host = yield* Lambda.eventSourceHost("AWS.Lambda.DocDBClusterEventSource");
     const Mapping = yield* EventSourceMapping;
 
     return Effect.fn(function* <TDoc = unknown, Req = never>(

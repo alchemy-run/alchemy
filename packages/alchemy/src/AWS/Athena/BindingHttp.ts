@@ -1,8 +1,7 @@
 import * as Effect from "effect/Effect";
-import * as Binding from "../../Binding.ts";
 import * as Output from "../../Output.ts";
 import type { Output as OutputType } from "../../Output.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { DataCatalog } from "./DataCatalog.ts";
 import type { WorkGroup } from "./WorkGroup.ts";
 
@@ -34,23 +33,20 @@ export const makeWorkGroupScopedHttpBinding = <I, A, E, R>(options: {
   injectWorkGroup?: boolean;
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (workGroup: WorkGroup) {
       const WorkGroupName = yield* workGroup.workGroupName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}(${workGroup}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: [workGroup.workGroupArn],
-              },
-            ],
-          });
-        }
+        yield* AWSBindings.bind`${options.tag}(${workGroup})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: [workGroup.workGroupArn],
+            },
+          ],
+        });
       }
       return Effect.fn(`${options.tag}(${workGroup.LogicalId})`)(function* (
         request: Omit<I, "WorkGroup">,
@@ -101,37 +97,34 @@ export const makeDataCatalogScopedHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (catalog: DataCatalog) {
       const CatalogName = yield* catalog.name;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}(${catalog}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: [catalog.dataCatalogArn],
-              },
-              {
-                // Metadata reads through a GLUE-type catalog federate to the
-                // Glue Data Catalog with the caller's credentials.
-                Effect: "Allow",
-                Action: [
-                  "glue:GetDatabase",
-                  "glue:GetDatabases",
-                  "glue:GetTable",
-                  "glue:GetTables",
-                  "glue:GetPartition",
-                  "glue:GetPartitions",
-                ],
-                Resource: glueArns(catalog.dataCatalogArn),
-              },
-            ],
-          });
-        }
+        yield* AWSBindings.bind`${options.tag}(${catalog})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: [catalog.dataCatalogArn],
+            },
+            {
+              // Metadata reads through a GLUE-type catalog federate to the
+              // Glue Data Catalog with the caller's credentials.
+              Effect: "Allow",
+              Action: [
+                "glue:GetDatabase",
+                "glue:GetDatabases",
+                "glue:GetTable",
+                "glue:GetTables",
+                "glue:GetPartition",
+                "glue:GetPartitions",
+              ],
+              Resource: glueArns(catalog.dataCatalogArn),
+            },
+          ],
+        });
       }
       return Effect.fn(`${options.tag}(${catalog.LogicalId})`)(function* (
         request: Omit<I, "CatalogName">,

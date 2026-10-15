@@ -45,6 +45,7 @@
     "./AWS/Endpoint": "./src/AWS/Endpoint.ts",
     "./AWS/Region": "./src/AWS/Region.ts",
     "./AWS/Lambda/*": "./src/AWS/Lambda/*.ts",
+    "./AWS/Server/*": "./src/AWS/Server/*.ts",
     "./Command": "./src/Command/index.ts",
     "./Construct": "./src/Construct/index.ts",
     "./Bundle": "./src/Bundle/index.ts",
@@ -165,6 +166,11 @@
         "types": "./lib/AWS/Lambda/*.d.ts",
         "bun": "./src/AWS/Lambda/*.ts",
         "default": "./lib/AWS/Lambda/*.js"
+      },
+      "./AWS/Server/*": {
+        "types": "./lib/AWS/Server/*.d.ts",
+        "bun": "./src/AWS/Server/*.ts",
+        "default": "./lib/AWS/Server/*.js"
       },
       "./Command": {
         "types": "./lib/Command/index.d.ts",

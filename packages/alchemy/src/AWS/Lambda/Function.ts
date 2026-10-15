@@ -19,6 +19,7 @@ import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import type * as rolldown from "rolldown";
 import { Unowned } from "../../AdoptPolicy.ts";
+import * as Binding from "../../Binding.ts";
 import type * as Bundle from "../../Bundle/Bundle.ts";
 import type { PackageInstall } from "../../Bundle/InstalledPackages.ts";
 import { deepEqual, havePropsChanged, isResolved, stripEffects } from "../../Diff.ts";
@@ -93,31 +94,6 @@ export const isFunction = (value: any): value is Function =>
   value !== null &&
   "Type" in value &&
   value.Type === "AWS.Lambda.Function";
-
-/**
- * True for any Alchemy host that accepts the `{ env, policyStatements }`
- * binding contract: the Lambda `Function`, the ECS `Task` and `Service`, and
- * the EKS `ServerHost`. AWS `Binding.Service` implementations guard their
- * deploy-time
- * `host.bind` registration with this predicate so every existing capability
- * (S3, DynamoDB, SQS, …) lands its IAM on whichever of the three hosts is in
- * context — the Lambda execution role, the ECS task role, or the EKS
- * pod-identity role.
- *
- * The type guard narrows to `Function` deliberately: all three hosts expose an
- * identical `{ env, policyStatements }` bind contract and only `host.bind` /
- * `host.LogicalId` are ever touched inside the guarded block, so downstream
- * typing is unchanged while the runtime check widens to all three.
- */
-export const isBindingHost = (value: any): value is Function =>
-  typeof value === "object" &&
-  value !== null &&
-  "Type" in value &&
-  (value.Type === "AWS.Lambda.Function" ||
-    value.Type === "AWS.ECS.Task" ||
-    value.Type === "AWS.ECS.Service" ||
-    value.Type === "Kubernetes.Deployment" ||
-    value.Type === "Kubernetes.Job");
 
 export interface FunctionBuildOptions
   extends Partial<rolldown.InputOptions>, Bundle.BundleExtraOptions {
@@ -570,6 +546,30 @@ export interface Function extends Resource<
   },
   Providers
 > {}
+
+/** An event source was used inside a Lambda Web Function. */
+export class EventSourceRequiresFunction extends Data.TaggedError("EventSourceRequiresFunction")<{
+  eventSource: string;
+  message: string;
+}> {}
+
+/**
+ * The `AWS.Lambda.Function` an event source attaches to. A Lambda Web
+ * Function only receives HTTP and can't be an event source target, so name
+ * the problem there instead of failing with a missing-service error (the
+ * typed API already rejects it; this covers untyped JavaScript).
+ */
+export const eventSourceHost = (eventSource: string) =>
+  Effect.flatMap(Binding.Host, (host) =>
+    host?.Type === "AWS.Lambda.WebFunction"
+      ? Effect.die(
+          new EventSourceRequiresFunction({
+            eventSource,
+            message: `${eventSource} needs an AWS.Lambda.Function, but "${host.LogicalId}" is an AWS.Lambda.WebFunction, which only receives HTTP. Consume the event source from an AWS.Lambda.Function instead.`,
+          }),
+        )
+      : Function,
+  );
 
 export type FunctionServices =
   | Credentials
@@ -1692,22 +1692,20 @@ export const FunctionProvider = () =>
         yield* Effect.logDebug(`creating function ${id}`);
         const waitStartedAt = Date.now();
 
-        const isRolePropagationError = <
-          E extends Lambda.UpdateFunctionCodeError | Lambda.CreateFunctionError,
-        >(
-          e: E,
+        // A just-created role (or its freshly attached policies, KMS grant
+        // principal, or security group) isn't visible to Lambda yet.
+        const isRolePropagationError = (
+          e:
+            | Lambda.CreateFunctionError
+            | Lambda.UpdateFunctionCodeError
+            | Lambda.UpdateFunctionConfigurationError,
         ) =>
-          e._tag === "InvalidParameterValueException" &&
-          (e.message?.includes("cannot be assumed by Lambda") ||
-            // Freshly attached AWSLambdaVPCAccessExecutionRole still
-            // propagating when a VPC-attached function is created/updated.
-            e.message?.includes("does not have permissions to call CreateNetworkInterface") ||
-            (e.message?.includes("KMS key is invalid for CreateGrant") &&
-              e.message?.includes("ARN does not refer to a valid principal")));
+          e._tag === "ExecutionRoleNotAssumable" ||
+          e._tag === "ExecutionRoleMissingVpcPermissions" ||
+          e._tag === "KmsGrantPrincipalNotReady";
 
         const isSecurityGroupPropagationError = (e: Lambda.CreateFunctionError) =>
-          e._tag === "InvalidParameterValueException" &&
-          e.message?.includes("InvalidGroup.NotFound");
+          e._tag === "SecurityGroupNotFound";
 
         const noteCreateDependencyWait = () =>
           session.note(

@@ -1,10 +1,8 @@
 import * as sqs from "@distilled.cloud/aws/sqs";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Binding from "../../Binding.ts";
 import * as Output from "../../Output.ts";
-import { isInstance } from "../EC2/Instance.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { Queue } from "./Queue.ts";
 import { StartMessageMoveTask, type StartMessageMoveTaskRequest } from "./StartMessageMoveTask.ts";
 
@@ -16,35 +14,32 @@ import { StartMessageMoveTask, type StartMessageMoveTaskRequest } from "./StartM
 export const StartMessageMoveTaskHttp = Layer.effect(
   StartMessageMoveTask,
   Effect.gen(function* () {
-    const startMessageMoveTask = yield* sqs.startMessageMoveTask;
+    const startMessageMoveTask = yield* AWSBindings.withCredentials(sqs.startMessageMoveTask);
 
     return Effect.fn(function* (source: Queue, options?: { destination?: Queue }) {
       const SourceArn = yield* source.queueArn;
       const destination = options?.destination;
       const DestinationArn = destination ? yield* destination.queueArn : undefined;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host) || isInstance(host)) {
-          yield* host.bind`Allow(${host}, AWS.SQS.StartMessageMoveTask(${source}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [
-                  "sqs:StartMessageMoveTask",
-                  "sqs:ReceiveMessage",
-                  "sqs:DeleteMessage",
-                  "sqs:GetQueueAttributes",
-                ],
-                Resource: [Output.interpolate`${source.queueArn}`],
-              },
-              {
-                Effect: "Allow",
-                Action: ["sqs:SendMessage", "sqs:GetQueueAttributes"],
-                Resource: [destination ? Output.interpolate`${destination.queueArn}` : "*"],
-              },
-            ],
-          });
-        }
+        yield* AWSBindings.bind`AWS.SQS.StartMessageMoveTask(${source})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [
+                "sqs:StartMessageMoveTask",
+                "sqs:ReceiveMessage",
+                "sqs:DeleteMessage",
+                "sqs:GetQueueAttributes",
+              ],
+              Resource: [Output.interpolate`${source.queueArn}`],
+            },
+            {
+              Effect: "Allow",
+              Action: ["sqs:SendMessage", "sqs:GetQueueAttributes"],
+              Resource: [destination ? Output.interpolate`${destination.queueArn}` : "*"],
+            },
+          ],
+        });
       }
       return Effect.fn(`AWS.SQS.StartMessageMoveTask(${source.LogicalId})`)(function* (
         request?: StartMessageMoveTaskRequest,

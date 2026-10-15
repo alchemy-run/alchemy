@@ -100,6 +100,10 @@ packages/alchemy/src/AWS/EC2/Vpc.ts            # VPC resource + provider
 packages/alchemy/src/AWS/EC2/Subnet.ts         # Subnet resource + provider
 ```
 
+## Package boundaries
+
+Splitting `packages/alchemy/src` into a provider-free core plus one package per provider is ongoing work. The `alchemy/package-boundaries` lint rule ([scripts/oxlint/alchemy.ts](./scripts/oxlint/alchemy.ts)) flags cross-provider imports and host-type checks. Until the split lands, a change that needs one may suppress the rule with an `oxlint-disable-next-line alchemy/package-boundaries -- <reason>` comment.
+
 # The Resource Factory Process
 
 Alchemy resource coverage is produced as a **software factory**: fleets of agents implement and live-test IaC resources in waves, and every API mismatch the tests surface is fed back as a patch to distilled. The factory was used to take Cloudflare from 36 to 239 cataloged resources (250 test files / 600+ test cases, 1000+ patched operations) and is the template for every future provider.

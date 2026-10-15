@@ -10,11 +10,13 @@ import type * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import type { WorkflowEngine } from "effect/workflow";
 import { makeCallback } from "../Callback.ts";
+/* oxlint-disable alchemy/package-boundaries -- package split phase 3: Domain hosted on Durable Objects; becomes an integration subpath */
 import { DurableObject as CloudflareDurableObject } from "../Cloudflare/Workers/DurableObject.ts";
 import { DurableObjectState } from "../Cloudflare/Workers/DurableObjectState.ts";
 import { upgrade, type WebSocket } from "../Cloudflare/Workers/WebSocket.ts";
 import type { Worker } from "../Cloudflare/Workers/Worker.ts";
 import { DurableObjectEngine } from "../Cloudflare/Workflows/DurableObjectEngine.ts";
+/* oxlint-enable alchemy/package-boundaries */
 import type { RuntimeContext } from "../RuntimeContext.ts";
 import type * as Aggregate from "./Aggregate.ts";
 import { isAfter, mergeCheckpoints } from "./InMemory.ts";

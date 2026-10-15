@@ -3,9 +3,11 @@
  * generated entry imports this module and the user's `main`, nothing else —
  * see {@link ./Process.ts} for why.
  */
+/* oxlint-disable alchemy/package-boundaries -- package split phase 3: per-cloud runtime bootstrap; moves into its provider */
 import * as Credentials from "@distilled.cloud/aws/Credentials";
 import * as Endpoint from "@distilled.cloud/aws/Endpoint";
 import * as Region from "@distilled.cloud/aws/Region";
+/* oxlint-enable alchemy/package-boundaries */
 import { BunServices } from "@effect/platform-bun";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";

@@ -18,6 +18,7 @@
  */
 import type * as cf from "@cloudflare/workers-types";
 import * as Effect from "effect/Effect";
+// oxlint-disable-next-line alchemy/package-boundaries -- package split phase 3: Git is built on Cloudflare (plus S3 blobs, Lambda hasher); becomes integration subpaths
 import type { DurableObjectState, SqlStorageValue } from "../../Cloudflare/Workers/index.ts";
 import { StoreError } from "../Protocol/Store.ts";
 

@@ -1,8 +1,7 @@
 import * as Effect from "effect/Effect";
-import * as Binding from "../../Binding.ts";
 import * as Output from "../../Output.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import { AWSEnvironment } from "../Environment.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
 import type { EventBus } from "./EventBus.ts";
 import type { Rule } from "./Rule.ts";
 
@@ -55,26 +54,23 @@ export const makeEventBridgeAccountHttpBinding = <I, A, E, R>(options: {
   resources?: (env: { accountId: string; region: string }) => readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          const { accountId, region } = yield* AWSEnvironment.current as unknown as Effect.Effect<{
-            accountId: string;
-            region: string;
-          }>;
-          yield* host.bind`Allow(${host}, ${options.tag}())`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: options.resources ? [...options.resources({ accountId, region })] : ["*"],
-              },
-            ],
-          });
-        }
+        const { accountId, region } = yield* AWSEnvironment.current as unknown as Effect.Effect<{
+          accountId: string;
+          region: string;
+        }>;
+        yield* AWSBindings.bind`${options.tag}()`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: options.resources ? [...options.resources({ accountId, region })] : ["*"],
+            },
+          ],
+        });
       }
       return Effect.fn(options.tag)(function* (request?: I) {
         return yield* op((request ?? {}) as I);
@@ -107,37 +103,34 @@ export const makeEventBridgeBusHttpBinding = <I, A, E, R>(options: {
   resources?: (env: { accountId: string; region: string }) => readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (bus?: EventBus) {
       const EventBusName = bus ? yield* bus.eventBusName : undefined;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          const { accountId, region } = yield* AWSEnvironment.current as unknown as Effect.Effect<{
-            accountId: string;
-            region: string;
-          }>;
-          // Pass the ARN as an unresolved Output — binding data is resolved
-          // by the engine before the host reconciles. Eagerly yielding here
-          // (during plan) produces a deferred object that serializes into an
-          // invalid IAM policy (MalformedPolicyDocumentException).
-          const resource = bus
-            ? Output.interpolate`${bus.eventBusArn}`
-            : (`arn:aws:events:${region}:${accountId}:event-bus/default` as const);
+        const { accountId, region } = yield* AWSEnvironment.current as unknown as Effect.Effect<{
+          accountId: string;
+          region: string;
+        }>;
+        // Pass the ARN as an unresolved Output — binding data is resolved
+        // by the engine before the host reconciles. Eagerly yielding here
+        // (during plan) produces a deferred object that serializes into an
+        // invalid IAM policy (MalformedPolicyDocumentException).
+        const resource = bus
+          ? Output.interpolate`${bus.eventBusArn}`
+          : (`arn:aws:events:${region}:${accountId}:event-bus/default` as const);
 
-          yield* host.bind`Allow(${host}, ${options.tag}(${bus ?? "default"}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: options.resources
-                  ? [...options.resources({ accountId, region })]
-                  : [resource],
-              },
-            ],
-          });
-        }
+        yield* AWSBindings.bind`${options.tag}(${bus ?? "default"})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: options.resources
+                ? [...options.resources({ accountId, region })]
+                : [resource],
+            },
+          ],
+        });
       }
       return Effect.fn(`${options.tag}(${bus?.LogicalId})`)(function* (request?: Partial<I>) {
         const eventBusName = EventBusName ? yield* EventBusName : undefined;
@@ -167,24 +160,21 @@ export const makeEventBridgeRuleHttpBinding = <I, A, E, R>(options: {
   ruleNameKey: string;
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (rule: Rule) {
       const RuleName = yield* rule.ruleName;
       const EventBusName = yield* rule.eventBusName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}(${rule}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: [rule.ruleArn],
-              },
-            ],
-          });
-        }
+        yield* AWSBindings.bind`${options.tag}(${rule})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: [rule.ruleArn],
+            },
+          ],
+        });
       }
       return Effect.fn(`${options.tag}(${rule.LogicalId})`)(function* (request?: Partial<I>) {
         const ruleName = yield* RuleName;

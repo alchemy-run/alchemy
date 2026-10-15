@@ -15,6 +15,17 @@ declare global {
    * property access on `globalThis`.
    */
   var __ALCHEMY_RUNTIME__: boolean | undefined;
+
+  /**
+   * Build-time constant naming the cloud whose platform built this bundle,
+   * e.g. `"AWS"` in a Lambda bundle.
+   *
+   * A provider's bindings compare it against their own cloud to drop the
+   * code a native host never runs (e.g. minting credentials for an external
+   * host). `undefined` when unbundled or when the platform sets none, in
+   * which case bindings decide at runtime.
+   */
+  var __ALCHEMY_NATIVE_HOST__: string | undefined;
 }
 
 export type AlchemyPhase = "plan" | "runtime";

@@ -1,10 +1,12 @@
 import * as Effect from "effect/Effect";
 import type * as HttpClient from "effect/http/HttpClient";
+import type { ProviderMode } from "../../ProviderMode.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
 import { Self } from "../../Self.ts";
 import { AccountApiToken } from "../ApiToken/AccountApiToken.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Credentials } from "../Credentials.ts";
+import { requireLiveResource } from "../HttpBindingDev.ts";
 import { authorizeWith } from "../HttpClientUtils.ts";
 
 /**
@@ -35,12 +37,15 @@ type K2PermissionGroup = "K2 Produce" | "K2 Consume";
 export const makeK2HttpAuth = Effect.gen(function* () {
   const Token = yield* AccountApiToken;
   const self = yield* Self;
-  const env = yield* CloudflareEnvironment;
 
-  return Effect.fn(function* (resource: { LogicalId: string }, permissionGroup: K2PermissionGroup) {
-    const { accountId } = yield* env;
+  return Effect.fn(function* (
+    resource: { readonly Type: string; readonly LogicalId: string; readonly Mode?: ProviderMode },
+    permissionGroup: K2PermissionGroup,
+  ) {
+    if (!globalThis.__ALCHEMY_RUNTIME__) yield* requireLiveResource(resource);
     const token = yield* Token(`${self.LogicalId}Token`);
     if (!globalThis.__ALCHEMY_RUNTIME__) {
+      const { accountId } = yield* CloudflareEnvironment.current;
       yield* token.bind`${resource.LogicalId}`({
         policies: [
           {

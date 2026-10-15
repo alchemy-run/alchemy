@@ -1,3 +1,4 @@
+// oxlint-disable-next-line alchemy/package-boundaries -- package split phase 2: provider-specific routes; become plugin `stateStores` / `cli`
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
@@ -7,6 +8,7 @@ import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
 import { AuthProviders } from "../../Auth/AuthProvider.ts";
 import { resolveProfileName, withProfileOverride } from "../../Auth/Resolve.ts";
+/* oxlint-disable alchemy/package-boundaries -- package split phase 2: provider-specific routes; become plugin `stateStores` / `cli` */
 import * as CloudflareAccess from "../../Cloudflare/Access.ts";
 import { CloudflareAuth } from "../../Cloudflare/Auth/AuthProvider.ts";
 import * as CloudflareEnvironment from "../../Cloudflare/CloudflareEnvironment.ts";
@@ -17,6 +19,7 @@ import {
   bootstrap as bootstrapStateStore,
   teardownStateStore,
 } from "../../Cloudflare/StateStore/State.ts";
+/* oxlint-enable alchemy/package-boundaries */
 import { loadConfigProvider } from "../../Util/ConfigProvider.ts";
 import { fileLogger } from "../../Util/FileLogger.ts";
 import type { Target } from "../Session.ts";
@@ -43,6 +46,7 @@ const logEntry = (
   resource: {
     fqn: scriptName,
     logicalId: scriptName,
+    // oxlint-disable-next-line alchemy/package-boundaries -- package split phase 2: provider-specific routes; become plugin `stateStores` / `cli`
     resourceType: "Cloudflare.Worker",
   },
   timestamp: line.timestamp,

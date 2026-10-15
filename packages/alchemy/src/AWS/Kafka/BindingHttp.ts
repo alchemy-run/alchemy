@@ -1,7 +1,6 @@
 import * as Effect from "effect/Effect";
-import * as Binding from "../../Binding.ts";
 import * as Output from "../../Output.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { ServerlessCluster } from "./ServerlessCluster.ts";
 
 /**
@@ -48,28 +47,25 @@ export const makeKafkaClusterHttpBinding = <I extends { ClusterArn: string }, A,
   topicScoped?: boolean;
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (cluster: ServerlessCluster) {
       const ClusterArn = yield* cluster.clusterArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}(${cluster}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: options.topicScoped
-                  ? [
-                      Output.interpolate`${cluster.clusterArn}`,
-                      cluster.clusterArn.pipe(Output.map(topicArnGlob)),
-                    ]
-                  : [Output.interpolate`${cluster.clusterArn}`],
-              },
-            ],
-          });
-        }
+        yield* AWSBindings.bind`${options.tag}(${cluster})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: options.topicScoped
+                ? [
+                    Output.interpolate`${cluster.clusterArn}`,
+                    cluster.clusterArn.pipe(Output.map(topicArnGlob)),
+                  ]
+                : [Output.interpolate`${cluster.clusterArn}`],
+            },
+          ],
+        });
       }
       return Effect.fn(`${options.tag}(${cluster.LogicalId})`)(function* (
         request?: Omit<I, "ClusterArn">,
