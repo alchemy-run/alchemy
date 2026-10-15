@@ -23,6 +23,7 @@ import type { Resource } from "../Resource.ts";
 import { packEnvValue } from "../RuntimeContext.ts";
 import type { ServerHost } from "../Server/Process.ts";
 import { Stack } from "../Stack.ts";
+import { sha256 } from "../Util/sha256.ts";
 import { App, deleteApp, ensureApp } from "./App.ts";
 import { boundTargetEnvKeys } from "./BindService.ts";
 import { attachBucketSecrets } from "./Bucket.ts";
@@ -271,6 +272,14 @@ export interface ServiceEndpoint {
   url: string | undefined;
 }
 
+/** An App secret a {@link Service} wrote. Never the plaintext. */
+export interface BoundSecret {
+  /** Fly's digest of the value after the write. */
+  digest: string;
+  /** sha256 of the value written. */
+  sha256: string;
+}
+
 export type Service = Resource<
   "Fly.Service",
   ServiceProps,
@@ -288,6 +297,14 @@ export type Service = Resource<
     network?: string;
     /** Token bound callers send with RPC calls. */
     rpcToken?: Redacted.Redacted<string>;
+    /**
+     * App secrets the Service wrote from bound `Config` and Redacted
+     * values, by name: Fly's digest after the write and a sha256 of the
+     * value. Only these are rewritten or deleted.
+     */
+    secrets?: Record<string, BoundSecret>;
+    /** App-secrets version that holds {@link secrets}. */
+    secretsVersion?: number;
     /** Fly Machine id of replica 0. */
     machineId: string;
     /** Fly Machine ids of every replica. */
@@ -727,8 +744,12 @@ export type ServiceRuntimeContext = FlyHostRuntimeContext;
  *
  * ### Config
  * Yield `Config` in init. Alchemy reads the value from the env of
- * whoever deploys and writes it onto the Machine, so there is no need
- * to copy it into `env`.
+ * whoever deploys and stores it as a secret on the Service's App, so
+ * there is no need to copy it into `env` and it never appears in the
+ * Machine config. Redacted outputs of bound resources are stored the
+ * same way. A Service in a shared App (`app`) writes them into the
+ * Machine env instead, because Fly gives every App secret to every
+ * Machine in the App.
  *
  * `Config.Redacted("API_KEY")` is `Redacted<string>`. Unwrap with
  * `Redacted.value` only where you need the raw string.
@@ -1111,6 +1132,75 @@ const toFlyGuest = (guest: MachineGuest | undefined): FlyMachineGuest => {
   return fly;
 };
 
+/**
+ * Store bound `Config` and Redacted values as App secrets. Fly's digest is
+ * not a hash Alchemy can compute, so a value is unchanged only when its
+ * sha256 matches the last write and Fly still reports that write's digest.
+ * A bound name that already exists is taken over, as the plain env var
+ * used to override it; this also converges after a crash between the
+ * write and the state save. Deletes only secrets this Service wrote that
+ * are no longer bound. Returns what it now owns and the App-secrets
+ * version Machines must reach.
+ */
+const syncBoundSecrets = Effect.fn(function* (
+  appName: string,
+  desired: Record<string, string>,
+  previous: { secrets: Record<string, BoundSecret>; version: number | undefined },
+) {
+  if (Object.keys(desired).length === 0 && Object.keys(previous.secrets).length === 0) {
+    return { secrets: {}, version: previous.version };
+  }
+  const listDigests = machines
+    .listSecrets({ app_name: appName, show_secrets: false })
+    .pipe(
+      Effect.map(
+        (listed) =>
+          new Map(
+            (listed.secrets ?? []).flatMap((secret) =>
+              secret.name === undefined ? [] : [[secret.name, secret.digest ?? ""] as const],
+            ),
+          ),
+      ),
+    );
+  const observed = yield* listDigests;
+  const secrets: Record<string, BoundSecret> = {};
+  const hashes: Record<string, string> = {};
+  const writes: Record<string, string> = {};
+  for (const [name, value] of Object.entries(desired)) {
+    const hash = yield* sha256(value);
+    const last = previous.secrets[name];
+    if (last !== undefined && last.sha256 === hash && observed.get(name) === last.digest) {
+      secrets[name] = last;
+    } else {
+      writes[name] = value;
+      hashes[name] = hash;
+    }
+  }
+  const versions: number[] = [];
+  const accept = (version: number | undefined) => {
+    if (version !== undefined && Number.isSafeInteger(version)) versions.push(version);
+  };
+  if (Object.keys(writes).length > 0) {
+    const response = yield* machines.updateSecrets({ app_name: appName, values: writes });
+    accept(response.version ?? response.Version);
+    const written = yield* listDigests;
+    for (const name of Object.keys(writes)) {
+      secrets[name] = { digest: written.get(name) ?? "", sha256: hashes[name]! };
+    }
+  }
+  for (const name of Object.keys(previous.secrets)) {
+    if (name in desired || !observed.has(name)) continue;
+    const response = yield* machines
+      .deleteSecret({ app_name: appName, secret_name: name })
+      .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    accept(response?.version ?? response?.Version);
+  }
+  return {
+    secrets,
+    version: versions.length > 0 ? Math.max(...versions) : previous.version,
+  };
+});
+
 const desiredEnv = (
   props: ServiceProps,
   bindingEnv: Record<string, any>,
@@ -1318,6 +1408,8 @@ interface Access {
   network: string | undefined;
   bindingPort: number;
   rpcToken: Redacted.Redacted<string> | undefined;
+  secrets?: Record<string, BoundSecret>;
+  secretsVersion?: number;
 }
 
 /** Drop the port Alchemy added for bindings from a services list. */
@@ -1501,6 +1593,8 @@ const toAttrs = (set: ReplicaSet, codeHash: string, access: Access): Service["At
   ownsApp: access.ownsApp,
   network: normalizeNetwork(access.network),
   rpcToken: access.rpcToken,
+  secrets: access.secrets,
+  secretsVersion: access.secretsVersion,
   ...endpointsOf(set, access),
   rolloutPending: set.rolloutPending,
   machineId: set.machineId,
@@ -1724,6 +1818,8 @@ export const ServiceProvider = () =>
             network: output?.network ?? (ownsApp ? olds?.network : undefined),
             bindingPort: olds?.bindingPort ?? DEFAULT_BINDING_PORT,
             rpcToken: output?.rpcToken,
+            secrets: output?.secrets,
+            secretsVersion: output?.secretsVersion,
           });
         }),
 
@@ -1774,9 +1870,27 @@ export const ServiceProvider = () =>
             const version = yield* attachPostgresSecrets(appName, pg.clusterId, pg.variableName);
             if (version !== undefined) secretVersions.push(version);
           }
+          const env = desiredEnv(props, bound.env, hosted.alchemyEnv, port);
+          // Redacted values (every bound `Config`) become App secrets, but
+          // only in an App the Service owns: Fly gives every App secret to
+          // every Machine in the App. A plain `env` entry wins over a binding.
+          const redacted = Object.keys(env).filter((key) =>
+            props.env?.[key] !== undefined
+              ? Redacted.isRedacted(props.env[key])
+              : key in bound.secrets,
+          );
+          const boundSecrets = yield* syncBoundSecrets(
+            appName,
+            ownsApp ? Object.fromEntries(redacted.map((key) => [key, env[key]!])) : {},
+            output?.appName === appName
+              ? { secrets: output.secrets ?? {}, version: output.secretsVersion }
+              : { secrets: {}, version: undefined },
+          );
+          if (boundSecrets.version !== undefined) secretVersions.push(boundSecrets.version);
           const minSecretsVersion =
             secretVersions.length > 0 ? Math.max(...secretVersions) : undefined;
-          const env = desiredEnv(props, bound.env, hosted.alchemyEnv, port);
+          // Fly's Machine env overrides App secrets, so drop the plain copies.
+          for (const name of Object.keys(boundSecrets.secrets)) delete env[name];
           if (policy.shutdown && !props.isExternal) {
             env.ALCHEMY_FLY_SHUTDOWN_TIMEOUT_MS = String(policy.shutdown.timeoutMs);
           }
@@ -1850,6 +1964,8 @@ export const ServiceProvider = () =>
             network,
             bindingPort,
             rpcToken: props.rpcToken,
+            secrets: boundSecrets.secrets,
+            secretsVersion: boundSecrets.version,
           });
         }),
 
