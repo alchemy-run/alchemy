@@ -1,12 +1,21 @@
+import { fileURLToPath } from "node:url";
 import * as cloudfront from "@distilled.cloud/aws/cloudfront";
+import * as LambdaWeb from "@distilled.cloud/aws/lambda-web";
 import * as S3 from "@distilled.cloud/aws/s3";
 import { describe, expect } from "alchemy-test";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as AWS from "@/AWS";
-import { Distribution, OriginAccessControl } from "@/AWS/CloudFront";
+import {
+  Distribution,
+  MANAGED_ALL_VIEWER_EXCEPT_HOST_HEADER_POLICY_ID,
+  MANAGED_CACHING_DISABLED_POLICY_ID,
+  OriginAccessControl,
+} from "@/AWS/CloudFront";
 import type { PolicyStatement } from "@/AWS/IAM/Policy";
 import { Bucket } from "@/AWS/S3";
 import * as Output from "@/Output";
@@ -16,6 +25,19 @@ import * as Test from "@/Test/Alchemy";
 const { test } = Test.make({ providers: AWS.providers() });
 
 const runLive = !process.env.FAST;
+// Web Functions are live-only; the Floci sweep (`ALCHEMY_TEST_DEV=1`) points
+// every AWS client at the emulator, which does not emulate them.
+const runWebFunctions = runLive && process.env.ALCHEMY_TEST_DEV !== "1";
+
+const webFunctionMain = fileURLToPath(new URL("./fixtures/web-function.ts", import.meta.url));
+
+// CloudFront itself bounds these lifecycles: a create waits ~5 min for
+// `Deployed`, a config update up to several more, and delete must disable
+// the distribution and wait for `Deployed` again (~3–5 min) before the
+// DeleteDistribution call. Under a loaded full-suite run create+update+delete
+// measured ~570s — right at the old 600s cap, so attempts timed out
+// mid-teardown. 15 min covers the platform floor with headroom.
+const DEPLOY_DELETE_TIMEOUT = 900_000;
 
 describe(
   "AWS.CloudFront.Distribution",
@@ -102,7 +124,7 @@ describe(
           yield* stack.destroy();
           yield* assertDistributionDeleted(deployed.distribution.distributionId);
         }),
-      { tags: ["provider:aws:iam", "provider:aws:s3"], timeout: 600_000 },
+      { tags: ["provider:aws:iam", "provider:aws:s3"], timeout: DEPLOY_DELETE_TIMEOUT },
     );
 
     // Fast probe (read-only): CloudFront `list()` exhaustively paginates
@@ -170,7 +192,7 @@ describe(
           yield* stack.destroy();
           yield* assertDistributionDeleted(deployed.distributionId);
         }),
-      { tags: ["provider:aws:s3"], timeout: 600_000 },
+      { tags: ["provider:aws:s3"], timeout: DEPLOY_DELETE_TIMEOUT },
     );
     // Exercises the newly-exposed config gaps: geo restriction + custom error
     // responses. Creates with a whitelist + a custom 404, updates the geo
@@ -261,7 +283,7 @@ describe(
           yield* stack.destroy();
           yield* assertDistributionDeleted(deployed.distribution.distributionId);
         }),
-      { tags: ["provider:aws:s3"], timeout: 600_000 },
+      { tags: ["provider:aws:s3"], timeout: DEPLOY_DELETE_TIMEOUT },
     );
 
     // Regression for the UpdateDistribution full-config-replacement failure:
@@ -346,7 +368,185 @@ describe(
           yield* stack.destroy();
           yield* assertDistributionDeleted(deployed.distributionId);
         }),
-      { timeout: 900_000 },
+      { timeout: DEPLOY_DELETE_TIMEOUT },
+    );
+
+    test.provider(
+      "webFunction origin refuses the AllViewer origin request policy",
+      (stack) =>
+        Effect.gen(function* () {
+          const failure = yield* stack
+            .plan(
+              Effect.gen(function* () {
+                const api = yield* AWS.Lambda.WebFunction("HostForwarded", {
+                  main: webFunctionMain,
+                  authType: "IamAuth",
+                });
+                return yield* Distribution("HostForwardedCdn", {
+                  origins: [{ id: "api", webFunction: api }],
+                  defaultCacheBehavior: {
+                    targetOriginId: "api",
+                    // Managed AllViewer: forwards the viewer's Host header.
+                    originRequestPolicyId: "216adef6-5c7f-47e4-b989-5492eafa07d3",
+                  },
+                });
+              }),
+            )
+            .pipe(Effect.exit);
+          expect(failure._tag).toBe("Failure");
+          expect(String(failure)).toContain("WebFunctionOriginForwardsHost");
+        }),
+      { tags: ["provider:aws:lambda"], timeout: 60_000 },
+    );
+
+    test.provider.skipIf(!runWebFunctions)(
+      "webFunction origin: CloudFront signs requests to an IamAuth Web Function",
+      (stack) =>
+        Effect.gen(function* () {
+          yield* stack.destroy();
+
+          const { api, distribution } = yield* stack.deploy(
+            Effect.gen(function* () {
+              const api = yield* AWS.Lambda.WebFunction("CdnOrigin", {
+                main: webFunctionMain,
+                authType: "IamAuth",
+              });
+              // No cache or origin request policy: a webFunction origin
+              // defaults to passing the whole request through uncached.
+              const distribution = yield* Distribution("WebFunctionCdn", {
+                origins: [{ id: "api", webFunction: api }],
+                defaultCacheBehavior: { targetOriginId: "api" },
+              });
+              return { api, distribution };
+            }),
+          );
+
+          // Through CloudFront: signed by the origin access control, with the
+          // method, query string, body and the viewer's own Authorization
+          // header all reaching the server.
+          const viaCdn = yield* HttpClient.execute(
+            HttpClientRequest.post(`https://${distribution.domainName}/echo?page=2`).pipe(
+              HttpClientRequest.setHeader("authorization", "Bearer app-token"),
+              HttpClientRequest.bodyText("ping", "text/plain"),
+            ),
+          ).pipe(
+            Effect.flatMap((response) =>
+              response.status === 200
+                ? response.json
+                : Effect.fail(new Error(`CloudFront returned ${response.status}`)),
+            ),
+            Effect.retry({
+              schedule: Schedule.max([Schedule.spaced("5 seconds"), Schedule.recurs(36)]),
+            }),
+          );
+          expect(viaCdn).toEqual({
+            message: "hello through cloudfront",
+            method: "POST",
+            query: "?page=2",
+            body: "ping",
+            endpoint: "default",
+            authorization: "Bearer app-token",
+          });
+
+          // The behavior got the API defaults.
+          const config = yield* cloudfront.getDistributionConfig({
+            Id: distribution.distributionId,
+          });
+          const behavior = config.DistributionConfig!.DefaultCacheBehavior;
+          expect(behavior.CachePolicyId).toBe(MANAGED_CACHING_DISABLED_POLICY_ID);
+          expect(behavior.OriginRequestPolicyId).toBe(
+            MANAGED_ALL_VIEWER_EXCEPT_HOST_HEADER_POLICY_ID,
+          );
+          expect(behavior.AllowedMethods?.Items.sort()).toEqual([
+            "DELETE",
+            "GET",
+            "HEAD",
+            "OPTIONS",
+            "PATCH",
+            "POST",
+            "PUT",
+          ]);
+
+          // Directly, unsigned: refused.
+          const direct = yield* HttpClient.get(api.url).pipe(Effect.map((r) => r.status));
+          expect(direct).toBe(403);
+
+          // Out-of-band: the grant names CloudFront and only this distribution.
+          const policy = yield* LambdaWeb.getResourcePolicy({ resourceArn: api.functionArn });
+          const statements = (
+            JSON.parse(policy.policy) as {
+              Statement: Array<{
+                Principal: { Service?: string };
+                Resource: string;
+                Condition?: { StringEquals?: Record<string, string> };
+              }>;
+            }
+          ).Statement;
+          expect(statements).toHaveLength(1);
+          expect(statements[0]!.Principal.Service).toBe("cloudfront.amazonaws.com");
+          expect(statements[0]!.Resource).toBe(api.endpointArn);
+          expect(statements[0]!.Condition?.StringEquals?.["aws:SourceArn"]).toBe(
+            distribution.distributionArn,
+          );
+
+          yield* stack.destroy();
+          yield* assertDistributionDeleted(distribution.distributionId);
+        }).pipe(Effect.onError(() => stack.destroy().pipe(Effect.ignore))),
+      { tags: ["provider:aws:lambda"], timeout: DEPLOY_DELETE_TIMEOUT },
+    );
+
+    test.provider.skipIf(!runWebFunctions)(
+      "webFunction origin: a multi-Region Web Function is signed with SigV4A",
+      (stack) =>
+        Effect.gen(function* () {
+          yield* stack.destroy();
+
+          const { api, distribution } = yield* stack.deploy(
+            Effect.gen(function* () {
+              const api = yield* AWS.Lambda.WebFunction("GlobalCdnOrigin", {
+                main: webFunctionMain,
+                authType: "IamAuth",
+                regions: ["us-east-1"],
+              });
+              const distribution = yield* Distribution("GlobalWebFunctionCdn", {
+                origins: [{ id: "api", webFunction: api }],
+                defaultCacheBehavior: { targetOriginId: "api" },
+              });
+              return { api, distribution };
+            }),
+          );
+          expect(api.endpointType).toBe("MultiRegion");
+          expect(api.domainName).toContain(".lambda-web.global.on.aws");
+
+          // The global domain only accepts SigV4A: with SigV4 every request
+          // through CloudFront is refused.
+          const viaCdn = yield* HttpClient.get(`https://${distribution.domainName}/`).pipe(
+            Effect.flatMap((response) =>
+              response.status === 200
+                ? response.json
+                : Effect.fail(new Error(`CloudFront returned ${response.status}`)),
+            ),
+            Effect.retry({
+              schedule: Schedule.max([Schedule.spaced("5 seconds"), Schedule.recurs(36)]),
+            }),
+          );
+          expect(viaCdn).toMatchObject({ message: "hello through cloudfront", method: "GET" });
+
+          // Out-of-band: the origin's access control signs with SigV4A.
+          const config = yield* cloudfront.getDistributionConfig({
+            Id: distribution.distributionId,
+          });
+          const originAccessControlId =
+            config.DistributionConfig!.Origins.Items[0]!.OriginAccessControlId!;
+          const control = yield* cloudfront.getOriginAccessControl({ Id: originAccessControlId });
+          expect(control.OriginAccessControl?.OriginAccessControlConfig?.SigningProtocol).toBe(
+            "sigv4a",
+          );
+
+          yield* stack.destroy();
+          yield* assertDistributionDeleted(distribution.distributionId);
+        }).pipe(Effect.onError(() => stack.destroy().pipe(Effect.ignore))),
+      { tags: ["provider:aws:lambda"], timeout: DEPLOY_DELETE_TIMEOUT },
     );
   },
 );

@@ -251,8 +251,11 @@ export const DBProxyTargetGroupProvider = () =>
           }
         }),
         read: Effect.fn(function* ({ olds, output }) {
+          const dbProxyName = output?.dbProxyName ?? olds?.dbProxyName;
+          // State saved before the props resolved has no proxy name to look up.
+          if (!dbProxyName) return undefined;
           const props = {
-            dbProxyName: output?.dbProxyName ?? olds?.dbProxyName ?? "",
+            dbProxyName,
             targetGroupName: output?.targetGroupName ?? olds?.targetGroupName,
             dbClusterIdentifiers: output?.dbClusterIdentifiers ?? olds?.dbClusterIdentifiers,
             dbInstanceIdentifiers: output?.dbInstanceIdentifiers ?? olds?.dbInstanceIdentifiers,

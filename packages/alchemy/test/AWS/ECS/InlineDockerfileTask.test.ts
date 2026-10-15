@@ -19,10 +19,9 @@ const { test } = Test.make({ providers: AWS.providers() });
 // inline preamble replaced the generated `FROM` (the RUN executed at build
 // time) AND the bundle was layered on top of that environment.
 //
-// Docker + ECR + Fargate placement is minutes of wall clock, so like the
-// other Task e2e tests this is gated out of the default sweep: run it
-// explicitly with `AWS_TEST_SLOW=1`.
-test.provider.skipIf(!process.env.AWS_TEST_SLOW || !!process.env.FAST)(
+// Docker + ECR + Fargate placement is ~1 minute of wall clock, so it is
+// skipped under --fast like the Task e2e smoke test.
+test.provider.skipIf(!!process.env.FAST)(
   "inline-dockerfile environment bakes RUN artifact into the bundled image",
   (stack) =>
     Effect.gen(function* () {

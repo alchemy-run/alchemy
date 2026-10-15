@@ -16,8 +16,10 @@ import type { Database as D1Database } from "../D1/Database.ts";
 import { SendEmail } from "../Email/SendEmail.ts";
 import type { App as FlagshipApp } from "../Flagship/App.ts";
 import type { Connection as Hyperdrive } from "../Hyperdrive/Connection.ts";
+import type { ConnectionLookup as HyperdriveLookup } from "../Hyperdrive/ConnectionLookup.ts";
 import type { ImagesBinding } from "../Images/ImagesBinding.ts";
 import type { Stream as K2Stream } from "../K2/Stream.ts";
+import type { InstantNamespace } from "../KV/InstantNamespace.ts";
 import type { Namespace } from "../KV/Namespace.ts";
 import type { MtlsCertificate } from "../MtlsCertificate/MtlsCertificate.ts";
 import type { LegacyPipeline } from "../Pipelines/LegacyPipeline.ts";
@@ -92,6 +94,10 @@ export interface SelfUrlWorkerBinding {
 export interface SelfServiceWorkerBinding {
   type: "self_service";
   name: string;
+  /** Named `WorkerEntrypoint` class to target; omitted → default export. */
+  entrypoint?: string;
+  /** `ctx.props` delivered to the entrypoint. */
+  props?: Record<string, unknown>;
 }
 
 /**
@@ -207,6 +213,7 @@ export type WorkerBindingResource =
   | S3Credentials
   | D1Database
   | Namespace
+  | InstantNamespace
   | Queue
   | AiGateway
   | AIBinding
@@ -225,6 +232,7 @@ export type WorkerBindingResource =
   | LegacyPipeline
   | K2Stream
   | Hyperdrive
+  | HyperdriveLookup
   | VectorizeIndex
   | Secret
   | Worker

@@ -8,7 +8,7 @@ import { ReplicationInstance, ReplicationSubnetGroup } from "@/AWS/DMS";
 import { Subnet, Vpc } from "@/AWS/EC2";
 import { AWSEnvironment } from "@/AWS/Environment";
 import * as Test from "@/Test/Alchemy";
-import { reapDmsOrphans } from "./reap.ts";
+import { DMS_REPLICATION_INSTANCE_VPC, reapDmsOrphans } from "./reap.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -40,16 +40,16 @@ const findInstance = (identifier: string) =>
     );
 
 // A replication instance takes ~6-10 minutes to provision, a similar time to
-// delete, and is billed hourly while it exists. The full lifecycle is gated
-// behind AWS_TEST_SLOW=1 and always destroys what it created.
-test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
+// delete, and is billed hourly while it exists. The full lifecycle is skipped
+// under `--fast` and always destroys what it created.
+test.provider.skipIf(!!process.env.FAST)(
   "create replication instance in a subnet group, destroy, verify gone",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
       // A previous hard-killed run (in-memory scratch state) may have
       // orphaned the VPC fixture — reap it out-of-band before deploying.
-      yield* reapDmsOrphans;
+      yield* reapDmsOrphans(DMS_REPLICATION_INSTANCE_VPC);
 
       const azResult = yield* ec2.describeAvailabilityZones({});
       const azs = (azResult.AvailabilityZones ?? [])
@@ -59,7 +59,9 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
 
       const { instance } = yield* stack.deploy(
         Effect.gen(function* () {
-          const vpc = yield* Vpc("DmsInstVpc", { cidrBlock: "10.92.0.0/16" });
+          const vpc = yield* Vpc(DMS_REPLICATION_INSTANCE_VPC.logicalId, {
+            cidrBlock: DMS_REPLICATION_INSTANCE_VPC.cidr,
+          });
           const subnetA = yield* Subnet("DmsInstSubnetA", {
             vpcId: vpc.vpcId,
             cidrBlock: "10.92.1.0/24",
@@ -75,7 +77,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
             subnetIds: [subnetA.subnetId, subnetB.subnetId],
           });
           const instance = yield* ReplicationInstance("Instance", {
-            replicationInstanceClass: "dms.t3.micro",
+            replicationInstanceClass: "dms.t3.small",
             allocatedStorage: 20,
             replicationSubnetGroupIdentifier: subnetGroup.replicationSubnetGroupIdentifier,
             publiclyAccessible: false,
@@ -86,7 +88,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
       );
 
       expect(instance.replicationInstanceArn).toContain(":rep:");
-      expect(instance.replicationInstanceClass).toBe("dms.t3.micro");
+      expect(instance.replicationInstanceClass).toBe("dms.t3.small");
       expect(instance.status).toBe("available");
 
       const observed = yield* findInstance(instance.replicationInstanceIdentifier);
@@ -107,7 +109,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
       // scratch destroy) fails: the reaper waits out the instance deletion
       // and tears the VPC fixture down out-of-band with idempotent typed
       // calls. `orDie` — a finalizer must not swallow its own failure.
-      Effect.ensuring(reapDmsOrphans.pipe(Effect.orDie)),
+      Effect.ensuring(reapDmsOrphans(DMS_REPLICATION_INSTANCE_VPC).pipe(Effect.orDie)),
     ),
   {
     tags: ["provider:aws", "provider:aws:dms", "provider:aws:ec2", "live"],

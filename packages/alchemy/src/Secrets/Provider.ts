@@ -8,7 +8,8 @@ import type * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import { AlchemyContext } from "../AlchemyContext.ts";
 import type { AuthProviders } from "../Auth/AuthProvider.ts";
 import type { ProfileStore } from "../Auth/Profile.ts";
-import { Stack } from "../Stack.ts";
+import type { Stack } from "../Stack.ts";
+import { StackContext } from "../StackContext.ts";
 import { Stage } from "../Stage.ts";
 
 /** What a secrets provider may depend on. */
@@ -45,7 +46,7 @@ export const resolveSecretsOption = <T>(
     : Effect.map(
         Effect.all({
           stage: Stage,
-          stack: Stack,
+          stack: StackContext,
           alchemyContext: AlchemyContext,
         }),
         option as (context: SecretsContext) => T,

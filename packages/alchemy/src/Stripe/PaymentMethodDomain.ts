@@ -185,6 +185,10 @@ const toAttrs = (domain: StripePaymentMethodDomain): PaymentMethodDomainAttribut
 
 const isMissingDomain = isMissingStripeResource;
 
+/** Stripe-hosted domains (`buy.stripe.com`, …) Stripe registers itself. */
+const isStripeManagedDomain = (domainName: string) =>
+  domainName === "stripe.com" || domainName.endsWith(".stripe.com");
+
 const getById = (paymentMethodDomain: string) =>
   GetPaymentMethodDomain({
     payment_method_domain: paymentMethodDomain,
@@ -269,9 +273,11 @@ export const PaymentMethodDomainProvider = () =>
     list: Effect.fn(function* () {
       // No metadata on this resource. Default list is enabled domains;
       // disabled rows stay in Stripe (domain_name remains reserved) but
-      // must not re-enter nuke.
+      // must not re-enter nuke. Stripe auto-registers its own hosted
+      // domains (e.g. `buy.stripe.com` for Payment Links) on the account;
+      // those are Stripe-managed, never ours, and are skipped.
       const domains = yield* listByEnabled(true);
-      return domains.map(toAttrs);
+      return domains.filter((domain) => !isStripeManagedDomain(domain.domain_name)).map(toAttrs);
     }),
 
     reconcile: Effect.fn(function* ({ id, news, output, instanceId }) {

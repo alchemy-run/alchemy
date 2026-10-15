@@ -1,7 +1,6 @@
 import * as Effect from "effect/Effect";
-import * as Binding from "../../Binding.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
 import { Region } from "../Region.ts";
 import type { ReportDefinition } from "./ReportDefinition.ts";
 
@@ -41,23 +40,20 @@ export const makeCurHttpBinding = <I extends object, A, E, R>(options: {
   operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
 }) =>
   Effect.gen(function* () {
-    const op = yield* pinCur(options.operation);
+    const op = yield* options.operation.pipe(pinCur, AWSBindings.withCredentials);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          const policyStatements: PolicyStatement[] = [
-            {
-              Effect: "Allow",
-              Action: [...options.iamActions],
-              Resource: ["*"],
-            },
-          ];
-          yield* host.bind`Allow(${host}, AWS.CostAndUsageReport.${options.capability}())`({
-            policyStatements,
-          });
-        }
+        const policyStatements: PolicyStatement[] = [
+          {
+            Effect: "Allow",
+            Action: [...options.iamActions],
+            Resource: ["*"],
+          },
+        ];
+        yield* AWSBindings.bind`AWS.CostAndUsageReport.${options.capability}()`({
+          policyStatements,
+        });
       }
       return Effect.fn(`AWS.CostAndUsageReport.${options.capability}`)(function* (request?: I) {
         // The region must also be pinned at the call site: the yield-time
@@ -92,25 +88,20 @@ export const makeReportDefinitionHttpBinding = <
   operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
 }) =>
   Effect.gen(function* () {
-    const op = yield* pinCur(options.operation);
+    const op = yield* options.operation.pipe(pinCur, AWSBindings.withCredentials);
 
     return Effect.fn(function* (report: ReportDefinition) {
       const ReportName = yield* report.reportName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, AWS.CostAndUsageReport.${options.capability}(${report}))`(
+        yield* AWSBindings.bind`AWS.CostAndUsageReport.${options.capability}(${report})`({
+          policyStatements: [
             {
-              policyStatements: [
-                {
-                  Effect: "Allow",
-                  Action: [...options.iamActions],
-                  Resource: [report.reportArn],
-                },
-              ],
+              Effect: "Allow",
+              Action: [...options.iamActions],
+              Resource: [report.reportArn],
             },
-          );
-        }
+          ],
+        });
       }
       return Effect.fn(`AWS.CostAndUsageReport.${options.capability}(${report.LogicalId})`)(
         function* (request?: Omit<I, "ReportName">) {

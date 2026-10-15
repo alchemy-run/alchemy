@@ -37,6 +37,7 @@ import * as Stream from "effect/Stream";
  * POST /:owner/:repo[.git]/git-receive-pack
  * ```
  */
+// oxlint-disable-next-line alchemy/package-boundaries -- package split phase 3: Git is built on Cloudflare (plus S3 blobs, Lambda hasher); becomes integration subpaths
 import * as Cloudflare from "../Cloudflare/index.ts";
 import type { HttpEffect } from "../Http.ts";
 import { RuntimeContext } from "../RuntimeContext.ts";

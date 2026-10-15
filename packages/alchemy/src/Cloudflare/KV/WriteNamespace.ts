@@ -1,6 +1,9 @@
 import * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
+import type { Input } from "../../Input.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
+import type { InstantNamespace } from "./InstantNamespace.ts";
+import type { WriteInstantNamespaceClient } from "./InstantNamespaceTypes.ts";
 import type { Namespace } from "./Namespace.ts";
 import type { NamespaceError } from "./NamespaceTypes.ts";
 
@@ -12,6 +15,9 @@ import type { NamespaceError } from "./NamespaceTypes.ts";
  * Context tag, its type, and the callable —
  * `yield* Cloudflare.KV.WriteNamespace(ns)`.
  *
+ * Also accepts InstantNamespace, returning a client without metadata or
+ * paginated listing options.
+ *
  * @binding
  * @product KV
  * @category Storage & Databases
@@ -19,8 +25,21 @@ import type { NamespaceError } from "./NamespaceTypes.ts";
 export interface WriteNamespace extends Binding.Service<
   WriteNamespace,
   "Cloudflare.KV.WriteNamespace",
-  (namespace: Namespace) => Effect.Effect<WriteNamespaceClient>
-> {}
+  {
+    (namespace: InstantNamespace): Effect.Effect<WriteInstantNamespaceClient>;
+    (namespace: Namespace): Effect.Effect<WriteNamespaceClient>;
+    (namespace: Namespace | InstantNamespace): Effect.Effect<WriteInstantNamespaceClient>;
+  }
+> {
+  <Req = never>(
+    namespace: Input<Namespace> | Effect.Effect<Namespace, never, Req>,
+  ): Effect.Effect<WriteNamespaceClient, never, WriteNamespace | Req>;
+  <Req = never>(
+    namespace:
+      | Input<Namespace | InstantNamespace>
+      | Effect.Effect<Namespace | InstantNamespace, never, Req>,
+  ): Effect.Effect<WriteInstantNamespaceClient, never, WriteNamespace | Req>;
+}
 
 export const WriteNamespace = Binding.Service<WriteNamespace>("Cloudflare.KV.WriteNamespace");
 

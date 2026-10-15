@@ -485,7 +485,7 @@ describe(
           const totalError = yield* createComputeArchive({
             directory: root,
             entrypoint: "server.ts",
-            maxUncompressedBytes: 256 * 1024 * 1024 + 1,
+            maxUncompressedBytes: 768 * 1024 * 1024 + 1,
           }).pipe(Effect.flip);
 
           expect(entriesError.message).toContain("hard limit");

@@ -1,10 +1,9 @@
 import * as Effect from "effect/Effect";
-import * as Binding from "../../Binding.ts";
 import * as Output from "../../Output.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { Cluster } from "./Cluster.ts";
 import type { Service } from "./Service.ts";
-import { isTask, type Task } from "./Task.ts";
+import { type Task } from "./Task.ts";
 
 /**
  * Shared scaffolding for AWS ECS HTTP bindings.
@@ -65,32 +64,29 @@ export const makeEcsClusterHttpBinding = <I extends { cluster?: string }, A, E, 
   resources: readonly EcsClusterIamResource[] | "cluster-condition";
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (cluster: Cluster) {
       const ClusterArn = yield* cluster.clusterArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host) || isTask(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}(${cluster}))`({
-            policyStatements: [
-              options.resources === "cluster-condition"
-                ? {
-                    Effect: "Allow",
-                    Action: [...options.actions],
-                    Resource: ["*"],
-                    Condition: {
-                      ArnEquals: { "ecs:cluster": cluster.clusterArn },
-                    },
-                  }
-                : {
-                    Effect: "Allow",
-                    Action: [...options.actions],
-                    Resource: clusterIamResources(cluster, options.resources),
+        yield* AWSBindings.bind`${options.tag}(${cluster})`({
+          policyStatements: [
+            options.resources === "cluster-condition"
+              ? {
+                  Effect: "Allow",
+                  Action: [...options.actions],
+                  Resource: ["*"],
+                  Condition: {
+                    ArnEquals: { "ecs:cluster": cluster.clusterArn },
                   },
-            ],
-          });
-        }
+                }
+              : {
+                  Effect: "Allow",
+                  Action: [...options.actions],
+                  Resource: clusterIamResources(cluster, options.resources),
+                },
+          ],
+        });
       }
       return Effect.fn(`${options.tag}(${cluster.LogicalId})`)(function* (
         request: Omit<I, "cluster">,
@@ -139,36 +135,33 @@ export const makeEcsTaskLaunchHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (cluster: Cluster, task: Task) {
       const ClusterArn = yield* cluster.clusterArn;
       const TaskDefinitionArn = yield* task.taskDefinitionArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host) || isTask(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}(${cluster}, ${task}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                // All revisions: the launch resolves the latest ACTIVE
-                // revision, which may be registered after this grant.
-                Resource: [
-                  Output.map(
-                    task.taskDefinitionArn,
-                    (arn) => `${revisionlessTaskDefinitionArn(arn)}:*`,
-                  ),
-                ],
-              },
-              {
-                Effect: "Allow",
-                Action: passRoleActions,
-                Resource: [task.taskRoleArn, task.executionRoleArn],
-              },
-            ],
-          });
-        }
+        yield* AWSBindings.bind`${options.tag}(${cluster}, ${task})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              // All revisions: the launch resolves the latest ACTIVE
+              // revision, which may be registered after this grant.
+              Resource: [
+                Output.map(
+                  task.taskDefinitionArn,
+                  (arn) => `${revisionlessTaskDefinitionArn(arn)}:*`,
+                ),
+              ],
+            },
+            {
+              Effect: "Allow",
+              Action: passRoleActions,
+              Resource: [task.taskRoleArn, task.executionRoleArn],
+            },
+          ],
+        });
       }
       return Effect.fn(`${options.tag}(${cluster.LogicalId}, ${task.LogicalId})`)(function* (
         request: Omit<I, "cluster" | "taskDefinition">,
@@ -215,24 +208,21 @@ export const makeEcsServiceHttpBinding = <I, A, E, R>(options: {
   inject?: boolean;
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (service: Service) {
       const ServiceArn = yield* service.serviceArn;
       const ClusterArn = yield* service.clusterArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host) || isTask(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}(${service}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: serviceIamResources(service, options.resources),
-              },
-            ],
-          });
-        }
+        yield* AWSBindings.bind`${options.tag}(${service})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: serviceIamResources(service, options.resources),
+            },
+          ],
+        });
       }
       return Effect.fn(`${options.tag}(${service.LogicalId})`)(function* (
         request: Omit<I, "service" | "cluster">,

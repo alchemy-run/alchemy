@@ -4,7 +4,9 @@ import * as HttpServerRequest from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Cloudflare from "@/Cloudflare";
 import { NativeImages } from "./images.ts";
-import { INTERCEPT_HOST, NativeObject } from "./object.ts";
+import { type ImageName, INTERCEPT_HOST, NativeObject, NativeReviewer } from "./object.ts";
+
+const imageFor = (value: string | null): ImageName => (value === "tools" ? "tools" : "shell");
 
 const execModeFor = (path: string) => {
   if (path === "/snapshot") return "snapshot";
@@ -22,6 +24,7 @@ export const NativeWorker = Cloudflare.Worker(
   },
   Effect.gen(function* () {
     const objects = yield* NativeObject;
+    const reviewers = yield* NativeReviewer;
     return {
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest.HttpServerRequest;
@@ -64,14 +67,25 @@ export const NativeWorker = Cloudflare.Worker(
                 .probe({
                   seed: url.searchParams.has("seed"),
                   restart: url.searchParams.has("restart"),
-                  image: url.searchParams.get("image") ?? "shell",
+                  image: imageFor(url.searchParams.get("image")),
                 })
                 .pipe(Effect.orDie),
             );
+          case "/reviewer/shell":
+          case "/reviewer/lint": {
+            const image = url.pathname.endsWith("/lint") ? "lint" : "shell";
+            return yield* HttpServerResponse.json(
+              yield* reviewers.getByName(`reviewer-${image}`).exec(image).pipe(Effect.orDie),
+            );
+          }
           default: {
+            // `/image/<name>` starts that image in an object of its own.
+            const image = url.pathname.startsWith("/image/")
+              ? imageFor(url.pathname.slice("/image/".length))
+              : "shell";
             const result = yield* objects
-              .getByName("workspace")
-              .exec(execModeFor(url.pathname))
+              .getByName(image === "shell" ? "workspace" : `image-${image}`)
+              .exec(execModeFor(url.pathname), image)
               .pipe(Effect.orDie);
             return yield* HttpServerResponse.json(result);
           }

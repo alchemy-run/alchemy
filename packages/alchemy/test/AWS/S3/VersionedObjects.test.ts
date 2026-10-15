@@ -224,7 +224,10 @@ describe.sequential(
             .pages({ RoleName: roleName })
             .pipe(Stream.runCollect);
           const documents = yield* Effect.forEach(
-            pages.flatMap((page) => page.PolicyNames),
+            // Skip the function's log-group guard; only binding grants count.
+            pages
+              .flatMap((page) => page.PolicyNames)
+              .filter((name) => name !== "AlchemyDenyLogGroupCreate"),
             (PolicyName) =>
               Effect.gen(function* () {
                 const result = yield* IAM.getRolePolicy({ RoleName: roleName, PolicyName });

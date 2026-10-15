@@ -25,7 +25,9 @@ class TransientUpstream extends Data.TaggedError("TransientUpstream")<{
 }> {}
 
 // Retry only transient 5xx (cold re-init, IAM propagation on the freshly
-// attached es:ESHttp* policy); a genuine 4xx surfaces immediately.
+// attached es:ESHttp* policy); a genuine 4xx surfaces immediately. Bounded
+// well under the 120s test timeout (~31s total) so a persistent fixture
+// failure surfaces its body instead of a bare timeout.
 const send = (request: HttpClientRequest.HttpClientRequest) =>
   HttpClient.execute(request).pipe(
     Effect.flatMap((response) =>
@@ -39,14 +41,14 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([Schedule.exponential("1 second"), Schedule.recurs(8)]),
+      schedule: Schedule.max([Schedule.exponential("1 second"), Schedule.recurs(5)]),
     }),
   );
 
 // The fixture provisions a real OpenSearch domain (~15-25 minutes, billed
-// per instance-hour) — gated behind AWS_TEST_SLOW=1 like the Domain
+// per instance-hour) — skipped under `--fast` like the Domain
 // lifecycle test. The suite stays skip-clean without the flag.
-const describeGated = process.env.AWS_TEST_SLOW ? describe.sequential : describe.skip;
+const describeGated = !process.env.FAST ? describe.sequential : describe.skip;
 
 describeGated("OpenSearch Data Plane", () => {
   beforeAll(

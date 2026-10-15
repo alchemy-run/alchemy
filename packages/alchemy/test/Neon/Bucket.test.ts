@@ -15,7 +15,7 @@ import { createPhysicalName } from "@/PhysicalName";
 import * as Provider from "@/Provider";
 import { ResourceContext } from "@/ResourceContext.ts";
 import * as Test from "@/Test/Alchemy";
-import { resourceContext } from "../Utils/ResourceContext.ts";
+import { resourceContext } from "../Util/ResourceContext.ts";
 
 const { test } = Test.make({ providers: providers() });
 

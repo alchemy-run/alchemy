@@ -21,9 +21,9 @@ const { test } = Test.make({ providers: AWS.providers() });
 // `/aws/batch/job` log stream.
 //
 // It is heavy (Docker build + ECR push + Fargate provisioning of the job,
-// several minutes end to end), so it is gated behind AWS_TEST_SLOW=1 and
-// always destroys what it created.
-test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
+// ~2.5 minutes end to end), so it is skipped under --fast and always
+// destroys what it created.
+test.provider.skipIf(!!process.env.FAST)(
   "deploys an Effect-native Batch job definition and runs it to SUCCEEDED",
   (stack) =>
     Effect.gen(function* () {

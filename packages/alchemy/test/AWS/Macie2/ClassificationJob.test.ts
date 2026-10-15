@@ -28,14 +28,14 @@ const getSession = macie2.getMacieSession({}).pipe(
 // Macie is not already enabled — the test enables Macie itself and disables it
 // again on teardown.
 //
-// Gated behind AWS_TEST_SLOW=1: Macie's control-plane APIs are low-TPS and,
+// Skipped under `--fast`: Macie's control-plane APIs are low-TPS and,
 // under the heavy concurrent load of the resource-factory test wave, both the
 // enablement→job-creation propagation and job creation itself intermittently
 // hit `Too Many Requests` throttling. The resource, its distilled
 // `MacieNotEnabled` synthetic error, and the bounded enablement-propagation
 // retry are all fully implemented and pass in isolation; run this gated on a
-// quiet account (AWS_TEST_SLOW=1) to exercise the full lifecycle.
-test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
+// quiet account to exercise the full lifecycle.
+test.provider.skipIf(!!process.env.FAST)(
   "lifecycle: create a one-time classification job, then cancel it",
   (stack) =>
     Effect.gen(function* () {
@@ -82,14 +82,23 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
       expect(live.tags?.["env"]).toBe("test");
       expect(live.tags?.["alchemy::id"]).toBe("Scan");
 
-      // Destroy — the job is cancelled, the bucket removed, and Macie disabled.
-      yield* stack.destroy();
+      // Phase 3 — remove the job while Macie stays enabled. Disabling Macie
+      // deletes every job, so the cancellation must be observed before the
+      // session is destroyed.
+      yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Session("Macie", { status: "ENABLED" });
+        }),
+      );
       const after = yield* macie2.describeClassificationJob({
         jobId: created.jobId,
       });
       // A cancelled/terminal job reports CANCELLED (or COMPLETE if it finished
       // scanning the empty bucket first).
       expect(["CANCELLED", "COMPLETE"]).toContain(after.jobStatus);
+
+      // Destroy — Macie is disabled.
+      yield* stack.destroy();
       const session = yield* getSession;
       expect(session).toBeUndefined();
     }),

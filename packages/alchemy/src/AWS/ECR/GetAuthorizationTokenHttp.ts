@@ -1,8 +1,7 @@
 import * as ecr from "@distilled.cloud/aws/ecr";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Binding from "../../Binding.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import { GetAuthorizationToken } from "./GetAuthorizationToken.ts";
 
 /**
@@ -14,22 +13,19 @@ import { GetAuthorizationToken } from "./GetAuthorizationToken.ts";
 export const GetAuthorizationTokenHttp = Layer.effect(
   GetAuthorizationToken,
   Effect.gen(function* () {
-    const op = yield* ecr.getAuthorizationToken;
+    const op = yield* AWSBindings.withCredentials(ecr.getAuthorizationToken);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, AWS.ECR.GetAuthorizationToken())`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: ["ecr:GetAuthorizationToken"],
-                Resource: ["*"],
-              },
-            ],
-          });
-        }
+        yield* AWSBindings.bind`AWS.ECR.GetAuthorizationToken()`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: ["ecr:GetAuthorizationToken"],
+              Resource: ["*"],
+            },
+          ],
+        });
       }
       return Effect.fn("AWS.ECR.GetAuthorizationToken")(function* () {
         return yield* op({});

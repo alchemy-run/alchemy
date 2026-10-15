@@ -11,6 +11,7 @@ import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
 import * as pathe from "pathe";
 import { adopt } from "@/AdoptPolicy";
+import { AlchemyContext } from "@/AlchemyContext";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import * as Cloudflare from "@/Cloudflare/index.ts";
 import * as R2 from "@/Cloudflare/R2";
@@ -134,6 +135,15 @@ describe.concurrent(
           expect(yield* getWorkerTags(worker.workerName, accountId)).toContain(
             "alchemy:id:TestWorker",
           );
+
+          // The bundle that shipped is kept for inspection in the Worker's own
+          // directory under `.alchemy/bundles`, named after stack, stage, and FQN.
+          const fs = yield* FileSystem.FileSystem;
+          const { dotAlchemy } = yield* AlchemyContext;
+          const bundled = yield* fs.readDirectory(
+            pathe.join(dotAlchemy, "bundles", `${s.name}-${s.stage}-TestWorker`),
+          );
+          expect(bundled.some((file) => file.endsWith(".js"))).toBe(true);
 
           // Verify the workers.dev subdomain is enabled on Cloudflare
           // (rather than just trusting the resource's output attributes).
@@ -1468,8 +1478,9 @@ describe.concurrent(
     // of Workers binding each other's `url` resolves on the first deploy.
     // Worker A serves only on a custom domain (`workersDev: false`): its
     // precreate `url` must be the domain, not `undefined`.
-    const circularUrlZone = process.env.CLOUDFLARE_TEST_WORKER_DOMAIN_ZONE_NAME;
-    test.provider.skipIf(!circularUrlZone)(
+    const circularUrlZone =
+      process.env.CLOUDFLARE_TEST_WORKER_DOMAIN_ZONE_NAME ?? "alchemy-test-2.us";
+    test.provider(
       "circular Worker URL bindings resolve custom-domain and workers.dev URLs on the first deploy",
       (stack) =>
         Effect.gen(function* () {
@@ -1826,8 +1837,9 @@ describe.concurrent(
     // Ordering contract: the canonical custom domain leads `urls` (it is the
     // most significant URL), aliases follow in declared order, and the
     // workers.dev URL comes last. Swapping name and alias moves `url`.
-    const customDomainZone = process.env.CLOUDFLARE_TEST_WORKER_DOMAIN_ZONE_NAME;
-    test.provider.skipIf(!customDomainZone)(
+    const customDomainZone =
+      process.env.CLOUDFLARE_TEST_WORKER_DOMAIN_ZONE_NAME ?? "alchemy-test-2.us";
+    test.provider(
       "custom domain outranks workers.dev in urls and selects url",
       (stack) =>
         Effect.gen(function* () {

@@ -12,12 +12,12 @@ const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Deb
 
 const zoneName = process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
 
-// Custom detections are plan-gated — the standard testing zone has a zero
-// custom-detection quota, so any create fails with the typed
-// `DetectionQuotaExceeded` error ("exceeded the maximum number of rules:
-// 1 out of 0"). Deploying a detection to assert presence in `list()` is
-// only feasible on an entitled zone supplied via env; otherwise the test
-// runs read-only and asserts a well-typed (possibly empty) result.
+// This file stays read-only on the standing test zone: the detection
+// lifecycle (including a `list()` presence assertion) runs in
+// LeakedCredentialCheck.test.ts, serialized with the other tests that flip
+// the same zone-level LCC toggle. Files run concurrently, so deploying a
+// detection here would race those toggle mutations. Supply
+// CLOUDFLARE_TEST_LCC_DETECTION_ZONE_ID=<another zone> to deploy here.
 const detectionZoneId = process.env.CLOUDFLARE_TEST_LCC_DETECTION_ZONE_ID;
 
 const resolveZoneId = Effect.gen(function* () {
@@ -46,9 +46,8 @@ describe.sequential(
     // skipping zones whose LCC toggle is off (typed
     // `LeakedCredentialChecksDisabled`) or that 403 (`Forbidden`).
     //
-    // On the standard testing account no zone has detections (quota is zero),
-    // so the result is a well-typed empty array. When an entitled zone is
-    // supplied, deploy a detection and assert it appears in the result.
+    // Without an override zone the assertion is read-only (a well-typed
+    // array). With one, deploy a detection and assert it appears.
     test.provider("list enumerates custom detections across all zones", (stack) =>
       Effect.gen(function* () {
         const zoneId = yield* resolveZoneId;
@@ -80,7 +79,7 @@ describe.sequential(
           expect(all.some((d) => d.detectionId === detection.detectionId)).toBe(true);
         } else {
           // Read-only assertion: the result is a well-typed array (empty on the
-          // unentitled standard account). `zoneId` is resolved to prove the
+          // standing zone between runs). `zoneId` is resolved to prove the
           // standing test zone exists in the enumeration scope.
           expect(zoneId).toBeTruthy();
           const all = yield* provider.list();

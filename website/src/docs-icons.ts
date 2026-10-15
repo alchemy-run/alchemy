@@ -50,6 +50,7 @@ export const TAB_ICONS: Record<string, string | undefined> = {
   CLI: l("square-terminal"),
   Cloudflare: b("cloudflare"),
   AWS: b("amazonwebservices"),
+  GCP: b("googlecloud"),
   Hetzner: b("hetzner"),
   Fly: b("flydotio"),
   Railway: b("railway"),
@@ -69,6 +70,7 @@ export const TAB_ICONS: Record<string, string | undefined> = {
   Drizzle: b("drizzle"),
   SQL: l("database"),
   Command: l("square-terminal"),
+  ACME: l("shield-check"),
   Reference: l("code"),
   Blog: l("newspaper"),
   Compare: l("scale"),
@@ -108,9 +110,16 @@ const GROUP_ICONS: Record<string, string | undefined> = {
   Clusters: l("network"),
   Workloads: l("container"),
   Objects: l("file-code"),
+  Frontends: l("monitor-smartphone"),
+  Security: l("shield-check"),
+  "Consistency patterns": l("git-merge"),
+  Hosting: l("server"),
+  Testing: l("flask-conical"),
+  Domain: l("blocks"),
   // Reference tab: provider groups get their official brand marks.
   AWS: b("amazonwebservices"),
   Cloudflare: b("cloudflare"),
+  GCP: b("googlecloud"),
   Hetzner: b("hetzner"),
   Fly: b("flydotio"),
   Railway: b("railway"),
@@ -130,6 +139,7 @@ const GROUP_ICONS: Record<string, string | undefined> = {
   Migrations: l("list-ordered"),
   Command: l("square-terminal"),
   Stripe: c("stripe"),
+  ACME: l("shield-check"),
 };
 
 /**

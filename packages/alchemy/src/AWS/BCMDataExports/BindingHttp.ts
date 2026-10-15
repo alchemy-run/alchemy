@@ -1,6 +1,5 @@
 import * as Effect from "effect/Effect";
-import * as Binding from "../../Binding.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { Export } from "./Export.ts";
 
 /**
@@ -42,25 +41,20 @@ export const makeExportHttpBinding = <I extends { ExportArn: string }, A, E, R>(
   operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (dataExport: Export) {
       const ExportArn = yield* dataExport.exportArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, AWS.BCMDataExports.${options.capability}(${dataExport}))`(
+        yield* AWSBindings.bind`AWS.BCMDataExports.${options.capability}(${dataExport})`({
+          policyStatements: [
             {
-              policyStatements: [
-                {
-                  Effect: "Allow",
-                  Action: [...options.iamActions],
-                  Resource: [dataExport.exportArn],
-                },
-              ],
+              Effect: "Allow",
+              Action: [...options.iamActions],
+              Resource: [dataExport.exportArn],
             },
-          );
-        }
+          ],
+        });
       }
       return Effect.fn(`AWS.BCMDataExports.${options.capability}(${dataExport.LogicalId})`)(
         function* (request?: Omit<I, "ExportArn">) {
@@ -92,22 +86,19 @@ export const makeDataExportsAccountHttpBinding = <I extends object, A, E, R>(opt
   operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, AWS.BCMDataExports.${options.capability}())`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.iamActions],
-                Resource: ["*"],
-              },
-            ],
-          });
-        }
+        yield* AWSBindings.bind`AWS.BCMDataExports.${options.capability}()`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.iamActions],
+              Resource: ["*"],
+            },
+          ],
+        });
       }
       return Effect.fn(`AWS.BCMDataExports.${options.capability}`)(function* (request?: I) {
         return yield* op((request ?? {}) as I);

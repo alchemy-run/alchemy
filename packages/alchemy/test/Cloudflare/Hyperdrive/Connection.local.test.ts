@@ -4,13 +4,21 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
+import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as pathe from "pathe";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment.ts";
+import { HyperdriveDevOriginUnsupported } from "@/Cloudflare/Hyperdrive/ConnectBinding.ts";
 import * as Cloudflare from "@/Cloudflare/index.ts";
 import * as Neon from "@/Neon/index.ts";
 import * as Test from "@/Test/Alchemy";
 import HyperdriveLocalWorker, { LocalHyperdrive } from "./fixtures/local-worker.ts";
+import { outOfBandConfig } from "./fixtures/lookup-config.ts";
+import HyperdriveLookupLocalWorker, {
+  LocalLookupHyperdrive,
+} from "./fixtures/lookup-local-worker.ts";
+import { lookupConfigName } from "./fixtures/lookup.ts";
 import HyperdriveRemoteWorker, { RemoteHyperdrive } from "./fixtures/remote-worker.ts";
 
 // `dev: true` runs local providers behind the RPC sidecar proxy by default,
@@ -178,5 +186,190 @@ test.provider(
       "live",
     ],
     timeout: 180_000,
+  },
+);
+
+/**
+ * `Hyperdrive.lookup` reads the real configuration from Cloudflare even in
+ * dev (it is not a resource, so there is nothing to emulate), while the
+ * locally-served Worker's binding passes through to the lookup's `dev`
+ * origin. Destroy leaves the configuration in place.
+ */
+test.provider(
+  "lookup with a dev origin round-trips SQL through the local passthrough",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+
+      yield* stack.destroy();
+
+      const project = yield* stack.deploy(Neon.Project("HyperdriveLookupLocalProject"));
+
+      yield* Effect.scoped(
+        Effect.gen(function* () {
+          const created = yield* outOfBandConfig(
+            accountId,
+            lookupConfigName("local"),
+            project.origin,
+          );
+
+          const { effectWorker, asyncWorker } = yield* stack.deploy(
+            Effect.gen(function* () {
+              yield* Neon.Project("HyperdriveLookupLocalProject");
+              // Through `Cloudflare.Hyperdrive.Connect`.
+              const effectWorker = yield* HyperdriveLookupLocalWorker;
+              // Through `env`.
+              const asyncWorker = yield* Cloudflare.Worker("HyperdriveLookupLocalAsyncWorker", {
+                main: pathe.resolve(import.meta.dirname, "fixtures/lookup-async-worker.ts"),
+                env: { HD: LocalLookupHyperdrive },
+              });
+              return { effectWorker, asyncWorker };
+            }),
+          );
+
+          for (const url of [`${effectWorker.url}/query`, asyncWorker.url!]) {
+            expect(url).toMatch(/^http:\/\/localhost:\d+/);
+            const body = (yield* getJsonReady(url)) as QueryBody;
+            expect(body.row.sum).toBe(2);
+            expect(body.row.db).toBe(project.databaseName);
+            expect(body.host).toBe(project.origin.host);
+          }
+
+          yield* stack.destroy();
+
+          const survived = yield* hyperdrive.getConfig({ accountId, hyperdriveId: created.id });
+          expect(survived.id).toBe(created.id);
+        }),
+      );
+    }).pipe(logLevel),
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:hyperdrive",
+      "provider:cloudflare:worker",
+      "provider:neon",
+      "provider:neon:project",
+      "live",
+    ],
+    timeout: 180_000,
+  },
+);
+
+/**
+ * A looked-up configuration's origin password is never returned by the API,
+ * so a dev run binding a lookup without a `dev` origin must die with the
+ * typed `HyperdriveDevOriginUnsupported` defect. The lookup itself must
+ * resolve first, so it targets a real out-of-band configuration.
+ */
+test.provider(
+  "lookup without a dev origin dies with HyperdriveDevOriginUnsupported",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+
+      yield* stack.destroy();
+
+      const project = yield* stack.deploy(Neon.Project("HyperdriveLookupLocalProject"));
+
+      const defect = yield* Effect.scoped(
+        Effect.gen(function* () {
+          const created = yield* outOfBandConfig(
+            accountId,
+            `${lookupConfigName("local")}-nodev`,
+            project.origin,
+          );
+          return yield* stack
+            .deploy(
+              Effect.gen(function* () {
+                yield* Neon.Project("HyperdriveLookupLocalProject");
+                return yield* Cloudflare.Worker("HyperdriveLookupNoDevWorker", {
+                  main: pathe.resolve(import.meta.dirname, "fixtures/vpc-async-worker.ts"),
+                  env: {
+                    HD: Cloudflare.Hyperdrive.lookup("HyperdriveLookupNoDev", {
+                      hyperdriveId: created.id,
+                    }),
+                  },
+                });
+              }),
+            )
+            .pipe(
+              Effect.flatMap(() => Effect.die(new Error("expected the dev deploy to die"))),
+              Effect.catchDefect((defect) => Effect.succeed(defect)),
+            );
+        }),
+      );
+
+      expect(defect).toBeInstanceOf(HyperdriveDevOriginUnsupported);
+      expect(defect).toMatchObject({
+        _tag: "HyperdriveDevOriginUnsupported",
+        logicalId: "HyperdriveLookupNoDev",
+        origin: "lookup",
+      });
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:hyperdrive",
+      "provider:cloudflare:worker",
+      "provider:neon",
+      "provider:neon:project",
+      "live",
+    ],
+    timeout: 180_000,
+  },
+);
+
+/**
+ * A Workers VPC origin is only reachable from Cloudflare's network, so a dev
+ * run binding it without a `dev` override must die with the typed
+ * `HyperdriveDevOriginUnsupported` defect instead of starting a Worker that
+ * can never connect.
+ */
+test.provider(
+  "VPC Service origin without a dev override dies with HyperdriveDevOriginUnsupported",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const defect = yield* stack
+        .deploy(
+          Effect.gen(function* () {
+            const connection = yield* Cloudflare.Hyperdrive.Connection(
+              "HyperdriveVpcDevConnection",
+              {
+                origin: {
+                  scheme: "postgres",
+                  serviceId: "00000000-0000-4000-8000-000000000000",
+                  database: "postgres",
+                  user: "postgres",
+                  password: Redacted.make("unused"),
+                },
+              },
+            );
+            return yield* Cloudflare.Worker("HyperdriveVpcDevWorker", {
+              main: pathe.resolve(import.meta.dirname, "fixtures/vpc-async-worker.ts"),
+              env: { HD: connection },
+            });
+          }),
+        )
+        .pipe(
+          Effect.flatMap(() => Effect.die(new Error("expected the dev deploy to die"))),
+          Effect.catchDefect((defect) => Effect.succeed(defect)),
+        );
+
+      expect(defect).toBeInstanceOf(HyperdriveDevOriginUnsupported);
+      expect(defect).toMatchObject({
+        _tag: "HyperdriveDevOriginUnsupported",
+        logicalId: "HyperdriveVpcDevConnection",
+        origin: "vpc",
+      });
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:hyperdrive", "provider:cloudflare:worker"],
+    timeout: 120_000,
   },
 );

@@ -1,7 +1,6 @@
 import * as Effect from "effect/Effect";
-import * as Binding from "../../Binding.ts";
 import type * as Output from "../../Output.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { App } from "./App.ts";
 
 /**
@@ -34,23 +33,20 @@ export const makeAmplifyHttpBinding = <I extends { appId: string }, A, E, R>(
   options: AmplifyHttpBindingOptions<I, A, E, R>,
 ) =>
   Effect.gen(function* () {
-    const operation = yield* options.operation;
+    const operation = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (app: App) {
       const AppId = yield* app.appId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, AWS.Amplify.${options.name}(${app}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: options.actions,
-                Resource: options.resources(app),
-              },
-            ],
-          });
-        }
+        yield* AWSBindings.bind`AWS.Amplify.${options.name}(${app})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: options.actions,
+              Resource: options.resources(app),
+            },
+          ],
+        });
       }
       return Effect.fn(`AWS.Amplify.${options.name}(${app.LogicalId})`)(function* (
         request: Omit<I, "appId">,

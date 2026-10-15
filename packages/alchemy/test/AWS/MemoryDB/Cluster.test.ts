@@ -71,9 +71,9 @@ const assertClusterDeleting = (name: string) =>
   );
 
 // MemoryDB clusters take ~10-15 minutes to provision and are billed per node
-// while they exist. The full lifecycle is gated behind AWS_TEST_SLOW=1 and
+// while they exist. The full lifecycle is skipped under `--fast` and
 // always destroys what it created.
-test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
+test.provider.skipIf(!!process.env.FAST)(
   "create single-node MemoryDB cluster, verify, destroy",
   (stack) =>
     Effect.gen(function* () {
@@ -129,9 +129,9 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
       yield* stack.destroy();
       yield* assertClusterDeleting(cluster.clusterName);
     }),
-  // create (~10-15 min) + delete initiation, one test.
+  // create (~10-15 min) + delete-until-gone (~5-10 min), one test.
   {
     tags: ["provider:aws", "provider:aws:ec2", "provider:aws:memorydb", "live"],
-    timeout: 1_500_000,
+    timeout: 2_400_000,
   },
 );

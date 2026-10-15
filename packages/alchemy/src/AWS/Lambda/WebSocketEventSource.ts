@@ -59,7 +59,7 @@ export const WebSocketEventSource = Layer.effect(
   AGW2WebSocketEventSource,
   Effect.gen(function* () {
     // this layer can only be used in a Lambda Function
-    const host = yield* Lambda.Function;
+    const host = yield* Lambda.eventSourceHost("AWS.Lambda.WebSocketEventSource");
     const Integration = yield* IntegrationResource;
     const Route = yield* RouteResource;
     const Permission = yield* LambdaPermission;

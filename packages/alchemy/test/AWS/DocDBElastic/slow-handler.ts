@@ -32,7 +32,7 @@ export class DocDBElasticSlowTestFunction extends Lambda.Function<Lambda.Functio
 
 /**
  * Cluster-scoped binding fixture: deploys a real 1-shard elastic cluster
- * (~10 minutes, billed per shard-vCPU-hour — gated behind AWS_TEST_SLOW) and
+ * (~10 minutes, billed per shard-vCPU-hour — skipped under `--fast`) and
  * a Lambda bound to it with CreateClusterSnapshot + StopCluster +
  * StartCluster. The Lambda is not VPC-attached: all three are control-plane
  * calls.

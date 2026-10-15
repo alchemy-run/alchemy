@@ -1,9 +1,8 @@
 import * as Effect from "effect/Effect";
-import * as Binding from "../../Binding.ts";
 import * as Output from "../../Output.ts";
 import type { Output as OutputType } from "../../Output.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
 import type { Parameter } from "./Parameter.ts";
 
 /**
@@ -50,40 +49,37 @@ export const makeParameterHttpBinding = <I, A, E, R>(options: {
   resources?: (parameter: Parameter) => (string | OutputType<string>)[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const op = yield* AWSBindings.withCredentials(options.operation);
     const requestKey = options.requestKey ?? "Name";
 
     return Effect.fn(function* <P extends Parameter>(parameter: P) {
       const Name = yield* parameter.parameterName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          const statements: {
-            Effect: PolicyStatement["Effect"];
-            Action: string[];
-            Resource: (string | OutputType<string>)[];
-          }[] = [
-            {
-              Effect: "Allow",
-              Action: [...options.actions],
-              Resource: options.resources?.(parameter) ?? [parameter.parameterArn],
-            },
-          ];
-          if (options.kmsActions !== undefined) {
-            statements.push({
-              Effect: "Allow",
-              Action: [...options.kmsActions],
-              Resource: [
-                Output.all(parameter.parameterArn, parameter.keyArn).pipe(
-                  Output.map(([parameterArn, keyArn]) => keyArn ?? parameterArn),
-                ),
-              ],
-            });
-          }
-          yield* host.bind`Allow(${host}, ${options.tag}(${parameter}))`({
-            policyStatements: statements,
+        const statements: {
+          Effect: PolicyStatement["Effect"];
+          Action: string[];
+          Resource: (string | OutputType<string>)[];
+        }[] = [
+          {
+            Effect: "Allow",
+            Action: [...options.actions],
+            Resource: options.resources?.(parameter) ?? [parameter.parameterArn],
+          },
+        ];
+        if (options.kmsActions !== undefined) {
+          statements.push({
+            Effect: "Allow",
+            Action: [...options.kmsActions],
+            Resource: [
+              Output.all(parameter.parameterArn, parameter.keyArn).pipe(
+                Output.map(([parameterArn, keyArn]) => keyArn ?? parameterArn),
+              ),
+            ],
           });
         }
+        yield* AWSBindings.bind`${options.tag}(${parameter})`({
+          policyStatements: statements,
+        });
       }
       return Effect.fn(`${options.tag}(${parameter.LogicalId})`)(function* (
         request?: Omit<I, "Name" | "Path">,

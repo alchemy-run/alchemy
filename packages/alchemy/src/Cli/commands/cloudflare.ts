@@ -10,6 +10,7 @@ import * as Cloudflare from "../../Alchemist/routes/cloudflare.ts";
 import * as CloudflareToken from "../../Alchemist/routes/cloudflareToken.ts";
 import type { CreatedToken } from "../../Alchemist/routes/cloudflareToken.ts";
 import * as CliKit from "../../Cli/CliKit/index.ts";
+// oxlint-disable-next-line alchemy/package-boundaries -- package split phase 2: provider CLI subcommand; becomes plugin `cli`
 import { STATE_STORE_SCRIPT_NAME } from "../../Cloudflare/StateStore/Api.ts";
 import { loadConfigProvider } from "../../Util/ConfigProvider.ts";
 import { formatLocalTimestamp } from "../Format.ts";
@@ -190,8 +191,11 @@ const createTokenCommand = Command.make(
       const apiKey =
         (yield* read(Config.String("CLOUDFLARE_API_KEY").pipe(Config.option))) ??
         (yield* prompt.prompt.password({
-          message:
-            "Paste your Global API Key (see bottom of https://dash.cloudflare.com/profile/api-tokens)",
+          message: "Paste your Global API Key",
+          // Keep the URL free of adjacent punctuation: terminals that
+          // auto-link URLs otherwise fold a trailing ")" into the link.
+          description:
+            "Find it under Global API Key at https://dash.cloudflare.com/profile/api-tokens",
           validate: (value) => (value.trim().length === 0 ? "Required" : undefined),
         }));
       const email =
@@ -220,7 +224,7 @@ const createTokenCommand = Command.make(
         name ??
         (yield* prompt.prompt.text({
           message: "Token name",
-          placeholder: allPermissions ? "alchemy-superuser" : "alchemy",
+          defaultValue: allPermissions ? "alchemy-superuser" : "alchemy",
           validate: (value) => (value.trim().length === 0 ? "Token name is required" : undefined),
         }));
       const permissionGroupIds = allPermissions

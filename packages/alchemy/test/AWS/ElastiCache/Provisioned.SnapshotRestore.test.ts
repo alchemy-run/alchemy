@@ -36,7 +36,7 @@ const waitForSnapshot = () =>
     }),
   );
 
-test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
+test.provider.skipIf(!!process.env.FAST)(
   "restores a new Valkey replication group from a final snapshot",
   (stack) =>
     Effect.gen(function* () {

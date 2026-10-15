@@ -37,7 +37,7 @@ import * as Provider from "@/Provider";
 import { ResourceContext } from "@/ResourceContext.ts";
 import * as Test from "@/Test/Alchemy";
 import { PlatformServices } from "@/Util/PlatformServices";
-import { resourceContext } from "../Utils/ResourceContext.ts";
+import { resourceContext } from "../Util/ResourceContext.ts";
 import {
   conflict,
   data,

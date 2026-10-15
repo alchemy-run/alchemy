@@ -52,6 +52,7 @@ function providersSidebarEntry() {
       { label: "SQL", link: "/sql" },
       { label: "Command", link: "/command" },
       { label: "ACME", link: "/acme" },
+      { label: "Domain", link: "/domain" },
     ],
   };
 }
@@ -126,12 +127,22 @@ function providerApiReferenceEntry(...providers: string[]) {
  * serve raw markdown for clients (e.g. coding agents) that prefer it.
  */
 /**
- * Dev only: hand-written docs (`.md`/`.mdx`) are editable in the browser.
- * Generated reference pages are edited through their JSDoc instead.
+ * Dev only: in-browser copy editing (`contenteditable`) is on for the home
+ * page. Every other page (docs, reference, compare) only gets it when the dev
+ * server is launched with `ALCHEMY_DOCS_EDIT=1`. Builds never ship the editor.
+ */
+const docsEditing = process.env.ALCHEMY_DOCS_EDIT === "1";
+const copyEditablePage = (pathname: string) => docsEditing || pathname === "/";
+
+/**
+ * Dev only, with `ALCHEMY_DOCS_EDIT=1`: hand-written docs (`.md`/`.mdx`) are
+ * editable in the browser. Generated reference pages are edited through their
+ * JSDoc instead, and blog posts aren't editable (in-place editing breaks
+ * selecting and copying text).
  */
 const markdownCopy: MarkdownFilesOptions = {
   root: fileURLToPath(new URL(".", import.meta.url)),
-  exclude: /\/src\/content\/docs\/providers\//,
+  exclude: /\/src\/content\/docs\/(providers|blog)\//,
   style: JSDOC_COPY_STYLE,
 };
 
@@ -140,7 +151,7 @@ function markdownCopyEditing(): AstroIntegration {
     name: "markdown-copy-editing",
     hooks: {
       "astro:config:setup": ({ command, config }) => {
-        if (command !== "dev") return;
+        if (command !== "dev" || !docsEditing) return;
         const processor = config.markdown.processor as
           | { name: string; options?: { mdastPlugins?: unknown[] } }
           | undefined;
@@ -243,6 +254,13 @@ export default defineConfig({
     "/better-auth/database-layers": "/better-auth/databases",
     "/better-auth/migrations": "/better-auth/guides/migrations",
     "/better-auth/upgrading": "/better-auth/upgrades/from-1-6-to-1-7",
+    // The Birthday Week post was published as beta.82, then re-released as beta.83.
+    "/blog/2026-10-12-beta-82": "/blog/2026-10-12-beta-83",
+    // Get started was folded into the overview and the tutorial.
+    "/domain/getting-started": "/domain/tutorial/part-1",
+    "/domain/stories": "/domain/testing-models",
+    "/domain/sagas": "/domain/saga",
+    "/domain/external-systems": "/domain/external-system",
   },
   prefetch: true,
   devToolbar: { enabled: false },
@@ -577,6 +595,7 @@ export default defineConfig({
                   link: "/cloudflare/compute/container-lifecycle",
                 },
                 { label: "Workflows", link: "/cloudflare/compute/workflows" },
+                { label: "Effect workflows", link: "/cloudflare/compute/effect-workflows" },
               ],
             },
             {
@@ -647,6 +666,10 @@ export default defineConfig({
                   link: "/cloudflare/data/r2-presigned-urls",
                 },
                 { label: "Hyperdrive", link: "/cloudflare/data/hyperdrive" },
+                {
+                  label: "Private database (Workers VPC)",
+                  link: "/cloudflare/data/hyperdrive-private-database",
+                },
                 { label: "Drizzle ORM", link: "/cloudflare/data/drizzle" },
                 { label: "Prisma ORM", link: "/cloudflare/data/prisma" },
                 { label: "Drizzle on D1", link: "/cloudflare/data/d1-drizzle" },
@@ -772,6 +795,8 @@ export default defineConfig({
                   link: "/aws/compute/choosing-a-runtime",
                 },
                 { label: "Lambda", link: "/aws/compute/lambda" },
+                { label: "Lambda Web Functions", link: "/aws/compute/web-functions" },
+                { label: "Effect workflows", link: "/aws/compute/effect-workflows" },
                 { label: "ECS", link: "/aws/compute/ecs" },
                 { label: "EC2", link: "/aws/compute/ec2" },
                 { label: "EKS", link: "/aws/compute/eks" },
@@ -1462,6 +1487,74 @@ export default defineConfig({
           ],
         },
         {
+          label: "Domain",
+          items: [
+            { label: "Overview", link: "/domain" },
+            { label: "What is Domain-Driven Design?", link: "/domain/what-is-ddd" },
+            { label: "Project layout", link: "/domain/project-layout" },
+            {
+              label: "Tutorial",
+              collapsed: false,
+              items: [{ autogenerate: { directory: "domain/tutorial" } }],
+            },
+            {
+              label: "Concepts",
+              items: [
+                { label: "Domain Model", link: "/domain/model" },
+                { label: "Command", link: "/domain/command" },
+                { label: "Event", link: "/domain/event" },
+                { label: "Aggregate", link: "/domain/aggregate" },
+                { label: "View", link: "/domain/view" },
+                { label: "Projection", link: "/domain/projection" },
+                { label: "Stream", link: "/domain/stream" },
+                { label: "Policy", link: "/domain/policy" },
+                { label: "Saga", link: "/domain/saga" },
+                { label: "External System", link: "/domain/external-system" },
+                { label: "Api", link: "/domain/api" },
+                { label: "Story", link: "/domain/story" },
+              ],
+            },
+            {
+              label: "Testing",
+              items: [
+                { label: "Testing a model", link: "/domain/testing-models" },
+                { label: "Testing an Api", link: "/domain/testing-apis" },
+              ],
+            },
+            {
+              label: "Frontends",
+              items: [
+                { label: "Integrate with foldkit", link: "/domain/foldkit" },
+                { label: "Optimistic updates", link: "/domain/optimistic-updates" },
+                { label: "Offline and local first", link: "/domain/local-first" },
+              ],
+            },
+            {
+              label: "Security",
+              items: [
+                { label: "Sessions and middleware", link: "/domain/sessions" },
+                { label: "Views as security boundaries", link: "/domain/view-security" },
+              ],
+            },
+            {
+              label: "Consistency patterns",
+              items: [
+                { label: "Unique values", link: "/domain/unique-values" },
+                { label: "Deadlines", link: "/domain/deadlines" },
+              ],
+            },
+            {
+              label: "Hosting",
+              items: [
+                { label: "Cloudflare Durable Objects", link: "/domain/cloudflare" },
+                { label: "In memory", link: "/domain/in-memory" },
+                { label: "Observability", link: "/domain/observability" },
+              ],
+            },
+            { ...providerResourcesEntry("Domain"), label: "Reference" },
+          ],
+        },
+        {
           label: "Axiom",
           items: [
             { label: "Overview", link: "/axiom" },
@@ -1735,6 +1828,7 @@ export default defineConfig({
   vite: {
     plugins: [
       copyEditor({
+        pages: copyEditablePage,
         handlers: {
           jsdoc: jsdocCopyHandler(),
           md: markdownFiles(markdownCopy),

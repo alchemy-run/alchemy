@@ -1,7 +1,6 @@
 import * as Effect from "effect/Effect";
-import * as Binding from "../../Binding.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
 import type { Accelerator } from "./Accelerator.ts";
 import { withGaRegion } from "./common.ts";
 import type { EndpointGroup } from "./EndpointGroup.ts";
@@ -39,23 +38,20 @@ export const makeGaAcceleratorHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* withGaRegion(options.operation);
+    const op = yield* options.operation.pipe(withGaRegion, AWSBindings.withCredentials);
 
     return Effect.fn(function* (accelerator: Accelerator) {
       const AcceleratorArn = yield* accelerator.acceleratorArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}(${accelerator}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: [accelerator.acceleratorArn],
-              },
-            ],
-          });
-        }
+        yield* AWSBindings.bind`${options.tag}(${accelerator})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: [accelerator.acceleratorArn],
+            },
+          ],
+        });
       }
       return Effect.fn(`${options.tag}(${accelerator.LogicalId})`)(function* (
         request?: Omit<I, "AcceleratorArn">,
@@ -96,24 +92,21 @@ export const makeGaEndpointGroupHttpBinding = <
   extraStatements?: readonly PolicyStatement[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* withGaRegion(options.operation);
+    const op = yield* options.operation.pipe(withGaRegion, AWSBindings.withCredentials);
 
     return Effect.fn(function* (endpointGroup: EndpointGroup) {
       const EndpointGroupArn = yield* endpointGroup.endpointGroupArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}(${endpointGroup}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: [endpointGroup.endpointGroupArn],
-              },
-              ...(options.extraStatements ?? []),
-            ],
-          });
-        }
+        yield* AWSBindings.bind`${options.tag}(${endpointGroup})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: [endpointGroup.endpointGroupArn],
+            },
+            ...(options.extraStatements ?? []),
+          ],
+        });
       }
       return Effect.fn(`${options.tag}(${endpointGroup.LogicalId})`)(function* (
         request: Omit<I, "EndpointGroupArn">,

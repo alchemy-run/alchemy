@@ -6,15 +6,16 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, diffTags, hasAlchemyTags } from "../../Tags.ts";
+import { subsetDiffers } from "../../Util/equal.ts";
 import type { PolicyDocument } from "../IAM/Policy.ts";
 import { normalizePolicyDocument, stringifyPolicyDocument } from "../IAM/Policy.ts";
 import type { Providers } from "../Providers.ts";
 import {
+  domainEndpoint,
   isDomainActive,
   isDomainDeletable,
   readDomainTags,
   repeatUntilDomainState,
-  subsetDiffers,
 } from "./internal.ts";
 
 export interface DomainClusterConfig {
@@ -406,7 +407,7 @@ export const DomainProvider = () =>
           domainArn: domain.ARN,
           domainId: domain.DomainId,
           engineVersion: domain.EngineVersion,
-          endpoint: domain.Endpoint ?? domain.EndpointV2,
+          endpoint: domainEndpoint(domain),
           created: domain.Created === true,
           processing: domain.Processing === true,
           tags: yield* readDomainTags(domain.ARN),

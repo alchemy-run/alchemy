@@ -1,9 +1,8 @@
 import * as secretsmanager from "@distilled.cloud/aws/secrets-manager";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Binding from "../../Binding.ts";
 import type { Accessor } from "../../Output.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import { BatchGetSecretValue, type BatchGetSecretValueRequest } from "./BatchGetSecretValue.ts";
 import type { Secret } from "./Secret.ts";
 
@@ -16,7 +15,9 @@ import type { Secret } from "./Secret.ts";
 export const BatchGetSecretValueHttp = Layer.effect(
   BatchGetSecretValue,
   Effect.gen(function* () {
-    const batchGetSecretValue = yield* secretsmanager.batchGetSecretValue;
+    const batchGetSecretValue = yield* AWSBindings.withCredentials(
+      secretsmanager.batchGetSecretValue,
+    );
 
     return Effect.fn(function* (secrets: readonly Secret[]) {
       const SecretIds: Accessor<string>[] = [];
@@ -24,28 +25,25 @@ export const BatchGetSecretValueHttp = Layer.effect(
         SecretIds.push(yield* secret.secretArn);
       }
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, AWS.SecretsManager.BatchGetSecretValue())`({
+        yield* AWSBindings.bind`AWS.SecretsManager.BatchGetSecretValue()`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: ["secretsmanager:BatchGetSecretValue"],
+              Resource: ["*"],
+            },
+          ],
+        });
+        for (const secret of secrets) {
+          yield* AWSBindings.bind`AWS.SecretsManager.BatchGetSecretValue(${secret})`({
             policyStatements: [
               {
                 Effect: "Allow",
-                Action: ["secretsmanager:BatchGetSecretValue"],
-                Resource: ["*"],
+                Action: ["secretsmanager:GetSecretValue", "secretsmanager:DescribeSecret"],
+                Resource: [secret.secretArn],
               },
             ],
           });
-          for (const secret of secrets) {
-            yield* host.bind`Allow(${host}, AWS.SecretsManager.BatchGetSecretValue(${secret}))`({
-              policyStatements: [
-                {
-                  Effect: "Allow",
-                  Action: ["secretsmanager:GetSecretValue", "secretsmanager:DescribeSecret"],
-                  Resource: [secret.secretArn],
-                },
-              ],
-            });
-          }
         }
       }
       return Effect.fn(

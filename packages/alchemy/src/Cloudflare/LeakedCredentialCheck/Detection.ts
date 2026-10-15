@@ -1,4 +1,5 @@
 import * as lcc from "@distilled.cloud/cloudflare/leaked-credential-checks";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
@@ -63,8 +64,9 @@ export type LeakedCredentialDetection = Resource<
  * Requires Leaked Credential Checks to be **enabled** on the zone (see
  * {@link LeakedCredentialCheck}) — every detection operation fails with the
  * typed `LeakedCredentialChecksDisabled` error otherwise. The number of
- * custom detections is plan-gated (the free plan allows none — creation
- * fails with the typed `DetectionQuotaExceeded` error).
+ * custom detections is plan-gated — a zone over its quota fails creation
+ * with the typed `DetectionQuotaExceeded` error. Each username/password
+ * expression pair may exist only once per zone (`DetectionAlreadyExists`).
  *
  * Safety: detections carry no ownership markers. When there is no prior
  * state, `read` scans the zone for an existing detection with the same
@@ -100,6 +102,18 @@ export type LeakedCredentialDetection = Resource<
  * @category Application Security
  */
 export const LeakedCredentialDetection = Resource<LeakedCredentialDetection>(TypeId);
+
+/**
+ * Creating a detection failed with `DetectionAlreadyExists`, but no detection
+ * with the same username/password expressions could be found on the zone.
+ */
+export class DetectionConflictUnresolved extends Data.TaggedError("DetectionConflictUnresolved")<{
+  readonly zoneId: string;
+}> {
+  override get message() {
+    return `Leaked credential detection reported as existing on zone ${this.zoneId} but was not found`;
+  }
+}
 
 /**
  * Returns true if the given value is a LeakedCredentialDetection resource.
@@ -201,12 +215,24 @@ export const LeakedCredentialDetectionProvider = () =>
       // 3. Ensure — create when missing. Requires the zone's Leaked
       //    Credential Checks toggle to be on; otherwise this fails with
       //    the typed `LeakedCredentialChecksDisabled` error.
+      //    A concurrent create of the same expression pair races us to
+      //    the typed `DetectionAlreadyExists` — re-observe and continue.
       if (!observed) {
-        observed = yield* lcc.createDetection({
-          zoneId,
-          username: news.username,
-          password: news.password,
-        });
+        observed = yield* lcc
+          .createDetection({
+            zoneId,
+            username: news.username,
+            password: news.password,
+          })
+          .pipe(
+            Effect.map((d): ObservedDetection | undefined => d),
+            Effect.catchTag("DetectionAlreadyExists", () =>
+              findByExpressions(zoneId, news.username, news.password),
+            ),
+          );
+        if (!observed) {
+          return yield* new DetectionConflictUnresolved({ zoneId });
+        }
       }
 
       // 4. Sync — PUT only when the observed expressions differ.

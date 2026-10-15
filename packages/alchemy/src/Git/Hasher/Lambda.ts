@@ -12,8 +12,10 @@
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
+/* oxlint-disable alchemy/package-boundaries -- package split phase 3: Git is built on Cloudflare (plus S3 blobs, Lambda hasher); becomes integration subpaths */
 import type { Function as LambdaFunction } from "../../AWS/Lambda/Function.ts";
 import { InvokeFunction } from "../../AWS/Lambda/InvokeFunction.ts";
+/* oxlint-enable alchemy/package-boundaries */
 import { hashBounds, resolveDeltas, scanPart } from "../Protocol/PartialScan.ts";
 import { Hasher, HashError, type HasherShape } from "./Hasher.ts";
 import {

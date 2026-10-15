@@ -6,6 +6,7 @@ import { DockerLive } from "../Docker/Docker.ts";
 import { KeyPair, KeyPairProvider } from "../KeyPair.ts";
 import * as Provider from "../Provider.ts";
 import { Random, RandomProvider } from "../Random.ts";
+import { Http1FetchHttpClient } from "../Util/Http1Dispatcher.ts";
 import * as Access from "./Access.ts";
 import * as AccessApp from "./Access/Application.ts";
 import * as Bookmark from "./Access/Bookmark.ts";
@@ -196,6 +197,7 @@ export const providers = () =>
       Configuration.Configuration,
       Connectivity.DirectoryService,
       Containers.ContainerPlatform,
+      Containers.DurableObjectApplication,
       ContentScanning.ContentScanning,
       ContentScanning.Expression,
       CustomCertificates.CustomCertificate,
@@ -263,6 +265,7 @@ export const providers = () =>
       KeylessCertificate.KeylessCertificate,
       KeyPair,
       KV.Namespace,
+      KV.InstantNamespace,
       LeakedCredentialCheck.LeakedCredentialCheck,
       LeakedCredentialCheck.LeakedCredentialDetection,
       List.List,
@@ -449,6 +452,7 @@ export const providers = () =>
         Configuration.ConfigurationProvider(),
         Connectivity.DirectoryServiceProvider(),
         Containers.ContainerProvider(),
+        Containers.DurableObjectApplicationProvider(),
         ContentScanning.ContentScanningProvider(),
         ContentScanning.ExpressionProvider(),
         CustomCertificates.CustomCertificateProvider(),
@@ -520,6 +524,7 @@ export const providers = () =>
           K2.SubscriptionProvider(),
           KeylessCertificate.KeylessCertificateProvider(),
           KV.NamespaceProvider(),
+          KV.InstantNamespaceProvider(),
           LeakedCredentialCheck.LeakedCredentialCheckProvider(),
           LeakedCredentialCheck.LeakedCredentialDetectionProvider(),
           List.ListProvider(),
@@ -690,6 +695,11 @@ export const providers = () =>
  * "internal error", 10001 "Unable to authenticate request", 10000
  * "Authentication error" under load) are tagged retryable at the source
  * in the SDK's global error map, so that default covers them.
+ *
+ * Every request goes out over HTTP/1.1 ({@link Http1FetchHttpClient}):
+ * Node 26's `fetch` negotiates HTTP/2 by default and funnels the engine's
+ * unbounded fan-out onto one session, where undici 8's HTTP/2 path has
+ * been resetting streams under load. HTTP/1.1 measured no slower here.
  */
 export const CloudflareApiLive = () =>
   Credentials.fromAuthProvider().pipe(
@@ -698,4 +708,5 @@ export const CloudflareApiLive = () =>
     Layer.provideMerge(Access.AccessLive),
     Layer.provideMerge(ProfileStoreLive),
     Layer.provideMerge(CredentialsStoreLive),
+    Layer.provideMerge(Http1FetchHttpClient),
   );

@@ -38,10 +38,6 @@ export type ContainerInfo = cf.ContainerInfo;
 export type ContainerSnapshot = cf.ContainerSnapshot;
 export type ContainerSnapshotOptions = cf.ContainerSnapshotOptions;
 
-type PreparedImages<ImageName extends string> = string extends ImageName
-  ? Readonly<Record<string, string | undefined>>
-  : Readonly<Record<ImageName, string>>;
-
 /** Errors a container `start` can fail with. */
 export type ContainerStartError =
   | ContainerError
@@ -101,16 +97,29 @@ export interface ContainerProcess {
  * returns. Binding never starts the container: call {@link start} before
  * using it. `start` is idempotent and coordinated across every handle in the
  * Durable Object, so calling it at the top of each operation is cheap.
+ *
+ * A Durable Object has one container instance. When several Durable
+ * Object-managed Containers are bound to it, each handle starts its own image,
+ * and every handle controls that same instance: start one image at a time.
  */
-export interface ContainerClient<ImageName extends string = string> {
-  /** Prepared image references. Required names retain their declaration's keys. */
-  readonly images: Effect.Effect<PreparedImages<ImageName>, ContainerError, RuntimeContext>;
+export interface ContainerClient {
+  /**
+   * This Container's prepared image reference, the key `start()` selects by
+   * default. Fails with {@link ContainerError} when the Container publishes no
+   * image to this Durable Object (fleet Containers and Containers without an
+   * image source).
+   */
+  readonly image: Effect.Effect<string, ContainerError, RuntimeContext>;
   /** Whether the container process is running; this does not imply port readiness. */
   readonly running: Effect.Effect<boolean, ContainerError, RuntimeContext>;
   /**
    * Start the container unless it is already running. Concurrent calls start
    * it once. Returns before ports are ready; {@link getTcpPort} waits for them.
    * Options apply only when this call actually starts the container.
+   *
+   * A Durable Object-managed Container starts its own {@link image} unless
+   * `options` names an `image` or a `containerSnapshot`. A no-op while any
+   * image is running: `destroy()` first to switch images.
    */
   start(
     options?: ContainerStartupOptions,
@@ -300,9 +309,11 @@ const fromProcess = (process: cf.ExecProcess): ContainerProcess => {
  * looked up on every call, never at construction: the client is also built
  * while planning a Worker, where no Durable Object state exists.
  */
-export const fromContainer = <ImageName extends string = string>(
+export const fromContainer = (
   getContainer: () => cf.Container | undefined,
-): ContainerClient<ImageName> => {
+  /** The key of this Container's image in `ctx.container.images`. */
+  imageKey?: string,
+): ContainerClient => {
   const attached = Effect.suspend(() => {
     const container = getContainer();
     return container
@@ -324,6 +335,30 @@ export const fromContainer = <ImageName extends string = string>(
 
   const running = call((container) => container.running ?? false);
 
+  const ownImage = (container: cf.Container) =>
+    imageKey === undefined ? undefined : container.images?.[imageKey];
+
+  const image = Effect.flatMap(attached, (container) => {
+    const ref = ownImage(container);
+    return ref === undefined
+      ? Effect.fail(
+          new ContainerError({
+            message: `Container '${imageKey}' publishes no image to this Durable Object.`,
+          }),
+        )
+      : Effect.succeed(ref);
+  });
+
+  /** Default `image` to this Container's own image. */
+  const withOwnImage = (
+    container: cf.Container,
+    options: ContainerStartupOptions | undefined,
+  ): ContainerStartupOptions | undefined => {
+    if (options?.image !== undefined || options?.containerSnapshot !== undefined) return options;
+    const ref = ownImage(container);
+    return ref === undefined ? options : ({ ...options, image: ref } as ContainerStartupOptions);
+  };
+
   const start = (options?: ContainerStartupOptions) =>
     Effect.gen(function* () {
       const container = yield* attached;
@@ -340,7 +375,7 @@ export const fromContainer = <ImageName extends string = string>(
           // Nothing listens on a fresh start; re-probe every port.
           readyPorts.clear();
           yield* Effect.try({
-            try: () => container.start(options),
+            try: () => container.start(withOwnImage(container, options)),
             catch: classifyStartError,
           }).pipe(
             Effect.retry({
@@ -452,8 +487,7 @@ export const fromContainer = <ImageName extends string = string>(
     ).pipe(Effect.map(fromProcess));
 
   return {
-    // The binding publishes every declared image under its declared name.
-    images: call((container) => container.images as PreparedImages<ImageName>),
+    image,
     running,
     start,
     destroy: (error) => callAsync((container) => container.destroy(error)),
@@ -495,7 +529,7 @@ export const makeContainerHandle = Effect.fnUntraced(function* (
 ) {
   yield* binding;
   const state = yield* DurableObjectState;
-  const client = fromContainer(() => state.container);
+  const client = fromContainer(() => state.container, id);
   const rpcPort = client.getTcpPort(3000);
   return makeFetchRpcStub<ContainerClient>({
     // RPC methods only run inside the Durable Object, where RuntimeContext is

@@ -30,6 +30,7 @@ import {
 import * as TempRoot from "../../Bundle/TempRoot.ts";
 import { sha256, sha256Object } from "../../Util/sha256.ts";
 import { zipCode, zipFiles, type ZipFile } from "../../Util/zip.ts";
+import { nativeHostBundle } from "../NativeHost.ts";
 import type { FunctionArchitecture, FunctionZipProps } from "./Function.ts";
 
 /**
@@ -81,6 +82,20 @@ export interface FunctionBundleResult {
 }
 
 type BundleServices = FileSystem.FileSystem | Path.Path | ChildProcessSpawner;
+
+/**
+ * Per-host overrides for the generated archive. The Event Function defaults
+ * apply when omitted; `AWS.Lambda.WebFunction` supplies its own HTTP-server
+ * entry.
+ */
+export interface FunctionBundleOptions {
+  /**
+   * Source of the generated entry module that imports an Effect `main`.
+   * Replaces the Event Function `bootstrap` entry. External (`isExternal`)
+   * modules are always bundled as-is.
+   */
+  readonly entry?: (importPath: string) => string;
+}
 
 export const makeFunctionBundler = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
@@ -136,11 +151,12 @@ export const makeFunctionBundler = Effect.gen(function* () {
 
   const resolveBundlePlan: (
     props: FunctionZipProps,
+    options?: FunctionBundleOptions,
   ) => Effect.Effect<
     FunctionBundlePlan,
     Bundle.BundleError | PlatformError,
     FileSystem.FileSystem | Path.Path
-  > = Effect.fn(function* (props: FunctionZipProps) {
+  > = Effect.fn(function* (props: FunctionZipProps, options?: FunctionBundleOptions) {
     const {
       output: buildOutput,
       install,
@@ -178,16 +194,17 @@ export const makeFunctionBundler = Effect.gen(function* () {
     const entryPlugin = props.isExternal
       ? undefined
       : virtualEntryPlugin(
-          (importPath) => `
+          options?.entry ??
+            ((importPath) => `
 import { bootstrap } from "alchemy/Runtime/Bootstrap/Lambda";
 import entrypoint from ${JSON.stringify(importPath)};
 
 export default await bootstrap(entrypoint);
-`,
+`),
         );
 
     return {
-      inputOptions: {
+      inputOptions: nativeHostBundle({
         ...inputOptions,
         input: realMain,
         cwd,
@@ -205,7 +222,7 @@ export default await bootstrap(entrypoint);
           ],
         },
         plugins: [inputOptions.plugins, entryPlugin],
-      },
+      }),
       outputOptions: {
         ...buildOutput,
         format: "esm",
@@ -287,13 +304,14 @@ export default await bootstrap(entrypoint);
   const bundleCode: (
     id: string,
     props: FunctionZipProps,
+    options?: FunctionBundleOptions,
   ) => Effect.Effect<FunctionBundleResult, Bundle.BundleError | PlatformError, BundleServices> =
-    Effect.fn(function* (_id: string, props: FunctionZipProps) {
+    Effect.fn(function* (_id: string, props: FunctionZipProps, options?: FunctionBundleOptions) {
       if (props.bundle === false) {
         const realMain = yield* TempRoot.resolveMainPath(props.main);
         return yield* prebuiltCode(realMain);
       }
-      const plan = yield* resolveBundlePlan(props);
+      const plan = yield* resolveBundlePlan(props, options);
       const bundleOutput = yield* Bundle.build(plan.inputOptions, plan.outputOptions, plan.extra);
       return yield* finishBundle(plan, bundleOutput);
     });
