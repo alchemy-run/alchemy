@@ -1,12 +1,16 @@
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import { CloudflareApiLive } from "@/Cloudflare/Providers";
 import * as Test from "@/Test/Alchemy";
+import { requestWorker } from "../Utils/WorkerRequest.ts";
 import Stack from "./fixtures/worker-worker-binding/stack.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
@@ -16,17 +20,113 @@ const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const stack = beforeAll(deploy(Stack));
-afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
+afterAll.skipIf(!!process.env.NO_DESTROY)(
+  Effect.gen(function* () {
+    const deployed = yield* Effect.exit(stack);
+    yield* destroy(Stack);
+    if (Exit.isFailure(deployed)) return;
+    const urls = [
+      deployed.value.targetUrl,
+      deployed.value.asyncCallerUrl,
+      deployed.value.effectCallerUrl,
+      deployed.value.selfWorkerUrl,
+    ];
+    yield* Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      for (const url of urls) {
+        const deleted = yield* workers
+          .getScript({
+            accountId,
+            scriptName: new URL(url).hostname.split(".")[0]!,
+          })
+          .pipe(
+            Effect.as(false),
+            Effect.catchTag("WorkerNotFound", () => Effect.succeed(true)),
+            Effect.repeat({
+              while: (gone) => !gone,
+              schedule: Schedule.spaced("1 second"),
+              times: 8,
+            }),
+            Effect.timeout("15 seconds"),
+          );
+        expect(deleted).toBe(true);
+      }
+    }).pipe(Effect.provide(CloudflareApiLive()), Effect.scoped);
+  }),
+  { timeout: 120_000 },
+);
 
 // Cold-start retry — fresh `workers.dev` URLs take a few seconds to start
 // answering 200, so the very first request rides this schedule. Cap the
-// exponential at 3s: uncapped, the doubling sleeps blow through the test
+// exponential at 5s: uncapped, the doubling sleeps blow through the test
 // timeout in a single wait after ~7 misses, even though the edge would
 // have propagated moments later.
 const coldStartRetry = Effect.retry({
-  schedule: Schedule.min([Schedule.exponential("500 millis"), Schedule.spaced("3 seconds")]),
-  times: 30,
+  schedule: Schedule.min([Schedule.exponential("500 millis"), Schedule.spaced("5 seconds")]),
+  times: 10,
 });
+
+for (const encoding of ["json", "bytes"] as const) {
+  for (const scenario of ["complete", "cancel", "empty", "head-failure", "tail-failure"] as const) {
+    test(
+      `native RPC ${encoding} stream handles ${scenario} with its source and event scopes`,
+      Effect.gen(function* () {
+        const { effectCallerUrl } = yield* stack;
+        const client = HttpClient.filterStatusOk(yield* HttpClient.HttpClient).pipe(
+          HttpClient.mapRequest(HttpClientRequest.setHeader("connection", "close")),
+        );
+        yield* client.get(`${effectCallerUrl}/rpc-stream-ready`).pipe(
+          Effect.flatMap((response) => response.text),
+          Effect.flatMap((body) =>
+            body === "rpc-stream-scopes"
+              ? Effect.void
+              : Effect.fail(new Error(`Worker not ready: ${body}`)),
+          ),
+          coldStartRetry,
+        );
+
+        // A later request can reach an edge that has not received the route.
+        // Only Cloudflare's pre-invocation placeholder is safe to retry.
+        const response = yield* requestWorker(
+          HttpClientRequest.get(`${effectCallerUrl}/rpc-stream/${encoding}/${scenario}`).pipe(
+            HttpClientRequest.setHeader("connection", "close"),
+          ),
+          { retryDelay: "5 seconds" },
+        );
+        expect(response.status).toBe(200);
+        const body = (yield* response.json) as {
+          values: Array<{ part: string; eventClosed: number; sourceClosed: number }>;
+          failed: boolean;
+          error?: { _tag: string; error?: { _tag: string; phase: string } };
+          after: string;
+        };
+        const parts =
+          scenario === "complete"
+            ? ["head", "tail"]
+            : scenario === "cancel" || scenario === "tail-failure"
+              ? ["head"]
+              : [];
+        expect(body.values).toEqual(
+          parts.map((part) => ({ part, eventClosed: 0, sourceClosed: 0 })),
+        );
+        expect(body.failed).toBe(scenario === "head-failure" || scenario === "tail-failure");
+        expect(body.after).toBe("hello after stream");
+        if (scenario === "head-failure" || (scenario === "tail-failure" && encoding === "json")) {
+          expect(body.error).toMatchObject({
+            _tag: "RpcRemoteStreamError",
+            error: {
+              _tag: "RpcStreamFixtureError",
+              phase: scenario === "head-failure" ? "head" : "tail",
+            },
+          });
+        } else if (scenario === "tail-failure") {
+          expect(body.error?._tag).toBe("SocketError");
+        }
+      }).pipe(logLevel),
+      { tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"], timeout: 90_000 },
+    );
+  }
+}
 
 test(
   "target worker's own fetch handler responds",
@@ -40,7 +140,7 @@ test(
   }).pipe(logLevel),
   {
     tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
-    timeout: 180_000,
+    timeout: 120_000,
   },
 );
 
@@ -56,7 +156,7 @@ test(
   }).pipe(logLevel),
   {
     tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
-    timeout: 180_000,
+    timeout: 120_000,
   },
 );
 
@@ -79,7 +179,7 @@ test(
   }).pipe(logLevel),
   {
     tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
-    timeout: 180_000,
+    timeout: 120_000,
   },
 );
 
@@ -95,7 +195,7 @@ test(
   }).pipe(logLevel),
   {
     tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
-    timeout: 180_000,
+    timeout: 120_000,
   },
 );
 
@@ -110,7 +210,7 @@ test(
   }).pipe(logLevel),
   {
     tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
-    timeout: 180_000,
+    timeout: 120_000,
   },
 );
 
@@ -135,7 +235,7 @@ test.provider(
     }).pipe(logLevel),
   {
     tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
-    timeout: 180_000,
+    timeout: 120_000,
   },
 );
 
@@ -150,6 +250,6 @@ test(
   }).pipe(logLevel),
   {
     tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
-    timeout: 180_000,
+    timeout: 120_000,
   },
 );

@@ -1,9 +1,12 @@
+import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Stream from "effect/Stream";
 import * as Cloudflare from "@/Cloudflare";
-import { WorkerEnvironmentKVObject } from "./object.ts";
+import { encodeRpcError } from "@/Cloudflare/Workers/Rpc";
+import { WorkerEnvironmentKVObject, streamScenarios } from "./object.ts";
 
 /** The regions a DO can be hinted toward, as `/colo` accepts them. */
 const LOCATION_HINTS: readonly Cloudflare.DurableObjectLocationHint[] = [
@@ -30,6 +33,50 @@ export default class DurableObjectWorkerEnvironmentWorker extends Cloudflare.Wor
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;
         const url = new URL(request.url, "http://x");
+
+        if (url.pathname.startsWith("/rpc-stream-ready/")) {
+          const name = url.pathname.slice("/rpc-stream-ready/".length);
+          const ready = yield* objects.getByName(`stream-${name}`).scopedStreamReady();
+          return HttpServerResponse.text(ready);
+        }
+
+        if (url.pathname.startsWith("/rpc-stream/")) {
+          const [, , encoding, mode] = url.pathname.split("/");
+          const scenario = streamScenarios.find((value) => value === mode);
+          if (!scenario || (encoding !== "json" && encoding !== "bytes")) {
+            return HttpServerResponse.text("Unknown stream scenario", { status: 400 });
+          }
+          const object = objects.getByName(`stream-${encoding}-${scenario}`);
+          const chunks: string[] = [];
+          const exit = yield* Effect.gen(function* () {
+            const source = yield* object.scopedStream(encoding === "bytes", scenario);
+            const lines = source.pipe(
+              Stream.map((value) =>
+                value instanceof Uint8Array
+                  ? value
+                  : new TextEncoder().encode(`${JSON.stringify(value)}\n`),
+              ),
+              Stream.decodeText,
+              Stream.splitLines,
+              Stream.filter((line) => line.length > 0),
+            );
+            // Cancel a logical record, independent of native chunk boundaries.
+            yield* (scenario === "cancel" ? lines.pipe(Stream.take(1)) : lines).pipe(
+              Stream.runForEach((value) =>
+                Effect.sync(() => {
+                  chunks.push(value);
+                }),
+              ),
+            );
+          }).pipe(Effect.timeout("5 seconds"), Effect.exit);
+          const after = yield* object.identity();
+          return yield* HttpServerResponse.json({
+            values: chunks.map((line) => JSON.parse(line)),
+            failed: Exit.isFailure(exit),
+            error: Exit.isFailure(exit) ? encodeRpcError(Cause.squash(exit.cause)) : undefined,
+            after,
+          });
+        }
 
         if (request.method === "POST" && url.pathname === "/roundtrip") {
           const object = objects.getByName("default");

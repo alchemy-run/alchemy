@@ -1,8 +1,11 @@
 import { describe, expect, it } from "alchemy-test";
 import * as Cause from "effect/Cause";
 import * as Data from "effect/Data";
+import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import * as Fiber from "effect/Fiber";
+import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import {
   RpcDecodeError,
@@ -402,6 +405,147 @@ describe(
   "toRpcStream",
   { tags: ["unit", "provider:cloudflare", "provider:cloudflare:worker", "local"] },
   () => {
+    for (const bytes of [false, true]) {
+      for (const cancel of [false, true]) {
+        it.effect(
+          `${bytes ? "bytes" : "jsonl"} ${cancel ? "cancellation" : "completion"} finalizes the source and attached scope once`,
+          () =>
+            Effect.gen(function* () {
+              const releaseTail = yield* Deferred.make<void>();
+              const eventScope = Scope.makeUnsafe();
+              let sourceClosed = 0;
+              let eventClosed = 0;
+              yield* Scope.addFinalizer(
+                eventScope,
+                Effect.sync(() => {
+                  eventClosed++;
+                }),
+              );
+              const source = Stream.unwrap(
+                Effect.gen(function* () {
+                  yield* Effect.addFinalizer(() =>
+                    Effect.sync(() => {
+                      sourceClosed++;
+                    }),
+                  );
+                  return Stream.concat(
+                    Stream.succeed(bytes ? new Uint8Array([1]) : 1),
+                    Stream.fromEffect(
+                      Deferred.await(releaseTail).pipe(
+                        Effect.map(() => {
+                          expect(sourceClosed).toBe(0);
+                          expect(eventClosed).toBe(0);
+                          return bytes ? new Uint8Array([2]) : 2;
+                        }),
+                      ),
+                    ),
+                  );
+                }),
+              ).pipe(Stream.onExit((exit) => Scope.close(eventScope, exit)));
+              const envelope = yield* toRpcStream(source);
+              const reader = envelope.body.getReader();
+              expect((yield* Effect.promise(() => reader.read())).done).toBe(false);
+              expect(sourceClosed).toBe(0);
+              expect(eventClosed).toBe(0);
+              if (cancel) {
+                yield* Effect.promise(() => reader.cancel());
+              } else {
+                yield* Deferred.succeed(releaseTail, undefined);
+                expect((yield* Effect.promise(() => reader.read())).done).toBe(false);
+                expect((yield* Effect.promise(() => reader.read())).done).toBe(true);
+              }
+              expect(sourceClosed).toBe(1);
+              expect(eventClosed).toBe(1);
+              yield* Effect.promise(() => reader.cancel());
+              expect(sourceClosed).toBe(1);
+              expect(eventClosed).toBe(1);
+            }),
+        );
+      }
+    }
+
+    for (const mode of ["empty", "head-failure", "head-defect", "tail-failure"] as const) {
+      it.effect(`${mode} finalizes the source and attached scope once`, () =>
+        Effect.gen(function* () {
+          const eventScope = Scope.makeUnsafe();
+          let sourceClosed = 0;
+          let eventClosed = 0;
+          yield* Scope.addFinalizer(
+            eventScope,
+            Effect.sync(() => {
+              eventClosed++;
+            }),
+          );
+          const source = Stream.unwrap(
+            Effect.gen(function* () {
+              yield* Effect.addFinalizer(() =>
+                Effect.sync(() => {
+                  sourceClosed++;
+                }),
+              );
+              if (mode === "empty") return Stream.empty;
+              if (mode === "head-defect") return Stream.die(new Error("first-pull defect"));
+              const failure = Stream.fail(new MyError({ message: mode }));
+              return mode === "head-failure" ? failure : Stream.concat(Stream.succeed(1), failure);
+            }),
+          ).pipe(Stream.onExit((exit) => Scope.close(eventScope, exit)));
+          const exit = yield* toRpcStream(source).pipe(
+            Effect.flatMap((envelope) => Stream.runCollect(fromRpcStreamEnvelope(envelope))),
+            Effect.exit,
+          );
+          expect(Exit.isSuccess(exit)).toBe(mode === "empty");
+          expect(sourceClosed).toBe(1);
+          expect(eventClosed).toBe(1);
+          yield* Scope.close(eventScope, Exit.void);
+          expect(sourceClosed).toBe(1);
+          expect(eventClosed).toBe(1);
+        }),
+      );
+    }
+
+    it.effect("interrupting encoding before the head releases the source and attached scope", () =>
+      Effect.gen(function* () {
+        const started = yield* Deferred.make<void>();
+        const eventScope = Scope.makeUnsafe();
+        let sourceClosed = 0;
+        let eventClosed = 0;
+        let returnedEnvelope = false;
+        yield* Scope.addFinalizer(
+          eventScope,
+          Effect.sync(() => {
+            eventClosed++;
+          }),
+        );
+        const source = Stream.fromEffect(
+          Effect.gen(function* () {
+            yield* Effect.addFinalizer(() =>
+              Effect.sync(() => {
+                sourceClosed++;
+              }),
+            );
+            yield* Deferred.succeed(started, undefined);
+            return yield* Effect.never;
+          }),
+        ).pipe(Stream.onExit((exit) => Scope.close(eventScope, exit)));
+        const fiber = yield* toRpcStream(source).pipe(
+          Effect.tap(() =>
+            Effect.sync(() => {
+              returnedEnvelope = true;
+            }),
+          ),
+          Effect.forkChild,
+        );
+        yield* Deferred.await(started);
+        expect(sourceClosed).toBe(0);
+        expect(eventClosed).toBe(0);
+        yield* Fiber.interrupt(fiber);
+        expect(Exit.isFailure(yield* Fiber.await(fiber))).toBe(true);
+        expect(returnedEnvelope).toBe(false);
+        expect(sourceClosed).toBe(1);
+        expect(eventClosed).toBe(1);
+      }),
+    );
+
     it.effect("selects jsonl encoding for non-byte data", () =>
       Effect.gen(function* () {
         const stream = Stream.fromIterable([{ a: 1 }]);
