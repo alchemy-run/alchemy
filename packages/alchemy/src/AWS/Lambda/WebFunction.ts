@@ -38,18 +38,28 @@ import {
   sameConnector,
 } from "./WebFunctionEgress.ts";
 import {
-  activeRevisionId,
   createEndpointConfig,
   deleteEndpoint,
   endpointTypeOf,
   getEndpoint,
+  latestRevisionId,
+  servedRevisions,
   syncEndpoint,
   validateWebFunctionSettings,
   WebFunctionFailed,
   WebFunctionNotReady,
   type WebFunctionAuthType,
+  type WebFunctionCanary,
   type WebFunctionEndpointSpec,
   type WebFunctionEndpointType,
+  type WebFunctionRevisionWeight,
+} from "./WebFunctionEndpointSync.ts";
+
+export type {
+  WebFunctionAuthType,
+  WebFunctionCanary,
+  WebFunctionEndpointType,
+  WebFunctionRevisionWeight,
 } from "./WebFunctionEndpointSync.ts";
 
 export const WebFunctionTypeId = "AWS.Lambda.WebFunction" as const;
@@ -173,6 +183,14 @@ export interface WebFunctionProps extends PlatformProps {
    */
   rateLimit?: number;
   /**
+   * Roll out deploys gradually on the built-in endpoint: the revision a
+   * deploy publishes gets `weight` percent of traffic and the revision it
+   * served before keeps the rest. Raise `weight` to shift more traffic,
+   * set it to `100` (or remove `canary`) to promote, or `0` to roll back.
+   * Each endpoint has its own split.
+   */
+  canary?: WebFunctionCanary;
+  /**
    * Route the server's outbound traffic through your VPC so it can reach
    * private resources such as RDS. Alchemy creates a Lambda network
    * connector (and the operator role Lambda uses to manage its network
@@ -229,10 +247,15 @@ export interface WebFunction extends Resource<
      */
     endpointType: WebFunctionEndpointType;
     /**
-     * Revision created by the latest deploy. The built-in endpoint and every
-     * `WebFunctionEndpoint` route all traffic to it.
+     * Revision the latest deploy published. Endpoints route all traffic to
+     * it, or `canary.weight` percent while a canary runs.
      */
     revisionId: string;
+    /**
+     * How the built-in endpoint splits traffic: one revision at 100, or the
+     * stable revision and the canary while a canary runs.
+     */
+    revisionWeights: WebFunctionRevisionWeight[];
     /** Name of the execution role. */
     roleName: string;
     /** ARN of the execution role. */
@@ -413,6 +436,20 @@ export type WebFunctionRuntimeContext = Omit<HostRuntimeContext, "run">;
  * });
  * ```
  *
+ * ### Canary deploys
+ * **Example:** Send 10% of traffic to each new deploy
+ * ```typescript
+ * const api = yield* AWS.Lambda.WebFunction("Api", {
+ *   main: "./src/server.ts",
+ *   authType: "ApplicationManaged",
+ *   // 90% stays on the previous revision. Raise it to shift more, set
+ *   // 100 (or remove `canary`) to promote, or 0 to roll back.
+ *   canary: { weight: 10 },
+ * });
+ *
+ * api.revisionWeights; // [{ revisionId: "<previous>", weight: 90 }, { revisionId: api.revisionId, weight: 10 }]
+ * ```
+ *
  * Put CloudFront in front with a `CloudFront.Distribution` origin
  * `{ webFunction: internal }`, which grants only that distribution access.
  * Grant other callers with `AWS.Lambda.WebFunctionPermission`.
@@ -498,6 +535,10 @@ const checkWebFunctionProps = (id: string, props: WebFunctionProps) =>
         props.timeout === undefined || Output.isOutput(props.timeout)
           ? undefined
           : toTimeoutSeconds(props.timeout),
+      canary:
+        props.canary === undefined || number(props.canary.weight) === undefined
+          ? undefined
+          : props.canary,
     });
   });
 
@@ -930,6 +971,7 @@ export const WebFunctionProvider = () =>
         endpoint: LambdaWeb.GetWebFunctionEndpointResponse,
         role: { roleName: string; roleArn: string },
         code: WebFunction["Attributes"]["code"],
+        revisionId: string,
       ): WebFunction["Attributes"] => ({
         functionName: fn.functionName,
         functionArn: fn.functionArn,
@@ -939,7 +981,8 @@ export const WebFunctionProvider = () =>
         url: `https://${endpoint.domainName}`,
         authType: endpoint.authType as WebFunctionAuthType,
         endpointType: endpoint.endpointType as WebFunctionEndpointType,
-        revisionId: activeRevisionId(endpoint),
+        revisionId,
+        revisionWeights: servedRevisions(endpoint),
         roleName: role.roleName,
         roleArn: role.roleArn,
         code,
@@ -1054,6 +1097,7 @@ export const WebFunctionProvider = () =>
               authType: olds?.authType ?? "IamAuth",
               endpointType: endpointTypeOf(olds?.regions),
               revisionId: "",
+              revisionWeights: [],
               roleName,
               roleArn: role.Role.Arn,
               code: { hash: "" },
@@ -1082,7 +1126,10 @@ export const WebFunctionProvider = () =>
             endpointType: (endpoint?.endpointType ??
               output?.endpointType ??
               endpointTypeOf(olds?.regions)) as WebFunctionEndpointType,
-            revisionId: endpoint ? activeRevisionId(endpoint) : (output?.revisionId ?? ""),
+            revisionId: endpoint
+              ? latestRevisionId(endpoint, output?.revisionId)
+              : (output?.revisionId ?? ""),
+            revisionWeights: endpoint ? servedRevisions(endpoint) : (output?.revisionWeights ?? []),
             roleName,
             roleArn: output?.roleArn ?? `arn:aws:iam::${accountId}:role/${roleName}`,
             code: output?.code ?? { hash: "" },
@@ -1164,6 +1211,7 @@ export const WebFunctionProvider = () =>
             regions: news.regions,
             maxEnvironments: news.maxEnvironments,
             rateLimit: news.rateLimit,
+            canary: news.canary,
           };
 
           // Observe → ensure the function. `CreateWebFunction` creates the
@@ -1225,19 +1273,21 @@ export const WebFunctionProvider = () =>
 
           // Sync the built-in endpoint onto the revision. A renamed endpoint is
           // a new endpoint: create it, then remove the previous one.
-          const previousRevisionId = observedEndpoint
-            ? activeRevisionId(observedEndpoint)
-            : undefined;
           const settled = yield* syncEndpoint({
             functionName,
             spec: endpoint,
             revisionId,
+            published: output?.revisionId,
             session,
           });
           // Moving off a revision whose egress connector the new one no
           // longer uses (e.g. `vpc` removed) may leave it unused.
-          if (previousRevisionId !== undefined && previousRevisionId !== revisionId) {
-            const previousConnector = yield* connectorOfRevision(functionName, previousRevisionId);
+          const stillServed = new Set(servedRevisions(settled).map((w) => w.revisionId));
+          for (const { revisionId: previous } of observedEndpoint
+            ? servedRevisions(observedEndpoint)
+            : []) {
+            if (stillServed.has(previous)) continue;
+            const previousConnector = yield* connectorOfRevision(functionName, previous);
             if (
               previousConnector !== undefined &&
               !sameConnector(previousConnector, egressNetworkConnectorArn)
@@ -1280,7 +1330,13 @@ export const WebFunctionProvider = () =>
           }
 
           yield* session.note(`https://${settled.domainName}`);
-          return toAttributes(fn, settled, { roleName, roleArn }, { hash: identityHash });
+          return toAttributes(
+            fn,
+            settled,
+            { roleName, roleArn },
+            { hash: identityHash },
+            revisionId,
+          );
         }),
         delete: Effect.fn(function* ({ id, output, session }) {
           // The role may already be gone — every step is idempotent. Grants
