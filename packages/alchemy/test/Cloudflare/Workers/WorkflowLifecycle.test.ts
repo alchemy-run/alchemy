@@ -79,6 +79,8 @@ const probeWorkflow = Effect.fn(function* (url: string, className = "LifecycleWo
     // A brand-new script reaches Workflow hosts one at a time, and Cloudflare
     // exposes no propagation API. Only a probe may observe the script (or its
     // entrypoint) as absent; scenario instances never retry.
+    // An instance still queued after polling has not been picked up yet.
+    if (status.status === "queued") return false;
     if (
       status.status === "errored" &&
       ((status.error?.name === "Error" && status.error.message === "Worker not found.") ||

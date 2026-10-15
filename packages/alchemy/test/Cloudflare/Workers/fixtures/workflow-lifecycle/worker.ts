@@ -358,9 +358,12 @@ const retryWorkflowControl = <A, R>(operation: string, effect: Effect.Effect<A, 
     Effect.catchDefect((defect) =>
       Cause.isUnknownError(defect) &&
       defect.cause instanceof Error &&
-      defect.cause.message === "internal error"
+      // Cloudflare sometimes appends "; reference = <id>".
+      defect.cause.message.startsWith("internal error")
         ? Effect.fail(new WorkflowControlUnavailable({ operation, cause: defect.cause }))
-        : Effect.die(defect),
+        : // Surface the native error, not the `UnknownError` wrapping it, so a
+          // failed request reports what Cloudflare actually said.
+          Effect.die(Cause.isUnknownError(defect) ? (defect.cause ?? defect) : defect),
     ),
     Effect.tapError(() => Effect.logWarning(`Native Workflow ${operation} unavailable; retrying`)),
     Effect.retry({ schedule: Schedule.exponential("250 millis"), times: 4 }),
