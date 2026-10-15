@@ -25,6 +25,7 @@ import * as Schema from "effect/Schema";
 import type * as Scope from "effect/Scope";
 import * as Socket from "effect/socket/Socket";
 import * as Stream from "effect/Stream";
+import * as Tracer from "effect/Tracer";
 import type { HttpEffect } from "../Http.ts";
 import type * as Aggregate from "./Aggregate.ts";
 import * as Command from "./Command.ts";
@@ -534,6 +535,10 @@ interface LiveRequest {
   readonly tag: string;
   readonly payload: unknown;
   readonly cursor?: number;
+  /** The client's span, as the RPC protocol carries it, so the read joins the caller's trace. */
+  readonly traceId?: string;
+  readonly spanId?: string;
+  readonly sampled?: boolean;
 }
 
 /**
@@ -587,6 +592,7 @@ const liveReads = (
     if (Option.isNone(payload))
       return HttpServerResponse.text("Invalid live read", { status: 400 });
     const { key, where, after } = payload.value as ReadPayload;
+    yield* Effect.annotateCurrentSpan({ "domain.read": live.tag, "domain.key": String(key) });
     // Run the read's middleware, as the RPC server would, around capturing what it provides.
     let authorized: Effect.Effect<RequestContext.Json, unknown> = RequestContext.capture;
     for (const service of read.rpc.middlewares) {
@@ -619,7 +625,28 @@ const liveReads = (
       ),
     );
     return yield* read.store.connect(String(key), judged);
-  });
+  }).pipe(
+    // A live read continues the trace of the client that opened it, like an RPC call.
+    (effect) =>
+      Effect.flatMap(HttpServerRequest, (request) => {
+        const raw = new URL(request.url, "http://localhost").searchParams.get(LIVE_PARAM);
+        const live = raw === null ? undefined : (JSON.parse(raw) as LiveRequest);
+        return effect.pipe(
+          Effect.withSpan(`Domain.read ${live?.tag ?? "unknown"}`, {
+            kind: "server",
+            ...(live?.traceId && live.spanId
+              ? {
+                  parent: Tracer.externalSpan({
+                    traceId: live.traceId,
+                    spanId: live.spanId,
+                    sampled: live.sampled ?? true,
+                  }),
+                }
+              : {}),
+          }),
+        );
+      }),
+  );
 };
 
 // ---------------------------------------------------------------- client
@@ -857,6 +884,9 @@ export const protocolWebSocket = (
               tag: request.tag,
               payload: request.payload,
               cursor,
+              ...(request.traceId && request.spanId
+                ? { traceId: request.traceId, spanId: request.spanId, sampled: request.sampled }
+                : {}),
             };
             const socket = yield* Socket.makeWebSocket(
               `${socketUrl}?${LIVE_PARAM}=${encodeURIComponent(JSON.stringify(live))}`,

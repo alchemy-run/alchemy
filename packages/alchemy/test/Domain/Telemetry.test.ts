@@ -1,10 +1,14 @@
 import { describe, expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
 import * as Metric from "effect/Metric";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
+import * as Socket from "effect/socket/Socket";
+import * as Stream from "effect/Stream";
 import * as Tracer from "effect/Tracer";
 import { Activity } from "effect/workflow";
 import * as Domain from "@/Domain/index.ts";
@@ -89,6 +93,19 @@ const AuditDebitsLive = AuditDebits.toLayer(
     });
   }),
 );
+
+class Balance extends Domain.View("Balance", {
+  from: [Wallet],
+  key: Wallet,
+  state: Schema.Struct({ balance: Schema.Number }),
+  initial: { balance: 0 },
+  evolve: {
+    Opened: (_, e) => ({ balance: e.balance }),
+    Debited: (v, e) => ({ balance: v.balance - e.amount }),
+  },
+}) {}
+
+class WalletApi extends Domain.Api("WalletApi", Balance) {}
 
 class Bank extends Domain.Model("TelemetryBank", {
   aggregates: [Wallet, Ledger],
@@ -325,6 +342,46 @@ describe("Domain telemetry", () => {
       expect(batch.traceId).not.toBe(debit.traceId);
       expect(batch.links.map((l) => l.span.spanId)).toEqual([debit.spanId]);
       expect(batch.attributes.get("domain.batch")).toBe(1);
+    }),
+  );
+
+  it.effect("a live read carries the caller's span, so the server joins its trace", () =>
+    Effect.gen(function* () {
+      const { tracer } = recording();
+      const urls: Array<string> = [];
+      // A socket that never opens: enough to see what the client asked for.
+      const sockets = Layer.succeed(Socket.WebSocketConstructor, (url) => {
+        urls.push(url);
+        return {
+          addEventListener: () => {},
+          removeEventListener: () => {},
+          close: () => {},
+          readyState: 0,
+        } as never;
+      });
+      const watched = yield* Effect.gen(function* () {
+        const client = yield* WalletApi.client;
+        const fiber = yield* client.Balance.watch("alice").pipe(Stream.runDrain, Effect.forkChild);
+        for (let i = 0; i < 100 && urls.length === 0; i++) yield* Effect.yieldNow;
+        const span = yield* Effect.currentSpan;
+        yield* Fiber.interrupt(fiber);
+        return span;
+      }).pipe(
+        Effect.withSpan("click"),
+        Effect.scoped,
+        Effect.provide(
+          Domain.protocolWebSocket("http://bank.test/api").pipe(
+            Layer.provide(Layer.mergeAll(FetchHttpClient.layer, sockets)),
+          ),
+        ),
+        Effect.withTracer(tracer),
+      );
+      expect(urls).toHaveLength(1);
+      const read = JSON.parse(new URL(urls[0]!).searchParams.get("read")!);
+      expect(read.tag).toBe("Balance.watch");
+      // The RPC client's span for the read, a child of the caller's.
+      expect(read.traceId).toBe(watched.traceId);
+      expect(typeof read.spanId).toBe("string");
     }),
   );
 
