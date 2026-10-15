@@ -65,7 +65,16 @@ const waitForReady = Effect.fn(function* (url: string) {
 
 const probeWorkflow = Effect.fn(function* (url: string, className = "LifecycleWorkflow") {
   const probe = Effect.gen(function* () {
-    const started = yield* request(`${url}/probe`, "POST");
+    const started = yield* request(`${url}/probe`, "POST").pipe(
+      // Workflows' control plane still failing after the fixture's own
+      // retries: not ready yet, so let the next round try again.
+      Effect.catchTag("WorkerRequestFailed", (error) =>
+        error.message.includes("WorkflowControlUnavailable")
+          ? Effect.succeed(undefined)
+          : Effect.fail(error),
+      ),
+    );
+    if (started === undefined) return false;
     const { id } = yield* Effect.try(() => JSON.parse(started) as { id: string });
     const status = yield* request(`${url}/probe/${id}`).pipe(
       Effect.flatMap((body) => Effect.try(() => JSON.parse(body) as Omit<Status, "entries">)),
