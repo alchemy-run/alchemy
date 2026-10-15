@@ -257,6 +257,10 @@ const readDelegatedAdministrator = Effect.fn(function* ({
           }),
         (page) => page.DelegatedServices,
       ),
+    ).pipe(
+      Effect.catchTag(["AccountNotFoundException", "AccountNotRegisteredException"], () =>
+        Effect.succeed<organizations.DelegatedService[]>([]),
+      ),
     ),
     retryOrganizations(
       collectPages(

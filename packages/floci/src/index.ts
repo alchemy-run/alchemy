@@ -9,7 +9,9 @@ import * as path from "node:path";
  *
  * alchemy's AWS local dev points its providers at a floci endpoint. This
  * package owns the emulator lifecycle with a strict resolution order that
- * keeps every local loop registry-free:
+ * keeps every local loop registry-free. `ALCHEMY_FLOCI_EXTERNAL=1` requires an
+ * existing server and disables Docker fallback, for source development,
+ * unless the caller passes an explicit {@link FlociConfig.external}:
  *
  * 1. **Already serving** — if anything answers on the endpoint (e.g.
  *    `bun floci:dev` running `mvn quarkus:dev` from a floci checkout, or a
@@ -38,7 +40,7 @@ import * as Semaphore from "effect/Semaphore";
  * workflow. Bumping this pin (with a new `x.y.z-alchemy.N` tag) is how an
  * emulator change reaches users.
  */
-export const DEFAULT_FLOCI_IMAGE = "ghcr.io/alchemy-run/floci:1.6.0-alchemy.11";
+export const DEFAULT_FLOCI_IMAGE = "ghcr.io/alchemy-run/floci:2.1.0-alchemy.3";
 
 /** Default gateway port (LocalStack-compatible). */
 export const DEFAULT_FLOCI_PORT = 4566;
@@ -139,6 +141,12 @@ export class FlociError extends Data.TaggedError("FlociError")<{
 }> {}
 
 export interface FlociConfig {
+  /**
+   * Use an existing server without starting or replacing Docker containers.
+   * When omitted, `ALCHEMY_FLOCI_EXTERNAL=1` enables it for source
+   * development; an explicit value overrides the env var.
+   */
+  readonly external?: boolean | undefined;
   /**
    * Image to run when the emulator is not already serving.
    * Resolution order: `ALCHEMY_FLOCI_IMAGE` env var, this field,
@@ -402,6 +410,20 @@ const ensureFlociUnsynchronized = (
   Effect.gen(function* () {
     const port = config?.port ?? DEFAULT_FLOCI_PORT;
     const endpoint = `http://localhost:${port}`;
+    if (config?.external ?? process.env.ALCHEMY_FLOCI_EXTERNAL === "1") {
+      yield* checkHealth(endpoint).pipe(
+        Effect.timeout("5 seconds"),
+        Effect.mapError(
+          (cause) =>
+            new FlociError({
+              message: `external floci server unavailable at ${endpoint}`,
+              cause,
+            }),
+        ),
+      );
+      yield* syncCaBundle(endpoint);
+      return { endpoint, managed: false };
+    }
     const containerName = config?.containerName ?? DEFAULT_CONTAINER_NAME;
     const published = yield* publishedPorts(containerName);
     const elbPorts = yield* resolvePublishablePorts(

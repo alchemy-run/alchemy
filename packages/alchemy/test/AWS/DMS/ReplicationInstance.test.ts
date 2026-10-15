@@ -8,7 +8,7 @@ import { ReplicationInstance, ReplicationSubnetGroup } from "@/AWS/DMS";
 import { Subnet, Vpc } from "@/AWS/EC2";
 import { AWSEnvironment } from "@/AWS/Environment";
 import * as Test from "@/Test/Alchemy";
-import { reapDmsOrphans } from "./reap.ts";
+import { DMS_REPLICATION_INSTANCE_VPC, reapDmsOrphans } from "./reap.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -49,7 +49,7 @@ test.provider.skipIf(!!process.env.FAST)(
       yield* stack.destroy();
       // A previous hard-killed run (in-memory scratch state) may have
       // orphaned the VPC fixture — reap it out-of-band before deploying.
-      yield* reapDmsOrphans;
+      yield* reapDmsOrphans(DMS_REPLICATION_INSTANCE_VPC);
 
       const azResult = yield* ec2.describeAvailabilityZones({});
       const azs = (azResult.AvailabilityZones ?? [])
@@ -59,7 +59,9 @@ test.provider.skipIf(!!process.env.FAST)(
 
       const { instance } = yield* stack.deploy(
         Effect.gen(function* () {
-          const vpc = yield* Vpc("DmsInstVpc", { cidrBlock: "10.92.0.0/16" });
+          const vpc = yield* Vpc(DMS_REPLICATION_INSTANCE_VPC.logicalId, {
+            cidrBlock: DMS_REPLICATION_INSTANCE_VPC.cidr,
+          });
           const subnetA = yield* Subnet("DmsInstSubnetA", {
             vpcId: vpc.vpcId,
             cidrBlock: "10.92.1.0/24",
@@ -107,7 +109,7 @@ test.provider.skipIf(!!process.env.FAST)(
       // scratch destroy) fails: the reaper waits out the instance deletion
       // and tears the VPC fixture down out-of-band with idempotent typed
       // calls. `orDie` — a finalizer must not swallow its own failure.
-      Effect.ensuring(reapDmsOrphans.pipe(Effect.orDie)),
+      Effect.ensuring(reapDmsOrphans(DMS_REPLICATION_INSTANCE_VPC).pipe(Effect.orDie)),
     ),
   {
     tags: ["provider:aws", "provider:aws:dms", "provider:aws:ec2", "live"],

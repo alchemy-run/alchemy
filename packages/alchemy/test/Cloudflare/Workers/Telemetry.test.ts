@@ -116,8 +116,9 @@ describe(
             timeout: "120 seconds",
             label: "default-path service.name",
           });
-          // http.server root span from the HttpMiddleware tracer.
-          yield* expectUrlContains(collected, "http.server GET");
+          // HTTP server root span from the HttpMiddleware tracer, named
+          // after the request method.
+          yield* expectUrlContains(collected, '"name":"GET"');
           // Child span from Effect.fn instrumentation.
           yield* expectUrlContains(collected, "test.child-span");
           // Log record shipped by the OTLP logger.
