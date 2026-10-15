@@ -1,13 +1,17 @@
 import { expect } from "alchemy-test";
+import * as Config from "effect/Config";
+import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Layer from "effect/Layer";
+import * as Redacted from "effect/Redacted";
 import * as Ref from "effect/Ref";
 import { isResolved } from "@/Diff.ts";
 import * as Plan from "@/Plan";
 import { Platform, type Main, type PlatformProps } from "@/Platform.ts";
 import * as Provider from "@/Provider.ts";
 import { Resource } from "@/Resource";
+import { packEnvValue } from "@/RuntimeContext.ts";
 import { createHostRuntimeContext, type HostRuntimeContext, ServerHost } from "@/Server/Process.ts";
 import * as Stack from "@/Stack";
 import { Stage } from "@/Stage";
@@ -135,6 +139,66 @@ test(
     ).pipe(makePlan);
 
     expect(plan.resources["MyHost"]?.action).toBe("create");
+  }),
+  { tags: ["unit", "local"] },
+);
+
+// At runtime the Platform's Config interceptor reads bindings back through
+// `ctx.get`, which `JSON.parse`s the raw env var. An env var set verbatim
+// (a Worker's `env`, or the host) whose value parses as JSON — a numeric id,
+// `true` — came back as a number or boolean, so `Config.String` failed and
+// init died.
+test(
+  "runtime Config.String reads a verbatim env var that parses as JSON as its raw string",
+  Effect.gen(function* () {
+    const values = {
+      ALCHEMY_TEST_NUMERIC_ID: "1290780104129730",
+      ALCHEMY_TEST_BOOLEAN: "true",
+      ALCHEMY_TEST_ZERO: "0",
+    };
+    // A value bound at plan time is marker-packed and still read from the
+    // RuntimeContext.
+    const bound = { ALCHEMY_TEST_BOUND: packEnvValue(Redacted.make("42")) };
+    const previous = [...Object.keys(values), ...Object.keys(bound)].map(
+      (key) => [key, process.env[key]] as const,
+    );
+    yield* Effect.acquireRelease(
+      Effect.sync(() => Object.assign(process.env, values, bound)),
+      () =>
+        Effect.sync(() => {
+          for (const [key, value] of previous) {
+            if (value === undefined) delete process.env[key];
+            else process.env[key] = value;
+          }
+        }),
+    );
+    const read = yield* Ref.make<Record<string, string>>({});
+    yield* Host(
+      "RuntimeHost",
+      { main: "index.ts" },
+      Effect.gen(function* () {
+        for (const key of [...Object.keys(values), "ALCHEMY_TEST_BOUND"]) {
+          const value = yield* Config.String(key);
+          yield* Ref.update(read, (all) => ({ ...all, [key]: value }));
+        }
+        return {};
+      }),
+    ).pipe(
+      Effect.provideService(
+        ConfigProvider.ConfigProvider,
+        ConfigProvider.fromUnknown({ ALCHEMY_PHASE: "runtime", ...values }),
+      ),
+      Effect.provideService(Stack.Stack, {
+        name: "test",
+        stage: "test",
+        bindings: {},
+        resources: {},
+        actions: {},
+      }),
+      Effect.provideService(Stage, "test"),
+    );
+
+    expect(yield* Ref.get(read)).toEqual({ ...values, ALCHEMY_TEST_BOUND: "42" });
   }),
   { tags: ["unit", "local"] },
 );

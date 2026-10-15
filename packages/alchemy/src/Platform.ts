@@ -521,11 +521,18 @@ export const Platform = <
                             return node;
                           } else if (phase === "runtime" && ctx) {
                             // retrieve from the RuntimeContext if running in runtime phase
-                            const value = yield* ctx.get<Redacted.Redacted<string>>(key);
-                            if (value) {
-                              return ConfigProvider.makeValue(
-                                Redacted.isRedacted(value) ? Redacted.value(value) : value,
-                              );
+                            const value = yield* ctx.get<unknown>(key);
+                            // Only a bound `Redacted` or a string replaces the
+                            // provider's node. An env var set verbatim (via
+                            // `env`, or outside Alchemy) that parses as JSON —
+                            // a numeric id, `true` — comes back from `ctx.get`
+                            // as a number or boolean, which `Config.String`
+                            // rejects; the provider's node keeps the raw string.
+                            if (Redacted.isRedacted(value)) {
+                              return ConfigProvider.makeValue(String(Redacted.value(value)));
+                            }
+                            if (typeof value === "string") {
+                              return ConfigProvider.makeValue(value);
                             }
                           }
                           // fallback to the config provider otherwise
