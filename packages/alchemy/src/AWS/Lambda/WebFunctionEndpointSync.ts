@@ -33,6 +33,19 @@ export class WebFunctionFailed extends Data.TaggedError("WebFunctionFailed")<{
 
 export type WebFunctionAuthType = "ApplicationManaged" | "IamAuth";
 
+/**
+ * Send part of an endpoint's traffic to a new revision and keep the rest on
+ * the revision it served before.
+ */
+export interface WebFunctionCanary {
+  /**
+   * Percent of traffic (0–100) for the revision this deploy publishes. `0`
+   * rolls back: all traffic returns to the previous revision. `100`
+   * promotes, the same as removing `canary`.
+   */
+  weight: number;
+}
+
 /** The settings of one endpoint, as declared on either resource. */
 export interface WebFunctionEndpointSpec {
   endpointName: string;
@@ -41,6 +54,13 @@ export interface WebFunctionEndpointSpec {
   maxEnvironments?: number;
   rateLimit?: number;
   description?: string;
+  canary?: WebFunctionCanary;
+}
+
+/** How an endpoint splits traffic between at most two revisions. */
+export interface WebFunctionRevisionWeight {
+  revisionId: string;
+  weight: number;
 }
 
 /** A setting is outside the range Lambda accepts. */
@@ -61,6 +81,7 @@ export const validateWebFunctionSettings = (
     maxEnvironments?: number;
     maxConcurrencyPerEnvironment?: number;
     timeoutSeconds?: number;
+    canary?: WebFunctionCanary;
   },
 ): Effect.Effect<void, WebFunctionInvalidConfig> => {
   const invalid = (setting: string, message: string) =>
@@ -71,7 +92,17 @@ export const validateWebFunctionSettings = (
         message: `"${resourceId}": ${message}`,
       }),
     );
-  const { rateLimit, maxEnvironments, maxConcurrencyPerEnvironment, timeoutSeconds } = settings;
+  const { rateLimit, maxEnvironments, maxConcurrencyPerEnvironment, timeoutSeconds, canary } =
+    settings;
+  if (
+    canary !== undefined &&
+    (!Number.isInteger(canary.weight) || canary.weight < 0 || canary.weight > 100)
+  ) {
+    return invalid(
+      "canary",
+      `canary weight ${canary.weight} is not allowed: use a whole number from 0 to 100.`,
+    );
+  }
   if (rateLimit !== undefined) {
     const step = rateLimit <= 1000 ? 100 : 1000;
     if (
@@ -165,20 +196,75 @@ export const getEndpoint = (functionName: string, endpointName: string) =>
     Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
   );
 
-/** The revision receiving all of an endpoint's traffic. */
-export const activeRevisionId = (endpoint: {
-  revisionWeights: readonly { revisionId: string; weight: number }[];
-}) =>
-  endpoint.revisionWeights.find((w) => w.weight === 100)?.revisionId ??
-  endpoint.revisionWeights[0]?.revisionId ??
-  "";
+/** Revisions an endpoint sends traffic to. */
+export const servedRevisions = (endpoint: {
+  revisionWeights: readonly WebFunctionRevisionWeight[];
+}) => endpoint.revisionWeights.filter((w) => w.weight > 0);
+
+/**
+ * The newest revision an endpoint serves: the canary while one runs,
+ * otherwise the only revision. `published` (the revision the last deploy
+ * published) decides when the endpoint serves two.
+ */
+export const latestRevisionId = (
+  endpoint: { revisionWeights: readonly WebFunctionRevisionWeight[] },
+  published?: string,
+) => {
+  const served = servedRevisions(endpoint);
+  if (published !== undefined && served.some((w) => w.revisionId === published)) {
+    return published;
+  }
+  return [...served].sort((a, b) => a.weight - b.weight)[0]?.revisionId ?? "";
+};
+
+/**
+ * Split traffic between the revision this deploy publishes (`revisionId`)
+ * and the stable one the endpoint serves now. The stable revision is the
+ * served revision other than the one the previous deploy published, so a
+ * second code change during a canary replaces the canary and keeps the
+ * stable revision. Without `published` (adoption), the heavier one is
+ * stable.
+ */
+const revisionWeightsFor = ({
+  observed,
+  revisionId,
+  published,
+  canary,
+}: {
+  observed: { revisionWeights: readonly WebFunctionRevisionWeight[] } | undefined;
+  revisionId: string;
+  published: string | undefined;
+  canary: WebFunctionCanary | undefined;
+}): WebFunctionRevisionWeight[] => {
+  const all = [{ revisionId, weight: 100 }];
+  if (canary === undefined || canary.weight >= 100 || observed === undefined) return all;
+  const served = servedRevisions(observed);
+  const stable =
+    published === undefined
+      ? [...served].sort((a, b) => b.weight - a.weight)[0]?.revisionId
+      : (served.find((w) => w.revisionId !== published) ?? served[0])?.revisionId;
+  // Nothing to compare against yet (first deploy), or the code is back on
+  // the stable revision.
+  if (stable === undefined || stable === revisionId) return all;
+  if (canary.weight <= 0) return [{ revisionId: stable, weight: 100 }];
+  return [
+    { revisionId: stable, weight: 100 - canary.weight },
+    { revisionId, weight: canary.weight },
+  ];
+};
+
+const byRevision = (weights: readonly WebFunctionRevisionWeight[]) =>
+  [...weights].sort((a, b) => a.revisionId.localeCompare(b.revisionId));
 
 /** Settings `UpdateWebFunctionEndpoint` changes in place. */
-const desiredSettings = (spec: WebFunctionEndpointSpec, revisionId: string) => ({
+const desiredSettings = (
+  spec: WebFunctionEndpointSpec,
+  revisionWeights: WebFunctionRevisionWeight[],
+) => ({
   description: spec.description ?? "",
   authType: spec.authType,
   autoDeploymentMode: "Disabled" as const,
-  revisionWeights: [{ revisionId, weight: 100 }],
+  revisionWeights,
   // `{}` clears a previously set value.
   scalingConfig:
     spec.maxEnvironments === undefined ? {} : { maxEnvironments: spec.maxEnvironments },
@@ -192,10 +278,7 @@ const settingsMatch = (
   (observed.description ?? "") === desired.description &&
   observed.authType === desired.authType &&
   observed.autoDeploymentMode === desired.autoDeploymentMode &&
-  deepEqual(
-    observed.revisionWeights.filter((w) => w.weight > 0),
-    desired.revisionWeights,
-  ) &&
+  deepEqual(byRevision(servedRevisions(observed)), byRevision(desired.revisionWeights)) &&
   observed.scalingConfig?.maxEnvironments === desired.scalingConfig.maxEnvironments &&
   observed.throttleConfig?.rateLimit === desired.throttleConfig.rateLimit;
 
@@ -267,20 +350,24 @@ export const deleteEndpoint = (functionName: string, endpointName: string) =>
   });
 
 /**
- * Converge one endpoint on `spec`, routing all traffic to `revisionId`:
- * observe it, recreate it when its type or Regions disagree, create it when
- * missing, update the in-place settings that differ, and wait until it
- * settles.
+ * Converge one endpoint on `spec`, routing traffic to `revisionId` (all of
+ * it, or `spec.canary.weight` percent with the rest on the stable
+ * revision): observe it, recreate it when its type or Regions disagree,
+ * create it when missing, update the in-place settings that differ, and
+ * wait until it settles. `published` is the revision the previous deploy
+ * published to this endpoint.
  */
 export const syncEndpoint = Effect.fn(function* ({
   functionName,
   spec,
   revisionId,
+  published,
   session,
 }: {
   functionName: string;
   spec: WebFunctionEndpointSpec;
   revisionId: string;
+  published?: string;
   session: { note: (note: string) => Effect.Effect<void> };
 }) {
   const endpointType = endpointTypeOf(spec.regions);
@@ -300,7 +387,10 @@ export const syncEndpoint = Effect.fn(function* ({
     endpoint = undefined;
   }
 
-  const settings = desiredSettings(spec, revisionId);
+  const settings = desiredSettings(
+    spec,
+    revisionWeightsFor({ observed: endpoint, revisionId, published, canary: spec.canary }),
+  );
   if (endpoint === undefined) {
     yield* LambdaWeb.createWebFunctionEndpoint({
       functionName,

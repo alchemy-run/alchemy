@@ -222,6 +222,117 @@ test.provider(
   { tags, timeout: 300_000 },
 );
 
+/** Sorted so a two-revision split compares regardless of order. */
+const sortedWeights = (weights: readonly { revisionId: string; weight: number }[]) =>
+  [...weights].sort((a, b) => a.revisionId.localeCompare(b.revisionId));
+
+/** The distinct bodies `count` requests got back. */
+const sampleBodies = (url: string, count: number) =>
+  Effect.forEach(Array.from({ length: count }), () => getText(url)).pipe(
+    Effect.map((bodies) => [...new Set(bodies)].sort()),
+  );
+
+test.provider(
+  "canary: split, replace the canary, roll back, promote",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      // Each greeting is a new revision. "Webhooks" has no canary: it
+      // follows every deploy at 100%.
+      const deploy = (greeting: string, canary?: { weight: number }) =>
+        stack.deploy(
+          Effect.gen(function* () {
+            const fn = yield* AWS.Lambda.WebFunction("Canary", {
+              main: asyncServerMain,
+              authType: "ApplicationManaged",
+              env: { GREETING: greeting },
+              ...(canary ? { canary } : {}),
+            });
+            const webhooks = yield* AWS.Lambda.WebFunctionEndpoint("Webhooks", {
+              function: fn,
+              authType: "ApplicationManaged",
+            });
+            return { fn, webhooks };
+          }),
+        );
+      const weightsOf = (functionName: string) =>
+        getEndpoint(functionName).pipe(Effect.map((e) => sortedWeights(e.revisionWeights)));
+
+      // First deploy: nothing to compare against, so all traffic.
+      const v1 = yield* deploy("v1", { weight: 50 });
+      expect(v1.fn.revisionWeights).toEqual([{ revisionId: v1.fn.revisionId, weight: 100 }]);
+
+      // A new revision takes the canary share; the previous one keeps the rest.
+      const v2 = yield* deploy("v2", { weight: 50 });
+      expect(v2.fn.revisionId).not.toBe(v1.fn.revisionId);
+      const split = sortedWeights([
+        { revisionId: v1.fn.revisionId, weight: 50 },
+        { revisionId: v2.fn.revisionId, weight: 50 },
+      ]);
+      expect(sortedWeights(v2.fn.revisionWeights)).toEqual(split);
+      expect(yield* weightsOf(v2.fn.functionName)).toEqual(split);
+      expect(yield* sampleBodies(v2.fn.url, 30)).toEqual(["greeting=v1", "greeting=v2"]);
+      // The other endpoint has no canary and moved over entirely.
+      expect(v2.webhooks.revisionWeights).toEqual([{ revisionId: v2.fn.revisionId, weight: 100 }]);
+      expect(yield* getTextUntil(v2.webhooks.url, (b) => b === "greeting=v2")).toBe("greeting=v2");
+
+      // Unchanged props plan a noop.
+      const plan = yield* stack.plan(
+        AWS.Lambda.WebFunction("Canary", {
+          main: asyncServerMain,
+          authType: "ApplicationManaged",
+          env: { GREETING: "v2" },
+          canary: { weight: 50 },
+        }),
+      );
+      expect(plan.resources.Canary).toMatchObject({ action: "noop" });
+
+      // Another change during the canary replaces the canary; the stable
+      // revision stays.
+      const v3 = yield* deploy("v3", { weight: 50 });
+      expect(sortedWeights(v3.fn.revisionWeights)).toEqual(
+        sortedWeights([
+          { revisionId: v1.fn.revisionId, weight: 50 },
+          { revisionId: v3.fn.revisionId, weight: 50 },
+        ]),
+      );
+
+      // Shift more traffic in place: no new revision.
+      const shifted = yield* deploy("v3", { weight: 90 });
+      expect(shifted.fn.revisionId).toBe(v3.fn.revisionId);
+      expect(yield* weightsOf(shifted.fn.functionName)).toEqual(
+        sortedWeights([
+          { revisionId: v1.fn.revisionId, weight: 10 },
+          { revisionId: v3.fn.revisionId, weight: 90 },
+        ]),
+      );
+
+      // Roll back: all traffic to the stable revision.
+      const rolledBack = yield* deploy("v3", { weight: 0 });
+      expect(rolledBack.fn.revisionId).toBe(v3.fn.revisionId);
+      expect(rolledBack.fn.revisionWeights).toEqual([
+        { revisionId: v1.fn.revisionId, weight: 100 },
+      ]);
+      expect(yield* getTextUntil(rolledBack.fn.url, (b) => b === "greeting=v1")).toBe(
+        "greeting=v1",
+      );
+      // A rollback on one endpoint leaves the others on the new revision.
+      expect(yield* getText(rolledBack.webhooks.url)).toBe("greeting=v3");
+
+      // Promote: remove `canary`.
+      const promoted = yield* deploy("v3");
+      expect(yield* weightsOf(promoted.fn.functionName)).toEqual([
+        { revisionId: v3.fn.revisionId, weight: 100 },
+      ]);
+      expect(yield* getTextUntil(promoted.fn.url, (b) => b === "greeting=v3")).toBe("greeting=v3");
+
+      yield* stack.destroy();
+      yield* expectFunctionDeleted(promoted.fn.functionName, promoted.fn.roleName);
+    }).pipe(Effect.onError(() => stack.destroy().pipe(Effect.ignore))),
+  { tags, timeout: 600_000 },
+);
+
 test.provider(
   "Effect fetch handler with bindings and streaming",
   (stack) =>
@@ -558,6 +669,12 @@ test.provider(
       expect(yield* planError(fn({ rateLimit: 150 }))).toContain("e.g. 100 or 200");
       expect(yield* planError(fn({ maxEnvironments: 1 }))).toContain(
         "maxEnvironments 1 is not allowed",
+      );
+      expect(yield* planError(fn({ canary: { weight: 150 } }))).toContain(
+        "canary weight 150 is not allowed: use a whole number from 0 to 100.",
+      );
+      expect(yield* planError(fn({ canary: { weight: 12.5 } }))).toContain(
+        "canary weight 12.5 is not allowed",
       );
       expect(yield* planError(fn({ maxConcurrencyPerEnvironment: 129 }))).toContain(
         "maxConcurrencyPerEnvironment 129 is not allowed",
