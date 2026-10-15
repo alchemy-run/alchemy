@@ -6,6 +6,7 @@ import * as Schedule from "effect/Schedule";
 import * as Test from "@/Test/Alchemy";
 import { REPO_A, REPO_B } from "./fixtures/microvm-sandbox/gateway.ts";
 import type { Shell } from "./fixtures/microvm-sandbox/object.ts";
+import { PRESETS } from "./fixtures/microvm-sandbox/playground.ts";
 import SandboxStack, { providers, state } from "./fixtures/microvm-sandbox/stack.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({ providers, state });
@@ -153,14 +154,51 @@ describe.skipIf(skip).sequential("AWS Lambda MicroVM sandbox", () => {
   );
 
   test(
+    "the playground page serves every preset, and reads state with GET",
+    Effect.gen(function* () {
+      const { url } = yield* stack;
+      const client = yield* HttpClient.HttpClient;
+      const page = yield* client.get(new URL("/", url));
+      expect(page.status).toBe(200);
+      expect(page.headers["content-type"]).toContain("text/html");
+      const html = yield* page.text;
+      for (const preset of PRESETS) expect(html).toContain(preset.label);
+      // The page polls these with GET.
+      const running = yield* client
+        .get(new URL("/running", url))
+        .pipe(Effect.flatMap((r) => r.json));
+      expect(running).toBe(true);
+      const state = (yield* client
+        .get(new URL("/debug", url))
+        .pipe(Effect.flatMap((r) => r.json))) as { microvm?: { id?: string } };
+      expect(state.microvm?.id).toMatch(/^microvm-/);
+    }),
+    options,
+  );
+
+  for (const preset of PRESETS) {
+    test(
+      `playground preset "${preset.label}" is ${preset.expect}`,
+      Effect.gen(function* () {
+        const shell = yield* sh(preset.cmd);
+        const output = `${shell.stdout}${shell.stderr}`;
+        if (preset.expect === "allowed") expect(shell.exitCode, output).toBe(0);
+        else expect(shell.exitCode, output).not.toBe(0);
+        expect(output).toContain(preset.shows);
+      }),
+      options,
+    );
+  }
+
+  test(
     "setEgress narrows the running MicroVM without restarting it",
     Effect.gen(function* () {
       const before = yield* debug;
       yield* call("/narrow");
       const result = yield* probe;
       expect(result).toMatchObject({ statusA: "200", viaA: "1" });
-      // REPO_B lost its route: straight out with the placeholder.
-      expect(result).toMatchObject({ statusB: "401", viaB: "0" });
+      // REPO_B lost its route: the proxy refuses it (internet is off).
+      expect(result).toMatchObject({ statusB: "403", viaB: "0" });
       const after = yield* debug;
       expect(after.microvm?.id).toBe(before.microvm?.id);
       expect(after.egress).toBe(1);

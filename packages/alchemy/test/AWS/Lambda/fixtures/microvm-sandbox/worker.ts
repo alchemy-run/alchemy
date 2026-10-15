@@ -3,8 +3,10 @@ import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Cloudflare from "@/Cloudflare";
 import { MicrovmSandboxObject } from "./object.ts";
+import { PLAYGROUND } from "./playground.ts";
 
 /**
+ * GET  /                  a playground page that drives the routes below
  * POST /start?size=&ttl=  start the sandbox (or re-apply to the running one)
  * POST /narrow            narrow it to REPO_A
  * POST /sh                run the body as a shell script (inside the program)
@@ -41,6 +43,8 @@ export default class MicrovmSandboxWorker extends Cloudflare.Worker<MicrovmSandb
             );
           case "/running":
             return yield* HttpServerResponse.json(yield* object.running());
+          case "/":
+            return HttpServerResponse.html(PLAYGROUND);
           case "/debug":
             return yield* HttpServerResponse.json(yield* object.debug());
           case "/stop":
