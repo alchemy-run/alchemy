@@ -15,7 +15,9 @@ import * as Neon from "@/Neon/index.ts";
 import * as Test from "@/Test/Alchemy";
 import HyperdriveLocalWorker, { LocalHyperdrive } from "./fixtures/local-worker.ts";
 import { outOfBandConfig } from "./fixtures/lookup-config.ts";
-import HyperdriveLookupLocalWorker from "./fixtures/lookup-local-worker.ts";
+import HyperdriveLookupLocalWorker, {
+  LocalLookupHyperdrive,
+} from "./fixtures/lookup-local-worker.ts";
 import { lookupConfigName } from "./fixtures/lookup.ts";
 import HyperdriveRemoteWorker, { RemoteHyperdrive } from "./fixtures/remote-worker.ts";
 
@@ -211,18 +213,27 @@ test.provider(
             project.origin,
           );
 
-          const worker = yield* stack.deploy(
+          const { effectWorker, asyncWorker } = yield* stack.deploy(
             Effect.gen(function* () {
               yield* Neon.Project("HyperdriveLookupLocalProject");
-              return yield* HyperdriveLookupLocalWorker;
+              // Through `Cloudflare.Hyperdrive.Connect`.
+              const effectWorker = yield* HyperdriveLookupLocalWorker;
+              // Through `env`.
+              const asyncWorker = yield* Cloudflare.Worker("HyperdriveLookupLocalAsyncWorker", {
+                main: pathe.resolve(import.meta.dirname, "fixtures/lookup-async-worker.ts"),
+                env: { HD: LocalLookupHyperdrive },
+              });
+              return { effectWorker, asyncWorker };
             }),
           );
-          expect(worker.url).toMatch(/^http:\/\/localhost:\d+$/);
 
-          const body = (yield* getJsonReady(`${worker.url}/query`)) as QueryBody;
-          expect(body.row.sum).toBe(2);
-          expect(body.row.db).toBe(project.databaseName);
-          expect(body.host).toBe(project.origin.host);
+          for (const url of [`${effectWorker.url}/query`, asyncWorker.url!]) {
+            expect(url).toMatch(/^http:\/\/localhost:\d+/);
+            const body = (yield* getJsonReady(url)) as QueryBody;
+            expect(body.row.sum).toBe(2);
+            expect(body.row.db).toBe(project.databaseName);
+            expect(body.host).toBe(project.origin.host);
+          }
 
           yield* stack.destroy();
 
