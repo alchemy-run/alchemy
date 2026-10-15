@@ -1,3 +1,5 @@
+import { createRequire } from "node:module";
+import { pathToFileURL } from "node:url";
 import type * as Command from "effect/cli/Command";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -56,10 +58,16 @@ type Lazy<A> = () => Promise<A>;
 export interface StateStore {
   readonly description: string;
   /**
-   * The store's `State` layer. Built under the requested profile's config
-   * with an `AuthProviders` registry in context.
+   * The store's `State` layer, for the named store or the default one.
+   * Built under the requested profile's config with an `AuthProviders`
+   * registry in context.
    */
-  readonly layer: Lazy<Layer.Layer<State, any, any>>;
+  readonly layer: Lazy<(options: { readonly name?: string }) => Layer.Layer<State, any, any>>;
+  /**
+   * Whether the provider can address more than the default store per
+   * account, through {@link StateStoreTarget.name}.
+   */
+  readonly supportsNames?: boolean;
   /**
    * Provisioning for a store that is infrastructure of its own, such as
    * Cloudflare's state-store Worker. Omit it for a store that needs none,
@@ -68,8 +76,13 @@ export interface StateStore {
   readonly lifecycle?: Lazy<StateStoreLifecycle>;
 }
 
-/** Which profile and `.env` a state-store operation acts under. */
+/** Which store, profile and `.env` a state-store operation acts under. */
 export interface StateStoreTarget {
+  /**
+   * A store other than the account's default, e.g. an S3 bucket name. Only
+   * for stores that declare {@link StateStore.supportsNames}.
+   */
+  readonly name?: string;
   /** Falls back to the active profile. */
   readonly profile?: string;
   readonly envFile?: string;
@@ -178,30 +191,63 @@ const findDependencyManifest = Effect.fn(function* (dir: string, name: string) {
   }
 });
 
-const importPlugin = (specifier: string) =>
-  Effect.tryPromise({
-    try: () => import(specifier) as Promise<{ readonly default?: unknown }>,
-    catch: (cause) => new PluginError({ message: `Could not import plugin ${specifier}`, cause }),
-  }).pipe(
+/** A plugin specifier, and the manifest that declared it when not alchemy's own. */
+interface Declared {
+  readonly specifier: string;
+  readonly manifest?: { readonly file: string; readonly directory: string };
+}
+
+/**
+ * Resolve a dependency's plugin from the dependency's own directory: under
+ * pnpm, alchemy usually can't see a project's dependencies, but a package can
+ * always resolve its own exports.
+ */
+const resolveDeclared = ({ specifier, manifest }: Declared) =>
+  manifest === undefined
+    ? Effect.succeed(specifier)
+    : Effect.try({
+        try: () =>
+          pathToFileURL(
+            typeof Bun !== "undefined"
+              ? Bun.resolveSync(specifier, manifest.directory)
+              : createRequire(manifest.file).resolve(specifier),
+          ).href,
+        catch: (cause) =>
+          new PluginError({
+            message: `Could not resolve plugin ${specifier} declared in ${manifest.file}`,
+            cause,
+          }),
+      });
+
+const importPlugin = (declared: Declared) =>
+  Effect.flatMap(resolveDeclared(declared), (url) =>
+    Effect.tryPromise({
+      try: () => import(url) as Promise<{ readonly default?: unknown }>,
+      catch: (cause) =>
+        new PluginError({ message: `Could not import plugin ${declared.specifier}`, cause }),
+    }),
+  ).pipe(
     Effect.flatMap((module) =>
       typeof module.default === "object" &&
       module.default !== null &&
       typeof (module.default as Plugin).name === "string"
         ? Effect.succeed(module.default as Plugin)
         : Effect.fail(
-            new PluginError({ message: `Plugin ${specifier} has no default-exported plugin` }),
+            new PluginError({
+              message: `Plugin ${declared.specifier} has no default-exported plugin`,
+            }),
           ),
     ),
   );
 
 const discover = Effect.fn("Plugin.discover")(function* (cwd: string) {
   const path = yield* Path.Path;
-  const specifiers = new Set<string>();
+  const declared = new Map<string, Declared>();
   // alchemy's own: the providers that still live in this package.
   const own = yield* readManifest(
     yield* path.fromFileUrl(new URL("../package.json", import.meta.url)),
   );
-  for (const specifier of own?.alchemy?.plugins ?? []) specifiers.add(specifier);
+  for (const specifier of own?.alchemy?.plugins ?? []) declared.set(specifier, { specifier });
   // The project's dependencies that declare plugins.
   const project = yield* readManifest(path.join(cwd, "package.json"));
   const dependencies = Object.keys({
@@ -212,9 +258,16 @@ const discover = Effect.fn("Plugin.discover")(function* (cwd: string) {
     const file = yield* findDependencyManifest(cwd, name);
     if (file === undefined) continue;
     const manifest = yield* readManifest(file);
-    for (const specifier of manifest?.alchemy?.plugins ?? []) specifiers.add(specifier);
+    for (const specifier of manifest?.alchemy?.plugins ?? []) {
+      declared.set(specifier, {
+        specifier,
+        manifest: { file, directory: path.dirname(file) },
+      });
+    }
   }
-  const plugins = yield* Effect.forEach(specifiers, importPlugin, { concurrency: "unbounded" });
+  const plugins = yield* Effect.forEach(declared.values(), importPlugin, {
+    concurrency: "unbounded",
+  });
   const seen = new Set<string>();
   for (const plugin of plugins) {
     if (seen.has(plugin.name)) {

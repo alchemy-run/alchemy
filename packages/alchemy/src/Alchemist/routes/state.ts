@@ -18,22 +18,30 @@ export type StateSource =
    * A plugin's state store by name (e.g. `"aws"`, `"cloudflare"`), without
    * loading a project entrypoint.
    */
-  | ({ readonly backend: string } & Pick<Target, "profile" | "envFile">)
+  | ({ readonly backend: string } & Plugin.StateStoreTarget)
   /** Whatever the project's entrypoint configures. */
   | ({ readonly backend: "configured" } & Target);
 
-/** A plugin's state store by `--backend` name. */
-const findBackend = Effect.fn(function* (name: string) {
+/**
+ * A plugin's state store by `--backend` name, checking it can address the
+ * named store when one is given.
+ */
+const findBackend = Effect.fn(function* (backend: string, name?: string) {
   const stores = yield* Plugin.stateStores();
-  const backend = stores.get(name);
-  if (backend === undefined) {
+  const store = stores.get(backend);
+  if (store === undefined) {
     return yield* new Plugin.PluginError({
-      message: `Unknown state backend '${name}'. Available: local, configured${[...stores.keys()]
+      message: `Unknown state backend '${backend}'. Available: local, configured${[...stores.keys()]
         .map((store) => `, ${store}`)
         .join("")}.`,
     });
   }
-  return backend;
+  if (name !== undefined && !store.supportsNames) {
+    return yield* new Plugin.PluginError({
+      message: `State backend '${backend}' has only the default store; it does not take a name.`,
+    });
+  }
+  return store;
 });
 
 /**
@@ -54,8 +62,8 @@ export const store = Effect.fn("Alchemist.state.store")(function* (source: State
     return yield* Effect.provide(Effect.flatten(State.State), State.localState());
   }
   if (source.backend !== "configured") {
-    const { profile, envFile } = source as Pick<Target, "profile" | "envFile">;
-    const backend = yield* findBackend(source.backend);
+    const { name, profile, envFile } = source as Plugin.StateStoreTarget;
+    const backend = yield* findBackend(source.backend, name);
     const config = ConfigProvider.layer(
       withProfileOverride(yield* loadConfigProvider(Option.fromNullishOr(envFile)), profile),
     );
@@ -68,7 +76,7 @@ export const store = Effect.fn("Alchemist.state.store")(function* (source: State
         }),
     });
     return yield* Effect.flatten(State.State).pipe(
-      Effect.provide(layer),
+      Effect.provide(layer({ name })),
       Effect.provide(Layer.succeed(AuthProviders, {} satisfies AuthProviders["Service"])),
       Effect.provide(config),
     );
@@ -100,11 +108,11 @@ export interface LifecycleTarget extends Plugin.StateStoreTarget {
 }
 
 const lifecycleOperation = <K extends keyof Plugin.StateStoreLifecycle>(
-  backend: string,
+  { backend, name }: LifecycleTarget,
   operation: K,
 ) =>
   Effect.gen(function* () {
-    const store = yield* findBackend(backend);
+    const store = yield* findBackend(backend, name);
     const lifecycle = store.lifecycle
       ? yield* Effect.tryPromise({
           try: store.lifecycle,
@@ -129,7 +137,7 @@ export const bootstrap = Effect.fn("Alchemist.state.bootstrap")(function* ({
   backend,
   ...input
 }: LifecycleTarget & { readonly force?: boolean }) {
-  return yield* (yield* lifecycleOperation(backend, "bootstrap"))(input);
+  return yield* (yield* lifecycleOperation({ backend, ...input }, "bootstrap"))(input);
 });
 
 /** Delete a plugin's state store and its backing resources. */
@@ -137,7 +145,7 @@ export const teardown = Effect.fn("Alchemist.state.teardown")(function* ({
   backend,
   ...input
 }: LifecycleTarget) {
-  return yield* (yield* lifecycleOperation(backend, "teardown"))(input);
+  return yield* (yield* lifecycleOperation({ backend, ...input }, "teardown"))(input);
 });
 
 /** Past log entries from a plugin's state store, oldest first. */
@@ -145,9 +153,11 @@ export const logs = Effect.fn("Alchemist.state.logs")(function* ({
   backend,
   ...input
 }: LifecycleTarget & { readonly limit?: number; readonly since?: Date }) {
-  return yield* (yield* lifecycleOperation(backend, "logs"))(input);
+  return yield* (yield* lifecycleOperation({ backend, ...input }, "logs"))(input);
 });
 
 /** Live log entries from a plugin's state store. */
 export const tailLogs = ({ backend, ...input }: LifecycleTarget) =>
-  Stream.unwrap(Effect.map(lifecycleOperation(backend, "tailLogs"), (tail) => tail(input)));
+  Stream.unwrap(
+    Effect.map(lifecycleOperation({ backend, ...input }, "tailLogs"), (tail) => tail(input)),
+  );

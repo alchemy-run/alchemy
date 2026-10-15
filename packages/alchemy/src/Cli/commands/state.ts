@@ -24,6 +24,14 @@ const backend = Flag.String("backend").pipe(
   ),
   Flag.withDefault("configured"),
 );
+/** A plugin store other than the account's default, e.g. an S3 bucket. */
+const storeName = Flag.String("name").pipe(
+  Flag.withDescription(
+    "State store to address instead of the account's default (e.g. an S3 bucket; with --backend)",
+  ),
+  Flag.optional,
+  Flag.map(Option.getOrUndefined),
+);
 const config = Flag.File("config").pipe(
   Flag.withDescription("Alchemy entrypoint file (default: alchemy.run.ts)"),
   Flag.withAlias("c"),
@@ -47,6 +55,7 @@ type StateArgs = {
   readonly envFile: Option.Option<string>;
   readonly profile: string | undefined;
   readonly backend: string;
+  readonly name: string | undefined;
 };
 
 const source = (args: StateArgs): StateSource =>
@@ -61,6 +70,7 @@ const source = (args: StateArgs): StateSource =>
         }
       : {
           backend: args.backend,
+          name: args.name,
           profile: args.profile,
           envFile: Option.getOrUndefined(args.envFile),
         };
@@ -90,7 +100,7 @@ const usingStore =
 
 const listCommand = Command.make(
   "list",
-  { path: pathArgument, recursive, main: config, envFile, profile, backend },
+  { path: pathArgument, recursive, main: config, envFile, profile, backend, name: storeName },
   instrumentCommand("state.list")(
     Effect.fn(function* ({ path, recursive, ...args }) {
       const store = yield* AlchemistState.store(source(args));
@@ -107,7 +117,7 @@ const listCommand = Command.make(
 
 const readCommand = Command.make(
   "read",
-  { path: pathArgument, recursive, main: config, envFile, profile, backend },
+  { path: pathArgument, recursive, main: config, envFile, profile, backend, name: storeName },
   instrumentCommand("state.read")(
     Effect.fn(function* ({ path, recursive, ...args }) {
       const store = yield* AlchemistState.store(source(args));
@@ -135,6 +145,7 @@ const deleteCommand = Command.make(
     envFile,
     profile,
     backend,
+    name: storeName,
   },
   instrumentCommand("state.delete")(
     Effect.fn(function* ({ path, recursive, ...args }) {
@@ -209,7 +220,7 @@ const stateExplorer = (args: StateArgs) =>
 
 const nukeCommand = Command.make(
   "nuke",
-  { main: config, envFile, profile, backend, yes },
+  { main: config, envFile, profile, backend, name: storeName, yes },
   instrumentCommand("state.unsafe.nuke")(
     Effect.fn(function* ({ yes, ...args }) {
       const store = yield* AlchemistState.store(source(args));
@@ -245,10 +256,12 @@ const lifecycleBackend = Flag.String("backend").pipe(
 
 const lifecycleTarget = (args: {
   readonly backend: string;
+  readonly name: string | undefined;
   readonly profile: string | undefined;
   readonly envFile: Option.Option<string>;
 }) => ({
   backend: args.backend,
+  name: args.name,
   profile: args.profile,
   envFile: Option.getOrUndefined(args.envFile),
 });
@@ -259,6 +272,7 @@ const bootstrapCommand = Command.make(
     envFile,
     profile,
     backend: lifecycleBackend,
+    name: storeName,
     force: Flag.Boolean("force").pipe(
       Flag.withDescription("Redeploy an existing state store instead of adopting it"),
       Flag.withDefault(false),
@@ -274,7 +288,7 @@ const bootstrapCommand = Command.make(
 
 const teardownCommand = Command.make(
   "teardown",
-  { envFile, profile, backend: lifecycleBackend, yes },
+  { envFile, profile, backend: lifecycleBackend, name: storeName, yes },
   instrumentCommand("state.teardown")(
     Effect.fn(function* ({ yes: approved, ...args }) {
       yield* confirmOrDecline({
@@ -297,6 +311,7 @@ const logsCommand = Command.make(
     envFile,
     profile,
     backend: lifecycleBackend,
+    name: storeName,
     tail: Flag.Boolean("tail").pipe(
       Flag.withAlias("t"),
       Flag.withDescription("Stream logs as they happen instead of fetching past entries"),
@@ -350,7 +365,7 @@ const unsafeCommand = Command.make("unsafe", {}).pipe(
 
 export const stateCommand = Command.make(
   "state",
-  { main: config, envFile, profile, backend },
+  { main: config, envFile, profile, backend, name: storeName },
   instrumentCommand("state")(
     Effect.fn(function* (args) {
       if (!(yield* CliKit.CliKit).terminal.input) {

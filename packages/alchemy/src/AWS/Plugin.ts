@@ -6,7 +6,13 @@ export default Plugin.make({
   stateStores: {
     aws: {
       description: "S3 state store in the profile's AWS account",
-      layer: () => import("./StateStore/State.ts").then((module) => module.state()),
+      layer: () =>
+        import("./StateStore/State.ts").then(
+          (module) =>
+            ({ name }) =>
+              module.state({ bucketName: name }),
+        ),
+      supportsNames: true,
       lifecycle: () => import("./Alchemist/StateStore.ts").then((module) => module.lifecycle),
     },
   },

@@ -23,24 +23,25 @@ const stateBucketExists = (bucket: string) =>
   );
 
 /**
- * Ensure the default state bucket of the environment's account and region,
- * with the settings first use would give it.
+ * Ensure the state bucket (by default the one for the environment's account
+ * and region) with the settings first use would give it.
  */
-const bootstrapStateBucket = Effect.fn("AWS.state.bootstrap")(function* () {
+const bootstrapStateBucket = Effect.fn("AWS.state.bootstrap")(function* (name?: string) {
   const { accountId, region } = yield* AWSEnvironment.current;
-  const bucketName = createStateBucketName(accountId, region);
+  const bucketName = name ?? createStateBucketName(accountId, region);
   const existed = yield* stateBucketExists(bucketName);
   yield* provisionStateBucket(bucketName, region);
   return { accountId, region, bucketName, existed };
 });
 
 /**
- * Empty and delete the default state bucket of the environment's account and
- * region, every object version included. A missing bucket is not an error.
+ * Empty and delete the state bucket (by default the one for the environment's
+ * account and region), every object version included. A missing bucket is not
+ * an error.
  */
-const teardownStateBucket = Effect.fn("AWS.state.teardown")(function* () {
+const teardownStateBucket = Effect.fn("AWS.state.teardown")(function* (name?: string) {
   const { accountId, region } = yield* AWSEnvironment.current;
-  const bucketName = createStateBucketName(accountId, region);
+  const bucketName = name ?? createStateBucketName(accountId, region);
   if (!(yield* stateBucketExists(bucketName))) {
     return { accountId, region, bucketName, deleted: false };
   }
@@ -77,9 +78,9 @@ const environment = Effect.fn(function* (target: StateStoreTarget) {
 export const lifecycle: StateStoreLifecycle = {
   bootstrap: (input) =>
     Effect.gen(function* () {
-      const { bucketName, accountId, region, existed } = yield* bootstrapStateBucket().pipe(
-        Effect.provide(yield* environment(input)),
-      );
+      const { bucketName, accountId, region, existed } = yield* bootstrapStateBucket(
+        input.name,
+      ).pipe(Effect.provide(yield* environment(input)));
       const status = existed ? ("adopted" as const) : ("created" as const);
       return {
         status,
@@ -88,7 +89,7 @@ export const lifecycle: StateStoreLifecycle = {
     }),
   teardown: (input) =>
     Effect.gen(function* () {
-      const { bucketName, deleted } = yield* teardownStateBucket().pipe(
+      const { bucketName, deleted } = yield* teardownStateBucket(input.name).pipe(
         Effect.provide(yield* environment(input)),
       );
       return { deleted: deleted ? [bucketName] : [] };

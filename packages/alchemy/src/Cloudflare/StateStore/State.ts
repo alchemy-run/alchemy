@@ -139,7 +139,7 @@ export const state = () =>
                   message:
                     `Cloudflare State store is out of date ` +
                     `(expected v${expected}, observed v${observed ?? "unknown"}). ` +
-                    `Run 'alchemy provider cloudflare bootstrap --profile <your-ci-profile>' to upgrade it first, or pass --yes.`,
+                    `Run 'alchemy state bootstrap --backend cloudflare --profile <your-ci-profile>' to upgrade it first, or pass --yes.`,
                 }),
               );
             } else {
@@ -210,7 +210,7 @@ export const state = () =>
         } else if (isCI) {
           return yield* Effect.die(
             AuthError.make({
-              message: `Cloudflare State store not found. Run 'alchemy provider cloudflare bootstrap --profile <your-ci-profile>' to deploy it first, or pass --yes.`,
+              message: `Cloudflare State store not found. Run 'alchemy state bootstrap --backend cloudflare --profile <your-ci-profile>' to deploy it first, or pass --yes.`,
             }),
           );
         } else {
