@@ -72,7 +72,7 @@ describe.skipIf(!runLive || runEmulated)(
     // `server: "function"` keeps them on Lambda Function URLs.
     for (const server of ["web-function", "function"] as const) {
       test.provider(
-        `server: "${server}" deploys the OpenNext topology: SSR, S3 assets, image optimizer, ISR wiring`,
+        `server: "${server}" deploys Next.js: SSR, S3 assets, image optimization, ISR`,
         (stack) =>
           Effect.gen(function* () {
             yield* stack.destroy();

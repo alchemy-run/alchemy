@@ -190,12 +190,23 @@ export const buildStandalone = Effect.fn(function* (options: {
     .pipe(Effect.mapError(fail("Failed to copy the S3 cache handler")));
 
   // Next's image optimizer needs sharp built for the function's platform.
+  // Install it in an empty project (the standalone directory carries the
+  // app's package.json, which npm would try to resolve whole), then merge
+  // its node_modules into the server's.
   const sharpVersion = yield* projectSharpVersion(root);
+  const sharpProject = yield* fs
+    .makeTempDirectory({ prefix: "alchemy-next-sharp-" })
+    .pipe(Effect.mapError(fail("Failed to create a directory for sharp")));
+  yield* fs
+    .writeFileString(
+      path.join(sharpProject, "package.json"),
+      JSON.stringify({ name: "alchemy-next-sharp", private: true }),
+    )
+    .pipe(Effect.mapError(fail("Failed to prepare the sharp install")));
   yield* run(
     "npm",
     [
       "install",
-      "--no-save",
       "--no-package-lock",
       "--no-audit",
       "--no-fund",
@@ -204,9 +215,13 @@ export const buildStandalone = Effect.fn(function* (options: {
       "--libc=glibc",
       `sharp${sharpVersion ? `@${sharpVersion}` : ""}`,
     ],
-    appDir,
+    sharpProject,
     env,
   );
+  yield* copyInto(path.join(sharpProject, "node_modules"), path.join(appDir, "node_modules")).pipe(
+    Effect.mapError(fail("Failed to add sharp to the standalone server")),
+  );
+  yield* fs.remove(sharpProject, { recursive: true }).pipe(Effect.ignore);
 
   yield* fs
     .writeFileString(
