@@ -71,6 +71,7 @@ export const TAB_ICONS: Record<string, string | undefined> = {
   SQL: l("database"),
   Command: l("square-terminal"),
   ACME: l("shield-check"),
+  Domain: l("blocks"),
   Reference: l("code"),
   Blog: l("newspaper"),
   Compare: l("scale"),
