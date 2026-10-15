@@ -15,7 +15,8 @@
  * 4. writes `serve-node.mjs`, which starts Next's server (as the generated
  *    `server.js` does) with the cache handler, listening on
  *    `AWS_LAMBDA_HTTP_ENDPOINT`
- * 5. gathers `public/` and `.next/static` into one directory for S3
+ * 5. copies `public/` and `.next/static` into the server (the image
+ *    optimizer reads local images from it) and gathers them for S3
  */
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
@@ -229,6 +230,16 @@ export const buildStandalone = Effect.fn(function* (options: {
       makeStandaloneServeEntrySource(serverFiles.config),
     )
     .pipe(Effect.mapError(fail("Failed to write the Web Function entry")));
+
+  // Next's image optimizer loads local images (`public/`, and static
+  // imports under `/_next/static/media`) from its own server, which only has
+  // them when they are copied in, as Next's standalone docs describe.
+  yield* copyInto(path.join(root, "public"), path.join(appDir, "public")).pipe(
+    Effect.mapError(fail("Failed to copy public/ into the standalone server")),
+  );
+  yield* copyInto(path.join(nextDir, "static"), path.join(appDir, ".next", "static")).pipe(
+    Effect.mapError(fail("Failed to copy .next/static into the standalone server")),
+  );
 
   // S3 serves `public/` at the root and the build's hashed files under
   // `/_next/static`.

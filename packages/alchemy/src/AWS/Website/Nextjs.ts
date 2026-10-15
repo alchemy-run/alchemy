@@ -38,10 +38,7 @@ import { makeKvSite, type StaticSiteProps } from "./StaticSite.ts";
  */
 export const NEXTJS_AWS_FRAMEWORK_SPECIFIER = "@alchemy.run/frontend-frameworks/nextjs/aws";
 
-/** The Web Function entry the framework module writes beside each OpenNext server. */
-const NEXTJS_WEB_SERVE_ENTRY = "serve-node.mjs";
-
-/** The S3 key prefix the OpenNext ISR/fetch cache seed is uploaded under. */
+/** The S3 key prefix of the Next.js cache (both server forms). */
 export const NEXTJS_CACHE_PREFIX = "_cache";
 
 /** Props shared by both server forms of {@link Nextjs}. */
@@ -134,29 +131,30 @@ export interface NextjsFunctionServerProps extends FunctionServerProps {
 }
 
 /**
- * Props for {@link Nextjs}. The SSR server and the image optimizer run on
- * Lambda Web Functions with OpenNext's `node` wrapper by default (each
- * environment serves many requests and responses stream); set
- * `server: "function"` for Lambda Functions. ISR revalidation always runs
- * on a Lambda Function, since it consumes an SQS queue.
+ * Props for {@link Nextjs}. By default Next runs as its standalone server on
+ * a Lambda Web Function; set `server: "function"` for the OpenNext topology
+ * on Lambda Functions.
  */
 export type NextjsProps = NextjsBaseProps & (WebFunctionServerProps | NextjsFunctionServerProps);
 
 /**
- * Deploy a Next.js application to AWS with the OpenNext
- * (`@opennextjs/aws`) serverless topology: the SSR server on a Lambda Web
- * Function (OpenNext's `node` wrapper), static assets in S3 behind
- * CloudFront's KV-manifest edge router, the ISR/fetch cache in a dedicated
- * S3 bucket, a dedicated image optimizer (also a Web Function) routed at
- * `/_next/image`, and ISR revalidation through an SQS FIFO queue, consumed
- * by a Lambda Function, plus a DynamoDB tag-cache table. Set
- * `server: "function"` to run the server and image optimizer on streaming
- * Lambda Function URLs instead.
+ * Deploy a Next.js application to AWS: Next's own standalone server on a
+ * Lambda Web Function, static assets in S3 behind CloudFront's KV-manifest
+ * edge router, and an S3 bucket for the cache. The server runs the way it
+ * does under `next start` (SSR, middleware, ISR revalidation and
+ * `/_next/image` in-process), and an S3 `cacheHandler` shares ISR pages,
+ * the fetch cache and optimized images across environments.
  *
- * The build runs through `@alchemy.run/frontend-frameworks/nextjs/aws` (the
- * `@opennextjs/aws` pipeline) — both it and `@opennextjs/aws` must be
- * installed in your project. When the project has no `open-next.config.ts`,
- * a minimal default with the wrapper for the chosen `server` is generated.
+ * The build runs through `@alchemy.run/frontend-frameworks/nextjs/aws`,
+ * which must be installed in your project. It runs `next build` with
+ * standalone output; your `next.config.*` is used as-is.
+ *
+ * With `server: "function"` the site uses the OpenNext (`@opennextjs/aws`)
+ * topology instead: the server and an image optimizer on Lambda Functions
+ * behind streaming Function URLs, and ISR revalidation through an SQS FIFO
+ * queue, a consumer Lambda, and a DynamoDB tag table. Install
+ * `@opennextjs/aws` for it; when the project has no `open-next.config.ts`,
+ * a minimal streaming default is generated.
  *
  * During `alchemy dev` the site is Next's own dev server (`next dev`) and
  * no cloud resources are declared; `Alchemy.remote()` opts back into the
