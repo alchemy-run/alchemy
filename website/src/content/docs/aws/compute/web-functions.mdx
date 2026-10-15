@@ -213,7 +213,8 @@ const api = yield* AWS.Lambda.WebFunction("Api", {
 `maxConcurrencyPerEnvironment` is a cap per environment, not a total: at
 most `maxEnvironments × maxConcurrencyPerEnvironment` requests are in
 flight. Lower it for CPU-heavy servers. Requests beyond `rateLimit` get
-HTTP 429.
+HTTP 429. A value Lambda doesn't accept, such as `rateLimit: 1500`, fails
+at plan with the allowed range.
 
 Each environment has 2 GB of memory and 2 vCPUs, and you can't change
 that. Node's heap defaults to 1 GB; raise it with
@@ -299,6 +300,8 @@ const api = yield* AWS.Lambda.WebFunction("Api", {
 Use at least two subnets in different Availability Zones, and allow the
 security group on the database. Private subnets need a NAT gateway to
 reach the internet. A function with `vpc` can't also use `regions`.
+Remove `vpc` and the next deploy deletes the connector once no endpoint
+serves through it.
 
 ## Add another endpoint
 

@@ -186,7 +186,9 @@ export interface WebFunctionProps extends PlatformProps {
    * can request the same access, and both are merged.
    *
    * VPC access works only with single-Region endpoints, so it can't be
-   * combined with `regions`. Changing it creates a new revision.
+   * combined with `regions`. Changing it creates a new revision. Removing
+   * it deletes the connector and its operator role once no endpoint serves
+   * a revision that uses them.
    */
   vpc?: WebFunctionVpc;
   /**
@@ -1336,8 +1338,8 @@ export const WebFunctionProvider = () =>
             }),
           );
           yield* waitForFunctionGone(output.functionName);
-          // The egress connector outlives a `vpc` removal (old revisions may
-          // still reference it) and goes with the function.
+          // A connector still referenced at delete time (e.g. by an endpoint
+          // that never moved off it) goes with the function.
           yield* deleteEgress(id, session);
 
           yield* iam
