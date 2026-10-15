@@ -54,18 +54,36 @@ const checkEnvCommand = Command.make(
   ),
 );
 
-/** `alchemy provider`: `check-env` plus each plugin's provider subcommand. */
-export const providerCommand = async (plugins: ReadonlyArray<Plugin.Plugin>) =>
-  Command.make("provider", {}).pipe(
-    Command.withDescription("Manage cloud provider prerequisites and utilities"),
-    Command.withSubcommands([
-      checkEnvCommand,
-      ...(await Effect.runPromise(
-        Effect.forEach(plugins, (plugin) =>
-          plugin.cli?.provider
-            ? Plugin.resolve(plugin, "cli.provider", plugin.cli.provider)
-            : Effect.succeed(undefined),
-        ).pipe(Effect.map((commands) => commands.filter((command) => command !== undefined))),
-      )),
-    ]),
+/**
+ * `alchemy provider`: `check-env` plus each plugin's provider subcommand.
+ * Only the subcommand being run is loaded; the rest are listed by name, so a
+ * provider whose CLI can't load never blocks another's. One that fails to
+ * load runs as a command failing with its error.
+ */
+export const providerCommand = async (plugins: ReadonlyArray<Plugin.Plugin>) => {
+  const argv = process.argv.slice(2);
+  const requested = argv[argv.indexOf("provider") + 1];
+  const loadEvery = argv.includes("--completions");
+  const subcommands = await Promise.all(
+    plugins.flatMap((plugin): Array<Promise<Plugin.AnyCommand>> => {
+      const cli = plugin.cli?.provider;
+      if (cli === undefined) return [];
+      const listed = (run: () => Effect.Effect<void, Plugin.PluginError>) =>
+        Command.make(cli.name, {}, run).pipe(Command.withDescription(cli.description));
+      if (!loadEvery && cli.name !== requested) return [Promise.resolve(listed(() => Effect.void))];
+      return [
+        Effect.runPromise(
+          Plugin.resolve(plugin, "cli.provider", cli.load).pipe(
+            Effect.catch((error) =>
+              Effect.succeed<Plugin.AnyCommand>(listed(() => Effect.fail(error))),
+            ),
+          ),
+        ),
+      ];
+    }),
   );
+  return Command.make("provider", {}).pipe(
+    Command.withDescription("Manage cloud provider prerequisites and utilities"),
+    Command.withSubcommands([checkEnvCommand, ...subcommands]),
+  );
+};

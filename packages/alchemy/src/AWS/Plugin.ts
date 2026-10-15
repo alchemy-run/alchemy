@@ -22,10 +22,14 @@ export default Plugin.make({
     },
   },
   cli: {
-    provider: Plugin.lazy(
-      () => import("./Cli.ts"),
-      (module) => module.awsCommand,
-    ),
+    provider: {
+      name: "aws",
+      description: "Manage AWS provider prerequisites",
+      load: Plugin.lazy(
+        () => import("./Cli.ts"),
+        (module) => module.awsCommand,
+      ),
+    },
   },
   testServices: Plugin.lazy(
     () => import("./Local/TestServices.ts"),

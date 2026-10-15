@@ -99,6 +99,11 @@ const lifecycleOperation = <K extends keyof Plugin.StateStoreLifecycle>(
   operation: K,
 ) =>
   Effect.gen(function* () {
+    if ((Plugin.RESERVED_BACKENDS as ReadonlyArray<string>).includes(backend)) {
+      return yield* new Plugin.PluginError({
+        message: `State backend '${backend}' does not support ${operation}.`,
+      });
+    }
     const store = yield* findBackend(backend);
     const lifecycle = store.lifecycle ? yield* store.lifecycle : undefined;
     const run = lifecycle?.[operation];

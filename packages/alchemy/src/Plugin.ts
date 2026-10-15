@@ -1,4 +1,3 @@
-import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
 import type * as Command from "effect/cli/Command";
 import * as Data from "effect/Data";
@@ -138,8 +137,15 @@ export interface StateStoreTeardown {
 export type StateStoreLifecycleError = { readonly _tag: string };
 
 export interface Cli {
-  /** A subcommand of `alchemy provider`, named after the provider. */
-  readonly provider?: Lazy<AnyCommand>;
+  /**
+   * A subcommand of `alchemy provider`. Its name and description list it in
+   * help; the command itself loads only when it runs.
+   */
+  readonly provider?: {
+    readonly name: string;
+    readonly description: string;
+    readonly load: Lazy<AnyCommand>;
+  };
 }
 
 // Any command, whatever its name, errors and the CLI services it runs under.
@@ -168,6 +174,8 @@ export class PluginError extends Data.TaggedError("PluginError")<{
 
 const Manifest = Schema.Struct({
   name: Schema.optional(Schema.String),
+  main: Schema.optional(Schema.String),
+  exports: Schema.optional(Schema.Unknown),
   dependencies: Schema.optional(Schema.Record(Schema.String, Schema.String)),
   devDependencies: Schema.optional(Schema.Record(Schema.String, Schema.String)),
   alchemy: Schema.optional(
@@ -207,30 +215,89 @@ const findDependencyManifest = Effect.fn(function* (dir: string, name: string) {
 /** A plugin specifier, and the manifest that declared it when not alchemy's own. */
 interface Declared {
   readonly specifier: string;
-  readonly manifest?: { readonly file: string; readonly directory: string };
+  readonly manifest?: {
+    readonly file: string;
+    readonly directory: string;
+    readonly name: string | undefined;
+    readonly main: string | undefined;
+    readonly exports: unknown;
+  };
 }
 
+/** The conditions an ESM `import` resolves exports with, in priority order. */
+const importConditions = new Set(
+  typeof Bun !== "undefined" ? ["bun", "import", "node", "default"] : ["import", "node", "default"],
+);
+
+/** An `exports` target under {@link importConditions}, with `*` filled in. */
+const exportTarget = (target: unknown, star: string): string | undefined => {
+  if (typeof target === "string") return target.replaceAll("*", star);
+  if (Array.isArray(target)) {
+    for (const candidate of target) {
+      const resolved = exportTarget(candidate, star);
+      if (resolved !== undefined) return resolved;
+    }
+    return undefined;
+  }
+  if (typeof target === "object" && target !== null) {
+    for (const [condition, value] of Object.entries(target)) {
+      if (!importConditions.has(condition)) continue;
+      const resolved = exportTarget(value, star);
+      if (resolved !== undefined) return resolved;
+    }
+  }
+  return undefined;
+};
+
+/** A package's own subpath (`"."`, `"./Plugin"`) through its `exports` map. */
+const packageExport = (exports: unknown, main: string | undefined, subpath: string) => {
+  if (exports === undefined) return subpath === "." ? (main ?? "./index.js") : subpath;
+  const map =
+    typeof exports === "object" &&
+    exports !== null &&
+    !Array.isArray(exports) &&
+    Object.keys(exports).some((key) => key.startsWith("."))
+      ? (exports as Record<string, unknown>)
+      : { ".": exports };
+  if (subpath in map) return exportTarget(map[subpath], "");
+  for (const [pattern, target] of Object.entries(map)) {
+    const star = pattern.indexOf("*");
+    if (star === -1) continue;
+    const prefix = pattern.slice(0, star);
+    const suffix = pattern.slice(star + 1);
+    if (subpath.startsWith(prefix) && subpath.endsWith(suffix)) {
+      return exportTarget(target, subpath.slice(prefix.length, subpath.length - suffix.length));
+    }
+  }
+  return undefined;
+};
+
 /**
- * Resolve a dependency's plugin from the dependency's own directory: under
- * pnpm, alchemy usually can't see a project's dependencies, but a package can
- * always resolve its own exports.
+ * Resolve a dependency's plugin from the dependency itself, through its own
+ * `exports` with ESM import conditions: under pnpm alchemy usually can't see
+ * a project's dependencies, and a CommonJS resolver would pick `require`
+ * targets for a module loaded with `import()`. A plugin specifier must name
+ * the package that declares it.
  */
 const resolveDeclared = ({ specifier, manifest }: Declared) =>
-  manifest === undefined
-    ? Effect.succeed(specifier)
-    : Effect.try({
-        try: () =>
-          pathToFileURL(
-            typeof Bun !== "undefined"
-              ? Bun.resolveSync(specifier, manifest.directory)
-              : createRequire(manifest.file).resolve(specifier),
-          ).href,
-        catch: (cause) =>
-          new PluginError({
-            message: `Could not resolve plugin ${specifier} declared in ${manifest.file}`,
-            cause,
-          }),
+  Effect.gen(function* () {
+    if (manifest === undefined) return specifier;
+    const path = yield* Path.Path;
+    const { name } = manifest;
+    if (name === undefined || (specifier !== name && !specifier.startsWith(`${name}/`))) {
+      return yield* new PluginError({
+        message: `Plugin ${specifier} declared in ${manifest.file} must name that package (${name ?? "unnamed"})`,
       });
+    }
+    const subpath = specifier === name ? "." : `.${specifier.slice(name.length)}`;
+    const target = packageExport(manifest.exports, manifest.main, subpath);
+    if (target === undefined) {
+      return yield* new PluginError({
+        message: `Plugin ${specifier} is not exported for import by ${manifest.file}`,
+      });
+    }
+    return pathToFileURL(path.join(manifest.directory, target)).href;
+  });
 
 const importPlugin = (declared: Declared) =>
   Effect.flatMap(resolveDeclared(declared), (url) =>
@@ -274,7 +341,13 @@ const discover = Effect.fn("Plugin.discover")(function* (cwd: string) {
     for (const specifier of manifest?.alchemy?.plugins ?? []) {
       declared.set(specifier, {
         specifier,
-        manifest: { file, directory: path.dirname(file) },
+        manifest: {
+          file,
+          directory: path.dirname(file),
+          name: manifest?.name,
+          main: manifest?.main,
+          exports: manifest?.exports,
+        },
       });
     }
   }
@@ -282,14 +355,28 @@ const discover = Effect.fn("Plugin.discover")(function* (cwd: string) {
     concurrency: "unbounded",
   });
   const seen = new Set<string>();
+  // `--backend` names: alchemy's own, then each plugin's state stores.
+  const backends = new Map<string, string>(RESERVED_BACKENDS.map((name) => [name, "alchemy"]));
   for (const plugin of plugins) {
     if (seen.has(plugin.name)) {
       return yield* new PluginError({ message: `Two plugins are named ${plugin.name}` });
     }
     seen.add(plugin.name);
+    for (const backend of Object.keys(plugin.stateStores ?? {})) {
+      const owner = backends.get(backend);
+      if (owner !== undefined) {
+        return yield* new PluginError({
+          message: `Plugin ${plugin.name} registers state store '${backend}', which ${owner === "alchemy" ? "alchemy reserves" : `plugin ${owner} already registers`}`,
+        });
+      }
+      backends.set(backend, plugin.name);
+    }
   }
   return plugins;
 });
+
+/** `--backend` names alchemy handles itself, never a plugin's state store. */
+export const RESERVED_BACKENDS = ["local", "configured"] as const;
 
 const loaded = new Map<string, Effect.Effect<ReadonlyArray<Plugin>, PluginError>>();
 
@@ -330,6 +417,9 @@ export const resolve = <A>(plugin: Plugin, field: string, value: Lazy<A>) =>
   value.pipe(
     Effect.mapError(
       (cause) =>
-        new PluginError({ message: `Could not load ${field} of plugin ${plugin.name}`, cause }),
+        new PluginError({
+          message: `Could not load ${field} of plugin ${plugin.name}: ${cause.message}`,
+          cause,
+        }),
     ),
   );

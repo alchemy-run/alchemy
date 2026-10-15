@@ -1,3 +1,4 @@
+import * as NodeServices from "@effect/platform-node/NodeServices";
 import { describe, expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
@@ -55,13 +56,15 @@ const memoryStore = () => {
   const files = new Map<string, unknown>();
   const key = (profile: string, provider: string) => `${profile}/${provider}`;
   const store: CredentialsStoreService = {
+    // Yields after reading, so concurrent read-modify-writes interleave as
+    // they can on disk.
     read: (profile, provider, schema) =>
       Effect.suspend(() => {
         const encoded = files.get(key(profile, provider));
         return encoded === undefined
           ? Effect.succeed(undefined)
           : Schema.decodeUnknownEffect(schema)(encoded).pipe(Effect.orDie);
-      }),
+      }).pipe(Effect.tap(() => Effect.yieldNow)),
     write: (profile, provider, schema, credentials) =>
       Schema.encodeEffect(schema)(credentials).pipe(
         Effect.orDie,
@@ -87,7 +90,7 @@ describe(
           credentials("https://a.workers.dev"),
         );
         expect(yield* readStoreCredentials(store, "default", "team-a")).toBeUndefined();
-      }),
+      }).pipe(Effect.provide(NodeServices.layer)),
     );
 
     it.effect("keeps every store beside the others in one file", () =>
@@ -107,7 +110,7 @@ describe(
           credentials("https://b.workers.dev"),
         );
         expect([...files.keys()]).toEqual([`default/${CREDENTIALS_FILE}`]);
-      }),
+      }).pipe(Effect.provide(NodeServices.layer)),
     );
 
     it.effect("deleting one store keeps the others; the file goes with the last", () =>
@@ -132,7 +135,7 @@ describe(
         );
         yield* deleteStoreCredentials(store, "default", "team-b");
         expect(files.size).toBe(0);
-      }),
+      }).pipe(Effect.provide(NodeServices.layer)),
     );
 
     it.effect("deleting the file, as profile edit and logout do, clears every store", () =>
@@ -155,7 +158,29 @@ describe(
           yield* readStoreCredentials(store, "default", "alchemy-state-store"),
         ).toBeUndefined();
         expect(yield* readStoreCredentials(store, "default", "team-a")).toBeUndefined();
-      }),
+      }).pipe(Effect.provide(NodeServices.layer)),
+    );
+
+    it.effect("concurrent writes for different stores keep both", () =>
+      Effect.gen(function* () {
+        const { store } = memoryStore();
+        yield* Effect.all(
+          ["team-a", "team-b", "team-c"].map((name) =>
+            writeStoreCredentials(
+              store,
+              "default",
+              name,
+              credentials(`https://${name}.workers.dev`),
+            ),
+          ),
+          { concurrency: "unbounded" },
+        );
+        for (const name of ["team-a", "team-b", "team-c"]) {
+          expect(yield* readStoreCredentials(store, "default", name)).toEqual(
+            credentials(`https://${name}.workers.dev`),
+          );
+        }
+      }).pipe(Effect.provide(NodeServices.layer)),
     );
   },
 );

@@ -1,6 +1,7 @@
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import type { CredentialsStoreService } from "../../Auth/Credentials.ts";
+import { withLock } from "../../Auth/Lock.ts";
 
 /**
  * Filename (under `~/.alchemy/credentials/{profile}/`) used to cache the
@@ -82,6 +83,16 @@ export const readStoreCredentials = (
   storeName: string,
 ) => Effect.map(readStores(store, profile), (stores) => stores[storeName]);
 
+/**
+ * Serialize read-modify-writes of a profile's file across fibers and
+ * processes, so two stores bootstrapping at once keep both entries. Its own
+ * lock, not the profile-credentials one, which callers may already hold.
+ */
+const withFileLock = <A, E, R>(profile: string, effect: Effect.Effect<A, E, R>) =>
+  withLock(`${CREDENTIALS_FILE}-${profile}`, effect, {
+    label: "Cloudflare state-store credentials",
+  });
+
 /** Cache one state store's credentials beside the profile's other stores. */
 export const writeStoreCredentials = (
   store: CredentialsStoreService,
@@ -89,10 +100,13 @@ export const writeStoreCredentials = (
   storeName: string,
   credentials: StoredStateStoreCredentials,
 ) =>
-  Effect.flatMap(readStores(store, profile), (stores) =>
-    store.write(profile, CREDENTIALS_FILE, StoredStateStores, {
-      stores: { ...stores, [storeName]: credentials },
-    }),
+  withFileLock(
+    profile,
+    Effect.flatMap(readStores(store, profile), (stores) =>
+      store.write(profile, CREDENTIALS_FILE, StoredStateStores, {
+        stores: { ...stores, [storeName]: credentials },
+      }),
+    ),
   );
 
 /** Drop one state store's cached credentials; the file goes with the last. */
@@ -101,8 +115,11 @@ export const deleteStoreCredentials = (
   profile: string,
   storeName: string,
 ) =>
-  Effect.flatMap(readStores(store, profile), ({ [storeName]: _, ...rest }) =>
-    Object.keys(rest).length === 0
-      ? store.delete(profile, CREDENTIALS_FILE)
-      : store.write(profile, CREDENTIALS_FILE, StoredStateStores, { stores: rest }),
+  withFileLock(
+    profile,
+    Effect.flatMap(readStores(store, profile), ({ [storeName]: _, ...rest }) =>
+      Object.keys(rest).length === 0
+        ? store.delete(profile, CREDENTIALS_FILE)
+        : store.write(profile, CREDENTIALS_FILE, StoredStateStores, { stores: rest }),
+    ),
   );

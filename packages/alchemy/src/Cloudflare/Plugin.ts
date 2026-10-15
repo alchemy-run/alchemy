@@ -22,9 +22,13 @@ export default Plugin.make({
     },
   },
   cli: {
-    provider: Plugin.lazy(
-      () => import("./Cli.ts"),
-      (module) => module.cloudflareCommand,
-    ),
+    provider: {
+      name: "cloudflare",
+      description: "Manage Cloudflare provider prerequisites",
+      load: Plugin.lazy(
+        () => import("./Cli.ts"),
+        (module) => module.cloudflareCommand,
+      ),
+    },
   },
 });

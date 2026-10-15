@@ -7,9 +7,13 @@ export default Plugin.make({
     (module) => module.PrismaAuth,
   ),
   cli: {
-    provider: Plugin.lazy(
-      () => import("./Cli.ts"),
-      (module) => module.prismaCommand,
-    ),
+    provider: {
+      name: "prisma",
+      description: "Prisma contract tooling",
+      load: Plugin.lazy(
+        () => import("./Cli.ts"),
+        (module) => module.prismaCommand,
+      ),
+    },
   },
 });

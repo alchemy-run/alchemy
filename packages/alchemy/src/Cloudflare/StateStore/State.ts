@@ -101,6 +101,15 @@ export const state = (options: CloudflareStateOptions = {}) =>
         if (yield* hasLocalStack(localStage)) {
           // if there's still a local stack, then we need to finish the bootstrap
           // TODO(sam): what if the local stack was
+          if (isCI) {
+            // Finishing it deploys the store, which CI never does implicitly;
+            // `alchemy state bootstrap` resumes it.
+            return yield* Effect.die(
+              AuthError.make({
+                message: `Cloudflare State Store '${scriptName}' has an unfinished bootstrap. Run '${bootstrapCommand(scriptName)} --profile <your-ci-profile>' to finish it first.`,
+              }),
+            );
+          }
           const task = (yield* Interaction.Interaction).task;
           return yield* task(
             {
