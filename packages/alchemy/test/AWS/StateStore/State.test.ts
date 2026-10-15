@@ -716,12 +716,21 @@ test.provider(
 
       // The first store's scope has closed, so the lease is expired and the
       // next deploy of this stage can write.
-      const next = yield* makeS3State(options);
-      yield* next.set({ ...request, value: { ...created, attr: { vpcId: "vpc-cccc" } } });
-      expect(yield* next.get({ stack: STACK, stage, fqn: created.fqn })).toMatchObject({
-        attr: { vpcId: "vpc-cccc" },
-      });
-      yield* next.deleteStack({ stack: STACK, stage });
+      yield* Effect.scoped(
+        Effect.gen(function* () {
+          const next = yield* makeS3State(options);
+          yield* next.set({ ...request, value: { ...created, attr: { vpcId: "vpc-cccc" } } });
+          expect(yield* next.get({ stack: STACK, stage, fqn: created.fqn })).toMatchObject({
+            attr: { vpcId: "vpc-cccc" },
+          });
+          yield* next.deleteStack({ stack: STACK, stage });
+        }),
+      );
+
+      // Closing the store deletes its lease, so a destroyed stage is no
+      // longer listed.
+      const after = yield* makeS3State(options);
+      expect(yield* after.listStages(STACK)).not.toContain(stage);
       yield* stack.destroy();
     }),
   {

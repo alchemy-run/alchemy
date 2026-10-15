@@ -41,7 +41,7 @@ const OUTPUT_FILE = "__stack_output__.json";
 /**
  * Per `(stack, stage)` lease. Filtered out of `list` the same way as
  * {@link OUTPUT_FILE}. A delete of the stage leaves it in place so the
- * lock outlives the objects it was guarding; the store releases it on close.
+ * lock outlives the objects it was guarding; the store deletes it on close.
  */
 const LEASE_FILE = "__lease__.json";
 
@@ -572,9 +572,10 @@ export const makeS3State = (options: S3StateOptions = {}) =>
               // old etag a no-op, and the lease would stay live.
               const existing = yield* run((bucket) => readLease(bucket, key));
               if (existing === undefined || existing.record.token !== token) return;
-              const releasedAt = yield* Clock.currentTimeMillis;
+              // Delete rather than expire: a leftover lease object would keep
+              // a destroyed stage listed by `listStages`.
               yield* run((bucket) =>
-                putLease(bucket, key, { token, expiresAt: releasedAt }, { IfMatch: existing.etag }),
+                s3.deleteObject({ Bucket: bucket, Key: key, IfMatch: existing.etag }),
               );
             }).pipe(Effect.ignore),
           ),
