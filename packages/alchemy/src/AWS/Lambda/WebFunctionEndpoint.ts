@@ -5,15 +5,18 @@ import { Resource } from "../../Resource.ts";
 import type { Providers } from "../Providers.ts";
 import { connectorOfRevision, releaseEgressConnector, sameConnector } from "./WebFunctionEgress.ts";
 import {
-  activeRevisionId,
   deleteEndpoint,
   endpointIdentityChanged,
   getEndpoint,
+  latestRevisionId,
+  servedRevisions,
   syncEndpoint,
   toEndpointName,
   validateWebFunctionSettings,
   type WebFunctionAuthType,
+  type WebFunctionCanary,
   type WebFunctionEndpointType,
+  type WebFunctionRevisionWeight,
 } from "./WebFunctionEndpointSync.ts";
 
 export const WebFunctionEndpointTypeId = "AWS.Lambda.WebFunctionEndpoint" as const;
@@ -34,8 +37,8 @@ type Ref<T> = T | Effect.Effect<T, never, Providers>;
 export interface WebFunctionEndpointProps {
   /**
    * The Web Function this endpoint serves: the `AWS.Lambda.WebFunction`
-   * resource, or its class declaration. The endpoint routes all traffic to
-   * the function's latest revision and follows it on every deploy. Changing
+   * resource, or its class declaration. The endpoint routes traffic to the
+   * function's latest revision and follows it on every deploy. Changing
    * the function recreates the endpoint, which gets a new URL.
    */
   function: Ref<WebFunctionRef>;
@@ -73,6 +76,14 @@ export interface WebFunctionEndpointProps {
    */
   rateLimit?: number;
   /**
+   * Roll out deploys gradually on this endpoint: the revision a deploy
+   * publishes gets `weight` percent of traffic and the revision the
+   * endpoint served before keeps the rest. Set it to `100` (or remove
+   * `canary`) to promote, or `0` to roll back. Independent of the function's
+   * own `canary`.
+   */
+  canary?: WebFunctionCanary;
+  /**
    * Description of the endpoint.
    */
   description?: string;
@@ -101,8 +112,16 @@ export interface WebFunctionEndpoint extends Resource<
     domainName: string;
     /** HTTPS URL of the endpoint (`https://<domainName>`). */
     url: string;
-    /** Revision receiving all of the endpoint's traffic. */
+    /**
+     * The function's latest revision, which the endpoint routes all traffic
+     * to, or `canary.weight` percent while a canary runs.
+     */
     revisionId: string;
+    /**
+     * How the endpoint splits traffic: one revision at 100, or the stable
+     * revision and the canary while a canary runs.
+     */
+    revisionWeights: WebFunctionRevisionWeight[];
   },
   never,
   Providers
@@ -116,6 +135,7 @@ const checkEndpointProps = (id: string, props: WebFunctionEndpointProps) =>
   validateWebFunctionSettings(`AWS.Lambda.WebFunctionEndpoint "${id}"`, {
     rateLimit: typeof props.rateLimit === "number" ? props.rateLimit : undefined,
     maxEnvironments: typeof props.maxEnvironments === "number" ? props.maxEnvironments : undefined,
+    canary: typeof props.canary?.weight === "number" ? props.canary : undefined,
   });
 
 const resolveEndpointProps = (
@@ -173,6 +193,18 @@ const resolveEndpointProps = (
  * });
  * ```
  *
+ * ### Canary deploys
+ * **Example:** Roll out to the public endpoint more slowly
+ * ```typescript
+ * // The function's own endpoint takes each deploy at once; this one
+ * // sends 5% to the new revision until you raise or remove `canary`.
+ * const webhooks = yield* AWS.Lambda.WebFunctionEndpoint("Webhooks", {
+ *   function: api,
+ *   authType: "ApplicationManaged",
+ *   canary: { weight: 5 },
+ * });
+ * ```
+ *
  * ### Routing by endpoint
  * **Example:** Serve only webhook routes on the public endpoint
  * ```typescript
@@ -218,6 +250,7 @@ export const WebFunctionEndpointProvider = () =>
           domainName: string;
           revisionWeights: { revisionId: string; weight: number }[];
         },
+        revisionId: string,
       ): WebFunctionEndpoint["Attributes"] => ({
         functionName,
         functionArn: endpoint.functionArn,
@@ -227,7 +260,8 @@ export const WebFunctionEndpointProvider = () =>
         endpointArn: endpoint.endpointArn,
         domainName: endpoint.domainName,
         url: `https://${endpoint.domainName}`,
-        revisionId: activeRevisionId(endpoint),
+        revisionId,
+        revisionWeights: servedRevisions(endpoint),
       });
 
       return {
@@ -237,6 +271,7 @@ export const WebFunctionEndpointProvider = () =>
           yield* validateWebFunctionSettings(`AWS.Lambda.WebFunctionEndpoint "${id}"`, {
             rateLimit: news.rateLimit,
             maxEnvironments: news.maxEnvironments,
+            canary: news.canary,
           });
           if (!output || !olds) return undefined;
           // A different function, name, type, or Region set is a different
@@ -260,7 +295,9 @@ export const WebFunctionEndpointProvider = () =>
           const endpoint = yield* getEndpoint(functionName, endpointName);
           // Endpoints carry their function's tags: ownership follows the
           // function's.
-          return endpoint === undefined ? undefined : toAttributes(functionName, endpoint);
+          return endpoint === undefined
+            ? undefined
+            : toAttributes(functionName, endpoint, latestRevisionId(endpoint, output?.revisionId));
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           // Values that were Outputs at plan are resolved now.
@@ -268,7 +305,7 @@ export const WebFunctionEndpointProvider = () =>
           const functionName = functionOf(news).functionName;
           const endpointName = output?.endpointName ?? nameOf(id, news);
           const previous = yield* getEndpoint(functionName, endpointName);
-          const previousRevisionId = previous ? activeRevisionId(previous) : undefined;
+          const revisionId = functionOf(news).revisionId;
           const endpoint = yield* syncEndpoint({
             functionName,
             spec: {
@@ -278,14 +315,19 @@ export const WebFunctionEndpointProvider = () =>
               maxEnvironments: news.maxEnvironments,
               rateLimit: news.rateLimit,
               description: news.description,
+              canary: news.canary,
             },
-            revisionId: functionOf(news).revisionId,
+            revisionId,
+            published: output?.revisionId,
             session,
           });
           // Moving off a revision whose egress connector the new one no
           // longer uses (e.g. `vpc` removed) may leave it unused.
-          const revisionId = functionOf(news).revisionId;
-          if (previousRevisionId !== undefined && previousRevisionId !== revisionId) {
+          const stillServed = new Set(servedRevisions(endpoint).map((w) => w.revisionId));
+          for (const { revisionId: previousRevisionId } of previous
+            ? servedRevisions(previous)
+            : []) {
+            if (stillServed.has(previousRevisionId)) continue;
             const previousConnector = yield* connectorOfRevision(functionName, previousRevisionId);
             const currentConnector = yield* connectorOfRevision(functionName, revisionId);
             if (
@@ -300,7 +342,7 @@ export const WebFunctionEndpointProvider = () =>
             }
           }
           yield* session.note(`https://${endpoint.domainName}`);
-          return toAttributes(functionName, endpoint);
+          return toAttributes(functionName, endpoint, revisionId);
         }),
         delete: Effect.fn(function* ({ output }) {
           // Deleting the function deletes its endpoints too; a missing
