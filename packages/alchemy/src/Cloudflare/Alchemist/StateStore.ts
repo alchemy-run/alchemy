@@ -1,4 +1,3 @@
-// oxlint-disable-next-line alchemy/package-boundaries -- package split phase 2: provider-specific routes; become plugin `stateStores` / `cli`
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
@@ -6,24 +5,19 @@ import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
 import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
+import type { LogEntry } from "../../Alchemist/routes/logs.ts";
+import type { Target } from "../../Alchemist/Session.ts";
 import { AuthProviders } from "../../Auth/AuthProvider.ts";
 import { resolveProfileName, withProfileOverride } from "../../Auth/Resolve.ts";
-/* oxlint-disable alchemy/package-boundaries -- package split phase 2: provider-specific routes; become plugin `stateStores` / `cli` */
-import * as CloudflareAccess from "../../Cloudflare/Access.ts";
-import { CloudflareAuth } from "../../Cloudflare/Auth/AuthProvider.ts";
-import * as CloudflareEnvironment from "../../Cloudflare/CloudflareEnvironment.ts";
-import * as CloudflareCredentials from "../../Cloudflare/Credentials.ts";
-import { CloudflareLogs } from "../../Cloudflare/Logs.ts";
-import { STATE_STORE_SCRIPT_NAME } from "../../Cloudflare/StateStore/Api.ts";
-import {
-  bootstrap as bootstrapStateStore,
-  teardownStateStore,
-} from "../../Cloudflare/StateStore/State.ts";
-/* oxlint-enable alchemy/package-boundaries */
 import { loadConfigProvider } from "../../Util/ConfigProvider.ts";
 import { fileLogger } from "../../Util/FileLogger.ts";
-import type { Target } from "../Session.ts";
-import type { LogEntry } from "./logs.ts";
+import * as CloudflareAccess from "../Access.ts";
+import { CloudflareAuth } from "../Auth/AuthProvider.ts";
+import * as CloudflareEnvironment from "../CloudflareEnvironment.ts";
+import * as CloudflareCredentials from "../Credentials.ts";
+import { CloudflareLogs } from "../Logs.ts";
+import { STATE_STORE_SCRIPT_NAME } from "../StateStore/Api.ts";
+import { bootstrap as bootstrapStateStore, teardownStateStore } from "../StateStore/State.ts";
 
 export interface StateTarget extends Target {
   /** State-store worker to act on. @default the managed state-store worker */
@@ -46,7 +40,6 @@ const logEntry = (
   resource: {
     fqn: scriptName,
     logicalId: scriptName,
-    // oxlint-disable-next-line alchemy/package-boundaries -- package split phase 2: provider-specific routes; become plugin `stateStores` / `cli`
     resourceType: "Cloudflare.Worker",
   },
   timestamp: line.timestamp,

@@ -40,6 +40,7 @@
     "./Auth": "./src/Auth/index.ts",
     "./Alchemist": "./src/Alchemist/index.ts",
     "./AWS": "./src/AWS/index.ts",
+    "./AWS/Plugin": "./src/AWS/Plugin.ts",
     "./AWS/*": "./src/AWS/*/index.ts",
     "./AWS/Credentials": "./src/AWS/Credentials.ts",
     "./AWS/Endpoint": "./src/AWS/Endpoint.ts",
@@ -59,6 +60,7 @@
     "./Cli": "./src/Cli/index.ts",
     "./Cli/CliKit": "./src/Cli/CliKit/index.ts",
     "./Cloudflare": "./src/Cloudflare/index.ts",
+    "./Cloudflare/Plugin": "./src/Cloudflare/Plugin.ts",
     "./Cloudflare/Bridge": "./src/Cloudflare/Bridge.ts",
     "./Cloudflare/Live": "./src/Cloudflare/Live.ts",
     "./Cloudflare/RpcWebSocketClient": "./src/Cloudflare/Workers/RpcWebSocketClient.ts",
@@ -69,10 +71,12 @@
     "./Domain": "./src/Domain/index.ts",
     "./Axiom": "./src/Axiom/index.ts",
     "./GCP": "./src/GCP/index.ts",
+    "./GCP/Plugin": "./src/GCP/Plugin.ts",
     "./GCP/*": "./src/GCP/*/index.ts",
     "./GitHub": "./src/GitHub/index.ts",
     "./Endpoint": "./src/Endpoint/index.ts",
     "./Neon": "./src/Neon/index.ts",
+    "./Neon/Plugin": "./src/Neon/Plugin.ts",
     "./Neon/*": "./src/Neon/*/index.ts",
     "./Hetzner": "./src/Hetzner/index.ts",
     "./Fly": "./src/Fly/index.ts",
@@ -90,6 +94,7 @@
     "./Prisma/PrismaDevDatabase": null,
     "./Prisma/Refs": null,
     "./Planetscale": "./src/Planetscale/index.ts",
+    "./Planetscale/Plugin": "./src/Planetscale/Plugin.ts",
     "./Planetscale/*": "./src/Planetscale/*/index.ts",
     "./Stripe": "./src/Stripe/index.ts",
     "./Turso": "./src/Turso/index.ts",
@@ -141,6 +146,11 @@
         "types": "./lib/AWS/index.d.ts",
         "bun": "./src/AWS/index.ts",
         "default": "./lib/AWS/index.js"
+      },
+      "./AWS/Plugin": {
+        "types": "./lib/AWS/Plugin.d.ts",
+        "bun": "./src/AWS/Plugin.ts",
+        "default": "./lib/AWS/Plugin.js"
       },
       "./AWS/*": {
         "types": "./lib/AWS/*/index.d.ts",
@@ -237,6 +247,11 @@
         "bun": "./src/Cloudflare/index.ts",
         "default": "./lib/Cloudflare/index.js"
       },
+      "./Cloudflare/Plugin": {
+        "types": "./lib/Cloudflare/Plugin.d.ts",
+        "bun": "./src/Cloudflare/Plugin.ts",
+        "default": "./lib/Cloudflare/Plugin.js"
+      },
       "./Cloudflare/Bridge": {
         "types": "./lib/Cloudflare/Bridge.d.ts",
         "bun": "./src/Cloudflare/Bridge.ts",
@@ -287,6 +302,11 @@
         "bun": "./src/GCP/index.ts",
         "default": "./lib/GCP/index.js"
       },
+      "./GCP/Plugin": {
+        "types": "./lib/GCP/Plugin.d.ts",
+        "bun": "./src/GCP/Plugin.ts",
+        "default": "./lib/GCP/Plugin.js"
+      },
       "./GCP/*": {
         "types": "./lib/GCP/*/index.d.ts",
         "bun": "./src/GCP/*/index.ts",
@@ -306,6 +326,11 @@
         "types": "./lib/Neon/index.d.ts",
         "bun": "./src/Neon/index.ts",
         "default": "./lib/Neon/index.js"
+      },
+      "./Neon/Plugin": {
+        "types": "./lib/Neon/Plugin.d.ts",
+        "bun": "./src/Neon/Plugin.ts",
+        "default": "./lib/Neon/Plugin.js"
       },
       "./Neon/*": {
         "types": "./lib/Neon/*/index.d.ts",
@@ -355,6 +380,11 @@
         "types": "./lib/Planetscale/index.d.ts",
         "bun": "./src/Planetscale/index.ts",
         "default": "./lib/Planetscale/index.js"
+      },
+      "./Planetscale/Plugin": {
+        "types": "./lib/Planetscale/Plugin.d.ts",
+        "bun": "./src/Planetscale/Plugin.ts",
+        "default": "./lib/Planetscale/Plugin.js"
       },
       "./Planetscale/*": {
         "types": "./lib/Planetscale/*/index.d.ts",
@@ -619,5 +649,23 @@
     "ws": {
       "optional": true
     }
+  },
+  "alchemy": {
+    "plugins": [
+      "alchemy/AWS/Plugin",
+      "alchemy/Axiom/Plugin",
+      "alchemy/Cloudflare/Plugin",
+      "alchemy/Doppler/Plugin",
+      "alchemy/Fly/Plugin",
+      "alchemy/GCP/Plugin",
+      "alchemy/GitHub/Plugin",
+      "alchemy/Hetzner/Plugin",
+      "alchemy/Infisical/Plugin",
+      "alchemy/Neon/Plugin",
+      "alchemy/Planetscale/Plugin",
+      "alchemy/Prisma/Plugin",
+      "alchemy/Railway/Plugin",
+      "alchemy/Stripe/Plugin"
+    ]
   }
 }

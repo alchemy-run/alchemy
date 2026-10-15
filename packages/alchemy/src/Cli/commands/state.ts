@@ -16,14 +16,11 @@ import { failWithHelp, UserInputError } from "./errors.ts";
 import { envFile, profile, yes } from "./flags.ts";
 import { instrumentCommand } from "./instrument.ts";
 
-const backend = Flag.Literals("backend", [
-  "configured",
-  "local",
-  "cloudflare",
-  "aws",
-] as const).pipe(
-  Flag.withDescription("State backend (default: configured)"),
-  Flag.withDefault("configured" as const),
+const backend = Flag.String("backend").pipe(
+  Flag.withDescription(
+    "State backend: configured (default), local, or a provider's state store (e.g. aws, cloudflare)",
+  ),
+  Flag.withDefault("configured"),
 );
 const config = Flag.File("config").pipe(
   Flag.withDescription("Alchemy entrypoint file (default: alchemy.run.ts)"),
@@ -47,21 +44,21 @@ type StateArgs = {
   readonly main: string;
   readonly envFile: Option.Option<string>;
   readonly profile: string | undefined;
-  readonly backend: "configured" | "local" | "cloudflare" | "aws";
+  readonly backend: string;
 };
 
 const source = (args: StateArgs): StateSource =>
   args.backend === "local"
     ? { backend: "local" }
-    : args.backend === "cloudflare" || args.backend === "aws"
+    : args.backend === "configured"
       ? {
-          backend: args.backend,
+          backend: "configured",
+          entrypoint: args.main,
           profile: args.profile,
           envFile: Option.getOrUndefined(args.envFile),
         }
       : {
-          backend: "configured",
-          entrypoint: args.main,
+          backend: args.backend,
           profile: args.profile,
           envFile: Option.getOrUndefined(args.envFile),
         };

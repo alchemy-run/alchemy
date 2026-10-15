@@ -6,11 +6,11 @@ import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
-import { resolveStateStoreScope } from "@/Alchemist/routes/cloudflare.ts";
 import { AlchemyContext } from "@/AlchemyContext.ts";
 import { CredentialsStoreLive } from "@/Auth/Credentials.ts";
 import { ProfileStore, ProfileStoreLive } from "@/Auth/Profile.ts";
 import { CredentialsUnavailable } from "@/Auth/Resolve.ts";
+import { resolveStateStoreScope } from "@/Cloudflare/Alchemist/StateStore.ts";
 import * as Interaction from "@/Interaction.ts";
 import { PlatformServices } from "@/Util/PlatformServices.ts";
 

@@ -17,24 +17,9 @@ import { ArtifactStore, createArtifactStore } from "../Artifacts.ts";
 import { AuthError, AuthProviders } from "../Auth/AuthProvider.ts";
 import { SuppressMissingProviderConfig } from "../Auth/Profile.ts";
 import { withProfileOverride } from "../Auth/Resolve.ts";
-/* oxlint-disable alchemy/package-boundaries -- package split phase 2: static auth provider list; becomes plugin `auth` */
-import { AwsAuth } from "../AWS/AuthProvider.ts";
-import { AxiomAuth } from "../Axiom/AuthProvider.ts";
-import { CloudflareAuth } from "../Cloudflare/Auth/AuthProvider.ts";
-import { DopplerAuth } from "../Doppler/AuthProvider.ts";
-import { FlyAuth } from "../Fly/AuthProvider.ts";
-import { GcpAuth } from "../GCP/AuthProvider.ts";
-import { GitHubAuth } from "../GitHub/AuthProvider.ts";
-import { HetznerAuth } from "../Hetzner/AuthProvider.ts";
-import { InfisicalAuth } from "../Infisical/AuthProvider.ts";
-import { NeonAuth } from "../Neon/AuthProvider.ts";
-import { PlanetscaleAuth } from "../Planetscale/AuthProvider.ts";
-import { PrismaAuth } from "../Prisma/AuthProvider.ts";
-import { RailwayAuth } from "../Railway/AuthProvider.ts";
+import * as Plugin from "../Plugin.ts";
 import * as Stack from "../Stack.ts";
 import { Stage } from "../Stage.ts";
-import { StripeAuth } from "../Stripe/AuthProvider.ts";
-/* oxlint-enable alchemy/package-boundaries */
 import {
   loadConfigProvider,
   stackConfigLayer,
@@ -333,24 +318,21 @@ export const buildStackProviders = Effect.fn("buildStackProviders")(function* (
   return { authProviders, context, stackEffect };
 });
 
-const builtinAuth = Layer.mergeAll(
-  AwsAuth,
-  AxiomAuth,
-  CloudflareAuth,
-  FlyAuth,
-  GcpAuth,
-  GitHubAuth,
-  DopplerAuth,
-  HetznerAuth,
-  InfisicalAuth,
-  NeonAuth,
-  PlanetscaleAuth,
-  PrismaAuth,
-  RailwayAuth,
-  StripeAuth,
-);
+/** Every plugin's auth provider, merged into one registering layer. */
+const pluginAuth = Effect.fn("pluginAuth")(function* () {
+  const layers = yield* Effect.forEach(
+    yield* Plugin.load(),
+    (plugin) =>
+      plugin.auth ? Plugin.resolve(plugin, "auth", plugin.auth) : Effect.succeed(undefined),
+    { concurrency: "unbounded" },
+  );
+  return layers.reduce<Layer.Layer<never, never, any>>(
+    (merged, layer) => (layer === undefined ? merged : Layer.merge(merged, layer)),
+    Layer.empty,
+  );
+});
 
-const buildBuiltinAuthProviders = Effect.fn("buildBuiltinAuthProviders")(function* (options: {
+const buildPluginAuthProviders = Effect.fn("buildPluginAuthProviders")(function* (options: {
   readonly envFile: Option.Option<string>;
   readonly profile: string;
   readonly registry?: AuthProviders["Service"];
@@ -358,7 +340,10 @@ const buildBuiltinAuthProviders = Effect.fn("buildBuiltinAuthProviders")(functio
   const authProviders = options.registry ?? {};
   const shared = yield* sessionServices(options);
   yield* Layer.build(
-    Layer.provide(builtinAuth, Layer.mergeAll(Layer.succeed(AuthProviders, authProviders), shared)),
+    Layer.provide(
+      yield* pluginAuth(),
+      Layer.mergeAll(Layer.succeed(AuthProviders, authProviders), shared),
+    ),
   );
   return authProviders;
 });
@@ -374,7 +359,7 @@ const isMissingProviderConfig = Schema.is(
 const collectAuthProvidersUncached = Effect.fn("collectAuthProvidersUncached")(
   function* (options: CollectAuthProvidersOptions) {
     const authProviders: AuthProviders["Service"] = {};
-    yield* buildBuiltinAuthProviders({
+    yield* buildPluginAuthProviders({
       envFile: options.envFile,
       profile: options.profile,
       registry: authProviders,

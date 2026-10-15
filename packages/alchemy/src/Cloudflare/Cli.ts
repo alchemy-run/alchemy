@@ -6,17 +6,16 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
 import * as Stream from "effect/Stream";
-import * as Cloudflare from "../../Alchemist/routes/cloudflare.ts";
-import * as CloudflareToken from "../../Alchemist/routes/cloudflareToken.ts";
-import type { CreatedToken } from "../../Alchemist/routes/cloudflareToken.ts";
-import * as CliKit from "../../Cli/CliKit/index.ts";
-// oxlint-disable-next-line alchemy/package-boundaries -- package split phase 2: provider CLI subcommand; becomes plugin `cli`
-import { STATE_STORE_SCRIPT_NAME } from "../../Cloudflare/StateStore/Api.ts";
-import { loadConfigProvider } from "../../Util/ConfigProvider.ts";
-import { formatLocalTimestamp } from "../Format.ts";
-import { confirmOrDecline } from "./confirm.ts";
-import { envFile, parseSince, profile, yes } from "./flags.ts";
-import { instrumentCommand } from "./instrument.ts";
+import * as CliKit from "../Cli/CliKit/index.ts";
+import { confirmOrDecline } from "../Cli/commands/confirm.ts";
+import { envFile, parseSince, profile, yes } from "../Cli/commands/flags.ts";
+import { instrumentCommand } from "../Cli/commands/instrument.ts";
+import { formatLocalTimestamp } from "../Cli/Format.ts";
+import { loadConfigProvider } from "../Util/ConfigProvider.ts";
+import * as Cloudflare from "./Alchemist/StateStore.ts";
+import * as CloudflareToken from "./Alchemist/Token.ts";
+import type { CreatedToken } from "./Alchemist/Token.ts";
+import { STATE_STORE_SCRIPT_NAME } from "./StateStore/Api.ts";
 
 const SELECTABLE_SCOPE_LABELS: Record<string, string> = {
   "com.cloudflare.api.account": "account",

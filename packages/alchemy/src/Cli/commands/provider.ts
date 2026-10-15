@@ -2,9 +2,8 @@ import { Command, Flag } from "effect/cli";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Provider from "../../Alchemist/routes/provider.ts";
+import type * as Plugin from "../../Plugin.ts";
 import { CliKit } from "../CliKit/CliKit.ts";
-import { awsCommand } from "./aws.ts";
-import { cloudflareCommand } from "./cloudflare.ts";
 import { setExitCode } from "./errors.ts";
 import { config, envFile, profile } from "./flags.ts";
 import { instrumentCommand } from "./instrument.ts";
@@ -55,7 +54,14 @@ const checkEnvCommand = Command.make(
   ),
 );
 
-export const providerCommand = Command.make("provider", {}).pipe(
-  Command.withDescription("Manage cloud provider prerequisites and utilities"),
-  Command.withSubcommands([checkEnvCommand, awsCommand, cloudflareCommand]),
-);
+/** `alchemy provider`: `check-env` plus each plugin's provider subcommand. */
+export const providerCommand = async (plugins: ReadonlyArray<Plugin.Plugin>) =>
+  Command.make("provider", {}).pipe(
+    Command.withDescription("Manage cloud provider prerequisites and utilities"),
+    Command.withSubcommands([
+      checkEnvCommand,
+      ...(await Promise.all(
+        plugins.flatMap((plugin) => plugin.cli?.provider ?? []).map((load) => load()),
+      )),
+    ]),
+  );
