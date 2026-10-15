@@ -743,6 +743,9 @@ importers:
 
   .:
     devDependencies:
+      '@alchemy.run/floci':
+        specifier: workspace:*
+        version: link:packages/floci
       '@alchemy.run/pkg':
         specifier: workspace:*
         version: link:packages/pkg

@@ -611,7 +611,12 @@ describe(
               const parsed = yield* Effect.sync(() => new URL(result.url));
               expect(parsed.searchParams.get("versionId")).toBe(versionId ?? null);
               expect(parsed.searchParams.get("X-Amz-Signature")).toMatch(/^[0-9a-f]{64}$/);
-              expect(yield* Effect.sync(() => decodeURIComponent(parsed.pathname))).toBe(`/${key}`);
+              // Virtual-hosted URLs carry the bucket in the host; path-style
+              // URLs (distilled's form under a custom endpoint) in the path.
+              const bucketName = getOnlyBucket.bucketName;
+              expect(yield* Effect.sync(() => decodeURIComponent(parsed.pathname))).toBe(
+                parsed.hostname.startsWith(`${bucketName}.`) ? `/${key}` : `/${bucketName}/${key}`,
+              );
               expect(parsed.hash).toBe("");
               if (versionId === oldVersion.VersionId) {
                 yield* S3.deleteObject({ Bucket: getOnlyBucket.bucketName, Key: key });
