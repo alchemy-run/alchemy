@@ -19,6 +19,7 @@ import { ProfileStoreLive } from "../Auth/Profile.ts";
 import { withProfileOverride } from "../Auth/Resolve.ts";
 import { userStage } from "../Cli/commands/flags.ts";
 import { LoggingCli } from "../Cli/LoggingCli.ts";
+import * as Contributions from "../Contributions.ts";
 import { deploy as _deploy } from "../Deploy.ts";
 import { destroy as _destroy } from "../Destroy.ts";
 import type { Input } from "../Input.ts";
@@ -27,7 +28,6 @@ import * as RpcProviderProxy from "../Local/RpcProviderProxy.ts";
 import * as RpcSpawner from "../Local/RpcSpawner.ts";
 import { ALCHEMY_DEV } from "../Phase.ts";
 import * as Plan from "../Plan.ts";
-import * as Plugin from "../Plugin.ts";
 import type { ResourceSelection, SelectionOutput } from "../ResourceSelection.ts";
 import {
   type CompiledStack,
@@ -335,16 +335,16 @@ export type TestEffect<A, Req = never> = StackEffect<A, any, Req>;
 const testDev = Option.getOrElse(alchemyTestDevOverride(), () => false);
 
 /**
- * Every plugin's test services (e.g. AWS's Floci emulator), applied under
+ * Every provider's test services (e.g. AWS's Floci emulator), applied under
  * {@link ALCHEMY_TEST_DEV} only.
  */
-const testServices: ReadonlyArray<Plugin.TestServices> = testDev
+const testServices: ReadonlyArray<Contributions.TestServices> = testDev
   ? await Effect.runPromise(
-      Plugin.load().pipe(
-        Effect.flatMap((plugins) =>
-          Effect.forEach(plugins, (plugin) =>
-            plugin.testServices
-              ? Plugin.resolve(plugin, "testServices", plugin.testServices)
+      Contributions.load().pipe(
+        Effect.flatMap((providers) =>
+          Effect.forEach(providers, (provider) =>
+            provider.testServices
+              ? Contributions.resolve(provider, "testServices", provider.testServices)
               : Effect.succeed(undefined),
           ),
         ),

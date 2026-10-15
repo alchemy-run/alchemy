@@ -25,29 +25,30 @@ import type { PlatformServices } from "./Util/PlatformServices.ts";
  * the Alchemist API and the test harness need before (or without) importing
  * the user's `alchemy.run.ts`.
  *
- * A plugin module is imported on every CLI start, so it holds metadata and
- * lazy `import()`s only; the provider's code loads when a field is used.
+ * A contributions module is imported on every CLI start, so it holds
+ * metadata and lazy `import()`s only; the provider's code loads when a field
+ * is used.
  *
- * A package declares its plugins in `package.json`:
+ * A package declares what it contributes in `package.json`:
  *
  * ```json
- * { "alchemy": { "plugins": ["@alchemy.run/aws/Plugin"] } }
+ * { "alchemy": { "contributes": ["@alchemy.run/aws/Contributions"] } }
  * ```
  *
  * {@link load} reads that field from `alchemy` itself and from the project's
  * dependencies.
  */
-export interface Plugin {
-  /** Unique across loaded plugins, e.g. `"aws"`. */
+export interface Contributions {
+  /** Unique across loaded providers, e.g. `"aws"`. */
   readonly name: string;
   /**
    * Registers the provider's `AuthProvider` into `AuthProviders`, so
    * `alchemy profile` and login work without a stack that uses the provider.
    */
-  readonly auth?: Lazy<Layer.Layer<never, never, PluginServices>>;
+  readonly auth?: Lazy<Layer.Layer<never, never, ContributionServices>>;
   /**
    * The provider's state store, reachable from a profile alone as
-   * `alchemy state --backend <plugin name>`.
+   * `alchemy state --backend <provider name>`.
    */
   readonly stateStore?: StateStore;
   /** CLI commands the provider adds. */
@@ -60,8 +61,8 @@ export interface Plugin {
 }
 
 /**
- * The services every host of plugin code provides: the CLI and the Alchemist
- * API both run it under them. A plugin supplies anything else it needs
+ * The services every host of provider code provides: the CLI and the Alchemist
+ * API both run it under them. A provider supplies anything else it needs
  * itself, so a field can never require a service no host provides.
  */
 export type HostServices =
@@ -74,31 +75,32 @@ export type HostServices =
   | Interaction;
 
 /** What auth layers and state stores run under: the host's services and the auth registry. */
-export type PluginServices = HostServices | AuthProviders;
+export type ContributionServices = HostServices | AuthProviders;
 
 /** What a CLI command runs under: the host's services and the terminal. */
 export type CliServices = HostServices | CliKit;
 
-/** A plugin's own failure: any tagged error with a message for the user. */
-export type PluginFailure = { readonly _tag: string; readonly message: string };
+/** A provider's own failure: any tagged error with a message for the user. */
+export type ContributionFailure = { readonly _tag: string; readonly message: string };
 /**
- * A field loaded when used, so importing a plugin module stays cheap. Build
+ * A field loaded when used, so importing a provider module stays cheap. Build
  * one with {@link lazy}.
  */
-export type Lazy<A> = Effect.Effect<A, PluginError>;
+export type Lazy<A> = Effect.Effect<A, ContributionError>;
 
 /**
  * A {@link Lazy} field from a module of the provider's, imported on first
  * use:
  *
  * ```ts
- * auth: Plugin.lazy(() => import("./AuthProvider.ts"), (module) => module.AwsAuth),
+ * auth: Contributions.lazy(() => import("./AuthProvider.ts"), (module) => module.AwsAuth),
  * ```
  */
 export const lazy = <M, A>(load: () => Promise<M>, pick: (module: M) => A): Lazy<A> =>
   Effect.tryPromise({
     try: load,
-    catch: (cause) => new PluginError({ message: "Could not import a plugin module", cause }),
+    catch: (cause) =>
+      new ContributionError({ message: "Could not import a provider module", cause }),
   }).pipe(Effect.map(pick));
 
 export interface StateStore {
@@ -110,7 +112,9 @@ export interface StateStore {
 
 export interface StateStoreImpl {
   /** The store's `State` layer: the provider's own `state` function. */
-  readonly layer: (options: StateStoreOptions) => Layer.Layer<State, PluginFailure, PluginServices>;
+  readonly layer: (
+    options: StateStoreOptions,
+  ) => Layer.Layer<State, ContributionFailure, ContributionServices>;
   /** Provisioning, teardown and logs, for the operations the store supports. */
   readonly lifecycle?: StateStoreLifecycle;
 }
@@ -134,19 +138,19 @@ export interface StateStoreLifecycle {
       /** Redeploy an existing store instead of adopting it. */
       readonly force?: boolean;
     },
-  ) => Effect.Effect<StateStoreBootstrap, PluginFailure, PluginServices>;
+  ) => Effect.Effect<StateStoreBootstrap, ContributionFailure, ContributionServices>;
   /** Delete the store and its backing resources. Idempotent. */
   readonly teardown?: (
     input: StateStoreTarget,
-  ) => Effect.Effect<StateStoreTeardown, PluginFailure, PluginServices>;
+  ) => Effect.Effect<StateStoreTeardown, ContributionFailure, ContributionServices>;
   /** The store's past log entries, oldest first. */
   readonly logs?: (
     input: StateStoreTarget & { readonly limit?: number; readonly since?: Date },
-  ) => Effect.Effect<ReadonlyArray<StateStoreLogEntry>, PluginFailure, PluginServices>;
+  ) => Effect.Effect<ReadonlyArray<StateStoreLogEntry>, ContributionFailure, ContributionServices>;
   /** The store's log entries as they happen. */
   readonly tailLogs?: (
     input: StateStoreTarget,
-  ) => Stream.Stream<StateStoreLogEntry, PluginFailure, PluginServices>;
+  ) => Stream.Stream<StateStoreLogEntry, ContributionFailure, ContributionServices>;
 }
 
 export interface StateStoreBootstrap {
@@ -169,7 +173,7 @@ export interface StateStoreLogEntry {
 
 export interface Cli {
   /**
-   * The `alchemy provider <plugin name>` subcommand. Its description lists it
+   * The `alchemy provider <provider name>` subcommand. Its description lists it
    * in help; the command itself loads only when it runs.
    */
   readonly provider?: {
@@ -179,11 +183,11 @@ export interface Cli {
 }
 
 // Any command, whatever its name, errors and the CLI services it runs under.
-export type AnyCommand = Command.Command<any, any, any, PluginFailure, CliServices>;
+export type AnyCommand = Command.Command<any, any, any, ContributionFailure, CliServices>;
 
 export interface TestServices {
   /** Provided to test bodies and stack programs, closest wins. */
-  readonly layer: Layer.Layer<any, PluginFailure, never>;
+  readonly layer: Layer.Layer<any, ContributionFailure, never>;
   /** Rewrites the test's outbound HTTP, e.g. onto the emulator's gateway. */
   readonly mapRequest?: (
     request: HttpClientRequest.HttpClientRequest,
@@ -192,10 +196,10 @@ export interface TestServices {
   readonly env?: Readonly<Record<string, string>>;
 }
 
-/** Declare a plugin; the identity function, keeping its literal type. */
-export const make = <const P extends Plugin>(plugin: P): P => plugin;
+/** Declare a provider; the identity function, keeping its literal type. */
+export const make = <const P extends Contributions>(provider: P): P => provider;
 
-export class PluginError extends Data.TaggedError("PluginError")<{
+export class ContributionError extends Data.TaggedError("ContributionError")<{
   readonly message: string;
   readonly cause?: unknown;
 }> {
@@ -209,7 +213,7 @@ const Manifest = Schema.Struct({
   dependencies: Schema.optional(Schema.Record(Schema.String, Schema.String)),
   devDependencies: Schema.optional(Schema.Record(Schema.String, Schema.String)),
   alchemy: Schema.optional(
-    Schema.Struct({ plugins: Schema.optional(Schema.Array(Schema.String)) }),
+    Schema.Struct({ contributes: Schema.optional(Schema.Array(Schema.String)) }),
   ),
 });
 
@@ -219,11 +223,11 @@ const readManifest = Effect.fn(function* (file: string) {
   const text = yield* fs.readFileString(file);
   return yield* Effect.try({
     try: () => JSON.parse(text) as unknown,
-    catch: (cause) => new PluginError({ message: `Invalid JSON in ${file}`, cause }),
+    catch: (cause) => new ContributionError({ message: `Invalid JSON in ${file}`, cause }),
   }).pipe(
     Effect.flatMap(Schema.decodeUnknownEffect(Manifest)),
     Effect.mapError(
-      (cause) => new PluginError({ message: `Invalid package manifest ${file}`, cause }),
+      (cause) => new ContributionError({ message: `Invalid package manifest ${file}`, cause }),
     ),
   );
 });
@@ -242,7 +246,7 @@ const findDependencyManifest = Effect.fn(function* (dir: string, name: string) {
   }
 });
 
-/** A plugin specifier, and the manifest that declared it when not alchemy's own. */
+/** A provider specifier, and the manifest that declared it when not alchemy's own. */
 interface Declared {
   readonly specifier: string;
   readonly manifest?: {
@@ -279,7 +283,7 @@ const exportTarget = (target: unknown, star: string): string | undefined => {
   return undefined;
 };
 
-/** A package's own subpath (`"."`, `"./Plugin"`) through its `exports` map. */
+/** A package's own subpath (`"."`, `"./Contributions"`) through its `exports` map. */
 const packageExport = (exports: unknown, main: string | undefined, subpath: string) => {
   if (exports === undefined) return subpath === "." ? (main ?? "./index.js") : subpath;
   const map =
@@ -303,10 +307,10 @@ const packageExport = (exports: unknown, main: string | undefined, subpath: stri
 };
 
 /**
- * Resolve a dependency's plugin from the dependency itself, through its own
+ * Resolve a dependency's provider from the dependency itself, through its own
  * `exports` with ESM import conditions: under pnpm alchemy usually can't see
  * a project's dependencies, and a CommonJS resolver would pick `require`
- * targets for a module loaded with `import()`. A plugin specifier must name
+ * targets for a module loaded with `import()`. A provider specifier must name
  * the package that declares it.
  */
 const resolveDeclared = ({ specifier, manifest }: Declared) =>
@@ -315,49 +319,49 @@ const resolveDeclared = ({ specifier, manifest }: Declared) =>
     const path = yield* Path.Path;
     const { name } = manifest;
     if (name === undefined || (specifier !== name && !specifier.startsWith(`${name}/`))) {
-      return yield* new PluginError({
-        message: `Plugin ${specifier} declared in ${manifest.file} must name that package (${name ?? "unnamed"})`,
+      return yield* new ContributionError({
+        message: `${specifier}, contributed by ${manifest.file}, must name that package (${name ?? "unnamed"})`,
       });
     }
     const subpath = specifier === name ? "." : `.${specifier.slice(name.length)}`;
     const target = packageExport(manifest.exports, manifest.main, subpath);
     if (target === undefined) {
-      return yield* new PluginError({
-        message: `Plugin ${specifier} is not exported for import by ${manifest.file}`,
+      return yield* new ContributionError({
+        message: `${specifier} is not exported for import by ${manifest.file}`,
       });
     }
     return pathToFileURL(path.join(manifest.directory, target)).href;
   });
 
-const importPlugin = (declared: Declared) =>
+const importContributions = (declared: Declared) =>
   Effect.flatMap(resolveDeclared(declared), (url) =>
     Effect.tryPromise({
       try: () => import(url) as Promise<{ readonly default?: unknown }>,
       catch: (cause) =>
-        new PluginError({ message: `Could not import plugin ${declared.specifier}`, cause }),
+        new ContributionError({ message: `Could not import ${declared.specifier}`, cause }),
     }),
   ).pipe(
     Effect.flatMap((module) =>
       typeof module.default === "object" &&
       module.default !== null &&
-      typeof (module.default as Plugin).name === "string"
-        ? Effect.succeed(module.default as Plugin)
+      typeof (module.default as Contributions).name === "string"
+        ? Effect.succeed(module.default as Contributions)
         : Effect.fail(
-            new PluginError({
-              message: `Plugin ${declared.specifier} has no default-exported plugin`,
+            new ContributionError({
+              message: `${declared.specifier} has no default export`,
             }),
           ),
     ),
   );
 
-const discover = Effect.fn("Plugin.discover")(function* (cwd: string) {
+const discover = Effect.fn("Contributions.discover")(function* (cwd: string) {
   const path = yield* Path.Path;
   const declared = new Map<string, Declared>();
   const own = yield* readManifest(
     yield* path.fromFileUrl(new URL("../package.json", import.meta.url)),
   );
-  // The project's dependencies that declare plugins, before alchemy's own:
-  // the first plugin with a name wins, so a provider that moved into its own
+  // The project's dependencies that declare providers, before alchemy's own:
+  // the first provider with a name wins, so a provider that moved into its own
   // package replaces the copy still inside alchemy.
   const project = yield* readManifest(path.join(cwd, "package.json"));
   const dependencies = Object.keys({
@@ -368,7 +372,7 @@ const discover = Effect.fn("Plugin.discover")(function* (cwd: string) {
     const file = yield* findDependencyManifest(cwd, name);
     if (file === undefined) continue;
     const manifest = yield* readManifest(file);
-    for (const specifier of manifest?.alchemy?.plugins ?? []) {
+    for (const specifier of manifest?.alchemy?.contributes ?? []) {
       declared.set(specifier, {
         specifier,
         manifest: {
@@ -382,51 +386,51 @@ const discover = Effect.fn("Plugin.discover")(function* (cwd: string) {
     }
   }
   // alchemy's own: the providers that still live in this package.
-  for (const specifier of own?.alchemy?.plugins ?? []) declared.set(specifier, { specifier });
-  // A plugin that fails to load is skipped, never the rest; the first plugin
+  for (const specifier of own?.alchemy?.contributes ?? []) declared.set(specifier, { specifier });
+  // A provider that fails to load is skipped, never the rest; the first provider
   // with a name wins, and `--backend` names alchemy reserves are taken.
-  const plugins = new Map<string, Plugin>();
+  const providers = new Map<string, Contributions>();
   for (const declaration of declared.values()) {
-    const plugin = yield* importPlugin(declaration).pipe(
+    const provider = yield* importContributions(declaration).pipe(
       Effect.catch((error) =>
         Effect.as(
-          Effect.logWarning(`Skipping plugin ${declaration.specifier}: ${error.message}`),
+          Effect.logWarning(`Skipping ${declaration.specifier}: ${error.message}`),
           undefined,
         ),
       ),
     );
-    if (plugin === undefined) continue;
+    if (provider === undefined) continue;
     if (
-      plugins.has(plugin.name) ||
-      (RESERVED_BACKENDS as ReadonlyArray<string>).includes(plugin.name)
+      providers.has(provider.name) ||
+      (RESERVED_BACKENDS as ReadonlyArray<string>).includes(provider.name)
     ) {
       // Expected for alchemy's own copy of a provider that moved out.
       yield* (declaration.manifest ? Effect.logWarning : Effect.logDebug)(
-        `Skipping plugin ${declaration.specifier}: the name ${plugin.name} is taken`,
+        `Skipping ${declaration.specifier}: the name ${provider.name} is taken`,
       );
       continue;
     }
-    plugins.set(plugin.name, plugin);
+    providers.set(provider.name, provider);
   }
-  return [...plugins.values()];
+  return [...providers.values()];
 });
 
-/** `--backend` names alchemy handles itself, so no plugin may take them. */
+/** `--backend` names alchemy handles itself, so no provider may take them. */
 export const RESERVED_BACKENDS = ["local", "configured"] as const;
 
-const loaded = new Map<string, Effect.Effect<ReadonlyArray<Plugin>, PluginError>>();
+const loaded = new Map<string, Effect.Effect<ReadonlyArray<Contributions>, ContributionError>>();
 
-/** The plugins reachable from the project in `cwd`, loaded once per process. */
-export const load = Effect.fn("Plugin.load")(function* (cwd?: string) {
+/** The providers reachable from the project in `cwd`, loaded once per process. */
+export const load = Effect.fn("Contributions.load")(function* (cwd?: string) {
   const dir = cwd ?? (yield* Effect.sync(() => process.cwd()));
   let cached = loaded.get(dir);
   if (cached === undefined) {
     cached = yield* Effect.cached(
       discover(dir).pipe(
         Effect.mapError((error) =>
-          error._tag === "PluginError"
+          error._tag === "ContributionError"
             ? error
-            : new PluginError({ message: "Could not read package manifests", cause: error }),
+            : new ContributionError({ message: "Could not read package manifests", cause: error }),
         ),
         Effect.provideService(FileSystem.FileSystem, yield* FileSystem.FileSystem),
         Effect.provideService(Path.Path, yield* Path.Path),
@@ -437,22 +441,25 @@ export const load = Effect.fn("Plugin.load")(function* (cwd?: string) {
   return yield* cached;
 });
 
-/** Every plugin's state store, by `--backend` (plugin) name, with its plugin. */
-export const stateStores = Effect.fn("Plugin.stateStores")(function* () {
-  const stores = new Map<string, { readonly plugin: Plugin; readonly store: StateStore }>();
-  for (const plugin of yield* load()) {
-    if (plugin.stateStore) stores.set(plugin.name, { plugin, store: plugin.stateStore });
+/** Every provider's state store, by `--backend` (provider) name, with its provider. */
+export const stateStores = Effect.fn("Contributions.stateStores")(function* () {
+  const stores = new Map<
+    string,
+    { readonly provider: Contributions; readonly store: StateStore }
+  >();
+  for (const provider of yield* load()) {
+    if (provider.stateStore) stores.set(provider.name, { provider, store: provider.stateStore });
   }
   return stores;
 });
 
-/** Load one lazy field, failing with a {@link PluginError} naming the plugin. */
-export const resolve = <A>(plugin: Plugin, field: string, value: Lazy<A>) =>
+/** Load one lazy field, failing with a {@link ContributionError} naming the provider. */
+export const resolve = <A>(provider: Contributions, field: string, value: Lazy<A>) =>
   value.pipe(
     Effect.mapError(
       (cause) =>
-        new PluginError({
-          message: `Could not load ${field} of plugin ${plugin.name}: ${cause.message}`,
+        new ContributionError({
+          message: `Could not load ${provider.name}'s ${field}: ${cause.message}`,
           cause,
         }),
     ),

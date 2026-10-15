@@ -5,9 +5,9 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
 import * as AlchemistState from "../../Alchemist/routes/state.ts";
-import type { PluginSource, StateSource } from "../../Alchemist/routes/state.ts";
+import type { ProviderSource, StateSource } from "../../Alchemist/routes/state.ts";
 import * as CliKit from "../../Cli/CliKit/index.ts";
-import type { StateStoreLogEntry } from "../../Plugin.ts";
+import type { StateStoreLogEntry } from "../../Contributions.ts";
 import * as State from "../../State/index.ts";
 import {
   stateExplorerScreen,
@@ -25,7 +25,7 @@ const backend = Flag.String("backend").pipe(
   ),
   Flag.withDefault("configured"),
 );
-/** A plugin store other than the account's default, e.g. an S3 bucket. */
+/** A provider's store other than the account's default, e.g. an S3 bucket. */
 const storeName = Flag.String("name").pipe(
   Flag.withDescription(
     "State store to address instead of the account's default (e.g. an S3 bucket; with --backend)",
@@ -70,7 +70,7 @@ const source = (args: StateArgs): StateSource =>
           envFile: Option.getOrUndefined(args.envFile),
         }
       : {
-          _tag: "Plugin",
+          _tag: "Provider",
           backend: args.backend,
           name: args.name,
           profile: args.profile,
@@ -84,8 +84,8 @@ const lifecycleBackend = Flag.String("backend").pipe(
 
 const lifecycleSource = (
   args: Pick<StateArgs, "envFile" | "profile" | "backend" | "name">,
-): PluginSource => ({
-  _tag: "Plugin",
+): ProviderSource => ({
+  _tag: "Provider",
   backend: args.backend,
   name: args.name,
   profile: args.profile,

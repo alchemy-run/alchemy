@@ -4,7 +4,11 @@ import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
 import * as Stream from "effect/Stream";
 import { currentProfileName } from "../../Auth/Profile.ts";
-import type { StateStoreImpl, StateStoreLifecycle, StateStoreLogEntry } from "../../Plugin.ts";
+import type {
+  StateStoreImpl,
+  StateStoreLifecycle,
+  StateStoreLogEntry,
+} from "../../Contributions.ts";
 import * as Provisioning from "../../State/Provisioning.ts";
 import { fileLogger } from "../../Util/FileLogger.ts";
 import * as CloudflareAccess from "../Access.ts";
@@ -107,5 +111,5 @@ export const lifecycle: StateStoreLifecycle = {
     ),
 };
 
-/** The state store this provider's plugin registers. */
+/** The state store Cloudflare contributes. */
 export const stateStore: StateStoreImpl = { layer: state, lifecycle };

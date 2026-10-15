@@ -2,7 +2,7 @@ import { AlchemyContextLive } from "alchemy/AlchemyContext";
 import { ArtifactStore, createArtifactStore } from "alchemy/Artifacts";
 import { CredentialsStoreLive } from "alchemy/Auth/Credentials";
 import { ProfileStoreLive } from "alchemy/Auth/Profile";
-import * as Plugin from "alchemy/Plugin";
+import * as Contributions from "alchemy/Contributions";
 import { TelemetryLive } from "alchemy/Telemetry/Layer";
 import { moduleExtension } from "alchemy/Util/Node";
 import { PlatformServices } from "alchemy/Util/PlatformServices";
@@ -49,16 +49,16 @@ const placeholderCommand = (name: CommandName, description: string) =>
     name === "unsafe" ? Command.unlisted : (command) => command,
   );
 
-// A broken plugin shouldn't take the whole CLI down: warn and run without
-// plugins. Commands that need them (auth, `state --backend`) fail with the
-// plugin error when they load them again.
-const loadPlugins = () =>
+// A broken provider shouldn't take the whole CLI down: warn and run without
+// providers. Commands that need them (auth, `state --backend`) fail with the
+// provider error when they load them again.
+const loadContributions = () =>
   Effect.runPromise(
-    Plugin.load().pipe(
+    Contributions.load().pipe(
       Effect.catch((error) =>
         Effect.sync(() => {
           console.error(`warning: ${error.message}`);
-          return [] as ReadonlyArray<Plugin.Plugin>;
+          return [] as ReadonlyArray<Contributions.Contributions>;
         }),
       ),
       Effect.provide(PlatformServices),
@@ -68,7 +68,7 @@ const loadPlugins = () =>
 const loadCommand = async (name: CommandName) => {
   switch (name) {
     case "provider":
-      return (await import("./commands/provider.ts")).providerCommand(await loadPlugins());
+      return (await import("./commands/provider.ts")).providerCommand(await loadContributions());
     case "deploy":
       return (await import("./commands/deploy.ts")).deployCommand;
     case "dev":
@@ -201,9 +201,9 @@ const services = Layer.mergeAll(
   // merges with them. Listed as `mergeAll` siblings, whichever came last
   // would win the `CurrentLoggers` slot and silently drop the other.
   Layer.provideMerge(TelemetryLive, Layer.provide(GlobalLogLive, PlatformServices)),
-  // Plugin commands may require every `Plugin.CliServices` service; the cast
+  // Contributed commands may require every `Contributions.CliServices` service; the cast
   // on `main` below would hide one missing here.
-) satisfies Layer.Layer<Plugin.CliServices, unknown, unknown>;
+) satisfies Layer.Layer<Contributions.CliServices, unknown, unknown>;
 
 const program = Effect.gen(function* () {
   yield* logRunHeader;

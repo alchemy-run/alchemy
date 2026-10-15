@@ -40,7 +40,7 @@ test.provider(
       // Never the default store, which every other run on the account uses.
       const name = "lifecycle";
       const bucket = `alchemy-state-lifecycle-${accountId}-${region}-an`;
-      const target = { _tag: "Plugin", backend: "aws", name } as const;
+      const target = { _tag: "Provider", backend: "aws", name } as const;
       const alchemist = Alchemist.layer();
 
       yield* Alchemist.State.teardown(target).pipe(Effect.provide(alchemist));

@@ -8,7 +8,7 @@ import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Alchemist from "@/Alchemist/index.ts";
 import { providerCommand } from "@/Cli/commands/provider.ts";
-import * as Plugin from "@/Plugin.ts";
+import * as Contributions from "@/Contributions.ts";
 
 interface Dependency {
   /** `package.json` of the dependency; omit to leave it uninstalled. */
@@ -18,7 +18,7 @@ interface Dependency {
 }
 
 /**
- * A project in a temp directory, outside the repo, so a dependency's plugin
+ * A project in a temp directory, outside the repo, so a dependency's provider
  * only loads when it's resolved from the dependency itself.
  */
 const project = (
@@ -32,7 +32,7 @@ const project = (
       yield* fs.makeDirectory(options.directory, { recursive: true });
     }
     const root = yield* fs.makeTempDirectoryScoped({
-      prefix: "alchemy-plugin-",
+      prefix: "alchemy-provider-",
       directory: options.directory,
     });
     yield* fs.writeFileString(
@@ -57,144 +57,153 @@ const project = (
     return root;
   });
 
-const pluginPackage = (name: string, plugin: string): Dependency => ({
+const contributingPackage = (name: string, provider: string): Dependency => ({
   manifest: {
-    exports: { "./Plugin": "./Plugin.js" },
-    alchemy: { plugins: [`${name}/Plugin`] },
+    exports: { "./Contributions": "./Contributions.js" },
+    alchemy: { contributes: [`${name}/Contributions`] },
   },
-  files: { "Plugin.js": plugin },
+  files: { "Contributions.js": provider },
 });
 
-layer(NodeServices.layer)("Plugin.load", (it) => {
-  it.effect("loads alchemy's own plugins and a dependency's", () =>
+layer(NodeServices.layer)("Contributions.load", (it) => {
+  it.effect("loads alchemy's own providers and a dependency's", () =>
     Effect.gen(function* () {
       const root = yield* project({
-        "fake-plugin": pluginPackage(
-          "fake-plugin",
+        "fake-provider": contributingPackage(
+          "fake-provider",
           `export default { name: "fake", stateStore: { description: "Fake store" } };`,
         ),
       });
-      const plugins = yield* Plugin.load(root);
-      const names = plugins.map((plugin) => plugin.name);
+      const providers = yield* Contributions.load(root);
+      const names = providers.map((provider) => provider.name);
       expect(names).toEqual(expect.arrayContaining(["aws", "cloudflare", "prisma", "fake"]));
-      expect(plugins.find((plugin) => plugin.name === "fake")?.stateStore?.description).toBe(
+      expect(providers.find((provider) => provider.name === "fake")?.stateStore?.description).toBe(
         "Fake store",
       );
     }).pipe(Effect.scoped),
   );
 
-  it.effect("skips dependencies without plugins and ones not installed", () =>
+  it.effect("skips dependencies without providers and ones not installed", () =>
     Effect.gen(function* () {
       const root = yield* project({
         "plain-package": { manifest: { exports: { ".": "./index.js" } } },
         "not-installed": {},
       });
-      const own = yield* Plugin.load(process.cwd());
-      const plugins = yield* Plugin.load(root);
-      expect(plugins.map((plugin) => plugin.name)).toEqual(own.map((plugin) => plugin.name));
+      const own = yield* Contributions.load(process.cwd());
+      const providers = yield* Contributions.load(root);
+      expect(providers.map((provider) => provider.name)).toEqual(
+        own.map((provider) => provider.name),
+      );
     }).pipe(Effect.scoped),
   );
 
-  it.effect("a dependency's plugin replaces alchemy's own of the same name", () =>
+  it.effect("a dependency's provider replaces alchemy's own of the same name", () =>
     Effect.gen(function* () {
       const root = yield* project({
-        "aws-package": pluginPackage(
+        "aws-package": contributingPackage(
           "aws-package",
           `export default { name: "aws", from: "aws-package" };`,
         ),
       });
-      const aws = (yield* Plugin.load(root)).filter((plugin) => plugin.name === "aws");
+      const aws = (yield* Contributions.load(root)).filter((provider) => provider.name === "aws");
       expect(aws).toHaveLength(1);
       expect((aws[0] as { from?: string }).from).toBe("aws-package");
     }).pipe(Effect.scoped),
   );
 
-  it.effect("skips a second dependency plugin with a taken name", () =>
+  it.effect("skips a second dependency provider with a taken name", () =>
     Effect.gen(function* () {
       const root = yield* project({
-        "first-acme": pluginPackage(
+        "first-acme": contributingPackage(
           "first-acme",
           `export default { name: "acme", from: "first" };`,
         ),
-        "second-acme": pluginPackage(
+        "second-acme": contributingPackage(
           "second-acme",
           `export default { name: "acme", from: "second" };`,
         ),
       });
-      const acme = (yield* Plugin.load(root)).filter((plugin) => plugin.name === "acme");
-      expect(acme.map((plugin) => (plugin as { from?: string }).from)).toEqual(["first"]);
+      const acme = (yield* Contributions.load(root)).filter((provider) => provider.name === "acme");
+      expect(acme.map((provider) => (provider as { from?: string }).from)).toEqual(["first"]);
     }).pipe(Effect.scoped),
   );
 
-  it.effect("skips a plugin that fails to load, keeping the others", () =>
+  it.effect("skips a provider that fails to load, keeping the others", () =>
     Effect.gen(function* () {
       const root = yield* project({
-        "no-default": pluginPackage("no-default", `export const plugin = { name: "nope" };`),
-        "fake-plugin": pluginPackage("fake-plugin", `export default { name: "fake" };`),
+        "no-default": contributingPackage(
+          "no-default",
+          `export const provider = { name: "nope" };`,
+        ),
+        "fake-provider": contributingPackage("fake-provider", `export default { name: "fake" };`),
       });
-      const names = (yield* Plugin.load(root)).map((plugin) => plugin.name);
+      const names = (yield* Contributions.load(root)).map((provider) => provider.name);
       expect(names).toContain("fake");
       expect(names).toContain("aws");
       expect(names).not.toContain("nope");
     }).pipe(Effect.scoped),
   );
-  it.effect("resolves a dependency's plugin with import conditions", () =>
+  it.effect("resolves a dependency's provider with import conditions", () =>
     Effect.gen(function* () {
       const root = yield* project({
         "import-only": {
           manifest: {
-            exports: { "./Plugin": { import: "./Plugin.js" } },
-            alchemy: { plugins: ["import-only/Plugin"] },
+            exports: { "./Contributions": { import: "./Contributions.js" } },
+            alchemy: { contributes: ["import-only/Contributions"] },
           },
-          files: { "Plugin.js": `export default { name: "import-only" };` },
+          files: { "Contributions.js": `export default { name: "import-only" };` },
         },
         dual: {
           manifest: {
-            exports: { "./Plugin": { require: "./Plugin.cjs", import: "./Plugin.js" } },
-            alchemy: { plugins: ["dual/Plugin"] },
+            exports: {
+              "./Contributions": { require: "./Contributions.cjs", import: "./Contributions.js" },
+            },
+            alchemy: { contributes: ["dual/Contributions"] },
           },
           files: {
-            "Plugin.js": `export default { name: "dual-esm" };`,
-            "Plugin.cjs": `module.exports = { default: { name: "dual-cjs" } };`,
+            "Contributions.js": `export default { name: "dual-esm" };`,
+            "Contributions.cjs": `module.exports = { default: { name: "dual-cjs" } };`,
           },
         },
       });
-      const names = (yield* Plugin.load(root)).map((plugin) => plugin.name);
+      const names = (yield* Contributions.load(root)).map((provider) => provider.name);
       expect(names).toContain("import-only");
       expect(names).toContain("dual-esm");
       expect(names).not.toContain("dual-cjs");
     }).pipe(Effect.scoped),
   );
 
-  it.effect("skips a plugin whose specifier names another package", () =>
+  it.effect("skips a provider whose specifier names another package", () =>
     Effect.gen(function* () {
       const root = yield* project({
         borrower: {
-          manifest: { alchemy: { plugins: ["fake-plugin/Plugin"] } },
+          manifest: { alchemy: { contributes: ["fake-provider/Contributions"] } },
         },
       });
-      const own = yield* Plugin.load(process.cwd());
-      const plugins = yield* Plugin.load(root);
-      expect(plugins.map((plugin) => plugin.name)).toEqual(own.map((plugin) => plugin.name));
+      const own = yield* Contributions.load(process.cwd());
+      const providers = yield* Contributions.load(root);
+      expect(providers.map((provider) => provider.name)).toEqual(
+        own.map((provider) => provider.name),
+      );
     }).pipe(Effect.scoped),
   );
 
-  it.effect("skips a plugin named after a backend alchemy reserves", () =>
+  it.effect("skips a provider named after a backend alchemy reserves", () =>
     Effect.gen(function* () {
       const root = yield* project({
-        "local-store": pluginPackage("local-store", `export default { name: "local" };`),
+        "local-store": contributingPackage("local-store", `export default { name: "local" };`),
       });
-      const names = (yield* Plugin.load(root)).map((plugin) => plugin.name);
+      const names = (yield* Contributions.load(root)).map((provider) => provider.name);
       expect(names).not.toContain("local");
       expect(names).toContain("aws");
     }).pipe(Effect.scoped),
   );
 });
 
-/** The message of the `PluginError` a lifecycle route failed with. */
-const pluginErrorMessage = (error: unknown) => {
-  expect(error).toBeInstanceOf(Plugin.PluginError);
-  return (error as Plugin.PluginError).message;
+/** The message of the `ContributionError` a lifecycle route failed with. */
+const contributionErrorMessage = (error: unknown) => {
+  expect(error).toBeInstanceOf(Contributions.ContributionError);
+  return (error as Contributions.ContributionError).message;
 };
 
 /** Run with the process in `directory`, as the CLI would run in a project. */
@@ -214,13 +223,13 @@ declare global {
 }
 
 /**
- * A plugin whose state store holds a resource its layer's finalizer closes.
+ * A provider whose state store holds a resource its layer's finalizer closes.
  * It imports `effect` and alchemy's `State`, so it lives under this package.
  */
-const scopedStorePlugin = Effect.gen(function* () {
+const scopedStoreContributions = Effect.gen(function* () {
   const path = yield* Path.Path;
   const state = path.resolve(import.meta.dirname, "../src/State/State.ts");
-  return pluginPackage(
+  return contributingPackage(
     "scoped-store",
     `import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -257,14 +266,14 @@ layer(Alchemist.layer())("Alchemist.State lifecycle", (it) => {
       Effect.gen(function* () {
         const path = yield* Path.Path;
         const root = yield* project(
-          { "scoped-store": yield* scopedStorePlugin },
-          { directory: path.resolve(import.meta.dirname, "../.alchemy/test-plugins") },
+          { "scoped-store": yield* scopedStoreContributions },
+          { directory: path.resolve(import.meta.dirname, "../.alchemy/test-providers") },
         );
         const stacks = yield* inDirectory(
           root,
           Effect.scoped(
             Effect.flatMap(
-              Alchemist.State.store({ _tag: "Plugin", backend: "scoped-store" }),
+              Alchemist.State.store({ _tag: "Provider", backend: "scoped-store" }),
               (store) => store.listStacks(),
             ),
           ),
@@ -279,9 +288,9 @@ layer(Alchemist.layer())("Alchemist.State lifecycle", (it) => {
   it.effect("rejects an unknown backend", () =>
     Effect.gen(function* () {
       const error = yield* Effect.flip(
-        Alchemist.State.bootstrap({ _tag: "Plugin", backend: "nope" }),
+        Alchemist.State.bootstrap({ _tag: "Provider", backend: "nope" }),
       );
-      expect(pluginErrorMessage(error)).toBe(
+      expect(contributionErrorMessage(error)).toBe(
         "Unknown state backend 'nope'. Available: local, configured, aws, cloudflare.",
       );
     }),
@@ -289,20 +298,23 @@ layer(Alchemist.layer())("Alchemist.State lifecycle", (it) => {
 
   it.effect("rejects an operation the backend doesn't have", () =>
     Effect.gen(function* () {
-      const error = yield* Effect.flip(Alchemist.State.logs({ _tag: "Plugin", backend: "aws" }));
-      expect(pluginErrorMessage(error)).toBe("State backend 'aws' does not support logs.");
+      const error = yield* Effect.flip(Alchemist.State.logs({ _tag: "Provider", backend: "aws" }));
+      expect(contributionErrorMessage(error)).toBe("State backend 'aws' does not support logs.");
     }),
   );
 });
 
-const cliPlugin = (name: string, load: Plugin.Lazy<Plugin.AnyCommand>): Plugin.Plugin =>
-  Plugin.make({ name, cli: { provider: { description: `${name} commands`, load } } });
+const cliContributions = (
+  name: string,
+  load: Contributions.Lazy<Contributions.AnyCommand>,
+): Contributions.Contributions =>
+  Contributions.make({ name, cli: { provider: { description: `${name} commands`, load } } });
 
-const brokenCli = cliPlugin(
+const brokenCli = cliContributions(
   "broken",
-  Effect.fail(new Plugin.PluginError({ message: "broken CLI failed to import" })),
+  Effect.fail(new Contributions.ContributionError({ message: "broken CLI failed to import" })),
 );
-const workingCli = cliPlugin(
+const workingCli = cliContributions(
   "working",
   Effect.succeed(Command.make("working", {}, () => Effect.void)),
 );
@@ -322,14 +334,14 @@ describe("alchemy provider", () => {
   );
 });
 
-describe("Plugin contract", () => {
+describe("Contributions contract", () => {
   it("rejects a field requiring a service no host provides", () => {
     class PrivateClient extends Context.Service<PrivateClient, { readonly id: string }>()(
       "PrivateClient",
     ) {}
-    const plugin = Plugin.make({
+    const provider = Contributions.make({
       name: "needs-private-client",
-      // @ts-expect-error PrivateClient is not a host service; the plugin must supply it.
+      // @ts-expect-error PrivateClient is not a host service; the provider must supply it.
       auth: Effect.succeed(
         Layer.effectDiscard(
           Effect.gen(function* () {
@@ -338,6 +350,6 @@ describe("Plugin contract", () => {
         ),
       ),
     });
-    expect(plugin.name).toBe("needs-private-client");
+    expect(provider.name).toBe("needs-private-client");
   });
 });

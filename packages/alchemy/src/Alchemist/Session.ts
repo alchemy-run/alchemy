@@ -17,7 +17,7 @@ import { ArtifactStore, createArtifactStore } from "../Artifacts.ts";
 import { AuthError, AuthProviders } from "../Auth/AuthProvider.ts";
 import { SuppressMissingProviderConfig } from "../Auth/Profile.ts";
 import { withProfileOverride } from "../Auth/Resolve.ts";
-import * as Plugin from "../Plugin.ts";
+import * as Contributions from "../Contributions.ts";
 import * as Stack from "../Stack.ts";
 import { Stage } from "../Stage.ts";
 import {
@@ -318,12 +318,14 @@ export const buildStackProviders = Effect.fn("buildStackProviders")(function* (
   return { authProviders, context, stackEffect };
 });
 
-/** Every plugin's auth provider, merged into one registering layer. */
-const pluginAuth = Effect.fn("pluginAuth")(function* () {
+/** Every provider's auth provider, merged into one registering layer. */
+const contributedAuth = Effect.fn("contributedAuth")(function* () {
   const layers = yield* Effect.forEach(
-    yield* Plugin.load(),
-    (plugin) =>
-      plugin.auth ? Plugin.resolve(plugin, "auth", plugin.auth) : Effect.succeed(undefined),
+    yield* Contributions.load(),
+    (provider) =>
+      provider.auth
+        ? Contributions.resolve(provider, "auth", provider.auth)
+        : Effect.succeed(undefined),
     { concurrency: "unbounded" },
   );
   return layers.reduce<Layer.Layer<never, never, any>>(
@@ -332,21 +334,23 @@ const pluginAuth = Effect.fn("pluginAuth")(function* () {
   );
 });
 
-const buildPluginAuthProviders = Effect.fn("buildPluginAuthProviders")(function* (options: {
-  readonly envFile: Option.Option<string>;
-  readonly profile: string;
-  readonly registry?: AuthProviders["Service"];
-}) {
-  const authProviders = options.registry ?? {};
-  const shared = yield* sessionServices(options);
-  yield* Layer.build(
-    Layer.provide(
-      yield* pluginAuth(),
-      Layer.mergeAll(Layer.succeed(AuthProviders, authProviders), shared),
-    ),
-  );
-  return authProviders;
-});
+const buildContributedAuthProviders = Effect.fn("buildContributedAuthProviders")(
+  function* (options: {
+    readonly envFile: Option.Option<string>;
+    readonly profile: string;
+    readonly registry?: AuthProviders["Service"];
+  }) {
+    const authProviders = options.registry ?? {};
+    const shared = yield* sessionServices(options);
+    yield* Layer.build(
+      Layer.provide(
+        yield* contributedAuth(),
+        Layer.mergeAll(Layer.succeed(AuthProviders, authProviders), shared),
+      ),
+    );
+    return authProviders;
+  },
+);
 
 const isMissingProviderConfig = Schema.is(
   Schema.Struct({ _tag: Schema.Literals(["MissingProviderConfig"]) }),
@@ -359,7 +363,7 @@ const isMissingProviderConfig = Schema.is(
 const collectAuthProvidersUncached = Effect.fn("collectAuthProvidersUncached")(
   function* (options: CollectAuthProvidersOptions) {
     const authProviders: AuthProviders["Service"] = {};
-    yield* buildPluginAuthProviders({
+    yield* buildContributedAuthProviders({
       envFile: options.envFile,
       profile: options.profile,
       registry: authProviders,

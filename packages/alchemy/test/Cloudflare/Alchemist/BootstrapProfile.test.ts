@@ -7,15 +7,15 @@ import * as FileSystem from "effect/FileSystem";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
-import { pluginContext } from "@/Alchemist/routes/state.ts";
+import { providerContext } from "@/Alchemist/routes/state.ts";
 import { AlchemyContext } from "@/AlchemyContext.ts";
 import { ArtifactStore, createArtifactStore } from "@/Artifacts.ts";
 import { CredentialsStoreLive } from "@/Auth/Credentials.ts";
 import { ProfileStore, ProfileStoreLive } from "@/Auth/Profile.ts";
 import { CredentialsUnavailable } from "@/Auth/Resolve.ts";
 import { stateStoreScope } from "@/Cloudflare/Alchemist/StateStore.ts";
+import * as Contributions from "@/Contributions.ts";
 import * as Interaction from "@/Interaction.ts";
-import * as Plugin from "@/Plugin.ts";
 import { PlatformServices } from "@/Util/PlatformServices.ts";
 
 const STAGING_ACCOUNT = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
@@ -84,14 +84,16 @@ const withIsolatedHome = <A, E, R>(effect: (envFile: string) => Effect.Effect<A,
 /**
  * The Cloudflare store's scope as `alchemy state … --backend cloudflare`
  * resolves it: under the context core builds from `--profile` and
- * `--env-file`, with the plugin's auth registered.
+ * `--env-file`, with the provider's auth registered.
  */
 const resolveStateStoreScope = (target: { readonly profile?: string; readonly envFile: string }) =>
   Effect.gen(function* () {
-    const cloudflare = (yield* Plugin.load()).find((plugin) => plugin.name === "cloudflare");
-    if (cloudflare === undefined) return yield* Effect.die(new Error("no cloudflare plugin"));
+    const cloudflare = (yield* Contributions.load()).find(
+      (provider) => provider.name === "cloudflare",
+    );
+    if (cloudflare === undefined) return yield* Effect.die(new Error("no cloudflare provider"));
     return yield* stateStoreScope(undefined).pipe(
-      Effect.provide(yield* pluginContext(cloudflare, target)),
+      Effect.provide(yield* providerContext(cloudflare, target)),
     );
   });
 

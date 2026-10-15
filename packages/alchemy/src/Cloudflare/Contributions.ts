@@ -1,14 +1,14 @@
-import * as Plugin from "../Plugin.ts";
+import * as Contributions from "../Contributions.ts";
 
-export default Plugin.make({
+export default Contributions.make({
   name: "cloudflare",
-  auth: Plugin.lazy(
+  auth: Contributions.lazy(
     () => import("./Auth/AuthProvider.ts"),
     (module) => module.CloudflareAuth,
   ),
   stateStore: {
     description: "State-store Worker in the profile's Cloudflare account",
-    load: Plugin.lazy(
+    load: Contributions.lazy(
       () => import("./Alchemist/StateStore.ts"),
       (module) => module.stateStore,
     ),
@@ -16,7 +16,7 @@ export default Plugin.make({
   cli: {
     provider: {
       description: "Manage Cloudflare provider prerequisites",
-      load: Plugin.lazy(
+      load: Contributions.lazy(
         () => import("./Cli.ts"),
         (module) => module.cloudflareCommand,
       ),

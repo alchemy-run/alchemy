@@ -2,7 +2,7 @@ import * as s3 from "@distilled.cloud/aws/s3";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
-import type { StateStoreImpl, StateStoreLifecycle } from "../../Plugin.ts";
+import type { StateStoreImpl, StateStoreLifecycle } from "../../Contributions.ts";
 import * as Provisioning from "../../State/Provisioning.ts";
 import { deleteAllObjects } from "../Bootstrap.ts";
 import { AWSEnvironment } from "../Environment.ts";
@@ -77,5 +77,5 @@ export const lifecycle: StateStoreLifecycle = {
     ),
 };
 
-/** The state store this provider's plugin registers. */
+/** The state store AWS contributes. */
 export const stateStore: StateStoreImpl = { layer: state, lifecycle };

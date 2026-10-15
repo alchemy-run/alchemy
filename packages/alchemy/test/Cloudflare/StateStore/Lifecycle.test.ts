@@ -48,11 +48,11 @@ test.provider(
       // Never the default store, which every other run on the account uses.
       const name = "lifecycle";
       const worker = "alchemy-state-store-lifecycle";
-      const target = { _tag: "Plugin", backend: "cloudflare", name } as const;
+      const target = { _tag: "Provider", backend: "cloudflare", name } as const;
       const alchemist = Alchemist.layer();
       const defaultStacks = () =>
         Effect.flatMap(
-          Alchemist.State.store({ _tag: "Plugin", backend: "cloudflare" }).pipe(
+          Alchemist.State.store({ _tag: "Provider", backend: "cloudflare" }).pipe(
             Effect.provide(alchemist),
           ),
           (store) => store.listStacks(),

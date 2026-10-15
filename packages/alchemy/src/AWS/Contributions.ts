@@ -1,14 +1,14 @@
-import * as Plugin from "../Plugin.ts";
+import * as Contributions from "../Contributions.ts";
 
-export default Plugin.make({
+export default Contributions.make({
   name: "aws",
-  auth: Plugin.lazy(
+  auth: Contributions.lazy(
     () => import("./AuthProvider.ts"),
     (module) => module.AwsAuth,
   ),
   stateStore: {
     description: "S3 state store in the profile's AWS account",
-    load: Plugin.lazy(
+    load: Contributions.lazy(
       () => import("./Alchemist/StateStore.ts"),
       (module) => module.stateStore,
     ),
@@ -16,13 +16,13 @@ export default Plugin.make({
   cli: {
     provider: {
       description: "Manage AWS provider prerequisites",
-      load: Plugin.lazy(
+      load: Contributions.lazy(
         () => import("./Cli.ts"),
         (module) => module.awsCommand,
       ),
     },
   },
-  testServices: Plugin.lazy(
+  testServices: Contributions.lazy(
     () => import("./Local/TestServices.ts"),
     (module) => module.testServices(),
   ),

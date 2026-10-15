@@ -2,7 +2,7 @@ import { Command, Flag } from "effect/cli";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Provider from "../../Alchemist/routes/provider.ts";
-import * as Plugin from "../../Plugin.ts";
+import * as Contributions from "../../Contributions.ts";
 import { CliKit } from "../CliKit/CliKit.ts";
 import { setExitCode } from "./errors.ts";
 import { config, envFile, profile } from "./flags.ts";
@@ -55,19 +55,19 @@ const checkEnvCommand = Command.make(
 );
 
 /**
- * `alchemy provider`: `check-env` plus each plugin's provider subcommand. A
+ * `alchemy provider`: `check-env` plus each provider's provider subcommand. A
  * provider whose CLI fails to load never blocks another's: it runs as a
  * command failing with its error.
  */
-export const providerCommand = async (plugins: ReadonlyArray<Plugin.Plugin>) => {
+export const providerCommand = async (providers: ReadonlyArray<Contributions.Contributions>) => {
   const subcommands = await Effect.runPromise(
-    Effect.forEach(plugins, (plugin) => {
-      const cli = plugin.cli?.provider;
+    Effect.forEach(providers, (provider) => {
+      const cli = provider.cli?.provider;
       if (cli === undefined) return Effect.succeed([]);
-      return Plugin.resolve(plugin, "cli.provider", cli.load).pipe(
+      return Contributions.resolve(provider, "cli.provider", cli.load).pipe(
         Effect.catch((error) =>
-          Effect.succeed<Plugin.AnyCommand>(
-            Command.make(plugin.name, {}, () => Effect.fail(error)).pipe(
+          Effect.succeed<Contributions.AnyCommand>(
+            Command.make(provider.name, {}, () => Effect.fail(error)).pipe(
               Command.withDescription(cli.description),
             ),
           ),

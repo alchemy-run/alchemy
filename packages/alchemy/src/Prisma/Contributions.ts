@@ -1,15 +1,15 @@
-import * as Plugin from "../Plugin.ts";
+import * as Contributions from "../Contributions.ts";
 
-export default Plugin.make({
+export default Contributions.make({
   name: "prisma",
-  auth: Plugin.lazy(
+  auth: Contributions.lazy(
     () => import("./AuthProvider.ts"),
     (module) => module.PrismaAuth,
   ),
   cli: {
     provider: {
       description: "Prisma contract tooling",
-      load: Plugin.lazy(
+      load: Contributions.lazy(
         () => import("./Cli.ts"),
         (module) => module.prismaCommand,
       ),
