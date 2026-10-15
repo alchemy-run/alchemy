@@ -2,12 +2,14 @@ import * as Anthropic from "alchemy/Anthropic";
 import { WORKSPACE } from "./Sandbox.ts";
 
 /**
- * The toolchain the repository needs (it pins Node 24, pnpm and Bun), for
- * every host's image. The checkout itself is prepared at runtime (see
- * Agent.ts).
+ * The toolchain the repository needs (Node, pnpm and Bun), for every host's
+ * image. The checkout itself is prepared at runtime (see Agent.ts).
+ *
+ * The base is pinned by digest (node 26.12.0, bookworm): a moving tag would
+ * rebuild every layer whenever Docker Hub republishes it. Bump it on purpose.
  */
 export const TOOLCHAIN = `
-FROM node:24-bookworm
+FROM node:26-bookworm@sha256:a856ae5e25d498bbe5ec85fde88f00f5ed99908fda803ba39d7735ab8574f58c
 RUN corepack enable && npm install -g bun@1.3.13
 RUN mkdir -p ${WORKSPACE}
 `;
