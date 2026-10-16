@@ -743,6 +743,9 @@ importers:
 
   .:
     devDependencies:
+      '@alchemy.run/axiom':
+        specifier: workspace:*
+        version: link:packages/axiom
       '@alchemy.run/floci':
         specifier: workspace:*
         version: link:packages/floci
@@ -889,6 +892,9 @@ importers:
         specifier: 'catalog:'
         version: 4.5.0
     devDependencies:
+      '@alchemy.run/axiom':
+        specifier: workspace:*
+        version: link:../../packages/axiom
       '@cloudflare/workers-types':
         specifier: 5.20261012.1
         version: 5.20261012.1
@@ -1828,6 +1834,9 @@ importers:
 
   examples/cloudflare-domain:
     dependencies:
+      '@alchemy.run/axiom':
+        specifier: workspace:*
+        version: link:../../packages/axiom
       '@bank/domain':
         specifier: workspace:*
         version: link:packages/domain
@@ -1893,6 +1902,9 @@ importers:
 
   examples/cloudflare-domain/packages/server:
     dependencies:
+      '@alchemy.run/axiom':
+        specifier: workspace:*
+        version: link:../../../../packages/axiom
       '@bank/domain':
         specifier: workspace:*
         version: link:../domain
@@ -7230,18 +7242,12 @@ importers:
       '@distilled.cloud/aws':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/aws
-      '@distilled.cloud/axiom':
-        specifier: workspace:*
-        version: link:../../submodules/distilled/packages/axiom
       '@distilled.cloud/cloudflare':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/cloudflare
       '@distilled.cloud/core':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/core
-      '@distilled.cloud/doppler':
-        specifier: workspace:*
-        version: link:../../submodules/distilled/packages/doppler
       '@distilled.cloud/fly-io':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/fly-io
@@ -7254,9 +7260,6 @@ importers:
       '@distilled.cloud/iceberg':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/iceberg
-      '@distilled.cloud/infisical':
-        specifier: workspace:*
-        version: link:../../submodules/distilled/packages/infisical
       '@distilled.cloud/neon':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/neon
@@ -7563,6 +7566,28 @@ importers:
         specifier: 'catalog:'
         version: 7.0.2
 
+  packages/axiom:
+    dependencies:
+      '@distilled.cloud/axiom':
+        specifier: workspace:*
+        version: link:../../submodules/distilled/packages/axiom
+      '@distilled.cloud/core':
+        specifier: workspace:*
+        version: link:../../submodules/distilled/packages/core
+    devDependencies:
+      '@types/bun':
+        specifier: 'catalog:'
+        version: 1.4.3
+      alchemy:
+        specifier: workspace:*
+        version: link:../alchemy
+      effect:
+        specifier: 4.0.4
+        version: 4.0.4
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+
   packages/better-auth:
     devDependencies:
       '@better-auth/drizzle-adapter':
@@ -7765,6 +7790,25 @@ importers:
       vite:
         specifier: 'catalog:'
         version: 8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1)
+
+  packages/doppler:
+    dependencies:
+      '@distilled.cloud/doppler':
+        specifier: workspace:*
+        version: link:../../submodules/distilled/packages/doppler
+    devDependencies:
+      '@types/bun':
+        specifier: 'catalog:'
+        version: 1.4.3
+      alchemy:
+        specifier: workspace:*
+        version: link:../alchemy
+      effect:
+        specifier: 4.0.4
+        version: 4.0.4
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
 
   packages/drizzle:
     dependencies:
@@ -8628,11 +8672,33 @@ importers:
         specifier: 'catalog:'
         version: 7.0.2
 
+  packages/infisical:
+    dependencies:
+      '@distilled.cloud/infisical':
+        specifier: workspace:*
+        version: link:../../submodules/distilled/packages/infisical
+    devDependencies:
+      '@types/bun':
+        specifier: 'catalog:'
+        version: 1.4.3
+      alchemy:
+        specifier: workspace:*
+        version: link:../alchemy
+      effect:
+        specifier: 4.0.4
+        version: 4.0.4
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+
   packages/integration-tests:
     devDependencies:
       '@alchemy.run/acme':
         specifier: workspace:*
         version: link:../acme
+      '@alchemy.run/axiom':
+        specifier: workspace:*
+        version: link:../axiom
       '@alchemy.run/drizzle':
         specifier: workspace:*
         version: link:../drizzle

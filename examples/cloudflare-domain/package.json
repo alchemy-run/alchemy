@@ -17,6 +17,7 @@
     "test:integ": "bun test test/integ.test.ts"
   },
   "dependencies": {
+    "@alchemy.run/axiom": "workspace:*",
     "@bank/domain": "workspace:*",
     "@bank/server": "workspace:*",
     "@bank/web": "workspace:*",

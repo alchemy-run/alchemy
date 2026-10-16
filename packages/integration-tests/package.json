@@ -2,13 +2,14 @@
   "name": "@alchemy.run/integration-tests",
   "version": "2.0.0-beta.83",
   "private": true,
-  "description": "Tests for the integration packages (Git, ACME, Drizzle) against alchemy's providers.",
+  "description": "Tests for the integration packages (Git, ACME, Drizzle, Axiom) against alchemy's providers.",
   "type": "module",
   "scripts": {
     "test": "alchemy-test"
   },
   "devDependencies": {
     "@alchemy.run/acme": "workspace:*",
+    "@alchemy.run/axiom": "workspace:*",
     "@alchemy.run/drizzle": "workspace:*",
     "@alchemy.run/git": "workspace:*",
     "@cloudflare/workers-types": "catalog:",

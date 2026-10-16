@@ -15,6 +15,7 @@
     { "path": "../alchemy-test/tsconfig.json" },
     { "path": "../git/tsconfig.json" },
     { "path": "../acme/tsconfig.json" },
-    { "path": "../drizzle/tsconfig.json" }
+    { "path": "../drizzle/tsconfig.json" },
+    { "path": "../axiom/tsconfig.json" }
   ]
 }

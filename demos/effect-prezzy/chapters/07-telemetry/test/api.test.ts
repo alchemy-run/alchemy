@@ -1,6 +1,6 @@
 import { expect } from "bun:test";
+import * as Axiom from "@alchemy.run/axiom";
 import * as Alchemy from "alchemy";
-import * as Axiom from "alchemy/Axiom";
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Neon from "alchemy/Neon";
 import * as Test from "alchemy/Test/Bun";

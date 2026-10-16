@@ -16,6 +16,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@alchemy.run/axiom": "workspace:*",
     "@bank/domain": "workspace:*",
     "@cloudflare/workers-types": "catalog:",
     "@distilled.cloud/stripe": "workspace:*",
