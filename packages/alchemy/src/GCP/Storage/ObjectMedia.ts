@@ -25,6 +25,12 @@ export class ObjectNotFound extends Data.TaggedError("GCP.Storage.ObjectNotFound
   object: string;
 }> {}
 
+/** A create-if-absent upload found a live object with the same name (HTTP 412). */
+export class ObjectAlreadyExists extends Data.TaggedError("GCP.Storage.ObjectAlreadyExists")<{
+  bucket: string;
+  object: string;
+}> {}
+
 /** Cloud Storage rejected the request. */
 export class ObjectRequestFailed extends Data.TaggedError("GCP.Storage.ObjectRequestFailed")<{
   bucket: string;
@@ -57,7 +63,7 @@ export interface PutObjectContent {
   ifGenerationMatch?: string;
 }
 
-const isRetryable = (error: ObjectNotFound | ObjectRequestFailed) =>
+const isRetryable = (error: ObjectNotFound | ObjectRequestFailed | ObjectAlreadyExists) =>
   error._tag === "GCP.Storage.ObjectRequestFailed" && (error.status === 429 || error.status >= 500);
 
 const failureOf = (
@@ -146,7 +152,8 @@ export const makeObjectMedia = Effect.gen(function* () {
       }),
     );
 
-  const upload = (bucket: string, options: PutObjectContent) =>
+  /** POST a multipart upload and return the response, whatever its status. */
+  const post = (bucket: string, options: PutObjectContent) =>
     Effect.gen(function* () {
       const bytes =
         typeof options.body === "string" ? new TextEncoder().encode(options.body) : options.body;
@@ -186,19 +193,30 @@ export const makeObjectMedia = Effect.gen(function* () {
           HttpClientRequest.bodyUint8Array(payload, `multipart/related; boundary=${boundary}`),
         ),
       );
-      const response = yield* http
+      return yield* http
         .execute(request)
         .pipe(Effect.mapError(transportFailure(bucket, options.name)));
+    });
+
+  /** The uploaded object, or the failure a non-200 upload response stands for. */
+  const uploaded = (
+    bucket: string,
+    object: string,
+    response: HttpClientResponse.HttpClientResponse,
+  ) =>
+    Effect.gen(function* () {
       if (response.status !== 200) {
-        return yield* failureOf(bucket, options.name, response);
+        return yield* failureOf(bucket, object, response);
       }
-      const json = yield* response.json.pipe(
-        Effect.mapError(transportFailure(bucket, options.name)),
-      );
+      const json = yield* response.json.pipe(Effect.mapError(transportFailure(bucket, object)));
       // The upload endpoint answers with the same `Object` resource
       // `objects.insert` documents.
       return json as storage.Storage_Object;
-    }).pipe(
+    });
+
+  const upload = (bucket: string, options: PutObjectContent) =>
+    post(bucket, options).pipe(
+      Effect.flatMap((response) => uploaded(bucket, options.name, response)),
       Effect.retry({
         while: isRetryable,
         times: 4,
@@ -206,5 +224,26 @@ export const makeObjectMedia = Effect.gen(function* () {
       }),
     );
 
-  return { download, upload };
+  /**
+   * Upload only when no live object has the name (`ifGenerationMatch=0`).
+   * Fails with `ObjectAlreadyExists` when one does.
+   */
+  const create = (bucket: string, options: Omit<PutObjectContent, "ifGenerationMatch">) =>
+    post(bucket, { ...options, ifGenerationMatch: "0" }).pipe(
+      Effect.flatMap((response) =>
+        Effect.gen(function* () {
+          if (response.status === 412) {
+            return yield* new ObjectAlreadyExists({ bucket, object: options.name });
+          }
+          return yield* uploaded(bucket, options.name, response);
+        }),
+      ),
+      Effect.retry({
+        while: isRetryable,
+        times: 4,
+        schedule: Schedule.exponential("200 millis"),
+      }),
+    );
+
+  return { download, upload, create };
 });
