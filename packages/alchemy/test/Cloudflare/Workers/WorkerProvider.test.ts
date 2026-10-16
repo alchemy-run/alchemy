@@ -7,6 +7,7 @@ import {
   getDurableObjectTagMap,
   normalizeStateDomains,
   orderObservedWorkerRoutes,
+  resolveObservedWorkerDomain,
   resolveWorkerDomain,
   resolveWorkerDomainZone,
   resolveWorkersDev,
@@ -466,6 +467,53 @@ describe(
           auth,
           sameInZ2,
         ]);
+      });
+    });
+
+    describe("resolveObservedWorkerDomain", () => {
+      test("preserves the resolved zone when the canonical hostname is attached", () => {
+        const persisted = Effect.runSync(
+          resolveWorkerDomain({ name: "api.example.com", zoneName: "example.com" }),
+        );
+        const observed = resolveObservedWorkerDomain(["api.example.com"], [], persisted);
+        expect(deepEqual(observed, persisted)).toBe(true);
+      });
+
+      test("preserves previews when the canonical hostname is attached", () => {
+        const persisted = Effect.runSync(
+          resolveWorkerDomain({
+            name: "api.example.com",
+            zoneName: "example.com",
+            previews: true,
+          }),
+        );
+        const observed = resolveObservedWorkerDomain(["api.example.com"], [], persisted);
+        expect(deepEqual(observed, persisted)).toBe(true);
+      });
+
+      test("does not claim zone or previews when the canonical hostname is missing", () => {
+        const persisted = Effect.runSync(
+          resolveWorkerDomain({
+            name: "api.example.com",
+            zoneName: "example.com",
+            previews: true,
+            aliases: ["www.example.com"],
+            redirects: ["old.example.com"],
+          }),
+        );
+        const observed = resolveObservedWorkerDomain(
+          ["www.example.com", "unknown.example.com"],
+          ["old.example.com"],
+          persisted,
+        );
+        expect(deepEqual(observed, persisted)).toBe(false);
+        expect(observed).toEqual({
+          name: "www.example.com",
+          aliases: ["unknown.example.com"],
+          redirects: ["old.example.com"],
+        });
+        expect(observed?.zone).toBeUndefined();
+        expect(observed?.previews).toBeUndefined();
       });
     });
 
