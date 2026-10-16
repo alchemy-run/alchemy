@@ -52,6 +52,20 @@ interface EnvironmentLike {
 }
 
 /**
+ * @returns the specified directory, when it exists and is not empty; undefined, otherwise
+ */
+const nonEmptyDirectory = (
+  fs: FileSystem.FileSystem,
+  directory: string | undefined,
+): Effect.Effect<string | undefined, PlatformError> =>
+  Effect.gen(function* () {
+    if (directory === undefined) return undefined;
+    if (!(yield* fs.exists(directory))) return undefined;
+    const entries = yield* fs.readDirectory(directory);
+    return entries.length > 0 ? directory : undefined;
+  });
+
+/**
  * A Vite plugin that collects the output of the build and makes it available as an Effect.
  * @param entryEnvironment - The environment to use as the entry point for the server bundle. Defaults to "ssr".
  */
@@ -64,6 +78,11 @@ export const viteBuildOutputPlugin = Effect.fn(function* ({
   const path = yield* Path.Path;
   let clientDirectory: string | undefined;
   let base: string | undefined;
+  // Set when the entry environment builds and the client environment does
+  // not. Vite skips that client build when there is no `index.html`, and the
+  // worker build sets `copyPublicDir: false`, so `public/` would otherwise
+  // never be uploaded.
+  let publicDirectory: string | undefined;
   let serverEntry: string | undefined;
   const serverChunks = new Map<string, Effect.Effect<BundleFile, BundleError>>();
   const maybeExternalWorkspaces = new Set<string>();
@@ -124,6 +143,11 @@ export const viteBuildOutputPlugin = Effect.fn(function* ({
           throw new Error(`Entry chunk not found for environment "${this.environment.name}"`);
         }
         serverEntry = fileName(entryChunk.fileName, this.environment);
+        base ??= this.environment.config.base;
+        const configuredPublicDir = this.environment.config.publicDir;
+        if (typeof configuredPublicDir === "string" && configuredPublicDir.length > 0) {
+          publicDirectory = configuredPublicDir;
+        }
       }
       await Promise.all(
         files.map(async (file) => {
@@ -225,11 +249,14 @@ export const viteBuildOutputPlugin = Effect.fn(function* ({
     plugin,
     // Read lazily so callers observe the state collected during the build.
     // Only safe to await *after* `builder.buildApp()` has resolved.
-    output: Effect.sync((): ViteBuildOutput => ({
-      clientDirectory,
-      base,
-      serverBundle: makeServerBundle(),
-      externalWorkspaces: collectExternalWorkspaces(),
-    })),
+    output: Effect.gen(function* () {
+      const assetsDirectory = clientDirectory ?? (yield* nonEmptyDirectory(fs, publicDirectory));
+      return {
+        clientDirectory: assetsDirectory,
+        base,
+        serverBundle: makeServerBundle(),
+        externalWorkspaces: collectExternalWorkspaces(),
+      };
+    }),
   };
 });
