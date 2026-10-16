@@ -10,9 +10,9 @@
   },
   "type": "module",
   "scripts": {
-    "dev": "doppler run -p alchemy-v2 -c dev -- alchemy dev",
-    "deploy": "doppler run -p alchemy-v2 -c dev -- alchemy deploy",
-    "destroy": "doppler run -p alchemy-v2 -c dev -- alchemy destroy",
+    "dev": "alchemy dev",
+    "deploy": "alchemy deploy",
+    "destroy": "alchemy destroy",
     "test:e2e": "playwright test --tsconfig e2e/tsconfig.json"
   },
   "dependencies": {

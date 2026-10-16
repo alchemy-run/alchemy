@@ -1,6 +1,7 @@
 import * as Alchemy from "alchemy";
 import * as AWS from "alchemy/AWS";
 import * as Cloudflare from "alchemy/Cloudflare";
+import * as Doppler from "alchemy/Doppler";
 import * as GitHub from "alchemy/GitHub";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -19,6 +20,9 @@ export default Alchemy.Stack(
     // your GitHub auth profile's token.
     providers: Layer.mergeAll(Cloudflare.providers(), AWS.providers(), GitHub.providers()),
     state: Alchemy.localState(),
+    // ANTHROPIC_API_KEY (read by the gateway) comes from Doppler; an exported
+    // variable still overrides it.
+    secrets: [Doppler.Secrets({ project: "alchemy-v2", config: "dev" })],
   },
   Effect.gen(function* () {
     const api = yield* CodingAgents;

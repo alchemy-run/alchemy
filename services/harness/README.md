@@ -17,7 +17,7 @@ HTTP ──▶ Worker ──▶ Agent (Durable Object, one per issue) ──▶ 
 
 Each session works in a shallow clone of [alchemy-run/alchemy](https://github.com/alchemy-run/alchemy); the agent installs dependencies when it needs them. `git` and `gh` act as your GitHub login (the stack's GitHub auth profile), limited to pushing `agent/**` branches:
 
-The scripts run under Doppler (`alchemy-v2`, config `dev`), which supplies `ANTHROPIC_API_KEY`. The gateway reads it; the container never sees it.
+The stack loads its secrets from Doppler (`alchemy-v2`, config `dev`; see `secrets` in `alchemy.run.ts`): `ANTHROPIC_API_KEY`, which the gateway reads and the container never sees. Connect Doppler once with `alchemy profile edit --add Doppler`, or set `DOPPLER_TOKEN` in CI.
 
 ```sh
 pnpm run dev       # Worker + DO in workerd, the container in local Docker
@@ -64,7 +64,7 @@ End-to-end tests drive the API and the web UI (Playwright). They start
 environment:
 
 ```sh
-doppler run -p alchemy-v2 -c dev -- pnpm test:e2e
+pnpm test:e2e
 ```
 
 Point them at a deployment with `WEB_URL` and `API_URL` (the stack's `web` and `api` outputs):
