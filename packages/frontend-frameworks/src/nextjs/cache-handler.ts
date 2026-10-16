@@ -264,7 +264,14 @@ export default class AlchemyS3CacheHandler extends FileSystemCache {
       entry = decode(response.body) as CacheEntry;
     } else if (response.status === 404) {
       // Not written since the build: Next's prerendered output, if any.
+      // Next dates it by file time, which the deploy archive normalizes, so
+      // date it by the build: otherwise every prerendered page looks stale
+      // on its first request and renders again.
       entry = await super.get(key, ctx);
+      const buildTime = Number(process.env.ALCHEMY_NEXT_BUILD_TIME);
+      if (entry !== null && Number.isFinite(buildTime) && buildTime > 0) {
+        entry = { ...entry, lastModified: buildTime };
+      }
     } else {
       throw new Error(`Reading the Next.js cache failed: ${response.status}`);
     }
