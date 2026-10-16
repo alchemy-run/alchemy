@@ -53,6 +53,16 @@ export type BranchEndpointConfig = {
   suspendTimeoutSeconds?: number;
 };
 
+/** Observed settings of one compute endpoint on the branch. */
+export type BranchEndpoint = {
+  /** Neon endpoint identifier. */
+  id: string;
+  type: "read_only" | "read_write";
+  autoscalingLimitMinCu: number;
+  autoscalingLimitMaxCu: number;
+  suspendTimeoutSeconds: number;
+};
+
 export type BranchProps = {
   /**
    * The Neon project (or `{ projectId }`) to create the branch in.
@@ -175,6 +185,11 @@ export type Branch = Resource<
     migrationsHashes: Record<string, string>;
     /** Applied SQL import content hashes. */
     importHashes: Record<string, string>;
+    /**
+     * Observed compute endpoints, sorted by id. Part of the attributes so a
+     * setting changed outside Alchemy shows up as drift.
+     */
+    endpoints: BranchEndpoint[];
   },
   never,
   Providers
@@ -622,6 +637,10 @@ const hydrateBranch = (
     const db = dbs.databases.find((db) => db.name === previous?.databaseName) ?? dbs.databases[0];
     if (!db) return undefined;
     const conn = yield* fetchConnection(projectId, branch.id, db.name, db.owner_name);
+    const { endpoints } = yield* listProjectBranchEndpoints({
+      project_id: projectId,
+      branch_id: branch.id,
+    });
     const attributes: Branch["Attributes"] = {
       branchId: branch.id,
       branchName: branch.name,
@@ -648,6 +667,15 @@ const hydrateBranch = (
       migrationsTable: previous?.migrationsTable,
       migrationsHashes: previous?.migrationsHashes ?? {},
       importHashes: previous?.importHashes ?? {},
+      endpoints: endpoints
+        .map((endpoint) => ({
+          id: endpoint.id,
+          type: endpoint.type,
+          autoscalingLimitMinCu: endpoint.autoscaling_limit_min_cu,
+          autoscalingLimitMaxCu: endpoint.autoscaling_limit_max_cu,
+          suspendTimeoutSeconds: endpoint.suspend_timeout_seconds,
+        }))
+        .sort((a, b) => a.id.localeCompare(b.id)),
     };
     return attributes;
   }).pipe(
