@@ -16,10 +16,10 @@ export interface VercelCredentials {
   readonly teamSlug?: string;
 }
 
-export class Credentials extends Context.Tag("Vercel.Credentials")<
+export class Credentials extends Context.Service<
   Credentials,
   VercelCredentials
->() {}
+>()("Vercel.Credentials") {}
 
 const readEnv = (name: string): string | undefined => {
   const value = process.env[name];
@@ -27,7 +27,10 @@ const readEnv = (name: string): string | undefined => {
 };
 
 /** Resolve credentials from the environment. Fails when no token is set. */
-export const CredentialsFromEnv = Layer.effect(
+export const CredentialsFromEnv: Layer.Layer<
+  Credentials,
+  VercelMissingCredentials
+> = Layer.effect(
   Credentials,
   Effect.gen(function* () {
     const token = readEnv("VERCEL_TOKEN");

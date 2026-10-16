@@ -4,7 +4,6 @@ import * as Layer from "effect/Layer";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
 import { Credentials } from "./Credentials.ts";
 import { VercelError, VercelNotFound } from "./Errors.ts";
 
@@ -57,29 +56,32 @@ export interface VercelClient {
   readonly get: (
     path: string,
     scope?: VercelTeamScope,
-  ) => Effect.Effect<unknown, VercelError | VercelNotFound, never>;
+  ) => Effect.Effect<unknown, VercelError | VercelNotFound>;
   readonly post: (
     path: string,
     body: unknown,
     scope?: VercelTeamScope,
-  ) => Effect.Effect<unknown, VercelError | VercelNotFound, never>;
+  ) => Effect.Effect<unknown, VercelError | VercelNotFound>;
   readonly patch: (
     path: string,
     body: unknown,
     scope?: VercelTeamScope,
-  ) => Effect.Effect<unknown, VercelError | VercelNotFound, never>;
+  ) => Effect.Effect<unknown, VercelError | VercelNotFound>;
   readonly del: (
     path: string,
     scope?: VercelTeamScope,
-  ) => Effect.Effect<unknown, VercelError | VercelNotFound, never>;
+  ) => Effect.Effect<unknown, VercelError | VercelNotFound>;
 }
 
-export class Client extends Context.Tag("Vercel.Client")<
-  Client,
-  VercelClient
->() {}
+export class Client extends Context.Service<Client, VercelClient>()(
+  "Vercel.Client",
+) {}
 
-export const ClientLive = Layer.effect(
+export const ClientLive: Layer.Layer<
+  Client,
+  never,
+  Credentials | HttpClient.HttpClient
+> = Layer.effect(
   Client,
   Effect.gen(function* () {
     const creds = yield* Credentials;
@@ -95,30 +97,44 @@ export const ClientLive = Layer.effect(
         const url = withTeamScope(new URL(`${VERCEL_API_BASE_URL}${path}`), {
           teamId: scope?.teamId ?? creds.teamId,
           teamSlug: scope?.teamSlug ?? creds.teamSlug,
-        });
-        let req = HttpClientRequest.get(url.toString()).pipe(
-          HttpClientRequest.setMethod(method),
-          HttpClientRequest.setHeader("Authorization", `Bearer ${creds.token}`),
-        );
-        if (body !== undefined) {
-          req = HttpClientRequest.setBodyJson(req, body);
-        }
-        const res = yield* http.execute(req).pipe(
-          Effect.catchAll((cause) =>
+        }).toString();
+        const base =
+          method === "POST"
+            ? HttpClientRequest.post(url)
+            : method === "PATCH"
+              ? HttpClientRequest.patch(url)
+              : method === "DELETE"
+                ? HttpClientRequest.delete(url)
+                : HttpClientRequest.get(url);
+        const withAuth = base.pipe(HttpClientRequest.bearerToken(creds.token));
+        const req =
+          body !== undefined
+            ? yield* HttpClientRequest.bodyJson(body)(withAuth).pipe(
+                Effect.mapError(
+                  () =>
+                    new VercelError({
+                      status: 0,
+                      message: "Request is not JSON serializable",
+                    }),
+                ),
+              )
+            : withAuth;
+        const response = yield* http.execute(req).pipe(
+          Effect.catch(() =>
             Effect.fail(
               new VercelError({
                 status: 0,
-                message: `Vercel API transport failure: ${String(cause)}`,
+                message: "Vercel API transport failure",
               }),
             ),
           ),
         );
-        const status = res.status;
+        const status = response.status;
         if (status === 204) {
           return undefined;
         }
-        const parsed: unknown = yield* HttpClientResponse.json(res).pipe(
-          Effect.catchAll(() => Effect.succeed(undefined)),
+        const parsed: unknown = yield* response.json.pipe(
+          Effect.catch(() => Effect.succeed(undefined)),
         );
         if (status >= 200 && status < 300) {
           return parsed;

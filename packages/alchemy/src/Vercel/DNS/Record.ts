@@ -7,7 +7,8 @@ import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import { Client } from "../Client.ts";
+import { Client, type VercelClient, type VercelTeamScope } from "../Client.ts";
+import { VercelError, VercelNotFound } from "../Errors.ts";
 import type { Providers } from "../Providers.ts";
 
 /**
@@ -167,14 +168,9 @@ const backoff = Schedule.min([
 ]);
 
 const listRecords = (
-  client: {
-    get: (
-      path: string,
-      scope?: { teamId?: string; teamSlug?: string },
-    ) => Effect.Effect<unknown, unknown, never>;
-  },
+  client: VercelClient,
   domain: string,
-  scope: { teamId?: string; teamSlug?: string },
+  scope: VercelTeamScope,
 ) =>
   Effect.gen(function* () {
     const records: WireRecord[] = [];
@@ -202,16 +198,11 @@ const listRecords = (
   });
 
 const findRecord = (
-  client: {
-    get: (
-      path: string,
-      scope?: { teamId?: string; teamSlug?: string },
-    ) => Effect.Effect<unknown, unknown, never>;
-  },
+  client: VercelClient,
   domain: string,
   name: string,
   type: string,
-  scope: { teamId?: string; teamSlug?: string },
+  scope: VercelTeamScope,
 ) =>
   Effect.gen(function* () {
     const records = yield* listRecords(client, domain, scope);
