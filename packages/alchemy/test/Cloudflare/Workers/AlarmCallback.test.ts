@@ -8,6 +8,7 @@ import * as Schedule from "effect/Schedule";
 import * as Cloudflare from "@/Cloudflare";
 import { inMemoryState } from "@/State";
 import * as Test from "@/Test/Alchemy";
+import type { ScheduledRegressionResult } from "./fixtures/alarm-callback/legacy.ts";
 import type {
   AlarmObservationResult,
   BatchResult,
@@ -69,7 +70,9 @@ const json = <T>(url: string, method: "GET" | "POST" = "GET") =>
       const snapshot = new URL(url);
       snapshot.pathname = snapshot.pathname.replace(
         /\/[^/]+$/,
-        snapshot.pathname.endsWith("/legacy") ? "/legacy" : "/snapshot",
+        snapshot.pathname.endsWith("/legacy") || snapshot.pathname.endsWith("/scheduled-regression")
+          ? "/legacy"
+          : "/snapshot",
       );
       snapshot.search = "";
       yield* requestJson(snapshot.href, "GET");
@@ -627,6 +630,139 @@ describe.concurrent.each([
       }),
       { tags: [...(dev ? ["local"] : ["live"])], timeout: 90_000 },
     );
+
+    for (const count of [100, 1_000]) {
+      for (const kind of ["oneshot", "repeat", "mixed"] as const) {
+        test(
+          `scheduled events process all ${count} ${kind} rows in order on native SQL`,
+          Effect.gen(function* () {
+            const { url } = yield* stack;
+            const result = yield* json<ScheduledRegressionResult>(
+              `${url}/scheduled-${kind}-${count}/scheduled-regression?scenario=${kind}&count=${count}`,
+              "POST",
+            );
+            expect(result.failure).toBeNull();
+            expect(result.before.rows).toHaveLength(count);
+            expect(result.fired).toEqual(
+              Array.from({ length: count }, (_, i) => {
+                const id = `event-${String(i).padStart(4, "0")}`;
+                return {
+                  id,
+                  runAt: result.now - count + i,
+                  repeatMs:
+                    kind === "repeat" || (kind === "mixed" && i % 2 === 1) ? 86_400_000 : null,
+                  payload: { id },
+                };
+              }),
+            );
+            const repeating = result.fired.filter((event) => event.repeatMs !== null);
+            expect(result.after.rows).toEqual(
+              repeating.map((event) => ({
+                id: event.id,
+                run_at: result.now + 86_400_000,
+                repeat_ms: 86_400_000,
+                payload: JSON.stringify(event.payload),
+              })),
+            );
+            expect(result.after.alarm).toBe(repeating.length > 0 ? result.now + 86_400_000 : null);
+          }),
+          { tags: [...(dev ? ["local"] : ["live"])], timeout: 90_000 },
+        );
+      }
+    }
+
+    test(
+      "scheduled events preserve the due snapshot, fractional repeats, future rows and next alarm",
+      Effect.gen(function* () {
+        const { url } = yield* stack;
+        const result = yield* json<ScheduledRegressionResult>(
+          `${url}/scheduled-snapshot/scheduled-regression?scenario=snapshot`,
+          "POST",
+        );
+        expect(result.failure).toBeNull();
+        expect(result.fired.map((event) => event.id)).toEqual([
+          "one-shot",
+          "negative",
+          "fractional",
+          "zero",
+        ]);
+        expect(result.fired.map((event) => event.runAt)).toEqual([
+          result.now - 5,
+          result.now - 3,
+          result.now - 2,
+          result.now,
+        ]);
+        expect(result.fired.map((event) => event.payload)).toEqual(
+          result.fired.map((event) => ({ id: event.id })),
+        );
+        expect(result.after.rows.map(({ id, run_at }) => [id, run_at])).toEqual([
+          ["fractional", result.now + 0.25],
+          ["future", result.now + 10],
+          ["negative", result.now - 3],
+          ["zero", result.now],
+        ]);
+        expect(result.after.alarm).toBe(result.now + 1);
+      }),
+      { tags: [...(dev ? ["local"] : ["live"])], timeout: 90_000 },
+    );
+
+    for (const scenario of ["empty", "future"] as const) {
+      test(
+        `scheduled events leave ${scenario} rows unchanged and reconcile the native alarm`,
+        Effect.gen(function* () {
+          const { url } = yield* stack;
+          const result = yield* json<ScheduledRegressionResult>(
+            `${url}/scheduled-${scenario}/scheduled-regression?scenario=${scenario}`,
+            "POST",
+          );
+          expect(result.failure).toBeNull();
+          expect(result.fired).toEqual([]);
+          expect(result.after.rows).toEqual(result.before.rows);
+          expect(result.after.alarm).toBe(scenario === "empty" ? null : result.now + 60_000);
+        }),
+        { tags: [...(dev ? ["local"] : ["live"])], timeout: 90_000 },
+      );
+    }
+
+    test(
+      "scheduled events preserve JavaScript addition through native SQLite numeric affinity",
+      Effect.gen(function* () {
+        const { url } = yield* stack;
+        const result = yield* json<ScheduledRegressionResult>(
+          `${url}/scheduled-arithmetic/scheduled-regression?scenario=arithmetic`,
+          "POST",
+        );
+        expect(result.failure).toBeNull();
+        expect(result.fired).toHaveLength(9);
+        expect(result.after.rows).toHaveLength(9);
+        expect(result.actual).toEqual(result.expected);
+        expect(result.after.alarm).toBe(result.now + 1);
+      }),
+      { tags: [...(dev ? ["local"] : ["live"])], timeout: 90_000 },
+    );
+
+    for (const scenario of ["malformed", "sql-failure"] as const) {
+      test(
+        `scheduled events roll back native SQL, KV and alarm state after ${scenario}`,
+        Effect.gen(function* () {
+          const { url } = yield* stack;
+          const result = yield* json<ScheduledRegressionResult>(
+            `${url}/scheduled-${scenario}/scheduled-regression?scenario=${scenario}`,
+            "POST",
+          );
+          expect(result.failure).not.toBeNull();
+          if (scenario === "sql-failure") {
+            expect(result.failure).toContain("no such table: alchemy_alarm_callbacks");
+          }
+          expect(result.fired).toEqual([]);
+          expect(result.before.rows).toHaveLength(3);
+          expect(result.before.marker).toBeNull();
+          expect(result.before.callbackTablePresent).toBe(true);
+          expect(result.after).toEqual(result.before);
+        }),
+        { tags: [...(dev ? ["local"] : ["live"])], timeout: 90_000 },
+      );
+    }
   },
   { tags: ["provider:cloudflare", "provider:cloudflare:worker"] },
 );

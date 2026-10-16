@@ -6,7 +6,7 @@ import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Result from "effect/Result";
 import * as Cloudflare from "@/Cloudflare/index.ts";
 import * as Alchemy from "@/index.ts";
-import { LegacyAlarmObject } from "./legacy.ts";
+import { LegacyAlarmObject, type ScheduledScenario } from "./legacy.ts";
 import { AlarmObject, type RegistrationResult } from "./object.ts";
 
 export default class AlarmCallbackWorker extends Cloudflare.Worker<AlarmCallbackWorker>()(
@@ -37,6 +37,15 @@ export default class AlarmCallbackWorker extends Cloudflare.Worker<AlarmCallback
           return HttpServerResponse.text("Method Not Allowed", { status: 405 });
         }
         switch (operation) {
+          case "scheduled-regression":
+            return yield* HttpServerResponse.json(
+              yield* legacyObjects
+                .getByName(id)
+                .scheduledRegression(
+                  url.searchParams.get("scenario") as ScheduledScenario,
+                  Number(url.searchParams.get("count") ?? "0"),
+                ),
+            );
           case "worker-registration": {
             const snapshot = yield* object.snapshot();
             const context = yield* Alchemy.RuntimeContext;
