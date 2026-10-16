@@ -136,6 +136,9 @@ export const packEnvValue = (value: unknown): string =>
 export const packEnvValueKeepRedacted = (value: unknown): string | Redacted.Redacted<string> =>
   Redacted.isRedacted(value) ? value.pipe(packEnvValue, Redacted.make) : packEnvValue(value);
 
+// Only JSON's four whitespace characters may precede a valid JSON value.
+const possibleJson = /^[\x20\t\r\n]*["{\[0-9tfn-]/;
+
 /**
  * Parse an env-var string produced by {@link packEnvValue} back into its
  * value: rebuild `Redacted` from the marker, return other JSON values
@@ -155,6 +158,9 @@ export const packEnvValueKeepRedacted = (value: unknown): string | Redacted.Reda
 export const unpackEnvValue = <T>(raw: string | undefined): T | undefined => {
   if (raw === undefined) {
     return undefined;
+  }
+  if (typeof raw === "string" && !possibleJson.test(raw)) {
+    return raw as unknown as T;
   }
   try {
     const parsed: unknown = JSON.parse(raw);
