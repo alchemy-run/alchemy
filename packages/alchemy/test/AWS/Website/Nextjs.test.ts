@@ -97,7 +97,16 @@ describe.skipIf(!runLive || runEmulated)(
                   forceDestroy: true,
                   invalidation: { paths: "all", wait: true },
                 });
-                return { site };
+                // A second endpoint scales on its own environments: a second
+                // server process sharing the site's cache.
+                const other =
+                  server === "web-function"
+                    ? yield* AWS.Lambda.WebFunctionEndpoint("OtherEndpoint", {
+                        function: site.server as AWS.Lambda.WebFunction,
+                        authType: "ApplicationManaged",
+                      })
+                    : undefined;
+                return { site, other };
               }),
             );
 
@@ -168,27 +177,47 @@ describe.skipIf(!runLive || runEmulated)(
             expect(imageResponse.headers["content-type"] ?? "").toMatch(/^image\//);
 
             if (server === "web-function") {
-              // ISR through the S3 cache handler: the prerendered page is
-              // served from the cache until revalidatePath expires it, then
-              // rendered again. Straight to the server: CloudFront may hold
-              // the page for its s-maxage.
-              const serverUrl = deployed.site.serverUrl as string;
-              const generated = HttpClient.get(`${serverUrl}/isr`).pipe(
-                Effect.flatMap((response) => response.text),
-                Effect.map((body) => /generated:(\d+):/.exec(body)?.[1]),
-                Effect.filterOrFail(
-                  (stamp): stamp is string => stamp !== undefined,
-                  () => new Error("no ISR timestamp"),
-                ),
-                Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 30 }),
-              );
-              const first = yield* generated;
-              expect(yield* generated).toBe(first);
-              const revalidated = yield* HttpClient.post(`${serverUrl}/api/revalidate`).pipe(
+              // ISR through the S3 cache handler, across two environments.
+              // Straight to the servers: CloudFront may hold the page for its
+              // s-maxage.
+              const a = deployed.site.serverUrl as string;
+              const b = deployed.other!.url;
+              const get = (url: string) =>
+                HttpClient.get(url).pipe(
+                  Effect.flatMap((response) =>
+                    response.status === 200
+                      ? response.text
+                      : Effect.fail(new Error(`${url} returned ${response.status}`)),
+                  ),
+                  Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 30 }),
+                );
+              const instance = (base: string) =>
+                get(`${base}/api/instance`).pipe(
+                  Effect.map((body) => (JSON.parse(body) as { instance: string }).instance),
+                );
+              const generated = (base: string) =>
+                get(`${base}/isr`).pipe(
+                  Effect.map((body) => /generated:(\d+):/.exec(body)?.[1]),
+                  Effect.filterOrFail(
+                    (stamp): stamp is string => stamp !== undefined,
+                    () => new Error("no ISR timestamp"),
+                  ),
+                );
+
+              // The two endpoints really are two server processes.
+              expect(yield* instance(a)).not.toBe(yield* instance(b));
+
+              // Both serve the same cached render, and it stays cached.
+              const first = yield* generated(a);
+              expect(yield* generated(b)).toBe(first);
+              expect(yield* generated(a)).toBe(first);
+
+              // Revalidating in one environment reaches the other.
+              const revalidated = yield* HttpClient.post(`${a}/api/revalidate`).pipe(
                 Effect.flatMap((response) => response.json),
               );
               expect(revalidated).toEqual({ revalidated: true });
-              const second = yield* generated.pipe(
+              const second = yield* generated(b).pipe(
                 Effect.repeat({
                   schedule: Schedule.spaced("2 seconds"),
                   until: (stamp) => stamp !== first,
@@ -196,7 +225,9 @@ describe.skipIf(!runLive || runEmulated)(
                 }),
               );
               expect(second).not.toBe(first);
-              expect(yield* generated).toBe(second);
+              // ...and the new render is the one both now serve.
+              expect(yield* generated(a)).toBe(second);
+              expect(yield* generated(b)).toBe(second);
 
               // Out-of-band: the entries and the tag manifest are in S3.
               const objects = yield* S3.listObjectsV2({
