@@ -17,6 +17,7 @@
     "test": "bun test"
   },
   "dependencies": {
+    "@alchemy.run/drizzle": "workspace:*",
     "@distilled.cloud/railway": "workspace:*",
     "@effect/platform-node": "catalog:",
     "@effect/sql-pg": "catalog:",

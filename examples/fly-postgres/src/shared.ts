@@ -1,4 +1,4 @@
-import * as Drizzle from "alchemy/Drizzle";
+import * as Drizzle from "@alchemy.run/drizzle";
 import * as Fly from "alchemy/Fly";
 
 export const API_PORT = 3000;

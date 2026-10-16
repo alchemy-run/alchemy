@@ -88,6 +88,21 @@
       "path": "./packages/better-auth/tsconfig.json"
     },
     {
+      "path": "./packages/git/tsconfig.json"
+    },
+    {
+      "path": "./packages/drizzle/tsconfig.json"
+    },
+    {
+      "path": "./packages/sqlite/tsconfig.json"
+    },
+    {
+      "path": "./packages/acme/tsconfig.json"
+    },
+    {
+      "path": "./packages/integration-tests/tsconfig.json"
+    },
+    {
       "path": "./packages/pkg/tsconfig.json"
     },
     // TODO(sam): fix by upgrading starlight to ^0.39.2

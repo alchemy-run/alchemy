@@ -1,4 +1,4 @@
-import * as Drizzle from "alchemy/Drizzle";
+import * as Drizzle from "@alchemy.run/drizzle";
 import * as Turso from "alchemy/Turso";
 import * as Effect from "effect/Effect";
 

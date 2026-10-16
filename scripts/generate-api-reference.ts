@@ -49,6 +49,26 @@ const config = {
       providerPrefix: "BetterAuth",
       sourceDisplayPrefix: "packages/better-auth/src",
     },
+    {
+      srcRoot: path.join(import.meta.dir, "../packages/git/src"),
+      providerPrefix: "Git",
+      sourceDisplayPrefix: "packages/git/src",
+    },
+    {
+      srcRoot: path.join(import.meta.dir, "../packages/drizzle/src"),
+      providerPrefix: "Drizzle",
+      sourceDisplayPrefix: "packages/drizzle/src",
+    },
+    {
+      srcRoot: path.join(import.meta.dir, "../packages/sqlite/src"),
+      providerPrefix: "SQLite",
+      sourceDisplayPrefix: "packages/sqlite/src",
+    },
+    {
+      srcRoot: path.join(import.meta.dir, "../packages/acme/src"),
+      providerPrefix: "ACME",
+      sourceDisplayPrefix: "packages/acme/src",
+    },
   ] satisfies SourceRoot[],
 };
 

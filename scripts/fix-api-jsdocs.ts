@@ -4,6 +4,10 @@ import * as path from "node:path";
 const roots = [
   path.join(import.meta.dir, "../packages/alchemy/src"),
   path.join(import.meta.dir, "../packages/better-auth/src"),
+  path.join(import.meta.dir, "../packages/git/src"),
+  path.join(import.meta.dir, "../packages/drizzle/src"),
+  path.join(import.meta.dir, "../packages/sqlite/src"),
+  path.join(import.meta.dir, "../packages/acme/src"),
 ];
 
 const pageTag = /^\s*\*\s+@(resource|binding|layer|primitive)\b/;

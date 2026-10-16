@@ -1,0 +1,37 @@
+{
+  "name": "@alchemy.run/integration-tests",
+  "version": "2.0.0-beta.83",
+  "private": true,
+  "description": "Tests for the integration packages (Git, ACME, Drizzle) against alchemy's providers.",
+  "type": "module",
+  "scripts": {
+    "test": "alchemy-test"
+  },
+  "devDependencies": {
+    "@alchemy.run/acme": "workspace:*",
+    "@alchemy.run/drizzle": "workspace:*",
+    "@alchemy.run/git": "workspace:*",
+    "@cloudflare/workers-types": "catalog:",
+    "@distilled.cloud/acme": "workspace:*",
+    "@distilled.cloud/aws": "workspace:*",
+    "@distilled.cloud/cloudflare": "workspace:*",
+    "@distilled.cloud/core": "workspace:*",
+    "@distilled.cloud/fly-io": "workspace:*",
+    "@distilled.cloud/gcp": "workspace:*",
+    "@distilled.cloud/railway": "workspace:*",
+    "@distilled.cloud/zerossl": "workspace:*",
+    "@effect/platform-bun": "catalog:",
+    "@effect/sql-pg": "catalog:",
+    "@libsql/client": "catalog:",
+    "@types/bun": "catalog:",
+    "@types/pg": "catalog:",
+    "alchemy": "workspace:*",
+    "alchemy-test": "workspace:*",
+    "drizzle-orm": "catalog:",
+    "effect": "catalog:",
+    "mysql2": "catalog:",
+    "pathe": "catalog:",
+    "pg": "catalog:",
+    "typescript": "catalog:"
+  }
+}

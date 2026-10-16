@@ -15,7 +15,7 @@ import type { Postgres } from "./Postgres.ts";
  *
  * **Example:** Bind Postgres in a Function
  * ```typescript
- * import * as Drizzle from "alchemy/Drizzle/Postgres";
+ * import * as Drizzle from "@alchemy.run/drizzle/Postgres";
  *
  * export default class Query extends Railway.Function<Query>()(
  *   "Query",

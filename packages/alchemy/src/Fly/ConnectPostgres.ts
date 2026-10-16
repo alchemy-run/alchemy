@@ -16,7 +16,7 @@ import type { Postgres } from "./Postgres.ts";
  *
  * **Example:** Bind Postgres in a Service
  * ```typescript
- * import * as Drizzle from "alchemy/Drizzle/Postgres";
+ * import * as Drizzle from "@alchemy.run/drizzle/Postgres";
  *
  * const conn = yield* Fly.ConnectPostgres(Db);
  * const db = yield* Drizzle.Postgres(conn.connectionString);

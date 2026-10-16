@@ -1,0 +1,20 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "include": ["package.json", "test"],
+  "compilerOptions": {
+    "composite": true,
+    "noEmit": true,
+    "outDir": "./lib",
+    "rootDir": ".",
+    // Never emits; fixture Workers import their siblings relatively so the
+    // bundler resolves them without tsconfig paths.
+    "rewriteRelativeImportExtensions": false
+  },
+  "references": [
+    { "path": "../alchemy/tsconfig.json" },
+    { "path": "../alchemy-test/tsconfig.json" },
+    { "path": "../git/tsconfig.json" },
+    { "path": "../acme/tsconfig.json" },
+    { "path": "../drizzle/tsconfig.json" }
+  ]
+}
