@@ -18,6 +18,7 @@
   },
   "dependencies": {
     "@alchemy.run/axiom": "workspace:*",
+    "@alchemy.run/stripe": "workspace:*",
     "@bank/domain": "workspace:*",
     "@bank/server": "workspace:*",
     "@bank/web": "workspace:*",

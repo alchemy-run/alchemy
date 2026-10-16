@@ -1,4 +1,4 @@
-import * as Turso from "alchemy/Turso";
+import * as Turso from "@alchemy.run/turso";
 import * as Effect from "effect/Effect";
 
 export const BindingGroup = Turso.Group("BindingGroup", { location: "aws-us-east-1" });

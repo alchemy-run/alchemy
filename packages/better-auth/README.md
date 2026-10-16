@@ -82,7 +82,7 @@ Neon's serverless driver speaks WebSocket from the edge — no Hyperdrive, no `p
 
 ```typescript
 import { Neon as NeonDatabase } from "@alchemy.run/better-auth/Neon";
-import * as Neon from "alchemy/Neon";
+import * as Neon from "@alchemy.run/neon";
 
 export const AuthDb = Neon.Project("AuthDb");
 

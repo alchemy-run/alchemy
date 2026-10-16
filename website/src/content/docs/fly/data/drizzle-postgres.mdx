@@ -55,7 +55,7 @@ Commit the schema, SQL, and snapshots together; CI deploys this reviewed history
 
 ```typescript
 // src/db.ts
-import * as Fly from "alchemy/Fly";
+import * as Fly from "@alchemy.run/fly";
 
 export const Db = Fly.Postgres("Db", { region: "iad" });
 ```

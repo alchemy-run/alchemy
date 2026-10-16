@@ -1,6 +1,6 @@
 import { expect } from "bun:test";
+import * as Neon from "@alchemy.run/neon";
 import * as Cloudflare from "alchemy/Cloudflare";
-import * as Neon from "alchemy/Neon";
 import * as Test from "alchemy/Test/Bun";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";

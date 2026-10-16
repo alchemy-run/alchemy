@@ -63,7 +63,7 @@ git commit -m "Add database migration"
 
 ```typescript
 // src/db.ts
-import * as Turso from "alchemy/Turso";
+import * as Turso from "@alchemy.run/turso";
 import * as Effect from "effect/Effect";
 
 export const Db = Effect.gen(function* () {
@@ -83,7 +83,7 @@ Each deploy runs new migrations. See [Turso migrations](/turso/migrations).
 // src/api.ts
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Drizzle from "@alchemy.run/drizzle/LibSQL";
-import * as Turso from "alchemy/Turso";
+import * as Turso from "@alchemy.run/turso";
 import * as Effect from "effect/Effect";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import { Db } from "./db.ts";

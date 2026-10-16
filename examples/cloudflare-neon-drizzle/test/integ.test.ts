@@ -1,8 +1,8 @@
 import { expect } from "bun:test";
 import * as Drizzle from "@alchemy.run/drizzle";
+import * as Neon from "@alchemy.run/neon";
 import * as Alchemy from "alchemy";
 import * as Cloudflare from "alchemy/Cloudflare";
-import * as Neon from "alchemy/Neon";
 import * as Test from "alchemy/Test/Bun";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";

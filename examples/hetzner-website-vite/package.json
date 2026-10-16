@@ -21,6 +21,8 @@
   "dependencies": {
     "@alchemy.run/drizzle": "workspace:*",
     "@alchemy.run/frontend-frameworks": "workspace:*",
+    "@alchemy.run/hetzner": "workspace:*",
+    "@alchemy.run/neon": "workspace:*",
     "@distilled.cloud/hetzner": "workspace:*",
     "@effect/platform-node": "catalog:",
     "@effect/sql-pg": "catalog:",

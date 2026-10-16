@@ -55,7 +55,7 @@ Commit the schema, SQL, and snapshots together; do not generate migration histor
 
 ```typescript
 // src/db.ts
-import * as Neon from "alchemy/Neon";
+import * as Neon from "@alchemy.run/neon";
 
 export const Db = Neon.Project("Db", {
   region: "aws-eu-central-1",
@@ -68,7 +68,7 @@ The project's default branch hosts the database; see [Neon connections](/neon/da
 
 ```diff lang="typescript"
  // alchemy.run.ts
-+import * as Neon from "alchemy/Neon";
++import * as Neon from "@alchemy.run/neon";
 +import * as Layer from "effect/Layer";
 
 -  providers: Hetzner.providers(),

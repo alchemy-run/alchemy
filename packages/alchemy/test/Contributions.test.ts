@@ -78,7 +78,7 @@ describe("Contributions.load", { tags: ["unit", "local"] }, () =>
         });
         const providers = yield* Contributions.load(root);
         const names = providers.map((provider) => provider.name);
-        expect(names).toEqual(expect.arrayContaining(["aws", "cloudflare", "prisma", "fake"]));
+        expect(names).toEqual(expect.arrayContaining(["aws", "cloudflare", "gcp", "fake"]));
         expect(
           providers.find((provider) => provider.name === "fake")?.stateStores?.fake?.description,
         ).toBe("Fake store");

@@ -84,6 +84,51 @@ const config = {
       providerPrefix: "Infisical",
       sourceDisplayPrefix: "packages/infisical/src",
     },
+    {
+      srcRoot: path.join(import.meta.dir, "../packages/turso/src"),
+      providerPrefix: "Turso",
+      sourceDisplayPrefix: "packages/turso/src",
+    },
+    {
+      srcRoot: path.join(import.meta.dir, "../packages/planetscale/src"),
+      providerPrefix: "Planetscale",
+      sourceDisplayPrefix: "packages/planetscale/src",
+    },
+    {
+      srcRoot: path.join(import.meta.dir, "../packages/neon/src"),
+      providerPrefix: "Neon",
+      sourceDisplayPrefix: "packages/neon/src",
+    },
+    {
+      srcRoot: path.join(import.meta.dir, "../packages/prisma/src"),
+      providerPrefix: "Prisma",
+      sourceDisplayPrefix: "packages/prisma/src",
+    },
+    {
+      srcRoot: path.join(import.meta.dir, "../packages/hetzner/src"),
+      providerPrefix: "Hetzner",
+      sourceDisplayPrefix: "packages/hetzner/src",
+    },
+    {
+      srcRoot: path.join(import.meta.dir, "../packages/railway/src"),
+      providerPrefix: "Railway",
+      sourceDisplayPrefix: "packages/railway/src",
+    },
+    {
+      srcRoot: path.join(import.meta.dir, "../packages/fly/src"),
+      providerPrefix: "Fly",
+      sourceDisplayPrefix: "packages/fly/src",
+    },
+    {
+      srcRoot: path.join(import.meta.dir, "../packages/github/src"),
+      providerPrefix: "GitHub",
+      sourceDisplayPrefix: "packages/github/src",
+    },
+    {
+      srcRoot: path.join(import.meta.dir, "../packages/stripe/src"),
+      providerPrefix: "Stripe",
+      sourceDisplayPrefix: "packages/stripe/src",
+    },
   ] satisfies SourceRoot[],
 };
 

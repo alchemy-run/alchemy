@@ -65,7 +65,7 @@ Point Prisma at the source and register Alchemy's Effect outputs in
 ```typescript
 import { defineConfig as ormConfig } from "@prisma/orm-postgres/config";
 import { definePrismaConfig } from "prisma/config";
-import { withEffect } from "alchemy/Prisma/ORM/generator";
+import { withEffect } from "@alchemy.run/prisma/ORM/generator";
 
 export default definePrismaConfig({
   orm: withEffect(
@@ -113,7 +113,7 @@ shared Effect runtime, rather than generating another ORM implementation.
 Create `src/prisma/contract.ts` with the equivalent native Prisma builders:
 
 ```typescript
-import { defineContract } from "alchemy/Prisma/ORM";
+import { defineContract } from "@alchemy.run/prisma/ORM";
 
 export const contract = defineContract({}, ({ field, model, rel }) => ({
   models: {
@@ -184,7 +184,7 @@ Effect clients or standalone schemas.
 Pass the source contract directly to `Postgres` inside an Effect:
 
 ```typescript
-import { Postgres } from "alchemy/Prisma/ORM/Postgres";
+import { Postgres } from "@alchemy.run/prisma/ORM/Postgres";
 import { contract } from "./prisma/contract.ts";
 
 const db = yield* Postgres(connectionString, { contract });
@@ -228,7 +228,7 @@ needs validators without importing the contract builder.
 TypeScript-first applications can derive schemas directly:
 
 ```typescript
-import { makeSchemas } from "alchemy/Prisma/ORM/Schema";
+import { makeSchemas } from "@alchemy.run/prisma/ORM/Schema";
 import * as Schema from "effect/Schema";
 import { contract } from "./prisma/contract.ts";
 
