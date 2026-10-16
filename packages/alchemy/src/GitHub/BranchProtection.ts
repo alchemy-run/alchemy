@@ -1,3 +1,4 @@
+import type { Octokit as GitHubClient } from "@octokit/rest";
 import * as Effect from "effect/Effect";
 import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
@@ -40,7 +41,8 @@ export interface BranchProtectionProps {
 
     /**
      * Status checks that must pass, optionally pinned to the GitHub App that
-     * must report them.
+     * must report them. When this is set, the update sends `checks` and
+     * omits `contexts`. GitHub rejects a request that includes both.
      */
     checks?: {
       /**
@@ -371,6 +373,51 @@ interface ProtectionPayload {
   lock_branch?: { enabled?: boolean };
 }
 
+type UpdateBranchProtectionParams = NonNullable<
+  Parameters<GitHubClient["rest"]["repos"]["updateBranchProtection"]>[0]
+>;
+
+type RequiredStatusCheck = {
+  context: string;
+  app_id?: number;
+};
+
+/** The status-check body GitHub accepts: `contexts` or `checks`, never both. */
+type RequiredStatusChecks =
+  | { strict: boolean; contexts: string[] }
+  | { strict: boolean; checks: RequiredStatusCheck[] }
+  | null;
+
+type BranchProtectionUpdate = Omit<UpdateBranchProtectionParams, "required_status_checks"> & {
+  required_status_checks: RequiredStatusChecks;
+};
+
+// OpenAPI requires `contexts` on this body and lists `checks` as optional.
+// GitHub rejects a request that sends both. The route stays a `string` so
+// `request` accepts the body that is serialized. `BranchProtectionUpdate`
+// still checks every other field against the endpoint.
+const UPDATE_BRANCH_PROTECTION: string = "PUT /repos/{owner}/{repo}/branches/{branch}/protection";
+
+const requiredStatusChecksOf = (
+  checks: BranchProtectionProps["requiredStatusChecks"],
+): RequiredStatusChecks => {
+  if (checks === undefined) return null;
+  const strict = checks.strict ?? false;
+  if (checks.checks === undefined) {
+    return { strict, contexts: checks.contexts ?? [] };
+  }
+  return {
+    strict,
+    checks: checks.checks.map((check) => ({
+      context: check.context,
+      ...(check.appId === undefined ? {} : { app_id: check.appId }),
+    })),
+  };
+};
+
+const putBranchProtection = (octokit: GitHubClient, params: BranchProtectionUpdate) =>
+  octokit.request(UPDATE_BRANCH_PROTECTION, params);
+
 const attrsOf = (
   branch: string,
   protection: ProtectionPayload,
@@ -412,31 +459,17 @@ export const BranchProtectionProvider = () =>
       // Ensure & Sync — the PUT is a full upsert of the rule. Send explicit
       // values (or `null`) for every aspect so removed props converge back
       // to their defaults rather than being left as-is.
-      const checks = news.requiredStatusChecks;
+      const requiredStatusChecks = requiredStatusChecksOf(news.requiredStatusChecks);
       const reviews = news.requiredPullRequestReviews;
       const restrictions = news.restrictions;
 
       yield* Effect.tryPromise({
         try: () =>
-          octokit.rest.repos.updateBranchProtection({
+          putBranchProtection(octokit, {
             owner: news.owner,
             repo: news.repository,
             branch: news.branch,
-            required_status_checks:
-              checks === undefined
-                ? null
-                : {
-                    strict: checks.strict ?? false,
-                    contexts: checks.contexts ?? [],
-                    ...(checks.checks === undefined
-                      ? {}
-                      : {
-                          checks: checks.checks.map((check) => ({
-                            context: check.context,
-                            ...(check.appId === undefined ? {} : { app_id: check.appId }),
-                          })),
-                        }),
-                  },
+            required_status_checks: requiredStatusChecks,
             enforce_admins: news.enforceAdmins ?? false,
             required_pull_request_reviews:
               reviews === undefined
