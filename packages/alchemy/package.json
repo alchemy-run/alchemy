@@ -75,6 +75,7 @@
     "./Neon": "./src/Neon/index.ts",
     "./Neon/*": "./src/Neon/*/index.ts",
     "./Hetzner": "./src/Hetzner/index.ts",
+    "./Vercel": "./src/Vercel/index.ts",
     "./Fly": "./src/Fly/index.ts",
     "./ACME": "./src/ACME/index.ts",
     "./Railway": "./src/Railway/index.ts",
@@ -316,6 +317,11 @@
         "types": "./lib/Hetzner/index.d.ts",
         "bun": "./src/Hetzner/index.ts",
         "default": "./lib/Hetzner/index.js"
+      },
+      "./Vercel": {
+        "types": "./lib/Vercel/index.d.ts",
+        "bun": "./src/Vercel/index.ts",
+        "default": "./lib/Vercel/index.js"
       },
       "./Fly": {
         "types": "./lib/Fly/index.d.ts",
