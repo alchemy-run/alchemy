@@ -25,10 +25,9 @@ integration on top.
   deep links on by default.
 - [`Astro`](/aws/frontend/astro) — Astro sites, server-rendered or
   fully static; your `astro.config.*` loads natively.
-- [`Nextjs`](/aws/frontend/nextjs) — Next.js apps built through the
-  OpenNext (`@opennextjs/aws`) pipeline, with streaming SSR, image
-  optimization, and ISR wiring; your `next.config.*` is honored
-  as-is.
+- [`Nextjs`](/aws/frontend/nextjs) — Next.js apps on Next's own
+  standalone server, with ISR and image optimization through a shared S3
+  cache; your `next.config.*` is honored as-is.
 - [`Vinext`](/aws/frontend/vinext) — vinext (Next.js API on Vite)
   apps on a streaming Lambda; your `vite.config.ts` loads natively.
 - [`Nuxt`](/aws/frontend/nuxt) — Nuxt apps built through nitro's
