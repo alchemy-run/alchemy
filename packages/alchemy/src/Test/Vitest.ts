@@ -186,12 +186,24 @@ export const make = <ROut = any>(options: MakeOptions<ROut>): TestApi => {
     vitestBeforeEach(() => runEff(eff), timeoutOf(hookOptions));
   };
 
+  // Collected during file load, then run from one `afterAll`. Vitest's
+  // default `sequence.hooks: "stack"` runs `afterAll` in reverse registration
+  // order, and `"list"` runs it in registration order, so a second hook cannot
+  // be last in both. The fallback cleanup therefore follows these teardowns
+  // inside the same hook.
+  const teardowns: Array<{ effect: TestEffect<void>; timeout: number }> = [];
   const afterAll = ((eff, hookOptions) => {
-    vitestAfterAll(() => runEff(eff), timeoutOf(hookOptions) ?? DEFAULT_TIMEOUT);
+    teardowns.push({
+      effect: Effect.asVoid(eff),
+      timeout: timeoutOf(hookOptions) ?? DEFAULT_TIMEOUT,
+    });
   }) as AfterAllFn;
   afterAll.skipIf = (predicate) => (eff, hookOptions) => {
     if (predicate) return;
-    vitestAfterAll(() => runEff(eff), timeoutOf(hookOptions) ?? DEFAULT_TIMEOUT);
+    teardowns.push({
+      effect: Effect.asVoid(eff),
+      timeout: timeoutOf(hookOptions) ?? DEFAULT_TIMEOUT,
+    });
   };
 
   const afterEach: AfterEachFn = (eff, hookOptions) => {
@@ -205,15 +217,24 @@ export const make = <ROut = any>(options: MakeOptions<ROut>): TestApi => {
 
   // Fallback cleanup: if the user never calls `destroy(Stack)` (e.g.
   // `NO_DESTROY=1`), nothing else closes the shared scope and the sidecar
-  // child process leaks past the test process. Register an `afterAll` that
-  // closes it (and the RPC sidecar, which lives in its own scope so that
-  // mid-file `destroy(Stack)` calls can't kill it for later tests). We defer
-  // registration to a microtask so it runs AFTER any user-registered
-  // `afterAll` (including `destroy(Stack)`); vitest runs afterAll hooks in
-  // registration order.
+  // child process leaks past the test process. The RPC sidecar lives in its
+  // own scope so that mid-file `destroy(Stack)` calls can't kill it for later
+  // tests. Defer registration until the file's top-level `afterAll` calls
+  // have been collected.
   const closeAll = sidecar ? Effect.andThen(closeScope, sidecar.close) : closeScope;
   queueMicrotask(() => {
-    vitestAfterAll(() => Effect.runPromise(closeAll), DEFAULT_TIMEOUT);
+    const timeout = teardowns.reduce((total, hook) => total + hook.timeout, DEFAULT_TIMEOUT);
+    vitestAfterAll(
+      () =>
+        runEff(
+          Effect.gen(function* () {
+            for (const hook of teardowns) {
+              yield* hook.effect;
+            }
+          }).pipe(Effect.ensuring(closeAll)),
+        ),
+      timeout,
+    );
   });
 
   return {
