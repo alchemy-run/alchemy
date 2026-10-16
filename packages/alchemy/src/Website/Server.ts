@@ -217,6 +217,8 @@ export interface Server extends Resource<
  * ### Building Frameworks
  * **Example:** Nuxt For AWS Lambda
  * ```typescript
+ * import { Server } from "alchemy/Website";
+ *
  * const server = yield* Server("Server", {
  *   framework: "@alchemy.run/frontend-frameworks/nuxt",
  *   target: "@alchemy.run/frontend-frameworks/nuxt/aws",
@@ -226,6 +228,11 @@ export interface Server extends Resource<
  * //         server.clientDir   -> .output/public (static assets for the CDN)
  * // dev:    server.url         -> http://localhost:<port> (framework HMR server)
  * ```
+ *
+ * Compose `ServerProvider()` with the other providers in your stack. It
+ * selects the production build provider during deploy and the framework's
+ * local dev server during `alchemy dev`; the framework integration and target
+ * remain dependencies of the consuming project.
  *
  * @resource
  */
