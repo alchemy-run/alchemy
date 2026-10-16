@@ -4,6 +4,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
+import * as Pipeable from "effect/Pipeable";
 import * as Scheduler from "effect/Scheduler";
 import * as Stream from "effect/Stream";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
@@ -237,23 +238,80 @@ export interface SqlStorage {
   readonly databaseSize: number;
 }
 
+const defineCursorField = <A>(self: object, key: string, value: A): A => {
+  Object.defineProperty(self, key, { value, enumerable: true, configurable: true, writable: true });
+  return value;
+};
+
+// Writes commonly discard the cursor. Keep its Stream, bound methods, and
+// statistic Effects lazy so those writes allocate only this wrapper.
+class SqlCursorImpl<T extends Record<string, SqlStorageValue>>
+  extends Pipeable.Class
+  implements SqlCursor<T>
+{
+  #cursor: cf.SqlStorageCursor<T>;
+
+  constructor(cursor: cf.SqlStorageCursor<T>) {
+    super();
+    this.#cursor = cursor;
+  }
+
+  get [Stream.TypeId](): Stream.VarianceStruct<T, never, never> {
+    return Stream.empty[Stream.TypeId];
+  }
+
+  get channel(): Stream.Stream<T>["channel"] {
+    return defineCursorField(this, "channel", Stream.toChannel(Stream.fromIterable(this.#cursor)));
+  }
+
+  get next(): SqlCursor<T>["next"] {
+    const cursor = this.#cursor;
+    return defineCursorField(this, "next", () => Effect.sync(() => cursor.next()));
+  }
+
+  get toArray(): SqlCursor<T>["toArray"] {
+    const cursor = this.#cursor;
+    return defineCursorField(this, "toArray", () => Effect.sync(() => cursor.toArray()));
+  }
+
+  get one(): SqlCursor<T>["one"] {
+    const cursor = this.#cursor;
+    return defineCursorField(this, "one", () => Effect.sync(() => cursor.one()));
+  }
+
+  get raw(): SqlCursor<T>["raw"] {
+    const cursor = this.#cursor;
+    return defineCursorField(this, "raw", <U extends SqlStorageValue[]>() =>
+      Stream.fromIterableEffect(Effect.sync(() => cursor.raw<U>())),
+    );
+  }
+
+  get columnNames(): string[] {
+    return defineCursorField(this, "columnNames", this.#cursor.columnNames);
+  }
+
+  get rowsRead(): SqlCursor<T>["rowsRead"] {
+    const cursor = this.#cursor;
+    return defineCursorField(
+      this,
+      "rowsRead",
+      Effect.sync(() => cursor.rowsRead),
+    );
+  }
+
+  get rowsWritten(): SqlCursor<T>["rowsWritten"] {
+    const cursor = this.#cursor;
+    return defineCursorField(
+      this,
+      "rowsWritten",
+      Effect.sync(() => cursor.rowsWritten),
+    );
+  }
+}
+
 const fromSqlCursor = <T extends Record<string, SqlStorageValue>>(
   cursor: cf.SqlStorageCursor<T>,
-): SqlCursor<T> => {
-  const stream = Stream.fromIterableEffect(Effect.sync(() => cursor));
-  return Object.assign(stream, {
-    next: () => Effect.sync(() => cursor.next()),
-    toArray: () => Effect.sync(() => cursor.toArray()),
-    one: () => Effect.sync(() => cursor.one()),
-    raw: <U extends SqlStorageValue[]>() =>
-      Stream.fromIterableEffect(Effect.sync(() => cursor.raw<U>())),
-    get columnNames() {
-      return cursor.columnNames;
-    },
-    rowsRead: Effect.sync(() => cursor.rowsRead),
-    rowsWritten: Effect.sync(() => cursor.rowsWritten),
-  }) as SqlCursor<T>;
-};
+): SqlCursor<T> => new SqlCursorImpl(cursor);
 
 const fromSqlStorage = (sql: cf.SqlStorage, checkOwner: Effect.Effect<void>): SqlStorage => ({
   raw: sql,
