@@ -29,6 +29,7 @@ import type { Rpc } from "../../Rpc.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
 import type { Self as SelfService } from "../../Self.ts";
 import { isPathWithin } from "../../Util/isPathWithin.ts";
+import type { WebhookHost } from "../../WebhookHost.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Container } from "../Containers/Container.ts";
 import type { DevContainerImage } from "../Containers/ContainerApplication.ts";
@@ -103,6 +104,7 @@ export type WorkerPlacement = Exclude<workers.PutScriptRequest["metadata"]["plac
 
 export type WorkerServices =
   | Worker
+  | WebhookHost
   | Request
   | WorkerExecutionContext
   | WorkerEnvironment

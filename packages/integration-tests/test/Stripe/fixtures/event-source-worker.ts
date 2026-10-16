@@ -50,7 +50,7 @@ export default class StripeEventSourceWorker extends Cloudflare.Worker<StripeEve
     Effect.provide([
       Cloudflare.KV.ReadWriteNamespaceBinding,
       Stripe.CreateCustomerHttp,
-      Stripe.Cloudflare.ConsumeEventsLive,
+      Stripe.ConsumeEventsLive,
     ]),
   ),
 ) {}

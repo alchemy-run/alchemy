@@ -6,7 +6,7 @@ import { CustomerApi } from "@bank/domain/CustomerApi.api";
 import { LedgerStore } from "@bank/domain/Ledger/LedgerStore";
 import { SupportApi } from "@bank/domain/SupportApi.api";
 import * as Cloudflare from "alchemy/Cloudflare";
-import * as DomainCloudflare from "alchemy/Domain/Cloudflare";
+import * as DomainCloudflare from "alchemy/Cloudflare/Domain";
 import * as Telemetry from "alchemy/Telemetry";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
@@ -29,7 +29,7 @@ import { StripeSettlements } from "./Settlement/StripeSettlements.ts";
 const BankLive = Layer.mergeAll(
   SessionLive,
   MfaChallengeLive,
-  Stripe.Cloudflare.ConsumeEventsLive,
+  Stripe.ConsumeEventsLive,
   Observability,
 ).pipe(
   Layer.provideMerge(Bank.layer(BankHandlers)),

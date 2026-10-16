@@ -1,7 +1,6 @@
-import type * as cf from "@cloudflare/workers-types";
-import { isWorkerEvent, Worker } from "alchemy/Cloudflare/Workers/Worker";
 import * as Namespace from "alchemy/Namespace";
 import * as Output from "alchemy/Output";
+import { WebhookHost } from "alchemy/WebhookHost";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
@@ -16,17 +15,20 @@ import {
 import { Webhook } from "./Webhook.ts";
 
 /**
- * GitHub event source for Cloudflare Workers.
+ * GitHub event source on any {@link WebhookHost}.
  *
  * Deploy-time: provisions a {@link Webhook} on the repository whose delivery
- * URL points at this Worker (at a deterministic per-repo path). The webhook
- * secret is bound onto the Worker via an `Output` accessor so the runtime can
+ * URL points at the host (at a deterministic per-repo path). The webhook
+ * secret is bound onto the host via an `Output` accessor so the runtime can
  * verify delivery signatures.
  *
- * Runtime: registers a `fetch` listener that claims requests on the
- * repository's delivery path, verifies the `HMAC-SHA256` signature against the
- * bound secret, and forwards each delivery to the subscriber. Requests on any
- * other path fall through to the Worker's own `fetch` handler.
+ * Runtime: claims requests on the repository's delivery path, verifies the
+ * `HMAC-SHA256` signature against the bound secret, and forwards each
+ * delivery to the subscriber. Requests on any other path fall through to the
+ * host's own handler.
+ *
+ * Every Cloudflare Worker is a {@link WebhookHost}, so this is the only layer
+ * to provide.
  *
  * @layer
  * @product Webhook
@@ -35,7 +37,7 @@ import { Webhook } from "./Webhook.ts";
 export const RepositoryEventSourceLive = Layer.effect(
   RepositoryEventSource,
   Effect.gen(function* () {
-    const ctx = yield* Worker;
+    const ctx = yield* WebhookHost;
     // Loosely-typed constructor — yielding the resource class erases its
     // `GitHub.Providers` requirement. The requirement is satisfied by the
     // stack at plan time.
@@ -47,8 +49,8 @@ export const RepositoryEventSourceLive = Layer.effect(
     ) {
       const path = webhookPath(props);
 
-      // Deploy-time: provision the repository webhook pointing at this Worker.
-      // Skipped once running inside the deployed Worker (the global guard).
+      // Deploy-time: provision the repository webhook pointing at the host.
+      // Skipped once running inside the deployed host (the global guard).
       // Namespaced under the host so the webhook's logical identity matches the
       // previous Binding.Policy.
       if (!globalThis.__ALCHEMY_RUNTIME__) {
@@ -67,37 +69,21 @@ export const RepositoryEventSourceLive = Layer.effect(
         );
       }
 
-      // Bind the webhook secret as a Worker env accessor under a
-      // deterministic key. This single `yield*` does both halves: at plan
-      // time it registers a `secret_text` binding (the engine deploys
-      // `Redacted` values as Cloudflare secrets), and it returns an Effect
-      // that reads the value back from `WorkerEnvironment` at runtime —
-      // reconstructing the `Redacted` wrapper. No direct `event.env` access.
+      // Bind the webhook secret as an env accessor under a deterministic key.
+      // This single `yield*` does both halves: at plan time it registers the
+      // secret on the host, and it returns an Effect that reads the value
+      // back at runtime, reconstructing the `Redacted` wrapper.
       const secret = props.secret
         ? yield* Output.named(Output.asOutput(props.secret), webhookSecretEnvName(props))
         : undefined;
 
-      yield* ctx.listen((event) => {
-        if (!isWorkerEvent(event) || event.type !== "fetch") return;
-        const request = event.input as cf.Request;
-
-        let pathname: string;
-        try {
-          pathname = new URL(request.url).pathname;
-        } catch {
-          return;
-        }
-        // Not our delivery path — let the Worker's own handler take it.
-        if (pathname !== path) return;
-
-        return handleDelivery(request, secret, process);
-      });
+      yield* ctx.route(path, (request) => handleDelivery(request, secret, process));
     }) as RepositoryEventSourceService;
   }),
 );
 
 const handleDelivery = <Req>(
-  request: cf.Request,
+  request: Request,
   // The bound secret accessor (see `Output.named` above). `undefined` when
   // no secret was configured, in which case deliveries are accepted
   // unverified.
@@ -109,7 +95,7 @@ const handleDelivery = <Req>(
       return new Response("method not allowed", { status: 405 });
     }
 
-    const body = yield* Effect.promise(() => (request as unknown as Request).text());
+    const body = yield* Effect.promise(() => request.text());
 
     if (secret !== undefined) {
       const resolved = yield* secret;

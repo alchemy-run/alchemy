@@ -12,7 +12,7 @@ Put the bank on Cloudflare. Every account, customer, view and policy becomes a D
 ```typescript
 // src/BankWorker.ts
 import * as Cloudflare from "alchemy/Cloudflare";
-import * as DomainCloudflare from "alchemy/Domain/Cloudflare";
+import * as DomainCloudflare from "alchemy/Cloudflare/Domain";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { Bank, BankHandlers } from "./Bank.model.ts";

@@ -9,16 +9,10 @@ import * as Schedule from "effect/Schedule";
 import type * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import type { WorkflowEngine } from "effect/workflow";
-import { makeCallback } from "../Callback.ts";
-import { DurableObject as CloudflareDurableObject } from "../Cloudflare/Workers/DurableObject.ts";
-import { DurableObjectState } from "../Cloudflare/Workers/DurableObjectState.ts";
-import { upgrade, type WebSocket } from "../Cloudflare/Workers/WebSocket.ts";
-import type { Worker } from "../Cloudflare/Workers/Worker.ts";
-import { DurableObjectEngine } from "../Cloudflare/Workflows/DurableObjectEngine.ts";
-import type { RuntimeContext } from "../RuntimeContext.ts";
-import type * as Aggregate from "./Aggregate.ts";
-import { isAfter, mergeCheckpoints } from "./InMemory.ts";
-import { captureContext } from "./internal.ts";
+import { makeCallback } from "../../Callback.ts";
+import type * as Aggregate from "../../Domain/Aggregate.ts";
+import { isAfter, mergeCheckpoints } from "../../Domain/InMemory.ts";
+import { captureContext } from "../../Domain/internal.ts";
 import {
   type Accepted,
   type AggregateKit,
@@ -40,7 +34,13 @@ import {
   type ViewEntry,
   type ViewKit,
   type ViewSnapshot,
-} from "./Platform.ts";
+} from "../../Domain/Platform.ts";
+import type { RuntimeContext } from "../../RuntimeContext.ts";
+import { DurableObject as CloudflareDurableObject } from "../Workers/DurableObject.ts";
+import { DurableObjectState } from "../Workers/DurableObjectState.ts";
+import { upgrade, type WebSocket } from "../Workers/WebSocket.ts";
+import type { Worker } from "../Workers/Worker.ts";
+import { DurableObjectEngine } from "../Workflows/DurableObjectEngine.ts";
 
 const pad = (n: number) => n.toString().padStart(12, "0");
 
@@ -952,7 +952,7 @@ const DurableObjectPlatform: Layer.Layer<Platform, never, Worker> = Layer.effect
  * **Example:** A Worker serving an Api
  * ```typescript
  * import * as Cloudflare from "alchemy/Cloudflare";
- * import * as DomainCloudflare from "alchemy/Domain/Cloudflare";
+ * import * as DomainCloudflare from "alchemy/Cloudflare/Domain";
  * import * as Effect from "effect/Effect";
  * import * as Layer from "effect/Layer";
  * import { Bank, BankPolicies } from "./Bank.ts";
