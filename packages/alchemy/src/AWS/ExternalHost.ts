@@ -39,8 +39,12 @@ export interface ExternalAwsAccess {
   readonly region: Effect.Effect<string>;
 }
 
-// One identity per host instance, shared by every binding on it.
-const externalAccessByHost = new WeakMap<ResourceLike, ExternalAwsAccess>();
+// One identity per host init, shared by every binding on it. Keyed by the
+// init's `RuntimeContext` (falling back to the host): a plan/deploy re-runs
+// the host's init with a fresh `RuntimeContext` while `stack.resources`
+// hands back the same host object, and each pass must re-declare the
+// identity so its env (access key, role ARN, region) lands on the new one.
+const externalAccessByInit = new WeakMap<object, ExternalAwsAccess>();
 
 /**
  * The IAM identity an external host uses to reach AWS: `${id}User` holding
@@ -49,7 +53,8 @@ const externalAccessByHost = new WeakMap<ResourceLike, ExternalAwsAccess>();
  * at runtime, so the declarations run in both phases.
  */
 export const externalAwsAccess = Effect.fn(function* (host: ResourceLike) {
-  const cached = externalAccessByHost.get(host);
+  const cacheKey: object = (yield* CurrentRuntimeContext) ?? host;
+  const cached = externalAccessByInit.get(cacheKey);
   if (cached !== undefined) return cached;
 
   const id = host.LogicalId;
@@ -130,7 +135,7 @@ export const externalAwsAccess = Effect.fn(function* (host: ResourceLike) {
     region: "us-east-1",
   });
   const access: ExternalAwsAccess = { role, credentials, region };
-  externalAccessByHost.set(host, access);
+  externalAccessByInit.set(cacheKey, access);
   return access;
 });
 
