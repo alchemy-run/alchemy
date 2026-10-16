@@ -19,11 +19,11 @@
  * - **Swap mechanism** — a trigger re-runs the LIVE reconcile: the
  *   content-addressed image pipeline pushes a new `<repositoryUri>:<hash>`
  *   tag, registers a new task definition revision, and `updateService`
- *   points the service at it. Floci swaps the service's task definition in
- *   place WITHOUT restarting running containers (probed), so the
- *   old-revision tasks are stopped and the floci service scheduler
- *   relaunches them on the new revision (~6s observed end-to-end for a
- *   container relaunch).
+ *   points the service at it. Floci then rolls the service like ECS,
+ *   starting the replacement before stopping the old task. On one host a
+ *   bridge task's fixed host port is still taken, so `duringReconcile`
+ *   stops the old-revision tasks while the reconcile waits, and the floci
+ *   service scheduler relaunches them on the new revision.
  * - **Task roll** lives in the skeleton's `onReconciled` hook — NOT in the
  *   watch loop — so it also fires for engine-driven reconciles. Prop-only
  *   changes (an inline `dockerfile` edit, a new env var) never produce a
@@ -32,7 +32,9 @@
  *   old one until the next source edit.
  */
 
+import * as ecs from "@distilled.cloud/aws/ecs";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { deepEqual } from "../../Diff.ts";
 import { registerRpcErrorClasses } from "../../Local/RpcSerialization.ts";
@@ -133,6 +135,32 @@ export const FlociServiceProvider = () =>
         }
         return undefined;
       }),
+    // The live reconcile `updateService`s onto the new revision, then waits
+    // for the deployment to complete. Floci rolls like ECS, starting the
+    // replacement before stopping the old task, and on one host a bridge
+    // task's fixed host port is still held by the old task, so the
+    // replacement exits and the wait never ends. Stop the old revision's
+    // tasks as soon as the service points elsewhere; the scheduler then
+    // starts the replacement on the free port.
+    duringReconcile: ({ previous }) =>
+      Effect.gen(function* () {
+        if (previous?.taskFamily === undefined) return;
+        const service = (yield* ecs.describeServices({
+          cluster: previous.clusterArn,
+          services: [previous.serviceName],
+        })).services?.[0];
+        const next = service?.taskDefinition;
+        if (next === undefined || next === previous.taskDefinitionArn) return;
+        yield* restartFamilyTasks({
+          family: previous.taskFamily,
+          nextTaskDefinitionArn: next,
+          serviceManaged: true,
+        });
+      }).pipe(
+        // A failed poll only skips this tick.
+        Effect.ignore,
+        Effect.repeat(Schedule.spaced("2 seconds")),
+      ),
     // Fires on every reconcile — watcher-triggered AND engine-driven
     // (prop changes never produce a file event, so rolling only from the
     // watch loop left the service's containers on the old revision).

@@ -160,6 +160,21 @@ export interface DevWatchSpec<Props, Attrs> {
     attrs: Attrs;
   }) => Effect.Effect<void, unknown, any>;
   /**
+   * Runs alongside EVERY live reconcile (engine- and watcher-driven), with
+   * the floci override services provided, and is interrupted when the
+   * reconcile finishes. This is for emulator work the live reconcile waits
+   * on: an ECS service update waits for its deployment to complete, and on
+   * a single host the replacement task can't start until the old one stops,
+   * so stopping it in {@link onReconciled} would come too late.
+   *
+   * `previous` is the attrs before this reconcile — `undefined` on a
+   * greenfield create. Failures are logged, never propagated.
+   */
+  readonly duringReconcile?: (input: {
+    id: string;
+    previous: Attrs | undefined;
+  }) => Effect.Effect<void, unknown, any>;
+  /**
    * Resource-specific replacement rules, mirroring the LIVE diff's cheap
    * checks (never bundling/building). Checked before the generic dev policy.
    */
@@ -250,6 +265,24 @@ export const makeDevWatchProvider = <
       const live = liveCtx.mapUnsafe.get(cls.Type) as ProviderService<R>;
       const wrapped = withProviderContext(live, services);
 
+      /** Run `reconcile` with `spec.duringReconcile` alongside it, until it finishes. */
+      const alongsideReconcile = <A, E, R>(
+        id: string,
+        previous: Attrs | undefined,
+        reconcile: Effect.Effect<A, E, R>,
+      ): Effect.Effect<A, E, R> => {
+        if (spec.duringReconcile === undefined) return reconcile;
+        const during = spec.duringReconcile({ id, previous }).pipe(
+          Effect.provide(services),
+          Effect.catchCause((cause) =>
+            Effect.logWarning(`[alchemy dev] ${id}: work alongside reconcile failed`, cause),
+          ),
+          // Never win the race: only the reconcile's outcome counts.
+          Effect.andThen(Effect.never),
+        );
+        return Effect.raceFirst(reconcile, during);
+      };
+
       // Sidecar-process watch registry, keyed by logical id. `instanceId`
       // guards a create-first replacement's old-generation delete against
       // killing the successor's watcher.
@@ -321,13 +354,17 @@ export const makeDevWatchProvider = <
                   })
                   .pipe(Effect.provide(services))
               : entry.lastInput.news;
-          const fresh = yield* wrapped.reconcile(
-            withSafeSession({
-              ...entry.lastInput,
-              news: rerunNews,
-              olds: entry.lastInput.news,
-              output: entry.attrs,
-            }) as any,
+          const fresh = yield* alongsideReconcile(
+            input.id,
+            previous,
+            wrapped.reconcile(
+              withSafeSession({
+                ...entry.lastInput,
+                news: rerunNews,
+                olds: entry.lastInput.news,
+                output: entry.attrs,
+              }) as any,
+            ),
           );
           entry.attrs = fresh;
           if (spec.onReconciled !== undefined) {
@@ -469,8 +506,10 @@ export const makeDevWatchProvider = <
                       })
                       .pipe(Effect.provide(services))
                   : input.news;
-              const attrs = yield* wrapped.reconcile(
-                withSafeSession({ ...input, news: reconcileNews }) as any,
+              const attrs = yield* alongsideReconcile(
+                input.id,
+                previous,
+                wrapped.reconcile(withSafeSession({ ...input, news: reconcileNews }) as any),
               );
               yield* ensureWatch(input, attrs);
               if (spec.onReconciled !== undefined) {

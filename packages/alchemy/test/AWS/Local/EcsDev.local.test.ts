@@ -225,10 +225,19 @@ const assertFamilyTornDown = Effect.fn(function* (options: {
   const active = (clusters.clusters ?? []).filter((cluster) => cluster.status !== "INACTIVE");
   expect(active).toEqual([]);
 
-  const definition = yield* rawEcs("DescribeTaskDefinition", {
-    taskDefinition: options.taskDefinitionArn,
-  });
-  expect(definition.status).toBe(400); // ClientException: unable to describe
+  yield* expectTaskDefinitionDeleted(options.taskDefinitionArn);
+});
+
+/**
+ * The revision was deleted. Like ECS, the emulator keeps a deleted revision
+ * describable as `DELETE_IN_PROGRESS` until it is reaped, then rejects it.
+ */
+const expectTaskDefinitionDeleted = Effect.fn(function* (taskDefinitionArn: string) {
+  const response = yield* rawEcs("DescribeTaskDefinition", { taskDefinition: taskDefinitionArn });
+  if (response.status === 400) return;
+  expect(response.status).toBe(200);
+  const body = (yield* response.json) as { taskDefinition?: { status?: string } };
+  expect(body.taskDefinition?.status).toBe("DELETE_IN_PROGRESS");
 });
 
 /** Post-destroy: task container gone, cluster gone, task definition gone. */
@@ -255,10 +264,7 @@ const assertTornDown = Effect.fn(function* (options: {
   expect(active).toEqual([]);
 
   // The task definition revision is gone.
-  const definition = yield* rawEcs("DescribeTaskDefinition", {
-    taskDefinition: options.taskDefinitionArn,
-  });
-  expect(definition.status).toBe(400); // ClientException: unable to describe
+  yield* expectTaskDefinitionDeleted(options.taskDefinitionArn);
 });
 
 // Sequential on purpose: each test runs a `docker buildx build`, and
