@@ -256,6 +256,9 @@ export const AssetsLive = Layer.effect(
               name: "assets:files",
               disk: {
                 path: worker.assets.directory,
+                // Deploys upload dot-paths such as `.well-known/`. Reads still
+                // go through the manifest, so ignored files stay unreachable.
+                allowDotfiles: true,
               },
             },
             {
