@@ -1,5 +1,5 @@
 import { expect, type Page, test } from "@playwright/test";
-import { Api, listed, run, turn } from "./api.ts";
+import { Api, listed, newSession, run, settleCreated, turn } from "./api.ts";
 
 const composer = (page: Page) => page.getByPlaceholder("Ask the agent to do something…");
 
@@ -9,9 +9,11 @@ const send = async (page: Page, prompt: string) => {
 };
 
 test.beforeEach(async ({ page }) => {
-  await page.goto("/");
-  await page.getByRole("button", { name: "New session" }).first().click();
+  await newSession(page);
 });
+
+// Every session a test starts is settled after it: no machine is left running.
+test.afterEach(settleCreated);
 
 test("a message shows immediately and the agent replies", async ({ page }) => {
   await send(page, "Reply with exactly the word: pong");

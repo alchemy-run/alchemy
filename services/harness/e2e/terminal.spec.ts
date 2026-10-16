@@ -1,4 +1,5 @@
 import { expect, type Page, test } from "@playwright/test";
+import { newSession, settleCreated } from "./api.ts";
 
 /** The terminal's visible text (it renders to a canvas, so read its buffer). */
 const screen = (page: Page) =>
@@ -23,9 +24,11 @@ const screen = (page: Page) =>
   });
 
 test.beforeEach(async ({ page }) => {
-  await page.goto("/");
-  await page.getByRole("button", { name: "New session" }).first().click();
+  await newSession(page);
 });
+
+// Every session a test starts is settled after it: no machine is left running.
+test.afterEach(settleCreated);
 
 test("the terminal toggles open at the bottom and runs commands in the session's workspace", async ({
   page,

@@ -1,7 +1,10 @@
 import { expect, test } from "@playwright/test";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
-import { API_URL, Api, listed, run, text, turn } from "./api.ts";
+import { API_URL, Api, listed, run, settleCreated, text, turn } from "./api.ts";
+
+// Every session a test starts is settled after it: no machine is left running.
+test.afterEach(settleCreated);
 
 /** A fresh session per test (sessions are cheap; their ids are not reused). */
 const sessionId = (name: string) => `e2e-${name}-${Date.now().toString(36)}`;
