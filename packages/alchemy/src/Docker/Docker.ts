@@ -87,6 +87,16 @@ export class Docker extends Context.Service<
         "cap-add"?: Array<string> | undefined;
         /** Host devices in Docker's `host:container[:permissions]` form. */
         device?: Array<string> | undefined;
+        /** `--memory` limit in Docker byte-suffix format. */
+        memory?: string | undefined;
+        /** `--memory-swap` limit in Docker byte-suffix format. */
+        "memory-swap"?: string | undefined;
+        /** `--read-only`: mount the root filesystem read-only. */
+        "read-only"?: boolean;
+        /** `--security-opt` entries. */
+        "security-opt"?: Array<string> | undefined;
+        /** `--user`, as `uid[:gid]` or a name. */
+        user?: string | undefined;
         command: Array<string> | undefined;
         label?: Record<string, string>;
         context?: string;
@@ -423,6 +433,7 @@ export declare namespace Docker {
       Image: string;
       Cmd: string[] | null;
       Env: string[] | null;
+      User?: string;
       Labels: Record<string, string> | null;
       StopTimeout?: number;
       Healthcheck?: {
@@ -442,6 +453,10 @@ export declare namespace Docker {
       AutoRemove: boolean;
       NetworkMode?: string;
       CapAdd?: string[] | null;
+      Memory?: number;
+      MemorySwap?: number;
+      ReadonlyRootfs?: boolean;
+      SecurityOpt?: string[] | null;
       Devices?: Array<{
         PathOnHost: string;
         PathInContainer: string;

@@ -68,8 +68,13 @@ export default Alchemy.Stack(
 `Container` accepts the image resource directly, `alwaysPull: false`
 pins the pulled tag so re-deploys are no-ops, and environment values
 accept `Redacted` secrets — they are passed via process env, never
-on the CLI. [Run local services](/docker/local-services) walks
-through this composition.
+on the CLI. `memory` sets a memory limit (`"512m"`, `"2g"`). If the
+container uses more, the kernel stops the container, not the host.
+`readOnly: true` mounts the root filesystem read-only.
+`noNewPrivileges: true` stops processes from gaining privileges
+through setuid binaries.
+[Run local services](/docker/local-services) walks through this
+composition.
 
 `Image` builds from a Dockerfile:
 

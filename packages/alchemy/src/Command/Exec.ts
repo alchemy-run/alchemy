@@ -16,6 +16,14 @@ export interface ExecProps extends CommandRunProps {
    * @default true
    */
   memo?: MemoOptions | boolean;
+  /**
+   * Command to run when the resource is deleted, for a final backup or a
+   * deregistration call. It runs before the resources this `Exec` depends on
+   * are destroyed, with the `cwd`, `env`, `shell` and `timeout` of the last
+   * deploy. A non-zero exit fails the delete, so make the command succeed
+   * when its target can already be gone.
+   */
+  destroyCommand?: string;
 }
 
 export interface Exec extends Resource<
@@ -81,9 +89,28 @@ export interface Exec extends Resource<
  * });
  * ```
  *
+ * ### Running a Command on Destroy
+ * **Example:** Back Up Before Teardown
+ * ```typescript
+ * yield* Exec("migrate", {
+ *   command: "npm run db:migrate",
+ *   destroyCommand: "npm run db:backup",
+ * });
+ * ```
+ *
  * @resource
  */
 export const Exec = Resource<Exec>("Command.Exec");
+
+const inputHash = Effect.fn(function* (props: ExecProps) {
+  if (props.memo === false) return undefined;
+  return yield* hashDirectory({ cwd: props.cwd, memo: props.memo === true ? {} : props.memo });
+});
+
+const onlyDestroyCommandChanged = (olds: ExecProps | undefined, news: ExecProps): boolean =>
+  olds !== undefined &&
+  olds.destroyCommand !== news.destroyCommand &&
+  !havePropsChanged({ ...olds, destroyCommand: undefined }, { ...news, destroyCommand: undefined });
 
 export const ExecProvider = () =>
   Provider.effect(
@@ -102,29 +129,25 @@ export const ExecProvider = () =>
           // Optimization: short-circuit if props have changed to avoid unnecessary file system operations.
           if (havePropsChanged(olds, news)) return { action: "update" };
 
-          const newHash = yield* hashDirectory({
-            cwd: news.cwd,
-            memo: news.memo === true ? {} : news.memo,
-          });
+          const newHash = yield* inputHash(news);
           return {
             action: newHash === output.hash.input ? "noop" : "update",
           };
         }),
-        reconcile: Effect.fn(function* ({ news, session }) {
+        reconcile: Effect.fn(function* ({ news, olds, output, session }) {
+          // A noop never persists props and `delete` reads `destroyCommand`
+          // from state, so an edit to it alone is saved without a re-run.
+          if (onlyDestroyCommandChanged(olds, news)) {
+            const hash = yield* inputHash(news);
+            if (hash === output?.hash.input) return { hash: { input: hash } };
+          }
           yield* run(news, session);
-          return {
-            hash: {
-              input:
-                news.memo === false
-                  ? undefined
-                  : yield* hashDirectory({
-                      cwd: news.cwd,
-                      memo: news.memo === true ? {} : news.memo,
-                    }),
-            },
-          };
+          return { hash: { input: yield* inputHash(news) } };
         }),
-        delete: () => Effect.void,
+        delete: Effect.fn(function* ({ olds, session }) {
+          if (olds.destroyCommand === undefined) return;
+          yield* run({ ...olds, command: olds.destroyCommand }, session);
+        }),
       };
     }),
   );
