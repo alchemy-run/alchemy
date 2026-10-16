@@ -6,6 +6,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import type { PlatformError } from "effect/PlatformError";
 import * as Redacted from "effect/Redacted";
+import * as Schedule from "effect/Schedule";
 import { Unowned } from "../AdoptPolicy.ts";
 import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
@@ -82,7 +83,11 @@ export interface ContainerProps {
   extraHosts?: string[];
   /** Remove the container when it exits. @default false */
   removeOnExit?: boolean;
-  /** Start the container after creation/reconciliation. @default false */
+  /**
+   * Keep the container running after creation/reconciliation. A paused
+   * container is resumed when this is true; a restarting container is left
+   * alone while Docker completes its restart cycle. @default false
+   */
   start?: boolean;
   /** Docker healthcheck configuration. */
   healthcheck?: Container.Healthcheck;
@@ -142,6 +147,68 @@ export declare namespace Container {
     startInterval?: Duration.Input;
   }
 }
+
+/**
+ * Decide whether a live Docker status needs a runtime transition.
+ *
+ * Docker's `restarting` status is already active: it is stopped when the
+ * desired state is stopped, but is otherwise left to Docker. A `dead`
+ * container cannot be started and therefore requires replacement. A
+ * `removing` container is transitional and is re-observed before any
+ * replacement or runtime transition.
+ */
+export const containerRuntimeStatusAction = (
+  status: Container.Status,
+  start: boolean,
+): "update" | "replace" | undefined => {
+  if (status === "removing") return "update";
+  if (start) {
+    if (status === "running" || status === "restarting") return undefined;
+    return status === "dead" ? "replace" : "update";
+  }
+  return status === "running" || status === "restarting" ? "update" : undefined;
+};
+
+/** Remove a container, skipping stop when Docker reports it as dead. */
+export const removeDockerContainer = (
+  container: Pick<Docker["Service"]["container"], "stop" | "remove">,
+  name: string,
+  context?: string,
+  stop = true,
+) =>
+  (stop ? container.stop(name, context) : Effect.void).pipe(
+    Effect.andThen(container.remove(name, true, context)),
+    Effect.catchReason("PlatformError", "NotFound", () => Effect.void),
+  );
+
+/** Re-observe a container removal and fail instead of reporting stale state. */
+export const waitForContainerRemoval = (
+  inspect: (
+    name: string,
+    context?: string,
+  ) => Effect.Effect<Docker.Container | undefined, PlatformError>,
+  name: string,
+  context?: string,
+  pollSchedule = Schedule.spaced("250 millis"),
+) =>
+  inspect(name, context).pipe(
+    Effect.repeat({
+      schedule: pollSchedule,
+      until: (info) => info === undefined,
+      times: 8,
+    }),
+    Effect.flatMap((info) =>
+      info?.State.Status === "removing"
+        ? Effect.fail(
+            new ContainerRemovalTimeout({
+              name,
+              attempts: 9,
+              message: `Docker container ${name} remained in removing state after bounded re-observation`,
+            }),
+          )
+        : Effect.succeed(info),
+    ),
+  );
 
 export interface Container extends Resource<
   "Docker.Container",
@@ -446,11 +513,8 @@ export const ContainerProvider = () =>
           .inspect(name, context)
           .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.undefined));
 
-      const remove = (name: string, context?: string) =>
-        docker.container.stop(name, context).pipe(
-          Effect.andThen(docker.container.remove(name, true, context)),
-          Effect.catchReason("PlatformError", "NotFound", () => Effect.void),
-        );
+      const remove = (name: string, context?: string, stop = true) =>
+        removeDockerContainer(docker.container, name, context, stop);
 
       return Container.Provider.of({
         list: () => Effect.succeed([]),
@@ -486,10 +550,16 @@ export const ContainerProvider = () =>
           if (!Equal.equals(oldArgs, newArgs)) {
             return { action: "replace" as const, deleteFirst: true };
           }
-          if (
-            !Equal.equals(olds.networks ?? [], news.networks ?? []) ||
-            (olds.start ?? false) !== (news.start ?? false)
-          ) {
+          if (!Equal.equals(olds.networks ?? [], news.networks ?? [])) {
+            return { action: "update" as const };
+          }
+          const live = yield* inspect(newArgs.name, dockerContextName(news.context));
+          if (!live) return { action: "update" as const };
+          const statusAction = containerRuntimeStatusAction(live.State.Status, news.start ?? false);
+          if (statusAction === "replace") {
+            return { action: "replace" as const, deleteFirst: true };
+          }
+          if (statusAction === "update") {
             return { action: "update" as const };
           }
           // Same env file paths, possibly new contents: compare against the
@@ -509,7 +579,10 @@ export const ContainerProvider = () =>
           // Adoption has output but no olds. In that case the observed
           // container already lives in the desired context.
           const oldContext = olds ? dockerContextName(olds.context) : context;
-          const desiredLive = yield* inspect(args.name, context);
+          let desiredLive = yield* inspect(args.name, context);
+          if (desiredLive?.State.Status === "removing") {
+            desiredLive = yield* waitForContainerRemoval(inspect, args.name, context);
+          }
           const previous =
             output && (output.name !== args.name || oldContext !== context)
               ? yield* inspect(output.name, oldContext)
@@ -532,16 +605,17 @@ export const ContainerProvider = () =>
               : undefined;
           const recreate =
             live !== undefined &&
-            (live.Config.Labels?.[CREATE_CONFIG_HASH_LABEL] === undefined
+            ((live.Config.Labels?.[CREATE_CONFIG_HASH_LABEL] === undefined
               ? (oldArgs !== undefined && !Equal.equals(oldArgs, args)) ||
                 normalizeImageId(olds?.image) !== normalizeImageId(news.image) ||
                 !matchesLegacyConfig(live, args, news.image) ||
                 // Env file contents can't be compared without a label (e.g. an
                 // adopted container); recreate once so later edits are tracked.
                 (news.envFiles?.length ?? 0) > 0
-              : live.Config.Labels[CREATE_CONFIG_HASH_LABEL] !== configHash);
+              : live.Config.Labels[CREATE_CONFIG_HASH_LABEL] !== configHash) ||
+              (news.start === true && live.State.Status === "dead"));
           if (recreate) {
-            yield* remove(live.Id, context);
+            yield* remove(live.Id, context, live.State.Status !== "dead");
           }
 
           const current = recreate ? undefined : live;
@@ -575,9 +649,19 @@ export const ContainerProvider = () =>
           }
 
           yield* reconcileNetworks(current, news, olds);
-          if (news.start && current.State.Status !== "running") {
+          if (news.start && current.State.Status === "paused") {
+            yield* docker.container.unpause(current.Id, context);
+          } else if (
+            news.start &&
+            current.State.Status !== "running" &&
+            current.State.Status !== "restarting" &&
+            current.State.Status !== "removing"
+          ) {
             yield* docker.container.start(current.Id, context);
-          } else if (!news.start && current.State.Status === "running") {
+          } else if (
+            !news.start &&
+            (current.State.Status === "running" || current.State.Status === "restarting")
+          ) {
             yield* docker.container.stop(current.Id, context);
           }
           return yield* docker.container
@@ -703,6 +787,13 @@ const normalizeDevices = (devices: Container.DeviceMapping[] | undefined): strin
  * publishing ports.
  */
 export class InvalidContainerOptions extends Data.TaggedError("InvalidContainerOptions")<{
+  readonly message: string;
+}> {}
+
+/** Raised when Docker does not finish removing a container in bounded time. */
+export class ContainerRemovalTimeout extends Data.TaggedError("ContainerRemovalTimeout")<{
+  readonly name: string;
+  readonly attempts: number;
   readonly message: string;
 }> {}
 
