@@ -8,7 +8,10 @@ export const SVELTEKIT_FRAMEWORK_SPECIFIER = "@alchemy.run/frontend-frameworks/s
 /** The AWS Lambda deploy target for the SvelteKit build. */
 export const SVELTEKIT_AWS_TARGET_SPECIFIER = "@alchemy.run/frontend-frameworks/sveltekit/aws";
 
-export interface SvelteKitProps extends FrameworkSiteProps {
+/** The Node deploy target for the Lambda Web Function server (the default). */
+export const SVELTEKIT_WEB_TARGET_SPECIFIER = "@alchemy.run/frontend-frameworks/sveltekit/node";
+
+export type SvelteKitProps = FrameworkSiteProps<{
   /**
    * SvelteKit config overrides for the `sveltekit(...)` plugin call, merged
    * over the options of the user's own call (these win). JSON-serializable
@@ -18,13 +21,20 @@ export interface SvelteKitProps extends FrameworkSiteProps {
    * always owned by alchemy.
    */
   kit?: Record<string, unknown>;
-}
+}>;
 
 /**
- * Deploy a SvelteKit application to AWS: kit's SSR server on a streaming
- * Lambda Function URL, static assets (prerendered pages included) in S3,
- * and a CloudFront distribution whose edge router serves uploaded files
- * from S3 and forwards everything else to the server.
+ * Deploy a SvelteKit application to AWS: kit's SSR server on a Lambda Web
+ * Function, static assets (prerendered pages included) in S3, and a
+ * CloudFront distribution whose edge router serves uploaded files from S3
+ * and forwards everything else to the server.
+ *
+ * The server runs on a Lambda Web Function: the framework's Node server
+ * (built with the `@alchemy.run/frontend-frameworks/sveltekit/node` deploy
+ * target) serves many requests per environment and streams responses. Set
+ * `server: "function"` to use a Lambda Function behind a streaming Function
+ * URL instead, built with the `/aws` target below, for Regions without Web
+ * Functions.
  *
  * The build runs through `@alchemy.run/frontend-frameworks/sveltekit` with the
  * `@alchemy.run/frontend-frameworks/sveltekit/aws` deploy target (an in-memory
@@ -80,12 +90,13 @@ export interface SvelteKitProps extends FrameworkSiteProps {
  *
  * @resource
  */
-export const SvelteKit = (id: string, props: InputProps<SvelteKitProps> = {}) => {
+export const SvelteKit = (id: string, props: InputProps<SvelteKitProps, "server"> = {}) => {
   const p = props as SvelteKitProps;
   return makeFrameworkSite(id, props, {
     name: "SvelteKit",
     framework: SVELTEKIT_FRAMEWORK_SPECIFIER,
     target: SVELTEKIT_AWS_TARGET_SPECIFIER,
+    webTarget: SVELTEKIT_WEB_TARGET_SPECIFIER,
     options: { kit: p.kit },
   }).pipe(Namespace.push(id));
 };
