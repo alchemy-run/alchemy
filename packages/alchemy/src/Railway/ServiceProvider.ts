@@ -50,11 +50,13 @@ import {
   findServiceDomainById,
   type ServiceDomainRecord,
 } from "./ServiceDomain.ts";
+import { readServiceLimits, syncServiceLimits, type ServiceLimits } from "./ServiceLimits.ts";
 import { readServiceRegion, syncServiceRegion } from "./ServiceRegion.ts";
 import { withEnvironmentConfigLock } from "./transient.ts";
 import { uploadDeployTarball } from "./Up.ts";
 import { attachVolumeToService, listServiceVolumes } from "./Volume.ts";
 
+export { ServiceLimitsNotApplied } from "./ServiceLimits.ts";
 export { ServiceRegionNotApplied } from "./ServiceRegion.ts";
 
 const serviceFields = <E>(service: Query<RailwayService, E>) => ({
@@ -821,6 +823,7 @@ const toAttrs = (input: {
   codeHash: string;
   rpcToken: string;
   region: string | undefined;
+  limits: ServiceLimits | undefined;
 }): Service["Attributes"] => ({
   serviceId: input.service.id,
   name: input.service.name,
@@ -836,6 +839,7 @@ const toAttrs = (input: {
   cronSchedule: input.instance?.cronSchedule ?? undefined,
   rootDirectory: input.instance?.rootDirectory ?? undefined,
   region: input.region,
+  limits: input.limits,
   port: input.port,
   url: input.domain?.url,
   domain: input.domain?.domain,
@@ -946,6 +950,11 @@ export const ServiceProvider = () =>
                   legacy: instance?.region,
                 })
               : undefined;
+          const limits = yield* readServiceLimits({
+            environmentId: resolvedEnvId,
+            projectId: resolvedProjectId,
+            serviceId: found.id,
+          });
           const attrs = toAttrs({
             service: found,
             instance,
@@ -956,6 +965,7 @@ export const ServiceProvider = () =>
             codeHash: output?.code.hash ?? "",
             rpcToken: output?.rpcToken ?? "",
             region,
+            limits,
           });
           if (output !== undefined) {
             // Keep the recorded ownership id even if the live list lags.
@@ -991,6 +1001,7 @@ export const ServiceProvider = () =>
                       codeHash: "",
                       rpcToken: "",
                       region: undefined,
+                      limits: undefined,
                     }),
                   ),
               ),
@@ -1023,6 +1034,7 @@ export const ServiceProvider = () =>
             cronSchedule: undefined,
             rootDirectory: undefined,
             region: undefined,
+            limits: undefined,
             port,
             url: undefined,
             domain: undefined,
@@ -1254,6 +1266,12 @@ export const ServiceProvider = () =>
               fallbackReplicas: instance?.numReplicas,
             });
           let region = yield* placeRegion();
+          const limits = yield* syncServiceLimits({
+            environmentId,
+            projectId,
+            serviceId,
+            limits: props.limits,
+          });
 
           if (sourceRepo !== undefined) {
             const branchChanged = yield* syncBranch({
@@ -1383,6 +1401,7 @@ export const ServiceProvider = () =>
             codeHash,
             rpcToken,
             region,
+            limits,
           });
         }),
 

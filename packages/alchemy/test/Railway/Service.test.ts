@@ -8,6 +8,7 @@ import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
 import * as Provider from "@/Provider";
 import * as Railway from "@/Railway";
+import { serviceLimits } from "@/Railway/ServiceLimits.ts";
 import { activeReplicaRegions, serviceRegionPlacement } from "@/Railway/ServiceRegion.ts";
 import { withEnvironmentConfigLock } from "@/Railway/transient.ts";
 import * as Test from "@/Test/Alchemy";
@@ -713,6 +714,51 @@ test.provider.skipIf(!githubEntitled)(
     ],
     timeout: 120_000,
   },
+);
+
+test.provider(
+  "set a service's resource limits and change them",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const deploy = (limits: Railway.ServiceLimits) =>
+        stack.deploy(
+          Effect.gen(function* () {
+            const { project, environment } = yield* suitePartition;
+            const api = yield* Railway.Service("Limits", {
+              project,
+              environment,
+              image: "hashicorp/http-echo",
+              port: 5678,
+              publicDomain: false,
+              limits,
+            });
+            return { api };
+          }),
+        );
+
+      const created = yield* deploy({ cpu: 1, memoryBytes: 1_000_000_000 });
+      expect(created.api.limits).toEqual({ cpu: 1, memoryBytes: 1_000_000_000 });
+      const createdConfig = yield* readEnvironmentConfig(
+        created.api.environmentId,
+        created.api.projectId,
+      );
+      expect(serviceLimits(createdConfig.config, created.api.serviceId)).toEqual({
+        cpu: 1,
+        memoryBytes: 1_000_000_000,
+      });
+
+      const updated = yield* deploy({ memoryBytes: 2_000_000_000 });
+      expect(updated.api.serviceId).toEqual(created.api.serviceId);
+      expect(updated.api.limits).toEqual({ cpu: 1, memoryBytes: 2_000_000_000 });
+
+      yield* stack.destroy();
+
+      const gone = yield* waitUntilGone(created.api.serviceId);
+      expect(gone).toEqual("gone");
+    }).pipe(logLevel),
+  { timeout: 180_000 },
 );
 
 const placedRegions = (config: unknown, serviceId: string) =>

@@ -16,6 +16,7 @@ import type { Project } from "./Project.ts";
 import type { Providers } from "./Providers.ts";
 import { serveRailwayRpc } from "./rpc-server.ts";
 import { mintRpcToken } from "./rpc-token.ts";
+import type { ServiceLimits } from "./ServiceLimits.ts";
 
 /**
  * A resource-valued prop: the resource itself, or an Effect that produces
@@ -23,7 +24,7 @@ import { mintRpcToken } from "./rpc-token.ts";
  */
 type Ref<T> = T | Effect.Effect<T, never, Providers>;
 
-export type { ExtraFile, RailwayBuildOptions };
+export type { ExtraFile, RailwayBuildOptions, ServiceLimits };
 
 /**
  * Environment identity a Service is deployed into. Accepts a
@@ -76,6 +77,13 @@ export interface ServiceProps extends PlatformProps {
    * the current replica count.
    */
   region?: string;
+  /**
+   * Per-replica resource limits (`deploy.limitOverride`), the dashboard's
+   * Resource Limits setting. Omit to leave the current limits alone. A
+   * changed limit is committed to the environment config, which redeploys
+   * the service. Fields left out keep their current value.
+   */
+  limits?: ServiceLimits;
   /**
    * Port the process listens on. Written to `PORT` and used as the
    * generated `*.up.railway.app` `targetPort`. Default is `3000` for
@@ -264,6 +272,8 @@ export type Service = Resource<
      * `deploy.multiRegionConfig` has replicas in exactly one region.
      */
     region: string | undefined;
+    /** Observed per-replica resource limits, if any are set. */
+    limits: ServiceLimits | undefined;
     /** Port published on the generated service domain. */
     port: number | undefined;
     /** Public `https://{domain}` URL (`*.up.railway.app`). */
@@ -428,6 +438,20 @@ const createServiceRuntimeContext = (id: string): ServiceRuntimeContext => {
  *   image: "hashicorp/http-echo",
  *   port: 5678,
  *   region: "us-west2",
+ * });
+ * ```
+ *
+ * ### Resource limits
+ * `limits` caps each replica's vCPUs and memory. Omit it to leave the
+ * current limits alone.
+ *
+ * **Example:** Limits
+ * ```typescript
+ * const api = yield* Railway.Service("Api", {
+ *   project: site,
+ *   image: "hashicorp/http-echo",
+ *   port: 5678,
+ *   limits: { cpu: 1, memoryBytes: 4_000_000_000 },
  * });
  * ```
  *
