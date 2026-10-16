@@ -33,6 +33,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
+/* oxlint-disable alchemy/package-boundaries -- package split phase 3: Git is built on Cloudflare (plus S3 blobs, Lambda hasher); becomes integration subpaths */
 import { AbortMultipartUpload } from "../AWS/S3/AbortMultipartUpload.ts";
 import { AbortMultipartUploadHttp } from "../AWS/S3/AbortMultipartUploadHttp.ts";
 import { CompleteMultipartUpload } from "../AWS/S3/CompleteMultipartUpload.ts";
@@ -51,6 +52,7 @@ import { PutObject } from "../AWS/S3/PutObject.ts";
 import { PutObjectHttp } from "../AWS/S3/PutObjectHttp.ts";
 import { UploadPart } from "../AWS/S3/UploadPart.ts";
 import { UploadPartHttp } from "../AWS/S3/UploadPartHttp.ts";
+/* oxlint-enable alchemy/package-boundaries */
 import {
   BlobStore,
   BlobStoreError,

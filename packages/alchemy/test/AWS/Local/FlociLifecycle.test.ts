@@ -46,7 +46,9 @@ const isRunning = (name: string) =>
 
 /**
  * A config for an isolated test container: its own name and gateway port,
- * no ELB/CloudFront edge ports.
+ * no ELB/CloudFront edge ports. `external: false` keeps the suite on the
+ * managed-container path even when the runner exports
+ * `ALCHEMY_FLOCI_EXTERNAL=1` for the shared gateway.
  */
 const isolated = (name: string, port: number, overrides?: Floci.FlociConfig) =>
   Effect.gen(function* () {
@@ -54,6 +56,7 @@ const isolated = (name: string, port: number, overrides?: Floci.FlociConfig) =>
     yield* Floci.destroyFloci(containerName).pipe(Effect.ignore);
     yield* Effect.addFinalizer(() => Floci.destroyFloci(containerName).pipe(Effect.ignore));
     return {
+      external: false,
       containerName,
       port,
       elbListenerPorts: [],

@@ -2,7 +2,8 @@ import * as DynamoDB from "@distilled.cloud/aws/dynamodb";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Output from "../../Output.ts";
-import { grantTables, signed, tablesRegion } from "./BindingHttp.ts";
+import * as AWSBindings from "../AWSBindings.ts";
+import { grantTables, tablesRegion } from "./BindingHttp.ts";
 import {
   RestoreTableFromBackup,
   type RestoreTableFromBackupRequest,
@@ -14,7 +15,7 @@ export const RestoreTableFromBackupHttp = Layer.effect(
   Effect.gen(function* () {
     return Effect.fn(function* <From extends Table, To extends Table>(from: From, to: To) {
       const TargetTableName = yield* to.tableName;
-      const access = yield* grantTables(
+      yield* grantTables(
         `AWS.DynamoDB.RestoreTableFromBackup(${from.LogicalId}, ${to.LogicalId})`,
         () => [
           {
@@ -38,17 +39,16 @@ export const RestoreTableFromBackupHttp = Layer.effect(
         ],
       );
       // Restores stay in-region: both tables must share it.
-      const region = yield* tablesRegion(access, [from, to]);
+      const restoreTableFromBackup = yield* AWSBindings.withCredentials(
+        DynamoDB.restoreTableFromBackup,
+        tablesRegion([from, to]),
+      );
       return Effect.fn(`AWS.DynamoDB.RestoreTableFromBackup(${from.LogicalId}, ${to.LogicalId})`)(
         function* (request: RestoreTableFromBackupRequest) {
-          return yield* signed(
-            access,
-            region,
-            DynamoDB.restoreTableFromBackup({
-              ...request,
-              TargetTableName: yield* TargetTableName,
-            }),
-          );
+          return yield* restoreTableFromBackup({
+            ...request,
+            TargetTableName: yield* TargetTableName,
+          });
         },
       );
     });

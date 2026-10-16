@@ -80,7 +80,7 @@ export function consumeQueueMessages<Q extends Queue, Req = never, ResourceReq =
  *
  * The contract is a `Binding.Service`; the host-specific implementation
  * layers are `Lambda.QueueEventSource` (event-source mapping + runtime
- * dispatch) and `Server.SQSQueueEventSource` (long-poll receive loop).
+ * dispatch) and `AWS.Server.SQSQueueEventSource` (long-poll receive loop).
  * Consume it through the {@link consumeQueueMessages} helper.
  * ### Consuming a Queue
  * **Example:** Consume Messages in a Lambda Function

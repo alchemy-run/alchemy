@@ -1,6 +1,5 @@
 import * as Effect from "effect/Effect";
-import * as Binding from "../../Binding.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { CertificateAuthority } from "./CertificateAuthority.ts";
 
 /**
@@ -45,23 +44,20 @@ export const makeACMPCAHttpBinding = <Req extends { CertificateAuthorityArn: str
   options: ACMPCAHttpBindingOptions<Req, A, E, R>,
 ) =>
   Effect.gen(function* () {
-    const operation = yield* options.operation;
+    const operation = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (certificateAuthority: CertificateAuthority) {
       const Arn = yield* certificateAuthority.certificateAuthorityArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, AWS.ACMPCA.${options.action}(${certificateAuthority}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [`acm-pca:${options.action}`],
-                Resource: [certificateAuthority.certificateAuthorityArn],
-              },
-            ],
-          });
-        }
+        yield* AWSBindings.bind`AWS.ACMPCA.${options.action}(${certificateAuthority})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [`acm-pca:${options.action}`],
+              Resource: [certificateAuthority.certificateAuthorityArn],
+            },
+          ],
+        });
       }
       return Effect.fn(`AWS.ACMPCA.${options.action}(${certificateAuthority.LogicalId})`)(
         function* (

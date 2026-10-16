@@ -39,11 +39,12 @@ export const buildMicrovmDockerfile = (
       ? // `bun.sh/install` unpacks a zip, so the minimal MicroVM base needs
         // `unzip` (and `tar`) present before the installer runs.
         "RUN dnf install -y unzip tar && curl -fsSL https://bun.sh/install | bash && ln -s /root/.bun/bin/bun /usr/local/bin/bun && dnf clean all"
-      : // AL2023's default `nodejs` is Node 18 (EOL, no global `crypto`).
+      : // AL2023's default `nodejs` is Node 18, which lacks the global WebCrypto
+        // that AWS request signing needs; `nodejs24` also links `node`.
         userDockerfile === undefined
-        ? "RUN dnf install -y nodejs22 && dnf clean all"
+        ? "RUN dnf install -y nodejs24 && dnf clean all"
         : // A custom base (e.g. `node:24-bookworm`) may already carry node.
-          "RUN command -v node >/dev/null 2>&1 || (dnf install -y nodejs22 && dnf clean all)";
+          "RUN command -v node >/dev/null 2>&1 || (dnf install -y nodejs24 && dnf clean all)";
   const runtimeBin = runtime === "bun" ? "bun" : "node";
   return [
     base,

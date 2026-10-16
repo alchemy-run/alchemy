@@ -32,13 +32,13 @@ export { StoreError } from "./Protocol/Store.ts";
 export { WireProtocolError, PackIngestError } from "./RepoObject.ts";
 export {
   BlobStore,
-  BlobStoreR2,
   BlobStoreError,
   type BlobBody,
   type BlobMeta,
   type BlobMultipart,
   type BlobStoreShape,
 } from "./BlobStore.ts";
+export { BlobStoreR2 } from "./BlobStoreR2.ts";
 export { BlobStoreS3 } from "./BlobStoreS3.ts";
 export { RegistryD1 } from "./RegistryD1.ts";
 export {

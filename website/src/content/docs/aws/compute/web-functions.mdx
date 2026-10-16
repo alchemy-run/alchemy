@@ -9,7 +9,9 @@ the client as you produce them, and every function gets an HTTPS endpoint.
 It scales to zero when idle.
 
 Use it for anything that answers HTTP: APIs, server-rendered apps, AI
-responses streamed token by token. For queues, streams, schedules, and
+responses streamed token by token. The [AWS websites](/aws/frontend/websites)
+(Nuxt, SvelteKit, Astro, and the rest) run their server on one by
+default. For queues, streams, schedules, and
 other event sources, use a [Lambda Function](/aws/compute/lambda).
 
 :::caution
@@ -225,6 +227,35 @@ at plan with the allowed range.
 Each environment has 2 GB of memory and 2 vCPUs, and you can't change
 that. Node's heap defaults to 1 GB; raise it with
 `env: { NODE_OPTIONS: "--max-old-space-size=1536" }`.
+
+## Roll out gradually
+
+Set `canary` to send a share of traffic to each new deploy while the
+previous revision keeps the rest:
+
+```typescript
+const api = yield* AWS.Lambda.WebFunction("Api", {
+  main: "./src/server.ts",
+  authType: "ApplicationManaged",
+  canary: { weight: 10 },
+});
+```
+
+The next deploy that changes code or configuration sends 10% of requests
+to the new revision and 90% to the one before. Changing `weight` shifts
+traffic without publishing a new revision. Set it to `100`, or remove
+`canary`, to promote the new revision. Set it to `0` to roll back: all
+traffic returns to the previous revision.
+
+Deploying again during a canary replaces the canary and keeps the
+previous revision, so traffic never lands on more than two revisions.
+`api.revisionWeights` shows the current split. Lambda splits each request
+on its own, so one client can reach both revisions; keep the two
+compatible with each other.
+
+Each endpoint has its own split. Set `canary` on a `WebFunctionEndpoint`
+to roll it out on its own schedule; an endpoint without `canary` moves to
+each new revision at once.
 
 ## Serve from several Regions
 

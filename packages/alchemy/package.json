@@ -26,6 +26,7 @@
     "!bin/register-dev-mode.js",
     "lib",
     "src",
+    "skills",
     "NOTICE",
     "THIRD_PARTY_LICENSES.md"
   ],
@@ -48,6 +49,7 @@
     "./AWS/Endpoint": "./src/AWS/Endpoint.ts",
     "./AWS/Region": "./src/AWS/Region.ts",
     "./AWS/Lambda/*": "./src/AWS/Lambda/*.ts",
+    "./AWS/Server/*": "./src/AWS/Server/*.ts",
     "./Command": "./src/Command/index.ts",
     "./Construct": "./src/Construct/index.ts",
     "./Bundle": "./src/Bundle/index.ts",
@@ -70,6 +72,7 @@
     "./Cloudflare/R2/*": "./src/Cloudflare/R2/*.ts",
     "./Drizzle": "./src/Drizzle/index.ts",
     "./Egress": "./src/Egress/index.ts",
+    "./Domain": "./src/Domain/index.ts",
     "./Axiom": "./src/Axiom/index.ts",
     "./GCP": "./src/GCP/index.ts",
     "./GCP/*": "./src/GCP/*/index.ts",
@@ -191,6 +194,11 @@
         "bun": "./src/AWS/Lambda/*.ts",
         "default": "./lib/AWS/Lambda/*.js"
       },
+      "./AWS/Server/*": {
+        "types": "./lib/AWS/Server/*.d.ts",
+        "bun": "./src/AWS/Server/*.ts",
+        "default": "./lib/AWS/Server/*.js"
+      },
       "./Command": {
         "types": "./lib/Command/index.d.ts",
         "bun": "./src/Command/index.ts",
@@ -300,6 +308,11 @@
         "types": "./lib/Egress/index.d.ts",
         "bun": "./src/Egress/index.ts",
         "default": "./lib/Egress/index.js"
+      },
+      "./Domain": {
+        "types": "./lib/Domain/index.d.ts",
+        "bun": "./src/Domain/index.ts",
+        "default": "./lib/Domain/index.js"
       },
       "./Axiom": {
         "types": "./lib/Axiom/index.d.ts",

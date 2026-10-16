@@ -1,10 +1,9 @@
 import type * as Logs from "@distilled.cloud/aws/cloudwatch-logs";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Binding from "../../Binding.ts";
 import * as Output from "../../Output.ts";
-import { makeBatchedSink } from "../internal/BatchedSink.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
+import { makeBatchedSink } from "../../Util/BatchedSink.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import { LogEventSink, type LogEventSinkProps } from "./LogEventSink.ts";
 import type { LogGroup } from "./LogGroup.ts";
 import { PutLogEvents } from "./PutLogEvents.ts";
@@ -51,21 +50,18 @@ export const LogEventSinkHttp = Layer.effect(
 
     return Effect.fn(function* (logGroup: LogGroup, props: LogEventSinkProps) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, AWS.Logs.LogEventSink(${logGroup}))`({
-            policyStatements: [
-              {
-                // PutLogEvents authorizes against the log-stream resource
-                // (`log-group:{name}:log-stream:{stream}`), covered by the
-                // `:*` wildcard on the group ARN.
-                Effect: "Allow",
-                Action: ["logs:PutLogEvents"],
-                Resource: [Output.interpolate`${logGroup.logGroupArn}:*`],
-              },
-            ],
-          });
-        }
+        yield* AWSBindings.bind`AWS.Logs.LogEventSink(${logGroup})`({
+          policyStatements: [
+            {
+              // PutLogEvents authorizes against the log-stream resource
+              // (`log-group:{name}:log-stream:{stream}`), covered by the
+              // `:*` wildcard on the group ARN.
+              Effect: "Allow",
+              Action: ["logs:PutLogEvents"],
+              Resource: [Output.interpolate`${logGroup.logGroupArn}:*`],
+            },
+          ],
+        });
       }
       const put = yield* putLogEvents(logGroup);
       return makeBatchedSink<Logs.InputLogEvent, Logs.PutLogEventsResponse, Logs.PutLogEventsError>(

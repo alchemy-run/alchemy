@@ -12,10 +12,17 @@ import { Table } from "../DynamoDB/Table.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
 import { EventSourceMapping } from "../Lambda/EventSourceMapping.ts";
 import { Function as LambdaFunction, type FunctionProps } from "../Lambda/Function.ts";
+import { WebFunction } from "../Lambda/WebFunction.ts";
 import { Bucket } from "../S3/Bucket.ts";
 import { Queue } from "../SQS/Queue.ts";
 import { AssetDeployment } from "./AssetDeployment.ts";
 import { asRouterDomain, registerDevRouterRoute } from "./DevRouterRoute.ts";
+import {
+  checkWebsiteRegions,
+  siteEndpoint,
+  type FunctionServerProps,
+  type WebFunctionServerProps,
+} from "./FrameworkSite.ts";
 import {
   normalizeWebsiteDomain,
   type WebsiteAssetsConfig,
@@ -31,10 +38,14 @@ import { makeKvSite, type StaticSiteProps } from "./StaticSite.ts";
  */
 export const NEXTJS_AWS_FRAMEWORK_SPECIFIER = "@alchemy.run/frontend-frameworks/nextjs/aws";
 
+/** The Web Function entry the framework module writes beside each OpenNext server. */
+const NEXTJS_WEB_SERVE_ENTRY = "serve-node.mjs";
+
 /** The S3 key prefix the OpenNext ISR/fetch cache seed is uploaded under. */
 export const NEXTJS_CACHE_PREFIX = "_cache";
 
-export interface NextjsProps {
+/** Props shared by both server forms of {@link Nextjs}. */
+export interface NextjsBaseProps {
   /**
    * Project root directory (the directory containing `next.config.ts`).
    * @default "."
@@ -51,14 +62,6 @@ export interface NextjsProps {
    */
   dev?: ServerDevProps;
   /**
-   * SSR server (Lambda) configuration.
-   */
-  /**
-   * Memory allocated to the server function, in MB.
-   * @default 1024
-   */
-  memorySize?: number;
-  /**
    * Maximum server request duration.
    * @default 30 seconds
    */
@@ -68,26 +71,6 @@ export interface NextjsProps {
    * Values accept `Output`s (e.g. `API_URL: api.url`).
    */
   env?: Record<string, any>;
-  /**
-   * Server instruction set architecture.
-   * @default "x86_64"
-   */
-  architecture?: "x86_64" | "arm64";
-  /**
-   * Lambda runtime for the server function.
-   * @default "nodejs24.x"
-   */
-  runtime?: FunctionProps["runtime"];
-  /**
-   * Image optimization (Lambda) configuration.
-   */
-  imageOptimization?: {
-    /**
-     * Memory allocated to the image optimization function, in MB.
-     * @default 1536
-     */
-    memorySize?: number;
-  };
   /**
    * Static asset upload configuration.
    */
@@ -133,17 +116,47 @@ export interface NextjsProps {
 }
 
 /**
+ * The server and the image optimizer on Lambda Functions behind Function
+ * URLs: for servers that need more than 2 GB of memory or x86_64, or
+ * Regions without Web Functions.
+ */
+export interface NextjsFunctionServerProps extends FunctionServerProps {
+  /**
+   * Image optimization (Lambda) configuration.
+   */
+  imageOptimization?: {
+    /**
+     * Memory allocated to the image optimization function, in MB.
+     * @default 1536
+     */
+    memorySize?: number;
+  };
+}
+
+/**
+ * Props for {@link Nextjs}. The SSR server and the image optimizer run on
+ * Lambda Web Functions with OpenNext's `node` wrapper by default (each
+ * environment serves many requests and responses stream); set
+ * `server: "function"` for Lambda Functions. ISR revalidation always runs
+ * on a Lambda Function, since it consumes an SQS queue.
+ */
+export type NextjsProps = NextjsBaseProps & (WebFunctionServerProps | NextjsFunctionServerProps);
+
+/**
  * Deploy a Next.js application to AWS with the OpenNext
- * (`@opennextjs/aws`) serverless topology: the SSR server on a streaming
- * Lambda Function URL, static assets in S3 behind CloudFront's KV-manifest
- * edge router, the ISR/fetch cache in a dedicated S3 bucket, a dedicated
- * image optimization Lambda routed at `/_next/image`, and ISR revalidation
- * through an SQS FIFO queue plus a DynamoDB tag-cache table.
+ * (`@opennextjs/aws`) serverless topology: the SSR server on a Lambda Web
+ * Function (OpenNext's `node` wrapper), static assets in S3 behind
+ * CloudFront's KV-manifest edge router, the ISR/fetch cache in a dedicated
+ * S3 bucket, a dedicated image optimizer (also a Web Function) routed at
+ * `/_next/image`, and ISR revalidation through an SQS FIFO queue, consumed
+ * by a Lambda Function, plus a DynamoDB tag-cache table. Set
+ * `server: "function"` to run the server and image optimizer on streaming
+ * Lambda Function URLs instead.
  *
  * The build runs through `@alchemy.run/frontend-frameworks/nextjs/aws` (the
  * `@opennextjs/aws` pipeline) — both it and `@opennextjs/aws` must be
  * installed in your project. When the project has no `open-next.config.ts`,
- * a minimal default with the streaming server wrapper is generated.
+ * a minimal default with the wrapper for the chosen `server` is generated.
  *
  * During `alchemy dev` the site is Next's own dev server (`next dev`) and
  * no cloud resources are declared; `Alchemy.remote()` opts back into the
@@ -184,18 +197,21 @@ export interface NextjsProps {
  */
 
 export const Nextjs = Effect.fn("AWS.Website.Nextjs")(
-  function* (id: string, propsIn: InputProps<NextjsProps> = {}) {
+  function* (id: string, propsIn: InputProps<NextjsProps, "server"> = {}) {
     const props = propsIn as NextjsProps;
+    yield* checkWebsiteRegions(`AWS.Website.Nextjs "${id}"`, props);
     const ctx = yield* AlchemyContext;
     const remoted = yield* ProviderModePolicy;
     // Mirrors the other Website composites: during `alchemy dev` the site
     // is `next dev` (native HMR) and no cloud resources are declared;
     // `Alchemy.remote()` opts back into the full live deployment.
     const isLocal = ctx.dev && remoted !== true;
+    const onWebFunction = (props.server ?? "web-function") === "web-function";
 
     const build = yield* Server("Build", {
       framework: NEXTJS_AWS_FRAMEWORK_SPECIFIER,
       target: NEXTJS_AWS_FRAMEWORK_SPECIFIER,
+      options: { server: onWebFunction ? "web-function" : "function" },
       root: props.rootDir,
       env: props.env,
       memo: props.memo,
@@ -291,36 +307,54 @@ export const Nextjs = Effect.fn("AWS.Website.Nextjs")(
       tags: props.tags,
     });
 
-    const server = yield* LambdaFunction("Server", {
-      // The framework module derives the entry from open-next.output.json
-      // (origins.default.bundle + handler), so this tracks the manifest.
-      main: build.serverEntry as unknown as string,
-      handler: "handler",
-      isExternal: true,
-      // OpenNext's server-functions/default is a complete deployment unit
-      // (entry + traced .next output + its own node_modules) — ship as-is.
-      bundle: false,
-      runtime: props.runtime ?? "nodejs24.x",
-      architecture: props.architecture,
-      memorySize: props.memorySize ?? 1024,
-      timeout: props.timeout ?? Duration.seconds(30),
-      env: {
-        // The env names OpenNext's s3/sqs/dynamodb overrides read. Regions
-        // are omitted: the SDK falls back to the Lambda runtime's own
-        // AWS_REGION, and every resource here is same-region.
-        CACHE_BUCKET_NAME: cacheBucket.bucketName,
-        CACHE_BUCKET_KEY_PREFIX: NEXTJS_CACHE_PREFIX,
-        REVALIDATION_QUEUE_URL: revalidationQueue.queueUrl,
-        CACHE_DYNAMO_TABLE: tagCacheTable.tableName,
-        ...props.env,
-      },
-      functionUrl: {
-        authType: "NONE",
-        // The default server is built with the aws-lambda-streaming
-        // wrapper (the framework module enforces it).
-        invokeMode: "RESPONSE_STREAM",
-      },
-    });
+    // The env names OpenNext's s3/sqs/dynamodb overrides read. Regions are
+    // omitted: the SDK falls back to the runtime's own AWS_REGION, and every
+    // resource here is same-region.
+    const serverEnv = {
+      CACHE_BUCKET_NAME: cacheBucket.bucketName,
+      CACHE_BUCKET_KEY_PREFIX: NEXTJS_CACHE_PREFIX,
+      REVALIDATION_QUEUE_URL: revalidationQueue.queueUrl,
+      CACHE_DYNAMO_TABLE: tagCacheTable.tableName,
+      ...props.env,
+    };
+
+    const server = onWebFunction
+      ? yield* WebFunction("WebServer", {
+          // The framework module writes `serve-node.mjs` beside OpenNext's
+          // node-wrapper entry; the directory ships as-is.
+          main: build.serverEntry as unknown as string,
+          bundle: false,
+          authType: "ApplicationManaged",
+          timeout: props.timeout ?? Duration.seconds(30),
+          ...(props.server === "function"
+            ? {}
+            : {
+                maxConcurrencyPerEnvironment: props.maxConcurrencyPerEnvironment,
+                maxEnvironments: props.maxEnvironments,
+              }),
+          env: serverEnv,
+        })
+      : yield* LambdaFunction("Server", {
+          // The framework module derives the entry from open-next.output.json
+          // (origins.default.bundle + handler), so this tracks the manifest.
+          main: build.serverEntry as unknown as string,
+          handler: "handler",
+          isExternal: true,
+          // OpenNext's server-functions/default is a complete deployment unit
+          // (entry + traced .next output + its own node_modules) — ship as-is.
+          bundle: false,
+          runtime: (props.server === "function" ? props.runtime : undefined) ?? "nodejs24.x",
+          architecture: props.server === "function" ? props.architecture : undefined,
+          memorySize: (props.server === "function" ? props.memorySize : undefined) ?? 1024,
+          timeout: props.timeout ?? Duration.seconds(30),
+          env: serverEnv,
+          functionUrl: {
+            authType: "NONE",
+            // The default server is built with the aws-lambda-streaming
+            // wrapper (the framework module enforces it).
+            invokeMode: "RESPONSE_STREAM",
+          },
+        });
 
     yield* server.bind`Allow(${server}, AWS.Website.Nextjs.Cache(${cacheBucket}))`({
       policyStatements: [
@@ -399,25 +433,34 @@ export const Nextjs = Effect.fn("AWS.Website.Nextjs")(
     // Image optimization: OpenNext installs sharp's linux-arm64 binaries
     // into the bundle, so the function architecture is always arm64. Its
     // s3 image loader reads originals from the asset bucket.
-    const imageFunction = yield* LambdaFunction("ImageOptimization", {
-      main: fromDist("image-optimization-function/index.mjs"),
-      handler: "handler",
-      isExternal: true,
-      bundle: false,
-      runtime: "nodejs24.x",
-      architecture: "arm64",
-      memorySize: props.imageOptimization?.memorySize ?? 1536,
-      timeout: Duration.seconds(25),
-      env: {
-        BUCKET_NAME: bucket.bucketName,
-      },
-      functionUrl: {
-        authType: "NONE",
-        // The image optimizer is buffered (streaming: false in the
-        // OpenNext output manifest).
-        invokeMode: "BUFFERED",
-      },
-    });
+    const imageFunction = onWebFunction
+      ? yield* WebFunction("WebImageOptimization", {
+          main: fromDist(`image-optimization-function/${NEXTJS_WEB_SERVE_ENTRY}`),
+          bundle: false,
+          authType: "ApplicationManaged",
+          timeout: Duration.seconds(25),
+          env: { BUCKET_NAME: bucket.bucketName },
+        })
+      : yield* LambdaFunction("ImageOptimization", {
+          main: fromDist("image-optimization-function/index.mjs"),
+          handler: "handler",
+          isExternal: true,
+          bundle: false,
+          runtime: "nodejs24.x",
+          architecture: "arm64",
+          memorySize:
+            (props.server === "function" ? props.imageOptimization?.memorySize : undefined) ?? 1536,
+          timeout: Duration.seconds(25),
+          env: {
+            BUCKET_NAME: bucket.bucketName,
+          },
+          functionUrl: {
+            authType: "NONE",
+            // The image optimizer is buffered (streaming: false in the
+            // OpenNext output manifest).
+            invokeMode: "BUFFERED",
+          },
+        });
 
     yield* imageFunction.bind`Allow(${imageFunction}, AWS.S3.GetObject(${bucket}))`({
       policyStatements: [
@@ -435,8 +478,19 @@ export const Nextjs = Effect.fn("AWS.Website.Nextjs")(
       }
       return new URL(url).hostname;
     };
-    const serverHost = Output.map(urlHost)(server.functionUrl as any) as Input<string>;
-    const imageHost = Output.map(urlHost)(imageFunction.functionUrl as any) as Input<string>;
+    // CloudFront reaches each server through its Web Function endpoint
+    // (one per Region set, see `siteEndpoint`), or its Function URL.
+    const webProps = props.server === "function" ? {} : props;
+    const serverEndpoint = onWebFunction
+      ? yield* siteEndpoint("ServerEndpoint", server as WebFunction, webProps)
+      : undefined;
+    const imageEndpoint = onWebFunction
+      ? yield* siteEndpoint("ImageEndpoint", imageFunction as WebFunction, webProps)
+      : undefined;
+    const functionUrlHost = (fn: WebFunction | LambdaFunction): Input<string> =>
+      Output.map(urlHost)((fn as LambdaFunction).functionUrl as any) as Input<string>;
+    const serverHost = serverEndpoint?.domainName ?? functionUrlHost(server);
+    const imageHost = imageEndpoint?.domainName ?? functionUrlHost(imageFunction);
 
     const siteProps: StaticSiteProps = {
       path: build.clientDir as unknown as string,
@@ -471,11 +525,11 @@ export const Nextjs = Effect.fn("AWS.Website.Nextjs")(
       cacheBucket,
       cacheFiles,
       imageFunction,
-      imageUrl: imageFunction.functionUrl,
+      imageUrl: imageEndpoint?.url ?? (imageFunction as LambdaFunction).functionUrl,
       revalidationFunction,
       revalidationQueue,
       server,
-      serverUrl: server.functionUrl,
+      serverUrl: serverEndpoint?.url ?? (server as LambdaFunction).functionUrl,
       tagCacheTable,
     };
   },

@@ -2,9 +2,8 @@ import type { Credentials } from "@distilled.cloud/aws/Credentials";
 import type { Region } from "@distilled.cloud/aws/Region";
 import * as Effect from "effect/Effect";
 import type * as HttpClient from "effect/http/HttpClient";
-import * as Binding from "../../Binding.ts";
 import * as Output from "../../Output.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { Broker } from "./Broker.ts";
 
 /**
@@ -53,23 +52,20 @@ export const makeMqBrokerHttpBinding = <Req extends object, Out, Err>(
   config: MqBrokerHttpBindingConfig<Req, Out, Err>,
 ) =>
   Effect.gen(function* () {
-    const op = yield* config.operation;
+    const op = yield* AWSBindings.withCredentials(config.operation);
 
     return Effect.fn(function* (broker: Broker) {
       const BrokerId = yield* broker.brokerId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, AWS.MQ.${config.capability}(${broker}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...config.iamActions],
-                Resource: [Output.interpolate`${broker.brokerArn}`],
-              },
-            ],
-          });
-        }
+        yield* AWSBindings.bind`AWS.MQ.${config.capability}(${broker})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...config.iamActions],
+              Resource: [Output.interpolate`${broker.brokerArn}`],
+            },
+          ],
+        });
       }
       return Effect.fn(`AWS.MQ.${config.capability}(${broker.LogicalId})`)(function* (
         request?: Req,
@@ -107,22 +103,19 @@ export const makeMqAccountHttpBinding = <Req extends object, Out, Err>(
   config: MqAccountHttpBindingConfig<Req, Out, Err>,
 ) =>
   Effect.gen(function* () {
-    const op = yield* config.operation;
+    const op = yield* AWSBindings.withCredentials(config.operation);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, AWS.MQ.${config.capability}())`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...config.iamActions],
-                Resource: ["*"],
-              },
-            ],
-          });
-        }
+        yield* AWSBindings.bind`AWS.MQ.${config.capability}()`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...config.iamActions],
+              Resource: ["*"],
+            },
+          ],
+        });
       }
       return Effect.fn(`AWS.MQ.${config.capability}`)(function* (request?: Req) {
         return yield* op(request ?? ({} as Req));

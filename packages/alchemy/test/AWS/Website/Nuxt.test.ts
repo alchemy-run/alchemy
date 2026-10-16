@@ -1,6 +1,10 @@
 import * as cloudfront from "@distilled.cloud/aws/cloudfront";
 import { describe, expect } from "alchemy-test";
+import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
+import * as HttpClient from "effect/http/HttpClient";
+import * as Ref from "effect/Ref";
 import * as Schedule from "effect/Schedule";
 import * as pathe from "pathe";
 import * as AWS from "@/AWS";
@@ -34,7 +38,7 @@ describe.skipIf(!runLive)(
   { tags: ["provider:aws", "provider:aws:cloudfront", "provider:aws:website", "live"] },
   () => {
     test.provider.skipIf(runEmulated)(
-      "deploys SSR on a streaming Lambda URL with S3 assets behind CloudFront",
+      "deploys SSR on a Lambda Web Function with S3 assets behind CloudFront",
       (stack) =>
         Effect.gen(function* () {
           yield* stack.destroy();
@@ -59,6 +63,8 @@ describe.skipIf(!runLive)(
           const url = deployed.site.url! as string;
           expect(url).toMatch(/^https:\/\//);
           expect(deployed.site.serverUrl).toBeDefined();
+          // The server is a Lambda Web Function (the default).
+          expect(deployed.site.serverUrl).toContain(".lambda-web.");
           yield* Effect.log(`site url: ${url} | server url: ${deployed.site.serverUrl}`);
 
           // The Lambda Function URL serves the SSR page directly — isolates
@@ -100,6 +106,125 @@ describe.skipIf(!runLive)(
             yield* stack.destroy();
             yield* assertDistributionDeleted(distributionId);
           }
+        }),
+      { timeout: 2_400_000 },
+    );
+
+    test.provider.skipIf(runEmulated)(
+      'moves a standalone site from server: "function" onto a Web Function, then several Regions, without downtime',
+      (stack) =>
+        Effect.gen(function* () {
+          yield* stack.destroy();
+
+          const rootDir = yield* cloneFixture(fixtureDir, {
+            prefix: "alchemy-nuxt-aws-fn-",
+            tempRoot,
+            entries: fixtureEntries,
+          });
+          const deploy = (props: { server: "function" } | { regions?: string[] }) =>
+            stack.deploy(
+              Effect.gen(function* () {
+                const site = yield* AWS.Website.Nuxt("NuxtFunctionSite", {
+                  rootDir,
+                  ...props,
+                  forceDestroy: true,
+                  invalidation: { paths: "all", wait: true },
+                });
+                return { site };
+              }),
+            );
+
+          const deployed = yield* deploy({ server: "function" });
+          expect(deployed.site.serverUrl).toContain(".lambda-url.");
+          const url = `${deployed.site.url!}/`;
+          yield* expectUrlContains(url, "NUXT_AWS_PAGE_MARKER", {
+            timeout: "180 seconds",
+            label: "SSR home page",
+          });
+
+          // Dropping `server` moves the site onto a Web Function; the
+          // distribution (and its domain) stays, and the site keeps
+          // answering throughout.
+          const { result: migrated, failures: forward } = yield* probeDuring(
+            url,
+            "NUXT_AWS_PAGE_MARKER",
+            deploy({}),
+          );
+          expect(migrated.site.serverUrl).toContain(".lambda-web.");
+          expect(migrated.site.distribution!.distributionId).toBe(
+            deployed.site.distribution!.distributionId,
+          );
+          expect(forward).toEqual([]);
+
+          // Adding Regions gives the server one global domain; CloudFront
+          // moves to it and the site's URL stays.
+          const { result: global, failures: regional } = yield* probeDuring(
+            url,
+            "NUXT_AWS_PAGE_MARKER",
+            deploy({ regions: ["us-east-1"] }),
+          );
+          expect(global.site.serverUrl).toContain(".lambda-web.global.");
+          expect(global.site.distribution!.distributionId).toBe(
+            deployed.site.distribution!.distributionId,
+          );
+          expect(regional).toEqual([]);
+
+          const distributionId = deployed.site.distribution!.distributionId;
+          yield* stack.destroy();
+          yield* assertDistributionDeleted(distributionId);
+        }),
+      { timeout: 2_400_000 },
+    );
+
+    test.provider.skipIf(runEmulated)(
+      'moves a Router-attached site from server: "function" onto a Web Function without downtime',
+      (stack) =>
+        Effect.gen(function* () {
+          yield* stack.destroy();
+
+          const rootDir = yield* cloneFixture(fixtureDir, {
+            prefix: "alchemy-nuxt-aws-router-switch-",
+            tempRoot,
+            entries: fixtureEntries,
+          });
+          const deploy = (server: "function" | undefined) =>
+            stack.deploy(
+              Effect.gen(function* () {
+                const router = yield* AWS.Website.Router("FrontDoor", {
+                  invalidation: { paths: "all", wait: true },
+                });
+                const site = yield* AWS.Website.Nuxt("NuxtSite", {
+                  rootDir,
+                  ...(server === "function" ? { server: "function" as const } : {}),
+                  forceDestroy: true,
+                  domain: { router },
+                });
+                return { router, site };
+              }),
+            );
+
+          const deployed = yield* deploy("function");
+          expect(deployed.site.serverUrl).toContain(".lambda-url.");
+          const url = `${deployed.router.url as string}/`;
+          yield* expectUrlContains(url, "NUXT_AWS_PAGE_MARKER", {
+            timeout: "600 seconds",
+            label: "SSR via router",
+          });
+
+          const { result: migrated, failures: forward } = yield* probeDuring(
+            url,
+            "NUXT_AWS_PAGE_MARKER",
+            deploy(undefined),
+          );
+          expect(migrated.site.serverUrl).toContain(".lambda-web.");
+          expect(migrated.router.distribution.distributionId).toBe(
+            deployed.router.distribution.distributionId,
+          );
+          expect(forward).toEqual([]);
+
+          const distributionId = deployed.router.distribution.distributionId;
+          yield* stack.destroy();
+          yield* assertDistributionDeleted(distributionId);
         }),
       { timeout: 2_400_000 },
     );
@@ -193,3 +318,63 @@ const assertDistributionDeleted = (distributionId: string) =>
       schedule: Schedule.max([Schedule.fixed("10 seconds"), Schedule.recurs(60)]),
     }),
   );
+
+/**
+ * Run `effect` while requesting `url` once a second, and report every
+ * request that did not return the page (status and time).
+ */
+const probeDuring = <A, E, R>(url: string, marker: string, effect: Effect.Effect<A, E, R>) =>
+  Effect.gen(function* () {
+    const client = yield* HttpClient.HttpClient;
+    const failures = yield* Ref.make<string[]>([]);
+    const once = client.get(url).pipe(
+      Effect.flatMap((response) =>
+        Effect.map(response.text, (body) =>
+          response.status === 200 && body.includes(marker) ? undefined : `${response.status}`,
+        ),
+      ),
+      Effect.catch((error) => Effect.succeed(`error ${String(error)}`)),
+      Effect.flatMap((failure) =>
+        failure === undefined
+          ? Effect.void
+          : Ref.update(failures, (all) => [...all, `${new Date().toISOString()} ${failure}`]),
+      ),
+    );
+    const prober = yield* Effect.forkChild(once.pipe(Effect.repeat(Schedule.spaced("1 second"))));
+    const result = yield* effect;
+    yield* Fiber.interrupt(prober);
+    return { result, failures: yield* Ref.get(failures) };
+  });
+
+test.provider(
+  'regions with server: "function" is a type error, and fails at plan in untyped JS',
+  (stack) =>
+    Effect.gen(function* () {
+      const exit = yield* stack
+        .plan(
+          AWS.Website.Nuxt("RegionsOnFunction", {
+            server: "function",
+            // @ts-expect-error `regions` only exists on the Web Function server form.
+            regions: ["us-east-1"],
+          }),
+        )
+        .pipe(Effect.exit);
+      expect(exit._tag).toBe("Failure");
+      expect(exit._tag === "Failure" ? String(Cause.squash(exit.cause)) : "").toContain(
+        "regions needs the Web Function server",
+      );
+    }),
+  { tags: ["provider:aws", "provider:aws:website"] },
+);
+
+// Type-level: each server form only accepts its own props.
+export const _serverFormTypeChecks = () => [
+  AWS.Website.Nuxt("Web", { regions: ["us-east-1"], maxEnvironments: 10 }),
+  AWS.Website.Nuxt("Fn", { server: "function", memorySize: 4096, architecture: "x86_64" }),
+  // @ts-expect-error `memorySize` only exists on the `server: "function"` form.
+  AWS.Website.Nuxt("WebWithMemory", { memorySize: 4096 }),
+  // @ts-expect-error `maxEnvironments` only exists on the Web Function form.
+  AWS.Website.Nuxt("FnWithEnvironments", { server: "function", maxEnvironments: 10 }),
+  // @ts-expect-error `imageOptimization` only exists on the `server: "function"` form.
+  AWS.Website.Nextjs("NextWebWithImageMemory", { imageOptimization: { memorySize: 2048 } }),
+];

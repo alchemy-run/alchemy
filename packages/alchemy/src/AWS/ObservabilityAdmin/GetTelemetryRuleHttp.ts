@@ -1,8 +1,7 @@
 import * as obs from "@distilled.cloud/aws/observabilityadmin";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Binding from "../../Binding.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import { GetTelemetryRule } from "./GetTelemetryRule.ts";
 import type { TelemetryRule } from "./TelemetryRule.ts";
 
@@ -15,23 +14,20 @@ import type { TelemetryRule } from "./TelemetryRule.ts";
 export const GetTelemetryRuleHttp = Layer.effect(
   GetTelemetryRule,
   Effect.gen(function* () {
-    const getTelemetryRule = yield* obs.getTelemetryRule;
+    const getTelemetryRule = yield* AWSBindings.withCredentials(obs.getTelemetryRule);
 
     return Effect.fn(function* (rule: TelemetryRule) {
       const RuleIdentifier = yield* rule.ruleName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, AWS.ObservabilityAdmin.GetTelemetryRule(${rule}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: ["observabilityadmin:GetTelemetryRule"],
-                Resource: [rule.ruleArn],
-              },
-            ],
-          });
-        }
+        yield* AWSBindings.bind`AWS.ObservabilityAdmin.GetTelemetryRule(${rule})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: ["observabilityadmin:GetTelemetryRule"],
+              Resource: [rule.ruleArn],
+            },
+          ],
+        });
       }
       return Effect.fn(`AWS.ObservabilityAdmin.GetTelemetryRule(${rule.LogicalId})`)(function* () {
         return yield* getTelemetryRule({

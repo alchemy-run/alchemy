@@ -33,6 +33,7 @@ packages:
   - packages/*
   - services/*
   - examples/*
+  - examples/cloudflare-domain/packages/*
   - examples/cloudflare-website-service-bindings/apps/*
   - examples/monorepo-single-stack/*
   - examples/monorepo-multi-stack/*

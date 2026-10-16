@@ -3,11 +3,10 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Ref from "effect/Ref";
 import * as Stream from "effect/Stream";
-import * as Binding from "../../Binding.ts";
 import * as Output from "../../Output.ts";
 import { toWireSeconds } from "../../Util/Duration.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import { AWSEnvironment } from "../Environment.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
 import type { Application } from "./Application.ts";
 import type { ConfigurationProfile } from "./ConfigurationProfile.ts";
 import type { Environment } from "./Environment.ts";
@@ -48,8 +47,10 @@ interface SessionCache {
 export const GetConfigurationHttp = Layer.effect(
   GetConfiguration,
   Effect.gen(function* () {
-    const startSession = yield* appconfigdata.startConfigurationSession;
-    const getLatest = yield* appconfigdata.getLatestConfiguration;
+    const startSession = yield* AWSBindings.withCredentials(
+      appconfigdata.startConfigurationSession,
+    );
+    const getLatest = yield* AWSBindings.withCredentials(appconfigdata.getLatestConfiguration);
 
     return Effect.fn(function* (
       application: Application,
@@ -63,29 +64,23 @@ export const GetConfigurationHttp = Layer.effect(
       const ConfigurationProfileId = yield* configurationProfile.configurationProfileId;
 
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          const { accountId, region } = yield* AWSEnvironment.current as unknown as Effect.Effect<{
-            accountId: string;
-            region: string;
-          }>;
-          yield* host.bind`Allow(${host}, AWS.AppConfig.GetConfiguration(${application}, ${environment}, ${configurationProfile}))`(
-            {
-              policyStatements: [
-                {
-                  Effect: "Allow",
-                  Action: [
-                    "appconfig:StartConfigurationSession",
-                    "appconfig:GetLatestConfiguration",
-                  ],
-                  Resource: [
-                    Output.interpolate`arn:aws:appconfig:${region}:${accountId}:application/${application.applicationId}/environment/${environment.environmentId}/configuration/${configurationProfile.configurationProfileId}`,
-                  ],
-                },
-              ],
-            },
-          );
-        }
+        const { accountId, region } = yield* AWSEnvironment.current as unknown as Effect.Effect<{
+          accountId: string;
+          region: string;
+        }>;
+        yield* AWSBindings.bind`AWS.AppConfig.GetConfiguration(${application}, ${environment}, ${configurationProfile})`(
+          {
+            policyStatements: [
+              {
+                Effect: "Allow",
+                Action: ["appconfig:StartConfigurationSession", "appconfig:GetLatestConfiguration"],
+                Resource: [
+                  Output.interpolate`arn:aws:appconfig:${region}:${accountId}:application/${application.applicationId}/environment/${environment.environmentId}/configuration/${configurationProfile.configurationProfileId}`,
+                ],
+              },
+            ],
+          },
+        );
       }
 
       const cache = yield* Ref.make<SessionCache>({

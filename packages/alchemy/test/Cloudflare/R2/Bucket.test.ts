@@ -27,7 +27,7 @@ import { Stack, type StackSpec } from "@/Stack.ts";
 import { Stage } from "@/Stage.ts";
 import { type ResourceState, State } from "@/State";
 import * as Test from "@/Test/Alchemy";
-import { resourceContext } from "../../Utils/ResourceContext.ts";
+import { resourceContext } from "../../Util/ResourceContext.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 

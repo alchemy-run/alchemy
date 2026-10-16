@@ -46,6 +46,7 @@ import {
 import { getCompatibility } from "./Compatibility.ts";
 import { isDurableObjectExport } from "./DurableObject.ts";
 import { LocalWorkerProvider } from "./LocalWorkerProvider.ts";
+import { placeholderResetReason } from "./Placeholder.ts";
 import { routePatternUrl } from "./RoutePattern.ts";
 import { makeSourceContext, resolveSource } from "./Source.ts";
 import { readPrebuiltWorkerBundle } from "./Sources/Prebuilt.ts";
@@ -5810,7 +5811,7 @@ const makePlaceholderScript = (doClasses: readonly string[]) => {
   if (doClasses.length === 0) return worker;
   return `import { DurableObject } from "cloudflare:workers";
 
-const alchemyResetReason = "Alchemy worker is being deployed";
+const alchemyResetReason = ${JSON.stringify(placeholderResetReason)};
 class AlchemyPlaceholderDurableObject extends DurableObject {
   constructor(ctx, env) {
     super(ctx, env);

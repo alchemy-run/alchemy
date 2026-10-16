@@ -21,7 +21,7 @@ import { Provider } from "@/Provider.ts";
 import { ResourceContext } from "@/ResourceContext.ts";
 import { Stack, type StackSpec } from "@/Stack.ts";
 import { Stage } from "@/Stage.ts";
-import { resourceContext } from "../Utils/ResourceContext.ts";
+import { resourceContext } from "../Util/ResourceContext.ts";
 
 // Regression tests for the "engine-owned names" invariant: a provider's
 // `diff` must never order a replace (or rename) because the physical-name

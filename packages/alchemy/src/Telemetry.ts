@@ -67,6 +67,12 @@ export {
   Telemetry,
   type TelemetryLayer,
 } from "./TelemetryRuntime.ts";
+export {
+  type Destination as RelayDestination,
+  type RelayOptions,
+  relay,
+  type Signal as RelaySignal,
+} from "./TelemetryRelay.ts";
 
 const reference = Telemetry;
 

@@ -1,14 +1,13 @@
+import * as Effect from "effect/Effect";
 /**
  * Shared HTTP-binding scaffolding for the AppIntegrations service.
  * NOT exported from the service barrel — each `{Op}Http.ts` is a thin
  * one-call `Layer.effect(Cap, makeAppIntegrations*HttpBinding({ ... }))`.
  */
-import * as Effect from "effect/Effect";
-import * as Binding from "../../Binding.ts";
 import type { Input } from "../../Input.ts";
 import type { Output } from "../../Output.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import { AWSEnvironment } from "../Environment.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
 
 /** Deploy-time environment handed to the `resources` IAM builder. */
 export interface AppIntegrationsIamEnv {
@@ -51,36 +50,33 @@ export const makeAppIntegrationsHttpBinding = <
   dependentActions?: string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (resource: Res) {
       const Identifier = yield* options.identifier(resource);
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          const { accountId, region } = yield* AWSEnvironment.current as unknown as Effect.Effect<{
-            accountId: string;
-            region: string;
-          }>;
-          yield* host.bind`Allow(${host}, AWS.AppIntegrations.${options.name}(${resource}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: options.iamActions,
-                Resource: options.resources(resource, { region, accountId }),
-              },
-              ...(options.dependentActions?.length
-                ? [
-                    {
-                      Effect: "Allow" as const,
-                      Action: options.dependentActions,
-                      Resource: ["*"],
-                    },
-                  ]
-                : []),
-            ],
-          });
-        }
+        const { accountId, region } = yield* AWSEnvironment.current as unknown as Effect.Effect<{
+          accountId: string;
+          region: string;
+        }>;
+        yield* AWSBindings.bind`AWS.AppIntegrations.${options.name}(${resource})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: options.iamActions,
+              Resource: options.resources(resource, { region, accountId }),
+            },
+            ...(options.dependentActions?.length
+              ? [
+                  {
+                    Effect: "Allow" as const,
+                    Action: options.dependentActions,
+                    Resource: ["*"],
+                  },
+                ]
+              : []),
+          ],
+        });
       }
       return Effect.fn(`AWS.AppIntegrations.${options.name}(${resource.LogicalId})`)(function* (
         request?: Omit<WireReq, IdKey>,
@@ -109,22 +105,19 @@ export const makeAppIntegrationsAccountHttpBinding = <WireReq, Out, Err, OpR>(op
   iamActions: string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, AWS.AppIntegrations.${options.name}())`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: options.iamActions,
-                Resource: ["*"],
-              },
-            ],
-          });
-        }
+        yield* AWSBindings.bind`AWS.AppIntegrations.${options.name}()`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: options.iamActions,
+              Resource: ["*"],
+            },
+          ],
+        });
       }
       return Effect.fn(`AWS.AppIntegrations.${options.name}`)(function* (request?: WireReq) {
         // List requests are all-optional structs; an absent request is the

@@ -33,7 +33,7 @@ describe.skipIf(!runLive || runEmulated)(
   { tags: ["provider:aws", "provider:aws:cloudfront", "provider:aws:website", "live"] },
   () => {
     test.provider(
-      "deploys SSR on a streaming Lambda URL with S3 assets behind CloudFront",
+      "deploys SSR on a Lambda Web Function with S3 assets behind CloudFront",
       (stack) =>
         Effect.gen(function* () {
           yield* stack.destroy();
@@ -58,6 +58,8 @@ describe.skipIf(!runLive || runEmulated)(
           const url = deployed.site.url! as string;
           expect(url).toMatch(/^https:\/\//);
           expect(deployed.site.serverUrl).toBeDefined();
+          // The server is a Lambda Web Function (the default).
+          expect(deployed.site.serverUrl).toContain(".lambda-web.");
           yield* Effect.log(`site url: ${url} | server url: ${deployed.site.serverUrl}`);
 
           // The Lambda Function URL serves the SSR page directly — isolates

@@ -4,6 +4,7 @@ import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import type * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
+/* oxlint-disable alchemy/package-boundaries -- package split phase 3: Cloudflare DNS-01 solver for ACME; becomes an integration subpath */
 import { propagationDelay, waitForTxt } from "../../ACME/Dns.ts";
 import {
   dnsSolverLayer,
@@ -12,6 +13,7 @@ import {
   type DnsSolverDescriptor,
 } from "../../ACME/DnsSolver.ts";
 import { DnsSolverError } from "../../ACME/Errors.ts";
+/* oxlint-enable alchemy/package-boundaries */
 import type { Input } from "../../Input.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
 import type { Credentials } from "../Credentials.ts";
