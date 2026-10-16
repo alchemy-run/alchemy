@@ -53,6 +53,14 @@ export class LocalRuntimeState extends Context.Service<
      * a no-op until the worker has served at least once.
      */
     readonly workerRestarts: MutableHashMap.MutableHashMap<string, Effect.Effect<void>>;
+    /**
+     * Which running Workers host each container build context (absolute
+     * path → worker script names). A Worker builds its containers' images
+     * at start from these directories; a container whose reconcile rewrites
+     * its context after that (binding-contributed image layers land after
+     * `precreate`) restarts these Workers through {@link workerRestarts}.
+     */
+    readonly containerHosts: MutableHashMap.MutableHashMap<string, ReadonlySet<string>>;
   }
 >()("alchemy/cloudflare/LocalRuntimeState") {}
 
@@ -62,6 +70,7 @@ const LocalRuntimeStateLive = Layer.succeed(
     queues: MutableHashMap.empty(),
     queueConsumers: MutableHashMap.empty(),
     workerRestarts: MutableHashMap.empty(),
+    containerHosts: MutableHashMap.empty(),
   }),
 );
 

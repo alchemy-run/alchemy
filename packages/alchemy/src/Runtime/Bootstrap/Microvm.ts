@@ -11,6 +11,7 @@ import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
 import { MinimumLogLevel } from "effect/References";
+import { startEgressProxy } from "./EgressProxy.ts";
 import { entrypointLayer, resolveProgram, runProcess, stackConstant } from "./Process.ts";
 
 export interface MicrovmBootstrapOptions {
@@ -43,7 +44,10 @@ export const bootstrapMicrovm = (
     Logger.layer([Logger.consolePretty()]),
   );
 
-  const program = resolveProgram("default", { telemetry: true }).pipe(
+  // Before the program: anything it starts must reach the network through
+  // the egress proxy (when the image runs one).
+  const program = startEgressProxy.pipe(
+    Effect.andThen(resolveProgram("default", { telemetry: true })),
     Effect.provide(
       entrypointLayer(entrypoint).pipe(
         Layer.provideMerge(stackConstant(options.stack.name, options.stack.stage)),

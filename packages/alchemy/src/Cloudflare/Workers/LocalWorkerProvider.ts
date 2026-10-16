@@ -974,6 +974,26 @@ export const LocalWorkerProvider = () =>
                   worker.name,
                   restartWorker(worker.fqn),
                 );
+                // Record the container build contexts this instance built
+                // its images from, so a container that rewrites one later
+                // can restart us (see `containerHosts`).
+                for (const namespace of worker.durableObjectNamespaces) {
+                  const container = namespace.container;
+                  if (container === undefined) continue;
+                  // A Durable Object-managed class carries one image per bound Container.
+                  const images =
+                    "images" in container ? Object.values(container.images) : [container];
+                  for (const image of images) {
+                    if (!("dockerfile" in image)) continue;
+                    const context = path.resolve(runtimeBase, image.context ?? ".");
+                    const hosts = MutableHashMap.get(localRuntimeState.containerHosts, context);
+                    MutableHashMap.set(
+                      localRuntimeState.containerHosts,
+                      context,
+                      new Set([...(hosts._tag === "Some" ? hosts.value : []), worker.name]),
+                    );
+                  }
+                }
                 // Idempotent: the registry keeps ONE watcher per worker FQN
                 // across restarts (a new one only when the watched path set
                 // changed).

@@ -79,6 +79,7 @@ import type {
   DurableObjectContainerProps,
   EffectfulContainerProps,
   ExternalContainerProps,
+  ProgramDurableObjectContainerProps,
   RemoteContainerProps,
 } from "./ContainerApplication.ts";
 
@@ -376,6 +377,36 @@ type ContainerShape<Shape> = {
  * stopped container or invoke a shell; pass `['sh', '-c', command]` explicitly
  * when needed. Scope closure kills an unfinished exec process, but does not
  * signal its descendants. Use an Effect timeout to bound a command's lifetime.
+ *
+ * ### Programs Scheduled by a Durable Object
+ * A program the Durable Object starts and stops (an agent's machine, a
+ * harness server) is an `AI.Sandbox`: declare its sizes, then host it with
+ * `Cloudflare.Containers.Sandbox`. The program is the Container's one image;
+ * each size is an instance type chosen at `start({ size })`.
+ *
+ * **Example:** A sandbox running Claude Code
+ * ```typescript
+ * // src/Sandbox.ts
+ * export class Sandbox extends AI.Sandbox<Sandbox, { size: "small" | "large" }>()(
+ *   "Sandbox",
+ * ) {}
+ *
+ * // src/Sandbox.cloudflare.ts
+ * export default Cloudflare.Containers.Sandbox(
+ *   Sandbox,
+ *   {
+ *     main: import.meta.url,
+ *     runtime: "node",
+ *     image: "node:24-bookworm",
+ *     sizes: { small: "lite", large: "standard-4" },
+ *   },
+ *   Anthropic.ClaudeCodeServer("Claude", { cwd: "/workspace/app" }),
+ * );
+ *
+ * // In the Durable Object
+ * const sandbox = yield* Sandbox;
+ * yield* sandbox.start({ size: "large" });
+ * ```
  *
  * ### Native Durable Objects on Async Workers
  * A plain Durable Object class on an async Worker attaches its Containers
@@ -933,8 +964,12 @@ export declare namespace Container {
     Application: Effect.Effect<ContainerApplication<Self>, never, Providers | Req>;
     make: <InitReq = never, WorkerReq = never, PropsReq = never>(
       props:
-        | InputProps<EffectfulContainerProps>
-        | Effect.Effect<InputProps<EffectfulContainerProps>, Config.ConfigError, PropsReq>,
+        | InputProps<EffectfulContainerProps | ProgramDurableObjectContainerProps>
+        | Effect.Effect<
+            InputProps<EffectfulContainerProps | ProgramDurableObjectContainerProps>,
+            Config.ConfigError,
+            PropsReq
+          >,
       impl: Effect.Effect<Shape & WorkerShape<WorkerReq>, Config.ConfigError, InitReq>,
     ) => Layer.Layer<Application<Self>, never, Providers>;
     of(shape: Shape & WorkerShape): Shape;

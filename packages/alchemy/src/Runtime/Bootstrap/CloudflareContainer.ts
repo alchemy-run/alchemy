@@ -15,7 +15,10 @@ import { MinimumLogLevel } from "effect/References";
 // oxlint-disable-next-line alchemy/package-boundaries -- package split phase 3: per-cloud runtime bootstrap; moves into its provider
 import { CloudflareEnvironment } from "../../Cloudflare/CloudflareEnvironment.ts";
 import { reifyBoundConfigProvider } from "../../Runtime.ts";
+import { trustEgressCa } from "./EgressCa.ts";
+import { startEgressProxy } from "./EgressProxy.ts";
 import { entrypointLayer, resolveProgram, runProcess, stackConstant } from "./Process.ts";
+import { reportShutdown } from "./ShutdownSnapshot.ts";
 
 export interface ContainerBootstrapOptions {
   /** Stack identity baked in at deploy time. */
@@ -42,41 +45,48 @@ export const bootstrapContainer = (
     Logger.layer([Logger.consolePretty()]),
   );
 
-  const program = resolveProgram("default", { telemetry: true }).pipe(
-    Effect.provide(
-      entrypointLayer(entrypoint).pipe(
-        Layer.provideMerge(stackConstant(options.stack.name, options.stack.stage)),
-        Layer.provideMerge(runtime.httpServer),
-        // Capability bindings that talk to Cloudflare's HTTP API from inside
-        // the container (e.g. R2/KV/Queue `*Http` bindings) resolve their
-        // account via `CloudflareEnvironment` at runtime, exactly like the
-        // Worker bridge does (the service value is an `Effect` of the
-        // resolved credentials). The per-operation account/token are read
-        // from the container's env (the bound token outputs), so an absent
-        // account id here is harmless.
-        Layer.provideMerge(
-          Layer.succeed(
-            CloudflareEnvironment,
-            Effect.succeed({
-              account: process.env.ALCHEMY_CLOUDFLARE_ACCOUNT_ID,
-            }) as any,
+  // Before the program: anything it starts must trust the egress CA, and a
+  // shutdown is reported so the owning Durable Object can snapshot first.
+  const program = Effect.all([trustEgressCa, reportShutdown])
+    .pipe(
+      Effect.andThen(startEgressProxy),
+      Effect.andThen(resolveProgram("default", { telemetry: true })),
+    )
+    .pipe(
+      Effect.provide(
+        entrypointLayer(entrypoint).pipe(
+          Layer.provideMerge(stackConstant(options.stack.name, options.stack.stage)),
+          Layer.provideMerge(runtime.httpServer),
+          // Capability bindings that talk to Cloudflare's HTTP API from inside
+          // the container (e.g. R2/KV/Queue `*Http` bindings) resolve their
+          // account via `CloudflareEnvironment` at runtime, exactly like the
+          // Worker bridge does (the service value is an `Effect` of the
+          // resolved credentials). The per-operation account/token are read
+          // from the container's env (the bound token outputs), so an absent
+          // account id here is harmless.
+          Layer.provideMerge(
+            Layer.succeed(
+              CloudflareEnvironment,
+              Effect.succeed({
+                account: process.env.ALCHEMY_CLOUDFLARE_ACCOUNT_ID,
+              }) as any,
+            ),
           ),
-        ),
-        Layer.provideMerge(platform),
-        Layer.provideMerge(
-          Layer.succeed(
-            ConfigProvider.ConfigProvider,
-            // Auto-bound `Config` values arrive in the env as
-            // `{"_tag":"Redacted","value":...}` markers; reify them so a
-            // `Config` re-read inside a handler decodes the raw source value.
-            reifyBoundConfigProvider(ConfigProvider.fromEnv(), process.env),
+          Layer.provideMerge(platform),
+          Layer.provideMerge(
+            Layer.succeed(
+              ConfigProvider.ConfigProvider,
+              // Auto-bound `Config` values arrive in the env as
+              // `{"_tag":"Redacted","value":...}` markers; reify them so a
+              // `Config` re-read inside a handler decodes the raw source value.
+              reifyBoundConfigProvider(ConfigProvider.fromEnv(), process.env),
+            ),
           ),
+          Layer.provideMerge(Layer.succeed(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info")),
         ),
-        Layer.provideMerge(Layer.succeed(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info")),
       ),
-    ),
-    Effect.scoped,
-  );
+      Effect.scoped,
+    );
 
   return runProcess("Container", program);
 };

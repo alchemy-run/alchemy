@@ -258,7 +258,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
                   defaultBranch: created.defaultBranch,
                 }),
               ),
-              Effect.catchTag("ArtifactsError", (err) =>
+              Effect.catch((err) =>
                 HttpServerResponse.json({ error: err.message }, { status: 409 }),
               ),
             );
@@ -266,9 +266,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
         if (request.url.startsWith("/repos/list") && request.method === "GET") {
           return yield* repos.list({ limit: 50 }).pipe(
             Effect.flatMap((res) => HttpServerResponse.json(res)),
-            Effect.catchTag("ArtifactsError", (err) =>
-              HttpServerResponse.json({ error: err.message }, { status: 500 }),
-            ),
+            Effect.catch((err) => HttpServerResponse.json({ error: err.message }, { status: 500 })),
           );
         }
         if (request.url.startsWith("/repos/info") && request.method === "GET") {
@@ -277,20 +275,21 @@ export default class Api extends Cloudflare.Worker<Api>()(
             return yield* HttpServerResponse.json({ error: "name is required" }, { status: 400 });
           }
           return yield* repos.get(name).pipe(
-            Effect.flatMap((repo) =>
+            Effect.flatMap((repo) => repo.info()),
+            Effect.flatMap((info) =>
               HttpServerResponse.json({
-                id: repo.raw.id,
-                name: repo.raw.name,
-                description: repo.raw.description,
-                defaultBranch: repo.raw.defaultBranch,
-                remote: repo.raw.remote,
-                createdAt: repo.raw.createdAt,
-                updatedAt: repo.raw.updatedAt,
-                lastPushAt: repo.raw.lastPushAt,
-                readOnly: repo.raw.readOnly,
+                id: info.id,
+                name: info.name,
+                description: info.description,
+                defaultBranch: info.defaultBranch,
+                remote: info.remote,
+                createdAt: info.createdAt,
+                updatedAt: info.updatedAt,
+                lastPushAt: info.lastPushAt,
+                readOnly: info.readOnly,
               }),
             ),
-            Effect.catchTag("ArtifactsError", (err) =>
+            Effect.catch((err) =>
               HttpServerResponse.json({ name, error: err.message }, { status: 404 }),
             ),
           );
@@ -309,7 +308,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
           return yield* repos.get(name).pipe(
             Effect.flatMap((repo) => repo.createToken(body.scope ?? "read", body.ttl ?? 3600)),
             Effect.flatMap((token) => HttpServerResponse.json({ name, ...token })),
-            Effect.catchTag("ArtifactsError", (err) =>
+            Effect.catch((err) =>
               HttpServerResponse.json({ name, error: err.message }, { status: 404 }),
             ),
           );

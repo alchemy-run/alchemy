@@ -13,6 +13,7 @@ import * as Schema from "effect/Schema";
 import * as Semaphore from "effect/Semaphore";
 import { AdoptPolicy } from "../AdoptPolicy.ts";
 import { AlchemyContext } from "../AlchemyContext.ts";
+import { AnthropicAuth } from "../Anthropic/AuthProvider.ts";
 import { ArtifactStore, createArtifactStore } from "../Artifacts.ts";
 import { AuthError, AuthProviders } from "../Auth/AuthProvider.ts";
 import { SuppressMissingProviderConfig } from "../Auth/Profile.ts";
@@ -28,6 +29,8 @@ import { GitHubAuth } from "../GitHub/AuthProvider.ts";
 import { HetznerAuth } from "../Hetzner/AuthProvider.ts";
 import { InfisicalAuth } from "../Infisical/AuthProvider.ts";
 import { NeonAuth } from "../Neon/AuthProvider.ts";
+import { OpenAIAuth } from "../OpenAI/AuthProvider.ts";
+import { OpenRouterAuth } from "../OpenRouter/AuthProvider.ts";
 import { PlanetscaleAuth } from "../Planetscale/AuthProvider.ts";
 import { PrismaAuth } from "../Prisma/AuthProvider.ts";
 import { RailwayAuth } from "../Railway/AuthProvider.ts";
@@ -334,6 +337,7 @@ export const buildStackProviders = Effect.fn("buildStackProviders")(function* (
 });
 
 const builtinAuth = Layer.mergeAll(
+  AnthropicAuth,
   AwsAuth,
   AxiomAuth,
   CloudflareAuth,
@@ -344,6 +348,8 @@ const builtinAuth = Layer.mergeAll(
   HetznerAuth,
   InfisicalAuth,
   NeonAuth,
+  OpenRouterAuth,
+  OpenAIAuth,
   PlanetscaleAuth,
   PrismaAuth,
   RailwayAuth,

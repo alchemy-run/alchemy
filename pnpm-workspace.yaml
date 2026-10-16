@@ -31,6 +31,7 @@ tasks:
 packages:
   - website
   - packages/*
+  - services/*
   - examples/*
   - examples/cloudflare-domain/packages/*
   - examples/cloudflare-website-service-bindings/apps/*
@@ -92,6 +93,7 @@ catalog:
   "@opennextjs/cloudflare": "1.20.1"
   "@opentui/core": "latest"
   "@oxc-project/types": "^0.153.0"
+  "@peculiar/x509": "^2.1.0"
   "@playwright/test": "^1.64.0"
   "@prisma/orm-family-sql": "^8.0.0-rc.11"
   "@prisma/orm-postgres": "^8.0.0-rc.11"
@@ -193,6 +195,7 @@ catalog:
   react-dom: "^19.3.0"
   react-router: "^7.16.0"
   react-server-dom-webpack: "~19.3.0"
+  reflect-metadata: "^0.2.2"
   remotion: "4.0.535"
   rolldown: "1.2.13"
   satteri: "^0.10.5"

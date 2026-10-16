@@ -95,6 +95,9 @@
     //   "path": "./website/tsconfig.json"
     // },
     {
+      "path": "./services/harness/tsconfig.json"
+    },
+    {
       "path": "./examples/cloudflare-git-service/tsconfig.json"
     },
     {

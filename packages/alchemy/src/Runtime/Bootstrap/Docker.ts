@@ -11,6 +11,7 @@ import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
 import { BunHttpServer } from "../../Http.ts";
 import { reifyBoundConfigProvider } from "../../Runtime.ts";
+import { startEgressProxy } from "./EgressProxy.ts";
 import { entrypointLayer, resolveProgram, runProcess, stackFromEnv } from "./Process.ts";
 
 /**
@@ -25,7 +26,8 @@ export const bootstrap = (entrypoint: unknown): Promise<void> => {
     Logger.layer([Logger.consolePretty()]),
   );
 
-  const program = resolveProgram("program").pipe(
+  const program = startEgressProxy.pipe(
+    Effect.andThen(resolveProgram("program")),
     Effect.provide(
       entrypointLayer(entrypoint).pipe(
         Layer.provideMerge(stackFromEnv),

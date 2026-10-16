@@ -10,7 +10,10 @@ import * as Socket from "effect/socket/Socket";
 export interface LayerOptions {
   /** Options passed to Effect's WebSocket transport. */
   readonly socket?: Parameters<typeof Socket.layerWebSocket>[1];
-  /** Options passed to Effect's socket RPC protocol. */
+  /**
+   * Options passed to Effect's socket RPC protocol.
+   * @default { pingTimeout: "15 seconds" }
+   */
   readonly protocol?: Parameters<typeof RpcClient.layerProtocolSocket>[0];
   /** Options passed to the grouped Effect RPC client. */
   readonly client?: Omit<NonNullable<Parameters<typeof RpcClient.make>[1]>, "flatten">;
@@ -67,6 +70,14 @@ export interface LayerOptions {
  * @product Workers
  * @category Workers & Compute
  */
+/**
+ * Effect's client pings every 5 seconds and, by default, gives up when no
+ * frame arrived within one interval. It checks that before sending the first
+ * ping, so a call that is quiet for 5 seconds (a long unary RPC) drops a
+ * healthy socket. Three intervals leave room for a ping and its pong.
+ */
+const protocolDefaults = { pingTimeout: "15 seconds" } as const;
+
 export const layer = <I, Rpcs extends Rpc.Any>(
   service: Context.Key<I, RpcClient.RpcClient<Rpcs, RpcClientError>>,
   group: RpcGroup.RpcGroup<Rpcs>,
@@ -75,7 +86,7 @@ export const layer = <I, Rpcs extends Rpc.Any>(
 ): Layer.Layer<I, never, Socket.WebSocketConstructor | Rpc.MiddlewareClient<Rpcs>> =>
   Layer.effect(service, RpcClient.make(group, options.client)).pipe(
     Layer.provide(
-      RpcClient.layerProtocolSocket(options.protocol).pipe(
+      RpcClient.layerProtocolSocket({ ...protocolDefaults, ...options.protocol }).pipe(
         Layer.provide(
           Layer.mergeAll(
             Socket.layerWebSocket(url, options.socket),

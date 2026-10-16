@@ -8,6 +8,7 @@ export * from "./Workers/Rpc.ts";
 export * from "./Workers/RpcAsync.ts";
 
 // ── runtime bridge factories ──
+export { makeEgressRelay } from "./Containers/EgressRelay.ts";
 export { makeDurableObjectBridge } from "./Workers/DurableObjectBridge.ts";
 export { makeWorkerBridge } from "./Workers/WorkerBridge.ts";
 export { withSqlMigrations } from "./Workers/SqlMigrationsRuntime.ts";

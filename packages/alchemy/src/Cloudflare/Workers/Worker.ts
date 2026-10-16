@@ -5,8 +5,10 @@ import * as Effect from "effect/Effect";
 import type * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import path from "pathe";
+import type { Sandbox as AISandbox } from "../../AI/Sandbox.ts";
 import { type MemoOptions } from "../../Command/Memo.ts";
 import type { Dependencies } from "../../Dependencies.ts";
+import type { GatewayHost } from "../../Egress/Gateway.ts";
 import type { InputProps } from "../../Input.ts";
 import type { Named, Tag } from "../../Named.ts";
 import type * as Output from "../../Output.ts";
@@ -107,8 +109,18 @@ export type WorkerServices =
   | WorkerExecutionContext
   | WorkerEnvironment
   | CloudflareEnvironment
-  | Container.Application<any>
+  | HostedImplementation
   | SelfService;
+
+/**
+ * Implementations provided on the stack that a Worker or Durable Object
+ * yields: a Container's program (`Container.make`) or a sandbox's host
+ * (`Cloudflare.Containers.Sandbox`).
+ */
+export type HostedImplementation =
+  | Container.Application<any>
+  | AISandbox.Host<any>
+  | GatewayHost<any>;
 
 export type WorkerShape<Req = never> = Main<WorkerServices | Req> & MainRpc<WorkerServices | Req>;
 
@@ -2599,7 +2611,7 @@ export const Worker: ResourceClassLike<Worker> &
       ): Effect.Effect<
         Worker & Rpc<Self> & Dependencies<Deps>,
         never,
-        Self | Extract<Deps, Container.Application<any>> | Providers
+        Self | Extract<Deps, HostedImplementation> | Providers
       > &
         Named<Id> &
         PlatformIdentity<Id> & {
@@ -2613,7 +2625,7 @@ export const Worker: ResourceClassLike<Worker> &
           ): Layer.Layer<
             Self,
             never,
-            | Extract<Deps, Container.Application<any>>
+            | Extract<Deps, HostedImplementation>
             | Providers
             | Exclude<PropsReq | InitReq, Self | WorkerServices | Tag<WorkerTypeId>>
           >;
@@ -2623,7 +2635,7 @@ export const Worker: ResourceClassLike<Worker> &
       <
         const Id extends string,
         Shape extends WorkerShape,
-        Req extends WorkerServices | Container.Application<any> | PlatformServices | Tag,
+        Req extends WorkerServices | HostedImplementation | PlatformServices | Tag,
         PropsReq = never,
       >(
         id: Id,
@@ -2634,7 +2646,7 @@ export const Worker: ResourceClassLike<Worker> &
       ): Effect.Effect<
         Worker & Rpc<Self>,
         never,
-        Extract<Req, Container.Application<any>> | Providers | PropsReq
+        Extract<Req, HostedImplementation> | Providers | PropsReq
       > &
         Named<Id> &
         PlatformIdentity<Id> & {
@@ -2700,16 +2712,12 @@ export const Worker: ResourceClassLike<Worker> &
     <
       const Id extends string,
       Shape extends WorkerShape,
-      Req extends WorkerServices | Container.Application<any> | PlatformServices,
+      Req extends WorkerServices | HostedImplementation | PlatformServices,
     >(
       id: Id,
       props: InputProps<WorkerProps>,
       impl: Effect.Effect<Shape, ConfigError, Req>,
-    ): Effect.Effect<
-      Worker & Rpc<Shape>,
-      never,
-      Extract<Req, Container.Application<any>> | Providers
-    > &
+    ): Effect.Effect<Worker & Rpc<Shape>, never, Extract<Req, HostedImplementation> | Providers> &
       Named<Id> &
       PlatformIdentity<Id>;
     /**

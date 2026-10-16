@@ -264,6 +264,23 @@ describe.concurrent.each([
     );
 
     test(
+      "a call longer than the client's ping timeout keeps its socket alive",
+      Effect.gen(function* () {
+        const { url } = yield* stack;
+        const object = yield* freshObjects;
+        const observed = yield* observeSockets;
+        // Effect's default client drops a socket that is quiet for 5s; Alchemy's doesn't.
+        yield* Effect.gen(function* () {
+          const client = yield* SocketClient;
+          expect(yield* client.slow({ millis: 12_000 })).toBe(12_000);
+          expect(yield* client.increment()).toBe(1);
+        }).pipe(Effect.provide(observed.layer(`${url}/rpc/${object("slow")}`)));
+        expect(observed.sockets).toHaveLength(1);
+      }),
+      { tags: [...(dev ? ["local"] : ["live"])], timeout: 60_000 },
+    );
+
+    test(
       "a Layer shares one actual socket for concurrent callers without a caller scope and closes normally",
       Effect.gen(function* () {
         const { url } = yield* stack;

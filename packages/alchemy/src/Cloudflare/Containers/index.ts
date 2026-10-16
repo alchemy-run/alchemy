@@ -11,6 +11,7 @@ export type {
   ContainerProcess,
   ContainerSnapshot,
   ContainerSnapshotOptions,
+  ContainerStartOptions,
   ContainerStartError,
   ReservedContainerKey,
 } from "./ContainerClient.ts";
@@ -31,3 +32,6 @@ export {
   type DurableObjectApplicationProps,
 } from "./DurableObjectApplication.ts";
 export * from "./LocalContainerProvider.ts";
+export { Harness, type HarnessOptions } from "./Harness.ts";
+export { Sandbox, type SandboxProps } from "./Sandbox.ts";
+export { containerOf, type ContainerInstanceType } from "./SandboxClient.ts";

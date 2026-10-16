@@ -12,6 +12,7 @@ export * from "./CronEventSource.ts";
 export * from "./DurableObject.ts";
 export * from "./DurableObjectBridge.ts";
 export * from "./DurableObjectState.ts";
+export * from "./DurableSessionStore.ts";
 export * from "./DurableObjectStorage.ts";
 export * from "./EmailEventSource.ts";
 export * from "./Fetch.ts";

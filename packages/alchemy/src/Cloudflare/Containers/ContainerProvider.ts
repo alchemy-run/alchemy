@@ -15,6 +15,7 @@ import { deepEqual, isResolved } from "../../Diff.ts";
 import { hashDockerBuildInputs } from "../../Docker/BuildHash.ts";
 import { Docker } from "../../Docker/Docker.ts";
 import { isInlineDockerfile } from "../../Docker/Dockerfile.ts";
+import { materializeImageContext } from "../../Docker/ImageContext.ts";
 import { repositoryFromImageRef } from "../../Docker/Registry.ts";
 import * as Provider from "../../Provider.ts";
 import type { ScopedPlanStatusSession } from "../../Report.ts";
@@ -31,6 +32,8 @@ import type {
 } from "./ContainerApplication.ts";
 import {
   buildFinalDockerfile,
+  withImageLayers,
+  withProgramImage,
   bundleContainerProgram,
   containerEnvPreamble,
   createContainerApplicationName,
@@ -376,6 +379,24 @@ export const LiveContainerProvider = () =>
         };
       });
 
+      /**
+       * Copy the image layers' context sources (mounted files, folders, git
+       * checkouts) into a program's build context, returning their digest
+       * (undefined without any). Shared with the local provider's build context.
+       */
+      const materializeLayerContext = (id: string, props: AnyContainerApplicationProps) =>
+        Effect.gen(function* () {
+          const sources = (props.imageLayers ?? []).flatMap((layer) => layer.context ?? []);
+          if (sources.length === 0) return undefined;
+          const { dotAlchemy } = yield* AlchemyContext;
+          const context = yield* getStableContextDir(process.cwd(), dotAlchemy, `${id}-container`);
+          const materialized = yield* materializeImageContext({
+            context,
+            sources,
+          });
+          return materialized.digest;
+        });
+
       const computeImage = Effect.fn(function* (
         id: string,
         props: AnyContainerApplicationProps,
@@ -411,10 +432,13 @@ export const LiveContainerProvider = () =>
             props.external,
             props.autoInstallExternals,
           );
+          // Mounted sources (files, folders, git checkouts) are part of the image.
+          const contextDigest = yield* materializeLayerContext(id, props);
           const imageHash = (yield* sha256Object({
             bundleHash,
             dockerfile: finalDockerfile,
             imageName: props.publish?.repository?.toLowerCase(),
+            ...(contextDigest !== undefined ? { contextDigest } : {}),
           })).slice(0, 16);
           // The dev image is the deterministic build-context directory that
           // `buildAndPushImage` materializes into (and that the local provider
@@ -571,6 +595,9 @@ export const LiveContainerProvider = () =>
         const cacheOptions = {
           "cache-from": [`type=registry,ref=${cacheRef}`],
           "cache-to": ["type=inline"],
+          // One image manifest, no attestation index: Durable Object-managed
+          // containers fail to start from an index (Cloudflare "internal error").
+          args: ["--provenance=false", "--sbom=false"],
         };
 
         if (build.kind === "remote") {
@@ -638,6 +665,8 @@ export const LiveContainerProvider = () =>
               content: f.content,
             })),
           });
+          // The layers' mounted sources, next to the program (cached per digest).
+          yield* materializeLayerContext(id, props);
           yield* docker.image
             .build(
               {
@@ -802,24 +831,37 @@ export const LiveContainerProvider = () =>
         hasImageSource(props) ? computeImage(id, props, {}) : Effect.succeed(undefined);
 
       /**
+       * A Container's props with its bundled program's bindings (image layers,
+       * plain env) folded into its one image. See `withProgramImage`.
+       */
+      const durableObjectProgram = (
+        news: DurableObjectContainerProps,
+        accountId: string,
+        bindings: ReadonlyArray<ResourceBinding<ContainerApplication["Binding"]>>,
+      ) => withProgramImage(news, bindings, makeContainerEnv(news, accountId, [...bindings]));
+
+      /**
        * Publish the Container's image to Cloudflare's registry and wait until
        * it is prepared. An unchanged content hash keeps the previously
        * published reference.
        */
       const reconcileDurableObjectContainer = Effect.fn(function* ({
         id,
-        news,
+        news: declared,
         name,
+        bindings,
         output,
         session,
       }: {
         id: string;
         news: DurableObjectContainerProps;
         name: string;
+        bindings: ReadonlyArray<ResourceBinding<ContainerApplication["Binding"]>>;
         output: ContainerApplication["Attributes"] | undefined;
         session: ScopedPlanStatusSession;
       }) {
         const { accountId } = yield* yield* CloudflareEnvironment;
+        const news = yield* durableObjectProgram(declared, accountId, bindings);
         const attributes = durableObjectPlaceholder({
           // The application is owned by the Durable Object class.
           applicationId: "",
@@ -863,14 +905,19 @@ export const LiveContainerProvider = () =>
 
       const diffDurableObjectContainer = Effect.fn(function* ({
         id,
-        news,
+        news: declared,
+        accountId,
+        newBindings,
         output,
       }: {
         id: string;
         news: DurableObjectContainerProps;
+        accountId: string;
+        newBindings: ReadonlyArray<ResourceBinding<ContainerApplication["Binding"]>>;
         output: ContainerApplication["Attributes"] | undefined;
       }) {
         if (output === undefined) return undefined;
+        const news = yield* durableObjectProgram(declared, accountId, newBindings);
         // State written before one Container meant one image recorded the
         // Container as the application itself. The application now belongs to
         // the Durable Object class; drop the identity so deleting this
@@ -1079,6 +1126,7 @@ export const LiveContainerProvider = () =>
         const { accountId } = yield* yield* CloudflareEnvironment;
 
         yield* Effect.logInfo(`Cloudflare Container update: preparing ${existing.applicationName}`);
+        news = withImageLayers(news, bindings);
         const env = makeContainerEnv(news, accountId, bindings);
         const { build, imageRef, imageHash, dev } = yield* computeImage(id, news, env);
         const { deploymentImageRef, imageDigest } = yield* resolveDeploymentImage({
@@ -1217,7 +1265,7 @@ export const LiveContainerProvider = () =>
           const name = nameOf(news) ?? oldName;
 
           if (isDurableObjectContainer(news)) {
-            return yield* diffDurableObjectContainer({ id, news, output });
+            return yield* diffDurableObjectContainer({ id, news, accountId, newBindings, output });
           }
 
           if ((output?.accountId ?? accountId) !== accountId || name !== oldName) {
@@ -1260,14 +1308,14 @@ export const LiveContainerProvider = () =>
 
           const { imageHash, dev } = yield* computeImage(
             id,
-            news,
+            withImageLayers(news, newBindings),
             makeContainerEnv(news, accountId, newBindings),
           );
           if (imageHash !== output.hash?.image || !deepEqual(dev, output.dev)) {
             return { action: "update" } as const;
           }
         }),
-        precreate: Effect.fn(function* ({ id, news = {}, session }) {
+        precreate: Effect.fn(function* ({ id, news = {}, session, bindings = [] }) {
           yield* validateContainerConfiguration(news);
           const name = yield* createApplicationName(id, nameOf(news));
           yield* Effect.logInfo(`Cloudflare Container precreate: starting ${name}`);
@@ -1278,6 +1326,7 @@ export const LiveContainerProvider = () =>
               id,
               news,
               name,
+              bindings,
               output: undefined,
               session,
             });
@@ -1336,13 +1385,21 @@ export const LiveContainerProvider = () =>
           const name = output?.applicationName ?? (yield* createApplicationName(id, nameOf(news)));
           yield* Effect.logInfo(`Cloudflare Container reconcile: starting ${name}`);
           if (isDurableObjectContainer(news)) {
-            return yield* reconcileDurableObjectContainer({ id, news, name, output, session });
+            return yield* reconcileDurableObjectContainer({
+              id,
+              news,
+              name,
+              bindings,
+              output,
+              session,
+            });
           }
           const durableObjects = yield* getDurableObjects(bindings);
           const hasUnresolvedAttachment =
             durableObjects === undefined &&
             bindings.some((binding) => binding.data.durableObjects !== undefined);
           const { accountId } = yield* yield* CloudflareEnvironment;
+          news = withImageLayers(news, bindings);
           const env = makeContainerEnv(news, accountId, bindings);
 
           // Observe — re-fetch the cached application to confirm it still
