@@ -1,7 +1,7 @@
 /**
  * Bootstrap for an Effect `AWS.Lambda.WebFunction` (zip, Node runtime). The
  * generated entry imports this module and the user's `main` — see
- * {@link ./Process.ts} for why the entry is a shim.
+ * `alchemy/Runtime/Bootstrap/Process` for why the entry is a shim.
  *
  * Unlike an Event Function, a Web Function is a plain HTTP server: the
  * bundled program's `fetch` handler is served by Effect's Node HTTP server
@@ -9,7 +9,6 @@
  * environment serves many requests concurrently, and response bodies stream
  * straight to the client.
  */
-/* oxlint-disable alchemy/package-boundaries -- package split phase 3: per-cloud runtime bootstrap; moves into its provider */
 import * as Credentials from "@distilled.cloud/aws/Credentials";
 import * as Endpoint from "@distilled.cloud/aws/Endpoint";
 import * as Region from "@distilled.cloud/aws/Region";
@@ -24,8 +23,13 @@ import { MinimumLogLevel } from "effect/References";
 import * as Scope from "effect/Scope";
 import { NodeHttpServer } from "../../Http.ts";
 import { reifyBoundConfigProvider } from "../../Runtime.ts";
-import { ManagedHttpShutdown } from "./ManagedHttpShutdown.ts";
-import { entrypointLayer, resolveProgram, runProcess, stackFromEnv } from "./Process.ts";
+import { ManagedHttpShutdown } from "../../Runtime/Bootstrap/ManagedHttpShutdown.ts";
+import {
+  entrypointLayer,
+  resolveProgram,
+  runProcess,
+  stackFromEnv,
+} from "../../Runtime/Bootstrap/Process.ts";
 
 /**
  * The `host:port` Lambda routes requests to, or `127.0.0.1:3000` when

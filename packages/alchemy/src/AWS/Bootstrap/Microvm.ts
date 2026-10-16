@@ -4,14 +4,19 @@
  * so the platform-specific layers are supplied by the thin entry modules
  * {@link ./MicrovmBun.ts} / {@link ./MicrovmNode.ts} rather than imported
  * here. The generated entry imports one of those and the user's `main`,
- * nothing else — see {@link ./Process.ts} for why.
+ * nothing else — see `alchemy/Runtime/Bootstrap/Process` for why.
  */
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
 import { MinimumLogLevel } from "effect/References";
-import { entrypointLayer, resolveProgram, runProcess, stackConstant } from "./Process.ts";
+import {
+  entrypointLayer,
+  resolveProgram,
+  runProcess,
+  stackConstant,
+} from "../../Runtime/Bootstrap/Process.ts";
 
 export interface MicrovmBootstrapOptions {
   /** Port to serve on when the VM does not inject `PORT`. */

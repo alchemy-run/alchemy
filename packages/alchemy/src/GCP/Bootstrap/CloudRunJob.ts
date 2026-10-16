@@ -1,36 +1,39 @@
 /**
- * Process bootstrap for `Hetzner.Service` (a Node process serving the
- * bundled program). The generated entry imports this module and the user's
- * `main`, nothing else — see {@link ./Process.ts} for why.
+ * Process bootstrap for `GCP.Run.Job` and `GCP.Run.WorkerPool`. No HTTP
+ * server — the program's `run` executes, and for a Job the process exits 0
+ * once it finishes (Cloud Run marks the task complete on exit). A worker
+ * pool's long-running `run` loop keeps its instance alive.
+ *
+ * Runtime credentials come from the metadata server (the host's runtime
+ * service account).
  */
-import { NodeServices } from "@effect/platform-node";
+import { BunServices } from "@effect/platform-bun";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
-import { NodeHttpServer } from "../../Http.ts";
 import { reifyBoundConfigProvider } from "../../Runtime.ts";
-import { entrypointLayer, resolveProgram, runProcess, stackFromEnv } from "./Process.ts";
+import {
+  entrypointLayer,
+  resolveProgram,
+  runProcess,
+  stackFromEnv,
+} from "../../Runtime/Bootstrap/Process.ts";
+import { fromMetadataServer } from "../MetadataCredentials.ts";
 
-/**
- * Resolve the bundled program (the runners registered via `host.run` /
- * serve) and run it with a Node HTTP server bound to `PORT`, so the
- * returned `{ fetch }` handler is actually served and `host.run` loops
- * stay alive.
- */
 export const bootstrap = (entrypoint: unknown): Promise<void> => {
   const platform = Layer.mergeAll(
-    NodeServices.layer,
+    BunServices.layer,
     FetchHttpClient.layer,
     Logger.layer([Logger.consolePretty()]),
   );
 
-  const program = resolveProgram("program").pipe(
+  const program = resolveProgram("program", { telemetry: true }).pipe(
     Effect.provide(
       entrypointLayer(entrypoint).pipe(
         Layer.provideMerge(stackFromEnv),
-        Layer.provideMerge(NodeHttpServer({ hostname: "0.0.0.0" })),
+        Layer.provideMerge(fromMetadataServer()),
         Layer.provideMerge(platform),
         Layer.provideMerge(
           Layer.succeed(
@@ -43,5 +46,5 @@ export const bootstrap = (entrypoint: unknown): Promise<void> => {
     Effect.scoped,
   );
 
-  return runProcess("Hetzner service", program);
+  return runProcess("Cloud Run job", program, { exitOnComplete: true });
 };

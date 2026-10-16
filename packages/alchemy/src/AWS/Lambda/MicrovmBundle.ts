@@ -129,8 +129,8 @@ export const bundleMicrovmProgram = Effect.fn(function* ({
           (importPath) => `
 import { bootstrap } from ${JSON.stringify(
             runtime === "bun"
-              ? "alchemy/Runtime/Bootstrap/MicrovmBun"
-              : "alchemy/Runtime/Bootstrap/MicrovmNode",
+              ? "alchemy/AWS/Bootstrap/MicrovmBun"
+              : "alchemy/AWS/Bootstrap/MicrovmNode",
           )};
 import ${handler === "default" ? "entrypoint" : `{ ${handler} as entrypoint }`} from ${JSON.stringify(importPath)};
 

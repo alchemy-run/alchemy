@@ -26,11 +26,10 @@ import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
 import * as Scope from "effect/Scope";
-// oxlint-disable-next-line alchemy/package-boundaries -- package split phase 3: per-cloud runtime bootstrap; moves into its provider
-import { fromMetadataServer } from "../../GCP/MetadataCredentials.ts";
 import { HttpServer, safeHttpEffect } from "../../Http.ts";
 import { reifyBoundConfigProvider } from "../../Runtime.ts";
-import { entrypointLayer, resolveProgram, stackFromEnv } from "./Process.ts";
+import { entrypointLayer, resolveProgram, stackFromEnv } from "../../Runtime/Bootstrap/Process.ts";
+import { fromMetadataServer } from "../MetadataCredentials.ts";
 
 /** Web-standard dispatcher over the program's composed HTTP handler. */
 type Dispatch = (request: Request) => Promise<Response>;

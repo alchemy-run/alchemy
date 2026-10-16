@@ -231,7 +231,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
       Stripe.CreateCustomerHttp,
       Stripe.CreateCheckoutSessionHttp,
       Stripe.CreateBillingPortalSessionHttp,
-      Stripe.ConsumeEventsLive,
+      Stripe.Cloudflare.ConsumeEventsLive,
     ]),
   ),
 ) {}

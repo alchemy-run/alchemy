@@ -141,7 +141,7 @@ export type WebhookEndpoint = Resource<
  *   url: Output.interpolate`${api.url}/webhooks/stripe`,
  *   enabledEvents: [Stripe.CustomerCreated, Stripe.InvoicePaid],
  * });
- * yield* Stripe.bindWebhookSecret(api, webhook.secret);
+ * yield* Stripe.Cloudflare.bindWebhookSecret(api, webhook.secret);
  * ```
  *
  * On a Worker, prefer `consumeEvents` — it provisions this endpoint and

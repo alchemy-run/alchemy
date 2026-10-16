@@ -2,9 +2,9 @@
  * Process bootstrap core for `Cloudflare.Container` images. The runtime
  * (`bun` | `node`) is chosen at deploy time, and each is an optional peer,
  * so the platform-specific layers are supplied by the thin entry modules
- * {@link ./CloudflareContainerBun.ts} / {@link ./CloudflareContainerNode.ts}
+ * {@link ./ContainerBun.ts} / {@link ./ContainerNode.ts}
  * rather than imported here. The generated entry imports one of those and
- * the user's `main`, nothing else — see {@link ./Process.ts} for why.
+ * the user's `main`, nothing else — see `alchemy/Runtime/Bootstrap/Process` for why.
  */
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
@@ -12,10 +12,14 @@ import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
 import { MinimumLogLevel } from "effect/References";
-// oxlint-disable-next-line alchemy/package-boundaries -- package split phase 3: per-cloud runtime bootstrap; moves into its provider
-import { CloudflareEnvironment } from "../../Cloudflare/CloudflareEnvironment.ts";
 import { reifyBoundConfigProvider } from "../../Runtime.ts";
-import { entrypointLayer, resolveProgram, runProcess, stackConstant } from "./Process.ts";
+import {
+  entrypointLayer,
+  resolveProgram,
+  runProcess,
+  stackConstant,
+} from "../../Runtime/Bootstrap/Process.ts";
+import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 
 export interface ContainerBootstrapOptions {
   /** Stack identity baked in at deploy time. */
