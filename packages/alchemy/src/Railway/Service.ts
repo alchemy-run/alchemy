@@ -16,6 +16,7 @@ import type { Project } from "./Project.ts";
 import type { Providers } from "./Providers.ts";
 import { serveRailwayRpc } from "./rpc-server.ts";
 import { mintRpcToken } from "./rpc-token.ts";
+import type { RegistryCredentials } from "./ServiceRegistryCredentials.ts";
 
 /**
  * A resource-valued prop: the resource itself, or an Effect that produces
@@ -23,7 +24,7 @@ import { mintRpcToken } from "./rpc-token.ts";
  */
 type Ref<T> = T | Effect.Effect<T, never, Providers>;
 
-export type { ExtraFile, RailwayBuildOptions };
+export type { ExtraFile, RailwayBuildOptions, RegistryCredentials };
 
 /**
  * Environment identity a Service is deployed into. Accepts a
@@ -76,6 +77,14 @@ export interface ServiceProps extends PlatformProps {
    * the current replica count.
    */
   region?: string;
+  /**
+   * Credentials for pulling a private `image` (for example a GHCR token
+   * with `read:packages`). Railway never returns them, so Alchemy records a
+   * SHA-256 fingerprint and writes them only on create, adoption, or when
+   * they change; writing them redeploys the service. Omit to leave the
+   * current credentials alone.
+   */
+  registryCredentials?: RegistryCredentials;
   /**
    * Port the process listens on. Written to `PORT` and used as the
    * generated `*.up.railway.app` `targetPort`. Default is `3000` for
@@ -264,6 +273,8 @@ export type Service = Resource<
      * `deploy.multiRegionConfig` has replicas in exactly one region.
      */
     region: string | undefined;
+    /** SHA-256 fingerprint of the last `registryCredentials` written. */
+    registryCredentialsDigest: string | undefined;
     /** Port published on the generated service domain. */
     port: number | undefined;
     /** Public `https://{domain}` URL (`*.up.railway.app`). */
