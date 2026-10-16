@@ -51,6 +51,7 @@ function providersSidebarEntry() {
       { label: "Kubernetes", link: "/kubernetes" },
       { label: "SQL", link: "/sql" },
       { label: "Command", link: "/command" },
+      { label: "SSH", link: "/ssh" },
       { label: "ACME", link: "/acme" },
       { label: "Domain", link: "/domain" },
     ],
@@ -1792,6 +1793,10 @@ export default defineConfig({
             { label: "Dev servers", link: "/command/dev-servers" },
             providerResourcesEntry("Command"),
           ],
+        },
+        {
+          label: "SSH",
+          items: [{ label: "Overview", link: "/ssh" }, providerResourcesEntry("Ssh")],
         },
         {
           label: "ACME",

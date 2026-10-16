@@ -1,0 +1,186 @@
+---
+title: SSH
+description: Converge servers you reach over SSH to idempotent, type-safe recipes, with dry runs and drift detection in the deploy graph.
+---
+
+The SSH provider configures hosts that are already running, such as a
+`Hetzner.Server` another resource just created or a box you have always
+reached by hand. `Ssh.Provision` converges the host to a recipe: an
+ordered list of idempotent steps (packages, files, services, commands),
+each with a read-only `check` and an `apply`. The model follows
+[Ansible](https://docs.ansible.com/)'s modules and
+[Ignition](https://github.com/grovemotorco/ignition), written as Effects.
+It uses the system `ssh` and `scp` binaries and needs no agent on the
+host. Import from `alchemy/Ssh` and register `Ssh.providers()`.
+
+## Writing a recipe
+
+A recipe lives in its own module. `main: import.meta.url` tells
+`Provision` where to load it from again for a dry run:
+
+```typescript
+// infra/web.ts
+import * as Ssh from "alchemy/Ssh";
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+
+export const Web = Ssh.make({
+  main: import.meta.url,
+  name: "web",
+  vars: Schema.Struct({ domain: Schema.String }),
+  handlers: {
+    reloadNginx: Ssh.Steps.service({ name: "nginx", state: "reloaded" }),
+  },
+  run: (vars) =>
+    Effect.gen(function* () {
+      yield* Ssh.Steps.package({ packages: ["nginx"], update: true });
+      yield* Ssh.Steps.file({
+        path: "/etc/nginx/conf.d/site.conf",
+        content: `server { server_name ${vars.domain}; }\n`,
+        mode: "0644",
+        sudo: true,
+        notify: ["reloadNginx"],
+      });
+      yield* Ssh.Steps.service({
+        name: "nginx",
+        enabled: true,
+        state: "started",
+      });
+    }),
+});
+```
+
+A recipe is ordinary TypeScript: render templates with template
+strings, branch on `yield* Ssh.facts` (distribution, architecture,
+package manager), and use one step's output in the next.
+
+## Provisioning a host
+
+```typescript
+import { Web } from "./infra/web.ts";
+
+const server = yield* Hetzner.Server("web", {
+  serverType: "cpx12",
+  image: "ubuntu-24.04",
+});
+
+yield* Ssh.Provision("web-recipe", {
+  host: server.ipv4.as<string>(),
+  user: "root",
+  privateKey: server.privateKey,
+  recipe: Web,
+  vars: { domain: "example.com" },
+});
+```
+
+`vars` are the recipe's inputs and ordinary resource props: outputs of
+other resources resolve before the recipe runs, a changed value re-runs
+it, and `Redacted` values are kept out of logs, errors and state. The
+recipe's directory is content-hashed like
+[`Command.Exec`](/command/memoization), so a deploy with an unchanged
+recipe and vars never opens a session.
+
+## Dry runs and drift
+
+Every step's `check` is read-only. `read` runs the whole recipe in check
+mode and records the steps that would change as `pending`, together with
+the handlers they would notify:
+
+```typescript
+["file[/etc/nginx/conf.d/site.conf]", "handler[reloadNginx]"]
+```
+
+So `alchemy drift` shows what changed on the host since the last deploy
+and reconciles it back. A deploy with an unchanged recipe and vars does not
+touch the host. After an apply the engine runs `check`
+again and fails a step whose host still diverges.
+
+## Handlers and stamps
+
+A step names the handlers it `notify`s. A changed step queues them, and
+they run once each, in declaration order, when the recipe ends or at
+`yield* Ssh.flushHandlers`. A run that dies between the change and the
+flush loses its queued handlers. For an action that must not be lost,
+such as restarting a daemon for the config it last loaded, use `stamp`,
+which records the value it last acted on:
+
+```typescript
+yield* Ssh.Steps.stamp({
+  name: "restart app",
+  path: "/var/lib/app/.config-stamp",
+  value: configHash,
+  command: "systemctl restart app",
+  sudo: true,
+});
+```
+
+## Steps
+
+| Step | Converges |
+| --- | --- |
+| `package` | Packages through `apt` or `dnf`, whichever the host has |
+| `apt`, `dnf` | Packages, with manager-specific options (`update`, pinned versions) |
+| `file` | A file's content, mode and owner; optional `validate` and `atomic` |
+| `directory` | A directory's existence, mode and owner |
+| `managedBlock` | A marker-delimited block in a file |
+| `service` | A systemd unit's enablement and run state |
+| `exec` | A command, made idempotent with `creates`, `removes`, `unless`, `onlyIf` |
+| `git` | A checkout at a tag, commit or branch |
+| `authorizedKey` | A key in a user's `authorized_keys` |
+| `ufw` | Firewall defaults, rules and enablement |
+| `stamp` | A command re-run whenever a recorded value changes |
+| `waitFor` | A condition polled until it holds |
+
+## Writing a step
+
+A step is a `check` and an `apply` over the session's `Ssh.Client`,
+run with `Ssh.execute`:
+
+```typescript
+const timezone = (zone: string) =>
+  Ssh.execute({
+    kind: "timezone",
+    name: zone,
+    check: Effect.gen(function* () {
+      const client = yield* Ssh.Client;
+      const { stdout } = yield* client.exec(
+        "timedatectl show -p Timezone --value",
+      );
+      return stdout.trim() === zone
+        ? Ssh.converged(zone)
+        : Ssh.diverged({ zone: stdout.trim() }, { zone });
+    }),
+    apply: Effect.gen(function* () {
+      const client = yield* Ssh.Client;
+      const result = yield* client.exec(
+        `timedatectl set-timezone ${Ssh.quote(zone)}`,
+        { sudo: true },
+      );
+      if (result.code !== 0) {
+        return yield* new Ssh.StepFailed({
+          message: result.stderr,
+          kind: "timezone",
+          step: zone,
+        });
+      }
+      return Ssh.applied(zone);
+    }),
+  });
+```
+
+`exec` returns a non-zero exit as `code` rather than failing, so a
+`check` can read state from commands that are expected to fail.
+
+## Connecting
+
+The session is the system OpenSSH client, so `~/.ssh/config`, the agent
+and your default identities work as they do in a terminal. A `privateKey`
+is written to a temporary 0600 file for the session.
+
+- `hostKeyPolicy` is `accept-new` by default: an unknown host is recorded,
+  a changed key is refused.
+- `sudo: true` runs a command through `sudo -n`, so a password prompt
+  fails immediately instead of hanging.
+- A lost session is retried only while checking. A command interrupted
+  during `apply` may still be running on the host, so the step fails and
+  the next deploy's `check` decides.
