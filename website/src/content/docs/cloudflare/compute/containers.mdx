@@ -25,7 +25,7 @@ configuration lives on `.make()`, not here:
 
 ```typescript
 // src/Sandbox.ts
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import type * as Effect from "effect/Effect";
 
 export class Sandbox extends Cloudflare.Container<
@@ -78,7 +78,7 @@ container to the DO and hands you its handle, without starting it:
 
 ```typescript
 // src/Agent.ts
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Effect from "effect/Effect";
 import { Sandbox } from "./Sandbox.ts";
 
@@ -413,7 +413,7 @@ behalf:
 
 ```typescript
 // src/Web.ts
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Effect from "effect/Effect";
 import { Connection } from "./Db.ts";
 
@@ -550,7 +550,7 @@ so the handler reaches the container with full types:
 ```typescript
 // src/worker.ts
 import { getContainer } from "@cloudflare/containers";
-import type * as Cloudflare from "alchemy/Cloudflare";
+import type * as Cloudflare from "@alchemy.run/cloudflare";
 import type { Worker } from "../alchemy.run.ts";
 
 export default {

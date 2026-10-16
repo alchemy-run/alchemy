@@ -1,7 +1,7 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Planetscale from "@alchemy.run/planetscale";
-import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
 
 /**

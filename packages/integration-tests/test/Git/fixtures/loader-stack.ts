@@ -1,3 +1,9 @@
+/**
+ * The Git host with its pack hasher on dynamically loaded Workers (DESIGN
+ * §22.12): the same building-block assembly as `stack.ts`, with
+ * `HasherWorkerLoader` in place of the in-process hasher.
+ */
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import {
   BlobStoreR2,
   GIT_WORKER_OPTIONS,
@@ -7,12 +13,6 @@ import {
 } from "@alchemy.run/git";
 import { HasherWorkerLoader } from "@alchemy.run/git/Hasher";
 import * as Alchemy from "alchemy";
-/**
- * The Git host with its pack hasher on dynamically loaded Workers (DESIGN
- * §22.12): the same building-block assembly as `stack.ts`, with
- * `HasherWorkerLoader` in place of the in-process hasher.
- */
-import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
 import * as HttpRouter from "effect/http/HttpRouter";
 import * as Layer from "effect/Layer";

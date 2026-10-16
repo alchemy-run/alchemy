@@ -34,7 +34,7 @@ provider layers in `alchemy.run.ts`:
 // alchemy.run.ts
 import * as Alchemy from "alchemy";
 +import * as Axiom from "@alchemy.run/axiom";
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Effect from "effect/Effect";
 +import * as Layer from "effect/Layer";
 
@@ -125,7 +125,7 @@ binding from Part 2. Merge it into the Worker's `Effect.provide`:
 
 ```diff lang="typescript"
 // src/worker.ts
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 +import * as Axiom from "@alchemy.run/axiom";
 import * as Effect from "effect/Effect";
 +import * as Layer from "effect/Layer";

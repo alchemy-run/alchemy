@@ -82,7 +82,7 @@ Use [Neon's database configuration](/neon/guides/drizzle#feed-migrations-from-th
 
 ```typescript
 // src/Hyperdrive.ts
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Effect from "effect/Effect";
 import { NeonDb } from "./Db.ts";
 
@@ -101,7 +101,7 @@ Hyperdrive pools the direct Neon origin; local development uses the pooled origi
 
 ```typescript
 // src/Api.ts
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Drizzle from "@alchemy.run/drizzle/Postgres";
 import * as Effect from "effect/Effect";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
@@ -135,7 +135,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
 ```typescript
 // alchemy.run.ts
 import * as Alchemy from "alchemy";
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Neon from "@alchemy.run/neon";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -240,7 +240,7 @@ Use the [PlanetScale guide](/planetscale/guides/drizzle) to export `PlanetscaleD
 
 ```typescript
 // src/Hyperdrive.ts
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Effect from "effect/Effect";
 import { PlanetscaleDb } from "./Db.ts";
 

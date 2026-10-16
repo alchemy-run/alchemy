@@ -43,7 +43,7 @@ alongside `Cloudflare.providers()` in your stack:
 ```diff lang="typescript"
 // alchemy.run.ts
 import * as Alchemy from "alchemy";
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 +import * as Neon from "@alchemy.run/neon";
 +import * as Layer from "effect/Layer";
 
@@ -69,7 +69,7 @@ from the environment (good for CI) or stores a key under
 ```diff lang="typescript"
 // alchemy.run.ts
 import * as Alchemy from "alchemy";
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 +import * as Planetscale from "@alchemy.run/planetscale";
 +import * as Layer from "effect/Layer";
 
@@ -96,7 +96,7 @@ environment (good for CI) or stores the credentials under
 ```diff lang="typescript"
 // alchemy.run.ts
 import * as Alchemy from "alchemy";
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 +import * as Planetscale from "@alchemy.run/planetscale";
 +import * as Layer from "effect/Layer";
 
@@ -247,7 +247,7 @@ port, database, user, password }`) ready to feed straight in:
 
 ```diff lang="typescript"
 // src/Db.ts
-+import * as Cloudflare from "alchemy/Cloudflare";
++import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Neon from "@alchemy.run/neon";
 import * as Effect from "effect/Effect";
 
@@ -274,7 +274,7 @@ Hyperdrive already does its own connection pooling.
 
 ```diff lang="typescript"
 // src/Db.ts
-+import * as Cloudflare from "alchemy/Cloudflare";
++import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Planetscale from "@alchemy.run/planetscale";
 import * as Effect from "effect/Effect";
 
@@ -300,7 +300,7 @@ PostgresBranch → PostgresRole → Hyperdrive on the deploy graph.
 
 ```diff lang="typescript"
 // src/Db.ts
-+import * as Cloudflare from "alchemy/Cloudflare";
++import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Planetscale from "@alchemy.run/planetscale";
 import * as Effect from "effect/Effect";
 
@@ -438,7 +438,7 @@ underlying `Hyperdrive` object:
 
 ```diff lang="typescript"
 // src/Api.ts
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Effect from "effect/Effect";
 +import * as Redacted from "effect/Redacted";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
@@ -484,7 +484,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
 
 ```diff lang="typescript"
 // src/Api.ts
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Effect from "effect/Effect";
 +import * as Redacted from "effect/Redacted";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
@@ -530,7 +530,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
 
 ```diff lang="typescript"
 // src/Api.ts
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Effect from "effect/Effect";
 +import * as Redacted from "effect/Redacted";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
@@ -628,7 +628,7 @@ Hyperdrive.
 
 ```typescript
 // src/Api.ts
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as SQL from "alchemy/SQL/Postgres";
 import * as Effect from "effect/Effect";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";

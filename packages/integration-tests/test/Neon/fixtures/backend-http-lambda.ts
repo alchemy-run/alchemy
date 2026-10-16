@@ -1,5 +1,5 @@
 import * as Neon from "@alchemy.run/neon";
-import * as Lambda from "alchemy/AWS/Lambda/index";
+import * as Lambda from "alchemy/AWS/Lambda";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";

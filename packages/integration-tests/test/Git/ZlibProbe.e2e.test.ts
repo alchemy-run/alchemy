@@ -1,3 +1,4 @@
+import * as Cloudflare from "@alchemy.run/cloudflare";
 /**
  * The same probe as ZlibProbe.local.test.ts, against REAL Cloudflare: which
  * synchronous exact-span inflate paths exist in production workerd, and
@@ -6,7 +7,6 @@
  */
 import * as Alchemy from "alchemy";
 import { expect } from "alchemy-test";
-import * as Cloudflare from "alchemy/Cloudflare";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";

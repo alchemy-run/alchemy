@@ -26,6 +26,7 @@
     "src"
   ],
   "type": "module",
+  "sideEffects": false,
   "exports": {
     ".": "./src/index.ts",
     "./*": "./src/*.ts",
@@ -54,8 +55,7 @@
     "build:package": "node scripts/build.ts"
   },
   "dependencies": {
-    "@distilled.cloud/acme": "workspace:*",
-    "@distilled.cloud/cloudflare": "workspace:*"
+    "@distilled.cloud/acme": "workspace:*"
   },
   "devDependencies": {
     "@types/bun": "catalog:",

@@ -12,6 +12,12 @@
   },
   "references": [
     {
+      "path": "../../submodules/distilled/packages/acme/tsconfig.json"
+    },
+    {
+      "path": "../../submodules/distilled/packages/core/tsconfig.json"
+    },
+    {
       "path": "../alchemy/tsconfig.json"
     }
   ]

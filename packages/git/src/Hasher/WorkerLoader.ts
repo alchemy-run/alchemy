@@ -1,5 +1,5 @@
-import type { Worker, WorkerEnvironment } from "alchemy/Cloudflare/Workers/Worker";
-import { WorkerLoader } from "alchemy/Cloudflare/Workers/WorkerLoader";
+import type { Worker, WorkerEnvironment } from "@alchemy.run/cloudflare/Workers/Worker";
+import { WorkerLoader } from "@alchemy.run/cloudflare/Workers/WorkerLoader";
 /**
  * `Hasher` over dynamically loaded Workers (DESIGN §22.12). A
  * `WorkerLoader` binding on the Git Worker instantiates the hasher module

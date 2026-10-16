@@ -136,6 +136,9 @@
       "path": "./packages/stripe/tsconfig.json"
     },
     {
+      "path": "./packages/cloudflare/tsconfig.json"
+    },
+    {
       "path": "./packages/integration-tests/tsconfig.json"
     },
     {

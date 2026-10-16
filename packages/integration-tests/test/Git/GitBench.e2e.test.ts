@@ -1,5 +1,3 @@
-import { GitApi } from "@alchemy.run/git/Api";
-import { expect } from "alchemy-test";
 /**
  * Throughput benchmarks against a **deployed** git-service stack
  * (DESIGN.md §14–15): turns the estimated scaling table into measured
@@ -16,7 +14,9 @@ import { expect } from "alchemy-test";
  *
  * Skipped under `--fast`.
  */
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import { GitApi } from "@alchemy.run/git/Api";
+import { expect } from "alchemy-test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";

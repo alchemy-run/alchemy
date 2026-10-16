@@ -22,7 +22,7 @@ import type {
  *
  * ### Issue on demand
  * Publish the DNS-01 record through any runtime DNS write client wrapped
- * as a solver (`ACME.Cloudflare.zoneSolver(dns)`).
+ * as a solver (`Cloudflare.ACME.zoneSolver(dns)`).
  *
  * **Example:** Mint a wildcard from a Fly Service and upload it to its App
  * ```typescript
@@ -37,7 +37,7 @@ import type {
  *       fetch: Effect.gen(function* () {
  *         const issued = yield* acme.issue({
  *           identifiers: ["*.tenant.example.com"],
- *           solver: ACME.Cloudflare.zoneSolver(dns),
+ *           solver: Cloudflare.ACME.zoneSolver(dns),
  *         });
  *         yield* certs.upload({
  *           hostname: "*.tenant.example.com",

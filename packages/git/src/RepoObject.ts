@@ -1,4 +1,3 @@
-import type * as cf from "@cloudflare/workers-types";
 /**
  * The per-repo Durable Object (DESIGN.md §2, §3.4, §3.6, §8).
  *
@@ -26,7 +25,8 @@ import type * as cf from "@cloudflare/workers-types";
  * POST /:owner/:repo[.git]/git-receive-pack
  * ```
  */
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import type * as cf from "@cloudflare/workers-types";
 import type { HttpEffect } from "alchemy/Http";
 import { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Context from "effect/Context";

@@ -65,7 +65,7 @@ Deploy the committed files; this configuration does not generate SQL during depl
 ## Connect at runtime
 
 ```typescript
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 
 export const Hyperdrive = Effect.gen(function* () {
   const { branch } = yield* NeonDb;

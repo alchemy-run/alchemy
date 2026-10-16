@@ -1,3 +1,6 @@
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import type { Database } from "@alchemy.run/cloudflare/D1";
+import type { QueryDatabaseClient } from "@alchemy.run/cloudflare/D1";
 /**
  * `Git.RegistryD1` — the repo index on a D1 database.
  *
@@ -34,9 +37,6 @@
  * @product Git
  */
 import type * as runtime from "@cloudflare/workers-types";
-import * as Cloudflare from "alchemy/Cloudflare";
-import type { Database } from "alchemy/Cloudflare/D1";
-import type { QueryDatabaseClient } from "alchemy/Cloudflare/D1";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";

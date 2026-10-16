@@ -1,3 +1,6 @@
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import { CloudflareEnvironment } from "@alchemy.run/cloudflare";
+import { findZoneByName } from "@alchemy.run/cloudflare/Zone";
 import { CustomDomain } from "@alchemy.run/neon/CustomDomain";
 import { Function } from "@alchemy.run/neon/Function";
 import { Project } from "@alchemy.run/neon/Project";
@@ -5,9 +8,6 @@ import { providers } from "@alchemy.run/neon/Providers";
 import * as dns from "@distilled.cloud/cloudflare/dns";
 import * as Api from "@distilled.cloud/neon";
 import { expect } from "alchemy-test";
-import * as Cloudflare from "alchemy/Cloudflare";
-import { CloudflareEnvironment } from "alchemy/Cloudflare";
-import { findZoneByName } from "alchemy/Cloudflare/Zone";
 import * as AlchemyOutput from "alchemy/Output";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Config from "effect/Config";

@@ -111,7 +111,7 @@ The password's `origin` attribute is the exact shape
 the branch is one resource:
 
 ```typescript
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 
 const hyperdrive = yield* Cloudflare.Hyperdrive.Connection("app-hyperdrive", {
   origin: password.origin,

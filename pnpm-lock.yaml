@@ -746,6 +746,9 @@ importers:
       '@alchemy.run/axiom':
         specifier: workspace:*
         version: link:packages/axiom
+      '@alchemy.run/cloudflare':
+        specifier: workspace:*
+        version: link:packages/cloudflare
       '@alchemy.run/floci':
         specifier: workspace:*
         version: link:packages/floci
@@ -833,6 +836,9 @@ importers:
 
   benchmark/container:
     dependencies:
+      '@alchemy.run/cloudflare':
+        specifier: workspace:*
+        version: link:../../packages/cloudflare
       '@distilled.cloud/aws':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/aws
@@ -861,6 +867,9 @@ importers:
 
   demos/cli:
     dependencies:
+      '@alchemy.run/cloudflare':
+        specifier: workspace:*
+        version: link:../../packages/cloudflare
       '@effect/platform-bun':
         specifier: 'catalog:'
         version: 4.0.4(effect@4.0.4)
@@ -922,6 +931,9 @@ importers:
       '@alchemy.run/axiom':
         specifier: workspace:*
         version: link:../../packages/axiom
+      '@alchemy.run/cloudflare':
+        specifier: workspace:*
+        version: link:../../packages/cloudflare
       '@alchemy.run/fly':
         specifier: workspace:*
         version: link:../../packages/fly
@@ -1789,6 +1801,9 @@ importers:
 
   examples/cloudflare-agent:
     dependencies:
+      '@alchemy.run/cloudflare':
+        specifier: workspace:*
+        version: link:../../packages/cloudflare
       '@alchemy.run/github':
         specifier: workspace:*
         version: link:../../packages/github
@@ -1810,6 +1825,9 @@ importers:
       '@alchemy.run/better-auth':
         specifier: workspace:*
         version: link:../../packages/better-auth
+      '@alchemy.run/cloudflare':
+        specifier: workspace:*
+        version: link:../../packages/cloudflare
       alchemy:
         specifier: workspace:*
         version: link:../../packages/alchemy
@@ -1832,6 +1850,9 @@ importers:
 
   examples/cloudflare-d1-drizzle:
     dependencies:
+      '@alchemy.run/cloudflare':
+        specifier: workspace:*
+        version: link:../../packages/cloudflare
       '@alchemy.run/drizzle':
         specifier: workspace:*
         version: link:../../packages/drizzle
@@ -1860,6 +1881,9 @@ importers:
 
   examples/cloudflare-dev:
     dependencies:
+      '@alchemy.run/cloudflare':
+        specifier: workspace:*
+        version: link:../../packages/cloudflare
       '@cloudflare/puppeteer':
         specifier: 'catalog:'
         version: 1.4.0(supports-color@10.2.2)
@@ -1888,6 +1912,9 @@ importers:
       '@alchemy.run/axiom':
         specifier: workspace:*
         version: link:../../packages/axiom
+      '@alchemy.run/cloudflare':
+        specifier: workspace:*
+        version: link:../../packages/cloudflare
       '@alchemy.run/stripe':
         specifier: workspace:*
         version: link:../../packages/stripe
@@ -1959,6 +1986,9 @@ importers:
       '@alchemy.run/axiom':
         specifier: workspace:*
         version: link:../../../../packages/axiom
+      '@alchemy.run/cloudflare':
+        specifier: workspace:*
+        version: link:../../../../packages/cloudflare
       '@alchemy.run/stripe':
         specifier: workspace:*
         version: link:../../../../packages/stripe
@@ -2021,6 +2051,9 @@ importers:
 
   examples/cloudflare-durable-object-sql:
     dependencies:
+      '@alchemy.run/cloudflare':
+        specifier: workspace:*
+        version: link:../../packages/cloudflare
       '@alchemy.run/drizzle':
         specifier: workspace:*
         version: link:../../packages/drizzle
@@ -2045,6 +2078,9 @@ importers:
 
   examples/cloudflare-effect-sql-d1:
     dependencies:
+      '@alchemy.run/cloudflare':
+        specifier: workspace:*
+        version: link:../../packages/cloudflare
       '@cloudflare/workers-types':
         specifier: 5.20261012.1
         version: 5.20261012.1
@@ -2063,6 +2099,9 @@ importers:
 
   examples/cloudflare-email:
     dependencies:
+      '@alchemy.run/cloudflare':
+        specifier: workspace:*
+        version: link:../../packages/cloudflare
       '@cloudflare/workers-types':
         specifier: 5.20261012.1
         version: 5.20261012.1
@@ -2081,6 +2120,9 @@ importers:
 
   examples/cloudflare-federated-api:
     dependencies:
+      '@alchemy.run/cloudflare':
+        specifier: workspace:*
+        version: link:../../packages/cloudflare
       alchemy:
         specifier: workspace:*
         version: link:../../packages/alchemy
@@ -2101,6 +2143,9 @@ importers:
         specifier: 'catalog:'
         version: 0.165.0(@effect/platform-browser@4.0.4(effect@4.0.4))(effect@4.0.4)
     devDependencies:
+      '@alchemy.run/cloudflare':
+        specifier: workspace:*
+        version: link:../../packages/cloudflare
       '@foldkit/vite-plugin':
         specifier: 'catalog:'
         version: 0.26.0(effect@4.0.4)(foldkit@0.165.0(@effect/platform-browser@4.0.4(effect@4.0.4))(effect@4.0.4))(redis@6.2.1)(vite@8.3.4(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))
@@ -2132,6 +2177,9 @@ importers:
         specifier: 'catalog:'
         version: 0.165.0(@effect/platform-browser@4.0.4(effect@4.0.4))(effect@4.0.4)
     devDependencies:
+      '@alchemy.run/cloudflare':
+        specifier: workspace:*
+        version: link:../../packages/cloudflare
       '@foldkit/vite-plugin':
         specifier: 'catalog:'
         version: 0.26.0(effect@4.0.4)(foldkit@0.165.0(@effect/platform-browser@4.0.4(effect@4.0.4))(effect@4.0.4))(redis@6.2.1)(vite@8.3.4(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))
@@ -2150,6 +2198,9 @@ importers:
 
   examples/cloudflare-git-artifacts:
     dependencies:
+      '@alchemy.run/cloudflare':
+        specifier: workspace:*
+        version: link:../../packages/cloudflare
       '@effect/platform-bun':
         specifier: 'catalog:'
         version: 4.0.4(effect@4.0.4)
@@ -2168,6 +2219,9 @@ importers:
       '@alchemy.run/better-auth':
         specifier: workspace:*
         version: link:../../packages/better-auth
+      '@alchemy.run/cloudflare':
+        specifier: workspace:*
+        version: link:../../packages/cloudflare
       '@alchemy.run/git':
         specifier: workspace:*
         version: link:../../packages/git
@@ -2226,6 +2280,9 @@ importers:
 
   examples/cloudflare-hyperdrive-aws-vpc:
     dependencies:
+      '@alchemy.run/cloudflare':
+        specifier: workspace:*
+        version: link:../../packages/cloudflare
       '@cloudflare/workers-types':
         specifier: 5.20261012.1
         version: 5.20261012.1
@@ -2245,6 +2302,9 @@ importers:
 
   examples/cloudflare-microvm-shell:
     dependencies:
+      '@alchemy.run/cloudflare':
+        specifier: workspace:*
+        version: link:../../packages/cloudflare
       '@distilled.cloud/aws':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/aws
@@ -2264,6 +2324,9 @@ importers:
 
   examples/cloudflare-neon-drizzle:
     dependencies:
+      '@alchemy.run/cloudflare':
+        specifier: workspace:*
+        version: link:../../packages/cloudflare
       '@alchemy.run/drizzle':
         specifier: workspace:*
         version: link:../../packages/drizzle
@@ -2304,6 +2367,9 @@ importers:
 
   examples/cloudflare-neon-prisma:
     dependencies:
+      '@alchemy.run/cloudflare':
+        specifier: workspace:*
+        version: link:../../packages/cloudflare
       '@alchemy.run/neon':
         specifier: workspace:*
         version: link:../../packages/neon
@@ -2341,6 +2407,9 @@ importers:
 
   examples/cloudflare-neon-prisma-psl:
     dependencies:
+      '@alchemy.run/cloudflare':
+        specifier: workspace:*
+        version: link:../../packages/cloudflare
       '@alchemy.run/neon':
         specifier: workspace:*
         version: link:../../packages/neon
@@ -2375,6 +2444,9 @@ importers:
 
   examples/cloudflare-octane:
     dependencies:
+      '@alchemy.run/cloudflare':
+        specifier: workspace:*
+        version: link:../../packages/cloudflare
       '@alchemy.run/frontend-frameworks':
         specifier: workspace:*
         version: link:../../packages/frontend-frameworks
@@ -2406,6 +2478,9 @@ importers:
 
   examples/cloudflare-planetscale-mysql-drizzle:
     dependencies:
+      '@alchemy.run/cloudflare':
+        specifier: workspace:*
+        version: link:../../packages/cloudflare
       '@alchemy.run/drizzle':
         specifier: workspace:*
         version: link:../../packages/drizzle
@@ -2443,6 +2518,9 @@ importers:
 
   examples/cloudflare-planetscale-postgres-drizzle:
     dependencies:
+      '@alchemy.run/cloudflare':
+        specifier: workspace:*
+        version: link:../../packages/cloudflare
       '@alchemy.run/drizzle':
         specifier: workspace:*
         version: link:../../packages/drizzle
@@ -2483,6 +2561,9 @@ importers:
 
   examples/cloudflare-preview-benchmark:
     dependencies:
+      '@alchemy.run/cloudflare':
+        specifier: workspace:*
+        version: link:../../packages/cloudflare
       '@effect/platform-bun':
         specifier: 'catalog:'
         version: 4.0.4(effect@4.0.4)
@@ -2498,6 +2579,9 @@ importers:
 
   examples/cloudflare-secrets-store:
     dependencies:
+      '@alchemy.run/cloudflare':
+        specifier: workspace:*
+        version: link:../../packages/cloudflare
       '@cloudflare/workers-types':
         specifier: 5.20261012.1
         version: 5.20261012.1
@@ -2523,6 +2607,9 @@ importers:
         specifier: 'catalog:'
         version: 1.9.17
     devDependencies:
+      '@alchemy.run/cloudflare':
+        specifier: workspace:*
+        version: link:../../packages/cloudflare
       '@tailwindcss/postcss':
         specifier: 'catalog:'
         version: 4.3.3
@@ -2550,6 +2637,9 @@ importers:
 
   examples/cloudflare-static-site:
     dependencies:
+      '@alchemy.run/cloudflare':
+        specifier: workspace:*
+        version: link:../../packages/cloudflare
       '@distilled.cloud/cloudflare':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/cloudflare
@@ -2569,6 +2659,9 @@ importers:
 
   examples/cloudflare-tanstack-rpc-drizzle:
     dependencies:
+      '@alchemy.run/cloudflare':
+        specifier: workspace:*
+        version: link:../../packages/cloudflare
       '@alchemy.run/drizzle':
         specifier: workspace:*
         version: link:../../packages/drizzle
@@ -2639,6 +2732,9 @@ importers:
 
   examples/cloudflare-tanstack-start-solid:
     dependencies:
+      '@alchemy.run/cloudflare':
+        specifier: workspace:*
+        version: link:../../packages/cloudflare
       '@tanstack/solid-router':
         specifier: 'catalog:'
         version: 1.170.39(solid-js@1.9.17)
@@ -2673,6 +2769,9 @@ importers:
 
   examples/cloudflare-turso-drizzle:
     dependencies:
+      '@alchemy.run/cloudflare':
+        specifier: workspace:*
+        version: link:../../packages/cloudflare
       '@alchemy.run/drizzle':
         specifier: workspace:*
         version: link:../../packages/drizzle
@@ -2711,6 +2810,9 @@ importers:
         specifier: 'catalog:'
         version: 5.4.0(@rspack/core@1.7.11(@swc/helpers@0.5.23))(@vue/compiler-sfc@3.5.43)(esbuild@0.28.2)(rolldown@1.2.13)(rollup@4.62.4)(vite@8.3.4(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))(vue@3.6.0-beta.17(typescript@7.0.2))(webpack@5.109.2(cssnano@9.7.0(postcss@8.5.29))(csso@5.0.5)(esbuild@0.28.2)(lightningcss@1.33.0)(postcss@8.5.29))
     devDependencies:
+      '@alchemy.run/cloudflare':
+        specifier: workspace:*
+        version: link:../../packages/cloudflare
       '@tailwindcss/vite':
         specifier: 'catalog:'
         version: 4.3.3(vite@8.3.4(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))
@@ -2760,6 +2862,9 @@ importers:
         specifier: 'catalog:'
         version: 7.3.8(@types/node@26.6.5)(aws4fetch@1.0.20)(db0@0.3.4(@electric-sql/pglite@0.3.15)(@libsql/client@0.17.4)(drizzle-orm@1.0.0-rc.5-ab785fc(@cloudflare/workers-types@5.20261012.1)(@effect/sql-d1@4.0.4(effect@4.0.4))(@effect/sql-libsql@4.0.4(effect@4.0.4))(@effect/sql-mysql2@4.0.4(@types/node@26.6.5)(effect@4.0.4))(@effect/sql-pg@4.0.4(effect@4.0.4))(@effect/sql-sqlite-do@4.0.4(effect@4.0.4))(@electric-sql/pglite@0.3.15)(@libsql/client@0.17.4)(@neondatabase/serverless@1.1.0)(@types/pg@8.20.4)(arktype@2.2.8)(bun-types@1.4.3)(effect@4.0.4)(mysql2@3.24.5(@types/node@26.6.5))(pg@8.23.1)(valibot@1.2.0(typescript@7.0.2))(zod@4.5.4))(mysql2@3.24.5(@types/node@26.6.5)))(esbuild@0.28.2)(ioredis@5.11.1(supports-color@10.2.2))(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1)
     devDependencies:
+      '@alchemy.run/cloudflare':
+        specifier: workspace:*
+        version: link:../../packages/cloudflare
       '@alchemy.run/frontend-frameworks':
         specifier: workspace:*
         version: link:../../packages/frontend-frameworks
@@ -2788,6 +2893,9 @@ importers:
         specifier: 'catalog:'
         version: 0.165.0(@effect/platform-browser@4.0.4(effect@4.0.4))(effect@4.0.4)
     devDependencies:
+      '@alchemy.run/cloudflare':
+        specifier: workspace:*
+        version: link:../../packages/cloudflare
       '@foldkit/vite-plugin':
         specifier: 'catalog:'
         version: 0.26.0(effect@4.0.4)(foldkit@0.165.0(@effect/platform-browser@4.0.4(effect@4.0.4))(effect@4.0.4))(redis@6.2.1)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))
@@ -2819,6 +2927,9 @@ importers:
         specifier: 'catalog:'
         version: 19.3.0(react@19.3.0)
     devDependencies:
+      '@alchemy.run/cloudflare':
+        specifier: workspace:*
+        version: link:../../packages/cloudflare
       '@alchemy.run/frontend-frameworks':
         specifier: workspace:*
         version: link:../../packages/frontend-frameworks
@@ -2849,6 +2960,9 @@ importers:
 
   examples/cloudflare-website-nuxt:
     dependencies:
+      '@alchemy.run/cloudflare':
+        specifier: workspace:*
+        version: link:../../packages/cloudflare
       alchemy:
         specifier: workspace:*
         version: link:../../packages/alchemy
@@ -2890,6 +3004,9 @@ importers:
         specifier: 'catalog:'
         version: 7.16.0(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
     devDependencies:
+      '@alchemy.run/cloudflare':
+        specifier: workspace:*
+        version: link:../../packages/cloudflare
       '@tailwindcss/vite':
         specifier: 'catalog:'
         version: 4.3.3(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))
@@ -2920,6 +3037,9 @@ importers:
 
   examples/cloudflare-website-service-bindings:
     dependencies:
+      '@alchemy.run/cloudflare':
+        specifier: workspace:*
+        version: link:../../packages/cloudflare
       alchemy:
         specifier: workspace:*
         version: link:../../packages/alchemy
@@ -3185,6 +3305,9 @@ importers:
 
   examples/cloudflare-website-solidstart:
     dependencies:
+      '@alchemy.run/cloudflare':
+        specifier: workspace:*
+        version: link:../../packages/cloudflare
       '@solidjs/meta':
         specifier: 'catalog:'
         version: 0.29.4(solid-js@1.9.17)
@@ -3219,6 +3342,9 @@ importers:
 
   examples/cloudflare-website-sveltekit:
     dependencies:
+      '@alchemy.run/cloudflare':
+        specifier: workspace:*
+        version: link:../../packages/cloudflare
       alchemy:
         specifier: workspace:*
         version: link:../../packages/alchemy
@@ -3256,6 +3382,9 @@ importers:
 
   examples/cloudflare-website-tanstack-start:
     dependencies:
+      '@alchemy.run/cloudflare':
+        specifier: workspace:*
+        version: link:../../packages/cloudflare
       '@tanstack/react-router':
         specifier: 'catalog:'
         version: 1.170.42(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
@@ -3302,6 +3431,9 @@ importers:
 
   examples/cloudflare-website-vinext:
     dependencies:
+      '@alchemy.run/cloudflare':
+        specifier: workspace:*
+        version: link:../../packages/cloudflare
       alchemy:
         specifier: workspace:*
         version: link:../../packages/alchemy
@@ -3361,6 +3493,9 @@ importers:
         specifier: 'catalog:'
         version: 19.3.0(react@19.3.0)
     devDependencies:
+      '@alchemy.run/cloudflare':
+        specifier: workspace:*
+        version: link:../../packages/cloudflare
       '@tailwindcss/vite':
         specifier: 'catalog:'
         version: 4.3.3(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))
@@ -3391,6 +3526,9 @@ importers:
 
   examples/cloudflare-website-vocs:
     dependencies:
+      '@alchemy.run/cloudflare':
+        specifier: workspace:*
+        version: link:../../packages/cloudflare
       alchemy:
         specifier: workspace:*
         version: link:../../packages/alchemy
@@ -3446,6 +3584,9 @@ importers:
 
   examples/cloudflare-website-waku:
     dependencies:
+      '@alchemy.run/cloudflare':
+        specifier: workspace:*
+        version: link:../../packages/cloudflare
       alchemy:
         specifier: workspace:*
         version: link:../../packages/alchemy
@@ -3498,6 +3639,9 @@ importers:
       '@alchemy.run/better-auth':
         specifier: workspace:*
         version: link:../../packages/better-auth
+      '@alchemy.run/cloudflare':
+        specifier: workspace:*
+        version: link:../../packages/cloudflare
       '@effect/platform-bun':
         specifier: 'catalog:'
         version: 4.0.4(effect@4.0.4)
@@ -3519,6 +3663,9 @@ importers:
       '@alchemy.run/better-auth':
         specifier: workspace:*
         version: link:../../packages/better-auth
+      '@alchemy.run/cloudflare':
+        specifier: workspace:*
+        version: link:../../packages/cloudflare
       '@cloudflare/workers-types':
         specifier: 5.20261012.1
         version: 5.20261012.1
@@ -3540,6 +3687,9 @@ importers:
 
   examples/dev-stress:
     dependencies:
+      '@alchemy.run/cloudflare':
+        specifier: workspace:*
+        version: link:../../packages/cloudflare
       '@cloudflare/workers-types':
         specifier: 5.20261012.1
         version: 5.20261012.1
@@ -5300,6 +5450,9 @@ importers:
 
   examples/monorepo-multi-stack/backend:
     dependencies:
+      '@alchemy.run/cloudflare':
+        specifier: workspace:*
+        version: link:../../../packages/cloudflare
       '@effect/platform-bun':
         specifier: 'catalog:'
         version: 4.0.4(effect@4.0.4)
@@ -5315,6 +5468,9 @@ importers:
 
   examples/monorepo-multi-stack/frontend:
     dependencies:
+      '@alchemy.run/cloudflare':
+        specifier: workspace:*
+        version: link:../../../packages/cloudflare
       '@effect/platform-bun':
         specifier: 'catalog:'
         version: 4.0.4(effect@4.0.4)
@@ -5348,6 +5504,9 @@ importers:
 
   examples/monorepo-single-stack/backend:
     dependencies:
+      '@alchemy.run/cloudflare':
+        specifier: workspace:*
+        version: link:../../../packages/cloudflare
       '@effect/platform-bun':
         specifier: 'catalog:'
         version: 4.0.4(effect@4.0.4)
@@ -6060,6 +6219,9 @@ importers:
 
   examples/prisma-compute-effect:
     dependencies:
+      '@alchemy.run/cloudflare':
+        specifier: workspace:*
+        version: link:../../packages/cloudflare
       '@alchemy.run/prisma':
         specifier: workspace:*
         version: link:../../packages/prisma
@@ -6082,6 +6244,9 @@ importers:
 
   examples/prisma-tanstack-start:
     dependencies:
+      '@alchemy.run/cloudflare':
+        specifier: workspace:*
+        version: link:../../packages/cloudflare
       '@alchemy.run/prisma':
         specifier: workspace:*
         version: link:../../packages/prisma
@@ -7484,6 +7649,9 @@ importers:
 
   examples/stripe-billing:
     dependencies:
+      '@alchemy.run/cloudflare':
+        specifier: workspace:*
+        version: link:../../packages/cloudflare
       '@alchemy.run/stripe':
         specifier: workspace:*
         version: link:../../packages/stripe
@@ -7508,6 +7676,9 @@ importers:
 
   examples/stripe-connect:
     dependencies:
+      '@alchemy.run/cloudflare':
+        specifier: workspace:*
+        version: link:../../packages/cloudflare
       '@alchemy.run/stripe':
         specifier: workspace:*
         version: link:../../packages/stripe
@@ -7535,9 +7706,6 @@ importers:
       '@distilled.cloud/acme':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/acme
-      '@distilled.cloud/cloudflare':
-        specifier: workspace:*
-        version: link:../../submodules/distilled/packages/cloudflare
     devDependencies:
       '@types/bun':
         specifier: 'catalog:'
@@ -7554,9 +7722,6 @@ importers:
 
   packages/alchemy:
     dependencies:
-      '@alchemy.run/cloudflare-runtime':
-        specifier: workspace:*
-        version: link:../cloudflare-runtime
       '@alchemy.run/floci':
         specifier: workspace:*
         version: link:../floci
@@ -7569,60 +7734,18 @@ importers:
       '@distilled.cloud/aws':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/aws
-      '@distilled.cloud/cloudflare':
-        specifier: workspace:*
-        version: link:../../submodules/distilled/packages/cloudflare
       '@distilled.cloud/core':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/core
-      '@distilled.cloud/fly-io':
-        specifier: workspace:*
-        version: link:../../submodules/distilled/packages/fly-io
       '@distilled.cloud/gcp':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/gcp
-      '@distilled.cloud/hetzner':
-        specifier: workspace:*
-        version: link:../../submodules/distilled/packages/hetzner
-      '@distilled.cloud/iceberg':
-        specifier: workspace:*
-        version: link:../../submodules/distilled/packages/iceberg
       '@distilled.cloud/neon':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/neon
-      '@distilled.cloud/planetscale':
-        specifier: workspace:*
-        version: link:../../submodules/distilled/packages/planetscale
-      '@distilled.cloud/prisma':
-        specifier: workspace:*
-        version: link:../../submodules/distilled/packages/prisma
-      '@distilled.cloud/railway':
-        specifier: workspace:*
-        version: link:../../submodules/distilled/packages/railway
-      '@distilled.cloud/stripe':
-        specifier: workspace:*
-        version: link:../../submodules/distilled/packages/stripe
-      '@distilled.cloud/turso':
-        specifier: workspace:*
-        version: link:../../submodules/distilled/packages/turso
-      '@distilled.cloud/zerossl':
-        specifier: workspace:*
-        version: link:../../submodules/distilled/packages/zerossl
       '@effect/sql-d1':
         specifier: 'catalog:'
         version: 4.0.4(effect@4.0.4)
-      '@neon/functions':
-        specifier: 'catalog:'
-        version: 0.11.0(hono@4.13.13)
-      '@octokit/rest':
-        specifier: 'catalog:'
-        version: 22.0.1
-      '@octokit/webhooks':
-        specifier: 'catalog:'
-        version: 14.2.0
-      '@prisma/dev':
-        specifier: 'catalog:'
-        version: 0.20.0(typescript@7.0.2)
       '@types/aws-lambda':
         specifier: 'catalog:'
         version: 8.10.164
@@ -7632,9 +7755,6 @@ importers:
       fflate:
         specifier: 'catalog:'
         version: 0.8.3
-      libsodium-wrappers:
-        specifier: 'catalog:'
-        version: 0.8.4
       pathe:
         specifier: 'catalog:'
         version: 2.0.3
@@ -7917,6 +8037,9 @@ importers:
 
   packages/better-auth:
     devDependencies:
+      '@alchemy.run/cloudflare':
+        specifier: workspace:*
+        version: link:../cloudflare
       '@alchemy.run/neon':
         specifier: workspace:*
         version: link:../neon
@@ -7977,6 +8100,67 @@ importers:
       typescript:
         specifier: 'catalog:'
         version: 7.0.2
+
+  packages/cloudflare:
+    dependencies:
+      '@alchemy.run/acme':
+        specifier: workspace:*
+        version: link:../acme
+      '@alchemy.run/cloudflare-runtime':
+        specifier: workspace:*
+        version: link:../cloudflare-runtime
+      '@distilled.cloud/aws':
+        specifier: workspace:*
+        version: link:../../submodules/distilled/packages/aws
+      '@distilled.cloud/cloudflare':
+        specifier: workspace:*
+        version: link:../../submodules/distilled/packages/cloudflare
+      '@distilled.cloud/core':
+        specifier: workspace:*
+        version: link:../../submodules/distilled/packages/core
+      '@distilled.cloud/iceberg':
+        specifier: workspace:*
+        version: link:../../submodules/distilled/packages/iceberg
+      pathe:
+        specifier: 'catalog:'
+        version: 2.0.3
+      rolldown:
+        specifier: 1.2.13
+        version: 1.2.13
+      tinyglobby:
+        specifier: 'catalog:'
+        version: 0.2.17
+    devDependencies:
+      '@alchemy.run/frontend-frameworks':
+        specifier: workspace:*
+        version: link:../frontend-frameworks
+      '@cloudflare/workers-types':
+        specifier: 5.20261012.1
+        version: 5.20261012.1
+      '@effect/platform-bun':
+        specifier: 'catalog:'
+        version: 4.0.4(effect@4.0.4)
+      '@effect/platform-node':
+        specifier: 'catalog:'
+        version: 4.0.4(effect@4.0.4)(redis@6.2.1)
+      '@types/bun':
+        specifier: 'catalog:'
+        version: 1.4.3
+      '@types/node':
+        specifier: 'catalog:'
+        version: 26.6.5
+      alchemy:
+        specifier: workspace:*
+        version: link:../alchemy
+      effect:
+        specifier: 4.0.4
+        version: 4.0.4
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+      vite:
+        specifier: 'catalog:'
+        version: 8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1)
 
   packages/cloudflare-runtime:
     dependencies:
@@ -8155,6 +8339,9 @@ importers:
         specifier: 1.0.0-rc.5-ab785fc
         version: 1.0.0-rc.5-ab785fc
     devDependencies:
+      '@alchemy.run/cloudflare':
+        specifier: workspace:*
+        version: link:../cloudflare
       '@cloudflare/workers-types':
         specifier: 5.20261012.1
         version: 5.20261012.1
@@ -9026,6 +9213,9 @@ importers:
 
   packages/git:
     devDependencies:
+      '@alchemy.run/cloudflare':
+        specifier: workspace:*
+        version: link:../cloudflare
       '@cloudflare/workers-types':
         specifier: 5.20261012.1
         version: 5.20261012.1
@@ -9122,6 +9312,12 @@ importers:
       '@alchemy.run/axiom':
         specifier: workspace:*
         version: link:../axiom
+      '@alchemy.run/cloudflare':
+        specifier: workspace:*
+        version: link:../cloudflare
+      '@alchemy.run/cloudflare-runtime':
+        specifier: workspace:*
+        version: link:../cloudflare-runtime
       '@alchemy.run/drizzle':
         specifier: workspace:*
         version: link:../drizzle
@@ -9158,6 +9354,12 @@ importers:
       '@alchemy.run/turso':
         specifier: workspace:*
         version: link:../turso
+      '@cloudflare/containers':
+        specifier: 'catalog:'
+        version: 0.3.7
+      '@cloudflare/puppeteer':
+        specifier: 'catalog:'
+        version: 1.4.0(supports-color@10.2.2)
       '@cloudflare/workers-types':
         specifier: 5.20261012.1
         version: 5.20261012.1
@@ -9182,6 +9384,9 @@ importers:
       '@distilled.cloud/hetzner':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/hetzner
+      '@distilled.cloud/iceberg':
+        specifier: workspace:*
+        version: link:../../submodules/distilled/packages/iceberg
       '@distilled.cloud/neon':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/neon
@@ -9212,21 +9417,42 @@ importers:
       '@effect/sql-pg':
         specifier: 'catalog:'
         version: 4.0.4(effect@4.0.4)
+      '@foldkit/vite-plugin':
+        specifier: 'catalog:'
+        version: 0.26.0(effect@4.0.4)(foldkit@0.165.0(@effect/platform-browser@4.0.4(effect@4.0.4))(effect@4.0.4))(redis@6.2.1)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))
       '@libsql/client':
         specifier: 'catalog:'
         version: 0.17.4
       '@neon/functions':
         specifier: 'catalog:'
         version: 0.11.0(hono@4.13.13)
+      '@octanejs/adapter-cloudflare':
+        specifier: 'catalog:'
+        version: 0.0.12(@octanejs/app-core@0.0.18(octane@0.1.22(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))))
+      '@octanejs/vite-plugin':
+        specifier: 'catalog:'
+        version: 0.1.22(octane@0.1.22(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1)))(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))
       '@octokit/rest':
         specifier: 'catalog:'
         version: 22.0.1
+      '@opennextjs/cloudflare':
+        specifier: 'catalog:'
+        version: 1.20.1(next@16.2.10(@babel/core@7.29.7(supports-color@10.2.2))(@playwright/test@1.64.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(supports-color@10.2.2)(wrangler@4.149.0(@cloudflare/workers-types@5.20261012.1)(@types/node@26.6.5))
       '@prisma/orm-postgres':
         specifier: 'catalog:'
         version: 8.0.0-rc.11(@prisma/cli-engine@0.4.0(@prisma/management-api-sdk@1.69.0)(magicast@0.5.5))(magicast@0.5.5)(typanion@3.14.0)(typescript@7.0.2)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))
       '@sveltejs/kit':
         specifier: 'catalog:'
         version: 3.0.1(@sveltejs/vite-plugin-svelte@7.3.1(svelte@5.57.2)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1)))(svelte@5.57.2)(typescript@7.0.2)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))
+      '@sveltejs/vite-plugin-svelte':
+        specifier: 'catalog:'
+        version: 7.3.1(svelte@5.57.2)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))
+      '@tanstack/react-router':
+        specifier: 'catalog:'
+        version: 1.170.42(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
+      '@tanstack/react-start':
+        specifier: 'catalog:'
+        version: 1.168.61(@rspack/core@1.7.11(@swc/helpers@0.5.23))(@vitejs/plugin-rsc@0.5.36(react-dom@19.3.0(react@19.3.0))(react-server-dom-webpack@19.3.0(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(webpack@5.109.2(cssnano@9.7.0(postcss@8.5.29))(csso@5.0.5)(esbuild@0.28.2)(lightningcss@1.33.0)(postcss@8.5.29)))(react@19.3.0)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1)))(crossws@0.4.10(srvx@1.0.5))(esbuild@0.28.2)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(rolldown@1.2.13)(rollup@4.62.4)(supports-color@10.2.2)(vite-plugin-solid@2.11.14(solid-js@1.9.17)(supports-color@10.2.2)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1)))(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))(webpack@5.109.2(cssnano@9.7.0(postcss@8.5.29))(csso@5.0.5)(esbuild@0.28.2)(lightningcss@1.33.0)(postcss@8.5.29))
       '@types/bun':
         specifier: 'catalog:'
         version: 1.4.3
@@ -9236,9 +9462,21 @@ importers:
       '@types/pg':
         specifier: 'catalog:'
         version: 8.20.4
+      '@types/react':
+        specifier: 'catalog:'
+        version: 19.3.0
+      '@types/react-dom':
+        specifier: 'catalog:'
+        version: 19.3.0(@types/react@19.3.0)
       '@types/ws':
         specifier: 'catalog:'
         version: 8.18.2
+      '@vitejs/plugin-react':
+        specifier: 'catalog:'
+        version: 6.1.2(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))
+      '@vitejs/plugin-rsc':
+        specifier: 'catalog:'
+        version: 0.5.36(react-dom@19.3.0(react@19.3.0))(react-server-dom-webpack@19.3.0(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(webpack@5.109.2(cssnano@9.7.0(postcss@8.5.29))(csso@5.0.5)(esbuild@0.28.2)(lightningcss@1.33.0)(postcss@8.5.29)))(react@19.3.0)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))
       alchemy:
         specifier: workspace:*
         version: link:../alchemy
@@ -9248,6 +9486,9 @@ importers:
       arktype:
         specifier: 'catalog:'
         version: 2.2.8
+      astro:
+        specifier: 'catalog:'
+        version: 7.3.8(@types/node@26.6.5)(aws4fetch@1.0.20)(db0@0.3.4(@electric-sql/pglite@0.3.15)(@libsql/client@0.17.4)(drizzle-orm@1.0.0-rc.5-ab785fc(@cloudflare/workers-types@5.20261012.1)(@effect/sql-d1@4.0.4(effect@4.0.4))(@effect/sql-libsql@4.0.4(effect@4.0.4))(@effect/sql-mysql2@4.0.4(@types/node@26.6.5)(effect@4.0.4))(@effect/sql-pg@4.0.4(effect@4.0.4))(@effect/sql-sqlite-do@4.0.4(effect@4.0.4))(@electric-sql/pglite@0.3.15)(@libsql/client@0.17.4)(@neondatabase/serverless@1.1.0)(@types/pg@8.20.4)(arktype@2.2.8)(bun-types@1.4.3)(effect@4.0.4)(mysql2@3.24.5(@types/node@26.6.5))(pg@8.23.1)(valibot@1.2.0(typescript@7.0.2))(zod@4.5.4))(mysql2@3.24.5(@types/node@26.6.5)))(esbuild@0.28.2)(ioredis@5.11.1(supports-color@10.2.2))(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1)
       aws4fetch:
         specifier: 'catalog:'
         version: 1.0.20
@@ -9260,12 +9501,27 @@ importers:
       fflate:
         specifier: 'catalog:'
         version: 0.8.3
+      foldkit:
+        specifier: 'catalog:'
+        version: 0.165.0(@effect/platform-browser@4.0.4(effect@4.0.4))(effect@4.0.4)
       hono:
         specifier: 'catalog:'
         version: 4.13.13
       mysql2:
         specifier: 3.24.5
         version: 3.24.5(@types/node@26.6.5)
+      next:
+        specifier: 'catalog:'
+        version: 16.2.10(@babel/core@7.29.7(supports-color@10.2.2))(@playwright/test@1.64.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
+      nitropack:
+        specifier: 'catalog:'
+        version: 2.13.4(@electric-sql/pglite@0.3.15)(@libsql/client@0.17.4)(@rspack/core@1.7.11(@swc/helpers@0.5.23))(aws4fetch@1.0.20)(drizzle-orm@1.0.0-rc.5-ab785fc(@cloudflare/workers-types@5.20261012.1)(@effect/sql-d1@4.0.4(effect@4.0.4))(@effect/sql-libsql@4.0.4(effect@4.0.4))(@effect/sql-mysql2@4.0.4(@types/node@26.6.5)(effect@4.0.4))(@effect/sql-pg@4.0.4(effect@4.0.4))(@effect/sql-sqlite-do@4.0.4(effect@4.0.4))(@electric-sql/pglite@0.3.15)(@libsql/client@0.17.4)(@neondatabase/serverless@1.1.0)(@types/pg@8.20.4)(arktype@2.2.8)(bun-types@1.4.3)(effect@4.0.4)(mysql2@3.24.5(@types/node@26.6.5))(pg@8.23.1)(valibot@1.2.0(typescript@7.0.2))(zod@4.5.4))(mysql2@3.24.5(@types/node@26.6.5))(oxc-parser@0.141.0)(rolldown@1.2.13)(srvx@1.0.5)(supports-color@10.2.2)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))(webpack@5.109.2(cssnano@9.7.0(postcss@8.5.29))(csso@5.0.5)(esbuild@0.28.2)(lightningcss@1.33.0)(postcss@8.5.29))
+      nuxt:
+        specifier: 'catalog:'
+        version: 4.6.1(d2ee0207bac70ce7d8a6088a081ccd72)
+      octane:
+        specifier: 'catalog:'
+        version: 0.1.22(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))
       pathe:
         specifier: 'catalog:'
         version: 2.0.3
@@ -9275,15 +9531,45 @@ importers:
       prisma:
         specifier: 'catalog:'
         version: 8.0.0-rc.15(6202619f3f95102d65e1e6e6a54642a2)
+      react:
+        specifier: 'catalog:'
+        version: 19.3.0
+      react-dom:
+        specifier: 'catalog:'
+        version: 19.3.0(react@19.3.0)
+      react-router:
+        specifier: 'catalog:'
+        version: 7.16.0(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
+      react-server-dom-webpack:
+        specifier: 'catalog:'
+        version: 19.3.0(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(webpack@5.109.2(cssnano@9.7.0(postcss@8.5.29))(csso@5.0.5)(esbuild@0.28.2)(lightningcss@1.33.0)(postcss@8.5.29))
+      rolldown:
+        specifier: 1.2.13
+        version: 1.2.13
+      svelte:
+        specifier: 'catalog:'
+        version: 5.57.2
       typescript:
         specifier: 'catalog:'
         version: 7.0.2
       typescript-api:
         specifier: 'catalog:'
         version: typescript@7.1.0-dev.20260905.1(patch_hash=ed13690efac6337cfbdd058866fcc3bac76fb9afaf90d700200bbe40f7e4baf7)
+      unenv:
+        specifier: 'catalog:'
+        version: 2.0.0-rc.24
       uuid:
         specifier: 'catalog:'
         version: 14.0.3
+      vite:
+        specifier: 'catalog:'
+        version: 8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1)
+      vocs:
+        specifier: 'catalog:'
+        version: 2.8.2(985010434d4c5c22ddccd2b9a1bea9f0)
+      waku:
+        specifier: 'catalog:'
+        version: 1.0.0-beta.7(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(react-dom@19.3.0(react@19.3.0))(react-server-dom-webpack@19.3.0(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(webpack@5.109.2(cssnano@9.7.0(postcss@8.5.29))(csso@5.0.5)(esbuild@0.28.2)(lightningcss@1.33.0)(postcss@8.5.29)))(react@19.3.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1)
       ws:
         specifier: 'catalog:'
         version: 8.22.0
@@ -9349,6 +9635,9 @@ importers:
 
   packages/pkg:
     dependencies:
+      '@alchemy.run/cloudflare':
+        specifier: workspace:*
+        version: link:../cloudflare
       '@distilled.cloud/github':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/github
@@ -10767,6 +11056,9 @@ importers:
 
   website:
     dependencies:
+      '@alchemy.run/cloudflare':
+        specifier: workspace:*
+        version: link:../packages/cloudflare
       '@alchemy.run/github':
         specifier: workspace:*
         version: link:../packages/github

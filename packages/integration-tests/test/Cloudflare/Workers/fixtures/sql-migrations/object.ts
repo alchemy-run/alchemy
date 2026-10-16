@@ -1,6 +1,6 @@
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import { applySqlMigrations } from "@alchemy.run/cloudflare/Workers/SqlMigrationsApply";
 import * as Drizzle from "@alchemy.run/drizzle/Cloudflare";
-import * as Cloudflare from "alchemy/Cloudflare";
-import { applySqlMigrations } from "alchemy/Cloudflare/Workers/SqlMigrationsApply";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 import { relations, users } from "./schema.ts";

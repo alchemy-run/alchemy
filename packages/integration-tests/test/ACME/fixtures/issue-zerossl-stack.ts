@@ -1,6 +1,6 @@
 import * as ACME from "@alchemy.run/acme";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Alchemy from "alchemy";
-import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import AcmeIssueZeroSslWorker from "./issue-worker-zerossl.ts";

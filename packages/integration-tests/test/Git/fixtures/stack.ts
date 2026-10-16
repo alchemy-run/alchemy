@@ -1,3 +1,4 @@
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import {
   BlobStoreR2,
   GIT_WORKER_OPTIONS,
@@ -22,7 +23,6 @@ import {
  * user-land middleware in `test-auth.ts`; the engine sees no credential.
  */
 import * as Alchemy from "alchemy";
-import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
 import * as HttpRouter from "effect/http/HttpRouter";
 import * as Layer from "effect/Layer";
