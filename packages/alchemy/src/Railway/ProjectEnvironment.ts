@@ -45,6 +45,12 @@ export interface EnvironmentProps {
    */
   name?: string;
   /**
+   * Whether to create an ephemeral (PR) environment. Defaults to `false`.
+   * Create-only; ignored on update. Does not enable Railway's automatic
+   * PR deployments.
+   */
+  ephemeral?: boolean;
+  /**
    * Fork this environment from an existing one (`sourceEnvironmentId`).
    * Create-only; ignored on update. Pass the project's `environmentId` to
    * copy production's services, volumes, and variables.
@@ -118,6 +124,19 @@ const resolveEnvironmentProps = (
  * const staging = yield* Railway.Environment("Staging", {
  *   project: site,
  *   name: "staging",
+ * });
+ * ```
+ *
+ * ### Create a PR preview
+ * `ephemeral: true` lists the environment under PR Environments in Railway.
+ * Create-only; existing environments are not converted on update.
+ *
+ * **Example:** Ephemeral preview environment
+ * ```typescript
+ * const preview = yield* Railway.Environment("Preview", {
+ *   project: site,
+ *   name: "pr-123",
+ *   ephemeral: true,
  * });
  * ```
  *
@@ -204,7 +223,7 @@ const projectEnvironments = (projectId: string) =>
   Query.items(Railway.environments({ projectId, first: 50 }).pipe(Query.map(environmentFields)));
 
 const environmentCreate = Query.fn(
-  (input: { name: string; projectId: string; sourceEnvironmentId?: string }) =>
+  (input: { name: string; projectId: string; ephemeral?: boolean; sourceEnvironmentId?: string }) =>
     environmentFields(Railway.environmentCreate({ input })),
 );
 
@@ -308,6 +327,7 @@ export const EnvironmentProvider = () =>
           environmentCreate({
             name,
             projectId,
+            ...(props.ephemeral !== undefined ? { ephemeral: props.ephemeral } : {}),
             ...(props.sourceEnvironmentId !== undefined
               ? { sourceEnvironmentId: props.sourceEnvironmentId }
               : {}),
