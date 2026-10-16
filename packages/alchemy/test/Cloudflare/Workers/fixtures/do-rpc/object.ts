@@ -1,7 +1,29 @@
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import type * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import * as Cloudflare from "@/Cloudflare";
+
+export const streamScenarios = [
+  "complete",
+  "cancel",
+  "empty",
+  "head-failure",
+  "tail-failure",
+] as const;
+
+class RpcStreamFixtureError extends Data.TaggedError("RpcStreamFixtureError")<{
+  readonly phase: "head" | "tail";
+}> {}
+
+interface RpcStreamSnapshot {
+  part: "head" | "tail";
+  eventClosed: number;
+  sourceClosed: number;
+}
+
+type RpcStreamValue = RpcStreamSnapshot | Uint8Array;
 
 const KV = Cloudflare.KV.Namespace("DurableObjectWorkerEnvironmentKV", {
   title: "durable-object-worker-environment-kv",
@@ -18,6 +40,60 @@ export class WorkerEnvironmentKVObject extends Cloudflare.DurableObject<WorkerEn
         identity: () => Effect.sync(() => state.id.toString()),
         put: (key: string, value: string) => kv.put(key, value),
         get: (key: string) => kv.get(key),
+        scopedStreamReady: () => Effect.succeed("rpc-stream-scopes"),
+        scopedStream: (
+          bytes: boolean,
+          scenario: (typeof streamScenarios)[number],
+        ): Effect.Effect<
+          Stream.Stream<RpcStreamValue, RpcStreamFixtureError>,
+          never,
+          Scope.Scope
+        > =>
+          Effect.gen(function* () {
+            let eventClosed = 0;
+            yield* Effect.addFinalizer(() =>
+              Effect.sync(() => {
+                eventClosed++;
+              }),
+            );
+
+            return Stream.unwrap(
+              Effect.gen(function* () {
+                let sourceClosed = 0;
+                yield* Effect.addFinalizer(() =>
+                  Effect.sync(() => {
+                    sourceClosed++;
+                  }),
+                );
+                const value = (part: "head" | "tail"): RpcStreamValue => {
+                  const snapshot = { part, eventClosed, sourceClosed };
+                  return bytes
+                    ? new TextEncoder().encode(`${JSON.stringify(snapshot)}\n`)
+                    : snapshot;
+                };
+                if (scenario === "empty") return Stream.empty;
+                if (scenario === "head-failure") {
+                  return Stream.fail(new RpcStreamFixtureError({ phase: "head" }));
+                }
+                return Stream.concat(
+                  Stream.succeed(value("head")),
+                  Stream.fromEffect(
+                    scenario === "cancel"
+                      ? Effect.never
+                      : Effect.gen(function* () {
+                          // Keep the tail in a later pull so both scope lifetimes
+                          // are observed after the native RPC method has returned.
+                          yield* Effect.sleep("50 millis");
+                          if (scenario === "tail-failure") {
+                            return yield* Effect.fail(new RpcStreamFixtureError({ phase: "tail" }));
+                          }
+                          return value("tail");
+                        }),
+                  ),
+                );
+              }),
+            );
+          }),
         // Egress colo is diagnostic, not a placement guarantee.
         colo: () =>
           Effect.promise(async () => {
