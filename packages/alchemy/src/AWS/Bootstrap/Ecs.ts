@@ -1,13 +1,11 @@
 /**
  * Process bootstrap for `AWS.ECS.Task` / `AWS.ECS.Service` containers. The
  * generated entry imports this module and the user's `main`, nothing else —
- * see {@link ./Process.ts} for why.
+ * see `alchemy/Runtime/Bootstrap/Process` for why.
  */
-/* oxlint-disable alchemy/package-boundaries -- package split phase 3: per-cloud runtime bootstrap; moves into its provider */
 import * as Credentials from "@distilled.cloud/aws/Credentials";
 import * as Endpoint from "@distilled.cloud/aws/Endpoint";
 import * as Region from "@distilled.cloud/aws/Region";
-/* oxlint-enable alchemy/package-boundaries */
 import { BunServices } from "@effect/platform-bun";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
@@ -16,7 +14,12 @@ import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
 import { BunHttpServer } from "../../Http.ts";
 import { reifyBoundConfigProvider } from "../../Runtime.ts";
-import { entrypointLayer, resolveProgram, runProcess, stackFromEnv } from "./Process.ts";
+import {
+  entrypointLayer,
+  resolveProgram,
+  runProcess,
+  stackFromEnv,
+} from "../../Runtime/Bootstrap/Process.ts";
 
 /**
  * Resolve the bundled program (the runners registered via `host.run` /

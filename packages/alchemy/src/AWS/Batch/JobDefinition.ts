@@ -850,7 +850,7 @@ export const JobDefinitionProvider = () =>
               realMain,
               virtualEntryPlugin(
                 (importPath) => `
-import { bootstrap } from "alchemy/Runtime/Bootstrap/Batch";
+import { bootstrap } from "alchemy/AWS/Bootstrap/Batch";
 import { ${handler} as entrypoint } from ${JSON.stringify(importPath)};
 
 await bootstrap(entrypoint);

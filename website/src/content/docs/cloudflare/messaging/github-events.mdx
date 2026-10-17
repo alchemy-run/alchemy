@@ -67,11 +67,11 @@ the Worker:
    Effect.gen(function* () {
      // ...
 -  }),
-+  }).pipe(Effect.provide(Cloudflare.Workers.GitHubRepositoryEventSourceLive)),
++  }).pipe(Effect.provide(GitHub.Cloudflare.RepositoryEventSourceLive)),
  );
 ```
 
-`GitHubRepositoryEventSourceLive` does both halves: at deploy time it
+`GitHub.Cloudflare.RepositoryEventSourceLive` does both halves: at deploy time it
 provisions the repository webhook pointing at this Worker, and at
 runtime it registers a `fetch` listener that claims the webhook's
 delivery path and forwards each verified delivery to your handler.
@@ -242,7 +242,7 @@ Worth reading in the example:
 
 ## Cloudflare-only today
 
-`Cloudflare.Workers.GitHubRepositoryEventSourceLive` is currently the
+`GitHub.Cloudflare.RepositoryEventSourceLive` is currently the
 only implementation of the `RepositoryEventSource` contract — there
 is no AWS Lambda event source yet. On other hosts you can still
 provision a [`GitHub.Webhook`](/providers/github/webhook) directly

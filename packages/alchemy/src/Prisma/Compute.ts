@@ -1474,7 +1474,7 @@ const bundleEffectCompute = Effect.fn(function* (props: ComputeProps) {
         props.bundle?.input?.plugins,
         virtualEntryPlugin(
           (importPath) => `
-import { bootstrap } from "alchemy/Runtime/Bootstrap/Prisma";
+import { bootstrap } from "alchemy/Prisma/Bootstrap";
 ${importEntrypoint} from ${JSON.stringify(importPath)};
 
 await bootstrap(entrypoint, ${JSON.stringify({

@@ -1,7 +1,7 @@
 /**
  * Process bootstrap for `Prisma.Compute` apps. The generated entry imports
  * this module and the user's `main`, nothing else — see
- * {@link ./Process.ts} for why.
+ * `alchemy/Runtime/Bootstrap/Process` for why.
  */
 import { BunServices } from "@effect/platform-bun";
 import * as ConfigProvider from "effect/ConfigProvider";
@@ -10,9 +10,14 @@ import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
 import { MinimumLogLevel } from "effect/References";
-import { BunHttpServer } from "../../Http.ts";
-import { Stage } from "../../Stage.ts";
-import { entrypointLayer, resolveProgram, runProcess, stackConstant } from "./Process.ts";
+import { BunHttpServer } from "../Http.ts";
+import {
+  entrypointLayer,
+  resolveProgram,
+  runProcess,
+  stackConstant,
+} from "../Runtime/Bootstrap/Process.ts";
+import { Stage } from "../Stage.ts";
 
 export interface PrismaBootstrapOptions {
   /** Port to serve on when the platform does not inject `PORT`. */

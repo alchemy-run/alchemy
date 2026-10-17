@@ -325,8 +325,8 @@ export const bundleContainerProgram = Effect.fn(function* ({
           (importPath) => `
 import { bootstrap } from ${JSON.stringify(
             runtime === "bun"
-              ? "alchemy/Runtime/Bootstrap/CloudflareContainerBun"
-              : "alchemy/Runtime/Bootstrap/CloudflareContainerNode",
+              ? "alchemy/Cloudflare/Bootstrap/ContainerBun"
+              : "alchemy/Cloudflare/Bootstrap/ContainerNode",
           )};
 import ${handler === "default" ? "entrypoint" : `{ ${handler} as entrypoint }`} from ${JSON.stringify(importPath)};
 

@@ -241,7 +241,7 @@ export const mountCloudSqlInstances = <T extends CloudSqlTemplate>(
 
 /**
  * Generated entry for an Effect-native GCP container: imports only
- * `alchemy/Runtime/Bootstrap/<module>` plus the user's `main`. The runtime
+ * `alchemy/GCP/Bootstrap/<module>` plus the user's `main`. The runtime
  * flag is raised before the user's module evaluates (hence the dynamic
  * import) so module-scope code sees it.
  */
@@ -249,7 +249,7 @@ export const makeGcpBootstrap =
   (module: "CloudRun" | "CloudRunJob", handler: string) =>
   (importPath: string): string =>
     `
-import { bootstrap } from "alchemy/Runtime/Bootstrap/${module}";
+import { bootstrap } from "alchemy/GCP/Bootstrap/${module}";
 
 globalThis.__ALCHEMY_RUNTIME__ = true;
 const { ${handler}: entrypoint } = await import(${JSON.stringify(importPath)});

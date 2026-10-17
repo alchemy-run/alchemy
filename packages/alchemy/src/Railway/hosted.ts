@@ -38,7 +38,7 @@ export type RailwayHostRuntimeContext = HostRuntimeContext;
 /**
  * Container host. RPC wrapping lives in `Service.ts` so canvas Functions
  * do not pay for `rpc-server.ts` in the 96KB start command. The generated
- * Service entry is a shim that imports `alchemy/Runtime/Bootstrap/Railway`
+ * Service entry is a shim that imports `alchemy/Railway/Bootstrap`
  * (Node HTTP) plus the user's `main` — see that module for why.
  */
 export const createRailwayHostRuntimeContext = createContainerRuntimeContext;
@@ -156,14 +156,14 @@ const dockerfileCopyLines = (files: ReadonlyArray<ExtraFile> | undefined) =>
 
 /**
  * The generated entry for `Railway.Service` containers: a shim importing
- * only `alchemy/Runtime/Bootstrap/Railway` plus the user's `main` — see
+ * only `alchemy/Railway/Bootstrap` plus the user's `main` — see
  * that module for why the entry never imports alchemy's own dependencies.
  */
 const makeNodeBootstrap =
   (handler: string) =>
   (importPath: string): string =>
     `
-import { bootstrap } from "alchemy/Runtime/Bootstrap/Railway";
+import { bootstrap } from "alchemy/Railway/Bootstrap";
 
 globalThis.__ALCHEMY_RUNTIME__ = true;
 const { ${handler}: entrypoint } = await import(${JSON.stringify(importPath)});
