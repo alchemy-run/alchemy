@@ -1,4 +1,3 @@
-import * as Floci from "@alchemy.run/floci";
 /** @effect-diagnostics anyUnknownInErrorContext:off */
 import * as Config from "effect/Config";
 import { ConfigProvider } from "effect/ConfigProvider";
@@ -7,7 +6,6 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as HttpClient from "effect/http/HttpClient";
-import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Scope from "effect/Scope";
@@ -19,12 +17,9 @@ import { AuthProviders } from "../Auth/AuthProvider.ts";
 import { CredentialsStoreLive } from "../Auth/Credentials.ts";
 import { ProfileStoreLive } from "../Auth/Profile.ts";
 import { withProfileOverride } from "../Auth/Resolve.ts";
-/* oxlint-disable alchemy/package-boundaries -- package split phase 2: floci test services; become plugin `testServices` */
-import { DEFAULT_LOCAL_ENDPOINT } from "../AWS/AuthProvider.ts";
-import { flociServices } from "../AWS/Local/FlociServices.ts";
-/* oxlint-enable alchemy/package-boundaries */
 import { userStage } from "../Cli/commands/flags.ts";
 import { LoggingCli } from "../Cli/LoggingCli.ts";
+import * as Contributions from "../Contributions.ts";
 import { deploy as _deploy } from "../Deploy.ts";
 import { destroy as _destroy } from "../Destroy.ts";
 import type { Input } from "../Input.ts";
@@ -337,70 +332,70 @@ const overrideAlchemyContext = (overrides: { dev: boolean }) =>
 
 export type TestEffect<A, Req = never> = StackEffect<A, any, Req>;
 
-/**
- * Floci serves virtual-host data planes on the gateway when the Host
- * header is the AWS hostname (`{bucket}.s3-website-{region}.amazonaws.com`,
- * `{apiId}.appsync-api.{region}.amazonaws.com`,
- * `{apiId}.execute-api.{region}.amazonaws.com`,
- * `{distributionId}.cloudfront.net`). Live tests GET those hosts; under
- * {@link ALCHEMY_TEST_DEV} rewrite the URL to the emulator and keep the
- * Host so the virtual-host filter still fires.
- */
-const rewriteAwsVirtualHostToFloci = (
-  request: HttpClientRequest.HttpClientRequest,
-): HttpClientRequest.HttpClientRequest => {
-  let url: URL;
-  try {
-    url = new URL(request.url);
-  } catch {
-    return request;
-  }
-  if (
-    !/\.s3-website-[a-z0-9-]+\.amazonaws\.com$/i.test(url.hostname) &&
-    !/\.appsync-api\.[a-z0-9-]+\.amazonaws\.com$/i.test(url.hostname) &&
-    !/\.execute-api\.[a-z0-9-]+\.amazonaws\.com$/i.test(url.hostname) &&
-    !/\.cloudfront\.net$/i.test(url.hostname)
-  ) {
-    return request;
-  }
-  const rewritten = new URL(url.href);
-  const endpoint = new URL(DEFAULT_LOCAL_ENDPOINT);
-  rewritten.protocol = endpoint.protocol;
-  rewritten.hostname = endpoint.hostname;
-  rewritten.port = endpoint.port;
-  return request.pipe(
-    HttpClientRequest.setUrl(rewritten.toString()),
-    HttpClientRequest.setHeader("host", url.hostname),
-  );
-};
+const testDev = Option.getOrElse(alchemyTestDevOverride(), () => false);
 
-if (Option.getOrElse(alchemyTestDevOverride(), () => false)) {
-  // Floci rewrites WebSocket invoke URLs onto wss://127.0.0.1:4566/ws/...
-  // The gateway cert is self-signed; Bun/Node would otherwise reject the
-  // upgrade. Scoped to ALCHEMY_TEST_DEV only.
+/**
+ * Every provider's test services (e.g. AWS's Floci emulator), applied under
+ * {@link ALCHEMY_TEST_DEV} only.
+ */
+const testServices: ReadonlyArray<Contributions.TestServices> = testDev
+  ? await Effect.runPromise(
+      Contributions.load().pipe(
+        Effect.flatMap((providers) =>
+          Effect.forEach(providers, (provider) =>
+            provider.testServices
+              ? Contributions.resolve(provider, "testServices", provider.testServices)
+              : Effect.succeed(undefined),
+          ),
+        ),
+        Effect.map((services) => services.filter((service) => service !== undefined)),
+        Effect.provide(PlatformServices),
+      ),
+    )
+  : [];
+
+if (testDev) {
+  // Emulators rewrite WebSocket invoke URLs onto their self-signed gateway;
+  // Bun/Node would otherwise reject the upgrade. Scoped to ALCHEMY_TEST_DEV
+  // only.
   process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
-  // Local workerd trusts no self-signed certs and ignores the flag above
-  // (it's C++, not Node). Its runtime DOES fold `NODE_EXTRA_CA_CERTS` into
-  // workerd's outbound `trustedCertificates` (see cloudflare-runtime
-  // Internet.ts), so point it at the emulator CA bundle that `ensureFloci`
-  // refreshes on every health check. Set here — before the RPC spawner or
-  // any vite child forks — so the whole dev process tree inherits it.
-  process.env.NODE_EXTRA_CA_CERTS ??= Floci.FLOCI_CA_PATH;
+  // Set here — before the RPC spawner or any vite child forks — so the whole
+  // dev process tree inherits it.
+  for (const services of testServices) {
+    for (const [key, value] of Object.entries(services.env ?? {})) process.env[key] ??= value;
+  }
 }
 
-const flociWebsiteHttp = Layer.effect(
+/** The test services' layers, closest wins over the stack's own. */
+const testServicesLayer =
+  testServices.length === 0
+    ? undefined
+    : testServices
+        .map((services) => services.layer)
+        .reduce((merged, layer) => Layer.merge(merged, layer));
+
+const provideTestServices = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+  // Test services override services already present in R.
+  testServicesLayer === undefined
+    ? effect
+    : // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- the layer overrides services already present in R
+      (Effect.provide(effect, testServicesLayer) as Effect.Effect<A, E, R>);
+
+const testHttp = Layer.effect(
   HttpClient.HttpClient,
   Effect.map(HttpClient.HttpClient, (client) =>
-    HttpClient.mapRequest(client, rewriteAwsVirtualHostToFloci),
+    testServices.reduce(
+      (mapped, services) =>
+        services.mapRequest ? HttpClient.mapRequest(mapped, services.mapRequest) : mapped,
+      client,
+    ),
   ),
 ).pipe(Layer.provide(FetchHttpClient.layer));
 
 const platformLayer = () =>
   Layer.mergeAll(
     PlatformServices,
-    Option.getOrElse(alchemyTestDevOverride(), () => false)
-      ? flociWebsiteHttp
-      : FetchHttpClient.layer,
+    testDev ? testHttp : FetchHttpClient.layer,
     Layer.provide(ProfileStoreLive, PlatformServices),
     Layer.provide(CredentialsStoreLive, PlatformServices),
   );
@@ -443,10 +438,7 @@ export const toEffect = <A, ROut = any>(
     // `Test.make({ dev: true })` files are unchanged (mixed
     // `Alchemy.remote()` suites keep their live SDK).
     const body = sidecar ? sidecar.provide(effect) : effect;
-    const locally =
-      Option.getOrElse(alchemyTestDevOverride(), () => false) === true
-        ? Effect.provide(body, flociServices())
-        : body;
+    const locally = testDev ? provideTestServices(body) : body;
     return yield* locally.pipe(
       provideFreshArtifactStore,
       Effect.provideService(ConfigProvider, configProvider),
@@ -492,10 +484,7 @@ export const withProviders = <A, E, R, ROut>(
   // Closest wins: when `ALCHEMY_TEST_DEV=1`, pin the test body's
   // distilled AWS clients to the emulator BEFORE `options.providers`
   // (which still carries the live `AWSEnvironment`).
-  const body =
-    Option.getOrElse(alchemyTestDevOverride(), () => false) === true
-      ? Effect.provide(effect, flociServices())
-      : effect;
+  const body = testDev ? provideTestServices(effect) : effect;
   const stage = resolveStage(options);
   // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- providers layer is typed `any`; requirements are satisfied by it
   return body.pipe(
@@ -699,27 +688,25 @@ export const scratchStack = <ROut>(
       ? Layer.succeed(State.State, State.InMemoryService({}))
       : Layer.provide(State.localState(), PlatformServices);
 
-  // `withProviders` already pins the test body to Floci, but the stack program
-  // and its later plan/apply phase run under `AWS.providers()`'s live services.
-  // Pin both phases separately: Actions execute during apply, after the stack
-  // program has finished. This override must be inside `compiled.services` so
-  // Effect's closest-layer precedence selects Floci for Action data-plane calls.
-  const pinToFloci = <A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
-    Option.getOrElse(alchemyTestDevOverride(), () => false)
-      ? // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- flociServices overrides services already present in R
-        (Effect.provide(effect, flociServices()) as Effect.Effect<A, E, R>)
-      : effect;
+  // `withProviders` already pins the test body to the test services, but the
+  // stack program and its later plan/apply phase run under the providers'
+  // live services. Pin both phases separately: Actions execute during apply,
+  // after the stack program has finished. This override must be inside
+  // `compiled.services` so Effect's closest-layer precedence selects the test
+  // services for Action data-plane calls.
+  const pinToTestServices = <A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
+    testDev ? provideTestServices(effect) : effect;
 
   const buildAndApply = (
     effect: Effect.Effect<any, any, any>,
     planOptions?: Plan.FilteredPlanOptions,
   ) =>
-    (pinToFloci(effect) as Effect.Effect<any, any, never>).pipe(
+    (pinToTestServices(effect) as Effect.Effect<any, any, never>).pipe(
       makeStack({ name: stackName, providers: options.providers, state: stateLayer } as any) as any,
       Effect.flatMap((compiled: any) =>
         Plan.make(compiled, planOptions ?? {}).pipe(
           Effect.flatMap(apply),
-          pinToFloci,
+          pinToTestServices,
           Effect.provide(compiled.services),
         ),
       ),
@@ -731,10 +718,12 @@ export const scratchStack = <ROut>(
     effect: Effect.Effect<any, any, any>,
     planOptions?: Plan.FilteredPlanOptions,
   ) =>
-    (pinToFloci(effect) as Effect.Effect<any, any, never>).pipe(
+    (pinToTestServices(effect) as Effect.Effect<any, any, never>).pipe(
       makeStack({ name: stackName, providers: options.providers, state: stateLayer } as any) as any,
       Effect.flatMap((compiled: any) =>
-        pinToFloci(Plan.make(compiled, planOptions ?? {})).pipe(Effect.provide(compiled.services)),
+        pinToTestServices(Plan.make(compiled, planOptions ?? {})).pipe(
+          Effect.provide(compiled.services),
+        ),
       ),
       Effect.provideService(Stage, stage),
       provideFreshArtifactStore,

@@ -6,11 +6,9 @@ import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import { ChildProcess } from "effect/process";
 import * as Stream from "effect/Stream";
-/* oxlint-disable alchemy/package-boundaries -- package split phase 2: provider CLI subcommand; becomes plugin `cli` */
-import { generate, loadGeneratorConfig } from "../../Prisma/ORM/Generate.ts";
-import { CliError } from "../../Prisma/ORM/internal.ts";
-/* oxlint-enable alchemy/package-boundaries */
-import { exec } from "../../Util/exec.ts";
+import { exec } from "../Util/exec.ts";
+import { generate, loadGeneratorConfig } from "./ORM/Generate.ts";
+import { CliError } from "./ORM/internal.ts";
 
 const generateCommand = Command.make(
   "generate",
@@ -27,11 +25,12 @@ const generateCommand = Command.make(
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const loaded = yield* loadGeneratorConfig(config);
-    const bin = yield* path.fromFileUrl(new URL("../../../bin/cli.js", import.meta.url));
+    const bin = yield* path.fromFileUrl(new URL("../../bin/cli.js", import.meta.url));
     const run = Effect.gen(function* () {
       const result = yield* exec(
         ChildProcess.make(process.execPath, [
           bin,
+          "provider",
           "prisma",
           "generate",
           "--config",

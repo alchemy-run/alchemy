@@ -1,22 +1,19 @@
-// oxlint-disable-next-line alchemy/package-boundaries -- package split phase 2: provider-specific routes; become plugin `stateStores` / `cli`
 import * as Auth from "@distilled.cloud/aws/Auth";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as EffectConsole from "effect/Console";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
-/* oxlint-disable alchemy/package-boundaries -- package split phase 2: provider-specific routes; become plugin `stateStores` / `cli` */
-import { getAccountId, silentConsole } from "../../AWS/AuthProvider.ts";
+import type { Target } from "../../Alchemist/Session.ts";
+import { loadConfigProvider } from "../../Util/ConfigProvider.ts";
+import { getAccountId, silentConsole } from "../AuthProvider.ts";
 import {
   bootstrap as bootstrapAws,
   destroyBootstrap as destroyBootstrapAws,
-} from "../../AWS/Bootstrap.ts";
-import * as AWSCredentials from "../../AWS/Credentials.ts";
-import { AWSEnvironment } from "../../AWS/Environment.ts";
-import * as AWSRegion from "../../AWS/Region.ts";
-/* oxlint-enable alchemy/package-boundaries */
-import { loadConfigProvider } from "../../Util/ConfigProvider.ts";
-import type { Target } from "../Session.ts";
+} from "../Bootstrap.ts";
+import * as AWSCredentials from "../Credentials.ts";
+import { AWSEnvironment } from "../Environment.ts";
+import * as AWSRegion from "../Region.ts";
 
 export interface AwsTarget extends Target {
   readonly profile: string;

@@ -12,7 +12,7 @@ export const effectGeneratorKey = Symbol.for("alchemy/Prisma/ORM/generator");
 
 /**
  * Attach Effect generation to the ORM section of a Prisma configuration.
- * Run `alchemy prisma generate --config ./prisma.config.ts` to emit outputs.
+ * Run `alchemy provider prisma generate --config ./prisma.config.ts` to emit outputs.
  * Native Prisma commands continue to work and do not run this generator.
  *
  * ```typescript

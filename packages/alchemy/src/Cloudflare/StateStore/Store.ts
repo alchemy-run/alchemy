@@ -1,12 +1,25 @@
 import * as Effect from "effect/Effect";
 import { pipe } from "effect/Function";
 import * as Redacted from "effect/Redacted";
+import * as Schedule from "effect/Schedule";
 import type { ReplacedResourceState, ResourceState } from "../../State/ResourceState.ts";
 import { encodeState } from "../../State/StateEncoding.ts";
 import * as Secret from "../SecretsStore/index.ts";
 import { DurableObject } from "../Workers/DurableObject.ts";
 import { DurableObjectState } from "../Workers/DurableObjectState.ts";
 import { EncryptionKey } from "./Token.ts";
+
+/**
+ * Secrets Store reads from a Worker or Durable Object fail transiently
+ * ("Secrets Worker: Failed to fetch secret"); retry briefly before failing
+ * the request.
+ */
+export const retrySecretRead = <A, E, R>(read: Effect.Effect<A, E, R>) =>
+  read.pipe(
+    Effect.retry({
+      schedule: Schedule.max([Schedule.exponential("100 millis"), Schedule.recurs(3)]),
+    }),
+  );
 
 export default class Store extends DurableObject<Store>()(
   "Store",
@@ -19,7 +32,9 @@ export default class Store extends DurableObject<Store>()(
     const storage = state.storage;
 
     return Effect.gen(function* () {
-      const keyHex = yield* encryptionSecret.get().pipe(Effect.map(Redacted.value));
+      const keyHex = yield* encryptionSecret
+        .get()
+        .pipe(retrySecretRead, Effect.map(Redacted.value));
       const cryptoKey = yield* Effect.tryPromise(() =>
         crypto.subtle.importKey("raw", Buffer.from(keyHex, "hex"), { name: "AES-CTR" }, false, [
           "encrypt",

@@ -2,11 +2,11 @@ import * as Command from "effect/cli/Command";
 import * as Flag from "effect/cli/Flag";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
-import * as Aws from "../../Alchemist/routes/aws.ts";
-import * as CliKit from "../CliKit/index.ts";
-import { confirmOrDecline } from "./confirm.ts";
-import { envFile, yes } from "./flags.ts";
-import { instrumentCommand } from "./instrument.ts";
+import * as CliKit from "../Cli/CliKit/index.ts";
+import { confirmOrDecline } from "../Cli/commands/confirm.ts";
+import { envFile, yes } from "../Cli/commands/flags.ts";
+import { instrumentCommand } from "../Cli/commands/instrument.ts";
+import * as Aws from "./Alchemist/index.ts";
 
 const awsProfile = Flag.String("aws-profile").pipe(
   Flag.withDescription("AWS CLI/SSO profile to use for bootstrap credentials"),

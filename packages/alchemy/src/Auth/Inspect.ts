@@ -66,7 +66,7 @@ export const inspectProvider = Effect.fn("inspectProvider")(function* (
       diagnostic: {
         severity: "warning",
         code: "provider.unregistered",
-        message: `Provider '${name}' is not registered.`,
+        message: `Provider '${name}' is not registered. Install the package that provides it.`,
       },
     } satisfies ProviderConnection;
   }

@@ -10,14 +10,19 @@ import * as HttpRouter from "effect/http/HttpRouter";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import { RuntimeContext } from "../../RuntimeContext.ts";
-import { BearerTokenValidator, StateApi, StateAuthLive } from "../../State/HttpStateApi.ts";
+import {
+  BearerTokenValidator,
+  StateApi,
+  StateAuthLive,
+  StateStoreFailure,
+} from "../../State/HttpStateApi.ts";
 import { ReadSecret } from "../SecretsStore/ReadSecret.ts";
 import { ReadSecretBinding } from "../SecretsStore/ReadSecretBinding.ts";
 import { Worker } from "../Workers/Worker.ts";
-import Store from "./Store.ts";
-import { AuthToken } from "./Token.ts";
+import Store, { retrySecretRead } from "./Store.ts";
+import { AuthToken, DEFAULT_STATE_STORE_NAME, StateStoreName } from "./Token.ts";
 
-export const STATE_STORE_SCRIPT_NAME = "alchemy-state-store" as const;
+export const STATE_STORE_SCRIPT_NAME = DEFAULT_STATE_STORE_NAME;
 
 /**
  * Version of the deployed Cloudflare State Store worker contract.
@@ -28,6 +33,8 @@ export const STATE_STORE_SCRIPT_NAME = "alchemy-state-store" as const;
  * compare against this constant; a mismatch (or 404) triggers a
  * forced redeploy via the bootstrap flow.
  */
+// TODO: bump to 8 before release. The Worker's typed `StateStoreFailure`
+// responses and secret read retry change its runtime behaviour.
 export const STATE_STORE_VERSION = 7 as const;
 
 /**
@@ -95,16 +102,37 @@ export const STATE_STORE_VERSION = 7 as const;
  * In the bundled case, fall back to the published source file shipped
  * alongside the CLI under `../src/Cloudflare/StateStore/Api.ts`.
  */
+/**
+ * A failed Durable Object call, as the API's declared error: the operation and
+ * the kind of failure for the client, the full cause in the Worker's logs.
+ */
+const failed =
+  (operation: string) =>
+  <A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A, StateStoreFailure, R> =>
+    effect.pipe(
+      Effect.tapError((error) => Effect.logError(`State store ${operation} failed`, error)),
+      Effect.mapError(
+        (error) =>
+          new StateStoreFailure({
+            operation,
+            reason:
+              typeof error === "object" && error !== null && "_tag" in error
+                ? String(error._tag)
+                : "UnknownError",
+          }),
+      ),
+    );
+
 export default Worker(
   "Api",
-  {
-    name: STATE_STORE_SCRIPT_NAME,
+  Effect.map(StateStoreName, (name) => ({
+    name,
     main: import.meta.url,
     workersDev: true,
     compatibility: {
       date: DEFAULT_COMPATIBILITY_DATE,
     },
-  },
+  })),
   Effect.gen(function* () {
     const remoteSecret = yield* ReadSecret(AuthToken);
     const store = yield* Store;
@@ -115,7 +143,7 @@ export default Worker(
         validate: Effect.fn(function* (token) {
           const expected = yield* remoteSecret
             .get()
-            .pipe(Effect.orDie, Effect.provide(RuntimeContext.phantom));
+            .pipe(retrySecretRead, Effect.orDie, Effect.provide(RuntimeContext.phantom));
           return !!expected && timingSafeEqual(token.trim(), Redacted.value(expected).trim())
             ? yield* Effect.void
             : yield* HttpApiError.Unauthorized.make({});
@@ -140,6 +168,7 @@ export default Worker(
             .getByName(Store.ROOT_DO_NAME)
             .listStacks()
             .pipe(
+              failed("listStacks"),
               Effect.withSpan("state_store.listStacks", {
                 attributes: { "alchemy.state_store.op": "listStacks" },
               }),
@@ -150,6 +179,7 @@ export default Worker(
             .getByName(params.stack)
             .listStages()
             .pipe(
+              failed("listStages"),
               Effect.withSpan("state_store.listStages", {
                 attributes: {
                   "alchemy.state_store.op": "listStages",
@@ -163,6 +193,7 @@ export default Worker(
             .getByName(params.stack)
             .listResources({ stage: params.stage })
             .pipe(
+              failed("listResources"),
               Effect.withSpan("state_store.listResources", {
                 attributes: {
                   "alchemy.state_store.op": "listResources",
@@ -178,6 +209,7 @@ export default Worker(
             .getByName(params.stack)
             .get({ stage: params.stage, fqn })
             .pipe(
+              failed("getState"),
               Effect.withSpan("state_store.getState", {
                 attributes: {
                   "alchemy.state_store.op": "getState",
@@ -197,6 +229,7 @@ export default Worker(
               Effect.tap(() =>
                 store.getByName(Store.ROOT_DO_NAME).registerStack({ stack: params.stack }),
               ),
+              failed("setState"),
               Effect.withSpan("state_store.setState", {
                 attributes: {
                   "alchemy.state_store.op": "setState",
@@ -216,6 +249,7 @@ export default Worker(
             .remove({ stage: params.stage, fqn })
             .pipe(
               Effect.asVoid,
+              failed("deleteState"),
               Effect.withSpan("state_store.deleteState", {
                 attributes: {
                   "alchemy.state_store.op": "deleteState",
@@ -231,6 +265,7 @@ export default Worker(
             .getByName(params.stack)
             .getReplacedResources({ stage: params.stage })
             .pipe(
+              failed("getReplacedResources"),
               Effect.withSpan("state_store.getReplacedResources", {
                 attributes: {
                   "alchemy.state_store.op": "getReplacedResources",
@@ -245,6 +280,7 @@ export default Worker(
             .getByName(params.stack)
             .getOutput({ stage: params.stage })
             .pipe(
+              failed("getStackOutput"),
               Effect.withSpan("state_store.getStackOutput", {
                 attributes: {
                   "alchemy.state_store.op": "getStackOutput",
@@ -262,6 +298,7 @@ export default Worker(
               Effect.tap(() =>
                 store.getByName(Store.ROOT_DO_NAME).registerStack({ stack: params.stack }),
               ),
+              failed("setStackOutput"),
               Effect.withSpan("state_store.setStackOutput", {
                 attributes: {
                   "alchemy.state_store.op": "setStackOutput",
@@ -282,6 +319,7 @@ export default Worker(
                   : Effect.void,
               ),
               Effect.asVoid,
+              failed("deleteStack"),
               Effect.withSpan("state_store.deleteStack", {
                 attributes: {
                   "alchemy.state_store.op": "deleteStack",
