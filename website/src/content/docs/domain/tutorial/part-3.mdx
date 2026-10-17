@@ -95,11 +95,7 @@ import * as Domain from "alchemy/Domain";
 import { Customer } from "./Customer.aggregate.ts";
 +import { OpenAccount } from "./OpenAccount.command.ts";
 import { CustomerRegistered } from "./RegisterCustomer.command.ts";
-
-```
-
-```diff lang="typescript"
-// src/MainAccountProvisioning.policy.ts
+  // ...
   on: [CustomerRegistered],
 }) {}
 +
@@ -154,10 +150,7 @@ import { Account } from "../src/Account.aggregate.ts";
 +import { Bank, BankHandlers } from "../src/Bank.model.ts";
 import { DepositMoney, MoneyDeposited } from "../src/DepositMoney.command.ts";
 import { NotOpen } from "../src/NotOpen.rejection.ts";
-```
-
-```diff lang="typescript"
-// test/Account.test.ts
+// ...
 import { InsufficientFunds, WithdrawMoney } from "../src/WithdrawMoney.command.ts";
 
 -const story = Story.make(Bank);
@@ -174,10 +167,7 @@ import { AccountSummary } from "../src/AccountSummary.view.ts";
 +import { Bank, BankHandlers } from "../src/Bank.model.ts";
 import { DepositMoney } from "../src/DepositMoney.command.ts";
 import { AccountOpened } from "../src/OpenAccount.command.ts";
-```
-
-```diff lang="typescript"
-// test/views.test.ts
+// ...
 import { WithdrawMoney } from "../src/WithdrawMoney.command.ts";
 
 -const story = Story.make(Bank);

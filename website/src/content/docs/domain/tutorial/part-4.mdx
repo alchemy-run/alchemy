@@ -85,10 +85,9 @@ import { NotOpen } from "./NotOpen.rejection.ts";
 +import { Session } from "./Session.middleware.ts";
 
 export class MoneyDeposited extends Domain.Event("MoneyDeposited", {
-```
+  // ...
+}) {}
 
-```diff lang="typescript"
-// src/DepositMoney.command.ts
 export class DepositMoney extends Domain.Command("DepositMoney", {
   target: AccountId,
 +  middleware: [Session],
@@ -108,10 +107,9 @@ import { NotOpen } from "./NotOpen.rejection.ts";
 +import { Session } from "./Session.middleware.ts";
 
 export class MoneyWithdrawn extends Domain.Event("MoneyWithdrawn", {
-```
+  // ...
+}) {}
 
-```diff lang="typescript"
-// src/WithdrawMoney.command.ts
 export class WithdrawMoney extends Domain.Command("WithdrawMoney", {
   target: AccountId,
 +  middleware: [Session],
@@ -139,10 +137,7 @@ import { NotOpen } from "./NotOpen.rejection.ts";
 +import { NotOwner } from "./NotOwner.rejection.ts";
 import { AccountOpened, AlreadyOpen, OpenAccount } from "./OpenAccount.command.ts";
 import { InsufficientFunds, MoneyWithdrawn, WithdrawMoney } from "./WithdrawMoney.command.ts";
-```
-
-```diff lang="typescript"
-// src/Account.aggregate.ts
+// ...
 ]);
 type State = typeof State.Type;
 +
@@ -155,10 +150,7 @@ type State = typeof State.Type;
 +});
 
 // An event can only follow an open account; anything else is a bug.
-```
-
-```diff lang="typescript"
-// src/Account.aggregate.ts
+    // ...
     OpenAccount: (s, cmd) =>
       s._tag !== "Unopened" ? new AlreadyOpen() : [new AccountOpened({ owner: cmd.owner })],
 -    DepositMoney: (s, cmd) =>
@@ -197,10 +189,9 @@ import { CustomerId } from "./Customer.id.ts";
 +import { Session } from "./Session.middleware.ts";
 
 export class CustomerRegistered extends Domain.Event("CustomerRegistered", {
-```
+  // ...
+}) {}
 
-```diff lang="typescript"
-// src/RegisterCustomer.command.ts
 export class AlreadyRegistered extends Domain.Rejection("AlreadyRegistered") {}
 
 +export class NotYou extends Domain.Rejection("NotYou") {}
@@ -235,10 +226,7 @@ import { CustomerId } from "./Customer.id.ts";
 +} from "./RegisterCustomer.command.ts";
 
 export class Customer extends Domain.Aggregate("Customer", {
-```
-
-```diff lang="typescript"
-// src/Customer.aggregate.ts
+  // ...
   commands: [RegisterCustomer],
   decide: {
 -    RegisterCustomer: (s, cmd) =>
@@ -274,10 +262,7 @@ export class AccountSummary extends Domain.View("AccountSummary", {
 +  rejects: [NotOwner],
   state: Schema.Struct({ owner: Schema.NullOr(Schema.String), balance: Schema.Int }),
   initial: { owner: null, balance: 0 },
-```
-
-```diff lang="typescript"
-// src/AccountSummary.view.ts
+    // ...
     MoneyWithdrawn: (v, e) => ({ ...v, balance: e.balanceAfter }),
   },
 +  validate: Effect.fn(function* (_request, summary) {
@@ -299,10 +284,7 @@ import { Bank, BankHandlers } from "../src/Bank.model.ts";
 +import { CustomerId } from "../src/Customer.id.ts";
 import { DepositMoney, MoneyDeposited } from "../src/DepositMoney.command.ts";
 import { NotOpen } from "../src/NotOpen.rejection.ts";
-```
-
-```diff lang="typescript"
-// test/Account.test.ts
+// ...
 
 const story = Story.make(Bank, { layer: BankHandlers });
 +const asSam = Story.provide(CurrentActor, { customerId: CustomerId.make("sam") });
@@ -313,28 +295,19 @@ it.effect("opens an account", () =>
 +    asSam,
     Story.when(account, new OpenAccount({ owner: "sam" })),
     Story.then(account, new AccountOpened({ owner: "sam" })),
-```
-
-```diff lang="typescript"
-// test/Account.test.ts
+// ...
 it.effect("refuses to open an account twice", () =>
   story(
 +    asSam,
     Story.given(account, new AccountOpened({ owner: "sam" })),
     Story.when(account, new OpenAccount({ owner: "sam" })),
-```
-
-```diff lang="typescript"
-// test/Account.test.ts
+// ...
 it.effect("deposits into an open account and replies with the balance", () =>
   story(
 +    asSam,
     Story.given(account, new AccountOpened({ owner: "sam" })),
     Story.when(account, new DepositMoney({ amount: 100 })),
-```
-
-```diff lang="typescript"
-// test/Account.test.ts
+// ...
 
 it.effect("refuses a deposit into an account that isn't open", () =>
 -  story(Story.when(account, new DepositMoney({ amount: 100 })), Story.rejected(new NotOpen())),
@@ -360,10 +333,7 @@ import { Bank, BankHandlers } from "../src/Bank.model.ts";
 +import { CustomerId } from "../src/Customer.id.ts";
 import { DepositMoney } from "../src/DepositMoney.command.ts";
 import { AccountOpened } from "../src/OpenAccount.command.ts";
-```
-
-```diff lang="typescript"
-// test/views.test.ts
+// ...
 
 const story = Story.make(Bank, { layer: BankHandlers });
 +const asSam = Story.provide(CurrentActor, { customerId: CustomerId.make("sam") });
@@ -374,10 +344,7 @@ it.effect("the summary follows the balance", () =>
 +    asSam,
     Story.given(account, new AccountOpened({ owner: "sam" })),
     Story.when(account, new DepositMoney({ amount: 100 })),
-```
-
-```diff lang="typescript"
-// test/views.test.ts
+// ...
 it.effect("the statement has one line per movement", () =>
   story(
 +    asSam,
@@ -407,10 +374,7 @@ it.effect("registering opens a main account", () =>
 +    as("c-1"),
     Story.when(sam, new RegisterCustomer({ name: "sam" })),
     Story.then(sam, new CustomerRegistered({ name: "sam" })),
-```
-
-```diff lang="typescript"
-// test/registration.test.ts
+    // ...
   ),
 );
 +
