@@ -20,6 +20,7 @@ import {
   makeScopedArtifacts,
 } from "./Artifacts.ts";
 import { demandRemoteCredentials, failCredentialsRequired } from "./Auth/Demand.ts";
+// oxlint-disable-next-line alchemy/package-boundaries -- Worker retry identity must match the provider's account and generated names at the engine checkpoint boundary.
 import { CloudflareEnvironment } from "./Cloudflare/CloudflareEnvironmentService.ts";
 import {
   dedupeBindings,
@@ -1472,6 +1473,7 @@ const makePlan = <A>(
       }
 
       const adoptThis = resource.Adopt ?? (yield* shouldAdopt);
+      // oxlint-disable-next-line alchemy/package-boundaries -- The engine must distinguish legacy Worker checkpoints before serialization, retry, and cleanup.
       const isLiveWorker = resource.Type === "Cloudflare.Worker" && mode !== "local";
       if (
         isLiveWorker &&

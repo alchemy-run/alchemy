@@ -26,7 +26,9 @@ import {
   failCredentialsRequired,
   demandPlanCredentials,
 } from "./Auth/Demand.ts";
+// oxlint-disable-next-line alchemy/package-boundaries -- Worker retry identity must match the provider's account and generated names at the engine checkpoint boundary.
 import { CloudflareEnvironment } from "./Cloudflare/CloudflareEnvironmentService.ts";
+// oxlint-disable-next-line alchemy/package-boundaries -- Worker retry identity must match the provider's account and generated names at the engine checkpoint boundary.
 import { createWorkerName } from "./Cloudflare/Workers/WorkerName.ts";
 import { havePropsChanged, stripUnresolved } from "./Diff.ts";
 import type { Input } from "./Input.ts";
@@ -527,6 +529,7 @@ const executeNode = (
     const logicalId = node.resource.LogicalId;
     const namespace = node.resource.Namespace;
 
+    // oxlint-disable-next-line alchemy/package-boundaries -- The engine must distinguish legacy Worker checkpoints before serialization, retry, and cleanup.
     const isLiveWorker = node.resource.Type === "Cloudflare.Worker" && node.mode !== "local";
     const currentWorkerAccount = Effect.gen(function* () {
       const environment = yield* Effect.serviceOption(CloudflareEnvironment);
@@ -1229,6 +1232,7 @@ const executeNode = (
                 ? yield* visit(old.old)
                 : undefined;
             if (
+              // oxlint-disable-next-line alchemy/package-boundaries -- The engine must distinguish legacy Worker checkpoints before serialization, retry, and cleanup.
               old.resourceType === "Cloudflare.Worker" &&
               stampedMode(old) !== "local" &&
               old.workerIdentityResolved === true &&
@@ -1376,6 +1380,7 @@ const executeNode = (
         Effect.gen(function* () {
           const retain = node.resource.RemovalPolicy === "retain";
           const skipWorkerOutput =
+            // oxlint-disable-next-line alchemy/package-boundaries -- The engine must distinguish legacy Worker checkpoints before serialization, retry, and cleanup.
             old.resourceType === "Cloudflare.Worker" &&
             stampedMode(old) !== "local" &&
             (old.status === "creating" || old.status === "replacing") &&
@@ -2141,12 +2146,14 @@ const collectGarbage = Effect.fn(function* (plan: Plan, session: PlanStatusSessi
           ? node.state.workerWriteStarted
           : generation.workerWriteStarted;
         const workerAccountId =
+          // oxlint-disable-next-line alchemy/package-boundaries -- The engine must distinguish legacy Worker checkpoints before serialization, retry, and cleanup.
           resourceType === "Cloudflare.Worker" && stampedMode(generation) !== "local"
             ? recordedWorkerAccount(generation)
             : undefined;
         // Mutable: an attr-less row (interrupted create) may recover its
         // attributes from `provider.read` below, right before deletion.
         let attr =
+          // oxlint-disable-next-line alchemy/package-boundaries -- The engine must distinguish legacy Worker checkpoints before serialization, retry, and cleanup.
           resourceType === "Cloudflare.Worker" &&
           providerMode !== "local" &&
           (isProvisionalWorkerOutput(persistedAttr) ||
@@ -2306,6 +2313,7 @@ const collectGarbage = Effect.fn(function* (plan: Plan, session: PlanStatusSessi
                     "resource must be identified and cleaned up manually.",
                 );
               } else if (
+                // oxlint-disable-next-line alchemy/package-boundaries -- The engine must distinguish legacy Worker checkpoints before serialization, retry, and cleanup.
                 resourceType === "Cloudflare.Worker" &&
                 providerMode !== "local" &&
                 workerWriteStarted === false
@@ -2314,6 +2322,7 @@ const collectGarbage = Effect.fn(function* (plan: Plan, session: PlanStatusSessi
                   "Removing Worker checkpoint without a cloud lookup because no mutating lifecycle started.",
                 );
               } else if (
+                // oxlint-disable-next-line alchemy/package-boundaries -- The engine must distinguish legacy Worker checkpoints before serialization, retry, and cleanup.
                 resourceType === "Cloudflare.Worker" &&
                 providerMode !== "local" &&
                 workerIdentityResolved !== true
