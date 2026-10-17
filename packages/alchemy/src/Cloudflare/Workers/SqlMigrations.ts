@@ -54,7 +54,7 @@ export type SqlMigrationsInput =
  * **Example:** Capture SQL in the outer Effect and migrate on activation
  * ```typescript
  * import * as Cloudflare from "alchemy/Cloudflare";
- * import * as Drizzle from "alchemy/Drizzle/Cloudflare";
+ * import * as Drizzle from "@alchemy.run/drizzle/Cloudflare";
  * import * as Effect from "effect/Effect";
  * import { relations, users } from "./schema.ts";
  *

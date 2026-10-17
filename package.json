@@ -16,7 +16,7 @@
     "build:clean:shallow": "bun clean:shallow . && bun run build",
     "build:cloudflare-packages": "pnpm --filter @alchemy.run/cloudflare-test-tools build",
     "build:packages": "pnpm -r --filter \"{./packages/*}...\" run build:package",
-    "build:pkg": "pnpm -r --filter alchemy... --filter @alchemy.run/better-auth... --filter @alchemy.run/cloudflare-runtime... --filter @alchemy.run/frontend-frameworks... --filter @alchemy.run/node-utils... --filter @alchemy.run/floci... --filter @alchemy.run/pkg... run build:package",
+    "build:pkg": "pnpm -r --filter alchemy... --filter @alchemy.run/better-auth... --filter @alchemy.run/git... --filter @alchemy.run/drizzle... --filter @alchemy.run/sqlite... --filter @alchemy.run/acme... --filter @alchemy.run/cloudflare-runtime... --filter @alchemy.run/frontend-frameworks... --filter @alchemy.run/node-utils... --filter @alchemy.run/floci... --filter @alchemy.run/pkg... run build:package",
     "clean": "git clean -fqdx -e .env",
     "clean:shallow": "rm -rf alchemy/*.tgz && bun tsc -b --clean",
     "clear:state": "alchemy state unsafe nuke --config ./stacks/nuke.ts",

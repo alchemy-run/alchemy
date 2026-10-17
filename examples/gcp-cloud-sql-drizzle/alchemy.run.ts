@@ -1,5 +1,5 @@
+import * as Drizzle from "@alchemy.run/drizzle";
 import * as Alchemy from "alchemy";
-import * as Drizzle from "alchemy/Drizzle";
 import * as GCP from "alchemy/GCP";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";

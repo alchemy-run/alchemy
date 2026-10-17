@@ -8,7 +8,7 @@ Run Drizzle in a Railway container beside [Railway Postgres](/railway/data/postg
 ## Install the database dependencies
 
 ```sh
-pnpm add drizzle-orm@1.0.0-rc.5-ab785fc @effect/sql-pg pg
+pnpm add @alchemy.run/drizzle drizzle-orm@1.0.0-rc.5-ab785fc @effect/sql-pg pg
 pnpm add -D drizzle-kit@1.0.0-rc.5-ab785fc
 ```
 
@@ -115,7 +115,7 @@ The generated Railway Postgres URLs currently include `sslmode=no-verify`; a pub
 ## Open the runtime client
 
 ```diff lang="typescript"
-+import * as Drizzle from "alchemy/Drizzle/Postgres";
++import * as Drizzle from "@alchemy.run/drizzle/Postgres";
 
  const conn = yield* Railway.ConnectPostgres(Db);
 +const db = yield* Drizzle.Postgres(conn.connectionString);

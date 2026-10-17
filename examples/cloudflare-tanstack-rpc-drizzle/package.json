@@ -18,6 +18,7 @@
     "test": "bun test"
   },
   "dependencies": {
+    "@alchemy.run/drizzle": "workspace:*",
     "@effect/atom-react": "catalog:",
     "@effect/platform-bun": "catalog:",
     "@effect/platform-node": "catalog:",

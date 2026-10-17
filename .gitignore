@@ -85,6 +85,7 @@ examples/cloudflare-worker/src/scratch.ts
 /processes/
 .probe
 !packages/alchemy/src/Cloudflare/Workers/worker-module.d.ts
+!packages/git/src/worker-module.d.ts
 
 # pkg pack output (CI artifact hand-off)
 .pkg

@@ -83,7 +83,7 @@ jobs:
           ${{ contains(github.event.pull_request.labels.*.name, 'force-ci') && '--all' || '' }}
           --rebuild-all-path 'scripts/package-build.ts'
           --group 'alchemy=./packages/alchemy'
-          --group '@alchemy.run[Collapsed]=./packages/{better-auth,cloudflare-runtime,frontend-frameworks,node-utils,floci,pkg}'
+          --group '@alchemy.run[Collapsed]=./packages/{better-auth,git,drizzle,sqlite,acme,cloudflare-runtime,frontend-frameworks,node-utils,floci,pkg}'
 
       - name: Vouch for the manifest
         if: steps.pack.outputs.package-count != '0'

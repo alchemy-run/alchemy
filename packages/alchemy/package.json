@@ -52,8 +52,6 @@
     "./Bundle": "./src/Bundle/index.ts",
     "./Docker": "./src/Docker/index.ts",
     "./Doppler": "./src/Doppler/index.ts",
-    "./Git": "./src/Git/index.ts",
-    "./Git/Hasher": "./src/Git/Hasher/index.ts",
     "./Http": "./src/Http/index.ts",
     "./Infisical": "./src/Infisical/index.ts",
     "./Kubernetes": "./src/Kubernetes/index.ts",
@@ -67,7 +65,6 @@
     "./Cloudflare/*": "./src/Cloudflare/*/index.ts",
     "./Cloudflare/Workers/*": "./src/Cloudflare/Workers/*.ts",
     "./Cloudflare/R2/*": "./src/Cloudflare/R2/*.ts",
-    "./Drizzle": "./src/Drizzle/index.ts",
     "./Domain": "./src/Domain/index.ts",
     "./Axiom": "./src/Axiom/index.ts",
     "./GCP": "./src/GCP/index.ts",
@@ -80,7 +77,6 @@
     "./Neon/*": "./src/Neon/*/index.ts",
     "./Hetzner": "./src/Hetzner/index.ts",
     "./Fly": "./src/Fly/index.ts",
-    "./ACME": "./src/ACME/index.ts",
     "./Railway": "./src/Railway/index.ts",
     "./Prisma": "./src/Prisma/index.ts",
     "./Prisma/ORM": "./src/Prisma/ORM/index.ts",
@@ -101,7 +97,6 @@
     "./Runtime/Bootstrap/*": "./src/Runtime/Bootstrap/*.ts",
     "./Process": "./src/Process/index.ts",
     "./Redis": "./src/Redis/index.ts",
-    "./SQLite": "./src/SQLite/index.ts",
     "./TUI": "./src/TUI/index.ts",
     "./Secrets": "./src/Secrets/index.ts",
     "./Server": "./src/Server/index.ts",
@@ -207,16 +202,6 @@
         "bun": "./src/Doppler/index.ts",
         "default": "./lib/Doppler/index.js"
       },
-      "./Git": {
-        "types": "./lib/Git/index.d.ts",
-        "bun": "./src/Git/index.ts",
-        "default": "./lib/Git/index.js"
-      },
-      "./Git/Hasher": {
-        "types": "./lib/Git/Hasher/index.d.ts",
-        "bun": "./src/Git/Hasher/index.ts",
-        "default": "./lib/Git/Hasher/index.js"
-      },
       "./Http": {
         "types": "./lib/Http/index.d.ts",
         "bun": "./src/Http/index.ts",
@@ -282,11 +267,6 @@
         "bun": "./src/Cloudflare/R2/*.ts",
         "default": "./lib/Cloudflare/R2/*.js"
       },
-      "./Drizzle": {
-        "types": "./lib/Drizzle/index.d.ts",
-        "bun": "./src/Drizzle/index.ts",
-        "default": "./lib/Drizzle/index.js"
-      },
       "./Domain": {
         "types": "./lib/Domain/index.d.ts",
         "bun": "./src/Domain/index.ts",
@@ -346,11 +326,6 @@
         "types": "./lib/Fly/index.d.ts",
         "bun": "./src/Fly/index.ts",
         "default": "./lib/Fly/index.js"
-      },
-      "./ACME": {
-        "types": "./lib/ACME/index.d.ts",
-        "bun": "./src/ACME/index.ts",
-        "default": "./lib/ACME/index.js"
       },
       "./Railway": {
         "types": "./lib/Railway/index.d.ts",
@@ -416,11 +391,6 @@
         "bun": "./src/Redis/index.ts",
         "default": "./lib/Redis/index.js"
       },
-      "./SQLite": {
-        "types": "./lib/SQLite/index.d.ts",
-        "bun": "./src/SQLite/index.ts",
-        "default": "./lib/SQLite/index.js"
-      },
       "./TUI": {
         "types": "./lib/TUI/index.d.ts",
         "bun": "./src/TUI/index.ts",
@@ -464,7 +434,6 @@
     "@alchemy.run/floci": "workspace:*",
     "@alchemy.run/node-utils": "workspace:*",
     "@alchemy.run/sigil": "catalog:",
-    "@distilled.cloud/acme": "workspace:*",
     "@distilled.cloud/aws": "workspace:*",
     "@distilled.cloud/axiom": "workspace:*",
     "@distilled.cloud/cloudflare": "workspace:*",
@@ -483,8 +452,6 @@
     "@distilled.cloud/turso": "workspace:*",
     "@distilled.cloud/zerossl": "workspace:*",
     "@effect/sql-d1": "catalog:",
-    "@effect/sql-sqlite-do": "catalog:",
-    "@libsql/client": "catalog:",
     "@neon/functions": "catalog:",
     "@octokit/rest": "catalog:",
     "@octokit/webhooks": "catalog:",
@@ -542,6 +509,7 @@
     "arktype": "catalog:",
     "astro": "catalog:",
     "aws4fetch": "catalog:",
+    "drizzle-orm": "catalog:",
     "effect": "catalog:",
     "foldkit": "catalog:",
     "hono": "catalog:",
@@ -584,8 +552,6 @@
     "@effect/vitest": "catalog:",
     "@prisma/orm-postgres": "catalog:",
     "@vercel/nft": "catalog:",
-    "drizzle-kit": "catalog:",
-    "drizzle-orm": "catalog:",
     "effect": "catalog:",
     "mongodb": "catalog:",
     "mysql2": "catalog:",
@@ -626,12 +592,6 @@
       "optional": true
     },
     "@vercel/nft": {
-      "optional": true
-    },
-    "drizzle-kit": {
-      "optional": true
-    },
-    "drizzle-orm": {
       "optional": true
     },
     "mongodb": {
