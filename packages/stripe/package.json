@@ -57,7 +57,6 @@
     "@distilled.cloud/stripe": "workspace:*"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "catalog:",
     "@types/bun": "catalog:",
     "alchemy": "workspace:*",
     "effect": "catalog:",

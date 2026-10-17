@@ -20,6 +20,6 @@ export default Cloudflare.Worker(
     );
 
     return { fetch: Effect.succeed(HttpServerResponse.text("ok")) };
-  }).pipe(Effect.provide([Queues.WriteQueueBinding, GitHub.Cloudflare.RepositoryEventSourceLive])),
+  }).pipe(Effect.provide([Queues.WriteQueueBinding, GitHub.RepositoryEventSourceLive])),
 );
 // #endregion show

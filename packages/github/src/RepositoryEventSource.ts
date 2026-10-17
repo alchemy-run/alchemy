@@ -88,10 +88,9 @@ export interface RepositoryEventSourceProps<
  * `process` function that receives each {@link WebhookEvent} and returns an
  * `Effect`. The handler runs once per webhook delivery.
  *
- * Wiring the webhook (delivery URL, secret, IAM/bindings) is handled by the
- * host-specific runtime layer — see
- * `GitHub.Cloudflare.RepositoryEventSourceLive` for the Cloudflare Worker
- * implementation.
+ * Wiring the webhook (delivery URL, secret) is handled by
+ * `GitHub.RepositoryEventSourceLive`, over the host's `WebhookHost`.
+ *
  * **Example:** Example
  * ```typescript
  * // `event.name` is narrowed to "push" | "pull_request"

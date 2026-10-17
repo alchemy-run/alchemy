@@ -87,6 +87,8 @@ examples/cloudflare-worker/src/scratch.ts
 !packages/alchemy/src/Cloudflare/Workers/worker-module.d.ts
 !packages/git/src/worker-module.d.ts
 !packages/fly/src/globals.d.ts
+!packages/github/src/globals.d.ts
+!packages/stripe/src/globals.d.ts
 !packages/hetzner/src/globals.d.ts
 !packages/neon/src/globals.d.ts
 !packages/railway/src/globals.d.ts

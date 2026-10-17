@@ -1,10 +1,9 @@
-import type * as cf from "@cloudflare/workers-types";
 import { Webhooks } from "@distilled.cloud/stripe";
 import { AlchemyContext } from "alchemy/AlchemyContext";
-import { Worker, isWorkerEvent } from "alchemy/Cloudflare/Workers/Worker";
 import * as Namespace from "alchemy/Namespace";
 import * as Output from "alchemy/Output";
-import { isRedactedMarker, unpackEnvValue } from "alchemy/RuntimeContext";
+import { isRedactedMarker, RuntimeContext } from "alchemy/RuntimeContext";
+import { WebhookHost } from "alchemy/WebhookHost";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
@@ -19,15 +18,21 @@ import {
 import type { StripeEventClass, StripeEventInstance } from "./Events.ts";
 import { WebhookEndpoint } from "./WebhookEndpoint.ts";
 
+/** A host that accepts environment bindings, such as a Cloudflare Worker. */
+export interface EnvBindingHost {
+  readonly bind: (id: string, data: { env: Record<string, unknown> }) => Effect.Effect<void>;
+}
+
 /**
- * Attach a webhook signing secret to a Worker as `secret_text`.
+ * Attach a webhook signing secret to a host's environment, under the key
+ * {@link consumeEvents} reads for `path`.
  *
- * {@link consumeEvents} calls this automatically for the endpoint it
+ * {@link consumeEvents} binds the secret itself for the endpoint it
  * provisions. Declare a {@link WebhookEndpoint} manually only when you need
  * a URL you already own; then bind the minted secret yourself.
  */
 export const bindWebhookSecret = (
-  host: Worker,
+  host: EnvBindingHost,
   secret: WebhookEndpoint["secret"],
   path?: string,
 ): Effect.Effect<void> =>
@@ -38,14 +43,16 @@ export const bindWebhookSecret = (
   });
 
 /**
- * Cloudflare Worker implementation of {@link consumeEvents}.
+ * {@link consumeEvents} on any {@link WebhookHost}.
  *
- * Deploy-time: provisions a {@link WebhookEndpoint} pointing at this Worker
- * (at the subscribed path) and binds its minted signing secret onto the
- * Worker so deliveries can be verified. Under `alchemy dev` the Worker is
- * not publicly reachable, so no endpoint is provisioned. Runtime: registers a `fetch`
- * listener that claims requests on that path, verifies `Stripe-Signature`,
- * and runs the handler once per event.
+ * Deploy-time: provisions a {@link WebhookEndpoint} pointing at the host (at
+ * the subscribed path) and binds its minted signing secret so deliveries can
+ * be verified. Under `alchemy dev` the host is not publicly
+ * reachable, so no endpoint is provisioned. Runtime: claims requests on that
+ * path, verifies `Stripe-Signature`, and runs the handler once per event.
+ *
+ * Every Cloudflare Worker is a {@link WebhookHost}, so this is the only layer
+ * to provide.
  *
  * @layer
  * @product Webhook
@@ -54,13 +61,16 @@ export const bindWebhookSecret = (
 export const ConsumeEventsLive = Layer.effect(
   EventSource,
   Effect.gen(function* () {
-    const host = yield* Worker;
+    const host = yield* WebhookHost;
 
     return Effect.fn(function* (
       id: string,
       props: ConsumeEventsProps,
       process: (event: StripeEventInstance) => Effect.Effect<void, never, never>,
     ) {
+      // The signing secret is bound through the host's RuntimeContext, which
+      // every host provides its init, like `GitHub.RepositoryEventSourceLive`.
+      const runtime = yield* RuntimeContext;
       const path = webhookPath(props.path);
       const secretKey = webhookSecretEnvName(path);
       const byType = new Map(props.events.map((event) => [event.type, event] as const));
@@ -70,7 +80,7 @@ export const ConsumeEventsLive = Layer.effect(
           host.LogicalId,
           Effect.gen(function* () {
             // Stripe only delivers to public URLs, and under `alchemy dev` the
-            // Worker is on localhost: skip the endpoint rather than fail the
+            // host is on localhost: skip the endpoint rather than fail the
             // whole stack. Deliveries then answer 500 (no signing secret).
             const context = yield* Effect.serviceOption(AlchemyContext);
             if (Option.isSome(context) && context.value.dev) {
@@ -83,24 +93,14 @@ export const ConsumeEventsLive = Layer.effect(
               url: Output.interpolate`${host.url}${path}`,
               enabledEvents: [...props.events],
             });
-            yield* bindWebhookSecret(host, endpoint.secret, props.path);
+            // A binding, not a prop: the endpoint depends on the host's URL.
+            yield* bindWebhookSecret(host, endpoint.secret, path);
           }),
         );
       }
 
-      yield* host.listen((event) => {
-        if (!isWorkerEvent(event) || event.type !== "fetch") return;
-        const request = event.input as cf.Request;
-        let pathname: string;
-        try {
-          pathname = new URL(request.url).pathname;
-        } catch {
-          return;
-        }
-        if (pathname !== path) return;
-        const env = (event.env ?? {}) as Record<string, unknown>;
-        return handleDelivery(request, env, secretKey, byType, process);
-      });
+      const secret = runtime.get<unknown>(secretKey);
+      yield* host.route(path, (request) => handleDelivery(request, secret, byType, process));
     }) as EventSourceService;
   }),
 );
@@ -121,9 +121,8 @@ const asWebhookSecret = (raw: unknown): Redacted.Redacted<string> | undefined =>
 };
 
 const handleDelivery = <Req>(
-  request: cf.Request,
-  env: Record<string, any>,
-  secretKey: string,
+  request: Request,
+  secret: Effect.Effect<unknown>,
   byType: Map<string, StripeEventClass>,
   process: (event: StripeEventInstance) => Effect.Effect<void, never, Req>,
 ): Effect.Effect<Response, never, Req> =>
@@ -131,11 +130,9 @@ const handleDelivery = <Req>(
     if (request.method !== "POST") {
       return new Response("method not allowed", { status: 405 });
     }
-    const payload = yield* Effect.promise(() => (request as unknown as Request).text());
+    const payload = yield* Effect.promise(() => request.text());
     const signature = request.headers.get("stripe-signature") ?? "";
-    const resolved = asWebhookSecret(
-      unpackEnvValue(env[secretKey] as string | undefined) ?? env[secretKey],
-    );
+    const resolved = asWebhookSecret(yield* secret);
     if (resolved === undefined) {
       return new Response("webhook secret missing", { status: 500 });
     }

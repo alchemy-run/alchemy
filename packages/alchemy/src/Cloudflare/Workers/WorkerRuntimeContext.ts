@@ -10,6 +10,7 @@ import type { WorkflowExport } from "../Workflows/Workflow.ts";
 import type { DurableObjectExport } from "./DurableObject.ts";
 import { makeRequestHandler } from "./HttpServer.ts";
 import type { SqlMigrationsExport } from "./SqlMigrationsRuntime.ts";
+import { WebhookHostLive } from "./WebhookHost.ts";
 import {
   ExportedHandlerMethods,
   WorkerEnvironment,
@@ -75,6 +76,8 @@ export const makeWorkerRuntimeContext = (id: string): WorkerRuntimeContext => {
       Effect.sync(() => {
         exports[name] = value;
       }),
+    // Every Worker can receive webhooks, so event sources need no host wiring.
+    hostServices: WebhookHostLive,
     planServices: Layer.mergeAll(
       Layer.succeed(WorkerEnvironment, {}),
       // Lets the init closure `yield*` WorkerExecutionContext during plan;

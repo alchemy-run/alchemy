@@ -272,7 +272,7 @@ one `Effect.provide([...])`:
       Stripe.CreateCustomerHttp,
       Stripe.CreateCheckoutSessionHttp,
       Stripe.CreateBillingPortalSessionHttp,
-      Stripe.Cloudflare.ConsumeEventsLive,
+      Stripe.ConsumeEventsLive,
     ]),
   ),
 ) {}
@@ -530,7 +530,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
       Stripe.CreateCustomerHttp,
       Stripe.CreateCheckoutSessionHttp,
       Stripe.CreateBillingPortalSessionHttp,
-      Stripe.Cloudflare.ConsumeEventsLive,
+      Stripe.ConsumeEventsLive,
     ]),
   ),
 ) {}

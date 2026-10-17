@@ -13,6 +13,6 @@ export default Cloudflare.Worker(
     );
 
     return { fetch: Effect.succeed(HttpServerResponse.text("ok")) };
-  }).pipe(Effect.provide(GitHub.Cloudflare.RepositoryEventSourceLive)),
+  }).pipe(Effect.provide(GitHub.RepositoryEventSourceLive)),
 );
 // #endregion show
