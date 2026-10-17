@@ -1,4 +1,4 @@
-import * as Axiom from "alchemy/Axiom";
+import * as Axiom from "@alchemy.run/axiom";
 
 // #region show
 export const Traces = Axiom.Dataset("Traces", { name: "chat-traces", kind: "otel:traces:v1" });

@@ -1,9 +1,9 @@
 import { expect } from "bun:test";
+import * as Axiom from "@alchemy.run/axiom";
 // Runs under `bun test`: deploying a Worker from Vitest does not yet produce a
 // correct bundle (the Effect entrypoint is not detected under Vite's transform).
 import { CreatePaymentIntent } from "@distilled.cloud/stripe/stripe";
 import * as Alchemy from "alchemy";
-import * as Axiom from "alchemy/Axiom";
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Domain from "alchemy/Domain";
 import * as Stripe from "alchemy/Stripe";

@@ -23,14 +23,11 @@ const srcRoot = path.join(import.meta.dirname, "../../packages/alchemy/src");
 /** Top-level `src` directories that become their own package or integration subpath. */
 const PROVIDERS = new Set([
   "AWS",
-  "Axiom",
   "Cloudflare",
-  "Doppler",
   "Fly",
   "GCP",
   "GitHub",
   "Hetzner",
-  "Infisical",
   "Neon",
   "Planetscale",
   "Prisma",

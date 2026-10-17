@@ -1,5 +1,5 @@
+import * as Axiom from "@alchemy.run/axiom";
 import * as Alchemy from "alchemy";
-import * as Axiom from "alchemy/Axiom";
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as GitHub from "alchemy/GitHub";
 import * as Effect from "effect/Effect";

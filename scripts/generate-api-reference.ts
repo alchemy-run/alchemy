@@ -69,6 +69,21 @@ const config = {
       providerPrefix: "ACME",
       sourceDisplayPrefix: "packages/acme/src",
     },
+    {
+      srcRoot: path.join(import.meta.dir, "../packages/axiom/src"),
+      providerPrefix: "Axiom",
+      sourceDisplayPrefix: "packages/axiom/src",
+    },
+    {
+      srcRoot: path.join(import.meta.dir, "../packages/doppler/src"),
+      providerPrefix: "Doppler",
+      sourceDisplayPrefix: "packages/doppler/src",
+    },
+    {
+      srcRoot: path.join(import.meta.dir, "../packages/infisical/src"),
+      providerPrefix: "Infisical",
+      sourceDisplayPrefix: "packages/infisical/src",
+    },
   ] satisfies SourceRoot[],
 };
 
