@@ -14,7 +14,7 @@ access, and the manual prerequisites for each feature. Then follow the
 private files, managed sessions, SQL records, and an upload-triggered Function.
 
 Before launch, use the dedicated guides for [production Auth](/neon/guides/production-auth),
-[AI Gateway access](/neon/guides/ai-gateway),
+[AI Gateway access](/neon/guides/ai-gateway), [Realtime](/neon/guides/realtime),
 [private networking](/neon/guides/private-networking),
 [custom domains](/neon/guides/custom-domains), and
 [state preservation and recovery](/neon/guides/state-recovery).
@@ -64,6 +64,21 @@ const migrator = yield* Neon.Role("Migrator", { branch, name: "migrator" });
 
 `app.password` is `Redacted` and stays the same across deploys — see
 [Roles](/neon/data/roles).
+
+## Realtime
+
+`Neon.Realtime` enables live query subscriptions on a branch and exposes the
+invocation URL and the `Redacted` shared secret your backend seals queries with:
+
+```typescript
+const realtime = yield* Neon.Realtime("Realtime", {
+  project,
+  allowedOrigins: ["https://app.example.com"],
+});
+// realtime.url → NEON_REALTIME_URL, realtime.secret → NEON_REALTIME_SECRET
+```
+
+Destroying it disables Realtime on the branch — see [Realtime](/neon/guides/realtime).
 
 ## Organization governance
 

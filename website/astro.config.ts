@@ -1326,6 +1326,7 @@ export default defineConfig({
                   link: "/neon/guides/preview-branches",
                 },
                 { label: "AI Gateway setup", link: "/neon/guides/ai-gateway" },
+                { label: "Realtime", link: "/neon/guides/realtime" },
                 {
                   label: "Production Auth",
                   link: "/neon/guides/production-auth",

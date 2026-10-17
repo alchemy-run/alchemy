@@ -1,0 +1,109 @@
+---
+title: Realtime
+description: Enable Neon Realtime on a branch with Neon.Realtime and bind its URL and shared secret to your backend — no `neon realtime enable` or `neon env pull` step per stage.
+---
+
+[Neon Realtime](https://neon.com/docs/realtime/overview) streams live query
+results to browsers over WebSockets, backed by Postgres logical replication.
+It is enabled per branch and hands you two values: an invocation URL for
+clients and a shared secret your backend seals queries with. The Neon CLI
+exposes them as `NEON_REALTIME_URL` and `NEON_REALTIME_SECRET` through
+`neon realtime enable` followed by `neon env pull --service realtime`.
+
+`Neon.Realtime` replaces that manual step. Declare it next to the project or
+branch, and the stack enables Realtime, manages the allowed origins, and
+exposes the URL and secret as outputs. Complete [Setup](/neon/setup) first.
+
+Realtime is in beta and available in `aws-us-east-1`, `aws-us-east-2`,
+`aws-eu-central-1` and `aws-ap-southeast-1`; create the project in one of
+those regions.
+
+## Enable Realtime on the default branch
+
+```typescript
+import * as Neon from "alchemy/Neon";
+
+const project = yield* Neon.Project("app-db", {
+  region: "aws-eu-central-1",
+});
+
+const realtime = yield* Neon.Realtime("Realtime", {
+  project,
+  allowedOrigins: ["https://app.example.com", "http://localhost:3000"],
+});
+```
+
+`project` selects the project's default branch. Pass `branch` instead to
+enable Realtime on a `Neon.Branch`, for example a preview branch:
+
+```typescript
+const preview = yield* Neon.Branch("preview", { project });
+const realtime = yield* Neon.Realtime("PreviewRealtime", { branch: preview });
+```
+
+Provisioning is asynchronous on Neon's side; the resource waits until the
+branch reports the change applied before reading the URL and secret.
+
+## Allowed origins
+
+`allowedOrigins` lists the browser origins that may open Realtime
+connections: `http` or `https`, a host, an optional port, no path, at most 16
+entries. `["*"]` (or an empty list) allows any origin. Changing the list
+updates Realtime in place without rotating the secret. Omit it to leave the
+origins Neon currently has untouched — useful when another tool owns them.
+
+## Bind the outputs
+
+`realtime.url` is plain configuration. `realtime.secret` is `Redacted`, so a
+Worker or Function binds it as a secret and the deploy log and state never
+print it:
+
+```typescript
+import * as Cloudflare from "alchemy/Cloudflare";
+
+const api = yield* Cloudflare.Worker("api", {
+  main: "src/api.ts",
+  env: {
+    NEON_REALTIME_URL: realtime.url,
+    NEON_REALTIME_SECRET: realtime.secret,
+  },
+});
+```
+
+Your backend uses `NEON_REALTIME_SECRET` to seal the queries clients are
+allowed to subscribe to, and clients connect to `NEON_REALTIME_URL` — see
+Neon's [queries guide](https://neon.com/docs/realtime/guides/queries).
+
+## Adopt a branch enabled by the CLI
+
+A branch where Realtime was turned on from the CLI or console is foreign to
+the stack: deploying `Neon.Realtime` against it fails with
+`OwnedBySomeoneElse` so the stack never silently takes over a configuration
+it did not create. Adopt it explicitly, after which the stack manages its
+origins and disables it on destroy:
+
+```typescript
+import { adopt } from "alchemy";
+
+const realtime = yield* Neon.Realtime("Realtime", {
+  project,
+  allowedOrigins: ["https://app.example.com"],
+}).pipe(adopt(true));
+```
+
+## Lifecycle
+
+- **Drift:** if Realtime is disabled or its origins change behind the stack's
+  back, the next plan shows an update and the deploy converges. A branch
+  re-enabled after an out-of-band disable receives a new secret, because Neon
+  discards the old one when Realtime is turned off.
+- **Moving branches:** changing `project` or `branch` replaces the resource.
+  Realtime is enabled on the new branch before it is disabled on the old one.
+- **Destroy:** disables Realtime on the branch and discards the secret. Apps
+  still holding the old `NEON_REALTIME_SECRET` stop working.
+- **Secret rotation:** Neon rotates the secret with `neon realtime rotate-secret`
+  (or `POST .../realtime/rotate_secret`). The resource reads whatever secret
+  the branch currently has on each deploy, so redeploy after rotating.
+
+See the [`Neon.Realtime` reference](/providers/neon/realtime) for every
+property and output.

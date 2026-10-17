@@ -35,6 +35,7 @@ import {
 import { Project, ProjectProvider } from "./Project.ts";
 import { ProjectMemberRole, ProjectMemberRoleProvider } from "./ProjectMemberRole.ts";
 import { ProjectVPCEndpoint, ProjectVPCEndpointProvider } from "./ProjectVPCEndpoint.ts";
+import { Realtime, RealtimeProvider } from "./Realtime.ts";
 import { Role, RoleProvider } from "./Role.ts";
 import { WebsiteArtifact, WebsiteArtifactProvider } from "./Website/Artifact.ts";
 
@@ -87,6 +88,7 @@ export const providers = () =>
       AuthOAuthProvider,
       AuthTrustedDomain,
       DataApi,
+      Realtime,
       Function,
       FunctionTrigger,
       CustomDomain,
@@ -112,6 +114,7 @@ export const providers = () =>
         AuthOAuthProviderProvider(),
         AuthTrustedDomainProvider(),
         DataApiProvider(),
+        RealtimeProvider(),
         FunctionProvider(),
         FunctionTriggerProvider(),
         CustomDomainProvider(),
