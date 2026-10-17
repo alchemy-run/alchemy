@@ -301,6 +301,8 @@ export interface ProviderService<
     instanceId: string;
     session: ScopedPlanStatusSession;
     bindings: BindingData<Res>;
+    /** Effective resource-scoped adoption policy, including overrides of the CLI default. */
+    adopt?: boolean;
   }): Effect.Effect<Res["Attributes"], any, PrecreateReq>;
   /**
    * Reconciles the desired state of a Resource with the live cloud state.

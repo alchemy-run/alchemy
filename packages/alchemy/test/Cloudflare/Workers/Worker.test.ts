@@ -9,6 +9,7 @@ import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
+import * as Schedule from "effect/Schedule";
 import * as pathe from "pathe";
 import { adopt } from "@/AdoptPolicy";
 import { AlchemyContext } from "@/AlchemyContext";
@@ -21,6 +22,7 @@ import * as Output from "@/Output";
 import * as Provider from "@/Provider";
 import { Stack } from "@/Stack";
 import { State } from "@/State";
+import { isResourceState } from "@/State/State.ts";
 import * as Test from "@/Test/Alchemy";
 import { initialCwd } from "@/Util/Node.ts";
 import { cloneFixture } from "../Utils/Fixture.ts";
@@ -877,6 +879,59 @@ describe.concurrent(
         }).pipe(logLevel),
       { tags: ["live"] },
     );
+
+    for (const checkpointKind of ["legacy", "incomplete", "provisional"] as const) {
+      test.provider(
+        `destroy preserves a same-name Worker for an uncertain ${checkpointKind} checkpoint`,
+        (stack) =>
+          Effect.gen(function* () {
+            const { accountId } = yield* yield* CloudflareEnvironment;
+            yield* stack.destroy();
+            const original = yield* stack.deploy(
+              Cloudflare.Worker("InterruptedIdentity", { main, workersDev: false }),
+            );
+            const request = { accountId, scriptName: original.workerName };
+            const settings = yield* workers.getScriptScriptAndVersionSetting(request).pipe(
+              Effect.retry({
+                while: (error) => error._tag === "WorkerHasNoVersions",
+                times: 10,
+                schedule: Schedule.spaced("1 second"),
+              }),
+            );
+            const deployments = yield* workers.listScriptDeployments(request);
+            yield* Effect.gen(function* () {
+              const state = yield* yield* State;
+              const key = { stack: stack.name, stage: stack.stage, fqn: "InterruptedIdentity" };
+              const row = yield* state.get(key);
+              if (!isResourceState(row)) throw new Error("Expected a Worker state row");
+              yield* state.set({
+                ...key,
+                value: {
+                  ...row,
+                  status: "creating",
+                  props: { name: original.workerName },
+                  attr:
+                    checkpointKind === "provisional" ? { ...original, workerId: "" } : undefined,
+                  workerIdentityResolved: checkpointKind === "legacy" ? undefined : false,
+                },
+              });
+            }).pipe(Effect.provide(stack.state));
+            yield* stack.destroy();
+            expect(yield* workers.getScriptScriptAndVersionSetting(request)).toEqual(settings);
+            expect(yield* workers.listScriptDeployments(request)).toEqual(deployments);
+            yield* stack.deploy(
+              Cloudflare.Worker("InterruptedIdentity", {
+                main,
+                name: original.workerName,
+                workersDev: false,
+              }),
+            );
+            yield* stack.destroy();
+            yield* waitForWorkerToBeDeleted(original.workerName, accountId);
+          }).pipe(logLevel),
+        { tags: ["live"], timeout: 120_000 },
+      );
+    }
 
     // First-deploy behaviour: the default (omitting `workersDev`) must enable
     // the workers.dev subdomain, and `workersDev: false` must disable it. Both
