@@ -894,8 +894,8 @@ describe.concurrent(
             const settings = yield* workers.getScriptScriptAndVersionSetting(request).pipe(
               Effect.retry({
                 while: (error) => error._tag === "WorkerHasNoVersions",
-                times: 20,
-                schedule: Schedule.spaced("500 millis"),
+                times: 10,
+                schedule: Schedule.spaced("1 second"),
               }),
             );
             const deployments = yield* workers.listScriptDeployments(request);

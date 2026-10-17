@@ -12,7 +12,10 @@ import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
 import { Action } from "@/Action";
 import { adopt, AdoptPolicy, OwnedBySomeoneElse, Unowned } from "@/AdoptPolicy";
+import { AlchemyContext } from "@/AlchemyContext";
 import { apply, DestroyError } from "@/Apply";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironmentService";
+import { createWorkerName } from "@/Cloudflare/Workers/WorkerName";
 import { isResolved } from "@/Diff";
 import * as ProviderLayer from "@/Local/ProviderLayer";
 import * as Namespace from "@/Namespace.ts";
@@ -24,6 +27,7 @@ import * as RemovalPolicy from "@/RemovalPolicy.ts";
 import { renamedFrom } from "@/Rename.ts";
 import { Cli } from "@/Report.ts";
 import { Resource } from "@/Resource";
+import { ResourceContext } from "@/ResourceContext";
 import { Stack, make as makeStack } from "@/Stack";
 import { Stage } from "@/Stage";
 import {
@@ -9554,13 +9558,13 @@ describe("Worker checkpoint identity", { tags: ["unit", "local"] }, () => {
   interface CheckpointWorker extends Resource<
     "Cloudflare.Worker",
     {
-      name: string;
+      name?: string;
       namespace?: string | { name: string };
       dependency?: string;
       version?: { parent: string };
       preview?: { of: string };
     },
-    { workerName: string; namespace?: string; workerId?: string },
+    { workerName: string; namespace?: string; workerId?: string; accountId?: string },
     { self: string }
   > {}
   const CheckpointWorker = Resource<CheckpointWorker>("Cloudflare.Worker");
@@ -9582,6 +9586,8 @@ describe("Worker checkpoint identity", { tags: ["unit", "local"] }, () => {
       interruptUpload: boolean;
       replace: boolean;
       writePhases: unknown[];
+      precreated?: boolean;
+      accountId?: string;
     }
   >()("CheckpointIdentityProbe") {}
   const providers = Layer.mergeAll(
@@ -9600,25 +9606,36 @@ describe("Worker checkpoint identity", { tags: ["unit", "local"] }, () => {
         if (probe.unreadable)
           return yield* new WorkerHasNoVersions({ code: 10007, message: "Worker has no versions" });
         if (probe.absent) return undefined;
+        const environment = yield* Effect.serviceOption(CloudflareEnvironment);
+        const accountId = Option.isSome(environment)
+          ? (yield* environment.value).accountId
+          : probe.accountId;
         const attributes = {
-          workerName: olds.name,
+          workerName: yield* createWorkerName("Checkpoint", olds.name),
           namespace: typeof olds.namespace === "string" ? olds.namespace : olds.namespace?.name,
+          ...(accountId === undefined ? {} : { accountId }),
         };
         return olds.name === "foreign" ? Unowned(attributes) : attributes;
       }),
-      precreate: Effect.fn(function* () {
-        (yield* CheckpointProbe).writePhases.push(
-          (yield* getState<any>("Checkpoint")).workerWriteStarted,
-        );
+      precreate: Effect.fn(function* ({ news }) {
+        const probe = yield* CheckpointProbe;
+        probe.writePhases.push((yield* getState<any>("Checkpoint")).workerWriteStarted);
+        if (probe.precreated)
+          return {
+            workerName: yield* createWorkerName("Checkpoint", news.name),
+            workerId: yield* createWorkerName("Checkpoint", news.name),
+            namespace: news.namespace as string,
+          };
         return yield* new InterruptedPrecreate();
       }),
-      reconcile: Effect.fn(function* ({ news }) {
+      reconcile: Effect.fn(function* ({ news, output }) {
         const probe = yield* CheckpointProbe;
         probe.writePhases.push((yield* getState<any>("Checkpoint")).workerWriteStarted);
         if (probe.interruptUpload) return yield* new InterruptedUpload();
         return {
-          workerName: news.name,
+          workerName: output?.workerName ?? (yield* createWorkerName("Checkpoint", news.name)),
           namespace: typeof news.namespace === "string" ? news.namespace : news.namespace?.name,
+          ...(probe.accountId === undefined ? {} : { accountId: probe.accountId }),
         };
       }),
       delete: Effect.fn(function* ({ output }) {
@@ -9674,6 +9691,607 @@ describe("Worker checkpoint identity", { tags: ["unit", "local"] }, () => {
       props: { name: "old", namespace: "old-dispatch" },
       attr: { workerName: "old", namespace: "old-dispatch" },
     });
+
+  const inAccount = (accountId: string) =>
+    Effect.provideService(
+      CloudflareEnvironment,
+      Effect.succeed({
+        type: "apiToken" as const,
+        apiToken: Redacted.make("test-token"),
+        accountId,
+        source: { type: "env" as const },
+      }),
+    );
+
+  test.provider(
+    "a written attrless generation keeps its recorded account during retry cleanup",
+    (stack) =>
+      Effect.gen(function* () {
+        const probe = yield* CheckpointProbe;
+        yield* stack.destroy();
+        yield* seed({
+          ...checkpoint(true, "dispatch"),
+          workerWriteStarted: true,
+          workerAccountId: "account-a",
+        } as CreatingResourceState);
+        probe.accountId = "account-b";
+        const output = yield* stack
+          .deploy(
+            CheckpointWorker("Checkpoint", {
+              name: "shared",
+              namespace: "dispatch",
+            }),
+          )
+          .pipe(inAccount("account-b"));
+        expect(probe.deletes.map((value) => value.accountId)).toEqual(["account-a"]);
+        yield* stack.destroy().pipe(inAccount("account-b"));
+        expect(probe.deletes.map((value) => value.accountId)).toEqual(["account-a", "account-b"]);
+        expect(output.workerName).toBe("shared");
+      }),
+  );
+
+  test.provider("an account switch after planning refuses same-generation mutation", (stack) =>
+    Effect.gen(function* () {
+      const probe = yield* CheckpointProbe;
+      yield* stack.destroy();
+      yield* seed({
+        ...checkpoint(true, "dispatch"),
+        workerWriteStarted: true,
+        workerAccountId: "account-a",
+      } as CreatingResourceState);
+      const plan = yield* stack
+        .plan(
+          CheckpointWorker("Checkpoint", {
+            name: "shared",
+            namespace: "dispatch",
+          }),
+        )
+        .pipe(inAccount("account-a"));
+      const result = yield* apply(plan).pipe(inAccount("account-b"), Effect.exit);
+      expect(Exit.isFailure(result)).toBe(true);
+      expect(probe.writePhases).toEqual([]);
+      expect((yield* getState<any>("Checkpoint")).workerAccountId).toBe("account-a");
+      yield* stack.destroy().pipe(inAccount("account-a"));
+    }),
+  );
+
+  test.provider("recorded account cleanup preserves state when credentials fail", (stack) =>
+    Effect.gen(function* () {
+      const probe = yield* CheckpointProbe;
+      yield* stack.destroy();
+      yield* seed({
+        ...checkpoint(true, "dispatch"),
+        workerWriteStarted: true,
+        workerAccountId: "account-a",
+      } as CreatingResourceState);
+      const result = yield* stack
+        .destroy()
+        .pipe(
+          Effect.provideService(CloudflareEnvironment, Effect.die("Credentials unavailable")),
+          Effect.exit,
+        );
+      expect(Exit.isFailure(result)).toBe(true);
+      expect((yield* getState<any>("Checkpoint")).workerAccountId).toBe("account-a");
+      expect(probe.deletes).toEqual([]);
+      yield* stack.destroy().pipe(inAccount("account-a"));
+    }),
+  );
+
+  test.provider("readonly cached output cannot authorize a changed retry", (stack) =>
+    Effect.gen(function* () {
+      const probe = yield* CheckpointProbe;
+      yield* stack.destroy();
+      yield* seed({
+        ...checkpoint(true, "old-dispatch"),
+        props: { name: "old", namespace: "old-dispatch" },
+        attr: { workerName: "old", namespace: "old-dispatch", workerId: "old" },
+        workerWriteStarted: false,
+      });
+      const result = yield* stack
+        .deploy(
+          Effect.gen(function* () {
+            const dependency = yield* CheckpointDependency("Dependency", {});
+            return yield* CheckpointWorker("Checkpoint", {
+              name: "foreign",
+              namespace: dependency.name,
+            });
+          }),
+        )
+        .pipe(Effect.exit);
+      expect(probe.writePhases).toEqual([]);
+      expect(Exit.isFailure(result)).toBe(true);
+      if (Exit.isFailure(result))
+        expect(Cause.pretty(result.cause)).toContain("OwnedBySomeoneElse");
+      expect(probe.deletes).toEqual([]);
+      yield* stack.destroy();
+    }),
+  );
+
+  test.provider("canonical generated name survives attrless retry", (stack) =>
+    Effect.gen(function* () {
+      const probe = yield* CheckpointProbe;
+      yield* stack.destroy();
+      yield* seed({
+        ...checkpoint(true, "dispatch"),
+        props: { name: "persisted-physical-name", namespace: "dispatch" },
+        workerWriteStarted: true,
+      });
+      const output = yield* stack.deploy(
+        Effect.gen(function* () {
+          const dependency = yield* CheckpointDependency("Dependency", {});
+          return yield* CheckpointWorker("Checkpoint", { namespace: dependency.name });
+        }),
+      );
+      expect(output.workerName).toBe("persisted-physical-name");
+      expect(probe.deletes).toEqual([]);
+      yield* stack.destroy();
+    }),
+  );
+
+  for (const marker of [undefined, false]) {
+    for (const writeStarted of [undefined, true]) {
+      for (const cycle of [false, true]) {
+        test.provider(
+          `retry never transfers a previous write to an untouched identity (${marker}, ${writeStarted}, cycle=${cycle})`,
+          (stack) =>
+            Effect.gen(function* () {
+              const probe = yield* CheckpointProbe;
+              yield* stack.destroy();
+              const previous = {
+                ...checkpoint(marker),
+                props: { name: "old" },
+                propsIncomplete: true as const,
+                workerWriteStarted: writeStarted,
+              };
+              yield* seed(previous);
+              const desired = Effect.gen(function* () {
+                const worker = yield* CheckpointWorker("Checkpoint", {
+                  name: "untouched",
+                  namespace: "new-dispatch",
+                });
+                if (cycle) yield* worker.bind`self`({ self: worker.workerName });
+                return worker;
+              });
+              const plan = yield* stack.plan(desired);
+              const state = yield* yield* State;
+              const interrupted = yield* apply(plan).pipe(
+                Effect.provideService(
+                  State,
+                  Effect.succeed({
+                    ...state,
+                    set: (request) =>
+                      state
+                        .set(request)
+                        .pipe(
+                          Effect.flatMap((value) =>
+                            request.fqn === "Checkpoint"
+                              ? Effect.fail(
+                                  new StateStoreError({ message: "Interrupted before admission" }),
+                                )
+                              : Effect.succeed(value),
+                          ),
+                        ),
+                  }),
+                ),
+                Effect.exit,
+              );
+              expect(Exit.isFailure(interrupted)).toBe(true);
+              const row = yield* getState<any>("Checkpoint");
+              expect(row.workerWriteStarted).toBe(false);
+              expect(row.old.props).toEqual(previous.props);
+              expect(row.old.workerIdentityResolved).toBe(marker);
+              expect(row.old.workerWriteStarted).toBe(writeStarted);
+              expect(probe.writePhases).toEqual([]);
+              yield* stack.destroy();
+              expect(probe.reads).toEqual([]);
+              expect(probe.deletes).toEqual([]);
+            }),
+        );
+      }
+    }
+  }
+
+  test.provider(
+    "successful replacement precreate retains identity proof for later quarantine",
+    (stack) =>
+      Effect.gen(function* () {
+        const probe = yield* CheckpointProbe;
+        yield* stack.destroy();
+        yield* seedPredecessor(true);
+        probe.replace = true;
+        probe.precreated = true;
+        probe.interruptUpload = true;
+        yield* stack
+          .deploy(
+            Effect.gen(function* () {
+              const worker = yield* CheckpointWorker("Checkpoint", {
+                name: "new",
+                namespace: "dispatch",
+              });
+              yield* worker.bind`self`({ self: worker.workerName });
+              return worker;
+            }),
+          )
+          .pipe(Effect.catchTag("InterruptedUpload", () => Effect.void));
+        const row = yield* getState<any>("Checkpoint");
+        expect(row.attr.workerId).toBe("new");
+        expect(row.workerIdentityResolved).toBe(true);
+        probe.interruptUpload = false;
+        yield* stack.destroy();
+      }),
+  );
+
+  test.provider(
+    "successful generated precreate records its physical name before interruption",
+    (stack) =>
+      Effect.gen(function* () {
+        const probe = yield* CheckpointProbe;
+        yield* stack.destroy();
+        yield* seedPredecessor(true);
+        probe.replace = true;
+        probe.precreated = true;
+        probe.interruptUpload = true;
+        yield* stack
+          .deploy(
+            Effect.gen(function* () {
+              const worker = yield* CheckpointWorker("Checkpoint", {});
+              yield* worker.bind`self`({ self: worker.workerName });
+              return worker;
+            }),
+          )
+          .pipe(Effect.catchTag("InterruptedUpload", () => Effect.void));
+        const row = yield* getState<any>("Checkpoint");
+        expect(row.props.name).toBe(row.attr.workerName);
+        expect(row.workerIdentityResolved).toBe(true);
+        probe.interruptUpload = false;
+        const refused = yield* stack
+          .deploy(CheckpointWorker("Checkpoint", { name: "foreign" }))
+          .pipe(Effect.exit);
+        expect(Exit.isFailure(refused)).toBe(true);
+        yield* stack.destroy();
+        expect(
+          probe.deletes.filter((entry) => entry.workerName === row.attr.workerName),
+        ).toHaveLength(1);
+        expect(probe.deletes.some((entry) => entry.workerName === "foreign")).toBe(false);
+      }),
+  );
+
+  for (const cycle of [false, true]) {
+    for (const unreadable of [false, true]) {
+      test.provider(
+        `uncertain retry admits its new target before writing (cycle=${cycle}, unreadable=${unreadable})`,
+        (stack) =>
+          Effect.gen(function* () {
+            const probe = yield* CheckpointProbe;
+            yield* stack.destroy();
+            yield* seed({ ...checkpoint(false), workerWriteStarted: true });
+            probe.unreadable = unreadable;
+            const refused = yield* stack
+              .deploy(
+                Effect.gen(function* () {
+                  const worker = yield* CheckpointWorker("Checkpoint", {
+                    name: "foreign",
+                    namespace: "new-dispatch",
+                  });
+                  if (cycle) yield* worker.bind`self`({ self: worker.workerName });
+                  return worker;
+                }),
+              )
+              .pipe(Effect.exit);
+            probe.unreadable = false;
+            expect(Exit.isFailure(refused)).toBe(true);
+            if (Exit.isFailure(refused))
+              expect(Cause.pretty(refused.cause)).toContain(
+                unreadable ? "WorkerHasNoVersions" : "OwnedBySomeoneElse",
+              );
+            expect(probe.writePhases).toEqual([]);
+            const row = yield* getState<any>("Checkpoint");
+            expect(row.workerWriteStarted).toBe(false);
+            expect(row.old.workerIdentityResolved).toBe(false);
+            yield* stack.destroy();
+            expect(probe.deletes).toEqual([]);
+          }),
+      );
+    }
+  }
+
+  for (const absent of [false, true]) {
+    test.provider(
+      `a deferred unchanged namespace preserves a generated Worker name (absent=${absent})`,
+      (stack) =>
+        Effect.gen(function* () {
+          const probe = yield* CheckpointProbe;
+          yield* stack.destroy();
+          const oldName = yield* createWorkerName("Checkpoint", undefined).pipe(
+            Effect.provideService(ResourceContext, {
+              logicalId: "Checkpoint",
+              fqn: "Checkpoint",
+              instanceId: "interrupted",
+              type: CheckpointWorker.Type,
+            }),
+          );
+          yield* seed({
+            ...checkpoint(true),
+            props: { namespace: "dispatch" },
+            workerWriteStarted: true,
+          });
+          probe.absent = absent;
+          const output = yield* stack.deploy(
+            Effect.gen(function* () {
+              const dependency = yield* CheckpointDependency("Dependency", {});
+              return yield* CheckpointWorker("Checkpoint", { namespace: dependency.name });
+            }),
+          );
+          probe.absent = false;
+          expect(output.workerName).toBe(oldName);
+          expect(probe.deletes).toEqual([]);
+          yield* stack.destroy();
+          expect(probe.deletes).toEqual([output]);
+        }),
+    );
+  }
+
+  test.provider(
+    "same script names in different accounts keep separate cleanup histories",
+    (stack) =>
+      Effect.gen(function* () {
+        const probe = yield* CheckpointProbe;
+        yield* stack.destroy();
+        const old = { workerName: "same", namespace: "dispatch", accountId: "old-account" };
+        yield* seed({
+          ...checkpoint(true, "dispatch"),
+          props: { name: "same", namespace: "dispatch" },
+          attr: old,
+          workerWriteStarted: true,
+        });
+        probe.replace = true;
+        probe.accountId = "new-account";
+        const output = yield* stack.deploy(
+          CheckpointWorker("Checkpoint", { name: "same", namespace: "dispatch" }),
+        );
+        expect(probe.deletes).toEqual([old]);
+        yield* stack.destroy();
+        expect(probe.deletes).toEqual([old, output]);
+      }),
+  );
+
+  test.provider("a retry preserves an authoritative generated name from recorded output", (stack) =>
+    Effect.gen(function* () {
+      const probe = yield* CheckpointProbe;
+      yield* stack.destroy();
+      yield* seed({
+        ...checkpoint(true),
+        props: { namespace: "dispatch" },
+        attr: { workerName: "persisted-physical-name", namespace: "dispatch" },
+        workerWriteStarted: true,
+      });
+      const output = yield* stack.deploy(
+        Effect.gen(function* () {
+          const dependency = yield* CheckpointDependency("Dependency", {});
+          return yield* CheckpointWorker("Checkpoint", { namespace: dependency.name });
+        }),
+      );
+      expect(output.workerName).toBe("persisted-physical-name");
+      expect(probe.deletes).toEqual([]);
+      yield* stack.destroy();
+      expect(probe.deletes).toEqual([output]);
+    }),
+  );
+
+  test.provider(
+    "an account replacement with generated names keeps distinct generation IDs",
+    (stack) =>
+      Effect.gen(function* () {
+        const probe = yield* CheckpointProbe;
+        yield* stack.destroy();
+        const old = {
+          workerName: "previous-account-worker",
+          namespace: "dispatch",
+          accountId: "old-account",
+        };
+        yield* seed({
+          ...checkpoint(true),
+          props: { namespace: "dispatch" },
+          attr: old,
+          workerWriteStarted: true,
+        });
+        probe.accountId = "new-account";
+        const output = yield* stack.deploy(
+          Effect.gen(function* () {
+            const dependency = yield* CheckpointDependency("Dependency", {});
+            return yield* CheckpointWorker("Checkpoint", { namespace: dependency.name });
+          }),
+        );
+        expect((yield* getState<any>("Checkpoint")).instanceId).not.toBe("interrupted");
+        expect(output.workerName).not.toBe(old.workerName);
+        expect(probe.deletes).toEqual([old]);
+        yield* stack.destroy();
+        expect(probe.deletes).toEqual([old, output]);
+      }),
+  );
+
+  for (const marker of [undefined, false]) {
+    test.provider(
+      `real precreate output keeps original provenance when desired identity changes (${marker})`,
+      (stack) =>
+        Effect.gen(function* () {
+          const probe = yield* CheckpointProbe;
+          yield* stack.destroy();
+          const original = { workerName: "old", workerId: "old-script", namespace: "old-dispatch" };
+          yield* seed({
+            ...checkpoint(marker, "old-dispatch"),
+            props: { name: "old", namespace: "old-dispatch" },
+            attr: original,
+            workerWriteStarted: true,
+          });
+          const refused = yield* stack
+            .deploy(
+              Effect.gen(function* () {
+                const dependency = yield* CheckpointDependency("Dependency", {});
+                return yield* CheckpointWorker("Checkpoint", {
+                  name: "foreign",
+                  namespace: dependency.name,
+                });
+              }),
+            )
+            .pipe(Effect.exit);
+          expect(Exit.isFailure(refused)).toBe(true);
+          if (Exit.isFailure(refused))
+            expect(Cause.pretty(refused.cause)).toContain("OwnedBySomeoneElse");
+          const row = yield* getState<any>("Checkpoint");
+          expect(row.workerWriteStarted).toBe(false);
+          expect(row.old.workerIdentityResolved).toBe(marker);
+          expect(row.old.attr).toEqual(original);
+          expect(probe.writePhases).toEqual([]);
+          yield* stack.destroy();
+          expect(probe.deletes).toEqual([]);
+        }),
+    );
+
+    test.provider(`legacy real output cannot authorize a same-name retry (${marker})`, (stack) =>
+      Effect.gen(function* () {
+        const probe = yield* CheckpointProbe;
+        yield* stack.destroy();
+        yield* seed({
+          ...checkpoint(marker, "dispatch"),
+          props: { name: "foreign", namespace: "dispatch" },
+          attr: { workerName: "foreign", workerId: "cached-script", namespace: "dispatch" },
+          workerWriteStarted: true,
+        });
+        const refused = yield* stack
+          .deploy(CheckpointWorker("Checkpoint", { name: "foreign", namespace: "dispatch" }))
+          .pipe(Effect.exit);
+        expect(Exit.isFailure(refused)).toBe(true);
+        if (Exit.isFailure(refused))
+          expect(Cause.pretty(refused.cause)).toContain("OwnedBySomeoneElse");
+        expect(probe.writePhases).toEqual([]);
+        yield* stack.destroy();
+        expect(probe.deletes).toEqual([]);
+      }),
+    );
+
+    test.provider(
+      `an admitted same-identity cached predecessor is not deleted by retry cleanup (${marker})`,
+      (stack) =>
+        Effect.gen(function* () {
+          const probe = yield* CheckpointProbe;
+          yield* stack.destroy();
+          yield* seed({
+            ...checkpoint(marker, "dispatch"),
+            props: { name: "dispatch", namespace: "dispatch" },
+            attr: { workerName: "dispatch", workerId: "old-script", namespace: "dispatch" },
+            workerWriteStarted: true,
+          });
+          const output = yield* stack.deploy(
+            Effect.gen(function* () {
+              const dependency = yield* CheckpointDependency("Dependency", {});
+              return yield* CheckpointWorker("Checkpoint", {
+                name: dependency.name,
+                namespace: "dispatch",
+              });
+            }),
+          );
+          expect(probe.deletes).toEqual([]);
+          yield* stack.destroy();
+          expect(probe.deletes).toEqual([output]);
+        }),
+    );
+  }
+
+  for (const policy of [false, true]) {
+    test.provider(`retry honors the adoption policy captured by its plan (${policy})`, (stack) =>
+      Effect.gen(function* () {
+        const probe = yield* CheckpointProbe;
+        const context = yield* AlchemyContext;
+        yield* stack.destroy();
+        yield* seed({ ...checkpoint(false, "dispatch"), workerWriteStarted: true });
+        const plan = yield* stack
+          .plan(CheckpointWorker("Checkpoint", { name: "foreign", namespace: "dispatch" }))
+          .pipe(
+            Effect.provideService(AlchemyContext, { ...context, adopt: policy }),
+            Effect.updateContext(Context.omit(AdoptPolicy)),
+          );
+        expect(plan.resources.Checkpoint?.resource.Adopt).toBeUndefined();
+        const applied = yield* apply(plan).pipe(
+          Effect.provideService(AlchemyContext, { ...context, adopt: !policy }),
+          Effect.updateContext(Context.omit(AdoptPolicy)),
+          Effect.exit,
+        );
+        expect(Exit.isSuccess(applied)).toBe(policy);
+        expect(probe.writePhases).toEqual(policy ? [true] : []);
+        yield* stack.destroy();
+        expect(probe.deletes).toEqual(
+          policy ? [{ workerName: "foreign", namespace: "dispatch" }] : [],
+        );
+      }),
+    );
+  }
+
+  for (const sameName of [false, true]) {
+    test.provider(
+      `a resolved retry keeps cleanup with the physical attempt (same=${sameName})`,
+      (stack) =>
+        Effect.gen(function* () {
+          const probe = yield* CheckpointProbe;
+          yield* stack.destroy();
+          yield* seed({
+            ...checkpoint(true, "dispatch"),
+            props: { name: sameName ? "dispatch" : "old", namespace: "dispatch" },
+            workerWriteStarted: true,
+          });
+          const output = yield* stack.deploy(
+            Effect.gen(function* () {
+              const dependency = yield* CheckpointDependency("Dependency", {});
+              return yield* CheckpointWorker("Checkpoint", {
+                name: dependency.name,
+                namespace: "dispatch",
+              });
+            }),
+          );
+          expect(output.workerName).toBe("dispatch");
+          expect(probe.deletes).toEqual(
+            sameName ? [] : [{ workerName: "old", namespace: "dispatch" }],
+          );
+          yield* stack.destroy();
+          expect(probe.deletes.filter((entry) => entry.workerName === "dispatch")).toHaveLength(1);
+        }),
+    );
+  }
+
+  test.provider(
+    "retry removes a matching ancestor from cleanup without dropping intervening attempts",
+    (stack) =>
+      Effect.gen(function* () {
+        const probe = yield* CheckpointProbe;
+        yield* stack.destroy();
+        yield* seed({
+          ...checkpoint(true, "dispatch"),
+          status: "replacing",
+          deleteFirst: false,
+          props: { name: "middle", namespace: "dispatch" },
+          workerWriteStarted: true,
+          old: {
+            ...checkpoint(true, "dispatch"),
+            props: { name: "dispatch", namespace: "dispatch" },
+            workerWriteStarted: true,
+          },
+        });
+        const output = yield* stack.deploy(
+          Effect.gen(function* () {
+            const dependency = yield* CheckpointDependency("Dependency", {});
+            return yield* CheckpointWorker("Checkpoint", {
+              name: dependency.name,
+              namespace: "dispatch",
+            });
+          }),
+        );
+        expect(probe.deletes).toEqual([{ workerName: "middle", namespace: "dispatch" }]);
+        yield* stack.destroy();
+        expect(
+          probe.deletes.filter((entry) => entry.workerName === output.workerName),
+        ).toHaveLength(1);
+      }),
+  );
 
   test.provider(
     "the first replacement generation checkpoint proves no write after interruption",
@@ -9852,6 +10470,55 @@ describe("Worker checkpoint identity", { tags: ["unit", "local"] }, () => {
   );
 
   test.provider(
+    "an admitted Worker remains untouched when its read checkpoint fails before write intent",
+    (stack) =>
+      Effect.gen(function* () {
+        const probe = yield* CheckpointProbe;
+        yield* stack.destroy();
+        const plan = yield* stack.plan(
+          Effect.gen(function* () {
+            const dependency = yield* CheckpointDependency("Dependency", {});
+            return yield* CheckpointWorker("Checkpoint", {
+              name: "shared",
+              namespace: "dispatch",
+              dependency: dependency.name,
+            });
+          }),
+        );
+        const state = yield* yield* State;
+        const interrupted = yield* apply(plan).pipe(
+          Effect.provideService(
+            State,
+            Effect.succeed({
+              ...state,
+              set: (request) =>
+                state.set(request).pipe(
+                  Effect.flatMap((value) =>
+                    request.fqn === "Checkpoint" &&
+                    value.status === "creating" &&
+                    value.attr !== undefined &&
+                    value.workerWriteStarted === false
+                      ? Effect.fail(
+                          new StateStoreError({
+                            message: "Interrupted after admission, before write intent",
+                          }),
+                        )
+                      : Effect.succeed(value),
+                  ),
+                ),
+            }),
+          ),
+          Effect.exit,
+        );
+        expect(Exit.isFailure(interrupted)).toBe(true);
+        expect(probe.writePhases).toEqual([]);
+        expect((yield* getState<any>("Checkpoint")).workerWriteStarted).toBe(false);
+        yield* stack.destroy();
+        expect(probe.deletes).toEqual([]);
+      }),
+  );
+
+  test.provider(
     "an interrupted upload records write provenance before calling reconcile",
     (stack) =>
       Effect.gen(function* () {
@@ -9939,7 +10606,7 @@ describe("Worker checkpoint identity", { tags: ["unit", "local"] }, () => {
           name: "desired",
           namespace: "desired-dispatch",
         });
-        expect((yield* stack.plan(desired)).resources.Checkpoint?.action).toBe("create");
+        expect((yield* stack.plan(desired)).resources.Checkpoint?.action).toBe("replace");
         expect(probe.reads).toEqual([]);
         const output = yield* stack.deploy(desired);
         expect(output).toEqual({ workerName: "desired", namespace: "desired-dispatch" });
@@ -9997,7 +10664,7 @@ describe("Worker checkpoint identity", { tags: ["unit", "local"] }, () => {
         attr: { workerName: "shared", workerId: "" },
       });
       const desired = CheckpointWorker("Checkpoint", { name: "desired", namespace: "dispatch" });
-      expect((yield* stack.plan(desired)).resources.Checkpoint?.action).toBe("create");
+      expect((yield* stack.plan(desired)).resources.Checkpoint?.action).toBe("replace");
       expect(probe.reads).toEqual([]);
       yield* stack.deploy(desired);
       expect(probe.reads).toEqual([{ name: "desired", namespace: "dispatch" }]);
