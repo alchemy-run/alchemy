@@ -1,0 +1,137 @@
+{
+  "name": "@alchemy.run/planetscale",
+  "version": "2.0.0-beta.83",
+  "description": "PlanetScale MySQL and Postgres databases for Alchemy.",
+  "keywords": [
+    "alchemy",
+    "effect",
+    "infrastructure-as-code",
+    "mysql",
+    "planetscale",
+    "postgres"
+  ],
+  "homepage": "https://alchemy.run",
+  "bugs": {
+    "url": "https://github.com/alchemy-run/alchemy/issues"
+  },
+  "license": "Apache-2.0",
+  "author": "Sam Goodwin <sam@alchemy.run>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/alchemy-run/alchemy.git",
+    "directory": "packages/planetscale"
+  },
+  "files": [
+    "lib",
+    "src"
+  ],
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./MySQL": "./src/MySQL/index.ts",
+    "./Postgres": "./src/Postgres/index.ts",
+    "./*": "./src/*/index.ts",
+    "./Contributions": "./src/Contributions.ts",
+    "./Credentials": "./src/Credentials.ts",
+    "./OAuthClient": "./src/OAuthClient.ts",
+    "./Postgres/PostgresDatabase": "./src/Postgres/PostgresDatabase.ts",
+    "./Postgres/PostgresRole": "./src/Postgres/PostgresRole.ts",
+    "./package.json": "./package.json"
+  },
+  "publishConfig": {
+    "exports": {
+      ".": {
+        "types": "./lib/index.d.ts",
+        "bun": "./src/index.ts",
+        "worker": "./src/index.ts",
+        "default": "./lib/index.js"
+      },
+      "./MySQL": {
+        "types": "./lib/MySQL/index.d.ts",
+        "bun": "./src/MySQL/index.ts",
+        "worker": "./src/MySQL/index.ts",
+        "default": "./lib/MySQL/index.js"
+      },
+      "./Postgres": {
+        "types": "./lib/Postgres/index.d.ts",
+        "bun": "./src/Postgres/index.ts",
+        "worker": "./src/Postgres/index.ts",
+        "default": "./lib/Postgres/index.js"
+      },
+      "./*": {
+        "types": "./lib/*/index.d.ts",
+        "bun": "./src/*/index.ts",
+        "worker": "./src/*/index.ts",
+        "default": "./lib/*/index.js"
+      },
+      "./Contributions": {
+        "types": "./lib/Contributions.d.ts",
+        "bun": "./src/Contributions.ts",
+        "worker": "./src/Contributions.ts",
+        "default": "./lib/Contributions.js"
+      },
+      "./Credentials": {
+        "types": "./lib/Credentials.d.ts",
+        "bun": "./src/Credentials.ts",
+        "worker": "./src/Credentials.ts",
+        "default": "./lib/Credentials.js"
+      },
+      "./OAuthClient": {
+        "types": "./lib/OAuthClient.d.ts",
+        "bun": "./src/OAuthClient.ts",
+        "worker": "./src/OAuthClient.ts",
+        "default": "./lib/OAuthClient.js"
+      },
+      "./Postgres/PostgresDatabase": {
+        "types": "./lib/Postgres/PostgresDatabase.d.ts",
+        "bun": "./src/Postgres/PostgresDatabase.ts",
+        "worker": "./src/Postgres/PostgresDatabase.ts",
+        "default": "./lib/Postgres/PostgresDatabase.js"
+      },
+      "./Postgres/PostgresRole": {
+        "types": "./lib/Postgres/PostgresRole.d.ts",
+        "bun": "./src/Postgres/PostgresRole.ts",
+        "worker": "./src/Postgres/PostgresRole.ts",
+        "default": "./lib/Postgres/PostgresRole.js"
+      },
+      "./package.json": "./package.json"
+    },
+    "access": "public"
+  },
+  "scripts": {
+    "build": "pnpm -r --filter \"{.}...\" run build:package",
+    "build:package": "node scripts/build.ts"
+  },
+  "dependencies": {
+    "@distilled.cloud/core": "workspace:*",
+    "@distilled.cloud/planetscale": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/bun": "catalog:",
+    "@types/pg": "catalog:",
+    "alchemy": "workspace:*",
+    "effect": "catalog:",
+    "mysql2": "catalog:",
+    "pg": "catalog:",
+    "typescript": "catalog:"
+  },
+  "peerDependencies": {
+    "alchemy": "workspace:*",
+    "effect": "catalog:",
+    "mysql2": "catalog:",
+    "pg": "catalog:"
+  },
+  "peerDependenciesMeta": {
+    "mysql2": {
+      "optional": true
+    },
+    "pg": {
+      "optional": true
+    }
+  },
+  "alchemy": {
+    "contributes": [
+      "@alchemy.run/planetscale/Contributions"
+    ]
+  }
+}

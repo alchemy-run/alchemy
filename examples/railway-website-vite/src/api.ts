@@ -1,5 +1,5 @@
 import * as Drizzle from "@alchemy.run/drizzle/Postgres";
-import * as Railway from "alchemy/Railway";
+import * as Railway from "@alchemy.run/railway";
 import { desc, sql } from "drizzle-orm";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";

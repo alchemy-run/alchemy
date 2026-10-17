@@ -67,38 +67,11 @@
     "./GCP": "./src/GCP/index.ts",
     "./GCP/Contributions": "./src/GCP/Contributions.ts",
     "./GCP/*": "./src/GCP/*/index.ts",
-    "./GitHub": "./src/GitHub/index.ts",
     "./Endpoint": "./src/Endpoint/index.ts",
-    "./Neon": "./src/Neon/index.ts",
-    "./Neon/Contributions": "./src/Neon/Contributions.ts",
-    "./Neon/*": "./src/Neon/*/index.ts",
-    "./Hetzner": "./src/Hetzner/index.ts",
-    "./Fly": "./src/Fly/index.ts",
-    "./Railway": "./src/Railway/index.ts",
-    "./Prisma": "./src/Prisma/index.ts",
-    "./Prisma/ORM": "./src/Prisma/ORM/index.ts",
-    "./Prisma/ComputeApp": null,
-    "./Prisma/ComputeService": null,
-    "./Prisma/ComputeVersion": null,
-    "./Prisma/ComputeVersionObserve": null,
-    "./Prisma/EnvironmentVariableValidation": null,
-    "./Prisma/Credentials": null,
-    "./Prisma/Internal/*": null,
-    "./Prisma/PrismaDevDatabase": null,
-    "./Prisma/Refs": null,
-    "./Planetscale": "./src/Planetscale/index.ts",
-    "./Planetscale/Contributions": "./src/Planetscale/Contributions.ts",
-    "./Planetscale/*": "./src/Planetscale/*/index.ts",
-    "./Stripe": "./src/Stripe/index.ts",
-    "./Turso": "./src/Turso/index.ts",
     "./Runtime/Bootstrap/*": "./src/Runtime/Bootstrap/*.ts",
     "./AWS/Bootstrap/*": "./src/AWS/Bootstrap/*.ts",
     "./Cloudflare/Bootstrap/*": "./src/Cloudflare/Bootstrap/*.ts",
     "./GCP/Bootstrap/*": "./src/GCP/Bootstrap/*.ts",
-    "./Fly/Bootstrap": "./src/Fly/Bootstrap.ts",
-    "./Hetzner/Bootstrap": "./src/Hetzner/Bootstrap.ts",
-    "./Prisma/Bootstrap": "./src/Prisma/Bootstrap.ts",
-    "./Railway/Bootstrap": "./src/Railway/Bootstrap.ts",
     "./Process": "./src/Process/index.ts",
     "./Redis": "./src/Redis/index.ts",
     "./TUI": "./src/TUI/index.ts",
@@ -281,89 +254,10 @@
         "bun": "./src/GCP/*/index.ts",
         "default": "./lib/GCP/*/index.js"
       },
-      "./GitHub": {
-        "types": "./lib/GitHub/index.d.ts",
-        "bun": "./src/GitHub/index.ts",
-        "default": "./lib/GitHub/index.js"
-      },
       "./Endpoint": {
         "types": "./lib/Endpoint/index.d.ts",
         "bun": "./src/Endpoint/index.ts",
         "default": "./lib/Endpoint/index.js"
-      },
-      "./Neon": {
-        "types": "./lib/Neon/index.d.ts",
-        "bun": "./src/Neon/index.ts",
-        "default": "./lib/Neon/index.js"
-      },
-      "./Neon/Contributions": {
-        "types": "./lib/Neon/Contributions.d.ts",
-        "bun": "./src/Neon/Contributions.ts",
-        "default": "./lib/Neon/Contributions.js"
-      },
-      "./Neon/*": {
-        "types": "./lib/Neon/*/index.d.ts",
-        "bun": "./src/Neon/*/index.ts",
-        "default": "./lib/Neon/*/index.js"
-      },
-      "./Hetzner": {
-        "types": "./lib/Hetzner/index.d.ts",
-        "bun": "./src/Hetzner/index.ts",
-        "default": "./lib/Hetzner/index.js"
-      },
-      "./Fly": {
-        "types": "./lib/Fly/index.d.ts",
-        "bun": "./src/Fly/index.ts",
-        "default": "./lib/Fly/index.js"
-      },
-      "./Railway": {
-        "types": "./lib/Railway/index.d.ts",
-        "bun": "./src/Railway/index.ts",
-        "default": "./lib/Railway/index.js"
-      },
-      "./Prisma": {
-        "types": "./lib/Prisma/index.d.ts",
-        "bun": "./src/Prisma/index.ts",
-        "default": "./lib/Prisma/index.js"
-      },
-      "./Prisma/ORM": {
-        "types": "./lib/Prisma/ORM/index.d.ts",
-        "bun": "./src/Prisma/ORM/index.ts",
-        "default": "./lib/Prisma/ORM/index.js"
-      },
-      "./Prisma/ComputeApp": null,
-      "./Prisma/ComputeService": null,
-      "./Prisma/ComputeVersion": null,
-      "./Prisma/ComputeVersionObserve": null,
-      "./Prisma/EnvironmentVariableValidation": null,
-      "./Prisma/Credentials": null,
-      "./Prisma/Internal/*": null,
-      "./Prisma/PrismaDevDatabase": null,
-      "./Prisma/Refs": null,
-      "./Planetscale": {
-        "types": "./lib/Planetscale/index.d.ts",
-        "bun": "./src/Planetscale/index.ts",
-        "default": "./lib/Planetscale/index.js"
-      },
-      "./Planetscale/Contributions": {
-        "types": "./lib/Planetscale/Contributions.d.ts",
-        "bun": "./src/Planetscale/Contributions.ts",
-        "default": "./lib/Planetscale/Contributions.js"
-      },
-      "./Planetscale/*": {
-        "types": "./lib/Planetscale/*/index.d.ts",
-        "bun": "./src/Planetscale/*/index.ts",
-        "default": "./lib/Planetscale/*/index.js"
-      },
-      "./Stripe": {
-        "types": "./lib/Stripe/index.d.ts",
-        "bun": "./src/Stripe/index.ts",
-        "default": "./lib/Stripe/index.js"
-      },
-      "./Turso": {
-        "types": "./lib/Turso/index.d.ts",
-        "bun": "./src/Turso/index.ts",
-        "default": "./lib/Turso/index.js"
       },
       "./Runtime/Bootstrap/*": {
         "types": "./src/Runtime/Bootstrap/*.ts",
@@ -384,26 +278,6 @@
         "types": "./src/GCP/Bootstrap/*.ts",
         "bun": "./src/GCP/Bootstrap/*.ts",
         "default": "./src/GCP/Bootstrap/*.ts"
-      },
-      "./Fly/Bootstrap": {
-        "types": "./src/Fly/Bootstrap.ts",
-        "bun": "./src/Fly/Bootstrap.ts",
-        "default": "./src/Fly/Bootstrap.ts"
-      },
-      "./Hetzner/Bootstrap": {
-        "types": "./src/Hetzner/Bootstrap.ts",
-        "bun": "./src/Hetzner/Bootstrap.ts",
-        "default": "./src/Hetzner/Bootstrap.ts"
-      },
-      "./Prisma/Bootstrap": {
-        "types": "./src/Prisma/Bootstrap.ts",
-        "bun": "./src/Prisma/Bootstrap.ts",
-        "default": "./src/Prisma/Bootstrap.ts"
-      },
-      "./Railway/Bootstrap": {
-        "types": "./src/Railway/Bootstrap.ts",
-        "bun": "./src/Railway/Bootstrap.ts",
-        "default": "./src/Railway/Bootstrap.ts"
       },
       "./Process": {
         "types": "./lib/Process/index.d.ts",
@@ -635,15 +509,7 @@
     "contributes": [
       "alchemy/AWS/Contributions",
       "alchemy/Cloudflare/Contributions",
-      "alchemy/Fly/Contributions",
-      "alchemy/GCP/Contributions",
-      "alchemy/GitHub/Contributions",
-      "alchemy/Hetzner/Contributions",
-      "alchemy/Neon/Contributions",
-      "alchemy/Planetscale/Contributions",
-      "alchemy/Prisma/Contributions",
-      "alchemy/Railway/Contributions",
-      "alchemy/Stripe/Contributions"
+      "alchemy/GCP/Contributions"
     ]
   }
 }

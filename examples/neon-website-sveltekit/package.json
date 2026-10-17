@@ -19,6 +19,7 @@
     "build": "vite build"
   },
   "dependencies": {
+    "@alchemy.run/neon": "workspace:*",
     "alchemy": "workspace:*",
     "effect": "catalog:"
   },

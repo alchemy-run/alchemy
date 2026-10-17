@@ -32,7 +32,7 @@ unconditionally creates its own `Neon.Project`:
 // src/Db.ts
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Drizzle from "@alchemy.run/drizzle";
-import * as Neon from "alchemy/Neon";
+import * as Neon from "@alchemy.run/neon";
 import * as Effect from "effect/Effect";
 
 export const NeonDb = Effect.gen(function* () {
@@ -74,7 +74,7 @@ to every stack effect:
 +import * as Alchemy from "alchemy";
  import * as Cloudflare from "alchemy/Cloudflare";
  import * as Drizzle from "@alchemy.run/drizzle";
- import * as Neon from "alchemy/Neon";
+ import * as Neon from "@alchemy.run/neon";
  import * as Effect from "effect/Effect";
 
  export const NeonDb = Effect.gen(function* () {
@@ -147,7 +147,7 @@ without paying for a whole Postgres cluster.
 import * as Alchemy from "alchemy";
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Drizzle from "@alchemy.run/drizzle";
-import * as Neon from "alchemy/Neon";
+import * as Neon from "@alchemy.run/neon";
 import * as Effect from "effect/Effect";
 
 export const NeonDb = Effect.gen(function* () {

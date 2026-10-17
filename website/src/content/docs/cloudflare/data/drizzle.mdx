@@ -136,7 +136,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
 // alchemy.run.ts
 import * as Alchemy from "alchemy";
 import * as Cloudflare from "alchemy/Cloudflare";
-import * as Neon from "alchemy/Neon";
+import * as Neon from "@alchemy.run/neon";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import Api from "./src/Api.ts";
@@ -227,8 +227,8 @@ Review each generated change before committing and deploy only those committed f
 
 ```diff lang="typescript"
 // alchemy.run.ts
--import * as Neon from "alchemy/Neon";
-+import * as Planetscale from "alchemy/Planetscale";
+-import * as Neon from "@alchemy.run/neon";
++import * as Planetscale from "@alchemy.run/planetscale";
 
 -    providers: Layer.mergeAll(Cloudflare.providers(), Neon.providers()),
 +    providers: Layer.mergeAll(Cloudflare.providers(), Planetscale.providers()),

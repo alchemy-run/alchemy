@@ -31,7 +31,7 @@ Import the bootstrap before the contract builder:
 
 ```typescript
 import "./validation.ts";
-import { defineContract } from "alchemy/Prisma/ORM";
+import { defineContract } from "@alchemy.run/prisma/ORM";
 ```
 
 If your package uses `"sideEffects": false`, preserve this module:
@@ -46,8 +46,8 @@ PSL-first projects skip this step.
 
 ```typescript
 // src/db.ts
-import * as Neon from "alchemy/Neon";
-import * as Prisma from "alchemy/Prisma";
+import * as Neon from "@alchemy.run/neon";
+import * as Prisma from "@alchemy.run/prisma";
 import * as Effect from "effect/Effect";
 
 export const Db = Effect.gen(function* () {
@@ -88,7 +88,7 @@ Caching is disabled so reads immediately reflect writes. [Hyperdrive guide](/clo
 ```typescript
 // src/api.ts
 import * as Cloudflare from "alchemy/Cloudflare";
-import * as PrismaPostgres from "alchemy/Prisma/ORM/Postgres";
+import * as PrismaPostgres from "@alchemy.run/prisma/ORM/Postgres";
 import * as Effect from "effect/Effect";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import { contract } from "./prisma/contract.ts";
@@ -130,8 +130,8 @@ const db = yield* makeDatabase(conn.connectionString);
 // alchemy.run.ts
 import * as Alchemy from "alchemy";
 import * as Cloudflare from "alchemy/Cloudflare";
-import * as Neon from "alchemy/Neon";
-import * as Prisma from "alchemy/Prisma";
+import * as Neon from "@alchemy.run/neon";
+import * as Prisma from "@alchemy.run/prisma";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import Api from "./src/api.ts";

@@ -1,6 +1,6 @@
+import * as Planetscale from "@alchemy.run/planetscale";
 import { describe, expect } from "alchemy-test";
 import * as Cloudflare from "alchemy/Cloudflare";
-import * as Planetscale from "alchemy/Planetscale";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";

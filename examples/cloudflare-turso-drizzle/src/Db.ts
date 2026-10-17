@@ -1,5 +1,5 @@
 import * as Drizzle from "@alchemy.run/drizzle";
-import * as Turso from "alchemy/Turso";
+import * as Turso from "@alchemy.run/turso";
 import * as Effect from "effect/Effect";
 
 /** Every tenant database lives in this group. */

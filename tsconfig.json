@@ -109,6 +109,33 @@
       "path": "./packages/infisical/tsconfig.json"
     },
     {
+      "path": "./packages/turso/tsconfig.json"
+    },
+    {
+      "path": "./packages/planetscale/tsconfig.json"
+    },
+    {
+      "path": "./packages/neon/tsconfig.json"
+    },
+    {
+      "path": "./packages/prisma/tsconfig.json"
+    },
+    {
+      "path": "./packages/hetzner/tsconfig.json"
+    },
+    {
+      "path": "./packages/railway/tsconfig.json"
+    },
+    {
+      "path": "./packages/fly/tsconfig.json"
+    },
+    {
+      "path": "./packages/github/tsconfig.json"
+    },
+    {
+      "path": "./packages/stripe/tsconfig.json"
+    },
+    {
       "path": "./packages/integration-tests/tsconfig.json"
     },
     {

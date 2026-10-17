@@ -54,6 +54,8 @@
     "test": "alchemy-test"
   },
   "devDependencies": {
+    "@alchemy.run/neon": "workspace:*",
+    "@alchemy.run/planetscale": "workspace:*",
     "@better-auth/drizzle-adapter": "catalog:",
     "@cloudflare/workers-types": "catalog:",
     "@distilled.cloud/aws": "workspace:*",

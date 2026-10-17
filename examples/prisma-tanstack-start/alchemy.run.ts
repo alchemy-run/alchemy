@@ -1,8 +1,8 @@
+import * as Prisma from "@alchemy.run/prisma";
 import * as Alchemy from "alchemy";
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Command from "alchemy/Command";
 import * as Output from "alchemy/Output";
-import * as Prisma from "alchemy/Prisma";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";

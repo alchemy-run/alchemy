@@ -30,7 +30,7 @@ project — wasteful for short-lived PR previews:
 // src/Db.ts
 import * as Alchemy from "alchemy";
 import * as Drizzle from "@alchemy.run/drizzle";
-import * as Neon from "alchemy/Neon";
+import * as Neon from "@alchemy.run/neon";
 import * as Effect from "effect/Effect";
 
 export const NeonDb = Effect.gen(function* () {
@@ -138,7 +138,7 @@ copy-on-write and free; projects aren't.
 // src/Db.ts
 import * as Alchemy from "alchemy";
 import * as Drizzle from "@alchemy.run/drizzle";
-import * as Neon from "alchemy/Neon";
+import * as Neon from "@alchemy.run/neon";
 import * as Effect from "effect/Effect";
 
 export const NeonDb = Effect.gen(function* () {

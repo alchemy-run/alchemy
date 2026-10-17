@@ -1,6 +1,6 @@
+import * as Neon from "@alchemy.run/neon";
 import { expect } from "alchemy-test";
 import * as Cloudflare from "alchemy/Cloudflare";
-import * as Neon from "alchemy/Neon";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";

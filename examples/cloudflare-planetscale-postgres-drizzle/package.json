@@ -17,6 +17,7 @@
   },
   "dependencies": {
     "@alchemy.run/drizzle": "workspace:*",
+    "@alchemy.run/planetscale": "workspace:*",
     "@cloudflare/workers-types": "catalog:",
     "@effect/platform-bun": "catalog:",
     "@effect/platform-node": "catalog:",

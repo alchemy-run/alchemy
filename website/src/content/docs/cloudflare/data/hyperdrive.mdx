@@ -44,7 +44,7 @@ alongside `Cloudflare.providers()` in your stack:
 // alchemy.run.ts
 import * as Alchemy from "alchemy";
 import * as Cloudflare from "alchemy/Cloudflare";
-+import * as Neon from "alchemy/Neon";
++import * as Neon from "@alchemy.run/neon";
 +import * as Layer from "effect/Layer";
 
 export default Alchemy.Stack(
@@ -70,7 +70,7 @@ from the environment (good for CI) or stores a key under
 // alchemy.run.ts
 import * as Alchemy from "alchemy";
 import * as Cloudflare from "alchemy/Cloudflare";
-+import * as Planetscale from "alchemy/Planetscale";
++import * as Planetscale from "@alchemy.run/planetscale";
 +import * as Layer from "effect/Layer";
 
 export default Alchemy.Stack(
@@ -97,7 +97,7 @@ environment (good for CI) or stores the credentials under
 // alchemy.run.ts
 import * as Alchemy from "alchemy";
 import * as Cloudflare from "alchemy/Cloudflare";
-+import * as Planetscale from "alchemy/Planetscale";
++import * as Planetscale from "@alchemy.run/planetscale";
 +import * as Layer from "effect/Layer";
 
 export default Alchemy.Stack(
@@ -135,7 +135,7 @@ branches fork from:
 
 ```typescript
 // src/Db.ts
-import * as Neon from "alchemy/Neon";
+import * as Neon from "@alchemy.run/neon";
 import * as Effect from "effect/Effect";
 
 export const Db = Effect.gen(function* () {
@@ -166,7 +166,7 @@ Hyperdrive:
 
 ```typescript
 // src/Db.ts
-import * as Planetscale from "alchemy/Planetscale";
+import * as Planetscale from "@alchemy.run/planetscale";
 import * as Effect from "effect/Effect";
 
 export const Db = Effect.gen(function* () {
@@ -204,7 +204,7 @@ Hyperdrive:
 
 ```typescript
 // src/Db.ts
-import * as Planetscale from "alchemy/Planetscale";
+import * as Planetscale from "@alchemy.run/planetscale";
 import * as Effect from "effect/Effect";
 
 export const Db = Effect.gen(function* () {
@@ -248,7 +248,7 @@ port, database, user, password }`) ready to feed straight in:
 ```diff lang="typescript"
 // src/Db.ts
 +import * as Cloudflare from "alchemy/Cloudflare";
-import * as Neon from "alchemy/Neon";
+import * as Neon from "@alchemy.run/neon";
 import * as Effect from "effect/Effect";
 
 export const Db = Effect.gen(function* () {
@@ -275,7 +275,7 @@ Hyperdrive already does its own connection pooling.
 ```diff lang="typescript"
 // src/Db.ts
 +import * as Cloudflare from "alchemy/Cloudflare";
-import * as Planetscale from "alchemy/Planetscale";
+import * as Planetscale from "@alchemy.run/planetscale";
 import * as Effect from "effect/Effect";
 
 export const Db = Effect.gen(function* () {
@@ -301,7 +301,7 @@ PostgresBranch → PostgresRole → Hyperdrive on the deploy graph.
 ```diff lang="typescript"
 // src/Db.ts
 +import * as Cloudflare from "alchemy/Cloudflare";
-import * as Planetscale from "alchemy/Planetscale";
+import * as Planetscale from "@alchemy.run/planetscale";
 import * as Effect from "effect/Effect";
 
 export const Db = Effect.gen(function* () {

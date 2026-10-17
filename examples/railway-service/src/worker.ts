@@ -1,4 +1,4 @@
-import * as Railway from "alchemy/Railway";
+import * as Railway from "@alchemy.run/railway";
 import { ServerHost } from "alchemy/Server";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";

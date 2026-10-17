@@ -1,13 +1,13 @@
 import * as ACME from "@alchemy.run/acme";
+import * as Fly from "@alchemy.run/fly";
+import { FlyAuth } from "@alchemy.run/fly/AuthProvider";
+import { fromAuthProvider } from "@alchemy.run/fly/Credentials";
 import * as machines from "@distilled.cloud/fly-io/machines";
 import * as Alchemy from "alchemy";
 import { expect } from "alchemy-test";
 import * as Cloudflare from "alchemy/Cloudflare";
 import { CloudflareEnvironment } from "alchemy/Cloudflare";
 import { findZoneByName } from "alchemy/Cloudflare/Zone";
-import * as Fly from "alchemy/Fly";
-import { FlyAuth } from "alchemy/Fly/AuthProvider";
-import { fromAuthProvider } from "alchemy/Fly/Credentials";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";

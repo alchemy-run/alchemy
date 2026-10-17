@@ -37,7 +37,7 @@ Generate when the schema changes, then review and commit the schema, SQL, and sn
 
 ```typescript
 // src/Db.ts
-import * as Planetscale from "alchemy/Planetscale";
+import * as Planetscale from "@alchemy.run/planetscale";
 import * as Effect from "effect/Effect";
 
 export const PlanetscaleDb = Effect.gen(function* () {
@@ -91,7 +91,7 @@ For Vitess, use `mysql-core` columns and run the same generate, review, and comm
 
 ```typescript
 // src/Db.ts
-import * as Planetscale from "alchemy/Planetscale";
+import * as Planetscale from "@alchemy.run/planetscale";
 import * as Effect from "effect/Effect";
 
 export const PlanetscaleDb = Effect.gen(function* () {

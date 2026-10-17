@@ -1,8 +1,8 @@
 import * as Drizzle from "@alchemy.run/drizzle/LibSQL";
+import * as Turso from "@alchemy.run/turso";
 import { createClient } from "@libsql/client/web";
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as SQL from "alchemy/SQL/LibSQL";
-import * as Turso from "alchemy/Turso";
 import { defineRelations, sql as drizzleSql } from "drizzle-orm";
 import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 import * as Effect from "effect/Effect";

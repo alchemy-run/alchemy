@@ -1,4 +1,4 @@
-import { Environment } from "alchemy/Railway/ProjectEnvironment";
+import { Environment } from "@alchemy.run/railway/ProjectEnvironment";
 import { suiteProject } from "../suiteProject.ts";
 
 /**

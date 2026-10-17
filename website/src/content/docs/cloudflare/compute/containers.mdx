@@ -348,7 +348,7 @@ the connection once, then bind it:
 
 ```typescript
 // src/Db.ts
-import * as Prisma from "alchemy/Prisma";
+import * as Prisma from "@alchemy.run/prisma";
 import * as Effect from "effect/Effect";
 
 export const Connection = Effect.gen(function* () {
@@ -366,7 +366,7 @@ export const Connection = Effect.gen(function* () {
 
 ```typescript
 // src/Api.runtime.ts
-import * as Prisma from "alchemy/Prisma";
+import * as Prisma from "@alchemy.run/prisma";
 import * as SQL from "alchemy/SQL/Postgres";
 import * as Effect from "effect/Effect";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
