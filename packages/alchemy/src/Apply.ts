@@ -26,6 +26,8 @@ import {
   failCredentialsRequired,
   demandPlanCredentials,
 } from "./Auth/Demand.ts";
+// oxlint-disable-next-line alchemy/package-boundaries -- Worker retry identity must match the provider's account and generated names at the engine checkpoint boundary.
+import { CloudflareEnvironment } from "./Cloudflare/CloudflareEnvironmentService.ts";
 import { havePropsChanged, isResolved, stripUnresolved } from "./Diff.ts";
 import type { Input } from "./Input.ts";
 import { generateInstanceId } from "./InstanceId.ts";
@@ -69,6 +71,7 @@ import {
   State,
   StateStoreError,
 } from "./State/index.ts";
+import { recordedWorkerAccount } from "./State/WorkerState.ts";
 import { type ResourceOp, recordResourceOp } from "./Telemetry/Metrics.ts";
 import { hashInput } from "./Util/sha256.ts";
 
@@ -100,6 +103,7 @@ const quarantineReplacingWorkerOutputs = (
     return old === generation.old ? generation : { ...generation, old };
   }
   const attr =
+    // oxlint-disable-next-line alchemy/package-boundaries -- The engine must distinguish legacy Worker checkpoints before serialization, retry, and cleanup.
     generation.resourceType === "Cloudflare.Worker" &&
     stampedMode(generation) !== "local" &&
     generation.attr?.versionOf === undefined &&
@@ -108,7 +112,7 @@ const quarantineReplacingWorkerOutputs = (
       : generation.attr;
   return attr === generation.attr && old === generation.old
     ? generation
-    : { ...generation, attr, old };
+    : { ...generation, attr, old, workerAccountId: recordedWorkerAccount(generation) };
 };
 
 const provideLifecycleScope =
@@ -1086,6 +1090,7 @@ const executeNode = (
 
     // ── replace ──
     if (node.action === "replace") {
+      // oxlint-disable-next-line alchemy/package-boundaries -- The engine must distinguish legacy Worker checkpoints before serialization, retry, and cleanup.
       const isLiveWorker = node.resource.Type === "Cloudflare.Worker" && node.mode !== "local";
       if (node.state.status === "replaced" && !node.restart) {
         // The replacement already exists; this pass only needs GC to clean up
@@ -1987,6 +1992,11 @@ const collectGarbage = Effect.fn(function* (plan: Plan, session: PlanStatusSessi
         const adoptionBlocked = isDeleteNode(node)
           ? node.state.adoptionBlocked
           : generation.adoptionBlocked;
+        const workerAccountId =
+          // oxlint-disable-next-line alchemy/package-boundaries -- The engine must distinguish legacy Worker checkpoints before serialization, retry, and cleanup.
+          resourceType === "Cloudflare.Worker" && stampedMode(generation) !== "local"
+            ? recordedWorkerAccount(generation)
+            : undefined;
         // Mutable: an attr-less row (interrupted create) may recover its
         // attributes from `provider.read` below, right before deletion.
         let attr = persistedAttr;
@@ -2141,30 +2151,51 @@ const collectGarbage = Effect.fn(function* (plan: Plan, session: PlanStatusSessi
                     "resource must be identified and cleaned up manually.",
                 );
               } else if (provider.read) {
-                const recovered = yield* provider
-                  .read({ id: logicalId, fqn, instanceId, olds: props as never, output: undefined })
-                  .pipe(
-                    instrumentLifecycle("read", fqn, resourceType, logicalId, instanceId),
-                    // The persisted props of an interrupted create can carry
-                    // holes where unresolved Outputs were stripped at commit
-                    // time (see stripUnresolved) — e.g. a parent reference
-                    // persisted as `{}`. A provider that dereferences one
-                    // crashes deep inside its SDK client (a SchemaError
-                    // defect), which would make the stage impossible to
-                    // destroy. Recovery is best-effort: degrade the defect
-                    // to "nothing recovered", surface a note, and let the
-                    // row be dropped (#995).
-                    Effect.catchDefect((defect) =>
-                      scopedSession
-                        .note(
-                          "Recovery read crashed while looking up this " +
-                            "resource's interrupted create " +
-                            `(${String(defect)}) — if a physical resource ` +
-                            "was created, it must be cleaned up manually.",
-                        )
-                        .pipe(Effect.as(undefined)),
+                let recoveryRead = provider.read({
+                  id: logicalId,
+                  fqn,
+                  instanceId,
+                  olds: props as never,
+                  output: undefined,
+                });
+                if (workerAccountId !== undefined) {
+                  const environmentService = yield* Effect.serviceOption(CloudflareEnvironment);
+                  if (Option.isNone(environmentService))
+                    return yield* Effect.die(
+                      "Recorded Worker account requires Cloudflare credentials for cleanup",
+                    );
+                  const environment = yield* environmentService.value;
+                  recoveryRead = recoveryRead.pipe(
+                    Effect.provideService(
+                      CloudflareEnvironment,
+                      Effect.succeed({ ...environment, accountId: workerAccountId }),
                     ),
                   );
+                }
+                const recovered = yield* recoveryRead.pipe(
+                  instrumentLifecycle("read", fqn, resourceType, logicalId, instanceId),
+                  // The persisted props of an interrupted create can carry
+                  // holes where unresolved Outputs were stripped at commit
+                  // time (see stripUnresolved) — e.g. a parent reference
+                  // persisted as `{}`. A provider that dereferences one
+                  // crashes deep inside its SDK client (a SchemaError
+                  // defect), which would make the stage impossible to
+                  // destroy. Recovery is best-effort: degrade the defect
+                  // to "nothing recovered", surface a note, and let the
+                  // row be dropped (#995).
+                  Effect.catchDefect((defect) =>
+                    workerAccountId !== undefined
+                      ? Effect.die(defect)
+                      : scopedSession
+                          .note(
+                            "Recovery read crashed while looking up this " +
+                              "resource's interrupted create " +
+                              `(${String(defect)}) — if a physical resource ` +
+                              "was created, it must be cleaned up manually.",
+                          )
+                          .pipe(Effect.as(undefined)),
+                  ),
+                );
                 if (recovered !== undefined) {
                   if (Unowned.is(recovered)) {
                     yield* scopedSession.note(
@@ -2201,6 +2232,7 @@ const collectGarbage = Effect.fn(function* (plan: Plan, session: PlanStatusSessi
                 removalPolicy: node.resource.RemovalPolicy,
                 providerMode,
                 adoptionBlocked,
+                workerAccountId,
               });
             }
 
@@ -2271,6 +2303,7 @@ const collectGarbage = Effect.fn(function* (plan: Plan, session: PlanStatusSessi
                   bindings: excludeDeletedBindings(node.bindings),
                   removalPolicy: node.removalPolicy,
                   providerMode: node.providerMode,
+                  workerAccountId: node.workerAccountId,
                 });
               }
               yield* scopedSession.note(

@@ -1466,6 +1466,7 @@ const makePlan = <A>(
       }
 
       const adoptThis = resource.Adopt ?? (yield* shouldAdopt);
+      // oxlint-disable-next-line alchemy/package-boundaries -- The engine must distinguish legacy Worker checkpoints before serialization, retry, and cleanup.
       const isLiveWorker = resource.Type === "Cloudflare.Worker" && mode !== "local";
       const Node = <T extends Apply>(
         node: Omit<T, "provider" | "resource" | "bindings" | "downstream" | "mode">,

@@ -9890,6 +9890,8 @@ describe("Worker replacement ownership", { tags: ["unit", "local"] }, () => {
                 workerId: matching ? "observed" : "cached",
                 url: "https://desired.example",
               },
+              workerIdentityResolved: true,
+              workerWriteStarted: true,
             },
           });
           yield* stack.deploy(

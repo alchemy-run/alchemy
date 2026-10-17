@@ -24,6 +24,7 @@ import type { ScopedPlanStatusSession } from "../../Report.ts";
 import { type ResourceBinding } from "../../Resource.ts";
 import { isRedactedMarker } from "../../RuntimeContext.ts";
 import { Stack } from "../../Stack.ts";
+import { isProvisionalWorkerOutput } from "../../State/WorkerState.ts";
 import { cachedFunction } from "../../Util/cached-function.ts";
 import { initialCwd } from "../../Util/Node.ts";
 import { sha256Object } from "../../Util/sha256.ts";
@@ -5152,15 +5153,16 @@ export const LiveWorkerProvider = () =>
             // raises `OwnedBySomeoneElse`).
             return hasAlchemyWorkerTags(id, settings.tags ?? []) ? attrs : Unowned(attrs);
           },
-          (effect) =>
+          (effect, { output }) =>
             effect.pipe(
-              // A worker that exists but hasn't registered a version yet reads
-              // as "not deployed" — fall through to (re)create like NotFound.
-              // The dispatch-namespace endpoints report the same conditions as
-              // `DispatchNamespaceScriptNotFound` / `DispatchNamespaceNotFound`.
+              // Version propagation may lag a known upload. Without trusted
+              // output, unreadable version settings cannot prove absence.
               Effect.catchTags({
                 WorkerNotFound: () => Effect.succeed(undefined),
-                WorkerHasNoVersions: () => Effect.succeed(undefined),
+                WorkerHasNoVersions: (error) =>
+                  output === undefined || isProvisionalWorkerOutput(output)
+                    ? Effect.fail(error)
+                    : Effect.succeed(undefined),
                 DispatchNamespaceScriptNotFound: () => Effect.succeed(undefined),
                 DispatchNamespaceNotFound: () => Effect.succeed(undefined),
               }),
