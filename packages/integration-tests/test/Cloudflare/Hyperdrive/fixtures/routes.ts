@@ -1,4 +1,4 @@
-import type { ConnectClient } from "alchemy/Cloudflare/Hyperdrive";
+import type { ConnectClient } from "@alchemy.run/cloudflare/Hyperdrive";
 import * as Effect from "effect/Effect";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Redacted from "effect/Redacted";

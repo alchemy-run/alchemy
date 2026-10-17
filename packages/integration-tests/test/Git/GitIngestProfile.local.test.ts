@@ -1,3 +1,4 @@
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import { GitApi } from "@alchemy.run/git/Api";
 /**
  * Push-ingest profile against the LOCAL workerd (no cloud deploy): pushes
@@ -13,7 +14,6 @@ import { GitApi } from "@alchemy.run/git/Api";
  */
 import * as Alchemy from "alchemy";
 import { expect } from "alchemy-test";
-import * as Cloudflare from "alchemy/Cloudflare";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";

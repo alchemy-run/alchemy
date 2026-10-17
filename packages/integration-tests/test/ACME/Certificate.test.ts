@@ -1,11 +1,11 @@
 import * as ACME from "@alchemy.run/acme";
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import { CloudflareEnvironment } from "@alchemy.run/cloudflare";
+import { findZoneByName } from "@alchemy.run/cloudflare/Zone";
 import { Jose } from "@distilled.cloud/acme";
 import * as acme from "@distilled.cloud/acme/acme";
 import * as dns from "@distilled.cloud/cloudflare/dns";
 import { expect } from "alchemy-test";
-import * as Cloudflare from "alchemy/Cloudflare";
-import { CloudflareEnvironment } from "alchemy/Cloudflare";
-import { findZoneByName } from "alchemy/Cloudflare/Zone";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -41,7 +41,7 @@ test.provider(
           const cert = yield* ACME.Certificate("Certificate", {
             account,
             identifiers: [name],
-            solver: ACME.Cloudflare.ZoneSolver({ zoneId }),
+            solver: Cloudflare.ACME.ZoneSolver({ zoneId }),
             ...extra,
           });
           return { account, cert };
@@ -111,7 +111,7 @@ test.provider(
           return yield* ACME.Certificate("Certificate", {
             account: second ? secondAccount : firstAccount,
             identifiers: [`alchemy-acme-account-switch.${zoneName}`],
-            solver: ACME.Cloudflare.ZoneSolver({ zoneId }),
+            solver: Cloudflare.ACME.ZoneSolver({ zoneId }),
             revokeOnDelete: true,
           });
         });

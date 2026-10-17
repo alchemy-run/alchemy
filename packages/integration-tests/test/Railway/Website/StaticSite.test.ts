@@ -18,7 +18,7 @@ const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Deb
 
 const fixtureDir = pathe.resolve(
   import.meta.dirname,
-  "../../../../alchemy/test/Cloudflare/Website/staticsite-fixture",
+  "../../Cloudflare/Website/staticsite-fixture",
 );
 const tempRoot = pathe.resolve(import.meta.dirname, "../../../.tmp");
 

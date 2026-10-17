@@ -1,3 +1,4 @@
+import * as Cloudflare from "@alchemy.run/cloudflare";
 /**
  * The git-service example: a git host embedded in the app's own API, plus
  * a GitHub-style web UI, on one origin.
@@ -25,7 +26,6 @@
  * ```
  */
 import * as Alchemy from "alchemy";
-import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
 import GitHost from "./src/api/host.ts";
 

@@ -16,6 +16,7 @@
     "test": "bun test"
   },
   "dependencies": {
+    "@alchemy.run/cloudflare": "workspace:*",
     "@alchemy.run/stripe": "workspace:*",
     "@cloudflare/workers-types": "catalog:",
     "@distilled.cloud/stripe": "workspace:*",

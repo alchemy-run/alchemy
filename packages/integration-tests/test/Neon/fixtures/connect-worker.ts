@@ -1,4 +1,4 @@
-import { Worker } from "alchemy/Cloudflare/Workers/Worker";
+import { Worker } from "@alchemy.run/cloudflare/Workers/Worker";
 import { connectHandler } from "./connect-handler.ts";
 
 export default class ConnectWorker extends Worker<ConnectWorker>()(

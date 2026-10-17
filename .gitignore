@@ -42,7 +42,7 @@ examples/prisma-tanstack-start/src/prisma/contract.json
 !packages/integration-tests/test/Cloudflare/Workers/fixtures/drizzle-do/drizzle/migrations.js
 # Container image contexts COPY these into the image; without the negation
 # a fresh checkout has an empty build context and the container never boots.
-!packages/alchemy/test/Cloudflare/Container/fixtures/**/*.js
+!packages/integration-tests/test/Cloudflare/Container/fixtures/**/*.js
 *.map
 
 packages/cloudflare-runtime/src/rolldown/.env.test
@@ -84,8 +84,9 @@ examples/cloudflare-worker/src/scratch.ts
 .ai-workspace/
 /processes/
 .probe
-!packages/alchemy/src/Cloudflare/Workers/worker-module.d.ts
+!packages/cloudflare/src/Workers/worker-module.d.ts
 !packages/git/src/worker-module.d.ts
+!packages/cloudflare/src/globals.d.ts
 !packages/fly/src/globals.d.ts
 !packages/github/src/globals.d.ts
 !packages/stripe/src/globals.d.ts

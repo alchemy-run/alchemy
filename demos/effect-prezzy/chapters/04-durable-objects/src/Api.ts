@@ -1,4 +1,4 @@
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Http from "alchemy/Http";
 import * as SQL from "alchemy/SQL/D1";
 import * as Effect from "effect/Effect";

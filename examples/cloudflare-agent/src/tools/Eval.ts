@@ -1,5 +1,5 @@
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as AI from "alchemy/AI";
-import * as Cloudflare from "alchemy/Cloudflare";
 import { dedent } from "alchemy/Util";
 import * as Effect from "effect/Effect";
 import { HttpClientRequest } from "effect/http";

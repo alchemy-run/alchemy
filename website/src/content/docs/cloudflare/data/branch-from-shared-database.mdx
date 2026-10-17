@@ -30,7 +30,7 @@ unconditionally creates its own `Neon.Project`:
 
 ```typescript
 // src/Db.ts
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Drizzle from "@alchemy.run/drizzle";
 import * as Neon from "@alchemy.run/neon";
 import * as Effect from "effect/Effect";
@@ -72,7 +72,7 @@ to every stack effect:
 
 ```diff lang="typescript"
 +import * as Alchemy from "alchemy";
- import * as Cloudflare from "alchemy/Cloudflare";
+ import * as Cloudflare from "@alchemy.run/cloudflare";
  import * as Drizzle from "@alchemy.run/drizzle";
  import * as Neon from "@alchemy.run/neon";
  import * as Effect from "effect/Effect";
@@ -145,7 +145,7 @@ without paying for a whole Postgres cluster.
 ```typescript
 // src/Db.ts
 import * as Alchemy from "alchemy";
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Drizzle from "@alchemy.run/drizzle";
 import * as Neon from "@alchemy.run/neon";
 import * as Effect from "effect/Effect";

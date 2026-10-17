@@ -1,11 +1,11 @@
-import { GitApi } from "@alchemy.run/git/Api";
-import { expect } from "alchemy-test";
 /**
  * The pack hasher on dynamically loaded Workers, end to end (DESIGN
  * §22.12): pushes stream through four loaded hasher isolates, and the
  * result clones back byte-identical under `fsck --strict`.
  */
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import { GitApi } from "@alchemy.run/git/Api";
+import { expect } from "alchemy-test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";

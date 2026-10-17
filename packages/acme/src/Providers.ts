@@ -3,7 +3,6 @@ import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
 import { Account, AccountProvider } from "./Account.ts";
 import { Certificate, CertificateProvider } from "./Certificate.ts";
-import { ZoneSolverLive } from "./Cloudflare.ts";
 import { IssueCertificateHttp } from "./IssueCertificateHttp.ts";
 
 export class Providers extends Provider.ProviderCollection<Providers>()("ACME") {}
@@ -12,8 +11,9 @@ export type ProviderRequirements = Layer.Services<ReturnType<typeof providers>>;
 
 /**
  * Registers the ACME resource providers ({@link Account},
- * {@link Certificate}), the {@link IssueCertificateHttp} binding, and the
- * DNS-01 solvers (`ACME.Cloudflare.ZoneSolver`).
+ * {@link Certificate}) and the {@link IssueCertificateHttp} binding. DNS-01
+ * solvers come from the DNS provider, e.g. `Cloudflare.providers()` registers
+ * `Cloudflare.ACME.ZoneSolver`.
  *
  * @example
  * ```typescript
@@ -34,7 +34,6 @@ export const providers = () =>
   Layer.effect(Providers, Provider.collection([Account, Certificate])).pipe(
     Layer.provide(Layer.mergeAll(AccountProvider(), CertificateProvider())),
     Layer.provideMerge(IssueCertificateHttp),
-    Layer.provideMerge(ZoneSolverLive()),
     Layer.provideMerge(FetchHttpClient.layer),
     Layer.orDie,
   );

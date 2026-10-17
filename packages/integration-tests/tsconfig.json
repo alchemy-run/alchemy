@@ -23,7 +23,14 @@
     "test/Prisma/ORM/fixtures/psl/prisma.config.ts",
     "test/Prisma/ORM/fixtures/psl/migrations",
     "test/Prisma/ORM/fixtures/variants/prisma.config.ts",
-    "test/Prisma/ORM/fixtures/variants/migrations"
+    "test/Prisma/ORM/fixtures/variants/migrations",
+    // Nuxt fixtures: server routes use nitro's auto-imported globals, which
+    // only type-check against the `.nuxt/` types a nuxt build generates.
+    "test/Cloudflare/Website/fixtures/nuxt-app",
+    "test/Cloudflare/Website/fixtures/nuxt-spa-app",
+    // Octane fixtures use octane's JSX runtime.
+    "test/Cloudflare/Website/fixtures/octane-app",
+    "test/Cloudflare/Website/fixtures/octane-spa-app"
   ],
   "compilerOptions": {
     "composite": true,
@@ -54,6 +61,7 @@
     { "path": "../railway/tsconfig.json" },
     { "path": "../fly/tsconfig.json" },
     { "path": "../github/tsconfig.json" },
-    { "path": "../stripe/tsconfig.json" }
+    { "path": "../stripe/tsconfig.json" },
+    { "path": "../cloudflare/tsconfig.json" }
   ]
 }

@@ -1,4 +1,5 @@
 import { expect } from "bun:test";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Stripe from "@alchemy.run/stripe";
 import {
   CreatePaymentMethod,
@@ -10,7 +11,6 @@ import {
   GetWebhookEndpoints,
 } from "@distilled.cloud/stripe/stripe";
 import * as Alchemy from "alchemy";
-import * as Cloudflare from "alchemy/Cloudflare";
 import * as Test from "alchemy/Test/Bun";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";

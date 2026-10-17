@@ -1,9 +1,9 @@
 import * as ACME from "@alchemy.run/acme";
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import { CloudflareEnvironment } from "@alchemy.run/cloudflare";
+import { findZoneByName } from "@alchemy.run/cloudflare/Zone";
 import * as dns from "@distilled.cloud/cloudflare/dns";
 import { expect } from "alchemy-test";
-import * as Cloudflare from "alchemy/Cloudflare";
-import { CloudflareEnvironment } from "alchemy/Cloudflare";
-import { findZoneByName } from "alchemy/Cloudflare/Zone";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -12,7 +12,7 @@ import * as Stream from "effect/Stream";
 
 /**
  * The real DNS-01 path: Let's Encrypt staging validates `_acme-challenge`
- * TXT records that `ACME.Cloudflare.ZoneSolver` publishes in the standing
+ * TXT records that `Cloudflare.ACME.ZoneSolver` publishes in the standing
  * test zone. Staging has generous limits; the chain is untrusted but the
  * flow is production's.
  */

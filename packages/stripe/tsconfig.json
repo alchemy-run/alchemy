@@ -14,6 +14,12 @@
   },
   "references": [
     {
+      "path": "../../submodules/distilled/packages/stripe/tsconfig.json"
+    },
+    {
+      "path": "../../submodules/distilled/packages/core/tsconfig.json"
+    },
+    {
       "path": "../alchemy/tsconfig.json"
     }
   ]

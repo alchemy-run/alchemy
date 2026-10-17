@@ -1,3 +1,4 @@
+import type { DurableObjectState, SqlStorageValue } from "@alchemy.run/cloudflare/Workers/index";
 /**
  * Repo / Registry DO SQLite schema (DESIGN.md §3.1) and typed query helpers.
  *
@@ -17,7 +18,6 @@
  * failures surface as typed {@link StoreError}s instead of defects.
  */
 import type * as cf from "@cloudflare/workers-types";
-import type { DurableObjectState, SqlStorageValue } from "alchemy/Cloudflare/Workers/index";
 import * as Effect from "effect/Effect";
 import { StoreError } from "../Protocol/Store.ts";
 

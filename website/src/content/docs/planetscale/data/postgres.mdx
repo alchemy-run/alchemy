@@ -145,7 +145,7 @@ into consumers like [Cloudflare Hyperdrive](/cloudflare/data/hyperdrive):
   direct connection, e.g. Hyperdrive's local-dev origin.
 
 ```typescript
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 
 const hyperdrive = yield* Cloudflare.Hyperdrive.Connection("app-hyperdrive", {
   origin: role.origin, // direct — Hyperdrive pools at the edge

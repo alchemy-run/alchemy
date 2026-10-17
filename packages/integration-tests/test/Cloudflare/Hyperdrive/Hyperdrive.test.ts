@@ -1,10 +1,10 @@
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import { CloudflareEnvironment } from "@alchemy.run/cloudflare";
+import { findZoneByName } from "@alchemy.run/cloudflare/Zone";
 import * as Neon from "@alchemy.run/neon";
 import * as hyperdrive from "@distilled.cloud/cloudflare/hyperdrive";
 import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
 import { assert, expect } from "alchemy-test";
-import * as Cloudflare from "alchemy/Cloudflare";
-import { CloudflareEnvironment } from "alchemy/Cloudflare";
-import { findZoneByName } from "alchemy/Cloudflare/Zone";
 import * as Provider from "alchemy/Provider";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Data from "effect/Data";

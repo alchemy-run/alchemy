@@ -21,12 +21,12 @@ import * as path from "node:path";
 const srcRoot = path.join(import.meta.dirname, "../../packages/alchemy/src");
 
 /** Top-level `src` directories that become their own package. */
-const PROVIDERS = new Set(["AWS", "Cloudflare", "GCP"]);
+const PROVIDERS = new Set(["AWS", "GCP"]);
 
 const CORE = "core";
 
-// `rel` is a file (`AWS/S3/Bucket.ts`) or a directory import (`Cloudflare`,
-// from `alchemy/Cloudflare`). Root files (`Resource.ts`) are core.
+// `rel` is a file (`AWS/S3/Bucket.ts`) or a directory import (`AWS`, from
+// `alchemy/AWS`). Root files (`Resource.ts`) are core.
 const packageOf = (rel: string): string => {
   const top = rel.split("/")[0]!;
   const isRootFile = !rel.includes("/") && /\.tsx?$/.test(rel);

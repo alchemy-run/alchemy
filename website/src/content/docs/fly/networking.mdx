@@ -202,7 +202,7 @@ of Fly; this example uploads the result to a Fly App.
 
 ```typescript
 import * as ACME from "@alchemy.run/acme";
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Fly from "@alchemy.run/fly";
 import * as Layer from "effect/Layer";
 
@@ -227,7 +227,7 @@ const account = yield* ACME.Account("LetsEncrypt", {
 const certificate = yield* ACME.Certificate("Wildcard", {
   account,
   identifiers: ["*.example.com"],
-  solver: ACME.Cloudflare.ZoneSolver(zone),
+  solver: Cloudflare.ACME.ZoneSolver(zone),
 });
 yield* Fly.Certificate("WildcardUpload", {
   app: site,

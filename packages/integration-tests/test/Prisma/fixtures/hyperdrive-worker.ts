@@ -1,3 +1,4 @@
+import * as Cloudflare from "@alchemy.run/cloudflare";
 // Deep imports keep the Worker bundle lean: the `@/Prisma` barrel pulls in
 // the local dev-database machinery (@prisma/dev -> pglite), which balloons
 // the script and has no business inside a deployed Worker.
@@ -5,7 +6,6 @@ import { Connection } from "@alchemy.run/prisma/Connection";
 import { Postgres } from "@alchemy.run/prisma/Postgres";
 import type { PostgresOrigin } from "@alchemy.run/prisma/PostgresOrigin";
 import { Project } from "@alchemy.run/prisma/Project";
-import * as Cloudflare from "alchemy/Cloudflare";
 import * as SQL from "alchemy/SQL/Postgres";
 import * as Effect from "effect/Effect";
 import * as HttpServerRequest from "effect/http/HttpServerRequest";

@@ -55,14 +55,6 @@
     "./Kubernetes": "./src/Kubernetes/index.ts",
     "./Cli": "./src/Cli/index.ts",
     "./Cli/CliKit": "./src/Cli/CliKit/index.ts",
-    "./Cloudflare": "./src/Cloudflare/index.ts",
-    "./Cloudflare/Contributions": "./src/Cloudflare/Contributions.ts",
-    "./Cloudflare/Bridge": "./src/Cloudflare/Bridge.ts",
-    "./Cloudflare/Live": "./src/Cloudflare/Live.ts",
-    "./Cloudflare/RpcWebSocketClient": "./src/Cloudflare/Workers/RpcWebSocketClient.ts",
-    "./Cloudflare/*": "./src/Cloudflare/*/index.ts",
-    "./Cloudflare/Workers/*": "./src/Cloudflare/Workers/*.ts",
-    "./Cloudflare/R2/*": "./src/Cloudflare/R2/*.ts",
     "./Domain": "./src/Domain/index.ts",
     "./GCP": "./src/GCP/index.ts",
     "./GCP/Contributions": "./src/GCP/Contributions.ts",
@@ -70,7 +62,6 @@
     "./Endpoint": "./src/Endpoint/index.ts",
     "./Runtime/Bootstrap/*": "./src/Runtime/Bootstrap/*.ts",
     "./AWS/Bootstrap/*": "./src/AWS/Bootstrap/*.ts",
-    "./Cloudflare/Bootstrap/*": "./src/Cloudflare/Bootstrap/*.ts",
     "./GCP/Bootstrap/*": "./src/GCP/Bootstrap/*.ts",
     "./Process": "./src/Process/index.ts",
     "./Redis": "./src/Redis/index.ts",
@@ -194,46 +185,6 @@
         "bun": "./src/Cli/CliKit/index.ts",
         "default": "./lib/Cli/CliKit/index.js"
       },
-      "./Cloudflare": {
-        "types": "./lib/Cloudflare/index.d.ts",
-        "bun": "./src/Cloudflare/index.ts",
-        "default": "./lib/Cloudflare/index.js"
-      },
-      "./Cloudflare/Contributions": {
-        "types": "./lib/Cloudflare/Contributions.d.ts",
-        "bun": "./src/Cloudflare/Contributions.ts",
-        "default": "./lib/Cloudflare/Contributions.js"
-      },
-      "./Cloudflare/Bridge": {
-        "types": "./lib/Cloudflare/Bridge.d.ts",
-        "bun": "./src/Cloudflare/Bridge.ts",
-        "default": "./lib/Cloudflare/Bridge.js"
-      },
-      "./Cloudflare/Live": {
-        "types": "./lib/Cloudflare/Live.d.ts",
-        "bun": "./src/Cloudflare/Live.ts",
-        "default": "./lib/Cloudflare/Live.js"
-      },
-      "./Cloudflare/RpcWebSocketClient": {
-        "types": "./lib/Cloudflare/Workers/RpcWebSocketClient.d.ts",
-        "bun": "./src/Cloudflare/Workers/RpcWebSocketClient.ts",
-        "default": "./lib/Cloudflare/Workers/RpcWebSocketClient.js"
-      },
-      "./Cloudflare/*": {
-        "types": "./lib/Cloudflare/*/index.d.ts",
-        "bun": "./src/Cloudflare/*/index.ts",
-        "default": "./lib/Cloudflare/*/index.js"
-      },
-      "./Cloudflare/Workers/*": {
-        "types": "./lib/Cloudflare/Workers/*.d.ts",
-        "bun": "./src/Cloudflare/Workers/*.ts",
-        "default": "./lib/Cloudflare/Workers/*.js"
-      },
-      "./Cloudflare/R2/*": {
-        "types": "./lib/Cloudflare/R2/*.d.ts",
-        "bun": "./src/Cloudflare/R2/*.ts",
-        "default": "./lib/Cloudflare/R2/*.js"
-      },
       "./Domain": {
         "types": "./lib/Domain/index.d.ts",
         "bun": "./src/Domain/index.ts",
@@ -268,11 +219,6 @@
         "types": "./src/AWS/Bootstrap/*.ts",
         "bun": "./src/AWS/Bootstrap/*.ts",
         "default": "./src/AWS/Bootstrap/*.ts"
-      },
-      "./Cloudflare/Bootstrap/*": {
-        "types": "./src/Cloudflare/Bootstrap/*.ts",
-        "bun": "./src/Cloudflare/Bootstrap/*.ts",
-        "default": "./src/Cloudflare/Bootstrap/*.ts"
       },
       "./GCP/Bootstrap/*": {
         "types": "./src/GCP/Bootstrap/*.ts",
@@ -328,33 +274,17 @@
     "nuke": "cd ../../ && bun nuke"
   },
   "dependencies": {
-    "@alchemy.run/cloudflare-runtime": "workspace:*",
     "@alchemy.run/floci": "workspace:*",
     "@alchemy.run/node-utils": "workspace:*",
     "@alchemy.run/sigil": "catalog:",
     "@distilled.cloud/aws": "workspace:*",
-    "@distilled.cloud/cloudflare": "workspace:*",
     "@distilled.cloud/core": "workspace:*",
-    "@distilled.cloud/fly-io": "workspace:*",
     "@distilled.cloud/gcp": "workspace:*",
-    "@distilled.cloud/hetzner": "workspace:*",
-    "@distilled.cloud/iceberg": "workspace:*",
     "@distilled.cloud/neon": "workspace:*",
-    "@distilled.cloud/planetscale": "workspace:*",
-    "@distilled.cloud/prisma": "workspace:*",
-    "@distilled.cloud/railway": "workspace:*",
-    "@distilled.cloud/stripe": "workspace:*",
-    "@distilled.cloud/turso": "workspace:*",
-    "@distilled.cloud/zerossl": "workspace:*",
     "@effect/sql-d1": "catalog:",
-    "@neon/functions": "catalog:",
-    "@octokit/rest": "catalog:",
-    "@octokit/webhooks": "catalog:",
-    "@prisma/dev": "catalog:",
     "@types/aws-lambda": "catalog:",
     "capnweb": "catalog:",
     "fflate": "catalog:",
-    "libsodium-wrappers": "catalog:",
     "pathe": "catalog:",
     "picomatch": "catalog:",
     "rolldown": "catalog:",
@@ -508,7 +438,6 @@
   "alchemy": {
     "contributes": [
       "alchemy/AWS/Contributions",
-      "alchemy/Cloudflare/Contributions",
       "alchemy/GCP/Contributions"
     ]
   }

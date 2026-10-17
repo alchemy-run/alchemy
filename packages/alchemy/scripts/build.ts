@@ -3,12 +3,7 @@ import { build, exec } from "../../../scripts/package-build.ts";
 build(import.meta.dirname, {
   // Bootstrap modules are source inputs to the deployment bundler.
   exports: {
-    sourceOnly: [
-      "./Runtime/Bootstrap/*",
-      "./AWS/Bootstrap/*",
-      "./Cloudflare/Bootstrap/*",
-      "./GCP/Bootstrap/*",
-    ],
+    sourceOnly: ["./Runtime/Bootstrap/*", "./AWS/Bootstrap/*", "./GCP/Bootstrap/*"],
   },
   thirdPartyLicenses: true,
   readme: true,

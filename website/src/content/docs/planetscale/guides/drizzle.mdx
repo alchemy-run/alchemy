@@ -63,7 +63,7 @@ Register `Planetscale.providers()` in your Stack; the branch applies committed m
 ## Connect via `origin` / `pooledOrigin`
 
 ```typescript
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 
 export const Hyperdrive = Effect.gen(function* () {
   const { role } = yield* PlanetscaleDb;

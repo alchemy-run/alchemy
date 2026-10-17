@@ -20,6 +20,7 @@
     "react-router": "catalog:"
   },
   "devDependencies": {
+    "@alchemy.run/cloudflare": "workspace:*",
     "@tailwindcss/vite": "catalog:",
     "@types/react": "catalog:",
     "@vitejs/plugin-react": "catalog:",

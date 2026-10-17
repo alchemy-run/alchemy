@@ -1,14 +1,3 @@
-import * as Git from "@alchemy.run/git";
-import {
-  ApiHandlersLive,
-  BlobStoreR2,
-  GIT_WORKER_OPTIONS,
-  HasherInline,
-  RegistryDurableObject,
-  ReposDurableObject,
-} from "@alchemy.run/git";
-import * as GitHttp from "@alchemy.run/git/Http";
-import * as Alchemy from "alchemy";
 /**
  * A second application assembly with custom native HTTP handlers: the
  * suite's middleware, plus one branch-protection rule. This is the
@@ -20,7 +9,18 @@ import * as Alchemy from "alchemy";
  * entry imports its `main` module's DEFAULT export — one Worker class
  * per entry module.
  */
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as Git from "@alchemy.run/git";
+import {
+  ApiHandlersLive,
+  BlobStoreR2,
+  GIT_WORKER_OPTIONS,
+  HasherInline,
+  RegistryDurableObject,
+  ReposDurableObject,
+} from "@alchemy.run/git";
+import * as GitHttp from "@alchemy.run/git/Http";
+import * as Alchemy from "alchemy";
 import * as Http from "alchemy/Http";
 import * as Effect from "effect/Effect";
 import * as HttpApiBuilder from "effect/http-api/HttpApiBuilder";
