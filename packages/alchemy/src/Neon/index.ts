@@ -8,6 +8,7 @@ export {
 export * from "./AuthOAuthProvider.ts";
 export * from "./AuthTrustedDomain.ts";
 export * from "./DataApi.ts";
+export * from "./Realtime.ts";
 export * from "./AIGateway.ts";
 export * from "./ConnectAuth.ts";
 export * from "./QueryDataApi.ts";
