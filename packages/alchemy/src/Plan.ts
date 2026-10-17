@@ -1497,6 +1497,7 @@ const makePlan = <A>(
         });
       } else if (!modeSwitched && oldState.status === "creating" && oldState.attr === undefined) {
         const hasWorkerIdentityProof =
+          // oxlint-disable-next-line alchemy/package-boundaries -- The engine must distinguish legacy Worker checkpoints before serialization, retry, and cleanup.
           resource.Type === "Cloudflare.Worker" &&
           mode !== "local" &&
           oldState.workerIdentityResolved === true;

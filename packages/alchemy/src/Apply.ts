@@ -1886,6 +1886,7 @@ const collectGarbage = Effect.fn(function* (plan: Plan, session: PlanStatusSessi
           ? node.state.workerIdentityResolved
           : generation.workerIdentityResolved;
         const hasWorkerIdentityProof =
+          // oxlint-disable-next-line alchemy/package-boundaries -- The engine must distinguish legacy Worker checkpoints before serialization, retry, and cleanup.
           resourceType === "Cloudflare.Worker" &&
           providerMode !== "local" &&
           workerIdentityResolved === true;
