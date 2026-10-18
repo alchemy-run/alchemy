@@ -684,7 +684,9 @@ const makeDocker = (options: DockerOptions) =>
     const push: Docker["Service"]["image"]["push"] = Effect.fn(
       function* (ref, credentials, platform, context, session) {
         // Write the registry credentials directly into an isolated docker config
-        // as a plaintext `auths` entry and skip `docker login` entirely.
+        // as a plaintext `auths` entry and skip `docker login` entirely. Preserve
+        // the selected Docker context because the CLI stores named context metadata
+        // under DOCKER_CONFIG and the active context in config.json.
         //
         // `docker login` is the wrong tool here: on macOS Docker Desktop it routes
         // through the shared `osxkeychain`/`desktop` credential helper *regardless*
@@ -698,12 +700,56 @@ const makeDocker = (options: DockerOptions) =>
         // race. Only `push` reads this config; `build`/`pull`/`tag` keep using the
         // global docker config (buildx builders, `docker context`, etc. intact).
         const dir = yield* fs.makeTempDirectoryScoped({ prefix: "alchemy-docker-" });
+        const ambient = yield* DockerEnvironment;
+        const environment = {
+          DOCKER_CONFIG: yield* Config.String("DOCKER_CONFIG").pipe(Effect.orElseSucceed(() => "")),
+          HOME: yield* Config.String("HOME").pipe(Effect.orElseSucceed(() => "")),
+          USERPROFILE: yield* Config.String("USERPROFILE").pipe(Effect.orElseSucceed(() => "")),
+          ...ambient,
+        };
+        const isWindows = yield* Effect.sync(() => process.platform === "win32");
+        const home = isWindows
+          ? environment.USERPROFILE || environment.HOME
+          : environment.HOME || environment.USERPROFILE;
+        if (!environment.DOCKER_CONFIG && !home) {
+          return yield* systemError({
+            _tag: "InvalidData",
+            args: ["image", "push"],
+            description: "Unable to resolve the Docker client config directory.",
+          });
+        }
+        const sourceConfigDir = environment.DOCKER_CONFIG || path.join(home, ".docker");
+        const sourceConfig = yield* fs
+          .readFileString(path.join(sourceConfigDir, "config.json"))
+          .pipe(
+            Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed("{}")),
+            Effect.flatMap((contents) =>
+              Effect.try({
+                try: () => JSON.parse(contents) as { currentContext?: unknown },
+                catch: () =>
+                  systemError({
+                    _tag: "InvalidData",
+                    args: ["image", "push"],
+                    description: "Invalid Docker client config JSON.",
+                  }),
+              }),
+            ),
+          );
+        const contextsDir = path.join(sourceConfigDir, "contexts");
+        if (yield* fs.exists(contextsDir)) {
+          yield* fs.copy(contextsDir, path.join(dir, "contexts"));
+        }
         const config = yield* Effect.sync(() => {
           const password = Redacted.isRedacted(credentials.password)
             ? Redacted.value(credentials.password)
             : credentials.password;
           const auth = Buffer.from(`${credentials.username}:${password}`).toString("base64");
-          return JSON.stringify({ auths: { [credentials.server]: { auth } } });
+          return JSON.stringify({
+            ...(typeof sourceConfig?.currentContext === "string"
+              ? { currentContext: sourceConfig.currentContext }
+              : {}),
+            auths: { [credentials.server]: { auth } },
+          });
         });
         yield* fs.writeFileString(path.join(dir, "config.json"), config);
         const digestFile = path.join(dir, "digest");
