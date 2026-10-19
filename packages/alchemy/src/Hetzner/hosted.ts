@@ -176,14 +176,14 @@ const collectExtraFiles = Effect.fn(function* (extraFiles: ReadonlyArray<ExtraFi
 
 /**
  * The generated entry for `Hetzner.Service` units: a shim importing only
- * `alchemy/Runtime/Bootstrap/Hetzner` plus the user's `main` — see that
+ * `alchemy/Hetzner/Bootstrap` plus the user's `main` — see that
  * module for why the entry never imports alchemy's own dependencies.
  */
 const makeBunBootstrap =
   (handler: string) =>
   (importPath: string): string =>
     `
-import { bootstrap } from "alchemy/Runtime/Bootstrap/Hetzner";
+import { bootstrap } from "alchemy/Hetzner/Bootstrap";
 import { ${handler} as entrypoint } from ${JSON.stringify(importPath)};
 
 await bootstrap(entrypoint);

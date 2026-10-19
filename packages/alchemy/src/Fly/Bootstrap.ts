@@ -1,7 +1,7 @@
 /**
  * Process bootstrap for `Fly.Service` and `Fly.Sprite` (a Node process
  * serving the bundled program). The generated entry imports this module
- * and the user's `main`, nothing else — see {@link ./Process.ts} for why.
+ * and the user's `main`, nothing else — see `alchemy/Runtime/Bootstrap/Process` for why.
  */
 import { NodeServices } from "@effect/platform-node";
 import * as ConfigProvider from "effect/ConfigProvider";
@@ -11,10 +11,15 @@ import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
 import * as Option from "effect/Option";
 import * as Scope from "effect/Scope";
-import { NodeHttpServer } from "../../Http.ts";
-import { reifyBoundConfigProvider } from "../../Runtime.ts";
-import { ManagedHttpShutdown } from "./ManagedHttpShutdown.ts";
-import { entrypointLayer, resolveProgram, runProcess, stackFromEnv } from "./Process.ts";
+import { NodeHttpServer } from "../Http.ts";
+import { reifyBoundConfigProvider } from "../Runtime.ts";
+import { ManagedHttpShutdown } from "../Runtime/Bootstrap/ManagedHttpShutdown.ts";
+import {
+  entrypointLayer,
+  resolveProgram,
+  runProcess,
+  stackFromEnv,
+} from "../Runtime/Bootstrap/Process.ts";
 
 /**
  * Resolve the bundled program (the runners registered via `host.run` /

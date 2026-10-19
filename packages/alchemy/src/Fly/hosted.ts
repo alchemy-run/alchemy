@@ -123,7 +123,7 @@ export class DeployTokenMissing extends Data.TaggedError("Fly.DeployTokenMissing
 
 /**
  * The generated entry for `Fly.Service` / `Fly.Sprite` machines: a shim
- * importing only `alchemy/Runtime/Bootstrap/Fly` plus the user's `main` —
+ * importing only `alchemy/Fly/Bootstrap` plus the user's `main` —
  * see that module for why the entry never imports alchemy's own
  * dependencies. The runtime flag is raised BEFORE the user's module is
  * evaluated (hence the dynamic import) so its module-scope code sees it.
@@ -132,7 +132,7 @@ const makeBunBootstrap =
   (handler: string) =>
   (importPath: string): string =>
     `
-import { bootstrap } from "alchemy/Runtime/Bootstrap/Fly";
+import { bootstrap } from "alchemy/Fly/Bootstrap";
 
 globalThis.__ALCHEMY_RUNTIME__ = true;
 const { ${handler}: entrypoint } = await import(${JSON.stringify(importPath)});

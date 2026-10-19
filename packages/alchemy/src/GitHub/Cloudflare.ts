@@ -2,7 +2,9 @@ import type * as cf from "@cloudflare/workers-types";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
-/* oxlint-disable alchemy/package-boundaries -- package split phase 3: GitHub event source on a Worker; becomes an integration subpath */
+import { isWorkerEvent, Worker } from "../Cloudflare/Workers/Worker.ts";
+import * as Namespace from "../Namespace.ts";
+import * as Output from "../Output.ts";
 import {
   RepositoryEventSource,
   webhookPath,
@@ -10,12 +12,8 @@ import {
   type RepositoryEventSourceProps,
   type RepositoryEventSourceService,
   type WebhookEvent,
-} from "../../GitHub/RepositoryEventSource.ts";
-import { Webhook } from "../../GitHub/Webhook.ts";
-/* oxlint-enable alchemy/package-boundaries */
-import * as Namespace from "../../Namespace.ts";
-import * as Output from "../../Output.ts";
-import { isWorkerEvent, Worker } from "./Worker.ts";
+} from "./RepositoryEventSource.ts";
+import { Webhook } from "./Webhook.ts";
 
 /**
  * GitHub event source for Cloudflare Workers.
@@ -30,11 +28,11 @@ import { isWorkerEvent, Worker } from "./Worker.ts";
  * bound secret, and forwards each delivery to the subscriber. Requests on any
  * other path fall through to the Worker's own `fetch` handler.
  *
- * @binding
- * @product Workers
- * @category Workers & Compute
+ * @layer
+ * @product Webhook
+ * @provides GitHub.RepositoryEventSource
  */
-export const GitHubRepositoryEventSourceLive = Layer.effect(
+export const RepositoryEventSourceLive = Layer.effect(
   RepositoryEventSource,
   Effect.gen(function* () {
     const ctx = yield* Worker;

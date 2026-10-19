@@ -79,7 +79,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
     Effect.provide([
       Stripe.CreateCustomerHttp,
       Stripe.CreateCheckoutSessionHttp,
-      Stripe.ConsumeEventsLive,
+      Stripe.Cloudflare.ConsumeEventsLive,
     ]),
   ),
 ) {}

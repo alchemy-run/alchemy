@@ -185,7 +185,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
       Cloudflare.D1.QueryDatabaseBinding,
       Stripe.CreateAccountHttp,
       Stripe.CreateAccountLinkHttp,
-      Stripe.ConsumeEventsLive,
+      Stripe.Cloudflare.ConsumeEventsLive,
     ]),
   ),
 ) {}

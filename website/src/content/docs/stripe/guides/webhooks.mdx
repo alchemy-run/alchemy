@@ -57,7 +57,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
     return {
       fetch: Effect.succeed(HttpServerResponse.text("ok")),
     };
-  }).pipe(Effect.provide(Stripe.ConsumeEventsLive)),
+  }).pipe(Effect.provide(Stripe.Cloudflare.ConsumeEventsLive)),
 ) {}
 ```
 
@@ -123,7 +123,7 @@ const webhook = yield* Stripe.WebhookEndpoint("Events", {
   url: Output.interpolate`${api.url}/webhooks/stripe`,
   enabledEvents: [Stripe.CustomerSubscriptionCreated],
 });
-yield* Stripe.bindWebhookSecret(api, webhook.secret);
+yield* Stripe.Cloudflare.bindWebhookSecret(api, webhook.secret);
 ```
 
 ## Reference

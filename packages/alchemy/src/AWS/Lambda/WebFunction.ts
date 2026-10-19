@@ -570,7 +570,7 @@ export const WebFunction: Platform<
 
 /** Generated entry for Effect web functions. */
 const effectEntry = (importPath: string) => `
-import { bootstrap } from "alchemy/Runtime/Bootstrap/LambdaWeb";
+import { bootstrap } from "alchemy/AWS/Bootstrap/LambdaWeb";
 import entrypoint from ${JSON.stringify(importPath)};
 
 bootstrap(entrypoint);

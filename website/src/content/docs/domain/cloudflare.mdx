@@ -42,7 +42,7 @@ import { StripeSettlements } from "./Settlement/StripeSettlements.ts";
 const BankLive = Layer.mergeAll(
   SessionLive,
   MfaChallengeLive,
-  Stripe.ConsumeEventsLive,
+  Stripe.Cloudflare.ConsumeEventsLive,
   Observability,
 ).pipe(
   Layer.provideMerge(Bank.layer(BankHandlers)),

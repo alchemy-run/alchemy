@@ -1,7 +1,7 @@
 /**
  * Process bootstrap for `GCP.Run.Service`. The generated entry imports
  * this module and the user's `main`, nothing else — see
- * {@link ./Process.ts} for why.
+ * `alchemy/Runtime/Bootstrap/Process` for why.
  *
  * Runtime credentials come from the Cloud Run metadata server (the
  * service's runtime service account), so HTTP bindings call GCP with
@@ -13,11 +13,15 @@ import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
-// oxlint-disable-next-line alchemy/package-boundaries -- package split phase 3: per-cloud runtime bootstrap; moves into its provider
-import { fromMetadataServer } from "../../GCP/MetadataCredentials.ts";
 import { BunHttpServer } from "../../Http.ts";
 import { reifyBoundConfigProvider } from "../../Runtime.ts";
-import { entrypointLayer, resolveProgram, runProcess, stackFromEnv } from "./Process.ts";
+import {
+  entrypointLayer,
+  resolveProgram,
+  runProcess,
+  stackFromEnv,
+} from "../../Runtime/Bootstrap/Process.ts";
+import { fromMetadataServer } from "../MetadataCredentials.ts";
 
 /** Serve the bundled program with a Bun HTTP server on the injected `PORT`. */
 export const bootstrap = (entrypoint: unknown): Promise<void> => {

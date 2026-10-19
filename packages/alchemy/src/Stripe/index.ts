@@ -148,3 +148,4 @@ export * from "./UpdateTaxSettingsHttp.ts";
 export * from "./UpdateTerminalReader.ts";
 export * from "./UpdateTerminalReaderHttp.ts";
 export * from "./WebhookEndpoint.ts";
+export * as Cloudflare from "./Cloudflare.ts";

@@ -92,6 +92,13 @@
     "./Stripe": "./src/Stripe/index.ts",
     "./Turso": "./src/Turso/index.ts",
     "./Runtime/Bootstrap/*": "./src/Runtime/Bootstrap/*.ts",
+    "./AWS/Bootstrap/*": "./src/AWS/Bootstrap/*.ts",
+    "./Cloudflare/Bootstrap/*": "./src/Cloudflare/Bootstrap/*.ts",
+    "./GCP/Bootstrap/*": "./src/GCP/Bootstrap/*.ts",
+    "./Fly/Bootstrap": "./src/Fly/Bootstrap.ts",
+    "./Hetzner/Bootstrap": "./src/Hetzner/Bootstrap.ts",
+    "./Prisma/Bootstrap": "./src/Prisma/Bootstrap.ts",
+    "./Railway/Bootstrap": "./src/Railway/Bootstrap.ts",
     "./Process": "./src/Process/index.ts",
     "./Redis": "./src/Redis/index.ts",
     "./TUI": "./src/TUI/index.ts",
@@ -362,6 +369,41 @@
         "types": "./src/Runtime/Bootstrap/*.ts",
         "bun": "./src/Runtime/Bootstrap/*.ts",
         "default": "./src/Runtime/Bootstrap/*.ts"
+      },
+      "./AWS/Bootstrap/*": {
+        "types": "./src/AWS/Bootstrap/*.ts",
+        "bun": "./src/AWS/Bootstrap/*.ts",
+        "default": "./src/AWS/Bootstrap/*.ts"
+      },
+      "./Cloudflare/Bootstrap/*": {
+        "types": "./src/Cloudflare/Bootstrap/*.ts",
+        "bun": "./src/Cloudflare/Bootstrap/*.ts",
+        "default": "./src/Cloudflare/Bootstrap/*.ts"
+      },
+      "./GCP/Bootstrap/*": {
+        "types": "./src/GCP/Bootstrap/*.ts",
+        "bun": "./src/GCP/Bootstrap/*.ts",
+        "default": "./src/GCP/Bootstrap/*.ts"
+      },
+      "./Fly/Bootstrap": {
+        "types": "./src/Fly/Bootstrap.ts",
+        "bun": "./src/Fly/Bootstrap.ts",
+        "default": "./src/Fly/Bootstrap.ts"
+      },
+      "./Hetzner/Bootstrap": {
+        "types": "./src/Hetzner/Bootstrap.ts",
+        "bun": "./src/Hetzner/Bootstrap.ts",
+        "default": "./src/Hetzner/Bootstrap.ts"
+      },
+      "./Prisma/Bootstrap": {
+        "types": "./src/Prisma/Bootstrap.ts",
+        "bun": "./src/Prisma/Bootstrap.ts",
+        "default": "./src/Prisma/Bootstrap.ts"
+      },
+      "./Railway/Bootstrap": {
+        "types": "./src/Railway/Bootstrap.ts",
+        "bun": "./src/Railway/Bootstrap.ts",
+        "default": "./src/Railway/Bootstrap.ts"
       },
       "./Process": {
         "types": "./lib/Process/index.d.ts",

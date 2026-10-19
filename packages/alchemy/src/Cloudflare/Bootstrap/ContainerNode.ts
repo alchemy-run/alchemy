@@ -1,7 +1,7 @@
 /** `Cloudflare.Container` bootstrap on the node runtime. */
 import { NodeServices } from "@effect/platform-node";
 import { NodeHttpServer } from "../../Http.ts";
-import { bootstrapContainer, type ContainerBootstrapOptions } from "./CloudflareContainer.ts";
+import { bootstrapContainer, type ContainerBootstrapOptions } from "./Container.ts";
 
 export const bootstrap = (entrypoint: unknown, options: ContainerBootstrapOptions): Promise<void> =>
   bootstrapContainer(

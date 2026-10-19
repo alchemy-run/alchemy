@@ -3548,7 +3548,7 @@ describe(
           const manifest = readTarFile(tar, "compute.manifest.json");
           const bundle = readTarFile(tar, "bundle/index.js");
           expect(JSON.parse(manifest)).toMatchObject({ entrypoint: "bundle/index.js" });
-          // The generated entry is a shim over alchemy/Runtime/Bootstrap/Prisma;
+          // The generated entry is a shim over alchemy/Prisma/Bootstrap;
           // its label and the shared "bootstrap starting" message are separate
           // literals joined at runtime (see Runtime/Bootstrap/Process.ts).
           expect(bundle).toContain("Prisma Compute");

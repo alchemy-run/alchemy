@@ -96,7 +96,7 @@ export default Cloudflare.Worker(
     );
 
     // ...your own fetch handler is untouched
-  }).pipe(Effect.provide(Cloudflare.Workers.GitHubRepositoryEventSourceLive)),
+  }).pipe(Effect.provide(GitHub.Cloudflare.RepositoryEventSourceLive)),
 );
 ```
 
@@ -111,7 +111,7 @@ see [React to GitHub events from a Worker](/cloudflare/messaging/github-events).
 
 ## Cloudflare-only today
 
-`Cloudflare.Workers.GitHubRepositoryEventSourceLive` is currently
+`GitHub.Cloudflare.RepositoryEventSourceLive` is currently
 the only implementation of the `RepositoryEventSource` contract —
 there is no AWS Lambda event source yet. On other hosts you can
 still provision a `GitHub.Webhook` directly with any delivery URL,

@@ -1,10 +1,7 @@
 /**
- * Process bootstrap for `Railway.Service` (a Node process serving the
+ * Process bootstrap for `Hetzner.Service` (a Node process serving the
  * bundled program). The generated entry imports this module and the user's
- * `main`, nothing else — see {@link ./Process.ts} for why.
- *
- * Railway canvas Functions stay on bun (`functionRuntime(bun)` + the
- * inline canvas wrapper). This module is the Docker/Service path only.
+ * `main`, nothing else — see `alchemy/Runtime/Bootstrap/Process` for why.
  */
 import { NodeServices } from "@effect/platform-node";
 import * as ConfigProvider from "effect/ConfigProvider";
@@ -12,9 +9,14 @@ import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
-import { NodeHttpServer } from "../../Http.ts";
-import { reifyBoundConfigProvider } from "../../Runtime.ts";
-import { entrypointLayer, resolveProgram, runProcess, stackFromEnv } from "./Process.ts";
+import { NodeHttpServer } from "../Http.ts";
+import { reifyBoundConfigProvider } from "../Runtime.ts";
+import {
+  entrypointLayer,
+  resolveProgram,
+  runProcess,
+  stackFromEnv,
+} from "../Runtime/Bootstrap/Process.ts";
 
 /**
  * Resolve the bundled program (the runners registered via `host.run` /
@@ -46,5 +48,5 @@ export const bootstrap = (entrypoint: unknown): Promise<void> => {
     Effect.scoped,
   );
 
-  return runProcess("Railway service", program);
+  return runProcess("Hetzner service", program);
 };

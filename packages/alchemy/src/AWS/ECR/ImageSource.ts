@@ -90,7 +90,7 @@ export interface ResolveImageOptions {
 
 /**
  * The generated entry for `AWS.ECS.Task` / `AWS.ECS.Service` containers: a
- * shim importing only `alchemy/Runtime/Bootstrap/Ecs` (resolvable from any
+ * shim importing only `alchemy/AWS/Bootstrap/Ecs` (resolvable from any
  * consumer — `alchemy` is its direct dependency) plus the user's `main`.
  * Everything the runtime needs lives in that real module, so the virtual
  * entry never imports alchemy's own dependencies (`@distilled.cloud/*`,
@@ -101,7 +101,7 @@ export const makeBunBootstrap =
   (handler: string) =>
   (importPath: string): string =>
     `
-import { bootstrap } from "alchemy/Runtime/Bootstrap/Ecs";
+import { bootstrap } from "alchemy/AWS/Bootstrap/Ecs";
 import { ${handler} as entrypoint } from ${JSON.stringify(importPath)};
 
 await bootstrap(entrypoint);
