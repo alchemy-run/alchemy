@@ -128,8 +128,11 @@ export interface ContainerClient {
   destroy(error?: unknown): Effect.Effect<void, ContainerError, RuntimeContext>;
   /** Signal the container's main process. */
   signal(signo: number): Effect.Effect<void, ContainerError, RuntimeContext>;
-  /** Wait for the container to exit, preserving failures in the Effect error channel. */
-  monitor(): Effect.Effect<void, ContainerError, RuntimeContext>;
+  /**
+   * Wait for the container to exit, preserving failures in the Effect error channel. A start Cloudflare could not
+   * give an instance to, or limited, fails as `start` does, so a caller can start it again.
+   */
+  monitor(): Effect.Effect<void, ContainerStartError, RuntimeContext>;
   /** Running image and labels, or null when stopped. */
   inspect(): Effect.Effect<ContainerInfo | null, ContainerError, RuntimeContext>;
   /** A port inside the container whose requests wait until it accepts connections. */
@@ -492,7 +495,10 @@ export const fromContainer = (
     start,
     destroy: (error) => callAsync((container) => container.destroy(error)),
     signal: (signo) => call((container) => container.signal(signo)),
-    monitor: () => callAsync((container) => container.monitor()),
+    monitor: () =>
+      Effect.flatMap(attached, (container) =>
+        Effect.tryPromise({ try: () => container.monitor(), catch: classifyStartError }),
+      ),
     inspect: () => callAsync((container) => container.inspect()),
     getTcpPort,
     exec: (cmd, options) =>
