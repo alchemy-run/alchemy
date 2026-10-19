@@ -226,7 +226,7 @@ By the end you'll have:
 
    ```diff lang="typescript"
    import * as Alchemy from "alchemy";
-   +import * as GitHub from "alchemy/GitHub";
+   +import * as GitHub from "@alchemy.run/github";
    +import * as Output from "alchemy/Output";
    import * as Effect from "effect/Effect";
 
@@ -385,8 +385,8 @@ token-management token.
 ```typescript
 // stacks/github.ts
 import * as Alchemy from "alchemy";
-import * as Cloudflare from "alchemy/Cloudflare";
-import * as GitHub from "alchemy/GitHub";
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as GitHub from "@alchemy.run/github";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
@@ -513,8 +513,8 @@ your environment when deploying this stack.
 ```typescript
 // stacks/github.ts
 import * as Alchemy from "alchemy";
-import * as Cloudflare from "alchemy/Cloudflare";
-import * as GitHub from "alchemy/GitHub";
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as GitHub from "@alchemy.run/github";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -618,7 +618,7 @@ administration.
 // stacks/github.ts
 import * as Alchemy from "alchemy";
 import * as AWS from "alchemy/AWS";
-import * as GitHub from "alchemy/GitHub";
+import * as GitHub from "@alchemy.run/github";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 
@@ -749,7 +749,7 @@ AWS console.
 ```typescript
 // stacks/github.ts
 import * as Alchemy from "alchemy";
-import * as GitHub from "alchemy/GitHub";
+import * as GitHub from "@alchemy.run/github";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";

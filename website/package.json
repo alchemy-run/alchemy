@@ -25,6 +25,8 @@
     "preview": "astro preview"
   },
   "dependencies": {
+    "@alchemy.run/cloudflare": "workspace:*",
+    "@alchemy.run/github": "workspace:*",
     "@astrojs/check": "catalog:",
     "@astrojs/mdx": "catalog:",
     "@astrojs/react": "catalog:",

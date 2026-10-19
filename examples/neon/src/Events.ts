@@ -1,4 +1,4 @@
-import * as Neon from "alchemy/Neon";
+import * as Neon from "@alchemy.run/neon";
 import * as SQL from "alchemy/SQL/Postgres";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";

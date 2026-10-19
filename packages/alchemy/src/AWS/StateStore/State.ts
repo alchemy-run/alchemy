@@ -16,6 +16,7 @@ import * as Stream from "effect/Stream";
 import { CredentialsStoreLive } from "../../Auth/Credentials.ts";
 import { decodeFqn, encodeFqn } from "../../FQN.ts";
 import { STATE_STORE_VERSION } from "../../State/HttpStateApi.ts";
+import * as Provisioning from "../../State/Provisioning.ts";
 import {
   State,
   StateStoreError,
@@ -88,14 +89,21 @@ const amortizeCheck = (
 
 export interface S3StateOptions {
   /**
-   * Name of the S3 bucket that holds the state objects. The bucket is
-   * created on first use if it does not exist.
+   * A store other than the account's default, by logical name: its bucket is
+   * `alchemy-state-<name>-<accountId>-<region>-an`. The bucket is created on
+   * first use, except in CI, where `alchemy state bootstrap --backend aws
+   * --name <name>` provisions it ahead.
    *
-   * The bucket is created in the account-regional namespace, so custom
-   * names must follow the `<prefix>-<accountId>-<region>-an` convention.
+   * @default the account's default store, `alchemy-state-<accountId>-<region>-an`
+   */
+  name?: string;
+  /**
+   * A full bucket name instead of one derived from {@link S3StateOptions.name},
+   * e.g. an existing bucket. Created on first use like a named store's, in the
+   * account-regional namespace, so it must follow the
+   * `<prefix>-<accountId>-<region>-an` convention.
    *
    * @see https://docs.aws.amazon.com/AmazonS3/latest/userguide/gpbucketnamespaces.html#account-regional-gp-buckets
-   * @default `alchemy-state-{accountId}-{region}-an`
    */
   bucketName?: string;
   /**
@@ -115,6 +123,13 @@ export interface S3StateOptions {
    */
   encryption?: BucketEncryption;
 }
+
+/** Whether a state bucket exists. */
+export const stateBucketExists = (bucket: string) =>
+  s3.headBucket({ Bucket: bucket }).pipe(
+    Effect.as(true),
+    Effect.catchTag(["NotFound", "NoSuchBucket"], () => Effect.succeed(false)),
+  );
 
 /** Context required by the distilled S3 operations. */
 type S3Deps = Credentials | HttpClient | Region;
@@ -183,7 +198,7 @@ const withoutSdkDebugLogs = Effect.updateService(References.MinimumLogLevel, (le
  *   {
  *     providers: AWS.providers(),
  *     state: AWS.state({
- *       bucketName: "my-company-state",
+ *       name: "my-company-state",
  *       prefix: "alchemy",
  *       encryption: {
  *         sseAlgorithm: "aws:kms",
@@ -209,7 +224,7 @@ const withoutSdkDebugLogs = Effect.updateService(References.MinimumLogLevel, (le
  *   "my-stack",
  *   {
  *     providers: AWS.providers().pipe(Layer.provide(environment)),
- *     state: AWS.state({ bucketName: "my-company-state" }).pipe(Layer.provide(environment)),
+ *     state: AWS.state({ name: "my-company-state" }).pipe(Layer.provide(environment)),
  *   },
  *   Effect.gen(function* () {
  *     // ...
@@ -253,18 +268,7 @@ export const state = (options: S3StateOptions = {}) =>
 
       return yield* Effect.cached(make);
     }),
-  ).pipe(
-    // Fresh per call: these derive from the environment below, and shared
-    // (memoized) instances built for another environment in the same run
-    // would shadow an `AWSEnvironment` provided to this layer.
-    Layer.provideMerge(Layer.fresh(AwsRegion.fromEnvironment)),
-    Layer.provideMerge(Layer.fresh(AwsCredentials.fromEnvironment)),
-    Layer.provideMerge(Layer.fresh(Endpoint.fromEnvironment)),
-    Layer.provideMerge(providedOrDefault()),
-    Layer.provideMerge(AwsAuth),
-    Layer.provideMerge(CredentialsStoreLive),
-    Layer.orDie,
-  );
+  ).pipe(Layer.provideMerge(stateEnvironment()), Layer.orDie);
 
 /**
  * Construct an S3-backed {@link StateService}.
@@ -300,8 +304,18 @@ export const makeS3State = (options: S3StateOptions = {}) =>
     const bucket = yield* Effect.cached(
       Effect.gen(function* () {
         const { accountId, region } = yield* AWSEnvironment.current;
-        const bucketName = options.bucketName ?? createStateBucketName(accountId, region);
-        yield* ensureStateBucket(bucketName, region, options);
+        if (options.name !== undefined) yield* Provisioning.storeName(options.name);
+        const bucketName =
+          options.bucketName ?? createStateBucketName(accountId, region, options.name);
+        const ensure = ensureStateBucket(bucketName, region, options);
+        // First use creates the bucket (except in CI); every use converges
+        // its settings.
+        yield* (yield* stateBucketExists(bucketName))
+          ? ensure
+          : Provisioning.deployMissing(
+              { backend: "aws", name: options.name, label: `S3 state bucket '${bucketName}'` },
+              ensure,
+            );
         return bucketName;
       }).pipe(Effect.provideContext(context), Effect.mapError(toError)),
     );
@@ -743,8 +757,8 @@ export const makeS3State = (options: S3StateOptions = {}) =>
  *
  * @see https://docs.aws.amazon.com/AmazonS3/latest/userguide/gpbucketnamespaces.html#account-regional-gp-buckets
  */
-export const createStateBucketName = (accountId: string, region: string) =>
-  `alchemy-state-${accountId}-${region}-an`.toLowerCase();
+export const createStateBucketName = (accountId: string, region: string, name?: string) =>
+  `alchemy-state-${name === undefined ? "" : `${name}-`}${accountId}-${region}-an`.toLowerCase();
 
 /**
  * Observe-then-ensure the state bucket: head it, create it if missing
@@ -870,4 +884,35 @@ const ensureStateBucket = (bucket: string, region: string, options: S3StateOptio
         e._tag === "OperationAborted" || e._tag === "NoSuchBucket" || e._tag === "NotFound",
       schedule: Schedule.max([Schedule.spaced("2 seconds"), Schedule.recurs(10)]),
     }),
+  );
+
+/** The profile's AWS environment, resolved the way {@link state} resolves it. */
+export const stateEnvironment = () =>
+  // Fresh per call: these derive from the environment below, and shared
+  // (memoized) instances built for another environment in the same run
+  // would shadow an `AWSEnvironment` provided to this layer.
+  Layer.fresh(AwsRegion.fromEnvironment).pipe(
+    Layer.provideMerge(Layer.fresh(AwsCredentials.fromEnvironment)),
+    Layer.provideMerge(Layer.fresh(Endpoint.fromEnvironment)),
+    Layer.provideMerge(providedOrDefault()),
+    Layer.provideMerge(AwsAuth),
+    Layer.provideMerge(CredentialsStoreLive),
+  );
+
+/**
+ * Create the state bucket with its secure defaults, or converge an existing
+ * one to them: what first use of {@link state} does.
+ */
+export const provisionStateBucket = (
+  bucket: string,
+  region: string,
+): Effect.Effect<void, StateStoreError, S3Deps> =>
+  ensureStateBucket(bucket, region, {}).pipe(
+    Effect.mapError(
+      (cause) =>
+        new StateStoreError({
+          message: `Could not provision state bucket ${bucket}: ${cause._tag}`,
+          cause: cause instanceof Error ? cause : undefined,
+        }),
+    ),
   );

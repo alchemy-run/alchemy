@@ -206,7 +206,7 @@ export const createEc2HostedSupport = ({
           realMain,
           virtualEntryPlugin(
             (importPath) => `
-import { bootstrap } from "alchemy/Runtime/Bootstrap/Ec2";
+import { bootstrap } from "alchemy/AWS/Bootstrap/Ec2";
 import { ${handler} as entrypoint } from ${JSON.stringify(importPath)};
 
 await bootstrap(entrypoint);

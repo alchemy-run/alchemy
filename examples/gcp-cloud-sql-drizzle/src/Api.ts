@@ -1,4 +1,4 @@
-import * as Drizzle from "alchemy/Drizzle/Postgres";
+import * as Drizzle from "@alchemy.run/drizzle/Postgres";
 import * as GCP from "alchemy/GCP";
 import { eq } from "drizzle-orm";
 import * as Effect from "effect/Effect";

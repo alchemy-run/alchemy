@@ -2,7 +2,7 @@ import { expect } from "bun:test";
 import assert from "node:assert";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Test from "alchemy/Test/Bun";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";

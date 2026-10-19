@@ -20,32 +20,13 @@ import * as path from "node:path";
 
 const srcRoot = path.join(import.meta.dirname, "../../packages/alchemy/src");
 
-/** Top-level `src` directories that become their own package or integration subpath. */
-const PROVIDERS = new Set([
-  "ACME",
-  "AWS",
-  "Axiom",
-  "Cloudflare",
-  "Doppler",
-  "Drizzle",
-  "Fly",
-  "GCP",
-  "Git",
-  "GitHub",
-  "Hetzner",
-  "Infisical",
-  "Neon",
-  "Planetscale",
-  "Prisma",
-  "Railway",
-  "Stripe",
-  "Turso",
-]);
+/** Top-level `src` directories that become their own package. */
+const PROVIDERS = new Set(["AWS", "GCP"]);
 
 const CORE = "core";
 
-// `rel` is a file (`AWS/S3/Bucket.ts`) or a directory import (`Cloudflare`,
-// from `alchemy/Cloudflare`). Root files (`Resource.ts`) are core.
+// `rel` is a file (`AWS/S3/Bucket.ts`) or a directory import (`AWS`, from
+// `alchemy/AWS`). Root files (`Resource.ts`) are core.
 const packageOf = (rel: string): string => {
   const top = rel.split("/")[0]!;
   const isRootFile = !rel.includes("/") && /\.tsx?$/.test(rel);
@@ -96,7 +77,7 @@ const packageBoundaries = {
     },
     messages: {
       providerImport:
-        "{{own}} must not import {{target}}. Providers only meet through integration subpaths.",
+        "{{own}} must not import {{target}}. Providers only meet through core services.",
       coreImport:
         "Core must not import {{target}}. Move the code into the provider, or register it through a plugin.",
       coreDistilled: "Core must not depend on {{target}}; only @distilled.cloud/core.",

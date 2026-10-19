@@ -121,7 +121,7 @@ satisfied. Cloudflare shows why that split matters. A Worker binds an
 R2 bucket with the same shape:
 
 ```typescript
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 
 export const Uploads = Cloudflare.R2.Bucket("Uploads");
 

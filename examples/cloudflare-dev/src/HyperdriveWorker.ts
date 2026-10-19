@@ -9,7 +9,7 @@
  * HYPERDRIVE_DEV_URL=postgres://postgres:postgres@localhost:5432/postgres bun test
  * ```
  */
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as SQL from "alchemy/SQL/Postgres";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";

@@ -355,6 +355,10 @@ export default defineConfig({
                   label: "Local Provider",
                   link: "/infrastructure-as-code/local-provider",
                 },
+                {
+                  label: "Provider Contributions",
+                  link: "/infrastructure-as-code/contributions",
+                },
               ],
             },
             {
