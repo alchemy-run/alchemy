@@ -51,7 +51,7 @@ Bindings are:
 
 - one file per operation
 - the combined `Binding.Service` form (`interface X extends Binding.Service<X, "id", Shape>` + `const X = Binding.Service<X>("id")`); the deploy-time IAM registration is inlined into the impl layer under `if (!globalThis.__ALCHEMY_RUNTIME__)`, resolving the host via `yield* Binding.host`
-- usually named `alchemy/src/AWS/<Service>/<Operation>.ts` (callable + types) with the impl layer in `<Operation>Http.ts` (AWS runtime impls call the distilled HTTP API authenticated by the Lambda's IAM role; `Http`, not `Binding` — `Binding` is a Cloudflare native-worker concept)
+- usually named `packages/aws/src/<Service>/<Operation>.ts` (callable + types) with the impl layer in `<Operation>Http.ts` (AWS runtime impls call the distilled HTTP API authenticated by the Lambda's IAM role; `Http`, not `Binding` — `Binding` is a Cloudflare native-worker concept)
 
 ### 2. Resource
 
@@ -73,9 +73,9 @@ Use an event source when the service can push records/events into a runtime.
 
 This always has two layers:
 
-1. Service-level abstraction in `alchemy/src/AWS/<Service>/...`
+1. Service-level abstraction in `packages/aws/src/<Service>/...`
 2. Runtime-specific implementation in places like:
-   - `alchemy/src/AWS/Lambda/...`
+   - `packages/aws/src/Lambda/...`
    - `alchemy/src/Process/...`
 
 Examples:
@@ -248,8 +248,8 @@ Example:
 
 After each binding/resource implementation, update:
 
-1. `alchemy/src/AWS/<Service>/index.ts`
-2. `alchemy/src/AWS/Providers.ts`
+1. `packages/aws/src/<Service>/index.ts`
+2. `packages/aws/src/Providers.ts`
 
 If registration is missing, audit should flag it.
 
@@ -257,7 +257,7 @@ If registration is missing, audit should flag it.
 
 Every implemented binding should have a corresponding `describe("<BindingName>")` block in:
 
-- `alchemy/test/AWS/<Service>/Bindings.test.ts`
+- `packages/integration-tests/test/AWS/<Service>/Bindings.test.ts`
 
 Examples:
 
@@ -282,7 +282,7 @@ Deterministic rule:
 
 Use a real Lambda fixture in:
 
-- `alchemy/test/AWS/<Service>/handler.ts`
+- `packages/integration-tests/test/AWS/<Service>/handler.ts`
 
 Pattern:
 
@@ -412,8 +412,8 @@ Required shape:
 - `Table` keeps stream state in its attributes, but does not accept `streamSpecification` as a plain input prop
 - stream enablement is requested through the table binding contract
 - the public helper is `consumeTableChanges(table, props?, handler)`
-- the service-level abstraction lives in `alchemy/src/AWS/DynamoDB/Stream.ts`
-- the Lambda runtime implementation lives in `alchemy/src/AWS/Lambda/TableEventSource.ts`
+- the service-level abstraction lives in `packages/aws/src/DynamoDB/Stream.ts`
+- the Lambda runtime implementation lives in `packages/aws/src/Lambda/TableEventSource.ts`
 
 Why this pattern exists:
 

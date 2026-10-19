@@ -105,8 +105,8 @@ Full-suite memory safety and resource coverage remain unverified. Previous host-
 
 Relevant evidence:
 
-- `packages/alchemy/src/AWS/Providers.ts`: registration inventory.
-- `packages/alchemy/src/AWS/Local/ProviderContext.ts`: live collection context and local override behavior.
+- `packages/aws/src/Providers.ts`: registration inventory.
+- `packages/aws/src/Local/ProviderContext.ts`: live collection context and local override behavior.
 - `submodules/floci/docs/services/index.md`: service/operation index, not a resource acceptance matrix.
 - `submodules/floci/src/main/java/io/github/hectorvent/floci/services/s3tables/S3TablesController.java`: response representations.
 - `submodules/distilled/packages/aws/src/services/s3tables.ts`: required wire-response fields.
