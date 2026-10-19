@@ -92,7 +92,7 @@ The server package hosts the model on Durable Objects and implements what the do
 const BankLive = Layer.mergeAll(
   SessionLive,
   MfaChallengeLive,
-  Stripe.Cloudflare.ConsumeEventsLive,
+  Stripe.ConsumeEventsLive,
   Observability,
 ).pipe(
   Layer.provideMerge(Bank.layer(BankHandlers)),

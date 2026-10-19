@@ -56,7 +56,7 @@ my-app/
 | Package | Holds | May import |
 | --- | --- | --- |
 | domain | every Domain building block, Apis, middleware declarations, request contexts, ports (`Context.Service` interfaces) with memory implementations, stories | `alchemy/Domain`, `alchemy/Domain/Story` (tests), `effect` |
-| server | the Worker, `*Live` middleware, external system adapters, port implementations (D1, HTTP), event sources (Stripe webhooks), Api tests | domain, `alchemy/Cloudflare`, `alchemy/Domain/Cloudflare`, provider packages |
+| server | the Worker, `*Live` middleware, external system adapters, port implementations (D1, HTTP), event sources (Stripe webhooks), Api tests | domain, `alchemy/Cloudflare`, `alchemy/Cloudflare/Domain`, provider packages |
 | web | the foldkit app and its Worker | domain (Api, ids, value schemas), `alchemy/Domain` (client protocols), `foldkit` |
 
 Split a file when it mixes the two sides. For example, `Session.middleware.ts` (the domain declares it) and `Session.ts` (the server implements it).

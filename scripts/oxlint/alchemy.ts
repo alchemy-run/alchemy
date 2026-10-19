@@ -14,17 +14,13 @@ import * as path from "node:path";
  *   inside `Neon/`): that's a binding switching on a foreign host's `Type`,
  *   coupling the import graph can't see. Rename `aliases: [...]` are exempt.
  *
- * - An integration subpath, a file named after another provider directly
- *   under a package (`Stripe/Cloudflare.ts`, `Domain/Cloudflare.ts`), may
- *   import that provider: it's where the two meet.
- *
  * Pre-existing violations carry an `oxlint-disable` comment naming the phase of
  * the split that removes them.
  */
 
 const srcRoot = path.join(import.meta.dirname, "../../packages/alchemy/src");
 
-/** Top-level `src` directories that become their own package or integration subpath. */
+/** Top-level `src` directories that become their own package. */
 const PROVIDERS = new Set(["AWS", "Cloudflare", "GCP"]);
 
 const CORE = "core";
@@ -35,14 +31,6 @@ const packageOf = (rel: string): string => {
   const top = rel.split("/")[0]!;
   const isRootFile = !rel.includes("/") && /\.tsx?$/.test(rel);
   return PROVIDERS.has(top) && !isRootFile ? top : CORE;
-};
-
-/** The provider an integration subpath (`Stripe/Cloudflare.ts`) may import. */
-const integrationOf = (rel: string): string | undefined => {
-  const segments = rel.split("/");
-  if (segments.length !== 2) return undefined;
-  const provider = segments[1]!.replace(/\.tsx?$/, "");
-  return PROVIDERS.has(provider) && provider !== segments[0] ? provider : undefined;
 };
 
 const resolveSpecifier = (fromRel: string, specifier: string): string | undefined => {
@@ -89,7 +77,7 @@ const packageBoundaries = {
     },
     messages: {
       providerImport:
-        "{{own}} must not import {{target}}. Providers only meet through integration subpaths.",
+        "{{own}} must not import {{target}}. Providers only meet through core services.",
       coreImport:
         "Core must not import {{target}}. Move the code into the provider, or register it through a plugin.",
       coreDistilled: "Core must not depend on {{target}}; only @distilled.cloud/core.",
@@ -102,7 +90,6 @@ const packageBoundaries = {
     if (relative.startsWith("..") || path.isAbsolute(relative)) return {};
     const rel = relative.split(path.sep).join("/");
     const own = packageOf(rel);
-    const integration = integrationOf(rel);
 
     // Reported on the statement so a disable comment sits above `import`,
     // not inside a multi-line import's braces.
@@ -119,7 +106,7 @@ const packageBoundaries = {
       const resolved = resolveSpecifier(rel, specifier);
       if (resolved === undefined || resolved.startsWith("..")) return;
       const target = packageOf(resolved);
-      if (target === CORE || target === own || target === integration) return;
+      if (target === CORE || target === own) return;
       context.report({
         node,
         messageId: own === CORE ? "coreImport" : "providerImport",
@@ -137,7 +124,6 @@ const packageBoundaries = {
         if (typeof node.value !== "string") return;
         const prefix = TYPE_NAME.exec(node.value)?.[1];
         if (prefix === undefined || !PROVIDERS.has(prefix) || prefix === own) return;
-        if (prefix === integration) return;
         if (isAlias(node)) return;
         context.report({ node, messageId: "providerType", data: { value: node.value } });
       },

@@ -13,7 +13,7 @@ export interface ConsumeEventsProps<
    */
   events: E;
   /**
-   * Path on the host Worker. Defaults to `/webhooks/stripe`.
+   * Path on the host. Defaults to `/webhooks/stripe`.
    */
   path?: string;
 }
@@ -35,14 +35,15 @@ export const webhookEndpointLogicalId = (path?: string): string =>
   `WebhookEndpoint${sanitizeKey(webhookPath(path))}`;
 
 /**
- * Subscribe to Stripe webhook events on the host Worker.
+ * Subscribe to Stripe webhook events on the host.
  *
  * `consumeEvents` provisions the {@link WebhookEndpoint} itself: it derives
- * the delivery URL from the Worker's `url`, enables the selected event
- * types, and binds the endpoint's minted signing secret onto the Worker so
+ * the delivery URL from the host's `url`, enables the selected event
+ * types, and binds the endpoint's minted signing secret onto the host so
  * deliveries are verified. No separate endpoint declaration is needed.
  *
- * Provide `Stripe.Cloudflare.ConsumeEventsLive` on the Worker Effect.
+ * Provide `Stripe.ConsumeEventsLive` on the host's Effect, e.g. a Cloudflare
+ * Worker.
  *
  * ### Handling events
  * **Example:** Customer created and invoice paid
