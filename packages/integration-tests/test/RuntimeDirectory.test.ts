@@ -1,12 +1,12 @@
 import { gunzipSync } from "node:zlib";
+import { readPythonWorkerBundle } from "@alchemy.run/cloudflare/Workers/Sources/Python";
+import { WorkerBundle } from "@alchemy.run/cloudflare/Workers/Sources/Rolldown";
+import { watchBundleDirectory } from "@alchemy.run/cloudflare/Workers/Sources/shared";
 import nextjsSource from "@alchemy.run/frontend-frameworks/nextjs/source";
 import { createComputeArchive } from "@alchemy.run/prisma/ComputeArchive";
 import { expect, layer } from "alchemy-test";
 import { AlchemyContext, dotAlchemyDirectory } from "alchemy/AlchemyContext";
 import { createTempBundleDir, getStableContextDir } from "alchemy/Bundle/TempRoot";
-import { readPythonWorkerBundle } from "alchemy/Cloudflare/Workers/Sources/Python";
-import { WorkerBundle } from "alchemy/Cloudflare/Workers/Sources/Rolldown";
-import { watchBundleDirectory } from "alchemy/Cloudflare/Workers/Sources/shared";
 import { hashDirectory } from "alchemy/Command/Memo";
 import { ResourceContext } from "alchemy/ResourceContext";
 import { Stack } from "alchemy/Stack";

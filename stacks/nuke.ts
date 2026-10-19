@@ -1,3 +1,4 @@
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Fly from "@alchemy.run/fly";
 import * as Hetzner from "@alchemy.run/hetzner";
 import * as Neon from "@alchemy.run/neon";
@@ -8,7 +9,6 @@ import * as Stripe from "@alchemy.run/stripe";
 import * as Turso from "@alchemy.run/turso";
 import * as Alchemy from "alchemy";
 import * as AWS from "alchemy/AWS";
-import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 

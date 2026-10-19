@@ -16,10 +16,7 @@ const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Deb
 
 const hasHetznerCreds = !!process.env.HCLOUD_TOKEN;
 
-const fixtureDir = pathe.resolve(
-  import.meta.dirname,
-  "../../../../alchemy/test/Cloudflare/Website/vite-spa-fixture",
-);
+const fixtureDir = pathe.resolve(import.meta.dirname, "../../Cloudflare/Website/vite-spa-fixture");
 const tempRoot = pathe.resolve(import.meta.dirname, "../../../.tmp");
 const fixtureEntries = ["index.html", "package.json", "src"];
 

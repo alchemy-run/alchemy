@@ -7,7 +7,7 @@ Follow the [six-part tutorial](https://alchemy.run/better-auth/tutorial/part-1) 
 ```typescript
 import { BetterAuth } from "@alchemy.run/better-auth";
 import { CloudflareD1 } from "@alchemy.run/better-auth/CloudflareD1";
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 
 export const AuthDb = Cloudflare.D1.Database("AuthDb");
 
@@ -66,7 +66,7 @@ Native D1 binding at runtime; migrations run over the D1 HTTP API at deploy (and
 
 ```typescript
 import { CloudflareD1 } from "@alchemy.run/better-auth/CloudflareD1";
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 
 export const AuthDb = Cloudflare.D1.Database("AuthDb");
 

@@ -121,7 +121,7 @@ Worker reaches Postgres through Cloudflare's connection pooler:
 ```typescript
 // src/backend/database.ts
 import * as Alchemy from "alchemy";
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Drizzle from "@alchemy.run/drizzle";
 import * as Neon from "@alchemy.run/neon";
 import * as Effect from "effect/Effect";
@@ -186,7 +186,7 @@ we raise inside the `flatMap` stays a normal, typed failure the client can catch
 
 ```typescript
 // src/backend/api.ts
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Drizzle from "@alchemy.run/drizzle/Postgres";
 import { eq } from "drizzle-orm";
 import * as Effect from "effect/Effect";
@@ -279,7 +279,7 @@ resource into an SSR Worker (see [Frontend frameworks](/cloudflare/frontend/fron
 ```typescript
 // alchemy.run.ts
 import * as Alchemy from "alchemy";
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Drizzle from "@alchemy.run/drizzle";
 import * as Neon from "@alchemy.run/neon";
 import * as Effect from "effect/Effect";

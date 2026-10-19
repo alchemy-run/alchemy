@@ -34,10 +34,7 @@ for (const bluegreen of [true, false]) {
         const fs = yield* FileSystem.FileSystem;
         const path = yield* Path.Path;
         const rootDir = yield* cloneFixture(
-          path.resolve(
-            import.meta.dirname,
-            "../../../../alchemy/test/Cloudflare/Website/vite-spa-fixture",
-          ),
+          path.resolve(import.meta.dirname, "../../Cloudflare/Website/vite-spa-fixture"),
           {
             prefix: "alchemy-vite-fly-",
             tempRoot: path.resolve(import.meta.dirname, "../../../.tmp"),

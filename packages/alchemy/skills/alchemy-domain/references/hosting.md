@@ -6,8 +6,8 @@ The server package hosts the model in a Cloudflare Worker. `DomainCloudflare.Dur
 // packages/server/src/BankWorker.ts
 import { Bank, BankHandlers } from "@acme/domain/Bank.model";
 import { CustomerApi } from "@acme/domain/CustomerApi.api";
-import * as Cloudflare from "alchemy/Cloudflare";
-import * as DomainCloudflare from "alchemy/Cloudflare/Domain";
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as DomainCloudflare from "@alchemy.run/cloudflare/Domain";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";

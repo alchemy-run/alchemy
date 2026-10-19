@@ -34,7 +34,7 @@ provider layers in your Stack:
 ```typescript
 // alchemy.run.ts
 import * as Axiom from "@alchemy.run/axiom";
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Layer from "effect/Layer";
 
 providers: Layer.mergeAll(Cloudflare.providers(), Axiom.providers()),

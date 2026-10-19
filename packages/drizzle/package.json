@@ -25,6 +25,7 @@
     "src"
   ],
   "type": "module",
+  "sideEffects": false,
   "exports": {
     ".": "./src/index.ts",
     "./*": "./src/*.ts",
@@ -57,6 +58,7 @@
     "@effect/sql-sqlite-do": "catalog:"
   },
   "devDependencies": {
+    "@alchemy.run/cloudflare": "workspace:*",
     "@cloudflare/workers-types": "catalog:",
     "@effect/sql-libsql": "catalog:",
     "@effect/sql-mysql2": "catalog:",
@@ -68,6 +70,7 @@
     "typescript": "catalog:"
   },
   "peerDependencies": {
+    "@alchemy.run/cloudflare": "workspace:*",
     "@effect/sql-libsql": "catalog:",
     "@effect/sql-mysql2": "catalog:",
     "@effect/sql-pg": "catalog:",
@@ -77,6 +80,9 @@
     "effect": "catalog:"
   },
   "peerDependenciesMeta": {
+    "@alchemy.run/cloudflare": {
+      "optional": true
+    },
     "@effect/sql-libsql": {
       "optional": true
     },

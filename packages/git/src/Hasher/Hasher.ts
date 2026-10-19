@@ -1,4 +1,4 @@
-import { WorkerEnvironment } from "alchemy/Cloudflare/Workers/Worker";
+import { WorkerEnvironment } from "@alchemy.run/cloudflare/Workers/Worker";
 import { Random } from "alchemy/Random";
 import { RuntimeContext } from "alchemy/RuntimeContext";
 /**

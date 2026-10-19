@@ -1,10 +1,10 @@
+import { R2 } from "@alchemy.run/cloudflare";
 import * as Fly from "@alchemy.run/fly";
 import * as Hetzner from "@alchemy.run/hetzner";
 import * as Neon from "@alchemy.run/neon";
 import * as Railway from "@alchemy.run/railway";
 import type * as Alchemy from "alchemy";
 import * as AWS from "alchemy/AWS";
-import { R2 } from "alchemy/Cloudflare";
 import * as Storage from "alchemy/GCP/Storage";
 import * as FileSystem from "effect/FileSystem";
 

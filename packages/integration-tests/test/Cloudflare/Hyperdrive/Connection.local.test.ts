@@ -1,9 +1,9 @@
+import { CloudflareEnvironment } from "@alchemy.run/cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import { HyperdriveDevOriginUnsupported } from "@alchemy.run/cloudflare/Hyperdrive";
 import * as Neon from "@alchemy.run/neon";
 import * as hyperdrive from "@distilled.cloud/cloudflare/hyperdrive";
 import { expect } from "alchemy-test";
-import { CloudflareEnvironment } from "alchemy/Cloudflare";
-import * as Cloudflare from "alchemy/Cloudflare";
-import { HyperdriveDevOriginUnsupported } from "alchemy/Cloudflare/Hyperdrive";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";

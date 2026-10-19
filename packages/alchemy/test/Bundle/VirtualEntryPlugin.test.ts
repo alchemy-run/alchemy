@@ -27,8 +27,6 @@ const BOOTSTRAP_MODULES = [
   "alchemy/AWS/Bootstrap/Lambda",
   "alchemy/AWS/Bootstrap/MicrovmBun",
   "alchemy/AWS/Bootstrap/MicrovmNode",
-  "alchemy/Cloudflare/Bootstrap/ContainerBun",
-  "alchemy/Cloudflare/Bootstrap/ContainerNode",
   "alchemy/Runtime/Bootstrap/Docker",
 ] as const;
 

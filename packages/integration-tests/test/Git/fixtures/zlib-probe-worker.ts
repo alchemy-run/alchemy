@@ -7,7 +7,7 @@ import zlib from "node:zlib";
  * the CLIENT can measure wall time — workerd freezes `performance.now()`
  * during synchronous work, so the worker cannot time itself.
  */
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";

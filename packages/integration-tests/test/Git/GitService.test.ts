@@ -1,5 +1,3 @@
-import { GitApi, type Oid } from "@alchemy.run/git/Api";
-import { expect } from "alchemy-test";
 /**
  * Tier-2 deployed REST lifecycle suite (DESIGN.md §9): drives the typed
  * `HttpApiClient` against a real Cloudflare deployment of the git-service
@@ -10,7 +8,9 @@ import { expect } from "alchemy-test";
  * The full wire-protocol coverage lives in `GitProtocol.e2e.test.ts`; the
  * local dev-mode mirror of this suite is `GitService.local.test.ts`.
  */
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import { GitApi, type Oid } from "@alchemy.run/git/Api";
+import { expect } from "alchemy-test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as HttpApiClient from "effect/http-api/HttpApiClient";

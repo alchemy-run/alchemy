@@ -46,7 +46,7 @@ shared deployment runner, use a protected [remote state store](/state-store).
 
 ```diff lang="typescript"
 +import * as ACME from "@alchemy.run/acme";
-+import * as Cloudflare from "alchemy/Cloudflare";
++import * as Cloudflare from "@alchemy.run/cloudflare";
 
  export default Alchemy.Stack(
    "Certificates",
@@ -57,8 +57,9 @@ shared deployment runner, use a protected [remote state store](/state-store).
 +  },
 ```
 
-`ACME.providers()` manages accounts and certificates, and includes the
-Cloudflare DNS solver used to prove control of the domain.
+`ACME.providers()` manages accounts and certificates, and
+`Cloudflare.providers()` includes the Cloudflare DNS solver used to prove
+control of the domain.
 
 ## Connect Cloudflare
 
@@ -102,7 +103,7 @@ reuses on subsequent deployments.
 +  const certificate = yield* ACME.Certificate("Site", {
 +    account,
 +    identifiers: ["example.com"],
-+    solver: ACME.Cloudflare.ZoneSolver({
++    solver: Cloudflare.ACME.ZoneSolver({
 +      zoneId: Config.String("CLOUDFLARE_ZONE_ID"),
 +    }),
 +  });
@@ -142,7 +143,7 @@ The steps above produce this `alchemy.run.ts`:
 ```typescript
 import * as Alchemy from "alchemy";
 import * as ACME from "@alchemy.run/acme";
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -162,7 +163,7 @@ export default Alchemy.Stack(
     const certificate = yield* ACME.Certificate("Site", {
       account,
       identifiers: ["example.com"],
-      solver: ACME.Cloudflare.ZoneSolver({
+      solver: Cloudflare.ACME.ZoneSolver({
         zoneId: Config.String("CLOUDFLARE_ZONE_ID"),
       }),
     });

@@ -1,5 +1,5 @@
 import * as ACME from "@alchemy.run/acme";
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
@@ -19,7 +19,7 @@ export default class AcmeIssueZeroSslWorker extends Cloudflare.Worker<AcmeIssueZ
   Effect.gen(function* () {
     const acme = yield* ACME.IssueCertificate(ZeroSSLAccount);
     const dns = yield* Cloudflare.DNS.WriteDns(Zone);
-    const solver = ACME.Cloudflare.zoneSolver(dns);
+    const solver = Cloudflare.ACME.zoneSolver(dns);
 
     return {
       fetch: Effect.gen(function* () {

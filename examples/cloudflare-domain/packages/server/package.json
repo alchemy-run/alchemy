@@ -17,6 +17,7 @@
   },
   "dependencies": {
     "@alchemy.run/axiom": "workspace:*",
+    "@alchemy.run/cloudflare": "workspace:*",
     "@alchemy.run/stripe": "workspace:*",
     "@bank/domain": "workspace:*",
     "@cloudflare/workers-types": "catalog:",

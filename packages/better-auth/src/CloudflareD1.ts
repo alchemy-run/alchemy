@@ -1,5 +1,5 @@
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import type { RuntimeContext } from "alchemy";
-import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import type * as Scope from "effect/Scope";
@@ -23,7 +23,7 @@ import type { BetterAuthMigrationError } from "./Errors.ts";
  * ```typescript
  * import { BetterAuth } from "@alchemy.run/better-auth";
  * import { CloudflareD1 } from "@alchemy.run/better-auth/CloudflareD1";
- * import * as Cloudflare from "alchemy/Cloudflare";
+ * import * as Cloudflare from "@alchemy.run/cloudflare";
  *
  * export const AuthDb = Cloudflare.D1.Database("AuthDb");
  *

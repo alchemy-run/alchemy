@@ -115,7 +115,7 @@ verifies incoming objects in the Worker during a push.
 
 ```diff lang="typescript"
 // src/git.ts
-+import * as Cloudflare from "alchemy/Cloudflare";
++import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Git from "@alchemy.run/git";
 import * as Layer from "effect/Layer";
 
@@ -146,7 +146,7 @@ Create `src/host.ts`:
 
 ```typescript
 // src/host.ts
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Git from "@alchemy.run/git";
 import * as Http from "alchemy/Http";
 import * as Effect from "effect/Effect";
@@ -177,7 +177,7 @@ Create `alchemy.run.ts`:
 ```typescript
 // alchemy.run.ts
 import * as Alchemy from "alchemy";
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Effect from "effect/Effect";
 import GitHost from "./src/host.ts";
 

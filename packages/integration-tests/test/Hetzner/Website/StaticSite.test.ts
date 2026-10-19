@@ -18,7 +18,7 @@ const hasHetznerCreds = !!process.env.HCLOUD_TOKEN;
 
 const fixtureDir = pathe.resolve(
   import.meta.dirname,
-  "../../../../alchemy/test/Cloudflare/Website/staticsite-fixture",
+  "../../Cloudflare/Website/staticsite-fixture",
 );
 const tempRoot = pathe.resolve(import.meta.dirname, "../../../.tmp");
 

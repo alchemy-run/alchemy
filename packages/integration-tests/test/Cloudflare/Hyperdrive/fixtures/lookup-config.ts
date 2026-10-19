@@ -1,5 +1,5 @@
+import type { PublicOrigin } from "@alchemy.run/cloudflare/Hyperdrive";
 import * as hyperdrive from "@distilled.cloud/cloudflare/hyperdrive";
-import type { PublicOrigin } from "alchemy/Cloudflare/Hyperdrive";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";

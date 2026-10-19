@@ -1,5 +1,3 @@
-import { GitApi } from "@alchemy.run/git/Api";
-import { expect } from "alchemy-test";
 /**
  * Conformance workout — the real `git` CLI driven through the SHELL against
  * a deployed git-service stack.
@@ -16,7 +14,9 @@ import { expect } from "alchemy-test";
  * Each phase is a literal `sh -c` script (bounded by a hard timeout), so a
  * failure prints the exact shell block + stderr that broke.
  */
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import { GitApi } from "@alchemy.run/git/Api";
+import { expect } from "alchemy-test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";

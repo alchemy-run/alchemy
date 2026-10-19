@@ -1,5 +1,3 @@
-import { GitApi, type Oid } from "@alchemy.run/git/Api";
-import { expect } from "alchemy-test";
 /**
  * Tier-3 — the money suite (DESIGN.md §9 steps 1–14): the real `git` binary
  * driven via the Effect `ChildProcess` service against a deployed
@@ -9,7 +7,9 @@ import { expect } from "alchemy-test";
  * slow cases are `skipIf(process.env.FAST)`. `NO_DESTROY=1` keeps the
  * deployment between local iterations.
  */
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import { GitApi, type Oid } from "@alchemy.run/git/Api";
+import { expect } from "alchemy-test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";

@@ -1,6 +1,6 @@
+import { DurableObjectState } from "@alchemy.run/cloudflare/Workers/DurableObjectState";
+import type { SqlMigrations } from "@alchemy.run/cloudflare/Workers/SqlMigrations";
 import * as SqliteDoClient from "@effect/sql-sqlite-do/SqliteClient";
-import { DurableObjectState } from "alchemy/Cloudflare/Workers/DurableObjectState";
-import type { SqlMigrations } from "alchemy/Cloudflare/Workers/SqlMigrations";
 import type { AnyRelations, EmptyRelations } from "drizzle-orm";
 import * as SQLiteDoDrizzle from "drizzle-orm/effect-sqlite-do";
 import { migrate } from "drizzle-orm/effect-sqlite-do/migrator";

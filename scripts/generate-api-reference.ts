@@ -129,6 +129,11 @@ const config = {
       providerPrefix: "Stripe",
       sourceDisplayPrefix: "packages/stripe/src",
     },
+    {
+      srcRoot: path.join(import.meta.dir, "../packages/cloudflare/src"),
+      providerPrefix: "Cloudflare",
+      sourceDisplayPrefix: "packages/cloudflare/src",
+    },
   ] satisfies SourceRoot[],
 };
 

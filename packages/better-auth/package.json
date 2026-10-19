@@ -54,6 +54,7 @@
     "test": "alchemy-test"
   },
   "devDependencies": {
+    "@alchemy.run/cloudflare": "workspace:*",
     "@alchemy.run/neon": "workspace:*",
     "@alchemy.run/planetscale": "workspace:*",
     "@better-auth/drizzle-adapter": "catalog:",
@@ -76,6 +77,7 @@
     "typescript": "catalog:"
   },
   "peerDependencies": {
+    "@alchemy.run/cloudflare": "workspace:*",
     "@better-auth/drizzle-adapter": "catalog:",
     "@cloudflare/workers-types": "catalog:",
     "@distilled.cloud/aws": "workspace:*",
@@ -89,6 +91,9 @@
     "pg": "catalog:"
   },
   "peerDependenciesMeta": {
+    "@alchemy.run/cloudflare": {
+      "optional": true
+    },
     "@better-auth/drizzle-adapter": {
       "optional": true
     },

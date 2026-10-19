@@ -1,4 +1,4 @@
-import { Worker } from "alchemy/Cloudflare/Workers/Worker";
+import { Worker } from "@alchemy.run/cloudflare/Workers/Worker";
 import { storageHttpHandler } from "./StorageHttpHandler.ts";
 
 export default class StorageHttpWorker extends Worker<StorageHttpWorker>()(

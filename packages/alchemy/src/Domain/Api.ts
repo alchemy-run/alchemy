@@ -758,8 +758,8 @@ const build = (
  * ### Serving it from a Worker
  * **Example:** The Api as a Worker's fetch
  * ```typescript
- * import * as Cloudflare from "alchemy/Cloudflare";
- * import * as DomainCloudflare from "alchemy/Cloudflare/Domain";
+ * import * as Cloudflare from "@alchemy.run/cloudflare";
+ * import * as DomainCloudflare from "@alchemy.run/cloudflare/Domain";
  * import * as Effect from "effect/Effect";
  * import * as Layer from "effect/Layer";
  * import { Bank, BankPolicies } from "./Bank.ts";

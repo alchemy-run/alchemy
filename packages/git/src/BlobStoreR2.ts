@@ -1,5 +1,5 @@
-import * as Cloudflare from "alchemy/Cloudflare";
-import type { R2Error, ReadWriteBucketClient } from "alchemy/Cloudflare/R2/index";
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import type { R2Error, ReadWriteBucketClient } from "@alchemy.run/cloudflare/R2/index";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 /**
  * `Git.BlobStoreR2` — Cloudflare R2 implementation of {@link BlobStore}

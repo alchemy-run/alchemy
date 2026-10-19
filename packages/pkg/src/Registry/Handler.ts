@@ -1,4 +1,4 @@
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as SQL from "alchemy/SQL/D1";
 import { sha256 } from "alchemy/Util/sha256";
 import * as Clock from "effect/Clock";

@@ -30,10 +30,7 @@ test.provider(
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
       const cwd = yield* cloneFixture(
-        path.resolve(
-          import.meta.dirname,
-          "../../../../alchemy/test/Cloudflare/Website/staticsite-fixture",
-        ),
+        path.resolve(import.meta.dirname, "../../Cloudflare/Website/staticsite-fixture"),
         {
           prefix: "alchemy-staticsite-fly-",
           tempRoot: path.resolve(import.meta.dirname, "../../../.tmp"),
