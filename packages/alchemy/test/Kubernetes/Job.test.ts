@@ -169,5 +169,37 @@ describe(
         }),
       { timeout: 120_000 },
     );
+
+    // Dependents of a build or migration Job must not run before it has
+    // succeeded, and a failed Job must fail the deploy.
+    test.provider(
+      "waitForCompletion returns after success and fails the deploy on failure",
+      (stack) =>
+        Effect.gen(function* () {
+          yield* stack.destroy();
+          const job = (exitCode: number) =>
+            Kubernetes.Job("Waited", {
+              cluster: cluster.connection,
+              name: "waited",
+              image: "busybox:1.37",
+              command: ["sh", "-c", `sleep 2; exit ${exitCode}`],
+              backoffLimit: 0,
+              waitForCompletion: { timeoutSeconds: 90 },
+            });
+
+          const succeeded = yield* stack.deploy(job(0));
+          const finished = yield* readJob(succeeded.jobName);
+          expect(finished.status.succeeded).toBe(1);
+
+          const exit = yield* Effect.exit(stack.deploy(job(1)));
+          expect(Exit.isFailure(exit)).toBe(true);
+          if (Exit.isFailure(exit)) {
+            expect(Cause.pretty(exit.cause)).toContain("Kubernetes.JobFailed");
+          }
+
+          yield* stack.destroy();
+        }),
+      { timeout: 240_000 },
+    );
   },
 );

@@ -1,4 +1,8 @@
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
+import * as Schedule from "effect/Schedule";
+import * as Schema from "effect/Schema";
 import type { Scope } from "effect/Scope";
 import { isResolved } from "../Diff.ts";
 import * as Output from "../Output.ts";
@@ -20,6 +24,7 @@ import {
   type WorkloadIdentityOptions,
   type WorkloadImageSource,
   type WorkloadServices,
+  type ClusterTransport,
 } from "./ClusterAdapter.ts";
 import { toConnection, type ClusterLike, type Connection } from "./Connection.ts";
 import {
@@ -44,6 +49,85 @@ import {
   workloadImageHash,
 } from "./internal/workload.ts";
 import type { Providers } from "./Providers.ts";
+
+/** A one-shot Job reported `Failed` (or did not finish in time) while being waited for. */
+export class JobFailed extends Data.TaggedError("Kubernetes.JobFailed")<{
+  namespace: string;
+  jobName: string;
+  reason: string;
+  message: string;
+}> {}
+
+class JobRunning extends Data.TaggedError("Kubernetes.JobRunning")<{}> {}
+
+const JobStatus = Schema.Struct({
+  status: Schema.optional(
+    Schema.Struct({
+      conditions: Schema.optional(
+        Schema.Array(
+          Schema.Struct({
+            type: Schema.String,
+            status: Schema.String,
+            reason: Schema.optional(Schema.String),
+            message: Schema.optional(Schema.String),
+          }),
+        ),
+      ),
+    }),
+  ),
+});
+
+/** Poll a Job until its `Complete` or `Failed` condition is true. */
+const waitForJob = ({
+  transport,
+  namespace,
+  jobName,
+  timeoutSeconds,
+}: {
+  transport: ClusterTransport;
+  namespace: string;
+  jobName: string;
+  timeoutSeconds: number;
+}) =>
+  Effect.gen(function* () {
+    const observed = yield* readObject({
+      transport,
+      object: { apiVersion: "batch/v1", kind: "Job", name: jobName, namespace },
+    });
+    const conditions = Option.match(Schema.decodeUnknownOption(JobStatus)(observed), {
+      onNone: () => [],
+      onSome: (job) => job.status?.conditions ?? [],
+    });
+    const finished = (type: string) =>
+      conditions.find((condition) => condition.type === type && condition.status === "True");
+    const failed = finished("Failed");
+    if (failed) {
+      return yield* new JobFailed({
+        namespace,
+        jobName,
+        reason: failed.reason ?? "Failed",
+        message: failed.message ?? "the Job reported Failed",
+      });
+    }
+    if (!finished("Complete")) return yield* new JobRunning();
+  }).pipe(
+    Effect.retry({
+      while: (error) => error instanceof JobRunning,
+      schedule: Schedule.spaced("5 seconds"),
+    }),
+    Effect.timeoutOrElse({
+      duration: `${timeoutSeconds} seconds`,
+      orElse: () =>
+        Effect.fail(
+          new JobFailed({
+            namespace,
+            jobName,
+            reason: "Timeout",
+            message: `the Job did not finish within ${timeoutSeconds} seconds`,
+          }),
+        ),
+    }),
+  );
 
 export const isJob = (value: any): value is Job =>
   typeof value === "object" && value !== null && "Type" in value && value.Type === "Kubernetes.Job";
@@ -87,6 +171,14 @@ export interface JobPropsBase extends PlatformProps {
    * (Kubernetes `ttlSecondsAfterFinished`).
    */
   ttlSecondsAfterFinished?: number;
+  /**
+   * Wait for a one-shot Job (no `schedule`) to finish before the deploy
+   * moves on, and fail the deploy with `Kubernetes.JobFailed` when it fails.
+   * Resources that depend on the Job's attributes then never act on a build
+   * or migration that has not succeeded. `true` waits up to 1800 seconds.
+   * @default false
+   */
+  waitForCompletion?: boolean | { timeoutSeconds: number };
   /**
    * Container entrypoint override (Kubernetes `command`). Mostly useful with
    * `image` / `context` sources.
@@ -638,6 +730,13 @@ export const JobProvider = () =>
           });
 
           yield* session.note(`Applied Kubernetes ${kind} ${namespace}/${jobName}`);
+
+          if (kind === "Job" && news.waitForCompletion) {
+            const timeoutSeconds =
+              news.waitForCompletion === true ? 1800 : news.waitForCompletion.timeoutSeconds;
+            yield* session.note(`Waiting for Job ${namespace}/${jobName} to complete ...`);
+            yield* waitForJob({ transport, namespace, jobName, timeoutSeconds });
+          }
 
           return {
             connection,
