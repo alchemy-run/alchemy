@@ -1280,6 +1280,14 @@ export type Worker<Bindings = any> = Resource<
      * rules are deployed.
      */
     affinityZoneIds?: string[] | undefined;
+    /**
+     * The sorted names of the `secret_text` and `secret_key` bindings the
+     * last deploy uploaded. Cloudflare keeps a secret binding that a later
+     * upload omits, so a full deploy deletes every live secret missing from
+     * this list. Optional: state written before this field existed has none,
+     * which reads as a one-time update so that cleanup runs.
+     */
+    secretNames?: string[] | undefined;
     hash?: {
       assets: string | undefined;
       bundle: string | undefined;

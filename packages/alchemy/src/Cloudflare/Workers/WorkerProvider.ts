@@ -2119,6 +2119,17 @@ export const LiveWorkerProvider = () =>
         return namespaces;
       };
 
+      const isSecretBinding = (binding: { type: string }) =>
+        binding.type === "secret_text" || binding.type === "secret_key";
+
+      const getSecretNames = (
+        bindings: readonly { type: string; name: string }[] | null | undefined,
+      ) =>
+        (bindings ?? [])
+          .filter(isSecretBinding)
+          .map((binding) => binding.name)
+          .sort();
+
       const getExpectedDurableObjectClassNames = (
         bindings: readonly WorkerBinding[] | undefined,
         workerName: string,
@@ -4027,6 +4038,26 @@ export const LiveWorkerProvider = () =>
             hash,
           } satisfies Worker["Attributes"];
         }
+        // Cloudflare keeps a secret binding that a script upload omits, even
+        // with an empty `keep_bindings`, so a secret dropped from `env` would
+        // stay bound forever. Delete every live secret this deploy did not
+        // upload — only after a full upload: a secret delete deploys a new
+        // version at 100%, which would end a gradual rollout.
+        const secretNames = getSecretNames(metadata.bindings);
+        if (versionId === undefined) {
+          for (const binding of settings.bindings ?? []) {
+            if (isSecretBinding(binding) && !secretNames.includes(binding.name)) {
+              yield* session.note(`Deleting undeclared secret ${binding.name} ...`, {
+                kind: "status",
+              });
+              yield* workers.deleteScriptSecret({
+                accountId,
+                scriptName: name,
+                secretName: binding.name,
+              });
+            }
+          }
+        }
         const issuesEnabled = observability.issues?.enabled ?? false;
         if (
           versionId === undefined &&
@@ -4304,6 +4335,7 @@ export const LiveWorkerProvider = () =>
           versionId,
           deploymentId,
           affinityZoneIds,
+          secretNames,
           hash,
         } satisfies Worker["Attributes"];
       });
@@ -4691,8 +4723,17 @@ export const LiveWorkerProvider = () =>
           // update even when nothing else changed, so reconcile re-records
           // the immutable Worker ID.
           const legacyWorkerId = cachedWorkerId(output.workerId, output.workerName) === undefined;
+          // Rows persisted before `secretNames` existed may still carry
+          // secrets their `env` dropped (Cloudflare keeps them across
+          // uploads). Plan one update so reconcile deletes them.
+          const legacySecrets =
+            !newIsVersion &&
+            !newIsPreview &&
+            newNamespace === undefined &&
+            output.secretNames === undefined;
           if (
             legacyWorkerId ||
+            legacySecrets ||
             domainsChanged ||
             routesChanged ||
             cronsChanged ||
@@ -5216,6 +5257,7 @@ export const LiveWorkerProvider = () =>
               // (a getPhas call per known zone on every read); carry the
               // cleanup list forward like any other stable cache.
               affinityZoneIds: output?.affinityZoneIds,
+              secretNames: getSecretNames(settings.bindings),
               versionId: uploadedVersionId,
             } satisfies Worker["Attributes"];
 
