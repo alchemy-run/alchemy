@@ -1,6 +1,6 @@
 node_modules/
 dist/
-/lib/
+lib/
 /alchemy/lib/
 .out/
 .test/

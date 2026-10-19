@@ -1,10 +1,10 @@
 import { fileURLToPath } from "node:url";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { describe, expect, it } from "alchemy-test";
+import { exec } from "alchemy/Util/exec";
+import { nodeLoaderArgs } from "alchemy/Util/Node";
 import * as Effect from "effect/Effect";
 import { ChildProcess } from "effect/process";
-import { exec } from "@/Util/exec.ts";
-import { nodeLoaderArgs } from "@/Util/Node.ts";
 
 describe("optional frontend-frameworks peer", { tags: ["unit", "local"] }, () => {
   it.effect(

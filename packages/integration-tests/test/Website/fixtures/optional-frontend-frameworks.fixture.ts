@@ -21,7 +21,7 @@ registerHooks({
 
 const providers: string[] = [];
 for (const provider of ["Prisma", "Neon", "Fly", "Hetzner", "Railway"]) {
-  const module = await import(`alchemy/${provider}`);
+  const module = await import(`@alchemy.run/${provider.toLowerCase()}`);
   if (module.Website) providers.push(provider);
 }
 const providerImportAttempts = attempts;

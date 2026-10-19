@@ -68,7 +68,7 @@ const contributingPackage = (name: string, provider: string): Dependency => ({
 
 describe("Contributions.load", { tags: ["unit", "local"] }, () =>
   layer(NodeServices.layer)((it) => {
-    it.effect("loads alchemy's own providers and a dependency's", () =>
+    it.effect("loads a dependency's providers", () =>
       Effect.gen(function* () {
         const root = yield* project({
           "fake-provider": contributingPackage(
@@ -78,7 +78,7 @@ describe("Contributions.load", { tags: ["unit", "local"] }, () =>
         });
         const providers = yield* Contributions.load(root);
         const names = providers.map((provider) => provider.name);
-        expect(names).toEqual(expect.arrayContaining(["aws", "gcp", "fake"]));
+        expect(names).toContain("fake");
         expect(
           providers.find((provider) => provider.name === "fake")?.stateStores?.fake?.description,
         ).toBe("Fake store");
@@ -144,7 +144,6 @@ describe("Contributions.load", { tags: ["unit", "local"] }, () =>
         });
         const names = (yield* Contributions.load(root)).map((provider) => provider.name);
         expect(names).toContain("fake");
-        expect(names).toContain("aws");
         expect(names).not.toContain("nope");
       }).pipe(Effect.scoped),
     );
@@ -261,7 +260,6 @@ describe("Contributions.load", { tags: ["unit", "local"] }, () =>
           });
           expect(stores.get("multi-kv")?.provider.name).toBe("multi");
           expect(stores.get("multi-sql")?.store.description).toBe("SQL");
-          expect(stores.get("aws")?.provider.name).toBe("aws");
         }).pipe(Effect.scoped),
       // Exclusive: changes the process's working directory.
       { exclusive: true },
@@ -273,11 +271,12 @@ describe("Contributions.load", { tags: ["unit", "local"] }, () =>
         Effect.gen(function* () {
           const error = yield* Effect.flip(
             storeNames({
-              "aws-store": `export default { name: "other", stateStores: { aws: { description: "S3" } } };`,
+              "first-store": `export default { name: "first", stateStores: { kv: { description: "KV" } } };`,
+              "second-store": `export default { name: "second", stateStores: { kv: { description: "KV" } } };`,
             }),
           );
           expect(contributionErrorMessage(error)).toBe(
-            "aws and other both contribute a state store named aws",
+            "second and first both contribute a state store named kv",
           );
         }).pipe(Effect.scoped),
       { exclusive: true },
