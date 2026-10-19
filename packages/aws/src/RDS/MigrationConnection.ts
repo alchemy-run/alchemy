@@ -1,8 +1,8 @@
-import { MigrationError, type SqlExecutor } from "alchemy/SQL/Migrations/Format";
-import { makeMySQLMigrationExecutor } from "alchemy/SQL/Migrations/MySQLExecutor";
-import { makePgMigrationExecutor } from "alchemy/SQL/Migrations/PgExecutor";
-import { importMySql } from "alchemy/SQL/MySQLDriver";
-import { importPg } from "alchemy/SQL/PostgresDriver";
+import { MigrationError, type SqlExecutor } from "@alchemy.run/sql/Migrations/Format";
+import { makeMySQLMigrationExecutor } from "@alchemy.run/sql/Migrations/MySQLExecutor";
+import { makePgMigrationExecutor } from "@alchemy.run/sql/Migrations/PgExecutor";
+import { importMySql } from "@alchemy.run/sql/MySQLDriver";
+import { importPg } from "@alchemy.run/sql/PostgresDriver";
 import * as Effect from "effect/Effect";
 
 /**

@@ -27,6 +27,7 @@ const roots = [
   path.join(import.meta.dir, "../packages/kubernetes/src"),
   path.join(import.meta.dir, "../packages/docker/src"),
   path.join(import.meta.dir, "../packages/redis/src"),
+  path.join(import.meta.dir, "../packages/sql/src"),
 ];
 
 const pageTag = /^\s*\*\s+@(resource|binding|layer|primitive)\b/;

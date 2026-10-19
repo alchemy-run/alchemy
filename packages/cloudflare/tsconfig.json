@@ -16,6 +16,7 @@
     {
       "path": "../alchemy/tsconfig.json"
     },
+    { "path": "../sql/tsconfig.json" },
     { "path": "../docker/tsconfig.json" },
     { "path": "../domain/tsconfig.json" },
     {

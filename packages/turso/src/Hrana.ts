@@ -1,5 +1,5 @@
-import { MigrationError, type SqlExecutor } from "alchemy/SQL/Migrations/index";
-import { splitSqlStatements } from "alchemy/SQL/SqlFile";
+import { MigrationError, type SqlExecutor } from "@alchemy.run/sql/Migrations";
+import { splitSqlStatements } from "@alchemy.run/sql/SqlFile";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";

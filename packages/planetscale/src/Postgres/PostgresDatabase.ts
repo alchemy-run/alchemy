@@ -1,16 +1,16 @@
+import {
+  diffMigrations,
+  migrationsAttrs,
+  migrationsInputOf,
+  stampedOf,
+} from "@alchemy.run/sql/Migrations";
+import { hashImports } from "@alchemy.run/sql/SqlFile";
 import * as planetscale from "@distilled.cloud/planetscale";
 import { Credentials } from "@distilled.cloud/planetscale/Credentials";
 import { havePropsChanged, isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
-import {
-  diffMigrations,
-  migrationsAttrs,
-  migrationsInputOf,
-  stampedOf,
-} from "alchemy/SQL/Migrations/index";
-import { hashImports } from "alchemy/SQL/SqlFile";
 import { recordsEqual } from "alchemy/Util/equal";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";

@@ -516,6 +516,7 @@
     "build:package": "node scripts/build.ts"
   },
   "dependencies": {
+    "@alchemy.run/sql": "workspace:*",
     "@distilled.cloud/aws": "workspace:*",
     "@distilled.cloud/core": "workspace:*",
     "@distilled.cloud/neon": "workspace:*",

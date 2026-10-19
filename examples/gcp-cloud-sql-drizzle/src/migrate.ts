@@ -1,13 +1,13 @@
 import * as GCP from "@alchemy.run/gcp";
-import type * as sqladmin from "@distilled.cloud/gcp/sqladmin_v1";
-import * as Alchemy from "alchemy";
-import { RuntimeContext } from "alchemy/RuntimeContext";
 import {
   applyMigrations,
   inlineSqlParams,
   MigrationError,
   type SqlExecutor,
-} from "alchemy/SQL/Migrations/index";
+} from "@alchemy.run/sql/Migrations";
+import type * as sqladmin from "@distilled.cloud/gcp/sqladmin_v1";
+import * as Alchemy from "alchemy";
+import { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";

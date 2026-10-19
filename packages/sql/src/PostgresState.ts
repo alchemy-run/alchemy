@@ -1,3 +1,13 @@
+import { STATE_STORE_VERSION } from "alchemy/State/HttpStateApi";
+import type { ReplacedResourceState } from "alchemy/State/ResourceState";
+import {
+  State,
+  StateStoreError,
+  type PersistedState,
+  type StateService,
+} from "alchemy/State/State";
+import { encodeState, reviveStateRecursive } from "alchemy/State/StateEncoding";
+import { recordStateStoreInit } from "alchemy/Telemetry/Metrics";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
@@ -7,12 +17,7 @@ import * as Scope from "effect/Scope";
 import * as Semaphore from "effect/Semaphore";
 import type * as SqlClient from "effect/sql/SqlClient";
 import type * as SqlError from "effect/sql/SqlError";
-import { resolveConnectionOptions } from "../SQL/PostgresTls.ts";
-import { recordStateStoreInit } from "../Telemetry/Metrics.ts";
-import { STATE_STORE_VERSION } from "./HttpStateApi.ts";
-import type { ReplacedResourceState } from "./ResourceState.ts";
-import { State, StateStoreError, type PersistedState, type StateService } from "./State.ts";
-import { encodeState, reviveStateRecursive } from "./StateEncoding.ts";
+import { resolveConnectionOptions } from "./PostgresTls.ts";
 
 // `@effect/sql-pg` is loaded lazily rather than imported statically (as
 // `SQL/Postgres.ts` does) so that `postgresState({ client })` — which takes
@@ -129,7 +134,7 @@ interface Lease {
  * **Example:** Connection URL from configuration
  * ```typescript
  * import * as Alchemy from "alchemy";
- * import { postgresState } from "alchemy/State/PostgresState";
+ * import { postgresState } from "@alchemy.run/sql/PostgresState";
  * import * as Config from "effect/Config";
  *
  * const Stack = Alchemy.Stack(

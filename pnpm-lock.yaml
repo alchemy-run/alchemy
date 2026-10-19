@@ -973,6 +973,9 @@ importers:
       '@alchemy.run/railway':
         specifier: workspace:*
         version: link:../../packages/railway
+      '@alchemy.run/sql':
+        specifier: workspace:*
+        version: link:../../packages/sql
       '@cloudflare/workers-types':
         specifier: 5.20261012.1
         version: 5.20261012.1
@@ -1986,6 +1989,9 @@ importers:
       '@alchemy.run/cloudflare':
         specifier: workspace:*
         version: link:../../packages/cloudflare
+      '@alchemy.run/sql':
+        specifier: workspace:*
+        version: link:../../packages/sql
       '@cloudflare/puppeteer':
         specifier: 'catalog:'
         version: 1.4.0(supports-color@10.2.2)
@@ -4624,6 +4630,9 @@ importers:
       '@alchemy.run/gcp':
         specifier: workspace:*
         version: link:../../packages/gcp
+      '@alchemy.run/sql':
+        specifier: workspace:*
+        version: link:../../packages/sql
       '@distilled.cloud/gcp':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/gcp
@@ -5741,6 +5750,9 @@ importers:
       '@alchemy.run/neon':
         specifier: workspace:*
         version: link:../../packages/neon
+      '@alchemy.run/sql':
+        specifier: workspace:*
+        version: link:../../packages/sql
       '@aws-sdk/client-s3':
         specifier: 3.984.0
         version: 3.984.0
@@ -6503,6 +6515,9 @@ importers:
       '@alchemy.run/prisma':
         specifier: workspace:*
         version: link:../../packages/prisma
+      '@alchemy.run/sql':
+        specifier: workspace:*
+        version: link:../../packages/sql
       '@effect/platform-node':
         specifier: 'catalog:'
         version: 4.0.4(effect@4.0.4)(redis@6.2.1)
@@ -7948,12 +7963,6 @@ importers:
       '@effect/platform-node':
         specifier: 'catalog:'
         version: 4.0.4(effect@4.0.4)(redis@6.2.1)
-      '@effect/sql-mysql2':
-        specifier: 'catalog:'
-        version: 4.0.4(@types/node@26.6.5)(effect@4.0.4)
-      '@effect/sql-pg':
-        specifier: 'catalog:'
-        version: 4.0.4(effect@4.0.4)
       '@effect/vitest':
         specifier: 'catalog:'
         version: 4.0.4(effect@4.0.4)(vitest@5.0.4(@types/node@26.6.5)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1)))
@@ -7966,9 +7975,6 @@ importers:
       '@types/node':
         specifier: 'catalog:'
         version: 26.6.5
-      '@types/pg':
-        specifier: 'catalog:'
-        version: 8.20.4
       '@types/picomatch':
         specifier: 'catalog:'
         version: 4.0.3
@@ -7996,18 +8002,12 @@ importers:
       hono:
         specifier: 'catalog:'
         version: 4.13.13
-      mysql2:
-        specifier: 3.24.5
-        version: 3.24.5(@types/node@26.6.5)
       next:
         specifier: 'catalog:'
         version: 16.2.10(@babel/core@7.29.7(supports-color@10.2.2))(@playwright/test@1.64.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
       nuxt:
         specifier: 'catalog:'
         version: 4.6.1(aaeb10b55acae42c6a5462c89f1814aa)
-      pg:
-        specifier: 'catalog:'
-        version: 8.23.1
       react:
         specifier: 'catalog:'
         version: 19.3.0
@@ -8069,6 +8069,9 @@ importers:
       '@alchemy.run/kubernetes':
         specifier: workspace:*
         version: link:../kubernetes
+      '@alchemy.run/sql':
+        specifier: workspace:*
+        version: link:../sql
       '@distilled.cloud/aws':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/aws
@@ -8136,6 +8139,10 @@ importers:
         version: 7.0.2
 
   packages/better-auth:
+    dependencies:
+      '@alchemy.run/sql':
+        specifier: workspace:*
+        version: link:../sql
     devDependencies:
       '@alchemy.run/aws':
         specifier: workspace:*
@@ -8215,6 +8222,9 @@ importers:
       '@alchemy.run/docker':
         specifier: workspace:*
         version: link:../docker
+      '@alchemy.run/sql':
+        specifier: workspace:*
+        version: link:../sql
       '@distilled.cloud/aws':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/aws
@@ -8481,6 +8491,9 @@ importers:
 
   packages/drizzle:
     dependencies:
+      '@alchemy.run/sql':
+        specifier: workspace:*
+        version: link:../sql
       '@effect/sql-d1':
         specifier: 'catalog:'
         version: 4.0.4(effect@4.0.4)
@@ -8545,6 +8558,9 @@ importers:
       '@alchemy.run/redis':
         specifier: workspace:*
         version: link:../redis
+      '@alchemy.run/sql':
+        specifier: workspace:*
+        version: link:../sql
       '@distilled.cloud/aws':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/aws
@@ -9576,6 +9592,9 @@ importers:
       '@alchemy.run/redis':
         specifier: workspace:*
         version: link:../redis
+      '@alchemy.run/sql':
+        specifier: workspace:*
+        version: link:../sql
       '@alchemy.run/stripe':
         specifier: workspace:*
         version: link:../stripe
@@ -9868,6 +9887,9 @@ importers:
 
   packages/neon:
     dependencies:
+      '@alchemy.run/sql':
+        specifier: workspace:*
+        version: link:../sql
       '@distilled.cloud/aws':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/aws
@@ -9955,6 +9977,9 @@ importers:
 
   packages/planetscale:
     dependencies:
+      '@alchemy.run/sql':
+        specifier: workspace:*
+        version: link:../sql
       '@distilled.cloud/core':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/core
@@ -10103,6 +10128,39 @@ importers:
         specifier: 'catalog:'
         version: 7.0.2
 
+  packages/sql:
+    devDependencies:
+      '@effect/sql-mysql2':
+        specifier: 'catalog:'
+        version: 4.0.4(@types/node@26.6.5)(effect@4.0.4)
+      '@effect/sql-pg':
+        specifier: 'catalog:'
+        version: 4.0.4(effect@4.0.4)
+      '@types/bun':
+        specifier: 'catalog:'
+        version: 1.4.3
+      '@types/node':
+        specifier: 'catalog:'
+        version: 26.6.5
+      '@types/pg':
+        specifier: 'catalog:'
+        version: 8.20.4
+      alchemy:
+        specifier: workspace:*
+        version: link:../alchemy
+      effect:
+        specifier: 4.0.4
+        version: 4.0.4
+      mysql2:
+        specifier: 3.24.5
+        version: 3.24.5(@types/node@26.6.5)
+      pg:
+        specifier: 'catalog:'
+        version: 8.23.1
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+
   packages/sqlite:
     devDependencies:
       '@libsql/client':
@@ -10145,6 +10203,9 @@ importers:
 
   packages/turso:
     dependencies:
+      '@alchemy.run/sql':
+        specifier: workspace:*
+        version: link:../sql
       '@distilled.cloud/core':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/core
@@ -11396,6 +11457,9 @@ importers:
       '@alchemy.run/redis':
         specifier: workspace:*
         version: link:../packages/redis
+      '@alchemy.run/sql':
+        specifier: workspace:*
+        version: link:../packages/sql
       '@astrojs/check':
         specifier: 'catalog:'
         version: 0.9.10(prettier@3.9.6)(typescript@7.0.2)

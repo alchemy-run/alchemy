@@ -33,6 +33,7 @@
     "@alchemy.run/github": "workspace:*",
     "@alchemy.run/kubernetes": "workspace:*",
     "@alchemy.run/redis": "workspace:*",
+    "@alchemy.run/sql": "workspace:*",
     "@astrojs/check": "catalog:",
     "@astrojs/mdx": "catalog:",
     "@astrojs/react": "catalog:",

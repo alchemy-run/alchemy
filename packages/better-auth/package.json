@@ -53,6 +53,9 @@
     "build:package": "node scripts/build.ts",
     "test": "alchemy-test"
   },
+  "dependencies": {
+    "@alchemy.run/sql": "workspace:*"
+  },
   "devDependencies": {
     "@alchemy.run/aws": "workspace:*",
     "@alchemy.run/cloudflare": "workspace:*",

@@ -2,8 +2,8 @@ import {
   MigrationError,
   readMigrationRecords,
   type NormalizedMigrationsInput,
-} from "alchemy/SQL/Migrations/index";
-import { hashMigrations } from "alchemy/SQL/SqlFile";
+} from "@alchemy.run/sql/Migrations";
+import { hashMigrations } from "@alchemy.run/sql/SqlFile";
 import * as Effect from "effect/Effect";
 
 /**

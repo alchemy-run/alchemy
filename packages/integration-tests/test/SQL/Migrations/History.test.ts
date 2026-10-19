@@ -1,10 +1,10 @@
+import { classifyMigrationHistory, rewrittenMigrationHistory } from "@alchemy.run/sql/Migrations";
+import { hashMigrations } from "@alchemy.run/sql/SqlFile";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { expect, layer } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
-import { classifyMigrationHistory, rewrittenMigrationHistory } from "@/SQL/Migrations/index.ts";
-import { hashMigrations } from "@/SQL/SqlFile.ts";
 
 const describe = layer(NodeServices.layer);
 

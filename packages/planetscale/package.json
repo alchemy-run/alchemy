@@ -104,6 +104,7 @@
     "build:package": "node scripts/build.ts"
   },
   "dependencies": {
+    "@alchemy.run/sql": "workspace:*",
     "@distilled.cloud/core": "workspace:*",
     "@distilled.cloud/planetscale": "workspace:*"
   },

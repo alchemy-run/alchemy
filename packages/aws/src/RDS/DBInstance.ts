@@ -1,3 +1,10 @@
+import {
+  diffMigrations,
+  migrationsAttrs,
+  migrationsInputOf,
+  stampedOf,
+  type MigrationsInput,
+} from "@alchemy.run/sql/Migrations";
 import * as ec2 from "@distilled.cloud/aws/ec2";
 import * as rds from "@distilled.cloud/aws/rds";
 import * as secretsmanager from "@distilled.cloud/aws/secrets-manager";
@@ -5,13 +12,6 @@ import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
-import {
-  diffMigrations,
-  migrationsAttrs,
-  migrationsInputOf,
-  stampedOf,
-  type MigrationsInput,
-} from "alchemy/SQL/Migrations/index";
 import { createInternalTags, diffTags } from "alchemy/Tags";
 import { toWireDays, toWireSeconds } from "alchemy/Util/Duration";
 import { sha256 } from "alchemy/Util/sha256";

@@ -1,14 +1,14 @@
 import { Database } from "bun:sqlite";
-import * as NodeServices from "@effect/platform-node/NodeServices";
-import { expect, layer } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as Result from "effect/Result";
 import {
   applyAlchemyFormat,
   applyMigrations,
   readDrizzleDirRecords,
   readFlatRecords,
-} from "@/SQL/Migrations/index.ts";
+} from "@alchemy.run/sql/Migrations";
+import * as NodeServices from "@effect/platform-node/NodeServices";
+import { expect, layer } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as Result from "effect/Result";
 import { makeSqliteExecutor, tableNames } from "./sqlite-executor.ts";
 
 const fixture = (name: string) => new URL(`./fixtures/${name}`, import.meta.url).pathname;

@@ -1,12 +1,12 @@
 import * as MysqlClient from "@effect/sql-mysql2/MysqlClient";
+import { makeExecutionMemo } from "alchemy/Runtime/ExecutionMemo";
+import { proxyChain } from "alchemy/Util/proxy-chain";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import * as Sql from "effect/sql/SqlClient";
 import type * as Mysql from "mysql2";
-import { makeExecutionMemo } from "../Runtime/ExecutionMemo.ts";
-import { proxyChain } from "../Util/proxy-chain.ts";
 
 /**
  * Options for {@link MySQL}: `@effect/sql-mysql2`'s client configuration,
@@ -87,7 +87,7 @@ export const resolveMySQLConfig = <E = never, R = never>(
  * `connectionString`:
  *
  * ```typescript
- * import * as SQL from "alchemy/SQL/MySQL";
+ * import * as SQL from "@alchemy.run/sql/MySQL";
  *
  * const hd = yield* Cloudflare.Hyperdrive.Connect(Hyperdrive);
  * const sql = yield* SQL.MySQL({ url: hd.connectionString });

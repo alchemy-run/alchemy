@@ -1,6 +1,6 @@
+import { MigrationError, type MigrationsInput } from "@alchemy.run/sql/Migrations";
 import type { Input } from "alchemy/Input";
 import * as Namespace from "alchemy/Namespace";
-import { MigrationError, type MigrationsInput } from "alchemy/SQL/Migrations/index";
 import { toWireSeconds } from "alchemy/Util/Duration";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";

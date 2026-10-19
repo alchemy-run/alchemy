@@ -185,13 +185,10 @@
     "@alchemy.run/frontend-frameworks": "workspace:*",
     "@effect/platform-bun": "catalog:",
     "@effect/platform-node": "catalog:",
-    "@effect/sql-mysql2": "catalog:",
-    "@effect/sql-pg": "catalog:",
     "@effect/vitest": "catalog:",
     "@oxc-project/types": "catalog:",
     "@types/bun": "catalog:",
     "@types/node": "catalog:",
-    "@types/pg": "catalog:",
     "@types/picomatch": "catalog:",
     "@types/react": "catalog:",
     "@types/ws": "catalog:",
@@ -201,10 +198,8 @@
     "drizzle-orm": "catalog:",
     "effect": "catalog:",
     "hono": "catalog:",
-    "mysql2": "catalog:",
     "next": "catalog:",
     "nuxt": "catalog:",
-    "pg": "catalog:",
     "react": "catalog:",
     "react-devtools-core": "catalog:",
     "solid-js": "catalog:",
@@ -220,12 +215,8 @@
     "@alchemy.run/frontend-frameworks": "workspace:*",
     "@effect/platform-bun": "catalog:",
     "@effect/platform-node": "catalog:",
-    "@effect/sql-mysql2": "catalog:",
-    "@effect/sql-pg": "catalog:",
     "@effect/vitest": "catalog:",
     "effect": "catalog:",
-    "mysql2": "catalog:",
-    "pg": "catalog:",
     "vite": "catalog:",
     "ws": "catalog:"
   },
@@ -239,19 +230,7 @@
     "@effect/platform-node": {
       "optional": true
     },
-    "@effect/sql-mysql2": {
-      "optional": true
-    },
-    "@effect/sql-pg": {
-      "optional": true
-    },
     "@effect/vitest": {
-      "optional": true
-    },
-    "mysql2": {
-      "optional": true
-    },
-    "pg": {
       "optional": true
     },
     "vite": {

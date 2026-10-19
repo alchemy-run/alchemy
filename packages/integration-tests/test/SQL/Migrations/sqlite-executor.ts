@@ -1,6 +1,6 @@
 import type { Database } from "bun:sqlite";
+import { MigrationError, type SqlExecutor } from "@alchemy.run/sql/Migrations";
 import * as Effect from "effect/Effect";
-import { MigrationError, type SqlExecutor } from "@/SQL/Migrations/index.ts";
 
 /**
  * A {@link SqlExecutor} over an in-memory `bun:sqlite` database — the unit

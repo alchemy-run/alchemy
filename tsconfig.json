@@ -157,6 +157,9 @@
       "path": "./packages/redis/tsconfig.json"
     },
     {
+      "path": "./packages/sql/tsconfig.json"
+    },
+    {
       "path": "./packages/integration-tests/tsconfig.json"
     },
     {

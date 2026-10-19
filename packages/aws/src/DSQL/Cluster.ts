@@ -1,15 +1,15 @@
-import * as dsql from "@distilled.cloud/aws/dsql";
-import { Unowned } from "alchemy/AdoptPolicy";
-import { isResolved } from "alchemy/Diff";
-import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
 import {
   diffMigrations,
   migrationsAttrs,
   migrationsInputOf,
   stampedOf,
   type MigrationsInput,
-} from "alchemy/SQL/Migrations/index";
+} from "@alchemy.run/sql/Migrations";
+import * as dsql from "@distilled.cloud/aws/dsql";
+import { Unowned } from "alchemy/AdoptPolicy";
+import { isResolved } from "alchemy/Diff";
+import * as Provider from "alchemy/Provider";
+import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags, hasAlchemyTags } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";

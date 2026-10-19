@@ -1,7 +1,3 @@
-import * as Lambda from "@distilled.cloud/aws/lambda";
-import * as rds from "@distilled.cloud/aws/rds";
-import * as rdsdata from "@distilled.cloud/aws/rds-data";
-import * as secretsmanager from "@distilled.cloud/aws/secrets-manager";
 import {
   inlineSqlParams,
   MigrationError,
@@ -10,7 +6,11 @@ import {
   type NormalizedMigrationsInput,
   type SqlExecutor,
   type StampedMigrationsState,
-} from "alchemy/SQL/Migrations/index";
+} from "@alchemy.run/sql/Migrations";
+import * as Lambda from "@distilled.cloud/aws/lambda";
+import * as rds from "@distilled.cloud/aws/rds";
+import * as rdsdata from "@distilled.cloud/aws/rds-data";
+import * as secretsmanager from "@distilled.cloud/aws/secrets-manager";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";

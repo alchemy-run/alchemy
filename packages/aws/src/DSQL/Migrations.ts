@@ -6,8 +6,8 @@ import {
   type NormalizedMigrationsInput,
   type SqlExecutor,
   type StampedMigrationsState,
-} from "alchemy/SQL/Migrations/index";
-import { importPg } from "alchemy/SQL/PostgresDriver";
+} from "@alchemy.run/sql/Migrations";
+import { importPg } from "@alchemy.run/sql/PostgresDriver";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";

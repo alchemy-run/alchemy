@@ -41,6 +41,7 @@
     "@alchemy.run/planetscale": "workspace:*",
     "@alchemy.run/prisma": "workspace:*",
     "@alchemy.run/railway": "workspace:*",
+    "@alchemy.run/sql": "workspace:*",
     "@cloudflare/workers-types": "catalog:",
     "@tailwindcss/vite": "catalog:",
     "@types/react": "catalog:",

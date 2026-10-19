@@ -1,8 +1,8 @@
+import * as Output from "alchemy/Output";
+import type { RuntimeContext } from "alchemy/RuntimeContext";
+import { sha256 } from "alchemy/Util/sha256";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
-import * as Output from "../Output.ts";
-import type { RuntimeContext } from "../RuntimeContext.ts";
-import { sha256 } from "../Util/sha256.ts";
 
 /**
  * A database connection-string source, in every shape alchemy hands them

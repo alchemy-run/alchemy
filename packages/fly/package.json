@@ -69,6 +69,7 @@
   "dependencies": {
     "@alchemy.run/docker": "workspace:*",
     "@alchemy.run/redis": "workspace:*",
+    "@alchemy.run/sql": "workspace:*",
     "@distilled.cloud/aws": "workspace:*",
     "@distilled.cloud/core": "workspace:*",
     "@distilled.cloud/fly-io": "workspace:*",

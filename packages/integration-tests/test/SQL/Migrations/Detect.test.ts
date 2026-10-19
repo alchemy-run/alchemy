@@ -1,7 +1,3 @@
-import * as NodeServices from "@effect/platform-node/NodeServices";
-import { describe as plainDescribe, expect, layer, test } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as Result from "effect/Result";
 import {
   detectLayout,
   inlineSqlParams,
@@ -10,7 +6,11 @@ import {
   readFlatRecords,
   resolveMigrations,
   timestampPrefixMillis,
-} from "@/SQL/Migrations/index.ts";
+} from "@alchemy.run/sql/Migrations";
+import * as NodeServices from "@effect/platform-node/NodeServices";
+import { describe as plainDescribe, expect, layer, test } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as Result from "effect/Result";
 
 const fixture = (name: string) => new URL(`./fixtures/${name}`, import.meta.url).pathname;
 

@@ -7,6 +7,7 @@ import { DBCluster, DBInstance, MigrationRunner, type DBInstanceProps } from "@a
 import { Aurora, type AuroraProps } from "@alchemy.run/aws/RDS/Aurora";
 import { DBParameterGroup } from "@alchemy.run/aws/RDS/DBParameterGroup";
 import { DBSubnetGroup } from "@alchemy.run/aws/RDS/DBSubnetGroup";
+import { importPg } from "@alchemy.run/sql/PostgresDriver";
 import * as ec2 from "@distilled.cloud/aws/ec2";
 import * as Lambda from "@distilled.cloud/aws/lambda";
 import * as rds from "@distilled.cloud/aws/rds";
@@ -15,7 +16,6 @@ import * as secretsmanager from "@distilled.cloud/aws/secrets-manager";
 import { describe, expect } from "alchemy-test";
 import * as Drift from "alchemy/Drift";
 import * as Provider from "alchemy/Provider";
-import { importPg } from "alchemy/SQL/PostgresDriver";
 import { State } from "alchemy/State";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Cause from "effect/Cause";

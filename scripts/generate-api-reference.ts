@@ -159,6 +159,11 @@ const config = {
       providerPrefix: "Docker",
       sourceDisplayPrefix: "packages/docker/src",
     },
+    {
+      srcRoot: path.join(import.meta.dir, "../packages/sql/src"),
+      providerPrefix: "SQL",
+      sourceDisplayPrefix: "packages/sql/src",
+    },
   ] satisfies SourceRoot[],
 };
 

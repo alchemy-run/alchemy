@@ -1,11 +1,11 @@
 import * as PgClient from "@effect/sql-pg/PgClient";
+import { makeExecutionMemo } from "alchemy/Runtime/ExecutionMemo";
+import { proxyChain } from "alchemy/Util/proxy-chain";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import type * as Redacted from "effect/Redacted";
 import * as Sql from "effect/sql/SqlClient";
-import { makeExecutionMemo } from "../Runtime/ExecutionMemo.ts";
-import { proxyChain } from "../Util/proxy-chain.ts";
 import { resolveConnectionOptions } from "./PostgresTls.ts";
 
 /**
@@ -28,7 +28,7 @@ export type PostgresConfig<E, R> = Omit<PgClient.PgPoolConfig, "url"> & {
  * handler:
  *
  * ```typescript
- * import * as SQL from "alchemy/SQL/Postgres";
+ * import * as SQL from "@alchemy.run/sql/Postgres";
  *
  * const hd = yield* Cloudflare.Hyperdrive.Connect(Hyperdrive);
  * const sql = yield* SQL.Postgres({ url: hd.connectionString });
