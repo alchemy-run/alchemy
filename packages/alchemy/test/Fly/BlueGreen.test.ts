@@ -127,7 +127,7 @@ import {
 import {
   appName,
   candidateId,
-  machineInputMember,
+  MachineServiceAutostop,
   metadata,
   protocolClient,
   reconcile,
@@ -157,6 +157,8 @@ import {
 } from "./fixtures/signal-overlap.ts";
 import { delayedResourceWrite, ResourceRow } from "./fixtures/state-persistence.ts";
 import { transportProxy, throughProxy, type TransportEvent } from "./fixtures/transport.ts";
+
+const decodeAutostop = Schema.decodeUnknownSync(MachineServiceAutostop);
 
 describe.sequential(
   "deployment",
@@ -3701,19 +3703,11 @@ describe.sequential(
     test(
       "P3 pure autostop schema accepts strings and legacy booleans",
       Effect.sync(() => {
-        const decode = Schema.decodeUnknownSync(
-          machineInputMember<machines.FlyMachineServiceAutostop>([
-            "config",
-            "services",
-            "[]",
-            "autostop",
-          ]),
-        );
         for (const value of ["off", "stop", "suspend", false, true]) {
-          expect(decode(value)).toBe(value);
+          expect(decodeAutostop(value)).toBe(value);
         }
-        expect(() => decode({ mode: "stop" })).toThrow();
-        expect(() => decode(1)).toThrow();
+        expect(() => decodeAutostop({ mode: "stop" })).toThrow();
+        expect(() => decodeAutostop(1)).toThrow();
       }),
       { tags: ["provider:fly:machine"] },
     );

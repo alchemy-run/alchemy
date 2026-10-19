@@ -122,6 +122,16 @@ const Body = Schema.Struct({
   metadata: Schema.optional(Schema.Record(Schema.String, Schema.String)),
 });
 
+const decodeBody = Schema.decodeUnknownSync(Body);
+
+/** `createMachine`'s `config.services[].autostop` schema, built once. */
+export const MachineServiceAutostop = machineInputMember<machines.FlyMachineServiceAutostop>([
+  "config",
+  "services",
+  "[]",
+  "autostop",
+]);
+
 export interface ProtocolEvent {
   method: string;
   path: string;
@@ -146,7 +156,7 @@ export const protocolClient = (
         const now = yield* Clock.currentTimeMillis;
         return yield* Effect.sync(() => {
           const path = new URL(request.url).pathname;
-          const body = Schema.decodeUnknownSync(Body)(
+          const body = decodeBody(
             request.body._tag === "Uint8Array"
               ? JSON.parse(new TextDecoder().decode(request.body.body))
               : {},
