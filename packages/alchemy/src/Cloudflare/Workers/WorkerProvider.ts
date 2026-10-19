@@ -2119,6 +2119,17 @@ export const LiveWorkerProvider = () =>
         return namespaces;
       };
 
+      const isSecretBinding = (binding: { type: string }) =>
+        binding.type === "secret_text" || binding.type === "secret_key";
+
+      const getSecretNames = (
+        bindings: readonly { type: string; name: string }[] | null | undefined,
+      ) =>
+        (bindings ?? [])
+          .filter(isSecretBinding)
+          .map((binding) => binding.name)
+          .sort();
+
       const getExpectedDurableObjectClassNames = (
         bindings: readonly WorkerBinding[] | undefined,
         workerName: string,
@@ -4027,6 +4038,37 @@ export const LiveWorkerProvider = () =>
             hash,
           } satisfies Worker["Attributes"];
         }
+        // Cloudflare keeps a secret binding that a script upload omits, even
+        // with an empty `keep_bindings`, so a secret dropped from `env` would
+        // stay bound. Delete the secrets an earlier deploy uploaded and this
+        // one did not; secrets set outside Alchemy (`wrangler secret put`,
+        // the dashboard) are left alone. State written before `secretNames`
+        // existed falls back to the previous `env`. Deletes run only after a
+        // full upload: each one deploys a new version at 100%, which would
+        // end a gradual rollout, so a rollout keeps owning the removed names.
+        const uploadedSecretNames = getSecretNames(metadata.bindings);
+        const previousSecretNames =
+          output?.secretNames ??
+          Object.entries(olds?.env ?? {}).flatMap(([key, value]) =>
+            secretTextFromEnvValue(value) === undefined ? [] : [key],
+          );
+        const removedSecretNames = previousSecretNames.filter(
+          (secretName) => !uploadedSecretNames.includes(secretName),
+        );
+        if (versionId === undefined) {
+          const liveSecretNames = getSecretNames(settings.bindings);
+          for (const secretName of removedSecretNames) {
+            if (!liveSecretNames.includes(secretName)) continue;
+            yield* session.note(`Deleting removed secret ${secretName} ...`, { kind: "status" });
+            yield* workers
+              .deleteScriptSecret({ accountId, scriptName: name, secretName })
+              .pipe(Effect.catchTag("SecretNotFound", () => Effect.void));
+          }
+        }
+        const secretNames =
+          versionId === undefined
+            ? uploadedSecretNames
+            : [...new Set([...uploadedSecretNames, ...removedSecretNames])].sort();
         const issuesEnabled = observability.issues?.enabled ?? false;
         if (
           versionId === undefined &&
@@ -4304,6 +4346,7 @@ export const LiveWorkerProvider = () =>
           versionId,
           deploymentId,
           affinityZoneIds,
+          secretNames,
           hash,
         } satisfies Worker["Attributes"];
       });
@@ -5216,6 +5259,9 @@ export const LiveWorkerProvider = () =>
               // (a getPhas call per known zone on every read); carry the
               // cleanup list forward like any other stable cache.
               affinityZoneIds: output?.affinityZoneIds,
+              // Which secrets Alchemy uploaded is provider-managed state: the
+              // live list also holds secrets set outside Alchemy.
+              secretNames: output?.secretNames,
               versionId: uploadedVersionId,
             } satisfies Worker["Attributes"];
 
