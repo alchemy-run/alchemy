@@ -56,6 +56,7 @@ export const makeDaxConnectHttpBinding = (options: {
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     return Effect.fn(function* (cluster: Cluster) {
       const Host = yield* cluster.discoveryEndpointAddress;
       const Port = yield* cluster.discoveryEndpointPort;
@@ -64,7 +65,7 @@ export const makeDaxConnectHttpBinding = (options: {
 
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const prefix = connectEnvPrefix(cluster.LogicalId);
-        yield* AWSBindings.bind`${options.tag}(${cluster})`({
+        yield* bind`${options.tag}(${cluster})`({
           env: {
             [`${prefix}_HOST`]: cluster.discoveryEndpointAddress,
             // Lambda environment variables are strings — stringify the port.

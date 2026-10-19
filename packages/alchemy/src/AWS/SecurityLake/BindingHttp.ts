@@ -27,11 +27,12 @@ export const makeSecurityLakeDataLakeHttpBinding = <I, A, E, R>(options: {
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (lake: DataLake) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}(${lake})`({
+        yield* bind`${options.tag}(${lake})`({
           policyStatements: [
             {
               Effect: "Allow",

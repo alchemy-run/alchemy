@@ -14,10 +14,11 @@ export const makeTpuNodeHttpBinding = <I extends { name?: string }, A, E>(option
   operation: GcpHttpOp<I, A, E>;
 }) =>
   Effect.gen(function* () {
+    const bind = yield* GCPBindings.Bind;
     const run = yield* GCPBindings.withCredentials(options.operation);
     return Effect.fn(function* (node: Node) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* GCPBindings.bind`${options.tag}(${node})`({
+        yield* bind`${options.tag}(${node})`({
           iam: [grantFor(options.iam, node.name)],
         });
       }
@@ -41,10 +42,11 @@ export const makeTpuQueuedResourceHttpBinding = <I extends { name?: string }, A,
   operation: GcpHttpOp<I, A, E>;
 }) =>
   Effect.gen(function* () {
+    const bind = yield* GCPBindings.Bind;
     const run = yield* GCPBindings.withCredentials(options.operation);
     return Effect.fn(function* (resource: QueuedResource) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* GCPBindings.bind`${options.tag}(${resource})`({
+        yield* bind`${options.tag}(${resource})`({
           iam: [grantFor(options.iam, resource.name)],
         });
       }

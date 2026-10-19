@@ -33,12 +33,13 @@ export const makeWorkGroupScopedHttpBinding = <I, A, E, R>(options: {
   injectWorkGroup?: boolean;
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (workGroup: WorkGroup) {
       const WorkGroupName = yield* workGroup.workGroupName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}(${workGroup})`({
+        yield* bind`${options.tag}(${workGroup})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -97,12 +98,13 @@ export const makeDataCatalogScopedHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (catalog: DataCatalog) {
       const CatalogName = yield* catalog.name;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}(${catalog})`({
+        yield* bind`${options.tag}(${catalog})`({
           policyStatements: [
             {
               Effect: "Allow",

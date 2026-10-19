@@ -52,6 +52,7 @@ export const makeWafv2WebAclHttpBinding = <I, A, E, R>(options: {
   inject: (webAcl: ResolvedWebAcl) => Partial<I>;
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (webAcl: WebACL) {
@@ -60,7 +61,7 @@ export const makeWafv2WebAclHttpBinding = <I, A, E, R>(options: {
       const Id = yield* webAcl.webAclId;
       const Scope = yield* webAcl.scope;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}(${webAcl})`({
+        yield* bind`${options.tag}(${webAcl})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -105,6 +106,7 @@ export const makeWafv2IPSetHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (ipSet: IPSet) {
@@ -112,7 +114,7 @@ export const makeWafv2IPSetHttpBinding = <
       const Id = yield* ipSet.ipSetId;
       const Scope = yield* ipSet.scope;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}(${ipSet})`({
+        yield* bind`${options.tag}(${ipSet})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -160,13 +162,14 @@ export const makeWafv2RuleGroupHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (ruleGroup: RuleGroup) {
       const Arn = yield* ruleGroup.ruleGroupArn;
       const Scope = yield* ruleGroup.scope;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}(${ruleGroup})`({
+        yield* bind`${options.tag}(${ruleGroup})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -200,11 +203,12 @@ export const makeWafv2AccountHttpBinding = <I, A, E, R>(options: {
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}()`({
+        yield* bind`${options.tag}()`({
           policyStatements: [
             {
               Effect: "Allow",

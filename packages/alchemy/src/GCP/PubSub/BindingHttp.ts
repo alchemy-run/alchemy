@@ -14,11 +14,12 @@ export const makeTopicHttpBinding = <I extends { topic: string }, A, E>(options:
   operation: GcpHttpOp<I, A, E>;
 }) =>
   Effect.gen(function* () {
+    const bind = yield* GCPBindings.Bind;
     const run = yield* GCPBindings.withCredentials(options.operation);
     return Effect.fn(function* (topic: Topic) {
       const name = yield* topic.name;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* GCPBindings.bind`${options.tag}(${topic})`({
+        yield* bind`${options.tag}(${topic})`({
           iam: [grantFor(options.iam, topic.name)],
         });
       }
@@ -37,11 +38,12 @@ export const makeSubscriptionHttpBinding = <I extends { subscription: string }, 
   operation: GcpHttpOp<I, A, E>;
 }) =>
   Effect.gen(function* () {
+    const bind = yield* GCPBindings.Bind;
     const run = yield* GCPBindings.withCredentials(options.operation);
     return Effect.fn(function* (subscription: Subscription) {
       const name = yield* subscription.name;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* GCPBindings.bind`${options.tag}(${subscription})`({
+        yield* bind`${options.tag}(${subscription})`({
           iam: [grantFor(options.iam, subscription.name)],
         });
       }

@@ -40,12 +40,13 @@ export const makeInstanceHttpBinding = <I extends object, A, E, R>(options: {
   resource?: "instance" | "*";
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (instance: Instance) {
       const instanceId = yield* instance.instanceId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}(${instance})`({
+        yield* bind`${options.tag}(${instance})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -83,12 +84,13 @@ export const makeSecurityGroupHttpBinding = <I extends object, A, E, R>(options:
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (group: SecurityGroup) {
       const groupId = yield* group.groupId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}(${group})`({
+        yield* bind`${options.tag}(${group})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -127,12 +129,13 @@ export const makeVolumeHttpBinding = <I extends object, A, E, R>(options: {
   extraResources?: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (volume: Volume) {
       const volumeId = yield* volume.volumeId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}(${volume})`({
+        yield* bind`${options.tag}(${volume})`({
           policyStatements: [
             {
               Effect: "Allow",

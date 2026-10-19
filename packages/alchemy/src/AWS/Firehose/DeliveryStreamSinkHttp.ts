@@ -18,11 +18,12 @@ import { PutRecordBatch } from "./PutRecordBatch.ts";
 export const DeliveryStreamSinkHttp = Layer.effect(
   DeliveryStreamSink,
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const putRecordBatch = yield* PutRecordBatch;
 
     return Effect.fn(function* (deliveryStream: DeliveryStream) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`AWS.Firehose.DeliveryStreamSink(${deliveryStream})`({
+        yield* bind`AWS.Firehose.DeliveryStreamSink(${deliveryStream})`({
           policyStatements: [
             {
               Effect: "Allow",

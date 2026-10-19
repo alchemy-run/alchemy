@@ -10,13 +10,14 @@ import { Standby, type EnterStandbyRequest, type ExitStandbyRequest } from "./St
 export const StandbyHttp = Layer.effect(
   Standby,
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const enter = yield* AWSBindings.withCredentials(autoscaling.enterStandby);
     const exit = yield* AWSBindings.withCredentials(autoscaling.exitStandby);
 
     return Effect.fn(function* (group: AutoScalingGroup) {
       const AutoScalingGroupName = yield* group.autoScalingGroupName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`AWS.AutoScaling.Standby(${group})`({
+        yield* bind`AWS.AutoScaling.Standby(${group})`({
           policyStatements: [
             {
               Effect: "Allow",

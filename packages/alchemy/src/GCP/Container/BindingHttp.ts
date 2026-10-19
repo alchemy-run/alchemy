@@ -15,10 +15,11 @@ export const makeContainerClusterHttpBinding = <I extends { name?: string }, A, 
   operation: GcpHttpOp<I, A, E>;
 }) =>
   Effect.gen(function* () {
+    const bind = yield* GCPBindings.Bind;
     const run = yield* GCPBindings.withCredentials(options.operation);
     return Effect.fn(function* (cluster: Cluster) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* GCPBindings.bind`${options.tag}(${cluster})`({
+        yield* bind`${options.tag}(${cluster})`({
           iam: [grantFor(options.iam, cluster.name)],
         });
       }
@@ -40,10 +41,11 @@ export const makeContainerNodePoolHttpBinding = <I extends { name?: string }, A,
   operation: GcpHttpOp<I, A, E>;
 }) =>
   Effect.gen(function* () {
+    const bind = yield* GCPBindings.Bind;
     const run = yield* GCPBindings.withCredentials(options.operation);
     return Effect.fn(function* (nodePool: NodePool) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* GCPBindings.bind`${options.tag}(${nodePool})`({
+        yield* bind`${options.tag}(${nodePool})`({
           iam: [grantFor(options.iam, nodePool.name)],
         });
       }
@@ -75,10 +77,11 @@ export const makeContainerClustersNodePoolHttpBinding = <
   operation: GcpHttpOp<I, A, E>;
 }) =>
   Effect.gen(function* () {
+    const bind = yield* GCPBindings.Bind;
     const run = yield* GCPBindings.withCredentials(options.operation);
     return Effect.fn(function* (nodePool: ClustersNodePool) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* GCPBindings.bind`${options.tag}(${nodePool})`({
+        yield* bind`${options.tag}(${nodePool})`({
           iam: [grantFor(options.iam, nodePool.name)],
         });
       }

@@ -46,13 +46,14 @@ export const makeQAppHttpBinding = <I extends { instanceId: string }, A, E, R>(o
   injectAppId?: boolean;
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (app: QApp) {
       const instanceId = yield* app.instanceId;
       const appId = yield* app.appId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`AWS.QApps.${options.capability}(${app})`({
+        yield* bind`AWS.QApps.${options.capability}(${app})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -96,12 +97,13 @@ export const makeQAppsInstanceHttpBinding = <I extends { instanceId: string }, A
   operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (app: QApp) {
       const instanceId = yield* app.instanceId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`AWS.QApps.${options.capability}(${app})`({
+        yield* bind`AWS.QApps.${options.capability}(${app})`({
           policyStatements: [
             {
               Effect: "Allow",

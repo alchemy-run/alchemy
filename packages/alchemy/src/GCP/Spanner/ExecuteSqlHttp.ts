@@ -21,6 +21,7 @@ import { ExecuteSql, type ExecuteSqlRequest } from "./ExecuteSql.ts";
 export const ExecuteSqlHttp = Layer.effect(
   ExecuteSql,
   Effect.gen(function* () {
+    const bind = yield* GCPBindings.Bind;
     const createSession = yield* GCPBindings.withCredentials(
       spanner.createProjectsInstancesDatabasesSessions,
     );
@@ -48,7 +49,7 @@ export const ExecuteSqlHttp = Layer.effect(
 
     return Effect.fn(function* (database: Database) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* GCPBindings.bind`GCP.Spanner.ExecuteSql(${database})`({
+        yield* bind`GCP.Spanner.ExecuteSql(${database})`({
           iam: [
             grantFor({ role: "roles/spanner.databaseUser", on: "spanner.database" }, database.name),
           ],

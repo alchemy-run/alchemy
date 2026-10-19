@@ -15,11 +15,12 @@ import type { Service } from "./Service.ts";
 export const GetServiceHttp = Layer.effect(
   GetService,
   Effect.gen(function* () {
+    const bind = yield* GCPBindings.Bind;
     const get = yield* GCPBindings.withCredentials(cloudrun.getProjectsLocationsServices);
     return Effect.fn(function* <T extends Service>(service: T) {
       const name = yield* service.name;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* GCPBindings.bind`GCP.Run.GetService(${service})`({
+        yield* bind`GCP.Run.GetService(${service})`({
           iam: [grantFor({ role: "roles/run.viewer", on: "run.service" }, service.name)],
         });
       }

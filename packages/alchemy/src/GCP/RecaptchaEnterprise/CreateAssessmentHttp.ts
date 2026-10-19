@@ -15,12 +15,13 @@ import type { Key } from "./Key.ts";
 export const CreateAssessmentHttp = Layer.effect(
   CreateAssessment,
   Effect.gen(function* () {
+    const bind = yield* GCPBindings.Bind;
     const createProjectsAssessments = yield* GCPBindings.withCredentials(
       recaptchaenterprise.createProjectsAssessments,
     );
     return Effect.fn(function* <K extends Key>(key: K) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* GCPBindings.bind`GCP.RecaptchaEnterprise.CreateAssessment(${key})`({
+        yield* bind`GCP.RecaptchaEnterprise.CreateAssessment(${key})`({
           // reCAPTCHA keys have no resource-level IAM.
           iam: [{ role: "roles/recaptchaenterprise.agent" }],
         });

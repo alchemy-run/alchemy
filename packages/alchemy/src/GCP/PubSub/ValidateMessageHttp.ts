@@ -14,10 +14,11 @@ import { ValidateMessage, type ValidateMessageRequest } from "./ValidateMessage.
 export const ValidateMessageHttp = Layer.effect(
   ValidateMessage,
   Effect.gen(function* () {
+    const bind = yield* GCPBindings.Bind;
     const validate = yield* GCPBindings.withCredentials(pubsub.validateMessageProjectsSchemas);
     return Effect.fn(function* (schema: Schema) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* GCPBindings.bind`GCP.PubSub.ValidateMessage(${schema})`({
+        yield* bind`GCP.PubSub.ValidateMessage(${schema})`({
           // schemas.validate is checked on the parent project, not the schema.
           iam: [{ role: "roles/pubsub.viewer" }],
         });

@@ -2,7 +2,7 @@ import * as DynamoDB from "@distilled.cloud/aws/dynamodb";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as AWSBindings from "../AWSBindings.ts";
-import { grantTables, tablesRegion } from "./BindingHttp.ts";
+import { GrantTables, tablesRegion } from "./BindingHttp.ts";
 import {
   TransactGetItems,
   type TransactGetItemsRequest,
@@ -12,6 +12,7 @@ import {
 export const TransactGetItemsHttp = Layer.effect(
   TransactGetItems,
   Effect.gen(function* () {
+    const grantTables = yield* GrantTables;
     return Effect.fn(function* (...tables: TransactGetItemsTables) {
       const sortedTables = sortTables(tables);
       const tableNames = new Map(

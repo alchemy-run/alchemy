@@ -9,12 +9,13 @@ import { StartRestoreJob, type StartRestoreJobRequest } from "./StartRestoreJob.
 export const StartRestoreJobHttp = Layer.effect(
   StartRestoreJob,
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const startRestoreJob = yield* AWSBindings.withCredentials(backup.startRestoreJob);
 
     return Effect.fn(function* <R extends Role>(restoreRole: R) {
       const RoleArn = yield* restoreRole.roleArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`AWS.Backup.StartRestoreJob(${restoreRole})`({
+        yield* bind`AWS.Backup.StartRestoreJob(${restoreRole})`({
           policyStatements: [
             // StartRestoreJob authorizes on the recovery point's
             // underlying resource ARN (a snapshot ARN unknowable at

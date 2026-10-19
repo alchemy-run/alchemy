@@ -96,12 +96,13 @@ export const makeSecretAccessBinding = <Client>(options: {
   ) => Client;
 }) =>
   Effect.gen(function* () {
+    const bind = yield* GCPBindings.Bind;
     const helpers = yield* makeSecretHelpers;
     return Effect.fn(function* (secret: SecretBindingTarget) {
       // `name` is `projects/p/secrets/s` or, for regional secrets,
       // `projects/p/locations/l/secrets/s`; both are secret IAM targets.
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* GCPBindings.bind`${options.tag}(${secret})`({
+        yield* bind`${options.tag}(${secret})`({
           iam: options.grants.map((grant) => grantFor(grant, secret.name)),
         });
       }

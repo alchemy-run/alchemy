@@ -12,11 +12,12 @@ import { GetArtifactUrl, type GetArtifactUrlRequest } from "./GetArtifactUrl.ts"
 export const GetArtifactUrlHttp = Layer.effect(
   GetArtifactUrl,
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const getArtifactUrl = yield* AWSBindings.withCredentials(amplify.getArtifactUrl);
 
     return Effect.fn(function* (app: App) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`AWS.Amplify.GetArtifactUrl(${app})`({
+        yield* bind`AWS.Amplify.GetArtifactUrl(${app})`({
           policyStatements: [
             {
               Effect: "Allow",

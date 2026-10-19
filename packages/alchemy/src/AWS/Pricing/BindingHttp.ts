@@ -27,13 +27,14 @@ export const makePricingHttpBinding = <I extends object, A, E, R>(options: {
   operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     // Capture the client with the region pinned to us-east-1 — the Price
     // List Query API is not served from most regions.
     const op = yield* options.operation.pipe(withPricingRegion, AWSBindings.withCredentials);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`AWS.Pricing.${options.capability}()`({
+        yield* bind`AWS.Pricing.${options.capability}()`({
           policyStatements: [
             {
               Effect: "Allow",

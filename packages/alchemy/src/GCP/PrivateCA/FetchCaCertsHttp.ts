@@ -15,12 +15,13 @@ import { FetchCaCerts, type FetchCaCertsRequest } from "./FetchCaCerts.ts";
 export const FetchCaCertsHttp = Layer.effect(
   FetchCaCerts,
   Effect.gen(function* () {
+    const bind = yield* GCPBindings.Bind;
     const fetchCaCertsProjectsLocationsCaPools = yield* GCPBindings.withCredentials(
       privateca.fetchCaCertsProjectsLocationsCaPools,
     );
     return Effect.fn(function* <P extends CaPool>(pool: P) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* GCPBindings.bind`GCP.PrivateCA.FetchCaCerts(${pool})`({
+        yield* bind`GCP.PrivateCA.FetchCaCerts(${pool})`({
           iam: [
             grantFor({ role: "roles/privateca.poolReader", on: "privateca.caPool" }, pool.name),
           ],

@@ -11,6 +11,7 @@ import { PresignGetObject, type PresignGetObjectRequest } from "./PresignGetObje
 export const PresignGetObjectHttp = Layer.effect(
   PresignGetObject,
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const services = yield* AWSBindings.withCredentials(
       Effect.context<Credentials.Credentials | Region.Region>(),
     );
@@ -18,7 +19,7 @@ export const PresignGetObjectHttp = Layer.effect(
     return Effect.fn(function* (bucket: Bucket) {
       const BucketName = yield* bucket.bucketName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`AWS.S3.PresignGetObject(${bucket})`({
+        yield* bind`AWS.S3.PresignGetObject(${bucket})`({
           policyStatements: [
             {
               Effect: "Allow",

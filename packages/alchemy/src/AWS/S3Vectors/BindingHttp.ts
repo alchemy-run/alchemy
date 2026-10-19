@@ -52,12 +52,13 @@ export const makeVectorsHttpBinding = <Client, R>(options: {
   makeClient: Effect.Effect<(indexArn: Effect.Effect<string>, label: string) => Client, never, R>;
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const makeClient = yield* options.makeClient;
 
     return Effect.fn(function* <I extends Index>(index: I) {
       const IndexArn = yield* index.indexArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`AWS.S3Vectors.${options.name}(${index})`({
+        yield* bind`AWS.S3Vectors.${options.name}(${index})`({
           policyStatements: [
             {
               Effect: "Allow",

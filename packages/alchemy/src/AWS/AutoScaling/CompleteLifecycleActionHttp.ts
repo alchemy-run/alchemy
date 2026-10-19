@@ -12,6 +12,7 @@ import {
 export const CompleteLifecycleActionHttp = Layer.effect(
   CompleteLifecycleAction,
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const complete = yield* AWSBindings.withCredentials(autoscaling.completeLifecycleAction);
     const heartbeat = yield* AWSBindings.withCredentials(
       autoscaling.recordLifecycleActionHeartbeat,
@@ -20,7 +21,7 @@ export const CompleteLifecycleActionHttp = Layer.effect(
     return Effect.fn(function* (group: AutoScalingGroup) {
       const AutoScalingGroupName = yield* group.autoScalingGroupName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`AWS.AutoScaling.CompleteLifecycleAction(${group})`({
+        yield* bind`AWS.AutoScaling.CompleteLifecycleAction(${group})`({
           policyStatements: [
             {
               Effect: "Allow",

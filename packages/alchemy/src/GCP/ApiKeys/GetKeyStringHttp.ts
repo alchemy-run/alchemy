@@ -14,12 +14,13 @@ import type { Key } from "./Key.ts";
 export const GetKeyStringHttp = Layer.effect(
   GetKeyString,
   Effect.gen(function* () {
+    const bind = yield* GCPBindings.Bind;
     const getKeyStringProjectsLocationsKeys = yield* GCPBindings.withCredentials(
       apikeys.getKeyStringProjectsLocationsKeys,
     );
     return Effect.fn(function* <K extends Key>(key: K) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* GCPBindings.bind`GCP.ApiKeys.GetKeyString(${key})`({
+        yield* bind`GCP.ApiKeys.GetKeyString(${key})`({
           // API keys have no resource-level IAM.
           iam: [{ role: "roles/serviceusage.apiKeysViewer" }],
         });

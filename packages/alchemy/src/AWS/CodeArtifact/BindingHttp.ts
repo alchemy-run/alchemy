@@ -79,6 +79,7 @@ export const makeRepositoryHttpBinding = <
   resources?: (repository: Repository) => OutputType<string>[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (repository: Repository) {
@@ -86,7 +87,7 @@ export const makeRepositoryHttpBinding = <
       const DomainOwner = yield* repository.domainOwner;
       const RepositoryName = yield* repository.repositoryName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}(${repository})`({
+        yield* bind`${options.tag}(${repository})`({
           policyStatements: [
             {
               Effect: "Allow",

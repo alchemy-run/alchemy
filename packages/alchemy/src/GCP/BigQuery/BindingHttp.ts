@@ -17,10 +17,11 @@ export const makeTableHttpBinding = <
   operation: GcpHttpOp<I, A, E>;
 }) =>
   Effect.gen(function* () {
+    const bind = yield* GCPBindings.Bind;
     const run = yield* GCPBindings.withCredentials(options.operation);
     return Effect.fn(function* (table: Table) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* GCPBindings.bind`${options.tag}(${table})`({
+        yield* bind`${options.tag}(${table})`({
           iam: [grantFor(options.iam, table.name)],
         });
       }

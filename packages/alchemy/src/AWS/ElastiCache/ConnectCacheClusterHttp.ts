@@ -13,10 +13,11 @@ import {
 export const ConnectCacheClusterHttp = Layer.effect(
   ConnectCacheCluster,
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     return Effect.fn(function* (cluster: CacheCluster, options?: ConnectCacheClusterOptions) {
       const prefix = cacheClusterConnectEnvPrefix(cluster.LogicalId);
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`AWS.ElastiCache.ConnectCacheCluster(${cluster})`({
+        yield* bind`AWS.ElastiCache.ConnectCacheCluster(${cluster})`({
           env: {
             [`${prefix}_ENDPOINTS`]: Output.map(cluster.endpoints, JSON.stringify),
             [`${prefix}_TLS`]: Output.map(cluster.transitEncryptionEnabled, (tls) =>

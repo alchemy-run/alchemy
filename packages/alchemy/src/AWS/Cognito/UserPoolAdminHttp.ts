@@ -22,6 +22,7 @@ type UserPoolIdField = Pick<cip.AdminGetUserRequest, "UserPoolId">;
 export const UserPoolAdminHttp = Layer.effect(
   UserPoolAdmin,
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const adminCreateUser = yield* AWSBindings.withCredentials(cip.adminCreateUser);
     const adminGetUser = yield* AWSBindings.withCredentials(cip.adminGetUser);
     const adminSetUserPassword = yield* AWSBindings.withCredentials(cip.adminSetUserPassword);
@@ -70,7 +71,7 @@ export const UserPoolAdminHttp = Layer.effect(
     return Effect.fn(function* <P extends UserPool>(pool: P) {
       const UserPoolId = yield* pool.userPoolId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`AWS.Cognito.UserPoolAdmin(${pool})`({
+        yield* bind`AWS.Cognito.UserPoolAdmin(${pool})`({
           policyStatements: [
             {
               Effect: "Allow",

@@ -14,12 +14,13 @@ import type { Workflow } from "./Workflow.ts";
 export const CreateExecutionHttp = Layer.effect(
   CreateExecution,
   Effect.gen(function* () {
+    const bind = yield* GCPBindings.Bind;
     const createExecution = yield* GCPBindings.withCredentials(
       workflowexecutions.createProjectsLocationsWorkflowsExecutions,
     );
     return Effect.fn(function* (workflow: Workflow) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* GCPBindings.bind`GCP.Workflows.CreateExecution(${workflow})`({
+        yield* bind`GCP.Workflows.CreateExecution(${workflow})`({
           // Workflows has no resource-level IAM; invoker is granted on the project.
           iam: [{ role: "roles/workflows.invoker" }],
         });

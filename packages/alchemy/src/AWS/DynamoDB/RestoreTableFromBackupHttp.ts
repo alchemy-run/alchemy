@@ -3,7 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Output from "../../Output.ts";
 import * as AWSBindings from "../AWSBindings.ts";
-import { grantTables, tablesRegion } from "./BindingHttp.ts";
+import { GrantTables, tablesRegion } from "./BindingHttp.ts";
 import {
   RestoreTableFromBackup,
   type RestoreTableFromBackupRequest,
@@ -13,6 +13,7 @@ import type { Table } from "./Table.ts";
 export const RestoreTableFromBackupHttp = Layer.effect(
   RestoreTableFromBackup,
   Effect.gen(function* () {
+    const grantTables = yield* GrantTables;
     return Effect.fn(function* <From extends Table, To extends Table>(from: From, to: To) {
       const TargetTableName = yield* to.tableName;
       yield* grantTables(

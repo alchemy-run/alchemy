@@ -40,6 +40,7 @@ export const makeTargetScopedHttpBinding = <I extends TargetTriple, A, E, R>(opt
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (target: ScalableTarget) {
@@ -47,7 +48,7 @@ export const makeTargetScopedHttpBinding = <I extends TargetTriple, A, E, R>(opt
       const ResourceId = yield* target.resourceId;
       const ScalableDimension = yield* target.scalableDimension;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}(${target})`({
+        yield* bind`${options.tag}(${target})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -89,6 +90,7 @@ export const makePolicyScopedHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (policy: ScalingPolicy) {
@@ -97,7 +99,7 @@ export const makePolicyScopedHttpBinding = <
       const ScalableDimension = yield* policy.scalableDimension;
       const PolicyName = yield* policy.policyName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}(${policy})`({
+        yield* bind`${options.tag}(${policy})`({
           policyStatements: [
             {
               Effect: "Allow",

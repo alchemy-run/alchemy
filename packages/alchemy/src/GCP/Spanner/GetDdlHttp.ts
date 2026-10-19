@@ -15,12 +15,13 @@ import { GetDdl, type GetDdlRequest } from "./GetDdl.ts";
 export const GetDdlHttp = Layer.effect(
   GetDdl,
   Effect.gen(function* () {
+    const bind = yield* GCPBindings.Bind;
     const getDdlProjectsInstancesDatabases = yield* GCPBindings.withCredentials(
       spanner.getDdlProjectsInstancesDatabases,
     );
     return Effect.fn(function* (database: Database) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* GCPBindings.bind`GCP.Spanner.GetDdl(${database})`({
+        yield* bind`GCP.Spanner.GetDdl(${database})`({
           iam: [
             grantFor(
               { role: "roles/spanner.databaseReader", on: "spanner.database" },

@@ -38,12 +38,13 @@ export const makeGaAcceleratorHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* options.operation.pipe(withGaRegion, AWSBindings.withCredentials);
 
     return Effect.fn(function* (accelerator: Accelerator) {
       const AcceleratorArn = yield* accelerator.acceleratorArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}(${accelerator})`({
+        yield* bind`${options.tag}(${accelerator})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -92,12 +93,13 @@ export const makeGaEndpointGroupHttpBinding = <
   extraStatements?: readonly PolicyStatement[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* options.operation.pipe(withGaRegion, AWSBindings.withCredentials);
 
     return Effect.fn(function* (endpointGroup: EndpointGroup) {
       const EndpointGroupArn = yield* endpointGroup.endpointGroupArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}(${endpointGroup})`({
+        yield* bind`${options.tag}(${endpointGroup})`({
           policyStatements: [
             {
               Effect: "Allow",

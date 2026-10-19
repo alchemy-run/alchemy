@@ -14,10 +14,11 @@ export const makeModelHttpBinding = <I extends { name?: string }, A, E>(options:
   operation: GcpHttpOp<I, A, E>;
 }) =>
   Effect.gen(function* () {
+    const bind = yield* GCPBindings.Bind;
     const run = yield* GCPBindings.withCredentials(options.operation);
     return Effect.fn(function* (model: Model) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* GCPBindings.bind`${options.tag}(${model})`({
+        yield* bind`${options.tag}(${model})`({
           iam: [grantFor(options.iam, model.name)],
         });
       }
@@ -41,10 +42,11 @@ export const makeVersionHttpBinding = <I extends { name?: string }, A, E>(option
   operation: GcpHttpOp<I, A, E>;
 }) =>
   Effect.gen(function* () {
+    const bind = yield* GCPBindings.Bind;
     const run = yield* GCPBindings.withCredentials(options.operation);
     return Effect.fn(function* (version: ModelsVersion) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* GCPBindings.bind`${options.tag}(${version})`({
+        yield* bind`${options.tag}(${version})`({
           iam: [grantFor(options.iam, version.model)],
         });
       }

@@ -44,12 +44,13 @@ const socketUrl = (options: {
 export const ConnectHttp = Layer.effect(
   Connect,
   Effect.gen(function* () {
+    const bind = yield* GCPBindings.Bind;
     const readSecret = yield* ReadSecret;
     return Effect.fn(function* (instance: Instance, options: ConnectOptions) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         // Connects over the socket volume Cloud Run mounts for the host.
         yield* GCPBindings.requireServiceAccountHost("GCP.SQL.Connect");
-        yield* GCPBindings.bind`GCP.SQL.Connect(${instance})`({
+        yield* bind`GCP.SQL.Connect(${instance})`({
           // Cloud SQL has no instance-level IAM policy; an IAM Condition
           // scopes the project grant to this instance.
           iam: [

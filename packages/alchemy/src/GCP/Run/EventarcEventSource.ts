@@ -108,6 +108,7 @@ const toCloudEvent = (request: HttpServerRequest, body: Uint8Array): CloudEvent 
 export const EventarcEventSource = Layer.effect(
   EventarcEventSourceTag,
   Effect.gen(function* () {
+    const bind = yield* GCPBindings.Bind;
     const trigger = yield* Trigger;
     const member = yield* Member;
 
@@ -126,7 +127,7 @@ export const EventarcEventSource = Layer.effect(
         // Requested through the host's own bindings, so the host's IAM sync
         // keeps it on every redeploy instead of revoking it as out of band.
         if (!globalThis.__ALCHEMY_RUNTIME__) {
-          yield* GCPBindings.bind`GCP.Eventarc.EventSource(${{ LogicalId: id }})`({
+          yield* bind`GCP.Eventarc.EventSource(${{ LogicalId: id }})`({
             iam: [{ role: "roles/eventarc.eventReceiver" }],
           });
         }

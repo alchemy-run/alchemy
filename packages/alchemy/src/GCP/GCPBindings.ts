@@ -4,6 +4,7 @@ import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
+import type * as rolldown from "rolldown";
 import * as Binding from "../Binding.ts";
 import type { Input } from "../Input.ts";
 import * as Output from "../Output.ts";
@@ -26,15 +27,16 @@ import { ServiceAccountKey } from "./IAM/ServiceAccountKey.ts";
  *   the deployer's credentials.
  *
  * Import it as a namespace. A binding resolves its operations with
- * {@link withCredentials} when its layer is built, and binds to the host with
- * {@link bind} behind its own `__ALCHEMY_RUNTIME__` guard:
+ * {@link withCredentials} and gets its `bind` from {@link Bind} when its layer
+ * is built, then binds behind its own `__ALCHEMY_RUNTIME__` guard:
  *
  * ```ts
  * Effect.gen(function* () {
  *   const publish = yield* GCPBindings.withCredentials(pubsub.publishProjectsTopics);
+ *   const bind = yield* GCPBindings.Bind;
  *   return Effect.fn(function* (topic: Topic) {
  *     if (!globalThis.__ALCHEMY_RUNTIME__) {
- *       yield* GCPBindings.bind`GCP.PubSub.WriteTopic(${topic})`({
+ *       yield* bind`GCP.PubSub.WriteTopic(${topic})`({
  *         iam: [{ role: "roles/pubsub.publisher", resource: { kind: "pubsub.topic", name: topic.name } }],
  *       });
  *     }
@@ -52,9 +54,32 @@ export interface HostBinding {
   readonly env?: Record<string, unknown>;
 }
 
+declare global {
+  /**
+   * `true` in a bundle built for a host that runs as a GCP service account (Cloud Run, Cloud Functions, GKE), so
+   * `withCredentials` drops the created-key path from it.
+   */
+  var __ALCHEMY_GCP_SERVICE_ACCOUNT_HOST__: boolean | undefined;
+}
+
+/**
+ * Build options for a bundle that runs on a host running as a GCP service account (Cloud Run, Cloud Functions, GKE): defines
+ * `__ALCHEMY_GCP_SERVICE_ACCOUNT_HOST__` so the bundler drops the created-key credentials path.
+ */
+export const serviceAccountHostBundle = (input: rolldown.InputOptions): rolldown.InputOptions => ({
+  ...input,
+  transform: {
+    ...input.transform,
+    define: {
+      ...input.transform?.define,
+      "globalThis.__ALCHEMY_GCP_SERVICE_ACCOUNT_HOST__": "true",
+    },
+  },
+});
+
 /**
  * Env vars holding the key Alchemy creates for a host that doesn't run as a
- * service account. Only {@link bind} sets them, and only on that path, so
+ * service account. Only {@link Bind} sets them, and only on that path, so
  * at runtime their presence is the whole decision.
  */
 const KEY_ENV = {
@@ -103,56 +128,88 @@ type BindTarget = {
 };
 
 /**
- * Attach a binding to its host, labelled `Allow(<host>, <label>)`. Call it
- * behind a literal `if (!globalThis.__ALCHEMY_RUNTIME__)` so the bundler
- * drops it.
+ * The `bind` for a binding's layer: yield it while the layer is built, then
+ * call it from the returned function, behind a literal
+ * `if (!globalThis.__ALCHEMY_RUNTIME__)` so the bundler drops it. It attaches
+ * the binding to its host labelled `Allow(<host>, <label>)`:
+ *
+ * - a host that runs as a service account takes the roles on that account;
+ * - any other host gets a service account and key; the account takes the
+ *   roles and the key is bound into the host's env.
+ *
+ * ```ts
+ * Effect.gen(function* () {
+ *   const bind = yield* GCPBindings.Bind;
+ *   return Effect.fn(function* (topic: Topic) {
+ *     if (!globalThis.__ALCHEMY_RUNTIME__) {
+ *       yield* bind`GCP.PubSub.WriteTopic(${topic})`({ iam: [ … ] });
+ *     }
+ *   });
+ * })
+ * ```
  */
-export const bind =
-  (label: TemplateStringsArray, ...args: unknown[]) =>
-  (data: HostBinding): Effect.Effect<void> =>
-    Effect.gen(function* () {
-      const host = yield* Binding.Host;
-      if (host === undefined) return;
+/** The signature {@link Bind} yields. */
+export type BindHost = (
+  label: TemplateStringsArray,
+  ...args: unknown[]
+) => (data: HostBinding) => Effect.Effect<void>;
 
-      if (runsAsServiceAccount(host)) {
-        return yield* (host as unknown as BindTarget).bind(allow(label), host, ...args)(data);
-      }
+// Bindings only bind at deploy (every call site is behind the same literal
+// guard), so a host bundle gets a no-op and drops the identity resources.
+const runtimeBind: BindHost = () => () => Effect.void;
 
-      // Declared from inside a binding: the stack deploying the host provides
-      // `GCP.Providers`, so they aren't the binding's requirement.
-      const account = yield* ServiceAccount(`${host.LogicalId}ServiceAccount`, {
-        displayName: `Alchemy: GCP access for ${host.LogicalId}`.slice(0, 100),
-      }) as Effect.Effect<ServiceAccount>;
-      const key = yield* ServiceAccountKey(`${host.LogicalId}ServiceAccountKey`, {
-        serviceAccount: account.email,
-      }) as Effect.Effect<ServiceAccountKey>;
-      if (data.iam !== undefined && data.iam.length > 0) {
-        yield* (account as unknown as BindTarget).bind(
-          allow(label),
-          host,
-          ...args,
-        )({
-          iam: data.iam,
+export const Bind: Effect.Effect<BindHost> = globalThis.__ALCHEMY_RUNTIME__
+  ? Effect.succeed(runtimeBind)
+  : Effect.gen(function* () {
+      const GcpServiceAccount = yield* ServiceAccount;
+      const GcpServiceAccountKey = yield* ServiceAccountKey;
+
+      return (label: TemplateStringsArray, ...args: unknown[]) =>
+        Effect.fn(function* (data: HostBinding) {
+          const host = yield* Binding.Host;
+          if (host === undefined) return;
+
+          if (runsAsServiceAccount(host)) {
+            return yield* (host as unknown as BindTarget).bind(allow(label), host, ...args)(data);
+          }
+
+          const account = yield* GcpServiceAccount(`${host.LogicalId}ServiceAccount`, {
+            displayName: `Alchemy: GCP access for ${host.LogicalId}`.slice(0, 100),
+          });
+          const key = yield* GcpServiceAccountKey(`${host.LogicalId}ServiceAccountKey`, {
+            serviceAccount: account.email,
+          });
+          if (data.iam !== undefined && data.iam.length > 0) {
+            yield* (account as unknown as BindTarget).bind(
+              allow(label),
+              host,
+              ...args,
+            )({
+              iam: data.iam,
+            });
+          }
+          const runtime = (yield* CurrentRuntimeContext)!;
+          yield* runtime.set(KEY_ENV.email, account.email);
+          yield* runtime.set(KEY_ENV.project, account.project);
+          yield* runtime.set(KEY_ENV.privateKeyId, key.privateKeyId);
+          yield* runtime.set(KEY_ENV.privateKey, key.privateKey);
+          for (const [name, value] of Object.entries(data.env ?? {})) {
+            yield* runtime.set(name, Output.isOutput(value) ? value : Output.literal(value));
+          }
         });
-      }
-      const runtime = (yield* CurrentRuntimeContext)!;
-      yield* runtime.set(KEY_ENV.email, account.email);
-      yield* runtime.set(KEY_ENV.project, account.project);
-      yield* runtime.set(KEY_ENV.privateKeyId, key.privateKeyId);
-      yield* runtime.set(KEY_ENV.privateKey, key.privateKey);
-      for (const [key, value] of Object.entries(data.env ?? {})) {
-        yield* runtime.set(key, Output.isOutput(value) ? value : Output.literal(value));
-      }
     });
 
 /**
  * Resolve a distilled operation with the host's GCP credentials, once when
- * the binding's layer is built: with the key {@link bind} created for this
+ * the binding's layer is built: with the key {@link Bind} created for this
  * host if there is one, as-is otherwise (the host's own service account, or
  * the deployer).
  */
-export const withCredentials = <Op>(operation: Effect.Effect<Op, never, any>): Effect.Effect<Op> =>
-  Effect.gen(function* () {
+export const withCredentials: <Op>(operation: Effect.Effect<Op, never, any>) => Effect.Effect<Op> =
+  Effect.fn(function* <Op>(operation: Effect.Effect<Op, never, any>) {
+    // A host running as a service account signs with its own credentials.
+    if (globalThis.__ALCHEMY_GCP_SERVICE_ACCOUNT_HOST__)
+      return yield* operation as Effect.Effect<Op>;
     const runtime = yield* CurrentRuntimeContext;
     const email =
       globalThis.__ALCHEMY_RUNTIME__ && runtime !== undefined
@@ -180,14 +237,13 @@ export const withCredentials = <Op>(operation: Effect.Effect<Op, never, any>): E
  * Fail at deploy for a binding that needs its host to run as a service
  * account, e.g. one that reads ID tokens from the metadata server.
  */
-export const requireServiceAccountHost = (tag: string) =>
-  Effect.gen(function* () {
-    if (globalThis.__ALCHEMY_RUNTIME__) return;
-    const host = yield* Binding.Host;
-    if (host === undefined || runsAsServiceAccount(host)) return;
-    return yield* Effect.die(
-      new Error(
-        `${tag} needs a host that runs as a GCP service account (Cloud Run, Cloud Functions or GKE), not ${host.Type} ${host.LogicalId}.`,
-      ),
-    );
-  });
+export const requireServiceAccountHost = Effect.fn(function* (tag: string) {
+  if (globalThis.__ALCHEMY_RUNTIME__) return;
+  const host = yield* Binding.Host;
+  if (host === undefined || runsAsServiceAccount(host)) return;
+  return yield* Effect.die(
+    new Error(
+      `${tag} needs a host that runs as a GCP service account (Cloud Run, Cloud Functions or GKE), not ${host.Type} ${host.LogicalId}.`,
+    ),
+  );
+});

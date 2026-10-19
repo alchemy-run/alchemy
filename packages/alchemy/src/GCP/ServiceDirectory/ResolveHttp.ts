@@ -15,12 +15,13 @@ import type { Service } from "./Service.ts";
 export const ResolveHttp = Layer.effect(
   Resolve,
   Effect.gen(function* () {
+    const bind = yield* GCPBindings.Bind;
     const resolveProjectsLocationsNamespacesServices = yield* GCPBindings.withCredentials(
       servicedirectory.resolveProjectsLocationsNamespacesServices,
     );
     return Effect.fn(function* <S extends Service>(service: S) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* GCPBindings.bind`GCP.ServiceDirectory.Resolve(${service})`({
+        yield* bind`GCP.ServiceDirectory.Resolve(${service})`({
           iam: [
             grantFor(
               {

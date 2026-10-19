@@ -19,12 +19,13 @@ import { SubmitJob, type SubmitJobRequest } from "./SubmitJob.ts";
 export const SubmitJobHttp = Layer.effect(
   SubmitJob,
   Effect.gen(function* () {
+    const bind = yield* GCPBindings.Bind;
     const submitProjectsRegionsJobs = yield* GCPBindings.withCredentials(
       dataproc.submitProjectsRegionsJobs,
     );
     return Effect.fn(function* <T extends Cluster>(cluster: T) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* GCPBindings.bind`GCP.Dataproc.SubmitJob(${cluster})`({
+        yield* bind`GCP.Dataproc.SubmitJob(${cluster})`({
           // dataproc.jobs.create is checked on the project (jobs are not
           // children of the cluster); no narrower predefined role contains it.
           iam: [{ role: "roles/dataproc.editor" }],

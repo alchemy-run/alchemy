@@ -175,10 +175,11 @@ export const makeFirestoreDatabaseBinding = <Client>(options: {
   ) => Client;
 }) =>
   Effect.gen(function* () {
+    const bind = yield* GCPBindings.Bind;
     const helpers = yield* makeFirestoreDatabaseHelpers;
     return Effect.fn(function* (database: Database) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* GCPBindings.bind`${options.tag}(${database})`({
+        yield* bind`${options.tag}(${database})`({
           iam: [grantFor(options.iam, database.name)],
         });
       }

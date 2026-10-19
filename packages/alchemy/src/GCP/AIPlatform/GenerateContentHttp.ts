@@ -23,6 +23,7 @@ const TAG = "GCP.AIPlatform.GenerateContent";
 export const GenerateContentHttp = Layer.effect(
   GenerateContent,
   Effect.gen(function* () {
+    const bind = yield* GCPBindings.Bind;
     const generateContent = yield* GCPBindings.withCredentials(
       aiplatform.generateContentProjectsLocationsPublishersModels,
     );
@@ -53,7 +54,7 @@ export const GenerateContentHttp = Layer.effect(
       const id = `${publisher}/${model}@${location}`;
 
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* GCPBindings.bind`${TAG}(${{ LogicalId: id }})`({
+        yield* bind`${TAG}(${{ LogicalId: id }})`({
           // Publisher models have no resource IAM policy; aiplatform.user is
           // the narrowest predefined role carrying aiplatform.endpoints.predict.
           iam: [{ role: "roles/aiplatform.user" }],

@@ -14,12 +14,13 @@ import { ExchangeDebugToken, type ExchangeDebugTokenRequest } from "./ExchangeDe
 export const ExchangeDebugTokenHttp = Layer.effect(
   ExchangeDebugToken,
   Effect.gen(function* () {
+    const bind = yield* GCPBindings.Bind;
     const exchange = yield* GCPBindings.withCredentials(
       firebaseappcheck.exchangeDebugTokenProjectsApps,
     );
     return Effect.fn(function* (debugToken: AppsDebugToken) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* GCPBindings.bind`GCP.FirebaseAppCheck.ExchangeDebugToken(${debugToken})`({
+        yield* bind`GCP.FirebaseAppCheck.ExchangeDebugToken(${debugToken})`({
           // exchangeDebugToken is not IAM-gated; the debug token secret is the
           // credential.
           iam: [],

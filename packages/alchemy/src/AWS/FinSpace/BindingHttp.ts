@@ -32,13 +32,14 @@ export const makeFinSpaceKxHttpBinding = <I extends { environmentId: string }, A
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* <K extends KxEnvironment>(environment: K) {
       // Outputs yield a DEFERRED effect — resolve again per invocation below.
       const EnvironmentId = yield* environment.environmentId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}(${environment})`({
+        yield* bind`${options.tag}(${environment})`({
           policyStatements: [
             {
               Effect: "Allow",

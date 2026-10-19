@@ -17,11 +17,12 @@ import { StartJob } from "./StartJob.ts";
 export const StartJobHttp = Layer.effect(
   StartJob,
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(dataexchange.startJob);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`AWS.DataExchange.StartJob()`({
+        yield* bind`AWS.DataExchange.StartJob()`({
           policyStatements: [
             {
               Effect: "Allow",

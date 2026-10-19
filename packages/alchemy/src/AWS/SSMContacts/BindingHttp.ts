@@ -41,12 +41,13 @@ export const makeContactHttpBinding = <I extends { ContactId: string }, A, E, R>
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (contact: Contact) {
       const ContactArn = yield* contact.contactArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}(${contact})`({
+        yield* bind`${options.tag}(${contact})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -87,12 +88,13 @@ export const makeContactChannelHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (channel: ContactChannel) {
       const ChannelArn = yield* channel.contactChannelArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}(${channel})`({
+        yield* bind`${options.tag}(${channel})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -128,12 +130,13 @@ export const makeRotationHttpBinding = <I extends { RotationId: string }, A, E, 
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (rotation: Rotation) {
       const RotationArn = yield* rotation.rotationArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}(${rotation})`({
+        yield* bind`${options.tag}(${rotation})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -169,11 +172,12 @@ export const makeAccountHttpBinding = <I, A, E, R>(options: {
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}()`({
+        yield* bind`${options.tag}()`({
           policyStatements: [
             {
               Effect: "Allow",

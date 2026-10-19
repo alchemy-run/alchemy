@@ -22,10 +22,11 @@ export const makeEntityHttpBinding = <I extends { name: string }, A, E>(options:
   operation: GcpHttpOp<I, A, E>;
 }) =>
   Effect.gen(function* () {
+    const bind = yield* GCPBindings.Bind;
     const run = yield* GCPBindings.withCredentials(options.operation);
     return Effect.fn(function* (entity: ConnectionsEntityTypesEntity) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* GCPBindings.bind`${options.tag}(${entity})`({
+        yield* bind`${options.tag}(${entity})`({
           iam: [grantFor(options.iam, entity.name)],
         });
       }

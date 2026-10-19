@@ -25,10 +25,11 @@ export const makeTransferJobHttpBinding = <I extends { jobName?: string }, A, E>
   projectInBody?: boolean;
 }) =>
   Effect.gen(function* () {
+    const bind = yield* GCPBindings.Bind;
     const run = yield* GCPBindings.withCredentials(options.operation);
     return Effect.fn(function* (job: TransferJob) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* GCPBindings.bind`${options.tag}(${job})`({ iam: [grantFor(options.iam, job.name)] });
+        yield* bind`${options.tag}(${job})`({ iam: [grantFor(options.iam, job.name)] });
       }
       const name = yield* job.name;
       const project = yield* job.project;

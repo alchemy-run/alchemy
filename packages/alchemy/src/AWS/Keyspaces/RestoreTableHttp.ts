@@ -16,6 +16,7 @@ import type { Table } from "./Table.ts";
 export const RestoreTableHttp = Layer.effect(
   RestoreTable,
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const restoreTable = yield* AWSBindings.withCredentials(keyspaces.restoreTable);
 
     return Effect.fn(function* <From extends Table, To extends Keyspace>(
@@ -26,7 +27,7 @@ export const RestoreTableHttp = Layer.effect(
       const SourceTableName = yield* source.tableName;
       const TargetKeyspaceName = yield* targetKeyspace.keyspaceName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`AWS.Keyspaces.RestoreTable(${source}, ${targetKeyspace})`({
+        yield* bind`AWS.Keyspaces.RestoreTable(${source}, ${targetKeyspace})`({
           policyStatements: [
             {
               Effect: "Allow",

@@ -14,10 +14,11 @@ import type { Queue } from "./Queue.ts";
  * bespoke.
  */
 
-const grantOnQueue = (tag: string, queue: Queue, actions: readonly string[]) =>
-  Effect.gen(function* () {
+const GrantOnQueue = Effect.gen(function* () {
+  const bind = yield* AWSBindings.Bind;
+  return Effect.fn(function* (tag: string, queue: Queue, actions: readonly string[]) {
     if (!globalThis.__ALCHEMY_RUNTIME__) {
-      yield* AWSBindings.bind`${tag}(${queue})`({
+      yield* bind`${tag}(${queue})`({
         policyStatements: [
           {
             Effect: "Allow",
@@ -28,6 +29,7 @@ const grantOnQueue = (tag: string, queue: Queue, actions: readonly string[]) =>
       });
     }
   });
+});
 
 /**
  * Build the impl Effect for a queue-scoped operation whose request carries
@@ -44,6 +46,7 @@ export const makeQueueUrlHttpBinding = <I extends { QueueUrl?: string }, A, E, R
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const grantOnQueue = yield* GrantOnQueue;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (queue: Queue) {
@@ -75,6 +78,7 @@ export const makeQueueArnHttpBinding = <I extends { SourceArn?: string }, A, E, 
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const grantOnQueue = yield* GrantOnQueue;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (queue: Queue) {
@@ -106,6 +110,7 @@ export const makeQueueGrantHttpBinding = <I, A, E, R>(options: {
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const grantOnQueue = yield* GrantOnQueue;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (queue: Queue) {

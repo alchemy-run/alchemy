@@ -16,10 +16,11 @@ import type { Instance } from "./Instance.ts";
 export const ExecuteSqlHttp = Layer.effect(
   ExecuteSql,
   Effect.gen(function* () {
+    const bind = yield* GCPBindings.Bind;
     const execute = yield* GCPBindings.withCredentials(sqladmin.executeSqlInstances);
     return Effect.fn(function* (instance: Instance) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* GCPBindings.bind`GCP.SQL.ExecuteSql(${instance})`({
+        yield* bind`GCP.SQL.ExecuteSql(${instance})`({
           // Cloud SQL has no instance-level IAM policy; an IAM Condition
           // scopes the project grant to this instance.
           iam: [

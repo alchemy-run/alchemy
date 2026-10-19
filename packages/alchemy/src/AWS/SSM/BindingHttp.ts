@@ -49,6 +49,7 @@ export const makeParameterHttpBinding = <I, A, E, R>(options: {
   resources?: (parameter: Parameter) => (string | OutputType<string>)[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
     const requestKey = options.requestKey ?? "Name";
 
@@ -77,7 +78,7 @@ export const makeParameterHttpBinding = <I, A, E, R>(options: {
             ],
           });
         }
-        yield* AWSBindings.bind`${options.tag}(${parameter})`({
+        yield* bind`${options.tag}(${parameter})`({
           policyStatements: statements,
         });
       }

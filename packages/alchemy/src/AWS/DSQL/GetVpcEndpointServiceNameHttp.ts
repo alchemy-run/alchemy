@@ -14,12 +14,13 @@ import { GetVpcEndpointServiceName } from "./GetVpcEndpointServiceName.ts";
 export const GetVpcEndpointServiceNameHttp = Layer.effect(
   GetVpcEndpointServiceName,
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(dsql.getVpcEndpointServiceName);
 
     return Effect.fn(function* <R extends Cluster>(cluster: R) {
       const Identifier = yield* cluster.clusterId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`AWS.DSQL.GetVpcEndpointServiceName(${cluster})`({
+        yield* bind`AWS.DSQL.GetVpcEndpointServiceName(${cluster})`({
           policyStatements: [
             {
               Effect: "Allow",

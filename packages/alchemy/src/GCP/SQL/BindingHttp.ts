@@ -22,10 +22,11 @@ export const makeSqlInstanceHttpBinding = <
   operation: GcpHttpOp<I, A, E>;
 }) =>
   Effect.gen(function* () {
+    const bind = yield* GCPBindings.Bind;
     const run = yield* GCPBindings.withCredentials(options.operation);
     return Effect.fn(function* (instance: Instance) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* GCPBindings.bind`${options.tag}(${instance})`({
+        yield* bind`${options.tag}(${instance})`({
           iam: [
             grantFor(
               options.iam,
@@ -63,10 +64,11 @@ export const makeSqlUserHttpBinding = <
   operation: GcpHttpOp<I, A, E>;
 }) =>
   Effect.gen(function* () {
+    const bind = yield* GCPBindings.Bind;
     const run = yield* GCPBindings.withCredentials(options.operation);
     return Effect.fn(function* (user: User) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* GCPBindings.bind`${options.tag}(${user})`({
+        yield* bind`${options.tag}(${user})`({
           iam: [
             grantFor(
               options.iam,

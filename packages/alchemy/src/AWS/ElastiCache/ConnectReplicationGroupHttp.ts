@@ -13,6 +13,7 @@ import type { ReplicationGroup } from "./ReplicationGroup.ts";
 export const ConnectReplicationGroupHttp = Layer.effect(
   ConnectReplicationGroup,
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     return Effect.fn(function* (group: ReplicationGroup, options?: ConnectReplicationGroupOptions) {
       const prefix = replicationGroupConnectEnvPrefix(group.LogicalId);
       // Outputs yield a deferred runtime effect. Keep the Output expressions
@@ -33,7 +34,7 @@ export const ConnectReplicationGroupHttp = Layer.effect(
         port === undefined ? "" : String(port),
       );
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`AWS.ElastiCache.ConnectReplicationGroup(${group})`({
+        yield* bind`AWS.ElastiCache.ConnectReplicationGroup(${group})`({
           env: {
             [`${prefix}_HOST`]: endpointHost,
             [`${prefix}_PORT`]: Output.interpolate`${endpointPort}`,

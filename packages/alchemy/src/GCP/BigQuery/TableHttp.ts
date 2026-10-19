@@ -208,10 +208,11 @@ export const makeBigQueryTableBinding = <Client>(options: {
   ) => Client;
 }) =>
   Effect.gen(function* () {
+    const bind = yield* GCPBindings.Bind;
     const helpers = yield* makeBigQueryTableHelpers;
     return Effect.fn(function* (table: Table) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* GCPBindings.bind`${options.tag}(${table})`({
+        yield* bind`${options.tag}(${table})`({
           iam: options.iam.map((iam) => grantFor(iam, table.name)),
         });
       }

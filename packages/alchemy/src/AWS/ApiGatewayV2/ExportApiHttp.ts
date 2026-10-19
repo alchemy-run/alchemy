@@ -4,7 +4,7 @@ import * as Layer from "effect/Layer";
 import * as Output from "../../Output.ts";
 import * as AWSBindings from "../AWSBindings.ts";
 import type { Api } from "./Api.ts";
-import { registerApiGatewayV2Binding } from "./BindingHttp.ts";
+import { RegisterApiGatewayV2Binding } from "./BindingHttp.ts";
 import { ExportApi, type ExportApiRequest } from "./ExportApi.ts";
 
 /**
@@ -15,6 +15,7 @@ import { ExportApi, type ExportApiRequest } from "./ExportApi.ts";
 export const ExportApiHttp = Layer.effect(
   ExportApi,
   Effect.gen(function* () {
+    const registerApiGatewayV2Binding = yield* RegisterApiGatewayV2Binding;
     const exportApi = yield* AWSBindings.withCredentials(agw2.exportApi);
     return Effect.fn(function* <A extends Api>(api: A) {
       const ApiId = yield* api.apiId;

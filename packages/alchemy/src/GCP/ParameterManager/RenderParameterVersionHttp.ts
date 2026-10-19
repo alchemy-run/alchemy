@@ -15,12 +15,13 @@ import { RenderParameterVersion } from "./RenderParameterVersion.ts";
 export const RenderParameterVersionHttp = Layer.effect(
   RenderParameterVersion,
   Effect.gen(function* () {
+    const bind = yield* GCPBindings.Bind;
     const render = yield* GCPBindings.withCredentials(
       parametermanager.renderProjectsLocationsParametersVersions,
     );
     return Effect.fn(function* (version: ParametersVersion) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* GCPBindings.bind`GCP.ParameterManager.RenderParameterVersion(${version})`({
+        yield* bind`GCP.ParameterManager.RenderParameterVersion(${version})`({
           // Parameter Manager has no resource-level IAM; an IAM Condition on
           // the version name scopes the project grant to this version.
           iam: [

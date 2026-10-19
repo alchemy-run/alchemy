@@ -114,11 +114,12 @@ export const InvokeServiceHttp: Layer.Layer<InvokeService, never, HttpClient.Htt
   Layer.effect(
     InvokeService,
     Effect.gen(function* () {
+      const bind = yield* GCPBindings.Bind;
       const http = yield* HttpClient.HttpClient;
       return Effect.fn(function* <T extends Service>(service: T) {
         yield* GCPBindings.requireServiceAccountHost("GCP.Run.InvokeService");
         if (!globalThis.__ALCHEMY_RUNTIME__) {
-          yield* GCPBindings.bind`GCP.Run.InvokeService(${service})`({
+          yield* bind`GCP.Run.InvokeService(${service})`({
             iam: [grantFor({ role: "roles/run.invoker", on: "run.service" }, service.name)],
           });
         }

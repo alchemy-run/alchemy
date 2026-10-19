@@ -14,12 +14,13 @@ import type { PlatformsPolicy } from "./PlatformsPolicy.ts";
 export const GetPlatformsPolicyHttp = Layer.effect(
   GetPlatformsPolicy,
   Effect.gen(function* () {
+    const bind = yield* GCPBindings.Bind;
     const getPolicy = yield* GCPBindings.withCredentials(
       binaryauthorization.getProjectsPlatformsPolicies,
     );
     return Effect.fn(function* (policy: PlatformsPolicy) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* GCPBindings.bind`GCP.BinaryAuthorization.GetPlatformsPolicy(${policy})`({
+        yield* bind`GCP.BinaryAuthorization.GetPlatformsPolicy(${policy})`({
           // Platform policies have no resource-level IAM.
           iam: [{ role: "roles/binaryauthorization.policyViewer" }],
         });

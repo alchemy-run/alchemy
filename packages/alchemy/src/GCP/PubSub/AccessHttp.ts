@@ -50,10 +50,11 @@ const decode = (received: pubsub.ReceivedMessage): PulledMessage => {
 };
 
 export const makeWriteTopicBinding = Effect.gen(function* () {
+  const bind = yield* GCPBindings.Bind;
   const publish = yield* GCPBindings.withCredentials(pubsub.publishProjectsTopics);
   return Effect.fn(function* (topic: Topic) {
     if (!globalThis.__ALCHEMY_RUNTIME__) {
-      yield* GCPBindings.bind`GCP.PubSub.WriteTopic(${topic})`({
+      yield* bind`GCP.PubSub.WriteTopic(${topic})`({
         iam: [grantFor(writeTopicGrant, topic.name)],
       });
     }
@@ -79,6 +80,7 @@ export const makeWriteTopicBinding = Effect.gen(function* () {
 });
 
 export const makeReadSubscriptionBinding = Effect.gen(function* () {
+  const bind = yield* GCPBindings.Bind;
   const pull = yield* GCPBindings.withCredentials(pubsub.pullProjectsSubscriptions);
   const acknowledge = yield* GCPBindings.withCredentials(pubsub.acknowledgeProjectsSubscriptions);
   const modifyAckDeadline = yield* GCPBindings.withCredentials(
@@ -86,7 +88,7 @@ export const makeReadSubscriptionBinding = Effect.gen(function* () {
   );
   return Effect.fn(function* (subscription: Subscription) {
     if (!globalThis.__ALCHEMY_RUNTIME__) {
-      yield* GCPBindings.bind`GCP.PubSub.ReadSubscription(${subscription})`({
+      yield* bind`GCP.PubSub.ReadSubscription(${subscription})`({
         iam: [grantFor(readSubscriptionGrant, subscription.name)],
       });
     }

@@ -12,13 +12,14 @@ import { StartTagSyncTask, type StartTagSyncTaskRequest } from "./StartTagSyncTa
 export const StartTagSyncTaskHttp = Layer.effect(
   StartTagSyncTask,
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const startTagSyncTask = yield* AWSBindings.withCredentials(resourcegroups.startTagSyncTask);
 
     return Effect.fn(function* <R extends Role>(group: Group, syncRole: R) {
       const GroupName = yield* group.groupName;
       const RoleArn = yield* syncRole.roleArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`AWS.ResourceGroups.StartTagSyncTask(${group}, ${syncRole})`({
+        yield* bind`AWS.ResourceGroups.StartTagSyncTask(${group}, ${syncRole})`({
           policyStatements: [
             {
               Effect: "Allow",

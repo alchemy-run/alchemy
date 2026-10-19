@@ -50,6 +50,7 @@ export const makeFleetWiseResourceHttpBinding = <
   resources: (resource: Res) => (OutputType<string> | string)[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     // Capture the client in the FleetWise home region: yielding an
     // operation captures its services (region, credentials, HTTP client)
     // once, so the pin must wrap the capture, not the later calls.
@@ -58,7 +59,7 @@ export const makeFleetWiseResourceHttpBinding = <
     return Effect.fn(function* (resource: Res) {
       const Identifier = yield* options.identifier(resource);
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}(${resource})`({
+        yield* bind`${options.tag}(${resource})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -98,13 +99,14 @@ export const makeFleetWiseAccountHttpBinding = <I, A, E, R>(options: {
   resources?: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     // See makeFleetWiseResourceHttpBinding: the region pin wraps the
     // service capture, not the later calls.
     const op = yield* options.operation.pipe(inFleetWiseRegion, AWSBindings.withCredentials);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}()`({
+        yield* bind`${options.tag}()`({
           policyStatements: [
             {
               Effect: "Allow",

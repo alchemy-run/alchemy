@@ -15,12 +15,13 @@ import type { WorkerPool } from "./WorkerPool.ts";
 export const GetWorkerPoolHttp = Layer.effect(
   GetWorkerPool,
   Effect.gen(function* () {
+    const bind = yield* GCPBindings.Bind;
     const getProjectsLocationsWorkerPools = yield* GCPBindings.withCredentials(
       cloudrun.getProjectsLocationsWorkerPools,
     );
     return Effect.fn(function* <T extends WorkerPool>(pool: T) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* GCPBindings.bind`GCP.Run.GetWorkerPool(${pool})`({
+        yield* bind`GCP.Run.GetWorkerPool(${pool})`({
           iam: [grantFor({ role: "roles/run.viewer", on: "run.workerPool" }, pool.name)],
         });
       }

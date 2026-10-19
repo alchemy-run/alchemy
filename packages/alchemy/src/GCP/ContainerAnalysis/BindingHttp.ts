@@ -14,10 +14,11 @@ export const makeNoteHttpBinding = <I extends { name?: string }, A, E>(options: 
   operation: GcpHttpOp<I, A, E>;
 }) =>
   Effect.gen(function* () {
+    const bind = yield* GCPBindings.Bind;
     const run = yield* GCPBindings.withCredentials(options.operation);
     return Effect.fn(function* (note: Note) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* GCPBindings.bind`${options.tag}(${note})`({
+        yield* bind`${options.tag}(${note})`({
           iam: [grantFor(options.iam, note.name)],
         });
       }
@@ -37,10 +38,11 @@ export const makeOccurrenceHttpBinding = <I extends { name?: string }, A, E>(opt
   operation: GcpHttpOp<I, A, E>;
 }) =>
   Effect.gen(function* () {
+    const bind = yield* GCPBindings.Bind;
     const run = yield* GCPBindings.withCredentials(options.operation);
     return Effect.fn(function* (occurrence: Occurrence) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* GCPBindings.bind`${options.tag}(${occurrence})`({
+        yield* bind`${options.tag}(${occurrence})`({
           iam: [grantFor(options.iam, occurrence.name)],
         });
       }

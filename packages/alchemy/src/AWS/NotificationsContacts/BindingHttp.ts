@@ -40,13 +40,14 @@ export const makeEmailContactHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* options.operation.pipe(pinContactsRegion, AWSBindings.withCredentials);
 
     return Effect.fn(function* (contact: EmailContact) {
       // Output yields a DEFERRED effect — resolve again per invocation below.
       const ContactArn = yield* contact.emailContactArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}(${contact})`({
+        yield* bind`${options.tag}(${contact})`({
           policyStatements: [
             {
               Effect: "Allow",

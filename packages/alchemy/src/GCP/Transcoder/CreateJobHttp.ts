@@ -15,12 +15,13 @@ import type { JobTemplate } from "./JobTemplate.ts";
 export const CreateJobHttp = Layer.effect(
   CreateJob,
   Effect.gen(function* () {
+    const bind = yield* GCPBindings.Bind;
     const createProjectsLocationsJobs = yield* GCPBindings.withCredentials(
       transcoder.createProjectsLocationsJobs,
     );
     return Effect.fn(function* (template: JobTemplate) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* GCPBindings.bind`GCP.Transcoder.CreateJob(${template})`({
+        yield* bind`GCP.Transcoder.CreateJob(${template})`({
           // Narrowest predefined role with transcoder.jobs.create; Transcoder
           // has no resource-level IAM, so this is a project grant.
           iam: [{ role: "roles/transcoder.editor" }],

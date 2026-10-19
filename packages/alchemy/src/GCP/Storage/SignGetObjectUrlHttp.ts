@@ -49,6 +49,7 @@ const timestamps = (millis: number) => {
 export const SignGetObjectUrlHttp = Layer.effect(
   SignGetObjectUrl,
   Effect.gen(function* () {
+    const bind = yield* GCPBindings.Bind;
     const http = yield* HttpClient.HttpClient;
     const signBlob = yield* GCPBindings.withCredentials(
       iamcredentials.signBlobProjectsServiceAccounts,
@@ -84,7 +85,7 @@ export const SignGetObjectUrlHttp = Layer.effect(
     return Effect.fn(function* (bucket: Bucket) {
       yield* GCPBindings.requireServiceAccountHost("GCP.Storage.SignGetObjectUrl");
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* GCPBindings.bind`GCP.Storage.SignGetObjectUrl(${bucket})`({
+        yield* bind`GCP.Storage.SignGetObjectUrl(${bucket})`({
           iam: [
             // A signed URL carries the signer's own object permissions.
             grantFor(

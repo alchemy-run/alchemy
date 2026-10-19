@@ -12,6 +12,7 @@ import {
 export const GetParametersHttp = Layer.effect(
   GetParameters,
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const getParameters = yield* AWSBindings.withCredentials(SSM.getParameters);
 
     return Effect.fn(function* (...parameters: GetParametersParameters) {
@@ -25,7 +26,7 @@ export const GetParametersHttp = Layer.effect(
         // Sort by LogicalId so the binding identity (SID + ARN list) is
         // deterministic regardless of argument order.
         const sorted = [...parameters].sort((a, b) => a.LogicalId.localeCompare(b.LogicalId));
-        yield* AWSBindings.bind`AWS.SSM.GetParameters(${sorted})`({
+        yield* bind`AWS.SSM.GetParameters(${sorted})`({
           policyStatements: [
             {
               Effect: "Allow",

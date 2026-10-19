@@ -14,6 +14,7 @@ import type { InstrumentationConfiguration } from "./InstrumentationConfiguratio
 export const GetInstrumentationConfigurationStatusHttp = Layer.effect(
   GetInstrumentationConfigurationStatus,
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(appsignals.getInstrumentationConfigurationStatus);
     const tag = "AWS.ApplicationSignals.GetInstrumentationConfigurationStatus";
 
@@ -24,7 +25,7 @@ export const GetInstrumentationConfigurationStatusHttp = Layer.effect(
       const SignalType = yield* configuration.signalType;
       const LocationHash = yield* configuration.locationHash;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${tag}(${configuration})`({
+        yield* bind`${tag}(${configuration})`({
           policyStatements: [
             {
               Effect: "Allow",

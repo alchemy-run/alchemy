@@ -44,12 +44,13 @@ export const makeACMPCAHttpBinding = <Req extends { CertificateAuthorityArn: str
   options: ACMPCAHttpBindingOptions<Req, A, E, R>,
 ) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const operation = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (certificateAuthority: CertificateAuthority) {
       const Arn = yield* certificateAuthority.certificateAuthorityArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`AWS.ACMPCA.${options.action}(${certificateAuthority})`({
+        yield* bind`AWS.ACMPCA.${options.action}(${certificateAuthority})`({
           policyStatements: [
             {
               Effect: "Allow",

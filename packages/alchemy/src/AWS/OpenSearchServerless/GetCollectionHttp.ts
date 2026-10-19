@@ -12,12 +12,13 @@ import { GetCollection } from "./GetCollection.ts";
 export const GetCollectionHttp = Layer.effect(
   GetCollection,
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(aoss.batchGetCollection);
 
     return Effect.fn(function* (collection: Collection) {
       const CollectionId = yield* collection.collectionId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`AWS.OpenSearchServerless.GetCollection(${collection})`({
+        yield* bind`AWS.OpenSearchServerless.GetCollection(${collection})`({
           policyStatements: [
             {
               Effect: "Allow",

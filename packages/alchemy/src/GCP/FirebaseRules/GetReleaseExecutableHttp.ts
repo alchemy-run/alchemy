@@ -18,12 +18,13 @@ import type { Release } from "./Release.ts";
 export const GetReleaseExecutableHttp = Layer.effect(
   GetReleaseExecutable,
   Effect.gen(function* () {
+    const bind = yield* GCPBindings.Bind;
     const getExecutableProjectsReleases = yield* GCPBindings.withCredentials(
       firebaserules.getExecutableProjectsReleases,
     );
     return Effect.fn(function* (release: Release) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* GCPBindings.bind`GCP.FirebaseRules.GetReleaseExecutable(${release})`({
+        yield* bind`GCP.FirebaseRules.GetReleaseExecutable(${release})`({
           iam: [{ role: "roles/firebaserules.admin" }],
         });
       }

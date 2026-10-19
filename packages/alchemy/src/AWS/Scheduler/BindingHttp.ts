@@ -90,6 +90,7 @@ export const makeScheduleGroupScopedHttpBinding = <
   resourceScope?: "group" | "all";
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (group?: ScheduleGroup) {
@@ -99,7 +100,7 @@ export const makeScheduleGroupScopedHttpBinding = <
           options.resourceScope === "all"
             ? yield* allSchedulesArnPattern
             : yield* scheduleArnPattern(group);
-        yield* AWSBindings.bind`${options.tag}(${group ?? "default"})`({
+        yield* bind`${options.tag}(${group ?? "default"})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -148,6 +149,7 @@ export const makeScheduleWriteHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* <Ro extends Role>(executionRole: Ro, group?: ScheduleGroup) {
@@ -155,7 +157,7 @@ export const makeScheduleWriteHttpBinding = <
       const GroupName = group ? yield* group.scheduleGroupName : undefined;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const pattern = yield* scheduleArnPattern(group);
-        yield* AWSBindings.bind`${options.tag}(${executionRole}, ${group ?? "default"})`({
+        yield* bind`${options.tag}(${executionRole}, ${group ?? "default"})`({
           policyStatements: [
             {
               Effect: "Allow",

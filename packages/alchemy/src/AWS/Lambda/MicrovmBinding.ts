@@ -115,7 +115,7 @@ const imagePolicyStatements = <Req, Res, Err, Self>(
 
 /**
  * Build a MicroVM runtime binding bound to a {@link MicrovmImage}. At deploy it
- * grants the IAM statements to the host via `AWSBindings.bind`: the host's
+ * grants the IAM statements to the host via `AWSBindings.Bind`: the host's
  * own role, or the Role Alchemy creates for it. At runtime it calls the
  * distilled operation resolved with `AWSBindings.withCredentials`, signing in
  * the image's region on a host with a created key.
@@ -126,6 +126,7 @@ export const makeImageBinding = <Req, Res, Err, Self>(
   Layer.effect(
     options.binding as any,
     Effect.gen(function* () {
+      const bind = yield* AWSBindings.Bind;
       return Effect.fn(function* (image: MicrovmImage) {
         // Accessors (registered on the host at deploy, resolved at runtime).
         const imageArn = yield* image.imageArn;
@@ -139,7 +140,7 @@ export const makeImageBinding = <Req, Res, Err, Self>(
         );
 
         if (!globalThis.__ALCHEMY_RUNTIME__) {
-          yield* AWSBindings.bind`AWS.Lambda.${options.name}(${image})`({
+          yield* bind`AWS.Lambda.${options.name}(${image})`({
             policyStatements: imagePolicyStatements(image, options),
           });
         }
@@ -178,10 +179,11 @@ export const makeAccountBinding = <Req, Res, Err, Self>(
   Layer.effect(
     options.binding as any,
     Effect.gen(function* () {
+      const bind = yield* AWSBindings.Bind;
       const run = yield* AWSBindings.withCredentials(options.operation);
       return Effect.fn(function* () {
         if (!globalThis.__ALCHEMY_RUNTIME__) {
-          yield* AWSBindings.bind`AWS.Lambda.${options.name}()`({
+          yield* bind`AWS.Lambda.${options.name}()`({
             policyStatements: [{ Effect: "Allow", Action: options.actions, Resource: ["*"] }],
           });
         }

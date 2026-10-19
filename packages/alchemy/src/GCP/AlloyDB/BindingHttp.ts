@@ -16,10 +16,11 @@ export const makeAlloyDbClusterHttpBinding = <I extends { name?: string }, A, E>
   operation: GcpHttpOp<I, A, E>;
 }) =>
   Effect.gen(function* () {
+    const bind = yield* GCPBindings.Bind;
     const run = yield* GCPBindings.withCredentials(options.operation);
     return Effect.fn(function* (cluster: Cluster) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* GCPBindings.bind`${options.tag}(${cluster})`({
+        yield* bind`${options.tag}(${cluster})`({
           iam: [grantFor(options.iam, cluster.name)],
         });
       }
@@ -41,10 +42,11 @@ export const makeAlloyDbInstanceHttpBinding = <I extends { name?: string }, A, E
   operation: GcpHttpOp<I, A, E>;
 }) =>
   Effect.gen(function* () {
+    const bind = yield* GCPBindings.Bind;
     const run = yield* GCPBindings.withCredentials(options.operation);
     return Effect.fn(function* (instance: Instance) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* GCPBindings.bind`${options.tag}(${instance})`({
+        yield* bind`${options.tag}(${instance})`({
           iam: [grantFor(options.iam, instance.name)],
         });
       }
@@ -66,10 +68,11 @@ export const makeAlloyDbBackupHttpBinding = <I extends { name?: string }, A, E>(
   operation: GcpHttpOp<I, A, E>;
 }) =>
   Effect.gen(function* () {
+    const bind = yield* GCPBindings.Bind;
     const run = yield* GCPBindings.withCredentials(options.operation);
     return Effect.fn(function* (backup: Backup) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* GCPBindings.bind`${options.tag}(${backup})`({
+        yield* bind`${options.tag}(${backup})`({
           iam: [grantFor(options.iam, backup.name)],
         });
       }
@@ -91,10 +94,11 @@ export const makeAlloyDbUserHttpBinding = <I extends { name?: string }, A, E>(op
   operation: GcpHttpOp<I, A, E>;
 }) =>
   Effect.gen(function* () {
+    const bind = yield* GCPBindings.Bind;
     const run = yield* GCPBindings.withCredentials(options.operation);
     return Effect.fn(function* (user: ClustersUser) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* GCPBindings.bind`${options.tag}(${user})`({
+        yield* bind`${options.tag}(${user})`({
           iam: [grantFor(options.iam, user.name)],
         });
       }
@@ -114,10 +118,11 @@ export const makeAlloyDbConnectionInfoHttpBinding = <I extends { parent?: string
   operation: GcpHttpOp<I, A, E>;
 }) =>
   Effect.gen(function* () {
+    const bind = yield* GCPBindings.Bind;
     const run = yield* GCPBindings.withCredentials(options.operation);
     return Effect.fn(function* (instance: Instance) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* GCPBindings.bind`${options.tag}(${instance})`({
+        yield* bind`${options.tag}(${instance})`({
           iam: [grantFor(options.iam, instance.name)],
         });
       }

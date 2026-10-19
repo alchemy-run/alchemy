@@ -29,6 +29,7 @@ import {
 import { Stack } from "../../Stack.ts";
 import { createInternalTags, createTagsList, hasAlchemyTags, hasTags } from "../../Tags.ts";
 import { toSeconds } from "../../Util/Duration.ts";
+import { roleHostBundle } from "../AWSBindings.ts";
 import type { Credentials } from "../Credentials.ts";
 import { buildAndPushEcrImage } from "../ECR/Image.ts";
 import { AWSEnvironment } from "../Environment.ts";
@@ -986,7 +987,7 @@ export const ServiceProvider = () =>
           plugins?: rolldown.RolldownPluginOption,
         ) {
           return yield* Bundle.build(
-            {
+            roleHostBundle({
               ...props.build?.input,
               input: entry,
               cwd,
@@ -1004,7 +1005,7 @@ export const ServiceProvider = () =>
                 ...props.build?.input?.resolve,
               },
               plugins: [props.build?.input?.plugins, plugins],
-            },
+            }),
             {
               ...props.build?.output,
               format: "esm",

@@ -41,12 +41,13 @@ export const makeExportHttpBinding = <I extends { ExportArn: string }, A, E, R>(
   operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (dataExport: Export) {
       const ExportArn = yield* dataExport.exportArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`AWS.BCMDataExports.${options.capability}(${dataExport})`({
+        yield* bind`AWS.BCMDataExports.${options.capability}(${dataExport})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -86,11 +87,12 @@ export const makeDataExportsAccountHttpBinding = <I extends object, A, E, R>(opt
   operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`AWS.BCMDataExports.${options.capability}()`({
+        yield* bind`AWS.BCMDataExports.${options.capability}()`({
           policyStatements: [
             {
               Effect: "Allow",

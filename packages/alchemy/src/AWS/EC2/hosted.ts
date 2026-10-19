@@ -15,6 +15,7 @@ import { createInternalTags, createTagsList, hasTags } from "../../Tags.ts";
 import { sha256 } from "../../Util/sha256.ts";
 import { zipCode } from "../../Util/zip.ts";
 import { Assets } from "../Assets.ts";
+import { roleHostBundle } from "../AWSBindings.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
 
@@ -169,7 +170,7 @@ export const createEc2HostedSupport = ({
       plugins?: rolldown.RolldownPluginOption,
     ) {
       return yield* Bundle.build(
-        {
+        roleHostBundle({
           ...props.build?.input,
           input: entry,
           cwd,
@@ -187,7 +188,7 @@ export const createEc2HostedSupport = ({
             ...props.build?.input?.resolve,
           },
           plugins: [props.build?.input?.plugins, plugins],
-        },
+        }),
         {
           ...props.build?.output,
           format: "esm",

@@ -9,6 +9,7 @@ import { SubmitJob, type SubmitJobRequest } from "./SubmitJob.ts";
 export const SubmitJobHttp = Layer.effect(
   SubmitJob,
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const submitJob = yield* AWSBindings.withCredentials(batch.submitJob);
 
     return Effect.fn(function* (queue: JobQueue, jobDefinition: JobDefinition) {
@@ -16,7 +17,7 @@ export const SubmitJobHttp = Layer.effect(
       const JobQueueArn = yield* queue.jobQueueArn;
       const JobDefinitionArn = yield* jobDefinition.jobDefinitionArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`AWS.Batch.SubmitJob(${queue}, ${jobDefinition})`({
+        yield* bind`AWS.Batch.SubmitJob(${queue}, ${jobDefinition})`({
           policyStatements: [
             {
               Effect: "Allow",

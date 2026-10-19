@@ -70,12 +70,13 @@ export const makeRedisBinding = <Client>(options: {
   makeClient: (url: Url) => Client;
 }) =>
   Effect.gen(function* () {
+    const bind = yield* GCPBindings.Bind;
     const getAuthString = yield* GCPBindings.withCredentials(
       redis.getAuthStringProjectsLocationsInstances,
     );
     return Effect.fn(function* (instance: Instance) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* GCPBindings.bind`${options.tag}(${instance})`({ iam: [authGrantOf(instance)] });
+        yield* bind`${options.tag}(${instance})`({ iam: [authGrantOf(instance)] });
       }
       // A composed Output's binding key is its inspect string, which embeds
       // the mapping functions' source — and that differs between the

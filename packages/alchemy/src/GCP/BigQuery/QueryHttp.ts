@@ -15,10 +15,11 @@ import { Query, type QueryRequest } from "./Query.ts";
 export const QueryHttp = Layer.effect(
   Query,
   Effect.gen(function* () {
+    const bind = yield* GCPBindings.Bind;
     const queryJobs = yield* GCPBindings.withCredentials(bigquery.queryJobs);
     return Effect.fn(function* (dataset: Dataset) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* GCPBindings.bind`GCP.BigQuery.Query(${dataset})`({
+        yield* bind`GCP.BigQuery.Query(${dataset})`({
           iam: [
             // bigquery.jobs.create is only grantable on the project.
             { role: "roles/bigquery.jobUser" },

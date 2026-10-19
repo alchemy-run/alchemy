@@ -15,12 +15,13 @@ import { GetAttestor, type GetAttestorRequest } from "./GetAttestor.ts";
 export const GetAttestorHttp = Layer.effect(
   GetAttestor,
   Effect.gen(function* () {
+    const bind = yield* GCPBindings.Bind;
     const getAttestor = yield* GCPBindings.withCredentials(
       binaryauthorization.getProjectsAttestors,
     );
     return Effect.fn(function* (attestor: Attestor) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* GCPBindings.bind`GCP.BinaryAuthorization.GetAttestor(${attestor})`({
+        yield* bind`GCP.BinaryAuthorization.GetAttestor(${attestor})`({
           iam: [
             grantFor(
               {

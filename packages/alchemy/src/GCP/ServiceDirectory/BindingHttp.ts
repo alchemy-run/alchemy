@@ -13,10 +13,11 @@ export const makeEndpointHttpBinding = <I extends { name?: string }, A, E>(optio
   operation: GcpHttpOp<I, A, E>;
 }) =>
   Effect.gen(function* () {
+    const bind = yield* GCPBindings.Bind;
     const run = yield* GCPBindings.withCredentials(options.operation);
     return Effect.fn(function* (endpoint: Endpoint) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* GCPBindings.bind`${options.tag}(${endpoint})`({
+        yield* bind`${options.tag}(${endpoint})`({
           iam: [grantFor(options.iam, endpoint.service)],
         });
       }

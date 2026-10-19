@@ -15,12 +15,13 @@ import type { Repository } from "./Repository.ts";
 export const ListDockerImagesHttp = Layer.effect(
   ListDockerImages,
   Effect.gen(function* () {
+    const bind = yield* GCPBindings.Bind;
     const listDockerImages = yield* GCPBindings.withCredentials(
       artifactregistry.listProjectsLocationsRepositoriesDockerImages,
     );
     return Effect.fn(function* (repository: Repository) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* GCPBindings.bind`GCP.ArtifactRegistry.ListDockerImages(${repository})`({
+        yield* bind`GCP.ArtifactRegistry.ListDockerImages(${repository})`({
           iam: [
             grantFor(
               {

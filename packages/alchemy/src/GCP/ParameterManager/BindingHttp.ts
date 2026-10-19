@@ -14,10 +14,11 @@ export const makeParameterVersionHttpBinding = <I, A, E, Req = void>(options: {
   toInput: (versionName: string, request: Req | undefined) => I;
 }) =>
   Effect.gen(function* () {
+    const bind = yield* GCPBindings.Bind;
     const run = yield* GCPBindings.withCredentials(options.operation);
     return Effect.fn(function* (version: ParametersVersion) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* GCPBindings.bind`${options.tag}(${version})`({
+        yield* bind`${options.tag}(${version})`({
           iam: [grantFor(options.iam, version.name)],
         });
       }

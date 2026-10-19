@@ -14,12 +14,13 @@ import type { TransferConfig } from "./TransferConfig.ts";
 export const StartManualRunsHttp = Layer.effect(
   StartManualRuns,
   Effect.gen(function* () {
+    const bind = yield* GCPBindings.Bind;
     const startManualRunsProjectsLocationsTransferConfigs = yield* GCPBindings.withCredentials(
       bqdt.startManualRunsProjectsLocationsTransferConfigs,
     );
     return Effect.fn(function* (config: TransferConfig) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* GCPBindings.bind`GCP.BigQueryDataTransfer.StartManualRuns(${config})`({
+        yield* bind`GCP.BigQueryDataTransfer.StartManualRuns(${config})`({
           // bigquery.transfers.update is in no narrower predefined role, and
           // transfer configs have no resource-level IAM, so this is a project
           // grant (see StartManualRuns JSDoc).

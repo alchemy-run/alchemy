@@ -13,10 +13,11 @@ export const makeConnectionHttpBinding = <I extends { name?: string }, A, E>(opt
   operation: GcpHttpOp<I, A, E>;
 }) =>
   Effect.gen(function* () {
+    const bind = yield* GCPBindings.Bind;
     const run = yield* GCPBindings.withCredentials(options.operation);
     return Effect.fn(function* (connection: Connection) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* GCPBindings.bind`${options.tag}(${connection})`({
+        yield* bind`${options.tag}(${connection})`({
           iam: [grantFor(options.iam, connection.name)],
         });
       }

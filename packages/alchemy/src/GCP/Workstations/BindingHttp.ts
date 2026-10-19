@@ -15,10 +15,11 @@ export const makeClusterHttpBinding = <I extends { name?: string }, A, E>(option
   operation: GcpHttpOp<I, A, E>;
 }) =>
   Effect.gen(function* () {
+    const bind = yield* GCPBindings.Bind;
     const run = yield* GCPBindings.withCredentials(options.operation);
     return Effect.fn(function* (cluster: WorkstationCluster) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* GCPBindings.bind`${options.tag}(${cluster})`({
+        yield* bind`${options.tag}(${cluster})`({
           iam: [grantFor(options.iam, cluster.name)],
         });
       }
@@ -40,10 +41,11 @@ export const makeConfigHttpBinding = <I extends { name?: string }, A, E>(options
   operation: GcpHttpOp<I, A, E>;
 }) =>
   Effect.gen(function* () {
+    const bind = yield* GCPBindings.Bind;
     const run = yield* GCPBindings.withCredentials(options.operation);
     return Effect.fn(function* (config: WorkstationClustersWorkstationConfig) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* GCPBindings.bind`${options.tag}(${config})`({
+        yield* bind`${options.tag}(${config})`({
           iam: [grantFor(options.iam, config.name)],
         });
       }
@@ -65,10 +67,11 @@ export const makeWorkstationHttpBinding = <I extends { name?: string }, A, E>(op
   operation: GcpHttpOp<I, A, E>;
 }) =>
   Effect.gen(function* () {
+    const bind = yield* GCPBindings.Bind;
     const run = yield* GCPBindings.withCredentials(options.operation);
     return Effect.fn(function* (workstation: WorkstationClustersWorkstationConfigsWorkstation) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* GCPBindings.bind`${options.tag}(${workstation})`({
+        yield* bind`${options.tag}(${workstation})`({
           iam: [grantFor(options.iam, workstation.name)],
         });
       }
@@ -94,10 +97,11 @@ export const makeGenerateAccessTokenHttpBinding = <
   operation: GcpHttpOp<I, A, E>;
 }) =>
   Effect.gen(function* () {
+    const bind = yield* GCPBindings.Bind;
     const run = yield* GCPBindings.withCredentials(options.operation);
     return Effect.fn(function* (workstation: WorkstationClustersWorkstationConfigsWorkstation) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* GCPBindings.bind`${options.tag}(${workstation})`({
+        yield* bind`${options.tag}(${workstation})`({
           iam: [grantFor(options.iam, workstation.name)],
         });
       }

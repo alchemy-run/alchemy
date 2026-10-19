@@ -15,6 +15,7 @@ import type { Secret } from "./Secret.ts";
 export const BatchGetSecretValueHttp = Layer.effect(
   BatchGetSecretValue,
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const batchGetSecretValue = yield* AWSBindings.withCredentials(
       secretsmanager.batchGetSecretValue,
     );
@@ -25,7 +26,7 @@ export const BatchGetSecretValueHttp = Layer.effect(
         SecretIds.push(yield* secret.secretArn);
       }
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`AWS.SecretsManager.BatchGetSecretValue()`({
+        yield* bind`AWS.SecretsManager.BatchGetSecretValue()`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -35,7 +36,7 @@ export const BatchGetSecretValueHttp = Layer.effect(
           ],
         });
         for (const secret of secrets) {
-          yield* AWSBindings.bind`AWS.SecretsManager.BatchGetSecretValue(${secret})`({
+          yield* bind`AWS.SecretsManager.BatchGetSecretValue(${secret})`({
             policyStatements: [
               {
                 Effect: "Allow",

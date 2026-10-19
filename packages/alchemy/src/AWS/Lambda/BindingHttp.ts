@@ -11,7 +11,7 @@ import type { Function } from "./Function.ts";
  * the builders below. Everything except the operation, the IAM action list,
  * and the granted ARNs is boilerplate. How the host reaches AWS (native vs
  * external, see `AWSBindings.ts`) is handled by `AWSBindings.withCredentials`
- * and `AWSBindings.bind`.
+ * and `AWSBindings.Bind`.
  */
 
 /** Region segment of an AWS ARN (`arn:partition:service:<region>:...`). */
@@ -38,6 +38,7 @@ export const makeFunctionHttpBinding = <I extends { FunctionName?: string }, A, 
   resources?: (func: Function) => (string | OutputType<string>)[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     return Effect.fn(function* (func: Function) {
       const FunctionArn = yield* func.functionArn;
       // resolved per bind because a host with a created key signs in the function's own region
@@ -46,7 +47,7 @@ export const makeFunctionHttpBinding = <I extends { FunctionName?: string }, A, 
         Effect.succeed(Effect.map(FunctionArn, regionFromArn)),
       );
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}(${func})`({
+        yield* bind`${options.tag}(${func})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -80,11 +81,12 @@ export const makeLambdaAccountHttpBinding = <I, A, E, R>(options: {
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}()`({
+        yield* bind`${options.tag}()`({
           policyStatements: [
             {
               Effect: "Allow",

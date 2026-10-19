@@ -2,7 +2,7 @@ import * as DynamoDB from "@distilled.cloud/aws/dynamodb";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as AWSBindings from "../AWSBindings.ts";
-import { grantTables, tablesRegion } from "./BindingHttp.ts";
+import { GrantTables, tablesRegion } from "./BindingHttp.ts";
 import {
   RestoreTableToPointInTime,
   type RestoreTableToPointInTimeRequest,
@@ -12,6 +12,7 @@ import type { Table } from "./Table.ts";
 export const RestoreTableToPointInTimeHttp = Layer.effect(
   RestoreTableToPointInTime,
   Effect.gen(function* () {
+    const grantTables = yield* GrantTables;
     return Effect.fn(function* <From extends Table, To extends Table>(from: From, to: To) {
       const SourceTableName = yield* from.tableName;
       const TargetTableName = yield* to.tableName;

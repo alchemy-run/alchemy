@@ -47,6 +47,7 @@ interface SessionCache {
 export const GetConfigurationHttp = Layer.effect(
   GetConfiguration,
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const startSession = yield* AWSBindings.withCredentials(
       appconfigdata.startConfigurationSession,
     );
@@ -68,7 +69,7 @@ export const GetConfigurationHttp = Layer.effect(
           accountId: string;
           region: string;
         }>;
-        yield* AWSBindings.bind`AWS.AppConfig.GetConfiguration(${application}, ${environment}, ${configurationProfile})`(
+        yield* bind`AWS.AppConfig.GetConfiguration(${application}, ${environment}, ${configurationProfile})`(
           {
             policyStatements: [
               {

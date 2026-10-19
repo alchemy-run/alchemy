@@ -27,10 +27,11 @@ export const makeGitRepositoryLinkHttpBinding = <
   >;
 }) =>
   Effect.gen(function* () {
+    const bind = yield* GCPBindings.Bind;
     const run = yield* GCPBindings.withCredentials(options.operation);
     return Effect.fn(function* <T extends ConnectionsGitRepositoryLink>(link: T) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* GCPBindings.bind`${options.tag}(${link})`({
+        yield* bind`${options.tag}(${link})`({
           iam: [grantFor(options.iam, link.name)],
         });
       }

@@ -24,10 +24,11 @@ export const makeCollectorHttpBinding = <I extends { name?: string }, A, E>(opti
     ((input: I) => Effect.Effect<A, E, Credentials | HttpClient.HttpClient>);
 }) =>
   Effect.gen(function* () {
+    const bind = yield* GCPBindings.Bind;
     const run = yield* GCPBindings.withCredentials(options.operation);
     return Effect.fn(function* (collector: Collector) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* GCPBindings.bind`${options.tag}(${collector})`({
+        yield* bind`${options.tag}(${collector})`({
           iam: [grantFor(options.iam, collector.name)],
         });
       }

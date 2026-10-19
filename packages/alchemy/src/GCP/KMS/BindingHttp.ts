@@ -13,10 +13,11 @@ export const makeCryptoKeyHttpBinding = <I extends { name?: string }, A, E>(opti
   operation: GcpHttpOp<I, A, E>;
 }) =>
   Effect.gen(function* () {
+    const bind = yield* GCPBindings.Bind;
     const run = yield* GCPBindings.withCredentials(options.operation);
     return Effect.fn(function* (key: CryptoKey) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* GCPBindings.bind`${options.tag}(${key})`({ iam: [grantFor(options.iam, key.name)] });
+        yield* bind`${options.tag}(${key})`({ iam: [grantFor(options.iam, key.name)] });
       }
       const name = yield* key.name;
       return Effect.fn(`${options.tag}(${key.LogicalId})`)(function* (request?: Omit<I, "name">) {

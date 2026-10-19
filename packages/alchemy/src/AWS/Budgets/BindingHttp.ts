@@ -37,13 +37,14 @@ export const makeBudgetHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (budget: Budget) {
       const AccountId = yield* budget.accountId;
       const BudgetName = yield* budget.budgetName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}(${budget})`({
+        yield* bind`${options.tag}(${budget})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -85,6 +86,7 @@ export const makeBudgetActionHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (action: BudgetAction) {
@@ -92,7 +94,7 @@ export const makeBudgetActionHttpBinding = <
       const BudgetName = yield* action.budgetName;
       const ActionId = yield* action.actionId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}(${action})`({
+        yield* bind`${options.tag}(${action})`({
           policyStatements: [
             {
               Effect: "Allow",

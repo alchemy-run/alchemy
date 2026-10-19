@@ -50,6 +50,7 @@ export const makeAppIntegrationsHttpBinding = <
   dependentActions?: string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (resource: Res) {
@@ -59,7 +60,7 @@ export const makeAppIntegrationsHttpBinding = <
           accountId: string;
           region: string;
         }>;
-        yield* AWSBindings.bind`AWS.AppIntegrations.${options.name}(${resource})`({
+        yield* bind`AWS.AppIntegrations.${options.name}(${resource})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -105,11 +106,12 @@ export const makeAppIntegrationsAccountHttpBinding = <WireReq, Out, Err, OpR>(op
   iamActions: string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`AWS.AppIntegrations.${options.name}()`({
+        yield* bind`AWS.AppIntegrations.${options.name}()`({
           policyStatements: [
             {
               Effect: "Allow",

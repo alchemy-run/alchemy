@@ -14,6 +14,7 @@ import type { PolicyStore } from "./PolicyStore.ts";
 export const IsAuthorizedHttp = Layer.effect(
   IsAuthorized,
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const isAuthorized = yield* AWSBindings.withCredentials(AVP.isAuthorized);
     const isAuthorizedWithToken = yield* AWSBindings.withCredentials(AVP.isAuthorizedWithToken);
     const batchIsAuthorized = yield* AWSBindings.withCredentials(AVP.batchIsAuthorized);
@@ -24,7 +25,7 @@ export const IsAuthorizedHttp = Layer.effect(
     return Effect.fn(function* <S extends PolicyStore>(store: S) {
       const PolicyStoreId = yield* store.policyStoreId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`AWS.VerifiedPermissions.IsAuthorized(${store})`({
+        yield* bind`AWS.VerifiedPermissions.IsAuthorized(${store})`({
           policyStatements: [
             {
               Effect: "Allow",

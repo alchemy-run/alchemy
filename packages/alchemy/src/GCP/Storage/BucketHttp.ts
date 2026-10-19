@@ -2,7 +2,7 @@ import * as storage from "@distilled.cloud/gcp/storage_v1";
 import * as Effect from "effect/Effect";
 import * as GCPBindings from "../GCPBindings.ts";
 import type { Bucket } from "./Bucket.ts";
-import { grantOnBucket } from "./ObjectHttp.ts";
+import { GrantOnBucket } from "./ObjectHttp.ts";
 import { makeObjectMedia } from "./ObjectMedia.ts";
 import type { ReadBucketClient } from "./ReadBucket.ts";
 import type { WriteBucketClient } from "./WriteBucket.ts";
@@ -68,6 +68,7 @@ export const makeStorageBucketBinding = <Client>(options: {
   ) => Client;
 }) =>
   Effect.gen(function* () {
+    const grantOnBucket = yield* GrantOnBucket;
     const helpers = yield* makeStorageBucketHelpers;
     return Effect.fn(function* (bucket: Bucket) {
       yield* grantOnBucket(options.tag, bucket, options.role);

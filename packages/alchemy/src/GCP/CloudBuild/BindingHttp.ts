@@ -13,12 +13,13 @@ export const makeRepositoryHttpBinding = <I extends { repository: string }, A, E
   operation: GcpHttpOp<I, A, E> | ((input: I) => Effect.Effect<A, E>);
 }) =>
   Effect.gen(function* () {
+    const bind = yield* GCPBindings.Bind;
     const run = Effect.isEffect(options.operation)
       ? yield* options.operation as GcpHttpOp<I, A, E>
       : (options.operation as (input: I) => Effect.Effect<A, E>);
     return Effect.fn(function* <T extends Repository>(repository: T) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* GCPBindings.bind`${options.tag}(${repository})`({
+        yield* bind`${options.tag}(${repository})`({
           iam: [grantFor(options.iam, repository.name)],
         });
       }

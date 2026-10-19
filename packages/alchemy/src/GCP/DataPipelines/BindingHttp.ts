@@ -24,10 +24,11 @@ export const makePipelineHttpBinding = <I extends { name?: string }, A, E>(optio
     ((input: I) => Effect.Effect<A, E, Credentials | HttpClient.HttpClient>);
 }) =>
   Effect.gen(function* () {
+    const bind = yield* GCPBindings.Bind;
     const run = yield* GCPBindings.withCredentials(options.operation);
     return Effect.fn(function* (pipeline: Pipeline) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* GCPBindings.bind`${options.tag}(${pipeline})`({
+        yield* bind`${options.tag}(${pipeline})`({
           iam: [grantFor(options.iam, pipeline.name)],
         });
       }

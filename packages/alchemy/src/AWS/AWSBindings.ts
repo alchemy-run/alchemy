@@ -6,6 +6,7 @@ import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
+import type * as rolldown from "rolldown";
 import { AlchemyContext } from "../AlchemyContext.ts";
 import * as Binding from "../Binding.ts";
 import type { Input } from "../Input.ts";
@@ -32,15 +33,16 @@ import { CurrentRegion } from "./Region.ts";
  *   the deployer's credentials.
  *
  * Import it as a namespace. A binding resolves its operations with
- * {@link withCredentials} when its layer is built, and binds to the host with
- * {@link bind} behind its own `__ALCHEMY_RUNTIME__` guard:
+ * {@link withCredentials} and gets its `bind` from {@link Bind} when its layer
+ * is built, then binds behind its own `__ALCHEMY_RUNTIME__` guard:
  *
  * ```ts
  * Effect.gen(function* () {
  *   const sendMessage = yield* AWSBindings.withCredentials(sqs.sendMessage);
+ *   const bind = yield* AWSBindings.Bind;
  *   return Effect.fn(function* (queue: Queue) {
  *     if (!globalThis.__ALCHEMY_RUNTIME__) {
- *       yield* AWSBindings.bind`AWS.SQS.SendMessage(${queue})`({
+ *       yield* bind`AWS.SQS.SendMessage(${queue})`({
  *         policyStatements: [
  *           { Effect: "Allow", Action: ["sqs:SendMessage"], Resource: [queue.queueArn] },
  *         ],
@@ -66,9 +68,29 @@ export interface HostVpc {
   readonly securityGroupIds: Input<string[]>;
 }
 
+declare global {
+  /**
+   * `true` in a bundle built for a host that runs as an IAM role (Lambda, ECS, EC2, AppRunner, Batch, EKS), so
+   * `withCredentials` drops the created-key path from it.
+   */
+  var __ALCHEMY_AWS_ROLE_HOST__: boolean | undefined;
+}
+
+/**
+ * Build options for a bundle that runs on a host running as an IAM role (Lambda, ECS, EC2, AppRunner, Batch, EKS): defines
+ * `__ALCHEMY_AWS_ROLE_HOST__` so the bundler drops the created-key credentials path.
+ */
+export const roleHostBundle = (input: rolldown.InputOptions): rolldown.InputOptions => ({
+  ...input,
+  transform: {
+    ...input.transform,
+    define: { ...input.transform?.define, "globalThis.__ALCHEMY_AWS_ROLE_HOST__": "true" },
+  },
+});
+
 /**
  * Env vars holding the key Alchemy creates for a host that doesn't run as an
- * IAM role. Only {@link bind} sets them, and only on that path, so at
+ * IAM role. Only {@link Bind} sets them, and only on that path, so at
  * runtime their presence is the whole decision.
  */
 const KEY_ENV = {
@@ -125,74 +147,102 @@ type BindTarget = {
 const toOutput = (value: unknown) => (Output.isOutput(value) ? value : Output.literal(value));
 
 /**
- * Attach a binding to its host, labelled `Allow(<host>, <label>)`. Call it
- * behind a literal `if (!globalThis.__ALCHEMY_RUNTIME__)` so the bundler
- * drops it.
+ * The `bind` for a binding's layer: yield it while the layer is built, then
+ * call it from the returned function, behind a literal
+ * `if (!globalThis.__ALCHEMY_RUNTIME__)` so the bundler drops it. It attaches
+ * the binding to its host labelled `Allow(<host>, <label>)`:
+ *
+ * - a host that runs as an IAM role takes the statements on that role;
+ * - any other host gets an IAM User and AccessKey that may assume a Role;
+ *   the Role takes the statements and the key is bound into the host's env.
+ *
+ * ```ts
+ * Effect.gen(function* () {
+ *   const bind = yield* AWSBindings.Bind;
+ *   return Effect.fn(function* (queue: Queue) {
+ *     if (!globalThis.__ALCHEMY_RUNTIME__) {
+ *       yield* bind`AWS.SQS.SendMessage(${queue})`({ policyStatements: [ … ] });
+ *     }
+ *   });
+ * })
+ * ```
  */
-export const bind =
-  (label: TemplateStringsArray, ...args: unknown[]) =>
-  (data: HostBinding): Effect.Effect<void> =>
-    Effect.gen(function* () {
-      const host = yield* Binding.Host;
-      if (host === undefined) return;
+/** The signature {@link Bind} yields. */
+export type BindHost = (
+  label: TemplateStringsArray,
+  ...args: unknown[]
+) => (data: HostBinding) => Effect.Effect<void>;
 
-      if (runsAsRole(host)) {
-        return yield* (host as unknown as BindTarget).bind(
-          labelled("Allow", label),
-          host,
-          ...args,
-        )(data);
-      }
+// Bindings only bind at deploy (every call site is behind the same literal
+// guard), so a host bundle gets a no-op and drops the identity resources.
+const runtimeBind: BindHost = () => () => Effect.void;
 
-      // Declared from inside a binding: the stack deploying the host provides
-      // `AWS.Providers`, so they aren't the binding's requirement. The user may
-      // assume any role that trusts it; the role's trust policy restricts
-      // assumption to this user, which avoids a User↔Role ARN cycle.
-      const id = host.LogicalId;
-      const user = yield* User(`${id}User`, {
-        inlinePolicies: {
-          AssumeRole: {
-            Version: "2012-10-17",
-            Statement: [{ Effect: "Allow", Action: ["sts:AssumeRole"], Resource: ["*"] }],
-          },
-        },
-      }) as Effect.Effect<User>;
-      const accessKey = yield* AccessKey(`${id}AccessKey`, {
-        userName: user.userName,
-      }) as Effect.Effect<AccessKey>;
-      const role = yield* Role(`${id}Role`, {
-        assumeRolePolicyDocument: {
-          Version: "2012-10-17",
-          Statement: [
-            { Effect: "Allow", Principal: { AWS: user.userArn }, Action: ["sts:AssumeRole"] },
-          ],
-        },
-      }) as Effect.Effect<Role>;
-      if (data.policyStatements !== undefined && data.policyStatements.length > 0) {
-        yield* (role as unknown as BindTarget).bind(
-          labelled("Allow", label),
-          host,
-          ...args,
-        )({ policyStatements: data.policyStatements });
-      }
+export const Bind: Effect.Effect<BindHost> = globalThis.__ALCHEMY_RUNTIME__
+  ? Effect.succeed(runtimeBind)
+  : Effect.gen(function* () {
+      const IamUser = yield* User;
+      const IamAccessKey = yield* AccessKey;
+      const IamRole = yield* Role;
 
-      const runtime = (yield* CurrentRuntimeContext)!;
-      yield* runtime.set(KEY_ENV.accessKeyId, accessKey.accessKeyId);
-      yield* runtime.set(KEY_ENV.secretAccessKey, accessKey.secretAccessKey);
-      yield* runtime.set(KEY_ENV.roleArn, role.roleArn);
-      yield* runtime.set(
-        KEY_ENV.region,
-        Output.fromEffect(CurrentRegion.pipe(Effect.orDie)) as Output.Output<string>,
-      );
-      // Local dev: STS and the bound operations run on the emulator, reached
-      // via the same `AWS_ENDPOINT_URL` the emulator injects into Lambdas.
-      const context = yield* Effect.serviceOption(AlchemyContext);
-      if (Option.isSome(context) && context.value.dev) {
-        yield* runtime.set("AWS_ENDPOINT_URL", Output.literal(DEFAULT_LOCAL_ENDPOINT));
-      }
-      for (const [key, value] of Object.entries(data.env ?? {})) {
-        yield* runtime.set(key, toOutput(value));
-      }
+      return (label: TemplateStringsArray, ...args: unknown[]) =>
+        Effect.fn(function* (data: HostBinding) {
+          const host = yield* Binding.Host;
+          if (host === undefined) return;
+
+          if (runsAsRole(host)) {
+            return yield* (host as unknown as BindTarget).bind(
+              labelled("Allow", label),
+              host,
+              ...args,
+            )(data);
+          }
+
+          // The user may assume any role that trusts it; the role's trust policy
+          // restricts assumption to this user, which avoids a User↔Role ARN cycle.
+          const id = host.LogicalId;
+          const user = yield* IamUser(`${id}User`, {
+            inlinePolicies: {
+              AssumeRole: {
+                Version: "2012-10-17",
+                Statement: [{ Effect: "Allow", Action: ["sts:AssumeRole"], Resource: ["*"] }],
+              },
+            },
+          });
+          const accessKey = yield* IamAccessKey(`${id}AccessKey`, { userName: user.userName });
+          const role = yield* IamRole(`${id}Role`, {
+            assumeRolePolicyDocument: {
+              Version: "2012-10-17",
+              Statement: [
+                { Effect: "Allow", Principal: { AWS: user.userArn }, Action: ["sts:AssumeRole"] },
+              ],
+            },
+          });
+          if (data.policyStatements !== undefined && data.policyStatements.length > 0) {
+            yield* (role as unknown as BindTarget).bind(
+              labelled("Allow", label),
+              host,
+              ...args,
+            )({ policyStatements: data.policyStatements });
+          }
+
+          const runtime = (yield* CurrentRuntimeContext)!;
+          yield* runtime.set(KEY_ENV.accessKeyId, accessKey.accessKeyId);
+          yield* runtime.set(KEY_ENV.secretAccessKey, accessKey.secretAccessKey);
+          yield* runtime.set(KEY_ENV.roleArn, role.roleArn);
+          yield* runtime.set(
+            KEY_ENV.region,
+            Output.fromEffect(CurrentRegion.pipe(Effect.orDie)) as Output.Output<string>,
+          );
+          // Local dev: STS and the bound operations run on the emulator, reached
+          // via the same `AWS_ENDPOINT_URL` the emulator injects into Lambdas.
+          const context = yield* Effect.serviceOption(AlchemyContext);
+          if (Option.isSome(context) && context.value.dev) {
+            yield* runtime.set("AWS_ENDPOINT_URL", Output.literal(DEFAULT_LOCAL_ENDPOINT));
+          }
+          for (const [key, value] of Object.entries(data.env ?? {})) {
+            yield* runtime.set(key, toOutput(value));
+          }
+        });
     });
 
 /**
@@ -201,19 +251,17 @@ export const bind =
  * the internet, so this skips it. Call it behind a literal
  * `if (!globalThis.__ALCHEMY_RUNTIME__)`.
  */
-export const bindVpc =
-  (label: TemplateStringsArray, ...args: unknown[]) =>
-  (vpc: HostVpc): Effect.Effect<void> =>
-    Effect.gen(function* () {
-      const host = yield* Binding.Host;
-      if (host === undefined || !runsAsRole(host)) return;
-      yield* (host as unknown as BindTarget).bind(labelled("Vpc", label), host, ...args)({ vpc });
-    });
+export const bindVpc = (label: TemplateStringsArray, ...args: unknown[]) =>
+  Effect.fn(function* (vpc: HostVpc) {
+    const host = yield* Binding.Host;
+    if (host === undefined || !runsAsRole(host)) return;
+    yield* (host as unknown as BindTarget).bind(labelled("Vpc", label), host, ...args)({ vpc });
+  });
 
 /**
  * Resolve a distilled operation (or several, with `Effect.all`) with the
  * host's AWS credentials, once when the binding's layer is built: by
- * assuming the Role {@link bind} created for this host if there is one,
+ * assuming the Role {@link Bind} created for this host if there is one,
  * as-is otherwise (the host's own role, or the deployer).
  *
  * @param region the region a host with a created key signs in, e.g. a
@@ -221,58 +269,60 @@ export const bindVpc =
  *   host, so it also runs at deploy for those hosts.
  *   @default the stack's region
  */
-export const withCredentials = <Op>(
+export const withCredentials: <Op>(
   operation: Effect.Effect<Op, never, any>,
   region?: Effect.Effect<Effect.Effect<string>, never, any>,
-): Effect.Effect<Op> =>
-  Effect.gen(function* () {
-    if (!globalThis.__ALCHEMY_RUNTIME__) {
-      const host = yield* Binding.Host;
-      if (region !== undefined && host !== undefined && !runsAsRole(host)) {
-        yield* region as Effect.Effect<Effect.Effect<string>>;
-      }
-      return yield* operation as Effect.Effect<Op>;
+) => Effect.Effect<Op> = Effect.fn(function* <Op>(
+  operation: Effect.Effect<Op, never, any>,
+  region?: Effect.Effect<Effect.Effect<string>, never, any>,
+) {
+  // A host running as an IAM role signs with its own credentials.
+  if (globalThis.__ALCHEMY_AWS_ROLE_HOST__) return yield* operation as Effect.Effect<Op>;
+  if (!globalThis.__ALCHEMY_RUNTIME__) {
+    const host = yield* Binding.Host;
+    if (region !== undefined && host !== undefined && !runsAsRole(host)) {
+      yield* region as Effect.Effect<Effect.Effect<string>>;
     }
+    return yield* operation as Effect.Effect<Op>;
+  }
 
-    const runtime = yield* CurrentRuntimeContext;
-    const roleArn = runtime ? yield* runtime.get<string>(KEY_ENV.roleArn) : undefined;
-    if (runtime === undefined || roleArn === undefined) {
-      return yield* operation as Effect.Effect<Op>;
-    }
+  const runtime = yield* CurrentRuntimeContext;
+  const roleArn = runtime ? yield* runtime.get<string>(KEY_ENV.roleArn) : undefined;
+  if (runtime === undefined || roleArn === undefined) {
+    return yield* operation as Effect.Effect<Op>;
+  }
 
-    // The created user's key signs `AssumeRole`; read on each refresh.
-    const base = Layer.succeed(
-      Credentials,
-      Effect.gen(function* () {
-        const secret = yield* runtime.get<string | Redacted.Redacted<string>>(
-          KEY_ENV.secretAccessKey,
-        );
-        return {
-          accessKeyId: Redacted.make((yield* runtime.get<string>(KEY_ENV.accessKeyId)) ?? ""),
-          secretAccessKey: Redacted.isRedacted(secret) ? secret : Redacted.make(secret ?? ""),
-          sessionToken: undefined,
-          // STS is global; operations provide their own Region.
-          region: "us-east-1",
-        } satisfies ResolvedCredentials;
-      }),
-    );
-    const credentials = yield* makeAssumeRoleResolver({
-      roleArn: Effect.succeed(roleArn),
-      base,
-      region: "us-east-1",
-    });
-    const callRegion =
-      region !== undefined
-        ? yield* region as Effect.Effect<Effect.Effect<string>>
-        : Effect.map(runtime.get<string>(KEY_ENV.region), (value) => value ?? "us-east-1");
-    return yield* (operation as Effect.Effect<Op>).pipe(
-      Effect.provide(
-        Layer.mergeAll(
-          Layer.succeed(Credentials, credentials),
-          Layer.succeed(Region, callRegion as Effect.Effect<RegionName>),
-          Endpoint.fromEnv(),
-          FetchHttpClient.layer,
-        ),
-      ),
-    );
+  // The created user's key signs `AssumeRole`; read on each refresh.
+  const base = Layer.succeed(
+    Credentials,
+    Effect.gen(function* () {
+      const secret = yield* runtime.get<string | Redacted.Redacted<string>>(
+        KEY_ENV.secretAccessKey,
+      );
+      return {
+        accessKeyId: Redacted.make((yield* runtime.get<string>(KEY_ENV.accessKeyId)) ?? ""),
+        secretAccessKey: Redacted.isRedacted(secret) ? secret : Redacted.make(secret ?? ""),
+        sessionToken: undefined,
+        // STS is global; operations provide their own Region.
+        region: "us-east-1",
+      } satisfies ResolvedCredentials;
+    }),
+  );
+  const credentials = yield* makeAssumeRoleResolver({
+    roleArn: Effect.succeed(roleArn),
+    base,
+    region: "us-east-1",
   });
+  const callRegion =
+    region !== undefined
+      ? yield* region as Effect.Effect<Effect.Effect<string>>
+      : Effect.map(runtime.get<string>(KEY_ENV.region), (value) => value ?? "us-east-1");
+  return yield* (operation as Effect.Effect<Op>).pipe(
+    Effect.provide([
+      Layer.succeed(Credentials, credentials),
+      Layer.succeed(Region, callRegion as Effect.Effect<RegionName>),
+      Endpoint.fromEnv(),
+      FetchHttpClient.layer,
+    ]),
+  );
+});

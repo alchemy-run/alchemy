@@ -14,10 +14,11 @@ export const makeServiceHttpBinding = <I extends { name: string }, A, E>(options
   operation: GcpHttpOp<I, A, E>;
 }) =>
   Effect.gen(function* () {
+    const bind = yield* GCPBindings.Bind;
     const run = yield* GCPBindings.withCredentials(options.operation);
     return Effect.fn(function* (service: Service) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* GCPBindings.bind`${options.tag}(${service})`({
+        yield* bind`${options.tag}(${service})`({
           iam: [grantFor(options.iam, service.name)],
         });
       }
@@ -39,10 +40,11 @@ export const makeConnectorHttpBinding = <I extends { name: string }, A, E>(optio
   operation: GcpHttpOp<I, A, E>;
 }) =>
   Effect.gen(function* () {
+    const bind = yield* GCPBindings.Bind;
     const run = yield* GCPBindings.withCredentials(options.operation);
     return Effect.fn(function* (connector: ServicesConnector) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* GCPBindings.bind`${options.tag}(${connector})`({
+        yield* bind`${options.tag}(${connector})`({
           iam: [grantFor(options.iam, connector.name)],
         });
       }

@@ -34,6 +34,7 @@ import type { ApiGatewayV2Stage } from "./Stage.ts";
 export const ManageConnectionsHttp = Layer.effect(
   ManageConnections,
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const postToConnection = yield* AWSBindings.withCredentials(mgmt.postToConnection);
     const getConnection = yield* AWSBindings.withCredentials(mgmt.getConnection);
     const deleteConnection = yield* AWSBindings.withCredentials(mgmt.deleteConnection);
@@ -41,7 +42,7 @@ export const ManageConnectionsHttp = Layer.effect(
     return Effect.fn(function* <S extends ApiGatewayV2Stage>(stage: S) {
       const CallbackUrl = yield* stage.callbackUrl;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`AWS.ApiGatewayV2.ManageConnections(${stage})`({
+        yield* bind`AWS.ApiGatewayV2.ManageConnections(${stage})`({
           policyStatements: [
             {
               Effect: "Allow",

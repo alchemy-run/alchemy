@@ -15,7 +15,7 @@ import type { Bucket } from "./Bucket.ts";
  *   requested actions on the bound bucket (object-level `${arn}/*` or the
  *   bucket ARN itself, per `iamResources`). On a host that runs as an IAM
  *   role the statements go on that role; on any other host they go on the
- *   Role Alchemy creates for it (see `AWSBindings.bind`);
+ *   Role Alchemy creates for it (see `AWSBindings.Bind`);
  * - the runtime callable injects the resolved bucket name as `Bucket`; the
  *   operation is resolved with `AWSBindings.withCredentials`, so a host with
  *   a created key signs with the assumed Role in the bucket's region.
@@ -52,6 +52,7 @@ export const makeBucketHttpBinding = <I extends { Bucket?: string }, A, E, R>(op
   listBucket?: boolean;
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     return Effect.fn(function* <B extends Bucket>(bucket: B) {
       const BucketName = yield* bucket.bucketName;
       const BucketRegion = yield* bucket.region;
@@ -61,7 +62,7 @@ export const makeBucketHttpBinding = <I extends { Bucket?: string }, A, E, R>(op
         Effect.succeed(BucketRegion),
       );
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}(${bucket})`({
+        yield* bind`${options.tag}(${bucket})`({
           policyStatements: [
             {
               Effect: "Allow",

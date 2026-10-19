@@ -15,10 +15,11 @@ import type { Schema } from "./Schema.ts";
 export const GetSchemaHttp = Layer.effect(
   GetSchema,
   Effect.gen(function* () {
+    const bind = yield* GCPBindings.Bind;
     const getSchema = yield* GCPBindings.withCredentials(pubsub.getProjectsSchemas);
     return Effect.fn(function* (schema: Schema) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* GCPBindings.bind`GCP.PubSub.GetSchema(${schema})`({
+        yield* bind`GCP.PubSub.GetSchema(${schema})`({
           iam: [grantFor({ role: "roles/pubsub.viewer", on: "pubsub.schema" }, schema.name)],
         });
       }

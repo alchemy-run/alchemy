@@ -14,12 +14,13 @@ import type { Sink } from "./Sink.ts";
 export const ListAttachedLinksHttp = Layer.effect(
   ListAttachedLinks,
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const listAttachedLinks = yield* AWSBindings.withCredentials(oam.listAttachedLinks);
 
     return Effect.fn(function* (sink: Sink) {
       const SinkIdentifier = yield* sink.sinkArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`AWS.OAM.ListAttachedLinks(${sink})`({
+        yield* bind`AWS.OAM.ListAttachedLinks(${sink})`({
           policyStatements: [
             {
               Effect: "Allow",

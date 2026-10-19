@@ -15,12 +15,13 @@ import type { Parameter } from "./Parameter.ts";
 export const GetParameterHttp = Layer.effect(
   GetParameter,
   Effect.gen(function* () {
+    const bind = yield* GCPBindings.Bind;
     const getParameter = yield* GCPBindings.withCredentials(
       parametermanager.getProjectsLocationsParameters,
     );
     return Effect.fn(function* (parameter: Parameter) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* GCPBindings.bind`GCP.ParameterManager.GetParameter(${parameter})`({
+        yield* bind`GCP.ParameterManager.GetParameter(${parameter})`({
           // Parameter Manager has no resource-level IAM; an IAM Condition on
           // the parameter name scopes the project grant to this parameter.
           iam: [

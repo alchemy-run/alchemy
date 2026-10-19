@@ -18,10 +18,11 @@ import { TestRuleset, type TestRulesetRequest } from "./TestRuleset.ts";
 export const TestRulesetHttp = Layer.effect(
   TestRuleset,
   Effect.gen(function* () {
+    const bind = yield* GCPBindings.Bind;
     const testProjects = yield* GCPBindings.withCredentials(firebaserules.testProjects);
     return Effect.fn(function* (ruleset: Ruleset) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* GCPBindings.bind`GCP.FirebaseRules.TestRuleset(${ruleset})`({
+        yield* bind`GCP.FirebaseRules.TestRuleset(${ruleset})`({
           iam: [{ role: "roles/firebaserules.admin" }],
         });
       }

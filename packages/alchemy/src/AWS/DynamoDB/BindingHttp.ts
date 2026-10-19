@@ -27,15 +27,17 @@ import type { Table } from "./Table.ts";
 
 /**
  * Grant the host `policyStatements` under `label`, recorded as
- * `Allow(<host>, <label>)` (see `AWSBindings.bind`). Deploy-only: the grant
+ * `Allow(<host>, <label>)` (see `AWSBindings.Bind`). Deploy-only: the grant
  * sits behind the `__ALCHEMY_RUNTIME__` guard so the bundler drops it.
  */
-export const grantTables = (label: string, policyStatements: () => Input<PolicyStatement>[]) =>
-  Effect.gen(function* () {
+export const GrantTables = Effect.gen(function* () {
+  const bind = yield* AWSBindings.Bind;
+  return Effect.fn(function* (label: string, policyStatements: () => Input<PolicyStatement>[]) {
     if (!globalThis.__ALCHEMY_RUNTIME__) {
-      yield* AWSBindings.bind`${label}`({ policyStatements: policyStatements() });
+      yield* bind`${label}`({ policyStatements: policyStatements() });
     }
   });
+});
 
 /**
  * The region a host with a created key signs requests in, for
@@ -83,6 +85,7 @@ export const makeAccountHttpBinding = <I, A, E, R>(options: {
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const grantTables = yield* GrantTables;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* () {
@@ -119,6 +122,7 @@ export const makeTableHttpBinding = <I extends { TableName?: string }, A, E, R>(
   resources?: (table: Table) => (string | Output.Output<string>)[];
 }) =>
   Effect.gen(function* () {
+    const grantTables = yield* GrantTables;
     return Effect.fn(function* (table: Table) {
       const TableName = yield* table.tableName;
       // resolved per bind because a host with a created key signs in the table's own region
@@ -170,6 +174,7 @@ export const makeTableArnHttpBinding = <
   resources?: (table: Table) => (string | Output.Output<string>)[];
 }) =>
   Effect.gen(function* () {
+    const grantTables = yield* GrantTables;
     return Effect.fn(function* (table: Table) {
       const TableArn = yield* table.tableArn;
       // resolved per bind because a host with a created key signs in the table's own region
@@ -214,6 +219,7 @@ export const makeTableIamHttpBinding = <I, A, E, R>(options: {
   resources: (table: Table) => (string | Output.Output<string>)[];
 }) =>
   Effect.gen(function* () {
+    const grantTables = yield* GrantTables;
     return Effect.fn(function* (table: Table) {
       // resolved per bind because a host with a created key signs in the table's own region
       const op = yield* AWSBindings.withCredentials(options.operation, tablesRegion([table]));

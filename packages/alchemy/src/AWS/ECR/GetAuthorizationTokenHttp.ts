@@ -13,11 +13,12 @@ import { GetAuthorizationToken } from "./GetAuthorizationToken.ts";
 export const GetAuthorizationTokenHttp = Layer.effect(
   GetAuthorizationToken,
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(ecr.getAuthorizationToken);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`AWS.ECR.GetAuthorizationToken()`({
+        yield* bind`AWS.ECR.GetAuthorizationToken()`({
           policyStatements: [
             {
               Effect: "Allow",

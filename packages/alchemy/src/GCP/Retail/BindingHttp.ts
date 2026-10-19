@@ -13,10 +13,11 @@ export const makeServingConfigHttpBinding = <I extends { placement: string }, A,
   operation: GcpHttpOp<I, A, E>;
 }) =>
   Effect.gen(function* () {
+    const bind = yield* GCPBindings.Bind;
     const run = yield* GCPBindings.withCredentials(options.operation);
     return Effect.fn(function* (servingConfig: CatalogsServingConfig) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* GCPBindings.bind`${options.tag}(${servingConfig})`({
+        yield* bind`${options.tag}(${servingConfig})`({
           iam: [grantFor(options.iam, servingConfig.name)],
         });
       }

@@ -8,13 +8,14 @@ import { DescribeAlarms, type DescribeAlarmsRequest } from "./DescribeAlarms.ts"
 export const DescribeAlarmsHttp = Layer.effect(
   DescribeAlarms,
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const describeAlarms = yield* AWSBindings.withCredentials(cloudwatch.describeAlarms);
 
     return Effect.fn(function* (...alarms: AlarmResources) {
       const sorted = sortAlarmResources(alarms);
       const AlarmNames = yield* Effect.forEach(sorted, (alarm) => alarm.alarmName.asEffect());
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`AWS.CloudWatch.DescribeAlarms(${sorted})`({
+        yield* bind`AWS.CloudWatch.DescribeAlarms(${sorted})`({
           policyStatements: [
             {
               Effect: "Allow",

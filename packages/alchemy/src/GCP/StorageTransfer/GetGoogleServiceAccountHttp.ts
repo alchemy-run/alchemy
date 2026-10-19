@@ -20,10 +20,11 @@ export const GetGoogleServiceAccountHttp: Layer.Layer<
 > = Layer.effect(
   GetGoogleServiceAccount,
   Effect.gen(function* () {
+    const bind = yield* GCPBindings.Bind;
     const run = yield* GCPBindings.withCredentials(storagetransfer.getGoogleServiceAccounts);
     return Effect.fn(function* (job: TransferJob) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* GCPBindings.bind`GCP.StorageTransfer.GetGoogleServiceAccount(${job})`({
+        yield* bind`GCP.StorageTransfer.GetGoogleServiceAccount(${job})`({
           iam: [{ role: "roles/storagetransfer.viewer" }],
         });
       }

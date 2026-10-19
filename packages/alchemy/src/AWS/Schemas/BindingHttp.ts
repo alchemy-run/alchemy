@@ -34,13 +34,14 @@ export const makeSchemasSchemaHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (schema: Schema) {
       const RegistryName = yield* schema.registryName;
       const SchemaName = yield* schema.schemaName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}(${schema})`({
+        yield* bind`${options.tag}(${schema})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -83,12 +84,13 @@ export const makeSchemasRegistryHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (registry: Registry) {
       const RegistryName = yield* registry.registryName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}(${registry})`({
+        yield* bind`${options.tag}(${registry})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -145,6 +147,7 @@ export const makeSchemasDiscovererHttpBinding = <
   ruleActions?: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (discoverer: Discoverer) {
@@ -160,7 +163,7 @@ export const makeSchemasDiscovererHttpBinding = <
             (arn) =>
               `${arn.replace(":schemas:", ":events:").split(":discoverer/")[0]}:rule/${busSegment}Schemas-*`,
           );
-        yield* AWSBindings.bind`${options.tag}(${discoverer})`({
+        yield* bind`${options.tag}(${discoverer})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -208,11 +211,12 @@ export const makeSchemasAccountHttpBinding = <I, A, E, R>(options: {
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}()`({
+        yield* bind`${options.tag}()`({
           policyStatements: [
             {
               Effect: "Allow",

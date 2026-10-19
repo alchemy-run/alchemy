@@ -34,12 +34,13 @@ export const makeS3TablesTableBucketHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (tableBucket: TableBucket) {
       const tableBucketARN = yield* tableBucket.tableBucketArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}(${tableBucket})`({
+        yield* bind`${options.tag}(${tableBucket})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -87,6 +88,7 @@ export const makeS3TablesTableHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (table: Table) {
@@ -94,7 +96,7 @@ export const makeS3TablesTableHttpBinding = <
       const namespace = yield* table.namespace;
       const name = yield* table.name;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}(${table})`({
+        yield* bind`${options.tag}(${table})`({
           policyStatements: [
             {
               Effect: "Allow",

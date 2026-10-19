@@ -32,10 +32,11 @@ export const makeManagedKafkaHttpBinding =
     operation: GcpHttpOp<I, A, E>;
   }) =>
     Effect.gen(function* () {
+      const bind = yield* GCPBindings.Bind;
       const run = yield* GCPBindings.withCredentials(options.operation);
       return Effect.fn(function* (resource: Resource) {
         if (!globalThis.__ALCHEMY_RUNTIME__) {
-          yield* GCPBindings.bind`${options.tag}(${resource})`({
+          yield* bind`${options.tag}(${resource})`({
             iam: [grantFor(options.iam, resource.name)],
           });
         }

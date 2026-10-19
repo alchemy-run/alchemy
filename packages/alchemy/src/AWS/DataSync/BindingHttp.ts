@@ -40,13 +40,14 @@ export const makeDataSyncTaskHttpBinding = <I extends { TaskArn?: string }, A, E
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (task: Task) {
       // Outputs yield a DEFERRED effect — resolve again per invocation below.
       const TaskArn = yield* task.taskArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}(${task})`({
+        yield* bind`${options.tag}(${task})`({
           policyStatements: [taskPolicyStatement(task, options.actions)],
         });
       }
@@ -73,11 +74,12 @@ export const makeDataSyncTaskExecutionHttpBinding = <I, A, E, R>(options: {
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (task: Task) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}(${task})`({
+        yield* bind`${options.tag}(${task})`({
           policyStatements: [taskPolicyStatement(task, options.actions)],
         });
       }

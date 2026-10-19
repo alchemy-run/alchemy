@@ -47,6 +47,7 @@ const dbUserArn = (resource: ConnectResource, username: string) => {
 export const ConnectHttp = Layer.effect(
   Connect,
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const getSecretValue = yield* AWSBindings.withCredentials(secretsmanager.getSecretValue);
     // Ambient AWS identity for the IAM-auth token presign — captured at
     // layer build so the runtime client stays `RuntimeContext`-colored.
@@ -78,7 +79,7 @@ export const ConnectHttp = Layer.effect(
               }
             : undefined;
         if (options.auth === "iam") {
-          yield* AWSBindings.bind`AWS.RDS.Connect(${resource})`({
+          yield* bind`AWS.RDS.Connect(${resource})`({
             policyStatements: [
               {
                 Effect: "Allow",
@@ -88,7 +89,7 @@ export const ConnectHttp = Layer.effect(
             ],
           });
         } else {
-          yield* AWSBindings.bind`AWS.RDS.Connect(${options.secret})`({
+          yield* bind`AWS.RDS.Connect(${options.secret})`({
             policyStatements: [
               {
                 Effect: "Allow",

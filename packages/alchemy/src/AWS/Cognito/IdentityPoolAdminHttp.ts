@@ -18,6 +18,7 @@ type IdentityPoolIdField = Pick<ci.ListIdentitiesInput, "IdentityPoolId">;
 export const IdentityPoolAdminHttp = Layer.effect(
   IdentityPoolAdmin,
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const describeIdentity = yield* AWSBindings.withCredentials(ci.describeIdentity);
     const listIdentities = yield* AWSBindings.withCredentials(ci.listIdentities);
     const deleteIdentities = yield* AWSBindings.withCredentials(ci.deleteIdentities);
@@ -33,7 +34,7 @@ export const IdentityPoolAdminHttp = Layer.effect(
     return Effect.fn(function* <P extends IdentityPool>(pool: P) {
       const IdentityPoolId = yield* pool.identityPoolId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`AWS.Cognito.IdentityPoolAdmin(${pool})`({
+        yield* bind`AWS.Cognito.IdentityPoolAdmin(${pool})`({
           policyStatements: [
             {
               Effect: "Allow",

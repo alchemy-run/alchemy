@@ -20,12 +20,13 @@ export const GetCatalogItemHttp: Layer.Layer<
 > = Layer.effect(
   GetCatalogItem,
   Effect.gen(function* () {
+    const bind = yield* GCPBindings.Bind;
     const run = yield* GCPBindings.withCredentials(
       recommendationengine.getProjectsLocationsCatalogsCatalogItems,
     );
     return Effect.fn(function* (item: CatalogsCatalogItem) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* GCPBindings.bind`GCP.RecommendationEngine.GetCatalogItem(${item})`({
+        yield* bind`GCP.RecommendationEngine.GetCatalogItem(${item})`({
           iam: [{ role: "roles/automlrecommendations.viewer" }],
         });
       }

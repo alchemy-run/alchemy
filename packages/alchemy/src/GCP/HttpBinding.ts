@@ -79,11 +79,12 @@ export const makeNamedHttpBinding = <
   resourceName: (resource: Resource) => Output.Output<string, never>;
 }) =>
   Effect.gen(function* () {
+    const bind = yield* GCPBindings.Bind;
     const run = yield* GCPBindings.withCredentials(options.operation);
     return Effect.fn(function* (resource: Resource) {
       const resourceName = options.resourceName(resource);
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* GCPBindings.bind`${options.tag}(${resource})`({
+        yield* bind`${options.tag}(${resource})`({
           iam: [grantFor(options.iam, resourceName)],
         });
       }

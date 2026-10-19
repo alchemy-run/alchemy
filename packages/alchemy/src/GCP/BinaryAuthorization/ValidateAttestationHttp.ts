@@ -15,12 +15,13 @@ import { ValidateAttestation, type ValidateAttestationRequest } from "./Validate
 export const ValidateAttestationHttp = Layer.effect(
   ValidateAttestation,
   Effect.gen(function* () {
+    const bind = yield* GCPBindings.Bind;
     const validate = yield* GCPBindings.withCredentials(
       binaryauthorization.validateAttestationOccurrenceProjectsAttestors,
     );
     return Effect.fn(function* (attestor: Attestor) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* GCPBindings.bind`GCP.BinaryAuthorization.ValidateAttestation(${attestor})`({
+        yield* bind`GCP.BinaryAuthorization.ValidateAttestation(${attestor})`({
           iam: [
             grantFor(
               {

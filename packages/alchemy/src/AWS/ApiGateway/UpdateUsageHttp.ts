@@ -3,7 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Output from "../../Output.ts";
 import * as AWSBindings from "../AWSBindings.ts";
-import { registerApiGatewayBinding } from "./BindingHttp.ts";
+import { RegisterApiGatewayBinding } from "./BindingHttp.ts";
 import { UpdateUsage, type UpdateUsageRequest } from "./UpdateUsage.ts";
 import type { UsagePlan } from "./UsagePlan.ts";
 
@@ -15,6 +15,7 @@ import type { UsagePlan } from "./UsagePlan.ts";
 export const UpdateUsageHttp = Layer.effect(
   UpdateUsage,
   Effect.gen(function* () {
+    const registerApiGatewayBinding = yield* RegisterApiGatewayBinding;
     const updateUsage = yield* AWSBindings.withCredentials(ag.updateUsage);
     return Effect.fn(function* <P extends UsagePlan>(usagePlan: P) {
       const UsagePlanId = yield* usagePlan.id;

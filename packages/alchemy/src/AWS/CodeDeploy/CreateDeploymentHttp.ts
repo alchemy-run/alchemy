@@ -17,6 +17,7 @@ import type { DeploymentGroup } from "./DeploymentGroup.ts";
 export const CreateDeploymentHttp = Layer.effect(
   CreateDeployment,
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(codedeploy.createDeployment);
 
     return Effect.fn(function* <G extends DeploymentGroup>(group: G) {
@@ -24,7 +25,7 @@ export const CreateDeploymentHttp = Layer.effect(
       const ApplicationName = yield* group.applicationName;
       const DeploymentGroupName = yield* group.deploymentGroupName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`AWS.CodeDeploy.CreateDeployment(${group})`({
+        yield* bind`AWS.CodeDeploy.CreateDeployment(${group})`({
           policyStatements: [
             {
               Effect: "Allow",

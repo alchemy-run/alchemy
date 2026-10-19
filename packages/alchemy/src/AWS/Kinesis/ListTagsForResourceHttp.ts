@@ -11,12 +11,13 @@ import {
 export const ListTagsForResourceHttp = Layer.effect(
   ListTagsForResource,
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const listTagsForResource = yield* AWSBindings.withCredentials(Kinesis.listTagsForResource);
 
     return Effect.fn(function* (resource: TaggableResource) {
       const ResourceARN = yield* getResourceArn(resource);
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`AWS.Kinesis.ListTagsForResource(${resource})`({
+        yield* bind`AWS.Kinesis.ListTagsForResource(${resource})`({
           policyStatements: [
             {
               Effect: "Allow",

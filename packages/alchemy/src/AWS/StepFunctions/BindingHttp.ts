@@ -38,15 +38,16 @@ export const mapRunArnPattern = (stateMachine: StateMachine) =>
     (arn) => `${arn.replace(":stateMachine:", ":mapRun:")}/*`,
   );
 
-const grant = (
-  tag: string,
-  scope: { LogicalId: string } | string,
-  actions: readonly string[],
-  resources: readonly (string | Output.Output<string, any>)[],
-) =>
-  Effect.gen(function* () {
+const Grant = Effect.gen(function* () {
+  const bind = yield* AWSBindings.Bind;
+  return Effect.fn(function* (
+    tag: string,
+    scope: { LogicalId: string } | string,
+    actions: readonly string[],
+    resources: readonly (string | Output.Output<string, any>)[],
+  ) {
     if (!globalThis.__ALCHEMY_RUNTIME__) {
-      yield* AWSBindings.bind`${tag}(${scope})`({
+      yield* bind`${tag}(${scope})`({
         policyStatements: [
           {
             Effect: "Allow",
@@ -57,6 +58,7 @@ const grant = (
       });
     }
   });
+});
 
 /**
  * Build the impl Effect for a state-machine-scoped operation whose request
@@ -79,6 +81,7 @@ export const makeStateMachineArnHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const grant = yield* Grant;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (stateMachine: StateMachine) {
@@ -117,6 +120,7 @@ export const makeExecutionScopedHttpBinding = <I, A, E, R>(options: {
   scope?: "execution" | "mapRun";
 }) =>
   Effect.gen(function* () {
+    const grant = yield* Grant;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (stateMachine: StateMachine) {
@@ -146,6 +150,7 @@ export const makeActivityArnHttpBinding = <I extends { activityArn?: string }, A
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const grant = yield* Grant;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (activity: Activity) {
@@ -178,6 +183,7 @@ export const makeTaskCallbackHttpBinding = <I, A, E, R>(options: {
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const grant = yield* Grant;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (activity?: Activity) {
@@ -205,11 +211,12 @@ export const makeSfnServiceHttpBinding = <I, A, E, R>(options: {
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}()`({
+        yield* bind`${options.tag}()`({
           policyStatements: [
             {
               Effect: "Allow",

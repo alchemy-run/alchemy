@@ -13,6 +13,7 @@ import { Rerank, type RerankRequest } from "./Rerank.ts";
 export const RerankHttp = Layer.effect(
   Rerank,
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const rerank = yield* AWSBindings.withCredentials(bedrock.rerank);
 
     return Effect.fn(function* (model: string, ...additionalModels: string[]) {
@@ -24,7 +25,7 @@ export const RerankHttp = Layer.effect(
         // Sort so the binding identity (SID + ARN list) is deterministic
         // regardless of argument order.
         const sorted = [...new Set([model, ...additionalModels])].sort();
-        yield* AWSBindings.bind`AWS.Bedrock.Rerank(${sorted.join(",")})`({
+        yield* bind`AWS.Bedrock.Rerank(${sorted.join(",")})`({
           policyStatements: [
             {
               // bedrock:Rerank does not support resource-level scoping.

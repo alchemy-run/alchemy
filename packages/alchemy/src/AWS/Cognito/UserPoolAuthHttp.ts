@@ -19,6 +19,7 @@ type ClientIdField = Pick<cip.SignUpRequest, "ClientId">;
 export const UserPoolAuthHttp = Layer.effect(
   UserPoolAuth,
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const signUp = yield* AWSBindings.withCredentials(cip.signUp);
     const confirmSignUp = yield* AWSBindings.withCredentials(cip.confirmSignUp);
     const resendConfirmationCode = yield* AWSBindings.withCredentials(cip.resendConfirmationCode);
@@ -50,7 +51,7 @@ export const UserPoolAuthHttp = Layer.effect(
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         // No IAM is required for the public auth flows; the binding is
         // recorded so the app client deploys before the function.
-        yield* AWSBindings.bind`AWS.Cognito.UserPoolAuth(${client})`({
+        yield* bind`AWS.Cognito.UserPoolAuth(${client})`({
           policyStatements: [],
         });
       }

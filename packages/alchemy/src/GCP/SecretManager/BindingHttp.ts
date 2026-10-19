@@ -17,12 +17,13 @@ export const makeSecretHttpBinding = <I, A, E, Req = void>(options: {
   toInput: (secretName: string, request: Req | undefined) => I;
 }) =>
   Effect.gen(function* () {
+    const bind = yield* GCPBindings.Bind;
     const run = yield* GCPBindings.withCredentials(options.operation);
     return Effect.fn(function* (secret: SecretBindingTarget) {
       // `name` is `projects/p/secrets/s` or, for regional secrets,
       // `projects/p/locations/l/secrets/s`; both are secret IAM targets.
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* GCPBindings.bind`${options.tag}(${secret})`({
+        yield* bind`${options.tag}(${secret})`({
           iam: [grantFor(options.iam, secret.name)],
         });
       }

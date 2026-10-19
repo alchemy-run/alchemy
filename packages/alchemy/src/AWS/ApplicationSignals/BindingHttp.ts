@@ -27,11 +27,12 @@ export const makeApplicationSignalsAccountHttpBinding = <I, A, E, R>(options: {
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}()`({
+        yield* bind`${options.tag}()`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -62,12 +63,13 @@ export const makeSloIdHttpBinding = <I extends { Id: string }, A, E, R>(options:
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (slo: ServiceLevelObjective) {
       const SloArn = yield* slo.sloArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}(${slo})`({
+        yield* bind`${options.tag}(${slo})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -108,12 +110,13 @@ export const makeSloBatchHttpBinding = <I extends { SloIds: string[] }, A, E, R>
   accountActions?: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (slo: ServiceLevelObjective) {
       const SloArn = yield* slo.sloArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}(${slo})`({
+        yield* bind`${options.tag}(${slo})`({
           policyStatements: [
             {
               Effect: "Allow",

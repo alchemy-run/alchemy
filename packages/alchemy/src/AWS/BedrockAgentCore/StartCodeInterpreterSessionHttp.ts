@@ -14,6 +14,7 @@ import {
 export const StartCodeInterpreterSessionHttp = Layer.effect(
   StartCodeInterpreterSession,
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const startCodeInterpreterSession = yield* AWSBindings.withCredentials(
       agentcore.startCodeInterpreterSession,
     );
@@ -21,17 +22,15 @@ export const StartCodeInterpreterSessionHttp = Layer.effect(
     return Effect.fn(function* <R extends CodeInterpreter>(codeInterpreter: R) {
       const Identifier = yield* codeInterpreter.codeInterpreterId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`AWS.BedrockAgentCore.StartCodeInterpreterSession(${codeInterpreter})`(
-          {
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: ["bedrock-agentcore:StartCodeInterpreterSession"],
-                Resource: [codeInterpreter.codeInterpreterArn],
-              },
-            ],
-          },
-        );
+        yield* bind`AWS.BedrockAgentCore.StartCodeInterpreterSession(${codeInterpreter})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: ["bedrock-agentcore:StartCodeInterpreterSession"],
+              Resource: [codeInterpreter.codeInterpreterArn],
+            },
+          ],
+        });
       }
       return Effect.fn(
         `AWS.BedrockAgentCore.StartCodeInterpreterSession(${codeInterpreter.LogicalId})`,

@@ -24,10 +24,11 @@ export const makeJobHttpBinding = <I extends { name?: string }, A, E>(options: {
     ((input: I) => Effect.Effect<A, E, Credentials | HttpClient.HttpClient>);
 }) =>
   Effect.gen(function* () {
+    const bind = yield* GCPBindings.Bind;
     const run = yield* GCPBindings.withCredentials(options.operation);
     return Effect.fn(function* (job: Job) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* GCPBindings.bind`${options.tag}(${job})`({ iam: [grantFor(options.iam, job.name)] });
+        yield* bind`${options.tag}(${job})`({ iam: [grantFor(options.iam, job.name)] });
       }
       const name = yield* job.name;
       return Effect.fn(`${options.tag}(${job.LogicalId})`)(function* (request?: Omit<I, "name">) {

@@ -13,11 +13,12 @@ export const makeCertificateAuthorityHttpBinding = <I extends { name?: string },
   operation: GcpHttpOp<I, A, E>;
 }) =>
   Effect.gen(function* () {
+    const bind = yield* GCPBindings.Bind;
     const run = yield* GCPBindings.withCredentials(options.operation);
     return Effect.fn(function* (ca: CertificateAuthority) {
       // CAs have no IAM policy of their own; access is granted on the parent pool.
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* GCPBindings.bind`${options.tag}(${ca})`({ iam: [grantFor(options.iam, ca.caPool)] });
+        yield* bind`${options.tag}(${ca})`({ iam: [grantFor(options.iam, ca.caPool)] });
       }
       const name = yield* ca.name;
       return Effect.fn(`${options.tag}(${ca.LogicalId})`)(function* (request?: Omit<I, "name">) {

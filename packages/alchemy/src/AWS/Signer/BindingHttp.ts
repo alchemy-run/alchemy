@@ -44,13 +44,14 @@ export const makeSignerProfileHttpBinding = <I extends { profileName?: string },
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (profile: SigningProfile) {
       // Outputs yield a DEFERRED effect — resolve again per invocation below.
       const ProfileName = yield* profile.profileName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}(${profile})`({
+        yield* bind`${options.tag}(${profile})`({
           policyStatements: [profilePolicyStatement(profile, options.actions)],
         });
       }
@@ -83,6 +84,7 @@ export const makeSignerHttpBinding = <I, A, E, R>(options: {
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* () {
@@ -94,7 +96,7 @@ export const makeSignerHttpBinding = <I, A, E, R>(options: {
             Resource: ["*"],
           },
         ];
-        yield* AWSBindings.bind`${options.tag}()`({
+        yield* bind`${options.tag}()`({
           policyStatements,
         });
       }

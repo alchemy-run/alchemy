@@ -24,6 +24,7 @@ export const makeReservationHttpBinding = <I extends { name?: string }, A, E>(op
   operation: Op<I, A, E>;
 }) =>
   Effect.gen(function* () {
+    const bind = yield* GCPBindings.Bind;
     const run = yield* options.operation as Effect.Effect<
       (input: I) => Effect.Effect<A, E>,
       never,
@@ -31,7 +32,7 @@ export const makeReservationHttpBinding = <I extends { name?: string }, A, E>(op
     >;
     return Effect.fn(function* (reservation: AdminReservation) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* GCPBindings.bind`${options.tag}(${reservation})`({
+        yield* bind`${options.tag}(${reservation})`({
           iam: [grantFor(options.iam, reservation.name)],
         });
       }
@@ -53,6 +54,7 @@ export const makeTopicNameHttpBinding = <I extends { name?: string }, A, E>(opti
   operation: Op<I, A, E>;
 }) =>
   Effect.gen(function* () {
+    const bind = yield* GCPBindings.Bind;
     const run = yield* options.operation as Effect.Effect<
       (input: I) => Effect.Effect<A, E>,
       never,
@@ -60,7 +62,7 @@ export const makeTopicNameHttpBinding = <I extends { name?: string }, A, E>(opti
     >;
     return Effect.fn(function* (topic: AdminTopic) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* GCPBindings.bind`${options.tag}(${topic})`({
+        yield* bind`${options.tag}(${topic})`({
           iam: [grantFor(options.iam, topic.name)],
         });
       }
@@ -80,6 +82,7 @@ export const makeTopicStatsHttpBinding = <I extends { topic: string }, A, E>(opt
   operation: Op<I, A, E>;
 }) =>
   Effect.gen(function* () {
+    const bind = yield* GCPBindings.Bind;
     const run = yield* options.operation as Effect.Effect<
       (input: I) => Effect.Effect<A, E>,
       never,
@@ -87,7 +90,7 @@ export const makeTopicStatsHttpBinding = <I extends { topic: string }, A, E>(opt
     >;
     return Effect.fn(function* (topic: AdminTopic) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* GCPBindings.bind`${options.tag}(${topic})`({
+        yield* bind`${options.tag}(${topic})`({
           iam: [grantFor(options.iam, topic.name)],
         });
       }
@@ -114,6 +117,7 @@ export const makeSubscriptionHttpBinding = <
   operation: Op<I, A, E>;
 }) =>
   Effect.gen(function* () {
+    const bind = yield* GCPBindings.Bind;
     const run = yield* options.operation as Effect.Effect<
       (input: I) => Effect.Effect<A, E>,
       never,
@@ -121,7 +125,7 @@ export const makeSubscriptionHttpBinding = <
     >;
     return Effect.fn(function* (subscription: AdminSubscription) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* GCPBindings.bind`${options.tag}(${subscription})`({
+        yield* bind`${options.tag}(${subscription})`({
           iam: [grantFor(options.iam, subscription.name)],
         });
       }

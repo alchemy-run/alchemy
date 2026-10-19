@@ -11,11 +11,12 @@ import type { FindImageOptions } from "./Image.ts";
 export const GetAmiHttp = Layer.effect(
   GetAmi,
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const describeImages = yield* AWSBindings.withCredentials(ec2.describeImages);
 
     return Effect.fn(function* (options: FindImageOptions) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`AWS.EC2.GetAmi`({
+        yield* bind`AWS.EC2.GetAmi`({
           policyStatements: [
             {
               Effect: "Allow",

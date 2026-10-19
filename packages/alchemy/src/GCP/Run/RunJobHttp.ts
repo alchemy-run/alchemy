@@ -15,11 +15,12 @@ import { RunJob, type RunJobRequest } from "./RunJob.ts";
 export const RunJobHttp = Layer.effect(
   RunJob,
   Effect.gen(function* () {
+    const bind = yield* GCPBindings.Bind;
     const run = yield* GCPBindings.withCredentials(cloudrun.runProjectsLocationsJobs);
     return Effect.fn(function* <T extends Job>(job: T) {
       const name = yield* job.name;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* GCPBindings.bind`GCP.Run.RunJob(${job})`({
+        yield* bind`GCP.Run.RunJob(${job})`({
           iam: [
             // runWithOverrides: RunJobRequest accepts `body.overrides`.
             grantFor({ role: "roles/run.jobsExecutorWithOverrides", on: "run.job" }, job.name),

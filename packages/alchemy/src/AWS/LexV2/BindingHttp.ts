@@ -51,13 +51,14 @@ export const makeLexAliasHttpBinding = <Req extends object, Out, Err>(
   config: LexAliasHttpBindingConfig<Req, Out, Err>,
 ) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(config.operation);
 
     return Effect.fn(function* (alias: BotAlias) {
       const BotId = yield* alias.botId;
       const BotAliasId = yield* alias.botAliasId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`AWS.LexV2.${config.capability}(${alias})`({
+        yield* bind`AWS.LexV2.${config.capability}(${alias})`({
           policyStatements: [
             {
               Effect: "Allow",

@@ -69,12 +69,13 @@ export const makeDataSetHttpBinding = <I extends { DataSetId: string }, A, E, R>
   resources?: (dataSet: DataSet) => OutputType<string>[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (dataSet: DataSet) {
       const DataSetId = yield* dataSet.dataSetId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}(${dataSet})`({
+        yield* bind`${options.tag}(${dataSet})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -115,13 +116,14 @@ export const makeRevisionHttpBinding = <
   resources?: (revision: Revision) => OutputType<string>[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (revision: Revision) {
       const DataSetId = yield* revision.dataSetId;
       const RevisionId = yield* revision.revisionId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}(${revision})`({
+        yield* bind`${options.tag}(${revision})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -160,11 +162,12 @@ export const makeDataExchangeAccountHttpBinding = <I, A, E, R>(options: {
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}()`({
+        yield* bind`${options.tag}()`({
           policyStatements: [
             {
               Effect: "Allow",
