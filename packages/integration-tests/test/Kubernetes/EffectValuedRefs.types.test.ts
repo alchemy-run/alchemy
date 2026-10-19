@@ -1,6 +1,6 @@
+import * as Container from "@alchemy.run/gcp/Container";
 import * as Neon from "@alchemy.run/neon";
 import { expect, test } from "alchemy-test";
-import * as Container from "alchemy/GCP/Container";
 import * as Kubernetes from "alchemy/Kubernetes";
 import * as Effect from "effect/Effect";
 

@@ -21,7 +21,7 @@ import * as path from "node:path";
 const srcRoot = path.join(import.meta.dirname, "../../packages/alchemy/src");
 
 /** Top-level `src` directories that become their own package. */
-const PROVIDERS = new Set(["AWS", "GCP"]);
+const PROVIDERS = new Set(["AWS"]);
 
 const CORE = "core";
 

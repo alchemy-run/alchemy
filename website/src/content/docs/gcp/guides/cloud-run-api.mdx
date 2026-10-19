@@ -26,7 +26,7 @@ service:
 
 ```typescript
 // src/resources.ts
-import * as GCP from "alchemy/GCP";
+import * as GCP from "@alchemy.run/gcp";
 
 export const Links = GCP.Firestore.Database("Links", {
   location: "us-central1",
@@ -318,7 +318,7 @@ service's runtime service account and revokes its roles.
 <summary><code>examples/gcp-cloud-run-api/src/Api.ts</code></summary>
 
 ```typescript
-import * as GCP from "alchemy/GCP";
+import * as GCP from "@alchemy.run/gcp";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";

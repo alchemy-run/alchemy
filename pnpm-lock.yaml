@@ -755,6 +755,9 @@ importers:
       '@alchemy.run/fly':
         specifier: workspace:*
         version: link:packages/fly
+      '@alchemy.run/gcp':
+        specifier: workspace:*
+        version: link:packages/gcp
       '@alchemy.run/github':
         specifier: workspace:*
         version: link:packages/github
@@ -937,6 +940,9 @@ importers:
       '@alchemy.run/fly':
         specifier: workspace:*
         version: link:../../packages/fly
+      '@alchemy.run/gcp':
+        specifier: workspace:*
+        version: link:../../packages/gcp
       '@alchemy.run/github':
         specifier: workspace:*
         version: link:../../packages/github
@@ -4456,6 +4462,9 @@ importers:
 
   examples/gcp-cloud-function:
     dependencies:
+      '@alchemy.run/gcp':
+        specifier: workspace:*
+        version: link:../../packages/gcp
       '@distilled.cloud/gcp':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/gcp
@@ -4471,6 +4480,9 @@ importers:
 
   examples/gcp-cloud-run-api:
     dependencies:
+      '@alchemy.run/gcp':
+        specifier: workspace:*
+        version: link:../../packages/gcp
       '@distilled.cloud/gcp':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/gcp
@@ -4489,6 +4501,9 @@ importers:
       '@alchemy.run/drizzle':
         specifier: workspace:*
         version: link:../../packages/drizzle
+      '@alchemy.run/gcp':
+        specifier: workspace:*
+        version: link:../../packages/gcp
       '@distilled.cloud/gcp':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/gcp
@@ -4514,6 +4529,9 @@ importers:
 
   examples/gcp-cron:
     dependencies:
+      '@alchemy.run/gcp':
+        specifier: workspace:*
+        version: link:../../packages/gcp
       '@distilled.cloud/gcp':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/gcp
@@ -4529,6 +4547,9 @@ importers:
 
   examples/gcp-event-pipeline:
     dependencies:
+      '@alchemy.run/gcp':
+        specifier: workspace:*
+        version: link:../../packages/gcp
       '@distilled.cloud/gcp':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/gcp
@@ -4544,6 +4565,9 @@ importers:
 
   examples/gcp-eventarc-firestore:
     dependencies:
+      '@alchemy.run/gcp':
+        specifier: workspace:*
+        version: link:../../packages/gcp
       '@distilled.cloud/gcp':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/gcp
@@ -4559,6 +4583,9 @@ importers:
 
   examples/gcp-gke:
     dependencies:
+      '@alchemy.run/gcp':
+        specifier: workspace:*
+        version: link:../../packages/gcp
       '@distilled.cloud/gcp':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/gcp
@@ -4574,6 +4601,9 @@ importers:
 
   examples/gcp-memorystore-redis:
     dependencies:
+      '@alchemy.run/gcp':
+        specifier: workspace:*
+        version: link:../../packages/gcp
       '@distilled.cloud/gcp':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/gcp
@@ -4589,6 +4619,9 @@ importers:
 
   examples/gcp-pubsub-fanout:
     dependencies:
+      '@alchemy.run/gcp':
+        specifier: workspace:*
+        version: link:../../packages/gcp
       '@distilled.cloud/gcp':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/gcp
@@ -4604,6 +4637,9 @@ importers:
 
   examples/gcp-pubsub-worker:
     dependencies:
+      '@alchemy.run/gcp':
+        specifier: workspace:*
+        version: link:../../packages/gcp
       '@distilled.cloud/gcp':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/gcp
@@ -4619,6 +4655,9 @@ importers:
 
   examples/gcp-scheduled-job:
     dependencies:
+      '@alchemy.run/gcp':
+        specifier: workspace:*
+        version: link:../../packages/gcp
       '@distilled.cloud/gcp':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/gcp
@@ -4634,6 +4673,9 @@ importers:
 
   examples/gcp-secrets-kms:
     dependencies:
+      '@alchemy.run/gcp':
+        specifier: workspace:*
+        version: link:../../packages/gcp
       '@distilled.cloud/gcp':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/gcp
@@ -4649,6 +4691,9 @@ importers:
 
   examples/gcp-service-to-service:
     dependencies:
+      '@alchemy.run/gcp':
+        specifier: workspace:*
+        version: link:../../packages/gcp
       '@distilled.cloud/gcp':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/gcp
@@ -4664,6 +4709,9 @@ importers:
 
   examples/gcp-static-site:
     dependencies:
+      '@alchemy.run/gcp':
+        specifier: workspace:*
+        version: link:../../packages/gcp
       '@distilled.cloud/gcp':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/gcp
@@ -4679,6 +4727,9 @@ importers:
 
   examples/gcp-storage-uploads:
     dependencies:
+      '@alchemy.run/gcp':
+        specifier: workspace:*
+        version: link:../../packages/gcp
       '@distilled.cloud/gcp':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/gcp
@@ -4694,6 +4745,9 @@ importers:
 
   examples/gcp-vertex-ai:
     dependencies:
+      '@alchemy.run/gcp':
+        specifier: workspace:*
+        version: link:../../packages/gcp
       '@distilled.cloud/gcp':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/gcp
@@ -4716,6 +4770,9 @@ importers:
       '@alchemy.run/frontend-frameworks':
         specifier: workspace:*
         version: link:../../packages/frontend-frameworks
+      '@alchemy.run/gcp':
+        specifier: workspace:*
+        version: link:../../packages/gcp
       '@distilled.cloud/gcp':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/gcp
@@ -4756,6 +4813,9 @@ importers:
       '@alchemy.run/frontend-frameworks':
         specifier: workspace:*
         version: link:../../packages/frontend-frameworks
+      '@alchemy.run/gcp':
+        specifier: workspace:*
+        version: link:../../packages/gcp
       '@distilled.cloud/gcp':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/gcp
@@ -7737,9 +7797,6 @@ importers:
       '@distilled.cloud/core':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/core
-      '@distilled.cloud/gcp':
-        specifier: workspace:*
-        version: link:../../submodules/distilled/packages/gcp
       '@distilled.cloud/neon':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/neon
@@ -9211,6 +9268,40 @@ importers:
 
   packages/frontend-frameworks/src/nextjs/wrangler-stub: {}
 
+  packages/gcp:
+    dependencies:
+      '@distilled.cloud/core':
+        specifier: workspace:*
+        version: link:../../submodules/distilled/packages/core
+      '@distilled.cloud/gcp':
+        specifier: workspace:*
+        version: link:../../submodules/distilled/packages/gcp
+      rolldown:
+        specifier: 1.2.13
+        version: 1.2.13
+    devDependencies:
+      '@effect/platform-bun':
+        specifier: 'catalog:'
+        version: 4.0.4(effect@4.0.4)
+      '@effect/platform-node':
+        specifier: 'catalog:'
+        version: 4.0.4(effect@4.0.4)(redis@6.2.1)
+      '@types/bun':
+        specifier: 'catalog:'
+        version: 1.4.3
+      '@types/node':
+        specifier: 'catalog:'
+        version: 26.6.5
+      alchemy:
+        specifier: workspace:*
+        version: link:../alchemy
+      effect:
+        specifier: 4.0.4
+        version: 4.0.4
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+
   packages/git:
     devDependencies:
       '@alchemy.run/cloudflare':
@@ -9327,6 +9418,9 @@ importers:
       '@alchemy.run/frontend-frameworks':
         specifier: workspace:*
         version: link:../frontend-frameworks
+      '@alchemy.run/gcp':
+        specifier: workspace:*
+        version: link:../gcp
       '@alchemy.run/git':
         specifier: workspace:*
         version: link:../git
@@ -11059,6 +11153,9 @@ importers:
       '@alchemy.run/cloudflare':
         specifier: workspace:*
         version: link:../packages/cloudflare
+      '@alchemy.run/gcp':
+        specifier: workspace:*
+        version: link:../packages/gcp
       '@alchemy.run/github':
         specifier: workspace:*
         version: link:../packages/github

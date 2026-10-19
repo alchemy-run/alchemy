@@ -21,6 +21,7 @@ const roots = [
   path.join(import.meta.dir, "../packages/github/src"),
   path.join(import.meta.dir, "../packages/stripe/src"),
   path.join(import.meta.dir, "../packages/cloudflare/src"),
+  path.join(import.meta.dir, "../packages/gcp/src"),
 ];
 
 const pageTag = /^\s*\*\s+@(resource|binding|layer|primitive)\b/;

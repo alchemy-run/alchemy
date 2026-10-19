@@ -27,9 +27,6 @@
     },
     {
       "path": "../../submodules/distilled/packages/core/tsconfig.json"
-    },
-    {
-      "path": "../../submodules/distilled/packages/gcp/tsconfig.json"
     }
   ]
 }

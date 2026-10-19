@@ -134,6 +134,11 @@ const config = {
       providerPrefix: "Cloudflare",
       sourceDisplayPrefix: "packages/cloudflare/src",
     },
+    {
+      srcRoot: path.join(import.meta.dir, "../packages/gcp/src"),
+      providerPrefix: "GCP",
+      sourceDisplayPrefix: "packages/gcp/src",
+    },
   ] satisfies SourceRoot[],
 };
 

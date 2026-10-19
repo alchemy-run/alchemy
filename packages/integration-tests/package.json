@@ -15,6 +15,7 @@
     "@alchemy.run/drizzle": "workspace:*",
     "@alchemy.run/fly": "workspace:*",
     "@alchemy.run/frontend-frameworks": "workspace:*",
+    "@alchemy.run/gcp": "workspace:*",
     "@alchemy.run/git": "workspace:*",
     "@alchemy.run/github": "workspace:*",
     "@alchemy.run/hetzner": "workspace:*",

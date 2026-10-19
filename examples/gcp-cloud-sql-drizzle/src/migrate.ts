@@ -1,6 +1,6 @@
+import * as GCP from "@alchemy.run/gcp";
 import type * as sqladmin from "@distilled.cloud/gcp/sqladmin_v1";
 import * as Alchemy from "alchemy";
-import * as GCP from "alchemy/GCP";
 import { RuntimeContext } from "alchemy/RuntimeContext";
 import {
   applyMigrations,

@@ -1,0 +1,249 @@
+{
+  "name": "@alchemy.run/gcp",
+  "version": "2.0.0-beta.83",
+  "description": "Google Cloud resources, Cloud Run, Cloud Functions and GKE for Alchemy.",
+  "keywords": [
+    "alchemy",
+    "effect",
+    "gcp",
+    "google-cloud",
+    "infrastructure-as-code"
+  ],
+  "homepage": "https://alchemy.run",
+  "bugs": {
+    "url": "https://github.com/alchemy-run/alchemy/issues"
+  },
+  "license": "Apache-2.0",
+  "author": "Sam Goodwin <sam@alchemy.run>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/alchemy-run/alchemy.git",
+    "directory": "packages/gcp"
+  },
+  "files": [
+    "lib",
+    "src"
+  ],
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": "./src/index.ts",
+    "./Contributions": "./src/Contributions.ts",
+    "./Bootstrap/*": "./src/Bootstrap/*.ts",
+    "./*": "./src/*/index.ts",
+    "./AuthProvider": "./src/AuthProvider.ts",
+    "./Credentials": "./src/Credentials.ts",
+    "./Environment": "./src/Environment.ts",
+    "./Errors": "./src/Errors.ts",
+    "./GCPBindings": "./src/GCPBindings.ts",
+    "./Host": "./src/Host.ts",
+    "./HostContext": "./src/HostContext.ts",
+    "./HostRuntime": "./src/HostRuntime.ts",
+    "./HttpBinding": "./src/HttpBinding.ts",
+    "./IamPolicy": "./src/IamPolicy.ts",
+    "./Labels": "./src/Labels.ts",
+    "./MetadataCredentials": "./src/MetadataCredentials.ts",
+    "./Oidc": "./src/Oidc.ts",
+    "./Operation": "./src/Operation.ts",
+    "./Proto": "./src/Proto.ts",
+    "./Providers": "./src/Providers.ts",
+    "./PushDelivery": "./src/PushDelivery.ts",
+    "./Region": "./src/Region.ts",
+    "./Token": "./src/Token.ts",
+    "./DataManager/internal": "./src/DataManager/internal.ts",
+    "./Firestore/Document": "./src/Firestore/Document.ts",
+    "./Firestore/Values": "./src/Firestore/Values.ts",
+    "./PubSub/TopicEventSource": "./src/PubSub/TopicEventSource.ts",
+    "./RealTimeBidding/internal": "./src/RealTimeBidding/internal.ts",
+    "./Storage/ObjectMedia": "./src/Storage/ObjectMedia.ts",
+    "./package.json": "./package.json"
+  },
+  "publishConfig": {
+    "exports": {
+      ".": {
+        "types": "./lib/index.d.ts",
+        "bun": "./src/index.ts",
+        "default": "./lib/index.js"
+      },
+      "./Contributions": {
+        "types": "./lib/Contributions.d.ts",
+        "bun": "./src/Contributions.ts",
+        "default": "./lib/Contributions.js"
+      },
+      "./Bootstrap/*": {
+        "types": "./src/Bootstrap/*.ts",
+        "bun": "./src/Bootstrap/*.ts",
+        "default": "./src/Bootstrap/*.ts"
+      },
+      "./*": {
+        "types": "./lib/*/index.d.ts",
+        "bun": "./src/*/index.ts",
+        "default": "./lib/*/index.js"
+      },
+      "./AuthProvider": {
+        "types": "./lib/AuthProvider.d.ts",
+        "bun": "./src/AuthProvider.ts",
+        "default": "./lib/AuthProvider.js"
+      },
+      "./Credentials": {
+        "types": "./lib/Credentials.d.ts",
+        "bun": "./src/Credentials.ts",
+        "default": "./lib/Credentials.js"
+      },
+      "./Environment": {
+        "types": "./lib/Environment.d.ts",
+        "bun": "./src/Environment.ts",
+        "default": "./lib/Environment.js"
+      },
+      "./Errors": {
+        "types": "./lib/Errors.d.ts",
+        "bun": "./src/Errors.ts",
+        "default": "./lib/Errors.js"
+      },
+      "./GCPBindings": {
+        "types": "./lib/GCPBindings.d.ts",
+        "bun": "./src/GCPBindings.ts",
+        "default": "./lib/GCPBindings.js"
+      },
+      "./Host": {
+        "types": "./lib/Host.d.ts",
+        "bun": "./src/Host.ts",
+        "default": "./lib/Host.js"
+      },
+      "./HostContext": {
+        "types": "./lib/HostContext.d.ts",
+        "bun": "./src/HostContext.ts",
+        "default": "./lib/HostContext.js"
+      },
+      "./HostRuntime": {
+        "types": "./lib/HostRuntime.d.ts",
+        "bun": "./src/HostRuntime.ts",
+        "default": "./lib/HostRuntime.js"
+      },
+      "./HttpBinding": {
+        "types": "./lib/HttpBinding.d.ts",
+        "bun": "./src/HttpBinding.ts",
+        "default": "./lib/HttpBinding.js"
+      },
+      "./IamPolicy": {
+        "types": "./lib/IamPolicy.d.ts",
+        "bun": "./src/IamPolicy.ts",
+        "default": "./lib/IamPolicy.js"
+      },
+      "./Labels": {
+        "types": "./lib/Labels.d.ts",
+        "bun": "./src/Labels.ts",
+        "default": "./lib/Labels.js"
+      },
+      "./MetadataCredentials": {
+        "types": "./lib/MetadataCredentials.d.ts",
+        "bun": "./src/MetadataCredentials.ts",
+        "default": "./lib/MetadataCredentials.js"
+      },
+      "./Oidc": {
+        "types": "./lib/Oidc.d.ts",
+        "bun": "./src/Oidc.ts",
+        "default": "./lib/Oidc.js"
+      },
+      "./Operation": {
+        "types": "./lib/Operation.d.ts",
+        "bun": "./src/Operation.ts",
+        "default": "./lib/Operation.js"
+      },
+      "./Proto": {
+        "types": "./lib/Proto.d.ts",
+        "bun": "./src/Proto.ts",
+        "default": "./lib/Proto.js"
+      },
+      "./Providers": {
+        "types": "./lib/Providers.d.ts",
+        "bun": "./src/Providers.ts",
+        "default": "./lib/Providers.js"
+      },
+      "./PushDelivery": {
+        "types": "./lib/PushDelivery.d.ts",
+        "bun": "./src/PushDelivery.ts",
+        "default": "./lib/PushDelivery.js"
+      },
+      "./Region": {
+        "types": "./lib/Region.d.ts",
+        "bun": "./src/Region.ts",
+        "default": "./lib/Region.js"
+      },
+      "./Token": {
+        "types": "./lib/Token.d.ts",
+        "bun": "./src/Token.ts",
+        "default": "./lib/Token.js"
+      },
+      "./DataManager/internal": {
+        "types": "./lib/DataManager/internal.d.ts",
+        "bun": "./src/DataManager/internal.ts",
+        "default": "./lib/DataManager/internal.js"
+      },
+      "./Firestore/Document": {
+        "types": "./lib/Firestore/Document.d.ts",
+        "bun": "./src/Firestore/Document.ts",
+        "default": "./lib/Firestore/Document.js"
+      },
+      "./Firestore/Values": {
+        "types": "./lib/Firestore/Values.d.ts",
+        "bun": "./src/Firestore/Values.ts",
+        "default": "./lib/Firestore/Values.js"
+      },
+      "./PubSub/TopicEventSource": {
+        "types": "./lib/PubSub/TopicEventSource.d.ts",
+        "bun": "./src/PubSub/TopicEventSource.ts",
+        "default": "./lib/PubSub/TopicEventSource.js"
+      },
+      "./RealTimeBidding/internal": {
+        "types": "./lib/RealTimeBidding/internal.d.ts",
+        "bun": "./src/RealTimeBidding/internal.ts",
+        "default": "./lib/RealTimeBidding/internal.js"
+      },
+      "./Storage/ObjectMedia": {
+        "types": "./lib/Storage/ObjectMedia.d.ts",
+        "bun": "./src/Storage/ObjectMedia.ts",
+        "default": "./lib/Storage/ObjectMedia.js"
+      },
+      "./package.json": "./package.json"
+    },
+    "access": "public"
+  },
+  "scripts": {
+    "build": "pnpm -r --filter \"{.}...\" run build:package",
+    "build:package": "node scripts/build.ts"
+  },
+  "dependencies": {
+    "@distilled.cloud/core": "workspace:*",
+    "@distilled.cloud/gcp": "workspace:*",
+    "rolldown": "catalog:"
+  },
+  "devDependencies": {
+    "@effect/platform-bun": "catalog:",
+    "@effect/platform-node": "catalog:",
+    "@types/bun": "catalog:",
+    "@types/node": "catalog:",
+    "alchemy": "workspace:*",
+    "effect": "catalog:",
+    "typescript": "catalog:"
+  },
+  "peerDependencies": {
+    "@effect/platform-bun": "catalog:",
+    "@effect/platform-node": "catalog:",
+    "alchemy": "workspace:*",
+    "effect": "catalog:"
+  },
+  "peerDependenciesMeta": {
+    "@effect/platform-bun": {
+      "optional": true
+    },
+    "@effect/platform-node": {
+      "optional": true
+    }
+  },
+  "alchemy": {
+    "contributes": [
+      "@alchemy.run/gcp/Contributions"
+    ]
+  }
+}

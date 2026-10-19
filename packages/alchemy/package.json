@@ -56,13 +56,9 @@
     "./Cli": "./src/Cli/index.ts",
     "./Cli/CliKit": "./src/Cli/CliKit/index.ts",
     "./Domain": "./src/Domain/index.ts",
-    "./GCP": "./src/GCP/index.ts",
-    "./GCP/Contributions": "./src/GCP/Contributions.ts",
-    "./GCP/*": "./src/GCP/*/index.ts",
     "./Endpoint": "./src/Endpoint/index.ts",
     "./Runtime/Bootstrap/*": "./src/Runtime/Bootstrap/*.ts",
     "./AWS/Bootstrap/*": "./src/AWS/Bootstrap/*.ts",
-    "./GCP/Bootstrap/*": "./src/GCP/Bootstrap/*.ts",
     "./Process": "./src/Process/index.ts",
     "./Redis": "./src/Redis/index.ts",
     "./TUI": "./src/TUI/index.ts",
@@ -190,21 +186,6 @@
         "bun": "./src/Domain/index.ts",
         "default": "./lib/Domain/index.js"
       },
-      "./GCP": {
-        "types": "./lib/GCP/index.d.ts",
-        "bun": "./src/GCP/index.ts",
-        "default": "./lib/GCP/index.js"
-      },
-      "./GCP/Contributions": {
-        "types": "./lib/GCP/Contributions.d.ts",
-        "bun": "./src/GCP/Contributions.ts",
-        "default": "./lib/GCP/Contributions.js"
-      },
-      "./GCP/*": {
-        "types": "./lib/GCP/*/index.d.ts",
-        "bun": "./src/GCP/*/index.ts",
-        "default": "./lib/GCP/*/index.js"
-      },
       "./Endpoint": {
         "types": "./lib/Endpoint/index.d.ts",
         "bun": "./src/Endpoint/index.ts",
@@ -219,11 +200,6 @@
         "types": "./src/AWS/Bootstrap/*.ts",
         "bun": "./src/AWS/Bootstrap/*.ts",
         "default": "./src/AWS/Bootstrap/*.ts"
-      },
-      "./GCP/Bootstrap/*": {
-        "types": "./src/GCP/Bootstrap/*.ts",
-        "bun": "./src/GCP/Bootstrap/*.ts",
-        "default": "./src/GCP/Bootstrap/*.ts"
       },
       "./Process": {
         "types": "./lib/Process/index.d.ts",
@@ -279,7 +255,6 @@
     "@alchemy.run/sigil": "catalog:",
     "@distilled.cloud/aws": "workspace:*",
     "@distilled.cloud/core": "workspace:*",
-    "@distilled.cloud/gcp": "workspace:*",
     "@distilled.cloud/neon": "workspace:*",
     "@effect/sql-d1": "catalog:",
     "@types/aws-lambda": "catalog:",
@@ -437,8 +412,7 @@
   },
   "alchemy": {
     "contributes": [
-      "alchemy/AWS/Contributions",
-      "alchemy/GCP/Contributions"
+      "alchemy/AWS/Contributions"
     ]
   }
 }

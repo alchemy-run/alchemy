@@ -32,6 +32,7 @@
     "@alchemy.run/axiom": "workspace:*",
     "@alchemy.run/cloudflare": "workspace:*",
     "@alchemy.run/fly": "workspace:*",
+    "@alchemy.run/gcp": "workspace:*",
     "@alchemy.run/github": "workspace:*",
     "@alchemy.run/hetzner": "workspace:*",
     "@alchemy.run/neon": "workspace:*",

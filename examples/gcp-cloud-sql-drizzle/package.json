@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "@alchemy.run/drizzle": "workspace:*",
+    "@alchemy.run/gcp": "workspace:*",
     "@distilled.cloud/gcp": "workspace:*",
     "@effect/platform-node": "catalog:",
     "@effect/sql-pg": "catalog:",

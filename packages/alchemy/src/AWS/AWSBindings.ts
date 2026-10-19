@@ -68,23 +68,18 @@ export interface HostVpc {
   readonly securityGroupIds: Input<string[]>;
 }
 
-declare global {
-  /**
-   * `true` in a bundle built for a host that runs as an IAM role (Lambda, ECS, EC2, AppRunner, Batch, EKS), so
-   * `withCredentials` drops the created-key path from it.
-   */
-  var __ALCHEMY_AWS_ROLE_HOST__: boolean | undefined;
-}
-
 /**
  * Build options for a bundle that runs on a host running as an IAM role (Lambda, ECS, EC2, AppRunner, Batch, EKS): defines
- * `__ALCHEMY_AWS_ROLE_HOST__` so the bundler drops the created-key credentials path.
+ * `__ALCHEMY_HOST_IDENTITY__` as `"AWS.IAM.Role"` so the bundler drops the created-key credentials path.
  */
 export const roleHostBundle = (input: rolldown.InputOptions): rolldown.InputOptions => ({
   ...input,
   transform: {
     ...input.transform,
-    define: { ...input.transform?.define, "globalThis.__ALCHEMY_AWS_ROLE_HOST__": "true" },
+    define: {
+      ...input.transform?.define,
+      "globalThis.__ALCHEMY_HOST_IDENTITY__": JSON.stringify("AWS.IAM.Role"),
+    },
   },
 });
 
@@ -274,7 +269,8 @@ export const withCredentials: <Op>(
   region?: Effect.Effect<Effect.Effect<string>, never, any>,
 ) {
   // A host running as an IAM role signs with its own credentials.
-  if (globalThis.__ALCHEMY_AWS_ROLE_HOST__) return yield* operation as Effect.Effect<Op>;
+  if (globalThis.__ALCHEMY_HOST_IDENTITY__ === "AWS.IAM.Role")
+    return yield* operation as Effect.Effect<Op>;
   if (!globalThis.__ALCHEMY_RUNTIME__) {
     const host = yield* Binding.Host;
     if (region !== undefined && host !== undefined && !runsAsRole(host)) {
