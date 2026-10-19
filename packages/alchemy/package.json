@@ -38,7 +38,6 @@
     "./Alchemist": "./src/Alchemist/index.ts",
     "./Command": "./src/Command/index.ts",
     "./Bundle": "./src/Bundle/index.ts",
-    "./Http": "./src/Http/index.ts",
     "./Cli": "./src/Cli/index.ts",
     "./Cli/CliKit": "./src/Cli/CliKit/index.ts",
     "./Runtime/Bootstrap": "./src/Runtime/Bootstrap.ts",
@@ -80,11 +79,6 @@
         "types": "./lib/Bundle/index.d.ts",
         "bun": "./src/Bundle/index.ts",
         "default": "./lib/Bundle/index.js"
-      },
-      "./Http": {
-        "types": "./lib/Http/index.d.ts",
-        "bun": "./src/Http/index.ts",
-        "default": "./lib/Http/index.js"
       },
       "./Cli": {
         "types": "./lib/Cli/index.d.ts",

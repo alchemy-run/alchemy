@@ -1,14 +1,21 @@
+/**
+ * HTTP runtime bridges and platform services for Effect's HTTP APIs.
+ */
 import * as Cause from "effect/Cause";
 import * as Config from "effect/Config";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as ErrorReporter from "effect/ErrorReporter";
+import * as FileSystem from "effect/FileSystem";
+import * as Etag from "effect/http/Etag";
 import type { HttpBodyError } from "effect/http/HttpBody";
+import * as HttpPlatform from "effect/http/HttpPlatform";
 import { causeResponse, type HttpServerError } from "effect/http/HttpServerError";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as Path from "effect/Path";
 import * as Scope from "effect/Scope";
 import { ManagedHttpShutdown } from "./Runtime/ManagedHttpShutdown.ts";
 
@@ -222,3 +229,37 @@ export const NodeHttpServer = (serverOptions?: NodeHttpServerOptions) =>
       };
     }),
   );
+
+const HttpPlatformStub: Layer.Layer<HttpPlatform.HttpPlatform> = Layer.succeed(
+  HttpPlatform.HttpPlatform,
+  {
+    platform: "web",
+    // Advertises no algorithms, so the compression middleware never engages
+    // and compressResponse is never called.
+    compression: {
+      algorithms: new Set<HttpPlatform.CompressionAlgorithm>(),
+      compressResponse: (response) => Effect.succeed(response),
+    },
+    fileResponse: () => Effect.die("HttpPlatform.fileResponse not supported"),
+    fileWebResponse: () => Effect.die("HttpPlatform.fileWebResponse not supported"),
+  },
+);
+
+/**
+ * The `HttpPlatform`, `Etag`, `Path`, and no-op `FileSystem` services `HttpApiBuilder.layer`
+ * wants, for runtimes without a filesystem: Workers, Lambda. File responses
+ * die, compression never engages.
+ *
+ * Provide it to `HttpApiBuilder.layer(api)` in a Worker or a Lambda:
+ *
+ * ```typescript
+ * HttpApiBuilder.layer(Api).pipe(
+ *   Layer.provide(handlers),
+ *   Layer.provide(Http.Platform),
+ *   HttpRouter.toHttpEffect,
+ * )
+ * ```
+ */
+export const Platform: Layer.Layer<
+  Etag.Generator | HttpPlatform.HttpPlatform | Path.Path | FileSystem.FileSystem
+> = Layer.mergeAll(Etag.layer, HttpPlatformStub, Path.layer, FileSystem.layerNoop({}));
