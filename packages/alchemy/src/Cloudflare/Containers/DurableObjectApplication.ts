@@ -246,6 +246,20 @@ export const LiveDurableObjectApplicationProvider = () =>
         (yield* boundNamespace(className, bindings)) ??
         (output?.durableObjects?.namespaceId ? output.durableObjects : undefined);
       if (!durableObjects) {
+        // An existing Worker gaining this class publishes its old output
+        // first, which has no namespace for it yet. The application stays a
+        // placeholder until the Worker's upload binds the namespace, when
+        // the run reconciles it again; if that never comes, the next
+        // deploy's diff plans the create.
+        if (!isLiveApplication(output?.applicationId)) {
+          return placeholder({
+            applicationId: "",
+            applicationName: name,
+            accountId,
+            className,
+            createdAt: "",
+          });
+        }
         return yield* new ContainerConfigurationError({
           message: `The container application of Durable Object class '${className}' requires a resolved Durable Object namespace. Reconcile its Worker first.`,
         });
