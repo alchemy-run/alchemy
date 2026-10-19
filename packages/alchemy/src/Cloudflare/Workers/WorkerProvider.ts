@@ -4060,7 +4060,9 @@ export const LiveWorkerProvider = () =>
           for (const secretName of removedSecretNames) {
             if (!liveSecretNames.includes(secretName)) continue;
             yield* session.note(`Deleting removed secret ${secretName} ...`, { kind: "status" });
-            yield* workers.deleteScriptSecret({ accountId, scriptName: name, secretName });
+            yield* workers
+              .deleteScriptSecret({ accountId, scriptName: name, secretName })
+              .pipe(Effect.catchTag("SecretNotFound", () => Effect.void));
           }
         }
         const secretNames =
