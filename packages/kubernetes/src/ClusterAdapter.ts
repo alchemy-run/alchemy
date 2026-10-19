@@ -1,3 +1,9 @@
+import type * as Bundle from "alchemy/Bundle/Bundle";
+import type { InlineDockerfile } from "alchemy/Docker/Dockerfile";
+import type { ResourceBinding } from "alchemy/Resource";
+import type { ResourceContext } from "alchemy/ResourceContext";
+import type { Stack } from "alchemy/Stack";
+import type { Stage } from "alchemy/Stage";
 /**
  * The extension seam between the cluster-agnostic `Kubernetes.*` workloads
  * and the platform a cluster runs on.
@@ -30,12 +36,6 @@ import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
-import type * as Bundle from "../Bundle/Bundle.ts";
-import type { InlineDockerfile } from "../Docker/Dockerfile.ts";
-import type { ResourceBinding } from "../Resource.ts";
-import type { ResourceContext } from "../ResourceContext.ts";
-import type { Stack } from "../Stack.ts";
-import type { Stage } from "../Stage.ts";
 import type { Connection } from "./Connection.ts";
 
 /**
@@ -81,7 +81,7 @@ export interface ClusterTransport {
  * registers:
  *
  * ```ts
- * declare module "../../Kubernetes/ClusterAdapter.ts" {
+ * declare module "@alchemy.run/kubernetes/ClusterAdapter" {
  *   interface IdentityStateRegistry {
  *     "aws-pod-identity": {
  *       roleArn: string;
@@ -148,7 +148,7 @@ export interface WorkloadBindingContract {
  * impls can use AWS bindings without providing them:
  *
  * ```ts
- * declare module "../../Kubernetes/ClusterAdapter.ts" {
+ * declare module "@alchemy.run/kubernetes/ClusterAdapter" {
  *   interface WorkloadServicesRegistry {
  *     aws: Credentials | Region | AWSEnvironment;
  *   }

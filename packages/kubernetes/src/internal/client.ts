@@ -1,4 +1,6 @@
 import * as https from "node:https";
+import { isPlainObject, unwrapRedacted } from "alchemy/Util/data";
+import { collectRedactedSecrets, redactJson } from "alchemy/Util/Redaction";
 /**
  * Internal Kubernetes API client: transport-agnostic server-side apply and
  * kind discovery for arbitrary (CRD) manifests. Powers
@@ -14,8 +16,6 @@ import * as https from "node:https";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
-import { isPlainObject, unwrapRedacted } from "../../Util/data.ts";
-import { collectRedactedSecrets, redactJson } from "../../Util/Redaction.ts";
 import {
   ClusterNotFoundError,
   findClusterAdapter,

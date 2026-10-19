@@ -1,8 +1,3 @@
-import { Credentials } from "@distilled.cloud/aws/Credentials";
-import * as ecr from "@distilled.cloud/aws/ecr";
-import * as eks from "@distilled.cloud/aws/eks";
-import { Region, type RegionName } from "@distilled.cloud/aws/Region";
-import * as SigV4 from "@distilled.cloud/aws/SigV4";
 import {
   ClusterAdapter,
   ClusterNotFoundError,
@@ -10,8 +5,13 @@ import {
   type ClusterTransport,
   type ImageRegistryResolveOptions,
   type WorkloadIdentityReconcileOptions,
-} from "alchemy/Kubernetes/ClusterAdapter";
-import type { Connection } from "alchemy/Kubernetes/Connection";
+} from "@alchemy.run/kubernetes/ClusterAdapter";
+import type { Connection } from "@alchemy.run/kubernetes/Connection";
+import { Credentials } from "@distilled.cloud/aws/Credentials";
+import * as ecr from "@distilled.cloud/aws/ecr";
+import * as eks from "@distilled.cloud/aws/eks";
+import { Region, type RegionName } from "@distilled.cloud/aws/Region";
+import * as SigV4 from "@distilled.cloud/aws/SigV4";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import { Self } from "alchemy/Self";
 import * as Effect from "effect/Effect";
@@ -53,7 +53,7 @@ import {
   ensurePodRole,
 } from "./internal/podIdentity.ts";
 
-declare module "alchemy/Kubernetes/Connection" {
+declare module "@alchemy.run/kubernetes/Connection" {
   interface AuthRegistry {
     /**
      * Authenticate against an Amazon EKS cluster with SigV4 bearer tokens
@@ -73,7 +73,7 @@ declare module "alchemy/Kubernetes/Connection" {
   }
 }
 
-declare module "alchemy/Kubernetes/ClusterAdapter" {
+declare module "@alchemy.run/kubernetes/ClusterAdapter" {
   interface IdentityStateRegistry {
     /** EKS Pod Identity: generated IAM role + association. */
     "aws-pod-identity": {

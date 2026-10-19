@@ -1,3 +1,10 @@
+import { hashDirectory } from "alchemy/Command/Memo";
+import { isInlineDockerfile } from "alchemy/Docker/Dockerfile";
+import type { ResourceBinding } from "alchemy/Resource";
+import { Self } from "alchemy/Self";
+import { unwrapRedacted } from "alchemy/Util/data";
+import { collectRedactedSecrets } from "alchemy/Util/Redaction";
+import { sha256Object } from "alchemy/Util/sha256";
 /**
  * Internal helpers shared by the Kubernetes workload platforms
  * (`Kubernetes.Deployment`, `Kubernetes.Job`): image-source dispatch
@@ -8,13 +15,6 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
-import { hashDirectory } from "../../Command/Memo.ts";
-import { isInlineDockerfile } from "../../Docker/Dockerfile.ts";
-import type { ResourceBinding } from "../../Resource.ts";
-import { Self } from "../../Self.ts";
-import { unwrapRedacted } from "../../Util/data.ts";
-import { collectRedactedSecrets } from "../../Util/Redaction.ts";
-import { sha256Object } from "../../Util/sha256.ts";
 import type {
   ClusterAdapterService,
   IdentityState,

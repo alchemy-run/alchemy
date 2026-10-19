@@ -1,3 +1,5 @@
+import { unwrapRedacted } from "alchemy/Util/data";
+import { collectRedactedSecrets, redactJson } from "alchemy/Util/Redaction";
 /**
  * Internal Helm rendering for `Kubernetes.HelmChart`.
  *
@@ -18,8 +20,6 @@ import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Stream from "effect/Stream";
 import * as YAML from "yaml";
-import { unwrapRedacted } from "../../Util/data.ts";
-import { collectRedactedSecrets, redactJson } from "../../Util/Redaction.ts";
 import type { KubernetesObjectDefinition } from "./objects.ts";
 
 /** A Helm invocation or render failure (bad chart ref, template error, …). */

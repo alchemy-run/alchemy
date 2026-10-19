@@ -214,6 +214,7 @@
     "build:package": "node scripts/build.ts"
   },
   "dependencies": {
+    "@alchemy.run/kubernetes": "workspace:*",
     "@distilled.cloud/core": "workspace:*",
     "@distilled.cloud/gcp": "workspace:*",
     "rolldown": "catalog:"

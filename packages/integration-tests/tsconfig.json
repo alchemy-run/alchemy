@@ -68,6 +68,7 @@
   },
   "references": [
     { "path": "../alchemy/tsconfig.json" },
+    { "path": "../kubernetes/tsconfig.json" },
     { "path": "../domain/tsconfig.json" },
     { "path": "../aws/tsconfig.json" },
     { "path": "../floci/tsconfig.json" },

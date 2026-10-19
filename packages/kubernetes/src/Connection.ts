@@ -21,7 +21,7 @@ import type * as Redacted from "effect/Redacted";
  * extend it via module augmentation — e.g. AWS registers:
  *
  * ```ts
- * declare module "../../Kubernetes/Connection.ts" {
+ * declare module "@alchemy.run/kubernetes/Connection" {
  *   interface AuthRegistry {
  *     "aws-eks": { clusterName: string; region?: string };
  *   }

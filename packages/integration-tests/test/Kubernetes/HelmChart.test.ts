@@ -1,13 +1,13 @@
 import * as AWS from "@alchemy.run/aws";
-import * as NodeServices from "@effect/platform-node/NodeServices";
-import { describe as suite, expect, layer } from "alchemy-test";
-import * as Drift from "alchemy/Drift";
-import * as Kubernetes from "alchemy/Kubernetes";
+import * as Kubernetes from "@alchemy.run/kubernetes";
 import {
   HelmError,
   parseRenderedManifests,
   renderHelmChart,
-} from "alchemy/Kubernetes/internal/helm";
+} from "@alchemy.run/kubernetes/internal/helm";
+import * as NodeServices from "@effect/platform-node/NodeServices";
+import { describe as suite, expect, layer } from "alchemy-test";
+import * as Drift from "alchemy/Drift";
 import * as Provider from "alchemy/Provider";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Core from "alchemy/Test/Core";

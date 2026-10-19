@@ -1,3 +1,16 @@
+import {
+  ClusterAdapter,
+  ClusterNotFoundError,
+  type AdapterLifecycleServices,
+  type ClusterAdapterService,
+  type ClusterTransport,
+  type ImageRegistryDeleteOptions,
+  type ImageRegistryResolveOptions,
+  type ImageRegistryResult,
+  type WorkloadBindingContract,
+  type WorkloadIdentityReconcileOptions,
+} from "@alchemy.run/kubernetes/ClusterAdapter";
+import type { Connection } from "@alchemy.run/kubernetes/Connection";
 /**
  * The `gcp-gke` {@link ClusterAdapter}: everything platform-specific about
  * running `Kubernetes.*` workloads on Google Kubernetes Engine.
@@ -30,19 +43,6 @@
  */
 import * as container from "@distilled.cloud/gcp/container_v1";
 import { Credentials } from "@distilled.cloud/gcp/Credentials";
-import {
-  ClusterAdapter,
-  ClusterNotFoundError,
-  type AdapterLifecycleServices,
-  type ClusterAdapterService,
-  type ClusterTransport,
-  type ImageRegistryDeleteOptions,
-  type ImageRegistryResolveOptions,
-  type ImageRegistryResult,
-  type WorkloadBindingContract,
-  type WorkloadIdentityReconcileOptions,
-} from "alchemy/Kubernetes/ClusterAdapter";
-import type { Connection } from "alchemy/Kubernetes/Connection";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import type { ResourceBinding } from "alchemy/Resource";
 import { Self } from "alchemy/Self";
@@ -64,7 +64,7 @@ import {
 } from "../Host.ts";
 import { revokeIamMembership, updateIamMembership } from "../IamPolicy.ts";
 
-declare module "alchemy/Kubernetes/Connection" {
+declare module "@alchemy.run/kubernetes/Connection" {
   interface AuthRegistry {
     /**
      * Authenticate against a GKE cluster with Google OAuth bearer tokens
@@ -86,7 +86,7 @@ declare module "alchemy/Kubernetes/Connection" {
   }
 }
 
-declare module "alchemy/Kubernetes/ClusterAdapter" {
+declare module "@alchemy.run/kubernetes/ClusterAdapter" {
   interface IdentityStateRegistry {
     /**
      * GKE Workload Identity Federation: binding grants are applied to the

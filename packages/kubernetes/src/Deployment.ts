@@ -1,19 +1,19 @@
-import * as Data from "effect/Data";
-import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
-import { isResolved } from "../Diff.ts";
-import type { Input } from "../Input.ts";
-import { createPhysicalName } from "../PhysicalName.ts";
-import { Platform, type Main, type PlatformProps } from "../Platform.ts";
-import * as Provider from "../Provider.ts";
-import { Resource } from "../Resource.ts";
+import { isResolved } from "alchemy/Diff";
+import type { Input } from "alchemy/Input";
+import { createPhysicalName } from "alchemy/PhysicalName";
+import { Platform, type Main, type PlatformProps } from "alchemy/Platform";
+import * as Provider from "alchemy/Provider";
+import { Resource } from "alchemy/Resource";
 import {
   createHostRuntimeContext,
   type HostRuntimeContext,
   type ServerHost as ServerHostService,
-} from "../Server/Process.ts";
-import { Stack } from "../Stack.ts";
-import { createInternalTags } from "../Tags.ts";
+} from "alchemy/Server/Process";
+import { Stack } from "alchemy/Stack";
+import { createInternalTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
+import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import {
   findClusterAdapter,
   type ClusterTransport,

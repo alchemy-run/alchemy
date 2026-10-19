@@ -1,6 +1,6 @@
+import { DockerLive } from "alchemy/Docker/Docker";
+import * as Provider from "alchemy/Provider";
 import * as Layer from "effect/Layer";
-import { DockerLive } from "../Docker/Docker.ts";
-import * as Provider from "../Provider.ts";
 import { builtinAdapters } from "./BuiltinAdapters.ts";
 import { Deployment, DeploymentProvider } from "./Deployment.ts";
 import { HelmChart, HelmChartProvider } from "./HelmChart.ts";

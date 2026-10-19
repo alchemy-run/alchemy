@@ -1,6 +1,6 @@
+import * as Kubernetes from "@alchemy.run/kubernetes";
+import type { Connection } from "@alchemy.run/kubernetes/Connection";
 import { expect } from "alchemy-test";
-import * as Kubernetes from "alchemy/Kubernetes";
-import type { Connection } from "alchemy/Kubernetes/Connection";
 import * as Effect from "effect/Effect";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";

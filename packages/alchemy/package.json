@@ -43,7 +43,6 @@
     "./Bundle": "./src/Bundle/index.ts",
     "./Docker": "./src/Docker/index.ts",
     "./Http": "./src/Http/index.ts",
-    "./Kubernetes": "./src/Kubernetes/index.ts",
     "./Cli": "./src/Cli/index.ts",
     "./Cli/CliKit": "./src/Cli/CliKit/index.ts",
     "./Endpoint": "./src/Endpoint/index.ts",
@@ -114,11 +113,6 @@
         "types": "./lib/Http/index.d.ts",
         "bun": "./src/Http/index.ts",
         "default": "./lib/Http/index.js"
-      },
-      "./Kubernetes": {
-        "types": "./lib/Kubernetes/index.d.ts",
-        "bun": "./src/Kubernetes/index.ts",
-        "default": "./lib/Kubernetes/index.js"
       },
       "./Cli": {
         "types": "./lib/Cli/index.d.ts",

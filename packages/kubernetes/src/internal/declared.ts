@@ -1,8 +1,8 @@
+import { deepEqual } from "alchemy/Diff";
+import { isPlainObject } from "alchemy/Util/data";
+import { sha256Object } from "alchemy/Util/sha256";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
-import { deepEqual } from "../../Diff.ts";
-import { isPlainObject } from "../../Util/data.ts";
-import { sha256Object } from "../../Util/sha256.ts";
 
 /**
  * Core list keys. Used only for the upstream groups in {@link builtinGroups}

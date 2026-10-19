@@ -1,13 +1,13 @@
-import * as container from "@distilled.cloud/gcp/container_v1";
-import { Unowned } from "alchemy/AdoptPolicy";
-import { deepEqual, isResolved } from "alchemy/Diff";
-import type { Connection } from "alchemy/Kubernetes/Connection";
-import { deleteObjects, reconcileObjects } from "alchemy/Kubernetes/internal/client";
+import type { Connection } from "@alchemy.run/kubernetes/Connection";
+import { deleteObjects, reconcileObjects } from "@alchemy.run/kubernetes/internal/client";
 import {
   type KubernetesObjectBinding,
   type KubernetesObjectDefinition,
   type KubernetesObjectRef,
-} from "alchemy/Kubernetes/internal/objects";
+} from "@alchemy.run/kubernetes/internal/objects";
+import * as container from "@distilled.cloud/gcp/container_v1";
+import { Unowned } from "alchemy/AdoptPolicy";
+import { deepEqual, isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource, type ResourceBinding } from "alchemy/Resource";

@@ -1,4 +1,4 @@
-import * as Kubernetes from "alchemy/Kubernetes";
+import * as Kubernetes from "@alchemy.run/kubernetes";
 
 /**
  * The shared `Kubernetes.LocalCluster` for LocalCluster.test.ts: a kind

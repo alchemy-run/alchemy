@@ -26,7 +26,7 @@ The Kubernetes primitives you'll meet here:
 Alchemy models these directly:
 [`Cluster`](/providers/aws/eks/cluster) with `compute: "auto"`
 stands up the control plane from a VPC, and the cluster-agnostic
-`alchemy/Kubernetes` workloads target it by passing the cluster
+`@alchemy.run/kubernetes` workloads target it by passing the cluster
 resource as their `cluster` prop:
 [`Kubernetes.Deployment`](/providers/kubernetes/deployment)
 synthesizes a Kubernetes `Deployment` + `Service`;
@@ -42,7 +42,7 @@ with `AWS.providers()` in the Stack:
 
 ```typescript
 import * as AWS from "@alchemy.run/aws";
-import * as Kubernetes from "alchemy/Kubernetes";
+import * as Kubernetes from "@alchemy.run/kubernetes";
 import * as Layer from "effect/Layer";
 
 export default Alchemy.Stack(

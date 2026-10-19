@@ -1,8 +1,8 @@
+import { isResolved } from "alchemy/Diff";
+import * as Provider from "alchemy/Provider";
+import { Resource } from "alchemy/Resource";
+import { isPlainObject } from "alchemy/Util/data";
 import * as Effect from "effect/Effect";
-import { isResolved } from "../Diff.ts";
-import * as Provider from "../Provider.ts";
-import { Resource } from "../Resource.ts";
-import { isPlainObject } from "../Util/data.ts";
 import { toConnection, type ClusterLike, type Connection } from "./Connection.ts";
 import {
   applyObject,

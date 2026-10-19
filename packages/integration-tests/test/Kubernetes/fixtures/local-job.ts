@@ -1,4 +1,4 @@
-import * as Kubernetes from "alchemy/Kubernetes";
+import * as Kubernetes from "@alchemy.run/kubernetes";
 import * as Effect from "effect/Effect";
 import { TestLocalCluster } from "./local.ts";
 

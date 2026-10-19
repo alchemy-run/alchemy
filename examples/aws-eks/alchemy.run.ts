@@ -1,4 +1,5 @@
 import * as AWS from "@alchemy.run/aws";
+import * as Kubernetes from "@alchemy.run/kubernetes";
 /**
  * A "guestbook" app on EKS Auto Mode that exercises the full Kubernetes
  * container surface:
@@ -15,7 +16,6 @@ import * as AWS from "@alchemy.run/aws";
  *   (`src/SeedJob.ts`).
  */
 import * as Alchemy from "alchemy";
-import * as Kubernetes from "alchemy/Kubernetes";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import ApiLive, { Api } from "./src/Api.ts";

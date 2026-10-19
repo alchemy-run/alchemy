@@ -955,6 +955,9 @@ importers:
       '@alchemy.run/hetzner':
         specifier: workspace:*
         version: link:../../packages/hetzner
+      '@alchemy.run/kubernetes':
+        specifier: workspace:*
+        version: link:../../packages/kubernetes
       '@alchemy.run/neon':
         specifier: workspace:*
         version: link:../../packages/neon
@@ -1146,6 +1149,9 @@ importers:
       '@alchemy.run/aws':
         specifier: workspace:*
         version: link:../../packages/aws
+      '@alchemy.run/kubernetes':
+        specifier: workspace:*
+        version: link:../../packages/kubernetes
       '@distilled.cloud/aws':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/aws
@@ -1164,6 +1170,9 @@ importers:
       '@alchemy.run/aws':
         specifier: workspace:*
         version: link:../../packages/aws
+      '@alchemy.run/kubernetes':
+        specifier: workspace:*
+        version: link:../../packages/kubernetes
       '@distilled.cloud/aws':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/aws
@@ -4691,6 +4700,9 @@ importers:
       '@alchemy.run/gcp':
         specifier: workspace:*
         version: link:../../packages/gcp
+      '@alchemy.run/kubernetes':
+        specifier: workspace:*
+        version: link:../../packages/kubernetes
       '@distilled.cloud/gcp':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/gcp
@@ -5593,6 +5605,9 @@ importers:
 
   examples/kubernetes-tutorial:
     dependencies:
+      '@alchemy.run/kubernetes':
+        specifier: workspace:*
+        version: link:../../packages/kubernetes
       '@effect/platform-bun':
         specifier: 'catalog:'
         version: 4.0.4(effect@4.0.4)
@@ -8162,6 +8177,9 @@ importers:
       '@alchemy.run/floci':
         specifier: workspace:*
         version: link:../floci
+      '@alchemy.run/kubernetes':
+        specifier: workspace:*
+        version: link:../kubernetes
       '@distilled.cloud/aws':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/aws
@@ -9430,6 +9448,9 @@ importers:
 
   packages/gcp:
     dependencies:
+      '@alchemy.run/kubernetes':
+        specifier: workspace:*
+        version: link:../kubernetes
       '@distilled.cloud/core':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/core
@@ -9602,6 +9623,9 @@ importers:
       '@alchemy.run/hetzner':
         specifier: workspace:*
         version: link:../hetzner
+      '@alchemy.run/kubernetes':
+        specifier: workspace:*
+        version: link:../kubernetes
       '@alchemy.run/neon':
         specifier: workspace:*
         version: link:../neon
@@ -9860,6 +9884,31 @@ importers:
       yaml:
         specifier: 'catalog:'
         version: 2.9.1
+
+  packages/kubernetes:
+    dependencies:
+      yaml:
+        specifier: 'catalog:'
+        version: 2.9.1
+    devDependencies:
+      '@effect/platform-bun':
+        specifier: 'catalog:'
+        version: 4.0.4(effect@4.0.4)
+      '@types/bun':
+        specifier: 'catalog:'
+        version: 1.4.3
+      '@types/node':
+        specifier: 'catalog:'
+        version: 26.6.5
+      alchemy:
+        specifier: workspace:*
+        version: link:../alchemy
+      effect:
+        specifier: 4.0.4
+        version: 4.0.4
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
 
   packages/neon:
     dependencies:
@@ -11355,6 +11404,9 @@ importers:
       '@alchemy.run/github':
         specifier: workspace:*
         version: link:../packages/github
+      '@alchemy.run/kubernetes':
+        specifier: workspace:*
+        version: link:../packages/kubernetes
       '@astrojs/check':
         specifier: 'catalog:'
         version: 0.9.10(prettier@3.9.6)(typescript@7.0.2)

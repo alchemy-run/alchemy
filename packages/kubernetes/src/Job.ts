@@ -1,17 +1,17 @@
+import { isResolved } from "alchemy/Diff";
+import * as Output from "alchemy/Output";
+import { createPhysicalName } from "alchemy/PhysicalName";
+import { Platform, type PlatformProps, type PlatformServices } from "alchemy/Platform";
+import * as Provider from "alchemy/Provider";
+import { Resource } from "alchemy/Resource";
+import { packEnvValue, unpackEnvValue, RuntimeContext } from "alchemy/RuntimeContext";
+import type { HostRuntimeContext } from "alchemy/Server/Process";
+import { Stack } from "alchemy/Stack";
+import { createInternalTags } from "alchemy/Tags";
+import { unwrapRedacted } from "alchemy/Util/data";
+import { sha256Object } from "alchemy/Util/sha256";
 import * as Effect from "effect/Effect";
 import type { Scope } from "effect/Scope";
-import { isResolved } from "../Diff.ts";
-import * as Output from "../Output.ts";
-import { createPhysicalName } from "../PhysicalName.ts";
-import { Platform, type PlatformProps, type PlatformServices } from "../Platform.ts";
-import * as Provider from "../Provider.ts";
-import { Resource } from "../Resource.ts";
-import { packEnvValue, unpackEnvValue, RuntimeContext } from "../RuntimeContext.ts";
-import type { HostRuntimeContext } from "../Server/Process.ts";
-import { Stack } from "../Stack.ts";
-import { createInternalTags } from "../Tags.ts";
-import { unwrapRedacted } from "../Util/data.ts";
-import { sha256Object } from "../Util/sha256.ts";
 import {
   findClusterAdapter,
   type IdentityState,

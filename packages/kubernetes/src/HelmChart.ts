@@ -1,12 +1,12 @@
+import { hashDirectory } from "alchemy/Command/Memo";
+import { isResolved } from "alchemy/Diff";
+import { createPhysicalName } from "alchemy/PhysicalName";
+import * as Provider from "alchemy/Provider";
+import { Resource } from "alchemy/Resource";
+import { collectRedactedSecrets } from "alchemy/Util/Redaction";
+import { sha256Object } from "alchemy/Util/sha256";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
-import { hashDirectory } from "../Command/Memo.ts";
-import { isResolved } from "../Diff.ts";
-import { createPhysicalName } from "../PhysicalName.ts";
-import * as Provider from "../Provider.ts";
-import { Resource } from "../Resource.ts";
-import { collectRedactedSecrets } from "../Util/Redaction.ts";
-import { sha256Object } from "../Util/sha256.ts";
 import type { ClusterTransport } from "./ClusterAdapter.ts";
 import { toConnection, type ClusterLike, type Connection } from "./Connection.ts";
 import {

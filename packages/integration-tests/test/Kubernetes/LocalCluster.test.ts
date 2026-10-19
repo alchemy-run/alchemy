@@ -1,12 +1,12 @@
-import { describe, expect } from "alchemy-test";
-import * as Kubernetes from "alchemy/Kubernetes";
-import { connectCluster, readObject } from "alchemy/Kubernetes/internal/client";
+import * as Kubernetes from "@alchemy.run/kubernetes";
+import { connectCluster, readObject } from "@alchemy.run/kubernetes/internal/client";
 import {
   kindClusterConfig,
   kindConfigOf,
   REGISTRY_CONTAINERD_PATCH,
-} from "alchemy/Kubernetes/internal/kind";
-import { imagePlatformOf } from "alchemy/Kubernetes/internal/workload";
+} from "@alchemy.run/kubernetes/internal/kind";
+import { imagePlatformOf } from "@alchemy.run/kubernetes/internal/workload";
+import { describe, expect } from "alchemy-test";
 import * as Provider from "alchemy/Provider";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Core from "alchemy/Test/Core";

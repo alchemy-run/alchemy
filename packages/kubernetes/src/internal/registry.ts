@@ -1,3 +1,6 @@
+import type { RegistryCredentials } from "alchemy/Docker/Docker";
+import { makeContainerImageSource, type ImageRegistryTarget } from "alchemy/Docker/ImageSource";
+import { createPhysicalName } from "alchemy/PhysicalName";
 /**
  * Image publishing for connections that declare a
  * {@link Connection.registry}: `main` programs and `context` Dockerfiles are
@@ -6,9 +9,6 @@
  * adapter has no managed registry of its own (EKS pushes to ECR instead).
  */
 import * as Effect from "effect/Effect";
-import type { RegistryCredentials } from "../../Docker/Docker.ts";
-import { makeContainerImageSource, type ImageRegistryTarget } from "../../Docker/ImageSource.ts";
-import { createPhysicalName } from "../../PhysicalName.ts";
 import type { RegistryState, WorkloadImageSource } from "../ClusterAdapter.ts";
 import type { ContainerRegistry } from "../Connection.ts";
 
