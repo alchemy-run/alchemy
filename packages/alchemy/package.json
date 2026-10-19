@@ -44,7 +44,6 @@
     "./Runtime/Bootstrap": "./src/Runtime/Bootstrap.ts",
     "./Runtime/ManagedHttpShutdown": "./src/Runtime/ManagedHttpShutdown.ts",
     "./Secrets": "./src/Secrets/index.ts",
-    "./Server": "./src/Server/index.ts",
     "./State": "./src/State/index.ts",
     "./Util": "./src/Util/index.ts",
     "./bin/alchemy.js": "./bin/alchemy.js",
@@ -111,11 +110,6 @@
         "types": "./lib/Secrets/index.d.ts",
         "bun": "./src/Secrets/index.ts",
         "default": "./lib/Secrets/index.js"
-      },
-      "./Server": {
-        "types": "./lib/Server/index.d.ts",
-        "bun": "./src/Server/index.ts",
-        "default": "./lib/Server/index.js"
       },
       "./State": {
         "types": "./lib/State/index.d.ts",

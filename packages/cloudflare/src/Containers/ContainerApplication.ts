@@ -4,7 +4,7 @@ import type * as Bundle from "alchemy/Bundle/Bundle";
 import * as ProviderLayer from "alchemy/Local/ProviderLayer";
 import { type Main, type PlatformProps, type PlatformServices } from "alchemy/Platform";
 import { Resource } from "alchemy/Resource";
-import type { ProcessServices } from "alchemy/Server/Process";
+import type { ProcessServices } from "alchemy/Runtime/Process";
 import type * as Duration from "effect/Duration";
 import * as Redacted from "effect/Redacted";
 import type { Providers } from "../Providers.ts";

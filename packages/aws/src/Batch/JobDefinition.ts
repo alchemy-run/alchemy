@@ -13,12 +13,12 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import { Platform, type PlatformProps, type PlatformServices } from "alchemy/Platform";
 import * as Provider from "alchemy/Provider";
 import { Resource, type ResourceBinding } from "alchemy/Resource";
-import type { RuntimeContext } from "alchemy/RuntimeContext";
 import {
   createHostRuntimeContext,
   type HostRuntimeContext,
   type ServerHost,
-} from "alchemy/Server/Process";
+} from "alchemy/Runtime/Process";
+import type { RuntimeContext } from "alchemy/RuntimeContext";
 import { Stack } from "alchemy/Stack";
 import { createInternalTags, createTagsList, diffTags, hasTags } from "alchemy/Tags";
 import { toWireSeconds } from "alchemy/Util/Duration";

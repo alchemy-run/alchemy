@@ -8,7 +8,7 @@ import { Platform, type Main, type PlatformProps } from "alchemy/Platform";
 import * as Provider from "alchemy/Provider";
 import type { ScopedPlanStatusSession } from "alchemy/Report";
 import { Resource } from "alchemy/Resource";
-import type { ServerHost } from "alchemy/Server/Process";
+import type { ServerHost } from "alchemy/Runtime/Process";
 import { Stack } from "alchemy/Stack";
 import { Stage } from "alchemy/Stage";
 import { createAlchemyTagFilters, createInternalTags, diffTags } from "alchemy/Tags";

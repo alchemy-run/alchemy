@@ -8,7 +8,11 @@ import * as Plan from "@/Plan";
 import { Platform, type Main, type PlatformProps } from "@/Platform.ts";
 import * as Provider from "@/Provider.ts";
 import { Resource } from "@/Resource";
-import { createHostRuntimeContext, type HostRuntimeContext, ServerHost } from "@/Server/Process.ts";
+import {
+  createHostRuntimeContext,
+  type HostRuntimeContext,
+  ServerHost,
+} from "@/Runtime/Process.ts";
 import * as Stack from "@/Stack";
 import { Stage } from "@/Stage";
 import { inMemoryState, State } from "@/State";

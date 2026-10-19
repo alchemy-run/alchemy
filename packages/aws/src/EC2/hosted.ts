@@ -7,7 +7,7 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import type { PlatformProps } from "alchemy/Platform";
 import type { ScopedPlanStatusSession } from "alchemy/Report";
 import type { ResourceBinding } from "alchemy/Resource";
-import { createHostRuntimeContext, type HostRuntimeContext } from "alchemy/Server/Process";
+import { createHostRuntimeContext, type HostRuntimeContext } from "alchemy/Runtime/Process";
 import { createInternalTags, createTagsList, hasTags } from "alchemy/Tags";
 import { sha256 } from "alchemy/Util/sha256";
 import { zipCode } from "alchemy/Util/zip";

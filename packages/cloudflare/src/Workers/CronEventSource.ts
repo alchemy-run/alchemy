@@ -1,7 +1,7 @@
 import type * as cf from "@cloudflare/workers-types";
 import * as Namespace from "alchemy/Namespace";
+import type { FunctionContext } from "alchemy/Runtime/Function";
 import { RuntimeContext } from "alchemy/RuntimeContext";
-import type { FunctionContext } from "alchemy/Serverless/Function";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";

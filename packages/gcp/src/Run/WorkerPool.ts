@@ -7,12 +7,12 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import { Platform, type Main, type PlatformProps, type PlatformServices } from "alchemy/Platform";
 import * as Provider from "alchemy/Provider";
 import { Resource, type ResourceBinding } from "alchemy/Resource";
-import type { RuntimeContext } from "alchemy/RuntimeContext";
 import {
   createContainerRuntimeContext,
   type HostRuntimeContext,
   type ServerHost,
-} from "alchemy/Server/Process";
+} from "alchemy/Runtime/Process";
+import type { RuntimeContext } from "alchemy/RuntimeContext";
 import { tagRecord } from "alchemy/Tags";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";

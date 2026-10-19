@@ -1,5 +1,5 @@
 import { isScopeEjected } from "alchemy/Http";
-import type * as Serverless from "alchemy/Serverless/index";
+import type { FunctionListener } from "alchemy/Runtime/Function";
 import { toSeconds } from "alchemy/Util/Duration";
 /**
  * Internal scaffolding for AWS Lambda Durable Functions — NOT exported from
@@ -279,7 +279,7 @@ type WrappedDurableHandler = (event: any, context: lambda.Context) => Promise<an
 export const makeDurableListener = (options: {
   name: string;
   run: (input: unknown) => Effect.Effect<unknown>;
-}): Effect.Effect<Serverless.FunctionListener> =>
+}): Effect.Effect<FunctionListener> =>
   // `Effect.sync`, NOT `Effect.gen` yielding `loadDurableSdk`: the listener is
   // CONSTRUCTED when the host resolves `runtimeContext.exports`, which happens
   // at PLAN/DEPLOY time (`Platform.ts` does `yield* runtimeContext.exports`).
@@ -361,5 +361,5 @@ export const makeDurableListener = (options: {
         // let it surface as an invocation error.
         return yield* Effect.promise(() => run(event, context));
       });
-    }) as unknown as Serverless.FunctionListener;
+    }) as unknown as FunctionListener;
   });

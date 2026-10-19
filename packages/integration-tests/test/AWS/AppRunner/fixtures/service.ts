@@ -1,5 +1,5 @@
 import * as AWS from "@alchemy.run/aws";
-import { ServerHost } from "alchemy/Server/Process";
+import { ServerHost } from "alchemy/Runtime/Process";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";

@@ -11,7 +11,7 @@ import {
 import { findCwdForBundle, getStableContextDir, resolveMainPath } from "alchemy/Bundle/TempRoot";
 import { safeHttpEffect } from "alchemy/Http";
 import type { ResourceBinding } from "alchemy/Resource";
-import { createContainerRuntimeContext, type HostRuntimeContext } from "alchemy/Server/Process";
+import { createContainerRuntimeContext, type HostRuntimeContext } from "alchemy/Runtime/Process";
 import {
   copyExtraFiles,
   contextRootOf,

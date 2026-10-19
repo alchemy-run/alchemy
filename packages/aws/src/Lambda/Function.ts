@@ -16,8 +16,8 @@ import { Platform, type Main, type PlatformProps } from "alchemy/Platform";
 import type { LogLine, LogsInput } from "alchemy/Provider";
 import * as Provider from "alchemy/Provider";
 import { Resource, type ResourceBinding } from "alchemy/Resource";
+import type { FunctionContext, FunctionListener } from "alchemy/Runtime/Function";
 import { packEnvValue, unpackEnvValue } from "alchemy/RuntimeContext";
-import * as Serverless from "alchemy/Serverless/index";
 import { Stack } from "alchemy/Stack";
 import { Stage } from "alchemy/Stage";
 import { createInternalTags, createTagsList, hasAlchemyTags, hasTags } from "alchemy/Tags";
@@ -1013,12 +1013,12 @@ export const Function: Platform<
   Function,
   FunctionServices,
   FunctionShape,
-  Serverless.FunctionContext,
+  FunctionContext,
   {},
   FunctionZipProps
 > = Platform(FunctionTypeId, {
-  createRuntimeContext: (id: string): Serverless.FunctionContext => {
-    const listeners: Effect.Effect<Serverless.FunctionListener>[] = [];
+  createRuntimeContext: (id: string): FunctionContext => {
+    const listeners: Effect.Effect<FunctionListener>[] = [];
     const env: Record<string, any> = {};
 
     const ctx = {
@@ -1042,14 +1042,12 @@ export const Function: Platform<
       serve: (handler: HttpEffect) =>
         // @ts-ignore
         ctx.listen(makeFunctionHttpHandler(handler)),
-      listen: ((
-        handler: Serverless.FunctionListener | Effect.Effect<Serverless.FunctionListener>,
-      ) =>
+      listen: ((handler: FunctionListener | Effect.Effect<FunctionListener>) =>
         Effect.sync(() =>
           Effect.isEffect(handler)
             ? listeners.push(handler)
             : listeners.push(Effect.succeed(handler)),
-        )) as any as Serverless.FunctionContext["listen"],
+        )) as any as FunctionContext["listen"],
       exports: Effect.sync(() => ({
         // construct an Effect that produces the Function's entrypoint
         // Effect<(event, context) => Promise<any>>
@@ -1094,11 +1092,7 @@ export const Function: Platform<
                       // buffered spans/logs/metrics flush when it settles
                       // below.
                       Layer.effectContext(
-                        buildEventTelemetry(
-                          services,
-                          scope,
-                          (ctx as Serverless.FunctionContext).telemetry,
-                        ),
+                        buildEventTelemetry(services, scope, (ctx as FunctionContext).telemetry),
                       ),
                     ).pipe(Layer.provideMerge(Layer.succeedContext(services))),
                   ),

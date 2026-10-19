@@ -1,8 +1,8 @@
 import { HttpServer, type HttpEffect } from "alchemy/Http";
 import * as Output from "alchemy/Output";
 import { serveRpc } from "alchemy/Rpc";
+import type { ProcessContext } from "alchemy/Runtime/Process";
 import { packEnvValueKeepRedacted, unpackEnvValue } from "alchemy/RuntimeContext";
-import * as Server from "alchemy/Server";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 
@@ -13,7 +13,7 @@ export const MicrovmImageTypeId = "AWS.Lambda.MicrovmImage" as const;
  * that exposes the impl's `fetch` handler plus any RPC shape methods. Mirrors
  * the Cloudflare `ContainerPlatform` process context.
  */
-export const makeMicrovmRuntimeContext = (id: string): Server.ProcessContext => {
+export const makeMicrovmRuntimeContext = (id: string): ProcessContext => {
   const runners: Effect.Effect<void, never, any>[] = [];
   const env: Record<string, any> = {};
 
@@ -57,7 +57,7 @@ export const makeMicrovmRuntimeContext = (id: string): Server.ProcessContext => 
     run: ((effect: Effect.Effect<void, never, any>) =>
       Effect.sync(() => {
         runners.push(effect);
-      })) as unknown as Server.ProcessContext["run"],
+      })) as unknown as ProcessContext["run"],
     serve,
     exports: Effect.sync(() => ({
       default: Effect.all(
@@ -72,5 +72,5 @@ export const makeMicrovmRuntimeContext = (id: string): Server.ProcessContext => 
         { concurrency: "unbounded" },
       ),
     })),
-  } as Server.ProcessContext;
+  } as ProcessContext;
 };

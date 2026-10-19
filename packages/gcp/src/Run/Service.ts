@@ -8,7 +8,7 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import { Platform, type Main, type PlatformProps } from "alchemy/Platform";
 import * as Provider from "alchemy/Provider";
 import { Resource, type ResourceBinding } from "alchemy/Resource";
-import { type ServerHost } from "alchemy/Server/Process";
+import { type ServerHost } from "alchemy/Runtime/Process";
 import { tagRecord } from "alchemy/Tags";
 import type { ExtraFile } from "alchemy/Util/extraFiles";
 import * as Data from "effect/Data";

@@ -1,6 +1,6 @@
 import * as Binding from "alchemy/Binding";
 import * as Namespace from "alchemy/Namespace";
-import { ServerHost } from "alchemy/Server/Process";
+import { ServerHost } from "alchemy/Runtime/Process";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";

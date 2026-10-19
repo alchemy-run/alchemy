@@ -13,7 +13,7 @@ import type { LogLine, LogsInput } from "alchemy/Provider";
 import * as Provider from "alchemy/Provider";
 import type { ScopedPlanStatusSession } from "alchemy/Report";
 import { Resource, type ResourceBinding } from "alchemy/Resource";
-import { createHostRuntimeContext, type HostRuntimeContext } from "alchemy/Server/Process";
+import { createHostRuntimeContext, type HostRuntimeContext } from "alchemy/Runtime/Process";
 import { Stack } from "alchemy/Stack";
 import { createInternalTags, createTagsList, diffTags, hasAlchemyTags } from "alchemy/Tags";
 import * as Data from "effect/Data";

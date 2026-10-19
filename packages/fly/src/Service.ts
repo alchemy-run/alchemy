@@ -16,8 +16,8 @@ import { Platform, type Main, type MainRpc, type PlatformProps } from "alchemy/P
 import * as Provider from "alchemy/Provider";
 import { makeRandom } from "alchemy/Random";
 import type { Resource } from "alchemy/Resource";
+import type { ServerHost } from "alchemy/Runtime/Process";
 import { packEnvValue } from "alchemy/RuntimeContext";
-import type { ServerHost } from "alchemy/Server/Process";
 import { Stack } from "alchemy/Stack";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -889,7 +889,7 @@ export type ServiceRuntimeContext = FlyHostRuntimeContext;
  *
  * **Example:** ServerHost.run
  * ```typescript
- * import { ServerHost } from "alchemy/Server";
+ * import { ServerHost } from "alchemy/Runtime/Process";
  *
  * export default class Worker extends Fly.Service<Worker>()(
  *   "Worker",

@@ -11,7 +11,7 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import { Platform, type Main, type PlatformProps } from "alchemy/Platform";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
-import type { HostRuntimeContext, ServerHost } from "alchemy/Server/Process";
+import type { HostRuntimeContext, ServerHost } from "alchemy/Runtime/Process";
 import { Stack } from "alchemy/Stack";
 import { createInternalTags, diffTags } from "alchemy/Tags";
 import { toMillis, toWireSeconds } from "alchemy/Util/Duration";

@@ -5,7 +5,7 @@ import type * as Bundle from "alchemy/Bundle/Bundle";
 import { Platform } from "alchemy/Platform";
 import type { Main } from "alchemy/Platform";
 import type { Resource } from "alchemy/Resource";
-import type * as Server from "alchemy/Server";
+import type { ProcessContext } from "alchemy/Runtime/Process";
 import * as Effect from "effect/Effect";
 import type { PolicyStatement } from "../IAM/Policy.ts";
 import type { Role } from "../IAM/Role.ts";
@@ -575,7 +575,7 @@ export const MicrovmImage: Platform<
   MicrovmImage,
   MicrovmImageServices,
   MicrovmImageShape,
-  Server.ProcessContext
+  ProcessContext
 > = Platform(MicrovmImageTypeId, {
   createRuntimeContext: makeMicrovmRuntimeContext,
   // When `buildRole` is a Role instance, grant it the build permissions via a

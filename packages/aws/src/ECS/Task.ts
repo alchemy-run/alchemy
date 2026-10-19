@@ -8,12 +8,12 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import { Platform, type Main, type PlatformProps, type PlatformServices } from "alchemy/Platform";
 import * as Provider from "alchemy/Provider";
 import { Resource, type ResourceBinding } from "alchemy/Resource";
-import type { RuntimeContext } from "alchemy/RuntimeContext";
 import {
   createContainerRuntimeContext,
   type HostRuntimeContext,
   type ServerHost,
-} from "alchemy/Server/Process";
+} from "alchemy/Runtime/Process";
+import type { RuntimeContext } from "alchemy/RuntimeContext";
 import { Stack } from "alchemy/Stack";
 import { createInternalTags, createTagsList, diffTags, hasTags } from "alchemy/Tags";
 import * as Context from "effect/Context";
@@ -289,7 +289,7 @@ export interface TaskRuntimeContext extends HostRuntimeContext {
 }
 
 // Shared with `Docker.Service`; lives beside the host runtime context.
-export { createContainerRuntimeContext } from "alchemy/Server/Process";
+export { createContainerRuntimeContext } from "alchemy/Runtime/Process";
 
 /**
  * A Fargate task definition with a container image from one of three
