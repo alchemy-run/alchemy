@@ -154,50 +154,47 @@ export type BindHost = (
   ...args: unknown[]
 ) => (data: HostBinding) => Effect.Effect<void>;
 
-// Bindings only bind at deploy (every call site is behind the same literal
-// guard), so a host bundle gets a no-op and drops the identity resources.
-const runtimeBind: BindHost = () => () => Effect.void;
+export const Bind: Effect.Effect<BindHost> = Effect.gen(function* () {
+  // Bindings only bind at deploy, so a host bundle captures nothing here
+  // and drops the identity resources.
+  if (globalThis.__ALCHEMY_RUNTIME__) return () => () => Effect.void;
+  const GcpServiceAccount = yield* ServiceAccount;
+  const GcpServiceAccountKey = yield* ServiceAccountKey;
 
-export const Bind: Effect.Effect<BindHost> = globalThis.__ALCHEMY_RUNTIME__
-  ? Effect.succeed(runtimeBind)
-  : Effect.gen(function* () {
-      const GcpServiceAccount = yield* ServiceAccount;
-      const GcpServiceAccountKey = yield* ServiceAccountKey;
+  return (label: TemplateStringsArray, ...args: unknown[]) =>
+    Effect.fn(function* (data: HostBinding) {
+      const host = yield* Binding.Host;
+      if (host === undefined) return;
 
-      return (label: TemplateStringsArray, ...args: unknown[]) =>
-        Effect.fn(function* (data: HostBinding) {
-          const host = yield* Binding.Host;
-          if (host === undefined) return;
+      if (runsAsServiceAccount(host)) {
+        return yield* (host as unknown as BindTarget).bind(allow(label), host, ...args)(data);
+      }
 
-          if (runsAsServiceAccount(host)) {
-            return yield* (host as unknown as BindTarget).bind(allow(label), host, ...args)(data);
-          }
-
-          const account = yield* GcpServiceAccount(`${host.LogicalId}ServiceAccount`, {
-            displayName: `Alchemy: GCP access for ${host.LogicalId}`.slice(0, 100),
-          });
-          const key = yield* GcpServiceAccountKey(`${host.LogicalId}ServiceAccountKey`, {
-            serviceAccount: account.email,
-          });
-          if (data.iam !== undefined && data.iam.length > 0) {
-            yield* (account as unknown as BindTarget).bind(
-              allow(label),
-              host,
-              ...args,
-            )({
-              iam: data.iam,
-            });
-          }
-          const runtime = (yield* CurrentRuntimeContext)!;
-          yield* runtime.set(KEY_ENV.email, account.email);
-          yield* runtime.set(KEY_ENV.project, account.project);
-          yield* runtime.set(KEY_ENV.privateKeyId, key.privateKeyId);
-          yield* runtime.set(KEY_ENV.privateKey, key.privateKey);
-          for (const [name, value] of Object.entries(data.env ?? {})) {
-            yield* runtime.set(name, Output.isOutput(value) ? value : Output.literal(value));
-          }
+      const account = yield* GcpServiceAccount(`${host.LogicalId}ServiceAccount`, {
+        displayName: `Alchemy: GCP access for ${host.LogicalId}`.slice(0, 100),
+      });
+      const key = yield* GcpServiceAccountKey(`${host.LogicalId}ServiceAccountKey`, {
+        serviceAccount: account.email,
+      });
+      if (data.iam !== undefined && data.iam.length > 0) {
+        yield* (account as unknown as BindTarget).bind(
+          allow(label),
+          host,
+          ...args,
+        )({
+          iam: data.iam,
         });
+      }
+      const runtime = (yield* CurrentRuntimeContext)!;
+      yield* runtime.set(KEY_ENV.email, account.email);
+      yield* runtime.set(KEY_ENV.project, account.project);
+      yield* runtime.set(KEY_ENV.privateKeyId, key.privateKeyId);
+      yield* runtime.set(KEY_ENV.privateKey, key.privateKey);
+      for (const [name, value] of Object.entries(data.env ?? {})) {
+        yield* runtime.set(name, Output.isOutput(value) ? value : Output.literal(value));
+      }
     });
+});
 
 /**
  * Resolve a distilled operation with the host's GCP credentials, once when

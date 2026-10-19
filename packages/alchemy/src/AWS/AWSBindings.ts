@@ -173,77 +173,74 @@ export type BindHost = (
   ...args: unknown[]
 ) => (data: HostBinding) => Effect.Effect<void>;
 
-// Bindings only bind at deploy (every call site is behind the same literal
-// guard), so a host bundle gets a no-op and drops the identity resources.
-const runtimeBind: BindHost = () => () => Effect.void;
+export const Bind: Effect.Effect<BindHost> = Effect.gen(function* () {
+  // Bindings only bind at deploy, so a host bundle captures nothing here
+  // and drops the identity resources.
+  if (globalThis.__ALCHEMY_RUNTIME__) return () => () => Effect.void;
+  const IamUser = yield* User;
+  const IamAccessKey = yield* AccessKey;
+  const IamRole = yield* Role;
 
-export const Bind: Effect.Effect<BindHost> = globalThis.__ALCHEMY_RUNTIME__
-  ? Effect.succeed(runtimeBind)
-  : Effect.gen(function* () {
-      const IamUser = yield* User;
-      const IamAccessKey = yield* AccessKey;
-      const IamRole = yield* Role;
+  return (label: TemplateStringsArray, ...args: unknown[]) =>
+    Effect.fn(function* (data: HostBinding) {
+      const host = yield* Binding.Host;
+      if (host === undefined) return;
 
-      return (label: TemplateStringsArray, ...args: unknown[]) =>
-        Effect.fn(function* (data: HostBinding) {
-          const host = yield* Binding.Host;
-          if (host === undefined) return;
+      if (runsAsRole(host)) {
+        return yield* (host as unknown as BindTarget).bind(
+          labelled("Allow", label),
+          host,
+          ...args,
+        )(data);
+      }
 
-          if (runsAsRole(host)) {
-            return yield* (host as unknown as BindTarget).bind(
-              labelled("Allow", label),
-              host,
-              ...args,
-            )(data);
-          }
+      // The user may assume any role that trusts it; the role's trust policy
+      // restricts assumption to this user, which avoids a User↔Role ARN cycle.
+      const id = host.LogicalId;
+      const user = yield* IamUser(`${id}User`, {
+        inlinePolicies: {
+          AssumeRole: {
+            Version: "2012-10-17",
+            Statement: [{ Effect: "Allow", Action: ["sts:AssumeRole"], Resource: ["*"] }],
+          },
+        },
+      });
+      const accessKey = yield* IamAccessKey(`${id}AccessKey`, { userName: user.userName });
+      const role = yield* IamRole(`${id}Role`, {
+        assumeRolePolicyDocument: {
+          Version: "2012-10-17",
+          Statement: [
+            { Effect: "Allow", Principal: { AWS: user.userArn }, Action: ["sts:AssumeRole"] },
+          ],
+        },
+      });
+      if (data.policyStatements !== undefined && data.policyStatements.length > 0) {
+        yield* (role as unknown as BindTarget).bind(
+          labelled("Allow", label),
+          host,
+          ...args,
+        )({ policyStatements: data.policyStatements });
+      }
 
-          // The user may assume any role that trusts it; the role's trust policy
-          // restricts assumption to this user, which avoids a User↔Role ARN cycle.
-          const id = host.LogicalId;
-          const user = yield* IamUser(`${id}User`, {
-            inlinePolicies: {
-              AssumeRole: {
-                Version: "2012-10-17",
-                Statement: [{ Effect: "Allow", Action: ["sts:AssumeRole"], Resource: ["*"] }],
-              },
-            },
-          });
-          const accessKey = yield* IamAccessKey(`${id}AccessKey`, { userName: user.userName });
-          const role = yield* IamRole(`${id}Role`, {
-            assumeRolePolicyDocument: {
-              Version: "2012-10-17",
-              Statement: [
-                { Effect: "Allow", Principal: { AWS: user.userArn }, Action: ["sts:AssumeRole"] },
-              ],
-            },
-          });
-          if (data.policyStatements !== undefined && data.policyStatements.length > 0) {
-            yield* (role as unknown as BindTarget).bind(
-              labelled("Allow", label),
-              host,
-              ...args,
-            )({ policyStatements: data.policyStatements });
-          }
-
-          const runtime = (yield* CurrentRuntimeContext)!;
-          yield* runtime.set(KEY_ENV.accessKeyId, accessKey.accessKeyId);
-          yield* runtime.set(KEY_ENV.secretAccessKey, accessKey.secretAccessKey);
-          yield* runtime.set(KEY_ENV.roleArn, role.roleArn);
-          yield* runtime.set(
-            KEY_ENV.region,
-            Output.fromEffect(CurrentRegion.pipe(Effect.orDie)) as Output.Output<string>,
-          );
-          // Local dev: STS and the bound operations run on the emulator, reached
-          // via the same `AWS_ENDPOINT_URL` the emulator injects into Lambdas.
-          const context = yield* Effect.serviceOption(AlchemyContext);
-          if (Option.isSome(context) && context.value.dev) {
-            yield* runtime.set("AWS_ENDPOINT_URL", Output.literal(DEFAULT_LOCAL_ENDPOINT));
-          }
-          for (const [key, value] of Object.entries(data.env ?? {})) {
-            yield* runtime.set(key, toOutput(value));
-          }
-        });
+      const runtime = (yield* CurrentRuntimeContext)!;
+      yield* runtime.set(KEY_ENV.accessKeyId, accessKey.accessKeyId);
+      yield* runtime.set(KEY_ENV.secretAccessKey, accessKey.secretAccessKey);
+      yield* runtime.set(KEY_ENV.roleArn, role.roleArn);
+      yield* runtime.set(
+        KEY_ENV.region,
+        Output.fromEffect(CurrentRegion.pipe(Effect.orDie)) as Output.Output<string>,
+      );
+      // Local dev: STS and the bound operations run on the emulator, reached
+      // via the same `AWS_ENDPOINT_URL` the emulator injects into Lambdas.
+      const context = yield* Effect.serviceOption(AlchemyContext);
+      if (Option.isSome(context) && context.value.dev) {
+        yield* runtime.set("AWS_ENDPOINT_URL", Output.literal(DEFAULT_LOCAL_ENDPOINT));
+      }
+      for (const [key, value] of Object.entries(data.env ?? {})) {
+        yield* runtime.set(key, toOutput(value));
+      }
     });
+});
 
 /**
  * Attach the host to a VPC, labelled `Vpc(<host>, <label>)`. Only a host that
