@@ -113,6 +113,32 @@ describe("Contributions.load", { tags: ["unit", "local"] }, () =>
       }).pipe(Effect.scoped),
     );
 
+    it.effect(
+      "merges the dev environment providers contribute",
+      () =>
+        Effect.gen(function* () {
+          const path = yield* Path.Path;
+          // Imports `effect`, so the project lives under this package.
+          const devEnvProvider = (name: string, env: Record<string, string>) =>
+            contributingPackage(
+              name,
+              `import * as Effect from "effect/Effect";
+export default { name: ${JSON.stringify(name)}, devEnv: Effect.succeed(Effect.succeed(${JSON.stringify(env)})) };`,
+            );
+          const root = yield* project(
+            {
+              "env-one": devEnvProvider("env-one", { ONE: "1" }),
+              "env-two": devEnvProvider("env-two", { TWO: "2" }),
+            },
+            { directory: path.resolve(import.meta.dirname, "../.alchemy/test-providers") },
+          );
+          const env = yield* inDirectory(root, Contributions.devEnv());
+          expect(env).toMatchObject({ ONE: "1", TWO: "2" });
+        }).pipe(Effect.scoped),
+      // Exclusive: changes the process's working directory.
+      { exclusive: true },
+    );
+
     it.effect("skips a second dependency provider with a taken name", () =>
       Effect.gen(function* () {
         const root = yield* project({

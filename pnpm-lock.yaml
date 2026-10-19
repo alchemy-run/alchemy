@@ -7908,9 +7908,6 @@ importers:
 
   packages/alchemy:
     dependencies:
-      '@alchemy.run/floci':
-        specifier: workspace:*
-        version: link:../floci
       '@alchemy.run/node-utils':
         specifier: workspace:*
         version: link:../node-utils

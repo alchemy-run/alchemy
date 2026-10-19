@@ -171,7 +171,6 @@
     "nuke": "cd ../../ && bun nuke"
   },
   "dependencies": {
-    "@alchemy.run/floci": "workspace:*",
     "@alchemy.run/node-utils": "workspace:*",
     "@alchemy.run/sigil": "catalog:",
     "capnweb": "catalog:",
