@@ -1,6 +1,5 @@
 export { Action, isAction, type Action as ActionInstance, type ActionLike } from "./Action.ts";
 export * as AdoptPolicy from "./AdoptPolicy.ts";
-export * from "./AI/index.ts";
 export * from "./AlchemyContext.ts";
 export * from "./Apply.ts";
 export * from "./Callback.ts";

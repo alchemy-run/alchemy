@@ -34,7 +34,6 @@
   "exports": {
     ".": "./src/index.ts",
     "./*": "./src/*.ts",
-    "./AI": "./src/AI/index.ts",
     "./Workflows": "./src/Workflows.ts",
     "./Auth": "./src/Auth/index.ts",
     "./Alchemist": "./src/Alchemist/index.ts",
@@ -66,11 +65,6 @@
         "types": "./lib/*.d.ts",
         "bun": "./src/*.ts",
         "default": "./lib/*.js"
-      },
-      "./AI": {
-        "types": "./lib/AI/index.d.ts",
-        "bun": "./src/AI/index.ts",
-        "default": "./lib/AI/index.js"
       },
       "./Workflows": {
         "types": "./lib/Workflows.d.ts",
@@ -196,7 +190,6 @@
     "@types/picomatch": "catalog:",
     "@types/react": "catalog:",
     "@types/ws": "catalog:",
-    "@vercel/nft": "catalog:",
     "@vitejs/plugin-rsc": "catalog:",
     "alchemy-test": "workspace:*",
     "astro": "catalog:",
@@ -207,7 +200,6 @@
     "next": "catalog:",
     "nuxt": "catalog:",
     "pg": "catalog:",
-    "prisma": "catalog:",
     "react": "catalog:",
     "react-devtools-core": "catalog:",
     "solid-js": "catalog:",
@@ -226,18 +218,13 @@
     "@effect/sql-mysql2": "catalog:",
     "@effect/sql-pg": "catalog:",
     "@effect/vitest": "catalog:",
-    "@vercel/nft": "catalog:",
     "effect": "catalog:",
     "mysql2": "catalog:",
     "pg": "catalog:",
-    "prisma": "catalog:",
     "vite": "catalog:",
     "ws": "catalog:"
   },
   "peerDependenciesMeta": {
-    "prisma": {
-      "optional": true
-    },
     "@alchemy.run/frontend-frameworks": {
       "optional": true
     },
@@ -254,9 +241,6 @@
       "optional": true
     },
     "@effect/vitest": {
-      "optional": true
-    },
-    "@vercel/nft": {
       "optional": true
     },
     "mysql2": {
