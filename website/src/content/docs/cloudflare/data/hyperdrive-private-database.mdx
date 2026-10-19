@@ -21,7 +21,7 @@ password.
 ```typescript
 // alchemy.run.ts
 import * as Alchemy from "alchemy";
-import * as AWS from "alchemy/AWS";
+import * as AWS from "@alchemy.run/aws";
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -46,7 +46,7 @@ the private ones.
 
 ```typescript
 // src/Database.ts
-import * as AWS from "alchemy/AWS";
+import * as AWS from "@alchemy.run/aws";
 import * as Effect from "effect/Effect";
 
 export const Network = AWS.EC2.Network("Network", {
@@ -117,7 +117,7 @@ public hostnames.
 
 ```typescript
 // src/Connector.ts
-import * as AWS from "alchemy/AWS";
+import * as AWS from "@alchemy.run/aws";
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Effect from "effect/Effect";
 import { ConnectorSecurityGroup, Network } from "./Database.ts";

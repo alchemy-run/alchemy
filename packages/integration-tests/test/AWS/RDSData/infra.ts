@@ -1,6 +1,6 @@
-import * as EC2 from "alchemy/AWS/EC2";
-import * as RDS from "alchemy/AWS/RDS";
-import * as SecretsManager from "alchemy/AWS/SecretsManager";
+import * as EC2 from "@alchemy.run/aws/EC2";
+import * as RDS from "@alchemy.run/aws/RDS";
+import * as SecretsManager from "@alchemy.run/aws/SecretsManager";
 import * as Effect from "effect/Effect";
 
 /**

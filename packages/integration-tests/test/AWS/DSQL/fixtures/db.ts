@@ -1,4 +1,4 @@
-import * as DSQL from "alchemy/AWS/DSQL";
+import * as DSQL from "@alchemy.run/aws/DSQL";
 
 /**
  * Shared Aurora DSQL cluster for the Connect e2e fixtures. Both Lambda

@@ -102,7 +102,7 @@ SQL over HTTPS with IAM auth — no VPC attachment for the Lambda, no drivers, n
 
 ```typescript
 import { AuroraDataApi } from "@alchemy.run/better-auth/AuroraDataApi";
-import * as AWS from "alchemy/AWS";
+import * as AWS from "@alchemy.run/aws";
 
 export const Db = AWS.RDS.Aurora("AuthDb", {
   subnetIds: network.privateSubnetIds,
@@ -176,7 +176,7 @@ Effect.gen(function* () {
 No dedicated host layer needed — `auth.fetch` is host-portable. Serve it from a Lambda function URL with the database layer matching your target: `AuroraDataApi` for Aurora, `Neon` for Neon, or generic `Postgres`/`MySQL` (TCP drivers on Lambda need `build: { install: ["pg"] }` so the dynamically-imported driver ships with an npm layout).
 
 ```typescript
-import * as Lambda from "alchemy/AWS/Lambda";
+import * as Lambda from "@alchemy.run/aws/Lambda";
 import { Neon as NeonDatabase } from "@alchemy.run/better-auth/Neon";
 
 export const AuthDb = Neon.Project("AuthDb");

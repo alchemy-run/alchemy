@@ -7,7 +7,7 @@ import { createHash, randomBytes, randomUUID } from "node:crypto";
  * suite, exported as the env vars the suites read, and removed after the run.
  *
  * Every call uses the credentials and Region of
- * `packages/alchemy/src/AWS/Local/FlociServices.ts` (access key `test`,
+ * `packages/aws/src/Local/FlociServices.ts` (access key `test`,
  * us-east-1): Floci scopes state by access key and Region, and that is what
  * the local providers and the test-body SDK clients use under
  * `ALCHEMY_TEST_DEV=1`. The OAM sink lives in a second emulator account,
@@ -65,7 +65,7 @@ const FIXTURE_TAG_KEY = "alchemy-floci-fixture";
 const FIXTURE_TAG_VALUE = "standing";
 const VPC_CIDR = "10.250.0.0/16";
 // Must match FLOCI_REGION / FLOCI_ACCOUNT_ID in
-// packages/alchemy/src/AWS/Local/FlociServices.ts.
+// packages/aws/src/Local/FlociServices.ts.
 const REGION = "us-east-1" as RegionName;
 const ACCOUNT_ID = "000000000000";
 // Second emulator account for the cross-account OAM sink.
@@ -158,7 +158,7 @@ const groupVars: Record<Group, ReadonlyArray<string>> = {
   ],
 };
 
-// Suites (under packages/alchemy/test/AWS) gated on each group's vars.
+// Suites (under packages/integration-tests/test/AWS) gated on each group's vars.
 const groupSuites: Record<Group, ReadonlyArray<string>> = {
   eksRole: ["EKS/Cluster.test.ts", "EKS/ClusterBindings.test.ts"],
   eksCluster: [

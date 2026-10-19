@@ -1,3 +1,4 @@
+import * as AWS from "@alchemy.run/aws";
 /**
  * A "guestbook" app on EKS Auto Mode that exercises the full Kubernetes
  * container surface:
@@ -14,7 +15,6 @@
  *   (`src/SeedJob.ts`).
  */
 import * as Alchemy from "alchemy";
-import * as AWS from "alchemy/AWS";
 import * as Kubernetes from "alchemy/Kubernetes";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";

@@ -1,3 +1,4 @@
+import { imageSourceKind, validateImageSource } from "@alchemy.run/aws/ECR/ImageSource";
 import {
   buildFinalDockerfile,
   containerEnvPreamble,
@@ -8,7 +9,6 @@ import * as Dockerfile from "alchemy/Docker/Dockerfile";
 import * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
-import { imageSourceKind, validateImageSource } from "../../../alchemy/src/AWS/ECR/ImageSource.ts";
 
 describe(
   "Dockerfile.inline",

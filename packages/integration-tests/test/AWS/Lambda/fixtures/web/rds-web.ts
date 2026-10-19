@@ -1,8 +1,8 @@
+import * as EC2 from "@alchemy.run/aws/EC2";
+import * as Lambda from "@alchemy.run/aws/Lambda";
+import * as RDS from "@alchemy.run/aws/RDS";
+import * as SecretsManager from "@alchemy.run/aws/SecretsManager";
 import * as Drizzle from "@alchemy.run/drizzle/Postgres";
-import * as EC2 from "alchemy/AWS/EC2";
-import * as Lambda from "alchemy/AWS/Lambda";
-import * as RDS from "alchemy/AWS/RDS";
-import * as SecretsManager from "alchemy/AWS/SecretsManager";
 import { sql } from "drizzle-orm";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";

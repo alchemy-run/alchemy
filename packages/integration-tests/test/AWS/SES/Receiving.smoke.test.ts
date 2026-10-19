@@ -1,3 +1,10 @@
+import * as AWS from "@alchemy.run/aws";
+import {
+  ActiveReceiptRuleSet,
+  EmailIdentity,
+  ReceiptRule,
+  ReceiptRuleSet,
+} from "@alchemy.run/aws/SES";
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
 import { findZoneByName } from "@alchemy.run/cloudflare/Zone/lookup";
@@ -7,8 +14,6 @@ import * as sesv2 from "@distilled.cloud/aws/sesv2";
 import * as sts from "@distilled.cloud/aws/sts";
 import { expect } from "alchemy-test";
 import { adopt } from "alchemy/AdoptPolicy";
-import * as AWS from "alchemy/AWS";
-import { ActiveReceiptRuleSet, EmailIdentity, ReceiptRule, ReceiptRuleSet } from "alchemy/AWS/SES";
 import * as Output from "alchemy/Output";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";

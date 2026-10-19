@@ -39,14 +39,6 @@
     "./Workflows": "./src/Workflows.ts",
     "./Auth": "./src/Auth/index.ts",
     "./Alchemist": "./src/Alchemist/index.ts",
-    "./AWS": "./src/AWS/index.ts",
-    "./AWS/Contributions": "./src/AWS/Contributions.ts",
-    "./AWS/*": "./src/AWS/*/index.ts",
-    "./AWS/Credentials": "./src/AWS/Credentials.ts",
-    "./AWS/Endpoint": "./src/AWS/Endpoint.ts",
-    "./AWS/Region": "./src/AWS/Region.ts",
-    "./AWS/Lambda/*": "./src/AWS/Lambda/*.ts",
-    "./AWS/Server/*": "./src/AWS/Server/*.ts",
     "./Command": "./src/Command/index.ts",
     "./Construct": "./src/Construct/index.ts",
     "./Bundle": "./src/Bundle/index.ts",
@@ -58,7 +50,6 @@
     "./Domain": "./src/Domain/index.ts",
     "./Endpoint": "./src/Endpoint/index.ts",
     "./Runtime/Bootstrap/*": "./src/Runtime/Bootstrap/*.ts",
-    "./AWS/Bootstrap/*": "./src/AWS/Bootstrap/*.ts",
     "./Process": "./src/Process/index.ts",
     "./Redis": "./src/Redis/index.ts",
     "./TUI": "./src/TUI/index.ts",
@@ -100,46 +91,6 @@
         "types": "./lib/Alchemist/index.d.ts",
         "bun": "./src/Alchemist/index.ts",
         "default": "./lib/Alchemist/index.js"
-      },
-      "./AWS": {
-        "types": "./lib/AWS/index.d.ts",
-        "bun": "./src/AWS/index.ts",
-        "default": "./lib/AWS/index.js"
-      },
-      "./AWS/Contributions": {
-        "types": "./lib/AWS/Contributions.d.ts",
-        "bun": "./src/AWS/Contributions.ts",
-        "default": "./lib/AWS/Contributions.js"
-      },
-      "./AWS/*": {
-        "types": "./lib/AWS/*/index.d.ts",
-        "bun": "./src/AWS/*/index.ts",
-        "default": "./lib/AWS/*/index.js"
-      },
-      "./AWS/Credentials": {
-        "types": "./lib/AWS/Credentials.d.ts",
-        "bun": "./src/AWS/Credentials.ts",
-        "default": "./lib/AWS/Credentials.js"
-      },
-      "./AWS/Endpoint": {
-        "types": "./lib/AWS/Endpoint.d.ts",
-        "bun": "./src/AWS/Endpoint.ts",
-        "default": "./lib/AWS/Endpoint.js"
-      },
-      "./AWS/Region": {
-        "types": "./lib/AWS/Region.d.ts",
-        "bun": "./src/AWS/Region.ts",
-        "default": "./lib/AWS/Region.js"
-      },
-      "./AWS/Lambda/*": {
-        "types": "./lib/AWS/Lambda/*.d.ts",
-        "bun": "./src/AWS/Lambda/*.ts",
-        "default": "./lib/AWS/Lambda/*.js"
-      },
-      "./AWS/Server/*": {
-        "types": "./lib/AWS/Server/*.d.ts",
-        "bun": "./src/AWS/Server/*.ts",
-        "default": "./lib/AWS/Server/*.js"
       },
       "./Command": {
         "types": "./lib/Command/index.d.ts",
@@ -196,11 +147,6 @@
         "bun": "./src/Runtime/Bootstrap/*.ts",
         "default": "./src/Runtime/Bootstrap/*.ts"
       },
-      "./AWS/Bootstrap/*": {
-        "types": "./src/AWS/Bootstrap/*.ts",
-        "bun": "./src/AWS/Bootstrap/*.ts",
-        "default": "./src/AWS/Bootstrap/*.ts"
-      },
       "./Process": {
         "types": "./lib/Process/index.d.ts",
         "bun": "./src/Process/index.ts",
@@ -253,11 +199,8 @@
     "@alchemy.run/floci": "workspace:*",
     "@alchemy.run/node-utils": "workspace:*",
     "@alchemy.run/sigil": "catalog:",
-    "@distilled.cloud/aws": "workspace:*",
     "@distilled.cloud/core": "workspace:*",
-    "@distilled.cloud/neon": "workspace:*",
     "@effect/sql-d1": "catalog:",
-    "@types/aws-lambda": "catalog:",
     "capnweb": "catalog:",
     "fflate": "catalog:",
     "pathe": "catalog:",
@@ -268,7 +211,6 @@
   },
   "devDependencies": {
     "@alchemy.run/frontend-frameworks": "workspace:*",
-    "@aws/durable-execution-sdk-js": "catalog:",
     "@cloudflare/containers": "catalog:",
     "@cloudflare/puppeteer": "catalog:",
     "@cloudflare/workers-types": "catalog:",
@@ -285,7 +227,6 @@
     "@opennextjs/cloudflare": "catalog:",
     "@oxc-project/types": "catalog:",
     "@prisma/orm-family-sql": "catalog:",
-    "@prisma/orm-postgres": "catalog:",
     "@react-router/dev": "catalog:",
     "@react-router/node": "catalog:",
     "@solidjs/router": "catalog:",
@@ -315,7 +256,6 @@
     "hono": "catalog:",
     "iovalkey": "catalog:",
     "isbot": "catalog:",
-    "mongodb": "catalog:",
     "mysql2": "catalog:",
     "next": "catalog:",
     "nitropack": "catalog:",
@@ -343,17 +283,14 @@
   },
   "peerDependencies": {
     "@alchemy.run/frontend-frameworks": "workspace:*",
-    "@aws/durable-execution-sdk-js": "catalog:",
     "@effect/platform-bun": "catalog:",
     "@effect/platform-node": "catalog:",
     "@effect/sql-libsql": "catalog:",
     "@effect/sql-mysql2": "catalog:",
     "@effect/sql-pg": "catalog:",
     "@effect/vitest": "catalog:",
-    "@prisma/orm-postgres": "catalog:",
     "@vercel/nft": "catalog:",
     "effect": "catalog:",
-    "mongodb": "catalog:",
     "mysql2": "catalog:",
     "pg": "catalog:",
     "prisma": "catalog:",
@@ -361,16 +298,10 @@
     "ws": "catalog:"
   },
   "peerDependenciesMeta": {
-    "@prisma/orm-postgres": {
-      "optional": true
-    },
     "prisma": {
       "optional": true
     },
     "@alchemy.run/frontend-frameworks": {
-      "optional": true
-    },
-    "@aws/durable-execution-sdk-js": {
       "optional": true
     },
     "@effect/platform-bun": {
@@ -394,9 +325,6 @@
     "@vercel/nft": {
       "optional": true
     },
-    "mongodb": {
-      "optional": true
-    },
     "mysql2": {
       "optional": true
     },
@@ -409,10 +337,5 @@
     "ws": {
       "optional": true
     }
-  },
-  "alchemy": {
-    "contributes": [
-      "alchemy/AWS/Contributions"
-    ]
   }
 }

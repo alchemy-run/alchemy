@@ -1,6 +1,6 @@
 // Package import (not the @/ alias): the test bundles a temp copy of this
 // file from packages/alchemy/.tmp, where the alias does not resolve.
-import * as AWS from "alchemy/AWS";
+import * as AWS from "@alchemy.run/aws";
 import * as Effect from "effect/Effect";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 

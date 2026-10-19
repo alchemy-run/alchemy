@@ -1,4 +1,4 @@
-import * as AWS from "alchemy/AWS";
+import * as AWS from "@alchemy.run/aws";
 import * as Postgres from "alchemy/SQL/Postgres";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";

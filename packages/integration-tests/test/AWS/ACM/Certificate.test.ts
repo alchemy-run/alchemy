@@ -1,3 +1,6 @@
+import * as AWS from "@alchemy.run/aws";
+import { Certificate, waitForRoute53Change } from "@alchemy.run/aws/ACM/Certificate";
+import { HostedZone } from "@alchemy.run/aws/Route53";
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
 import { findZoneByName } from "@alchemy.run/cloudflare/Zone/lookup";
@@ -5,8 +8,6 @@ import * as acm from "@distilled.cloud/aws/acm";
 import { Region as AwsRegion } from "@distilled.cloud/aws/Region";
 import * as route53 from "@distilled.cloud/aws/route-53";
 import { expect } from "alchemy-test";
-import * as AWS from "alchemy/AWS";
-import { HostedZone } from "alchemy/AWS/Route53";
 import * as Output from "alchemy/Output";
 import * as Provider from "alchemy/Provider";
 import { isResourceState, State, type ResourceState } from "alchemy/State";
@@ -15,7 +16,6 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
-import { Certificate, waitForRoute53Change } from "../../../../alchemy/src/AWS/ACM/Certificate.ts";
 
 // ACM certificates for CloudFront are provider-pinned to us-east-1; every
 // out-of-band ACM call in this file must target the same region.

@@ -1,4 +1,4 @@
-import * as AWS from "alchemy/AWS";
+import * as AWS from "@alchemy.run/aws";
 import { ServerHost } from "alchemy/Server/Process";
 import * as Telemetry from "alchemy/Telemetry";
 import * as Config from "effect/Config";

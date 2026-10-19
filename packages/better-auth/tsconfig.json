@@ -14,6 +14,7 @@
     {
       "path": "../alchemy/tsconfig.json"
     },
+    { "path": "../aws/tsconfig.json" },
     { "path": "../cloudflare/tsconfig.json" },
     { "path": "../planetscale/tsconfig.json" },
     { "path": "../neon/tsconfig.json" }

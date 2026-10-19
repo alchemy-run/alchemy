@@ -1,6 +1,6 @@
-import * as Lambda from "alchemy/AWS/Lambda";
-import * as RDS from "alchemy/AWS/RDS";
-import * as RDSData from "alchemy/AWS/RDSData";
+import * as Lambda from "@alchemy.run/aws/Lambda";
+import * as RDS from "@alchemy.run/aws/RDS";
+import * as RDSData from "@alchemy.run/aws/RDSData";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";

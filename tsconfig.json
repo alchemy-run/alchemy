@@ -142,6 +142,9 @@
       "path": "./packages/gcp/tsconfig.json"
     },
     {
+      "path": "./packages/aws/tsconfig.json"
+    },
+    {
       "path": "./packages/integration-tests/tsconfig.json"
     },
     {

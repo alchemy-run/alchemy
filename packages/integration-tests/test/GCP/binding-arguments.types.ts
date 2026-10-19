@@ -36,7 +36,7 @@ export const program = Effect.gen(function* () {
   yield* GCP.Storage.consumeBucketEvents(Bucket, () => Effect.void);
 });
 
-import * as AWS from "alchemy/AWS";
+import * as AWS from "@alchemy.run/aws";
 const Queue = AWS.SQS.Queue("Q", {});
 export const aws = Effect.gen(function* () {
   yield* AWS.SQS.consumeQueueMessages(Queue, () => Effect.void);

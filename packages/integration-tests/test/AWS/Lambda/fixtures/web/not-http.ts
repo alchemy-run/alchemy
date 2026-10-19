@@ -1,5 +1,5 @@
-import * as Lambda from "alchemy/AWS/Lambda";
-import * as SQS from "alchemy/AWS/SQS";
+import * as Lambda from "@alchemy.run/aws/Lambda";
+import * as SQS from "@alchemy.run/aws/SQS";
 import { ServerHost } from "alchemy/Server";
 // Web Functions only receive HTTP. These declarations must fail to type
 // check and fail at plan rather than deploy something that never runs.

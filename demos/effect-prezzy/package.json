@@ -29,6 +29,7 @@
     "shiki": "catalog:"
   },
   "devDependencies": {
+    "@alchemy.run/aws": "workspace:*",
     "@alchemy.run/axiom": "workspace:*",
     "@alchemy.run/cloudflare": "workspace:*",
     "@alchemy.run/fly": "workspace:*",
