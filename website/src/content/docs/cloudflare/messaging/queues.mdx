@@ -38,7 +38,7 @@ Both resources are plain `yield*` calls — no special config.
 ```typescript
 // alchemy.run.ts
 import * as Alchemy from "alchemy";
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Effect from "effect/Effect";
 
 export const Queue = Cloudflare.Queues.Queue("Queue");
@@ -57,7 +57,7 @@ In the Worker's Construction phase, yield the queue resource and ask
 
 ```typescript
 // src/Api.ts
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Effect from "effect/Effect";
 import { Bucket } from "./Bucket.ts";
 import { Queue } from "./Queue.ts";

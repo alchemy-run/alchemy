@@ -495,7 +495,7 @@ export const virtualEntryPlugin = Effect.gen(function* () {
           // an unresolved import and leaves it external, which for a
           // generated entry means the deployed process dies at boot with
           // `Cannot find module` — the class of bug the shim design
-          // (alchemy/Runtime/Bootstrap/*) exists to prevent. Make it a build
+          // (`{Provider}/Bootstrap/*`) exists to prevent. Make it a build
           // error with the cause spelled out instead. Externals resolve to
           // `{ external: true }`, not null, so they pass through.
           if (importer === undefined || !ENTRY_REGEX.test(importer)) {
@@ -509,8 +509,8 @@ export const virtualEntryPlugin = Effect.gen(function* () {
             this.error(
               new Error(
                 `The generated entry for ${entry} imports "${id}", which cannot be resolved from the project. ` +
-                  "A generated entry may only import `alchemy/*` (resolvable from any project that depends on alchemy) and the entry itself; " +
-                  "check that `alchemy` is installed in the project containing the entry.",
+                  "A generated entry may only import its bootstrap module (from `alchemy` or the provider package that generated it) and the entry itself; " +
+                  "check that the package is installed in the project containing the entry.",
               ),
             );
           }

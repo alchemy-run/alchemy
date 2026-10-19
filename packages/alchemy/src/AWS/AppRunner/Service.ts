@@ -1023,7 +1023,7 @@ export const ServiceProvider = () =>
               realMain,
               virtualEntryPlugin(
                 (importPath) => `
-import { bootstrap } from "alchemy/Runtime/Bootstrap/AppRunner";
+import { bootstrap } from "alchemy/AWS/Bootstrap/AppRunner";
 import { ${handler} as entrypoint } from ${JSON.stringify(importPath)};
 
 await bootstrap(entrypoint);

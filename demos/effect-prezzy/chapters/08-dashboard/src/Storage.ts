@@ -1,5 +1,5 @@
-import * as Cloudflare from "alchemy/Cloudflare";
-import * as Neon from "alchemy/Neon";
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as Neon from "@alchemy.run/neon";
 import * as D1 from "alchemy/SQL/D1";
 import * as Postgres from "alchemy/SQL/Postgres";
 import * as Effect from "effect/Effect";

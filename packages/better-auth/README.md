@@ -7,7 +7,7 @@ Follow the [six-part tutorial](https://alchemy.run/better-auth/tutorial/part-1) 
 ```typescript
 import { BetterAuth } from "@alchemy.run/better-auth";
 import { CloudflareD1 } from "@alchemy.run/better-auth/CloudflareD1";
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 
 export const AuthDb = Cloudflare.D1.Database("AuthDb");
 
@@ -66,7 +66,7 @@ Native D1 binding at runtime; migrations run over the D1 HTTP API at deploy (and
 
 ```typescript
 import { CloudflareD1 } from "@alchemy.run/better-auth/CloudflareD1";
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 
 export const AuthDb = Cloudflare.D1.Database("AuthDb");
 
@@ -82,7 +82,7 @@ Neon's serverless driver speaks WebSocket from the edge — no Hyperdrive, no `p
 
 ```typescript
 import { Neon as NeonDatabase } from "@alchemy.run/better-auth/Neon";
-import * as Neon from "alchemy/Neon";
+import * as Neon from "@alchemy.run/neon";
 
 export const AuthDb = Neon.Project("AuthDb");
 

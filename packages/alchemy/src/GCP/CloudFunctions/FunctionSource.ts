@@ -28,7 +28,7 @@ export class FunctionSourceUploadFailed extends Data.TaggedError(
 
 /**
  * Generated entry for an Effect-native Cloud Function: imports only
- * `alchemy/Runtime/Bootstrap/CloudFunction` plus the user's `main`, and
+ * `alchemy/GCP/Bootstrap/CloudFunction` plus the user's `main`, and
  * exports the Functions Framework target. The runtime flag is raised
  * before the user's module evaluates.
  */
@@ -36,7 +36,7 @@ export const makeFunctionBootstrap =
   (handler: string) =>
   (importPath: string): string =>
     `
-import { makeHandler } from "alchemy/Runtime/Bootstrap/CloudFunction";
+import { makeHandler } from "alchemy/GCP/Bootstrap/CloudFunction";
 
 globalThis.__ALCHEMY_RUNTIME__ = true;
 const { ${handler}: entrypoint } = await import(${JSON.stringify(importPath)});

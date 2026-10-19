@@ -4,7 +4,7 @@ import { createRequire } from "node:module";
  * Alchemy Worker source provider for Astro projects.
  *
  * The default export implements alchemy's `WorkerSourceModule` contract
- * (`packages/alchemy/src/Cloudflare/Workers/Source.ts`) **structurally** —
+ * (`packages/cloudflare/src/Workers/Source.ts`) **structurally** —
  * this package deliberately does not depend on `alchemy`, so the types
  * below mirror the shapes of `SourceProvider` / `SourceContext` /
  * `DevContext` / `SourceBuildOutput` / `SourceHash` / `SourceDevHandle`
@@ -44,7 +44,7 @@ import cloudflareTarget from "./cloudflare.ts";
 
 // ─────────────────────────────────────────────────────────────────────
 // Structural mirrors of alchemy's source-provider contract
-// (packages/alchemy/src/Cloudflare/Workers/Source.ts). Keep in sync.
+// (packages/cloudflare/src/Workers/Source.ts). Keep in sync.
 // ─────────────────────────────────────────────────────────────────────
 
 /** Mirror of alchemy's `SourceHash`. */

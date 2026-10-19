@@ -49,6 +49,91 @@ const config = {
       providerPrefix: "BetterAuth",
       sourceDisplayPrefix: "packages/better-auth/src",
     },
+    {
+      srcRoot: path.join(import.meta.dir, "../packages/git/src"),
+      providerPrefix: "Git",
+      sourceDisplayPrefix: "packages/git/src",
+    },
+    {
+      srcRoot: path.join(import.meta.dir, "../packages/drizzle/src"),
+      providerPrefix: "Drizzle",
+      sourceDisplayPrefix: "packages/drizzle/src",
+    },
+    {
+      srcRoot: path.join(import.meta.dir, "../packages/sqlite/src"),
+      providerPrefix: "SQLite",
+      sourceDisplayPrefix: "packages/sqlite/src",
+    },
+    {
+      srcRoot: path.join(import.meta.dir, "../packages/acme/src"),
+      providerPrefix: "ACME",
+      sourceDisplayPrefix: "packages/acme/src",
+    },
+    {
+      srcRoot: path.join(import.meta.dir, "../packages/axiom/src"),
+      providerPrefix: "Axiom",
+      sourceDisplayPrefix: "packages/axiom/src",
+    },
+    {
+      srcRoot: path.join(import.meta.dir, "../packages/doppler/src"),
+      providerPrefix: "Doppler",
+      sourceDisplayPrefix: "packages/doppler/src",
+    },
+    {
+      srcRoot: path.join(import.meta.dir, "../packages/infisical/src"),
+      providerPrefix: "Infisical",
+      sourceDisplayPrefix: "packages/infisical/src",
+    },
+    {
+      srcRoot: path.join(import.meta.dir, "../packages/turso/src"),
+      providerPrefix: "Turso",
+      sourceDisplayPrefix: "packages/turso/src",
+    },
+    {
+      srcRoot: path.join(import.meta.dir, "../packages/planetscale/src"),
+      providerPrefix: "Planetscale",
+      sourceDisplayPrefix: "packages/planetscale/src",
+    },
+    {
+      srcRoot: path.join(import.meta.dir, "../packages/neon/src"),
+      providerPrefix: "Neon",
+      sourceDisplayPrefix: "packages/neon/src",
+    },
+    {
+      srcRoot: path.join(import.meta.dir, "../packages/prisma/src"),
+      providerPrefix: "Prisma",
+      sourceDisplayPrefix: "packages/prisma/src",
+    },
+    {
+      srcRoot: path.join(import.meta.dir, "../packages/hetzner/src"),
+      providerPrefix: "Hetzner",
+      sourceDisplayPrefix: "packages/hetzner/src",
+    },
+    {
+      srcRoot: path.join(import.meta.dir, "../packages/railway/src"),
+      providerPrefix: "Railway",
+      sourceDisplayPrefix: "packages/railway/src",
+    },
+    {
+      srcRoot: path.join(import.meta.dir, "../packages/fly/src"),
+      providerPrefix: "Fly",
+      sourceDisplayPrefix: "packages/fly/src",
+    },
+    {
+      srcRoot: path.join(import.meta.dir, "../packages/github/src"),
+      providerPrefix: "GitHub",
+      sourceDisplayPrefix: "packages/github/src",
+    },
+    {
+      srcRoot: path.join(import.meta.dir, "../packages/stripe/src"),
+      providerPrefix: "Stripe",
+      sourceDisplayPrefix: "packages/stripe/src",
+    },
+    {
+      srcRoot: path.join(import.meta.dir, "../packages/cloudflare/src"),
+      providerPrefix: "Cloudflare",
+      sourceDisplayPrefix: "packages/cloudflare/src",
+    },
   ] satisfies SourceRoot[],
 };
 

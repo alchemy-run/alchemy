@@ -196,7 +196,7 @@ export const makeFunctionBundler = Effect.gen(function* () {
       : virtualEntryPlugin(
           options?.entry ??
             ((importPath) => `
-import { bootstrap } from "alchemy/Runtime/Bootstrap/Lambda";
+import { bootstrap } from "alchemy/AWS/Bootstrap/Lambda";
 import entrypoint from ${JSON.stringify(importPath)};
 
 export default await bootstrap(entrypoint);

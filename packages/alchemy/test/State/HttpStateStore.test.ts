@@ -187,6 +187,53 @@ describe("makeHttpStateStore", { tags: ["unit", "local"] }, () => {
     30_000,
   );
 
+  // #1833: a failure behind the auth middleware (a Durable Object call, a
+  // Secrets Store read) used to encode as its `Unauthorized` and surface as an
+  // empty 500. The store now answers a typed StateStoreFailure.
+  it.live(
+    "retries a StateStoreFailure, then names the failed operation",
+    () => {
+      let calls = 0;
+      const stub: FetchStub = async () => {
+        calls++;
+        return json(
+          { _tag: "StateStoreFailure", operation: "getState", reason: "RpcCallError" },
+          500,
+        );
+      };
+      return Effect.gen(function* () {
+        const store = yield* makeStore;
+        const error = yield* store
+          .get({ stack: "s", stage: "dev", fqn: "stack/scope/a" })
+          .pipe(Effect.flip);
+        expect(error.message).toBe(
+          "State store failed to getState (RpcCallError); its logs have the cause.",
+        );
+        expect(error.http).toEqual({ status: 500 });
+        // initial attempt + 5 bounded retries
+        expect(calls).toBe(6);
+      }).pipe(Effect.provide(stubHttpClient(stub)));
+    },
+    30_000,
+  );
+
+  it.live("the credential check retries a StateStoreFailure", () => {
+    let calls = 0;
+    const stub: FetchStub = async () => {
+      calls++;
+      return calls < 3
+        ? json({ _tag: "StateStoreFailure", operation: "listStacks", reason: "RpcCallError" }, 500)
+        : json([]);
+    };
+    return checkHttpStateStoreAuth({ url: "https://state-store.test", authToken: "token" }).pipe(
+      Effect.map((authorized) => {
+        expect(authorized).toBe(true);
+        expect(calls).toBe(3);
+      }),
+      Effect.provide(stubHttpClient(stub)),
+    );
+  });
+
   it.live("maps a no-content 401 to a non-empty, actionable error", () => {
     const stub: FetchStub = async () => new Response(null, { status: 401 });
     return Effect.gen(function* () {
