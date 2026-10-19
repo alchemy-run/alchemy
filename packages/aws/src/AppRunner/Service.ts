@@ -1,3 +1,4 @@
+import { Docker } from "@alchemy.run/docker/Docker";
 import * as apprunner from "@distilled.cloud/aws/apprunner";
 import * as logs from "@distilled.cloud/aws/cloudwatch-logs";
 import * as ecr from "@distilled.cloud/aws/ecr";
@@ -8,7 +9,6 @@ import { AlchemyContext } from "alchemy/AlchemyContext";
 import * as Bundle from "alchemy/Bundle/Bundle";
 import { findCwdForBundle, getStableContextDir, resolveMainPath } from "alchemy/Bundle/TempRoot";
 import { isResolved } from "alchemy/Diff";
-import { Docker } from "alchemy/Docker/Docker";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import { Platform, type Main, type PlatformProps } from "alchemy/Platform";
 import * as Provider from "alchemy/Provider";

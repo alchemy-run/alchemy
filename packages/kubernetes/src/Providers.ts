@@ -1,4 +1,4 @@
-import { DockerLive } from "alchemy/Docker/Docker";
+import { DockerLive } from "@alchemy.run/docker/Docker";
 import * as Provider from "alchemy/Provider";
 import * as Layer from "effect/Layer";
 import { builtinAdapters } from "./BuiltinAdapters.ts";

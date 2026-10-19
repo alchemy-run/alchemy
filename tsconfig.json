@@ -148,6 +148,9 @@
       "path": "./packages/domain/tsconfig.json"
     },
     {
+      "path": "./packages/docker/tsconfig.json"
+    },
+    {
       "path": "./packages/kubernetes/tsconfig.json"
     },
     {

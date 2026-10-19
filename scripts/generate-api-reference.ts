@@ -154,6 +154,11 @@ const config = {
       providerPrefix: "Kubernetes",
       sourceDisplayPrefix: "packages/kubernetes/src",
     },
+    {
+      srcRoot: path.join(import.meta.dir, "../packages/docker/src"),
+      providerPrefix: "Docker",
+      sourceDisplayPrefix: "packages/docker/src",
+    },
   ] satisfies SourceRoot[],
 };
 

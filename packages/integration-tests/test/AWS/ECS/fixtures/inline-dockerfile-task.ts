@@ -1,5 +1,5 @@
 import { Task } from "@alchemy.run/aws/ECS/Task";
-import * as Dockerfile from "alchemy/Docker/Dockerfile";
+import * as Dockerfile from "@alchemy.run/docker/Dockerfile";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 

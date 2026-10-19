@@ -1,7 +1,7 @@
+import { DockerLive } from "@alchemy.run/docker/Docker";
 import { CredentialsStoreLive } from "alchemy/Auth/Credentials";
 import { ProfileStoreLive } from "alchemy/Auth/Profile";
 import * as Command from "alchemy/Command";
-import { DockerLive } from "alchemy/Docker/Docker";
 import * as Provider from "alchemy/Provider";
 import {
   Server as WebsiteServer,

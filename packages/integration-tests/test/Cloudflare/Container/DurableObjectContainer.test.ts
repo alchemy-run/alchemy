@@ -1,8 +1,8 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
+import { DockerLive } from "@alchemy.run/docker/Docker";
 import * as Containers from "@distilled.cloud/cloudflare/containers";
 import * as Workers from "@distilled.cloud/cloudflare/workers";
 import { describe, expect } from "alchemy-test";
-import { DockerLive } from "alchemy/Docker/Docker";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";

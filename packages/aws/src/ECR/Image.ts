@@ -1,7 +1,7 @@
+import { hashDockerBuildInputs, resolveDockerBuildPaths } from "@alchemy.run/docker/BuildHash";
+import { Docker } from "@alchemy.run/docker/Docker";
 import * as ecr from "@distilled.cloud/aws/ecr";
 import { isResolved } from "alchemy/Diff";
-import { hashDockerBuildInputs, resolveDockerBuildPaths } from "alchemy/Docker/BuildHash";
-import { Docker } from "alchemy/Docker/Docker";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";

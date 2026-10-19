@@ -1,9 +1,9 @@
-import * as ecr from "@distilled.cloud/aws/ecr";
 import {
   makeContainerImageSource,
   type ImageRegistryTarget,
   type ImageSourceLike,
-} from "alchemy/Docker/ImageSource";
+} from "@alchemy.run/docker/ImageSource";
+import * as ecr from "@distilled.cloud/aws/ecr";
 import * as Effect from "effect/Effect";
 import { roleHostBundle } from "../AWSBindings.ts";
 import { getEcrRegistryCredentials } from "./Image.ts";
@@ -31,7 +31,7 @@ export {
   type ImageSourceLike,
   type ImageSourceProps,
   type RegistryImageSource,
-} from "alchemy/Docker/ImageSource";
+} from "@alchemy.run/docker/ImageSource";
 
 /** The resolved (built/mirrored + pushed) image. */
 export interface ResolvedImage {

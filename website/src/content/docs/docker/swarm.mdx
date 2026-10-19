@@ -11,7 +11,7 @@ overlay `Docker.Network`), targeting any engine through a `Docker.Context`.
 ## Create the swarm
 
 ```typescript
-import * as Docker from "alchemy/Docker";
+import * as Docker from "@alchemy.run/docker";
 
 const swarm = yield* Docker.Swarm("swarm");
 ```
@@ -223,7 +223,7 @@ production.
 
 ```typescript
 import * as Alchemy from "alchemy";
-import * as Docker from "alchemy/Docker";
+import * as Docker from "@alchemy.run/docker";
 import * as Effect from "effect/Effect";
 
 export default Alchemy.Stack(

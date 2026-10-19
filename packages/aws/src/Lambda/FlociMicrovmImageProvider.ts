@@ -35,12 +35,12 @@
  * outside-context Dockerfile).
  */
 
+import { Docker, DockerLive } from "@alchemy.run/docker/Docker";
+import { isInlineDockerfile } from "@alchemy.run/docker/Dockerfile";
 import { AlchemyContext } from "alchemy/AlchemyContext";
 import * as Artifacts from "alchemy/Artifacts";
 import { getStableContextDir } from "alchemy/Bundle/TempRoot";
 import { hashDirectory } from "alchemy/Command/Memo";
-import { Docker, DockerLive } from "alchemy/Docker/Docker";
-import { isInlineDockerfile } from "alchemy/Docker/Dockerfile";
 import { sha256 } from "alchemy/Util/sha256";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";

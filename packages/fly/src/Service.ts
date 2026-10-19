@@ -1,3 +1,4 @@
+import { DockerLive, Docker } from "@alchemy.run/docker/Docker";
 import type {
   FlyMachineConfig,
   FlyMachineGuest,
@@ -10,7 +11,6 @@ import * as machines from "@distilled.cloud/fly-io/machines";
 import { AlchemyContext } from "alchemy/AlchemyContext";
 import * as Bundle from "alchemy/Bundle/Bundle";
 import { deepEqual, isResolved } from "alchemy/Diff";
-import { DockerLive, Docker } from "alchemy/Docker/Docker";
 import type { Input } from "alchemy/Input";
 import { Platform, type Main, type MainRpc, type PlatformProps } from "alchemy/Platform";
 import * as Provider from "alchemy/Provider";

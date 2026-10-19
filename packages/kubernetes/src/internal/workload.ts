@@ -1,5 +1,5 @@
+import { isInlineDockerfile } from "@alchemy.run/docker/Dockerfile";
 import { hashDirectory } from "alchemy/Command/Memo";
-import { isInlineDockerfile } from "alchemy/Docker/Dockerfile";
 import type { ResourceBinding } from "alchemy/Resource";
 import { Self } from "alchemy/Self";
 import { unwrapRedacted } from "alchemy/Util/data";

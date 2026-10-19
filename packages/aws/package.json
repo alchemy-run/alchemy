@@ -1318,6 +1318,7 @@
     "build:package": "node scripts/build.ts"
   },
   "dependencies": {
+    "@alchemy.run/docker": "workspace:*",
     "@alchemy.run/floci": "workspace:*",
     "@alchemy.run/kubernetes": "workspace:*",
     "@distilled.cloud/aws": "workspace:*",

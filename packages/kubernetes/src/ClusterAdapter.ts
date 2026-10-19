@@ -1,5 +1,5 @@
+import type { InlineDockerfile } from "@alchemy.run/docker/Dockerfile";
 import type * as Bundle from "alchemy/Bundle/Bundle";
-import type { InlineDockerfile } from "alchemy/Docker/Dockerfile";
 import type { ResourceBinding } from "alchemy/Resource";
 import type { ResourceContext } from "alchemy/ResourceContext";
 import type { Stack } from "alchemy/Stack";

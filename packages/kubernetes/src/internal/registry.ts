@@ -1,5 +1,8 @@
-import type { RegistryCredentials } from "alchemy/Docker/Docker";
-import { makeContainerImageSource, type ImageRegistryTarget } from "alchemy/Docker/ImageSource";
+import type { RegistryCredentials } from "@alchemy.run/docker/Docker";
+import {
+  makeContainerImageSource,
+  type ImageRegistryTarget,
+} from "@alchemy.run/docker/ImageSource";
 import { createPhysicalName } from "alchemy/PhysicalName";
 /**
  * Image publishing for connections that declare a

@@ -1,9 +1,9 @@
+import { DockerLive } from "@alchemy.run/docker/Docker";
 /** @effect-diagnostics layerMergeAllWithDependencies:off */
 import { isRetryable, isThrottlingError, isTransientError } from "@distilled.cloud/aws/Category";
 import { capped, jittered, Retry, type Factory as RetryFactory } from "@distilled.cloud/aws/Retry";
 import { CredentialsStoreLive } from "alchemy/Auth/Credentials";
 import * as Command from "alchemy/Command";
-import { DockerLive } from "alchemy/Docker/Docker";
 import { KeyPair, KeyPairProvider } from "alchemy/KeyPair";
 import * as ProviderLayer from "alchemy/Local/ProviderLayer";
 import * as Provider from "alchemy/Provider";

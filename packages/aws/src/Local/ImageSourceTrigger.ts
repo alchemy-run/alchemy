@@ -9,8 +9,8 @@
  * NOT exported from any service `index.ts`.
  */
 
+import { isInlineDockerfile } from "@alchemy.run/docker/Dockerfile";
 import * as Bundle from "alchemy/Bundle/Bundle";
-import { isInlineDockerfile } from "alchemy/Docker/Dockerfile";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";

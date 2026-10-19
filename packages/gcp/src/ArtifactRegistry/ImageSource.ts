@@ -1,3 +1,5 @@
+import { Docker } from "@alchemy.run/docker/Docker";
+import { isInlineDockerfile, type InlineDockerfile } from "@alchemy.run/docker/Dockerfile";
 /**
  * INTERNAL — Artifact Registry image-source machinery for GKE workloads.
  * Not exported from the GCP barrel or `ArtifactRegistry/index.ts`.
@@ -16,8 +18,6 @@ import {
 } from "alchemy/Bundle/InstalledPackages";
 import { findCwdForBundle, getStableContextDir, resolveMainPath } from "alchemy/Bundle/TempRoot";
 import { hashDirectory } from "alchemy/Command/Memo";
-import { Docker } from "alchemy/Docker/Docker";
-import { isInlineDockerfile, type InlineDockerfile } from "alchemy/Docker/Dockerfile";
 import { tagRecord } from "alchemy/Tags";
 import {
   contextRootOf,

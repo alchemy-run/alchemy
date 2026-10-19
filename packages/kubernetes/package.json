@@ -52,6 +52,7 @@
     "build:package": "node scripts/build.ts"
   },
   "dependencies": {
+    "@alchemy.run/docker": "workspace:*",
     "yaml": "catalog:"
   },
   "devDependencies": {

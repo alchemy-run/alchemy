@@ -1,12 +1,12 @@
+import { hashDockerBuildInputs } from "@alchemy.run/docker/BuildHash";
+import { Docker } from "@alchemy.run/docker/Docker";
+import { isInlineDockerfile } from "@alchemy.run/docker/Dockerfile";
+import { repositoryFromImageRef } from "@alchemy.run/docker/Registry";
 import * as Containers from "@distilled.cloud/cloudflare/containers";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { AlchemyContext } from "alchemy/AlchemyContext";
 import { getStableContextDir } from "alchemy/Bundle/TempRoot";
 import { deepEqual, isResolved } from "alchemy/Diff";
-import { hashDockerBuildInputs } from "alchemy/Docker/BuildHash";
-import { Docker } from "alchemy/Docker/Docker";
-import { isInlineDockerfile } from "alchemy/Docker/Dockerfile";
-import { repositoryFromImageRef } from "alchemy/Docker/Registry";
 import * as Provider from "alchemy/Provider";
 import type { ScopedPlanStatusSession } from "alchemy/Report";
 import { type ResourceBinding } from "alchemy/Resource";

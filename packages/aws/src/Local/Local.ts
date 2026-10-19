@@ -1,4 +1,4 @@
-import { DockerLive } from "alchemy/Docker/Docker";
+import { DockerLive } from "@alchemy.run/docker/Docker";
 import type * as RpcServer from "alchemy/Local/RpcServer";
 /**
  * The AWS provider group served by the dev sidecar (see

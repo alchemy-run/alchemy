@@ -3825,6 +3825,9 @@ importers:
 
   examples/docker-postgres:
     dependencies:
+      '@alchemy.run/docker':
+        specifier: workspace:*
+        version: link:../../packages/docker
       alchemy:
         specifier: workspace:*
         version: link:../../packages/alchemy
@@ -8174,6 +8177,9 @@ importers:
 
   packages/aws:
     dependencies:
+      '@alchemy.run/docker':
+        specifier: workspace:*
+        version: link:../docker
       '@alchemy.run/floci':
         specifier: workspace:*
         version: link:../floci
@@ -8323,6 +8329,9 @@ importers:
       '@alchemy.run/cloudflare-runtime':
         specifier: workspace:*
         version: link:../cloudflare-runtime
+      '@alchemy.run/docker':
+        specifier: workspace:*
+        version: link:../docker
       '@distilled.cloud/aws':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/aws
@@ -8525,6 +8534,28 @@ importers:
         specifier: 'catalog:'
         version: 8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1)
 
+  packages/docker:
+    dependencies:
+      rolldown:
+        specifier: 1.2.13
+        version: 1.2.13
+    devDependencies:
+      '@types/bun':
+        specifier: 'catalog:'
+        version: 1.4.3
+      '@types/node':
+        specifier: 'catalog:'
+        version: 26.6.5
+      alchemy:
+        specifier: workspace:*
+        version: link:../alchemy
+      effect:
+        specifier: 4.0.4
+        version: 4.0.4
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+
   packages/domain:
     devDependencies:
       '@types/bun':
@@ -8619,6 +8650,9 @@ importers:
 
   packages/fly:
     dependencies:
+      '@alchemy.run/docker':
+        specifier: workspace:*
+        version: link:../docker
       '@distilled.cloud/aws':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/aws
@@ -9448,6 +9482,9 @@ importers:
 
   packages/gcp:
     dependencies:
+      '@alchemy.run/docker':
+        specifier: workspace:*
+        version: link:../docker
       '@alchemy.run/kubernetes':
         specifier: workspace:*
         version: link:../kubernetes
@@ -9596,6 +9633,9 @@ importers:
       '@alchemy.run/cloudflare-runtime':
         specifier: workspace:*
         version: link:../cloudflare-runtime
+      '@alchemy.run/docker':
+        specifier: workspace:*
+        version: link:../docker
       '@alchemy.run/domain':
         specifier: workspace:*
         version: link:../domain
@@ -9887,6 +9927,9 @@ importers:
 
   packages/kubernetes:
     dependencies:
+      '@alchemy.run/docker':
+        specifier: workspace:*
+        version: link:../docker
       yaml:
         specifier: 'catalog:'
         version: 2.9.1
@@ -10082,6 +10125,9 @@ importers:
 
   packages/railway:
     dependencies:
+      '@alchemy.run/docker':
+        specifier: workspace:*
+        version: link:../docker
       '@distilled.cloud/aws':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/aws
@@ -11395,6 +11441,9 @@ importers:
       '@alchemy.run/cloudflare':
         specifier: workspace:*
         version: link:../packages/cloudflare
+      '@alchemy.run/docker':
+        specifier: workspace:*
+        version: link:../packages/docker
       '@alchemy.run/domain':
         specifier: workspace:*
         version: link:../packages/domain

@@ -1,6 +1,6 @@
+import { hashDockerBuildInputs, resolveDockerBuildPaths } from "@alchemy.run/docker/BuildHash";
+import { Docker } from "@alchemy.run/docker/Docker";
 import * as ecr from "@distilled.cloud/aws/ecr";
-import { hashDockerBuildInputs, resolveDockerBuildPaths } from "alchemy/Docker/BuildHash";
-import { Docker } from "alchemy/Docker/Docker";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import { createInternalTags, createTagsList, hasAlchemyTags } from "alchemy/Tags";
 import { sha256Object } from "alchemy/Util/sha256";

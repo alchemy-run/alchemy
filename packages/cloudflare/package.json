@@ -497,6 +497,7 @@
   "dependencies": {
     "@alchemy.run/acme": "workspace:*",
     "@alchemy.run/cloudflare-runtime": "workspace:*",
+    "@alchemy.run/docker": "workspace:*",
     "@distilled.cloud/aws": "workspace:*",
     "@distilled.cloud/cloudflare": "workspace:*",
     "@distilled.cloud/core": "workspace:*",

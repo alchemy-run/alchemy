@@ -1,3 +1,4 @@
+import type { Docker } from "@alchemy.run/docker/Docker";
 import type { FlyMachineService } from "@distilled.cloud/fly-io/machines";
 import * as machines from "@distilled.cloud/fly-io/machines";
 import * as Bundle from "alchemy/Bundle/Bundle";
@@ -8,7 +9,6 @@ import {
   type PackageInstall,
 } from "alchemy/Bundle/InstalledPackages";
 import { findCwdForBundle, getStableContextDir, resolveMainPath } from "alchemy/Bundle/TempRoot";
-import type { Docker } from "alchemy/Docker/Docker";
 import { safeHttpEffect } from "alchemy/Http";
 import type { ResourceBinding } from "alchemy/Resource";
 import { createContainerRuntimeContext, type HostRuntimeContext } from "alchemy/Server/Process";
