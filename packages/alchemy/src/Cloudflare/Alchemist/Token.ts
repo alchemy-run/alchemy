@@ -1,21 +1,17 @@
-/* oxlint-disable alchemy/package-boundaries -- package split phase 2: provider-specific routes; become plugin `stateStores` / `cli` */
 import * as accounts from "@distilled.cloud/cloudflare/accounts";
 import { apiKeyCredentials, apiTokenCredentials } from "@distilled.cloud/cloudflare/Credentials";
 import * as user from "@distilled.cloud/cloudflare/user";
-/* oxlint-enable alchemy/package-boundaries */
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
-/* oxlint-disable alchemy/package-boundaries -- package split phase 2: provider-specific routes; become plugin `stateStores` / `cli` */
+import { AlchemistInvalidInput, type Diagnostic } from "../../Alchemist/Errors.ts";
 import {
   selectableScopes,
   tokenPolicies,
   type PermissionGroup,
   type TokenPolicy,
-} from "../../Cloudflare/Auth/TokenPolicy.ts";
-import * as CloudflareCredentials from "../../Cloudflare/Credentials.ts";
-/* oxlint-enable alchemy/package-boundaries */
-import { AlchemistInvalidInput, type Diagnostic } from "../Errors.ts";
+} from "../Auth/TokenPolicy.ts";
+import * as CloudflareCredentials from "../Credentials.ts";
 
 export interface GlobalCredentials {
   readonly email: string;
@@ -26,9 +22,7 @@ export interface Account {
   readonly id: string;
   readonly name: string;
 }
-
-// oxlint-disable-next-line alchemy/package-boundaries -- package split phase 2: provider-specific routes; become plugin `stateStores` / `cli`
-export type { PermissionGroup, TokenPolicy } from "../../Cloudflare/Auth/TokenPolicy.ts";
+export type { PermissionGroup, TokenPolicy } from "../Auth/TokenPolicy.ts";
 
 export interface TokenCatalog {
   readonly accounts: ReadonlyArray<Account>;

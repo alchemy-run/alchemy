@@ -40,6 +40,7 @@
     "./Auth": "./src/Auth/index.ts",
     "./Alchemist": "./src/Alchemist/index.ts",
     "./AWS": "./src/AWS/index.ts",
+    "./AWS/Contributions": "./src/AWS/Contributions.ts",
     "./AWS/*": "./src/AWS/*/index.ts",
     "./AWS/Credentials": "./src/AWS/Credentials.ts",
     "./AWS/Endpoint": "./src/AWS/Endpoint.ts",
@@ -59,6 +60,7 @@
     "./Cli": "./src/Cli/index.ts",
     "./Cli/CliKit": "./src/Cli/CliKit/index.ts",
     "./Cloudflare": "./src/Cloudflare/index.ts",
+    "./Cloudflare/Contributions": "./src/Cloudflare/Contributions.ts",
     "./Cloudflare/Bridge": "./src/Cloudflare/Bridge.ts",
     "./Cloudflare/Live": "./src/Cloudflare/Live.ts",
     "./Cloudflare/RpcWebSocketClient": "./src/Cloudflare/Workers/RpcWebSocketClient.ts",
@@ -69,10 +71,12 @@
     "./Domain": "./src/Domain/index.ts",
     "./Axiom": "./src/Axiom/index.ts",
     "./GCP": "./src/GCP/index.ts",
+    "./GCP/Contributions": "./src/GCP/Contributions.ts",
     "./GCP/*": "./src/GCP/*/index.ts",
     "./GitHub": "./src/GitHub/index.ts",
     "./Endpoint": "./src/Endpoint/index.ts",
     "./Neon": "./src/Neon/index.ts",
+    "./Neon/Contributions": "./src/Neon/Contributions.ts",
     "./Neon/*": "./src/Neon/*/index.ts",
     "./Hetzner": "./src/Hetzner/index.ts",
     "./Fly": "./src/Fly/index.ts",
@@ -90,6 +94,7 @@
     "./Prisma/PrismaDevDatabase": null,
     "./Prisma/Refs": null,
     "./Planetscale": "./src/Planetscale/index.ts",
+    "./Planetscale/Contributions": "./src/Planetscale/Contributions.ts",
     "./Planetscale/*": "./src/Planetscale/*/index.ts",
     "./Stripe": "./src/Stripe/index.ts",
     "./Turso": "./src/Turso/index.ts",
@@ -141,6 +146,11 @@
         "types": "./lib/AWS/index.d.ts",
         "bun": "./src/AWS/index.ts",
         "default": "./lib/AWS/index.js"
+      },
+      "./AWS/Contributions": {
+        "types": "./lib/AWS/Contributions.d.ts",
+        "bun": "./src/AWS/Contributions.ts",
+        "default": "./lib/AWS/Contributions.js"
       },
       "./AWS/*": {
         "types": "./lib/AWS/*/index.d.ts",
@@ -237,6 +247,11 @@
         "bun": "./src/Cloudflare/index.ts",
         "default": "./lib/Cloudflare/index.js"
       },
+      "./Cloudflare/Contributions": {
+        "types": "./lib/Cloudflare/Contributions.d.ts",
+        "bun": "./src/Cloudflare/Contributions.ts",
+        "default": "./lib/Cloudflare/Contributions.js"
+      },
       "./Cloudflare/Bridge": {
         "types": "./lib/Cloudflare/Bridge.d.ts",
         "bun": "./src/Cloudflare/Bridge.ts",
@@ -287,6 +302,11 @@
         "bun": "./src/GCP/index.ts",
         "default": "./lib/GCP/index.js"
       },
+      "./GCP/Contributions": {
+        "types": "./lib/GCP/Contributions.d.ts",
+        "bun": "./src/GCP/Contributions.ts",
+        "default": "./lib/GCP/Contributions.js"
+      },
       "./GCP/*": {
         "types": "./lib/GCP/*/index.d.ts",
         "bun": "./src/GCP/*/index.ts",
@@ -306,6 +326,11 @@
         "types": "./lib/Neon/index.d.ts",
         "bun": "./src/Neon/index.ts",
         "default": "./lib/Neon/index.js"
+      },
+      "./Neon/Contributions": {
+        "types": "./lib/Neon/Contributions.d.ts",
+        "bun": "./src/Neon/Contributions.ts",
+        "default": "./lib/Neon/Contributions.js"
       },
       "./Neon/*": {
         "types": "./lib/Neon/*/index.d.ts",
@@ -355,6 +380,11 @@
         "types": "./lib/Planetscale/index.d.ts",
         "bun": "./src/Planetscale/index.ts",
         "default": "./lib/Planetscale/index.js"
+      },
+      "./Planetscale/Contributions": {
+        "types": "./lib/Planetscale/Contributions.d.ts",
+        "bun": "./src/Planetscale/Contributions.ts",
+        "default": "./lib/Planetscale/Contributions.js"
       },
       "./Planetscale/*": {
         "types": "./lib/Planetscale/*/index.d.ts",
@@ -619,5 +649,23 @@
     "ws": {
       "optional": true
     }
+  },
+  "alchemy": {
+    "contributes": [
+      "alchemy/AWS/Contributions",
+      "alchemy/Axiom/Contributions",
+      "alchemy/Cloudflare/Contributions",
+      "alchemy/Doppler/Contributions",
+      "alchemy/Fly/Contributions",
+      "alchemy/GCP/Contributions",
+      "alchemy/GitHub/Contributions",
+      "alchemy/Hetzner/Contributions",
+      "alchemy/Infisical/Contributions",
+      "alchemy/Neon/Contributions",
+      "alchemy/Planetscale/Contributions",
+      "alchemy/Prisma/Contributions",
+      "alchemy/Railway/Contributions",
+      "alchemy/Stripe/Contributions"
+    ]
   }
 }

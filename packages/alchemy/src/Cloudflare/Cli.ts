@@ -5,18 +5,14 @@ import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
-import * as Stream from "effect/Stream";
-import * as Cloudflare from "../../Alchemist/routes/cloudflare.ts";
-import * as CloudflareToken from "../../Alchemist/routes/cloudflareToken.ts";
-import type { CreatedToken } from "../../Alchemist/routes/cloudflareToken.ts";
-import * as CliKit from "../../Cli/CliKit/index.ts";
-// oxlint-disable-next-line alchemy/package-boundaries -- package split phase 2: provider CLI subcommand; becomes plugin `cli`
-import { STATE_STORE_SCRIPT_NAME } from "../../Cloudflare/StateStore/Api.ts";
-import { loadConfigProvider } from "../../Util/ConfigProvider.ts";
-import { formatLocalTimestamp } from "../Format.ts";
-import { confirmOrDecline } from "./confirm.ts";
-import { envFile, parseSince, profile, yes } from "./flags.ts";
-import { instrumentCommand } from "./instrument.ts";
+import * as CliKit from "../Cli/CliKit/index.ts";
+import { movedCommand } from "../Cli/commands/compat.ts";
+import { confirmOrDecline } from "../Cli/commands/confirm.ts";
+import { envFile, yes } from "../Cli/commands/flags.ts";
+import { instrumentCommand } from "../Cli/commands/instrument.ts";
+import { loadConfigProvider } from "../Util/ConfigProvider.ts";
+import * as CloudflareToken from "./Alchemist/Token.ts";
+import type { CreatedToken } from "./Alchemist/Token.ts";
 
 const SELECTABLE_SCOPE_LABELS: Record<string, string> = {
   "com.cloudflare.api.account": "account",
@@ -41,79 +37,6 @@ export const formatCreatedCloudflareToken = (result: CreatedToken, token: string
     ),
   ].join("\n");
 
-const cloudflareForce = Flag.Boolean("force").pipe(
-  Flag.withDescription(
-    "Force a full redeploy even if the state-store worker already exists. " +
-      "Without this flag, an existing worker is adopted and only its credentials are refreshed.",
-  ),
-  Flag.withDefault(false),
-);
-
-const cloudflareWorkerName = Flag.String("worker-name").pipe(
-  Flag.withDescription(
-    "Override the default state-store worker name (advanced; only needed for multiple state stores per account).",
-  ),
-  Flag.optional,
-  Flag.map(Option.getOrUndefined),
-);
-
-const bootstrapCommand = Command.make(
-  "bootstrap",
-  {
-    envFile,
-    profile,
-    force: cloudflareForce,
-    workerName: cloudflareWorkerName,
-  },
-  instrumentCommand(
-    "provider.cloudflare.bootstrap",
-    (a: { profile: string | undefined; force: boolean; workerName: string | undefined }) => ({
-      "alchemy.profile": a.profile ?? "",
-      "alchemy.force": a.force,
-      "alchemy.worker_name": a.workerName ?? "",
-    }),
-  )(
-    Effect.fn(function* ({ envFile, profile, force, workerName }) {
-      yield* Cloudflare.bootstrap({
-        workerName,
-        force,
-        profile,
-        envFile: Option.getOrUndefined(envFile),
-      });
-    }),
-  ),
-).pipe(Command.withDescription("Provision Cloudflare account prerequisites for deployments"));
-
-const teardownCommand = Command.make(
-  "teardown",
-  {
-    envFile,
-    profile,
-    workerName: cloudflareWorkerName,
-    yes,
-  },
-  instrumentCommand(
-    "provider.cloudflare.teardown",
-    (a: { profile: string | undefined; workerName: string | undefined }) => ({
-      "alchemy.profile": a.profile ?? "",
-      "alchemy.worker_name": a.workerName ?? "",
-    }),
-  )(
-    Effect.fn(function* ({ envFile, profile, workerName, yes: approved }) {
-      yield* confirmOrDecline({
-        yes: approved,
-        message: "Tear down the Cloudflare state store and its backing resources?",
-        confirmLabel: "Destroy",
-        cancelLabel: "Cancel",
-      });
-      yield* Cloudflare.teardown({
-        workerName,
-        profile,
-        envFile: Option.getOrUndefined(envFile),
-      });
-    }),
-  ),
-).pipe(Command.withDescription("Tear down the Cloudflare state store"), Command.unlisted);
 const allPermissionsFlag = Flag.Boolean("all-permissions").pipe(
   Flag.withDescription(
     "Grant the token EVERY Cloudflare permission group (a 'god token'). " +
@@ -275,90 +198,24 @@ const createTokenCommand = Command.make(
   ),
 ).pipe(Command.withDescription("Create a scoped Cloudflare API token"));
 
-const tailFlag = Flag.Boolean("tail").pipe(
-  Flag.withAlias("t"),
-  Flag.withDescription(
-    "Stream logs in real time via the Cloudflare tail websocket instead of fetching past entries.",
-  ),
-  Flag.withDefault(false),
-);
-
-const limitFlag = Flag.Int("limit").pipe(
-  Flag.withDescription("Number of log entries to fetch (ignored with --tail)"),
-  Flag.withDefault(100),
-);
-
-const sinceFlag = Flag.String("since").pipe(
-  Flag.withDescription("Fetch logs since this time (e.g. '1h', '30m', '2024-01-01T00:00:00Z')"),
-  Flag.optional,
-  Flag.map(Option.getOrUndefined),
-);
-
-/**
- * `alchemy provider cloudflare state logs` — get or tail logs from the
- * `alchemy-state-store` Worker on the user's account. Lets us debug
- * the state-store worker without standing up a stack file.
- */
-const stateLogsCommand = Command.make(
-  "logs",
-  {
-    envFile,
-    profile,
-    workerName: cloudflareWorkerName,
-    tail: tailFlag,
-    limit: limitFlag,
-    since: sinceFlag,
-  },
-  instrumentCommand(
-    "cloudflare.state.logs",
-    (a: {
-      profile: string | undefined;
-      workerName: string | undefined;
-      tail: boolean;
-      limit: number;
-    }) => ({
-      "alchemy.profile": a.profile ?? "",
-      "alchemy.worker_name": a.workerName ?? STATE_STORE_SCRIPT_NAME,
-      "alchemy.tail": a.tail,
-      "alchemy.limit": a.limit,
-    }),
-  )(
-    Effect.fn(function* ({ envFile, profile, workerName, tail, limit, since }) {
-      const scriptName = workerName ?? STATE_STORE_SCRIPT_NAME;
-      const target = {
-        profile,
-        workerName,
-        envFile: Option.getOrUndefined(envFile),
-      };
-      const formatLine = (line: { timestamp: Date; message: string }) =>
-        `${formatLocalTimestamp(line.timestamp)} [${scriptName}] ${line.message}`;
-      if (tail) {
-        yield* CliKit.accessors.output.info(`Tailing ${scriptName}...`);
-        yield* Cloudflare.tailStateLogs(target).pipe(
-          Stream.runForEach((line) => Console.log(formatLine(line))),
-        );
-        return;
-      }
-      const lines = yield* Cloudflare.stateLogs({
-        ...target,
-        limit,
-        since: since ? yield* parseSince(since) : undefined,
-      });
-      if (lines.length === 0) {
-        yield* Console.log(`(no log entries for ${scriptName})`);
-        return;
-      }
-      for (const line of lines) yield* Console.log(formatLine(line));
-    }),
-  ),
-).pipe(Command.withDescription("Stream or fetch logs from the state-store worker"));
-
-const stateCommand = Command.make("state", {}).pipe(
-  Command.withDescription("Manage the Cloudflare-hosted state store"),
-  Command.withSubcommands([stateLogsCommand]),
-);
+const moved = (name: string, replacement: string) =>
+  movedCommand(name, `alchemy provider cloudflare ${name}`, replacement);
 
 export const cloudflareCommand = Command.make("cloudflare", {}).pipe(
   Command.withDescription("Manage Cloudflare provider prerequisites"),
-  Command.withSubcommands([bootstrapCommand, teardownCommand, createTokenCommand, stateCommand]),
+  Command.withSubcommands([
+    createTokenCommand,
+    moved("bootstrap", "alchemy state bootstrap --backend cloudflare"),
+    moved("teardown", "alchemy state teardown --backend cloudflare"),
+    Command.make("state", {}).pipe(
+      Command.withSubcommands([
+        movedCommand(
+          "logs",
+          "alchemy provider cloudflare state logs",
+          "alchemy state logs --backend cloudflare",
+        ),
+      ]),
+      Command.unlisted,
+    ),
+  ]),
 );

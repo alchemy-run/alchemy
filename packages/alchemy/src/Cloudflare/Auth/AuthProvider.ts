@@ -29,7 +29,7 @@ import {
   validateFieldValues,
 } from "../../Auth/StoredAuthProvider.ts";
 import * as Interaction from "../../Interaction.ts";
-import { CREDENTIALS_FILE as STATE_STORE_CREDENTIALS_FILE } from "../StateStore/CredentialsFile.ts";
+import { clearStoreCredentials } from "../StateStore/CredentialsFile.ts";
 import {
   CLOUDFLARE_AUTH_PROVIDER_NAME,
   CloudflareAuthConfigSchema,
@@ -367,10 +367,10 @@ export const CloudflareAuth = AuthProviderLayer<
         const config = yield* configureInteractive(profileName, currentConfig);
         // Re-configuring auth may point this profile at a different
         // Cloudflare account. The cached state-store credentials
-        // (`~/.alchemy/credentials/{profile}/cloudflare-state-store.json`)
+        // (`~/.alchemy/profiles/{profile}/state-stores/cloudflare.json`)
         // are minted per-account, so drop them here; the next deploy
         // re-derives them against the freshly-configured account.
-        yield* store.delete(profileName, STATE_STORE_CREDENTIALS_FILE).pipe(Effect.ignore);
+        yield* clearStoreCredentials(store, profileName).pipe(Effect.ignore);
         return config;
       }).pipe(
         // AuthError messages are already user-facing; re-wrapping them in a
@@ -536,7 +536,7 @@ export const CloudflareAuth = AuthProviderLayer<
         Match.exhaustive,
         // The cached state-store credentials are derived from the account we
         // just logged out of, so drop them regardless of auth method.
-        Effect.andThen(store.delete(profileName, STATE_STORE_CREDENTIALS_FILE).pipe(Effect.ignore)),
+        Effect.andThen(clearStoreCredentials(store, profileName).pipe(Effect.ignore)),
       );
 
     const login = (
@@ -707,9 +707,7 @@ export const CloudflareAuth = AuthProviderLayer<
       input: { readonly method: string; readonly values: Record<string, string> },
     ): Effect.Effect<CloudflareAuthConfig, AuthError> => {
       const persist = (config: CloudflareAuthConfig) =>
-        store
-          .delete(profileName, STATE_STORE_CREDENTIALS_FILE)
-          .pipe(Effect.ignore, Effect.as(config));
+        clearStoreCredentials(store, profileName).pipe(Effect.ignore, Effect.as(config));
       if (input.method !== "stored") {
         return Effect.fail(
           AuthError.make({

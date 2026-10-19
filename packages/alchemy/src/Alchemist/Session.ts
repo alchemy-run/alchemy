@@ -17,24 +17,9 @@ import { ArtifactStore, createArtifactStore } from "../Artifacts.ts";
 import { AuthError, AuthProviders } from "../Auth/AuthProvider.ts";
 import { SuppressMissingProviderConfig } from "../Auth/Profile.ts";
 import { withProfileOverride } from "../Auth/Resolve.ts";
-/* oxlint-disable alchemy/package-boundaries -- package split phase 2: static auth provider list; becomes plugin `auth` */
-import { AwsAuth } from "../AWS/AuthProvider.ts";
-import { AxiomAuth } from "../Axiom/AuthProvider.ts";
-import { CloudflareAuth } from "../Cloudflare/Auth/AuthProvider.ts";
-import { DopplerAuth } from "../Doppler/AuthProvider.ts";
-import { FlyAuth } from "../Fly/AuthProvider.ts";
-import { GcpAuth } from "../GCP/AuthProvider.ts";
-import { GitHubAuth } from "../GitHub/AuthProvider.ts";
-import { HetznerAuth } from "../Hetzner/AuthProvider.ts";
-import { InfisicalAuth } from "../Infisical/AuthProvider.ts";
-import { NeonAuth } from "../Neon/AuthProvider.ts";
-import { PlanetscaleAuth } from "../Planetscale/AuthProvider.ts";
-import { PrismaAuth } from "../Prisma/AuthProvider.ts";
-import { RailwayAuth } from "../Railway/AuthProvider.ts";
+import * as Contributions from "../Contributions.ts";
 import * as Stack from "../Stack.ts";
 import { Stage } from "../Stage.ts";
-import { StripeAuth } from "../Stripe/AuthProvider.ts";
-/* oxlint-enable alchemy/package-boundaries */
 import {
   loadConfigProvider,
   stackConfigLayer,
@@ -333,35 +318,42 @@ export const buildStackProviders = Effect.fn("buildStackProviders")(function* (
   return { authProviders, context, stackEffect };
 });
 
-const builtinAuth = Layer.mergeAll(
-  AwsAuth,
-  AxiomAuth,
-  CloudflareAuth,
-  FlyAuth,
-  GcpAuth,
-  GitHubAuth,
-  DopplerAuth,
-  HetznerAuth,
-  InfisicalAuth,
-  NeonAuth,
-  PlanetscaleAuth,
-  PrismaAuth,
-  RailwayAuth,
-  StripeAuth,
-);
-
-const buildBuiltinAuthProviders = Effect.fn("buildBuiltinAuthProviders")(function* (options: {
-  readonly envFile: Option.Option<string>;
-  readonly profile: string;
-  readonly registry?: AuthProviders["Service"];
-}) {
-  const authProviders = options.registry ?? {};
-  const shared = yield* sessionServices(options);
-  yield* Layer.build(
-    Layer.provide(builtinAuth, Layer.mergeAll(Layer.succeed(AuthProviders, authProviders), shared)),
+/**
+ * Every provider's auth provider, merged into one registering layer. One
+ * provider whose auth fails to load is skipped with a warning, so it can't
+ * take every other provider's auth down with it.
+ */
+const contributedAuth = Effect.fn("contributedAuth")(function* () {
+  const layers = yield* Effect.forEach(
+    yield* Contributions.load(),
+    (provider) =>
+      provider.auth
+        ? Contributions.resolve(provider, "auth", provider.auth).pipe(
+            Effect.catch((error) => Effect.as(Effect.logWarning(error.message), undefined)),
+          )
+        : Effect.void,
+    { concurrency: "unbounded" },
   );
-  return authProviders;
+  return Layer.mergeAll(Layer.empty, ...layers.filter((layer) => layer !== undefined));
 });
+
+const buildContributedAuthProviders = Effect.fn("buildContributedAuthProviders")(
+  function* (options: {
+    readonly envFile: Option.Option<string>;
+    readonly profile: string;
+    readonly registry?: AuthProviders["Service"];
+  }) {
+    const authProviders = options.registry ?? {};
+    const shared = yield* sessionServices(options);
+    yield* Layer.build(
+      Layer.provide(
+        yield* contributedAuth(),
+        Layer.mergeAll(Layer.succeed(AuthProviders, authProviders), shared),
+      ),
+    );
+    return authProviders;
+  },
+);
 
 const isMissingProviderConfig = Schema.is(
   Schema.Struct({ _tag: Schema.Literals(["MissingProviderConfig"]) }),
@@ -374,7 +366,7 @@ const isMissingProviderConfig = Schema.is(
 const collectAuthProvidersUncached = Effect.fn("collectAuthProvidersUncached")(
   function* (options: CollectAuthProvidersOptions) {
     const authProviders: AuthProviders["Service"] = {};
-    yield* buildBuiltinAuthProviders({
+    yield* buildContributedAuthProviders({
       envFile: options.envFile,
       profile: options.profile,
       registry: authProviders,

@@ -21,20 +21,24 @@ export const makeFakeProfileStore = (
   ...overrides,
 });
 
-export const makeFakeCredentialsStore = (stored?: unknown): CredentialsStore["Service"] => ({
-  read: <A, E>(_profile: string, _provider: string, schema: Schema.Codec<A, E>) =>
-    stored === undefined
-      ? Effect.succeed(undefined)
-      : Schema.decodeUnknownEffect(schema)(stored).pipe(
-          Effect.mapError(
-            (cause) =>
-              new AuthError({
-                message: "Stored credentials do not match the expected shape.",
-                cause,
-              }),
+export const makeFakeCredentialsStore = (stored?: unknown): CredentialsStore["Service"] => {
+  const fake: CredentialsStore["Service"] = {
+    read: <A, E>(_profile: string, _provider: string, schema: Schema.Codec<A, E>) =>
+      stored === undefined
+        ? Effect.succeed(undefined)
+        : Schema.decodeUnknownEffect(schema)(stored).pipe(
+            Effect.mapError(
+              (cause) =>
+                new AuthError({
+                  message: "Stored credentials do not match the expected shape.",
+                  cause,
+                }),
+            ),
           ),
-        ),
-  write: () => Effect.void,
-  delete: () => Effect.void,
-  deleteProfile: () => Effect.void,
-});
+    write: () => Effect.void,
+    delete: () => Effect.void,
+    deleteProfile: () => Effect.void,
+    scoped: () => fake,
+  };
+  return fake;
+};

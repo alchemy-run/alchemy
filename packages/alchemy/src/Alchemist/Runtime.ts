@@ -25,6 +25,9 @@ import { routeCacheLayer } from "./Session.ts";
  * )
  * ```
  */
+/** The services {@link layer} provides; every Alchemist route runs under them. */
+export type Services = Layer.Success<ReturnType<typeof layer>>;
+
 export const layer = () =>
   Layer.mergeAll(
     Layer.mergeAll(AlchemyContextLive, ProfileStoreLive, CredentialsStoreLive).pipe(
