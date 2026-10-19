@@ -30,10 +30,6 @@ const BOOTSTRAP_MODULES = [
   "alchemy/Cloudflare/Bootstrap/ContainerBun",
   "alchemy/Cloudflare/Bootstrap/ContainerNode",
   "alchemy/Runtime/Bootstrap/Docker",
-  "alchemy/Fly/Bootstrap",
-  "alchemy/Hetzner/Bootstrap",
-  "alchemy/Prisma/Bootstrap",
-  "alchemy/Railway/Bootstrap",
 ] as const;
 
 layer(NodeServices.layer)("generated entry bootstraps", (it) => {

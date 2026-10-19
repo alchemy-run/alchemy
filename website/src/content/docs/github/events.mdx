@@ -18,7 +18,7 @@ on the first deploy, updated in place on subsequent deploys, deleted
 when the stack is destroyed:
 
 ```typescript
-import * as GitHub from "alchemy/GitHub";
+import * as GitHub from "@alchemy.run/github";
 
 yield* GitHub.Webhook("ci-webhook", {
   owner: "my-org",
@@ -71,7 +71,7 @@ hands your handler a typed payload:
 ```typescript
 // src/worker.ts
 import * as Cloudflare from "alchemy/Cloudflare";
-import * as GitHub from "alchemy/GitHub";
+import * as GitHub from "@alchemy.run/github";
 import * as Effect from "effect/Effect";
 
 export default Cloudflare.Worker(

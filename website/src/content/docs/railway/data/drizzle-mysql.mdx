@@ -55,7 +55,7 @@ Commit the schema, SQL, and snapshots together; deployment must consume the revi
 
 ```typescript
 // src/db.ts
-import * as Railway from "alchemy/Railway";
+import * as Railway from "@alchemy.run/railway";
 import { Site } from "./project.ts";
 
 export const Db = Railway.MySQL("Db", { project: Site });

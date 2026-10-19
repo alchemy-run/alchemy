@@ -1,11 +1,11 @@
+import * as Railway from "@alchemy.run/railway";
+import { RailwayAuth } from "@alchemy.run/railway/AuthProvider";
+import { fromAuthProvider } from "@alchemy.run/railway/Credentials";
 import { Query } from "@distilled.cloud/core/query";
 import { GraphQLLive, Railway as RailwayApi } from "@distilled.cloud/railway";
 import * as Alchemy from "alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Provider from "alchemy/Provider";
-import * as Railway from "alchemy/Railway";
-import { RailwayAuth } from "alchemy/Railway/AuthProvider";
-import { fromAuthProvider } from "alchemy/Railway/Credentials";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";

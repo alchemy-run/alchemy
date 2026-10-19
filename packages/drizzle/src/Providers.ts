@@ -16,7 +16,7 @@ export type ProviderRequirements = Layer.Services<ReturnType<typeof providers>>;
  * import * as Alchemy from "alchemy";
  * import * as Cloudflare from "alchemy/Cloudflare";
  * import * as Drizzle from "@alchemy.run/drizzle";
- * import * as Neon from "alchemy/Neon";
+ * import * as Neon from "@alchemy.run/neon";
  * import * as Effect from "effect/Effect";
  * import * as Layer from "effect/Layer";
  *

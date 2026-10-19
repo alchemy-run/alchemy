@@ -1,7 +1,7 @@
 import * as Drizzle from "@alchemy.run/drizzle/Postgres";
-import { ConnectPostgres } from "alchemy/Railway/ConnectPostgres";
-import { ConnectPostgresHttp } from "alchemy/Railway/ConnectPostgresHttp";
-import { Function } from "alchemy/Railway/Function";
+import { ConnectPostgres } from "@alchemy.run/railway/ConnectPostgres";
+import { ConnectPostgresHttp } from "@alchemy.run/railway/ConnectPostgresHttp";
+import { Function } from "@alchemy.run/railway/Function";
 import * as Effect from "effect/Effect";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import { Db } from "./postgres-shared.ts";

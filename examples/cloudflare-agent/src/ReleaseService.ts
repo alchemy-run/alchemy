@@ -1,5 +1,5 @@
+import * as Github from "@alchemy.run/github";
 import * as Cloudflare from "alchemy/Cloudflare";
-import * as Github from "alchemy/GitHub";
 import * as Effect from "effect/Effect";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import { ReleaseVersion } from "./ReleaseVersion.ts";

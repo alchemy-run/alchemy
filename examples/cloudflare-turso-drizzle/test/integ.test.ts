@@ -1,9 +1,9 @@
 import { expect } from "bun:test";
 import * as Drizzle from "@alchemy.run/drizzle";
+import * as Turso from "@alchemy.run/turso";
 import * as Alchemy from "alchemy";
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Test from "alchemy/Test/Bun";
-import * as Turso from "alchemy/Turso";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";

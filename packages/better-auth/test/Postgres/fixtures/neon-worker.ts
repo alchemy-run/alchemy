@@ -1,5 +1,5 @@
+import * as Neon from "@alchemy.run/neon";
 import * as Cloudflare from "alchemy/Cloudflare";
-import * as Neon from "alchemy/Neon";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";

@@ -1,3 +1,8 @@
+import { RailwayAuth } from "@alchemy.run/railway/AuthProvider";
+import { fromAuthProvider } from "@alchemy.run/railway/Credentials";
+import { resolveWorkspace } from "@alchemy.run/railway/Environment";
+import { createProject, type Project } from "@alchemy.run/railway/Project";
+import { Environment } from "@alchemy.run/railway/ProjectEnvironment";
 /**
  * One Railway project for the live test process. Not a stack resource —
  * tests pass it as `project:` so `stack.destroy()` cannot delete it.
@@ -7,11 +12,6 @@
  */
 import { Query } from "@distilled.cloud/core/query";
 import { GraphQLLive, Railway } from "@distilled.cloud/railway";
-import { RailwayAuth } from "alchemy/Railway/AuthProvider";
-import { fromAuthProvider } from "alchemy/Railway/Credentials";
-import { resolveWorkspace } from "alchemy/Railway/Environment";
-import { createProject, type Project } from "alchemy/Railway/Project";
-import { Environment } from "alchemy/Railway/ProjectEnvironment";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";

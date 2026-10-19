@@ -66,7 +66,7 @@ const openPool = (
  * ```typescript
  * import { BetterAuth } from "@alchemy.run/better-auth";
  * import { Neon as NeonDatabase } from "@alchemy.run/better-auth/Neon";
- * import * as Neon from "alchemy/Neon";
+ * import * as Neon from "@alchemy.run/neon";
  *
  * export const AuthDb = Neon.Project("AuthDb");
  *

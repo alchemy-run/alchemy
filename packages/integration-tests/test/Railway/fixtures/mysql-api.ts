@@ -1,5 +1,5 @@
 import * as Drizzle from "@alchemy.run/drizzle/MySQL";
-import * as Railway from "alchemy/Railway";
+import * as Railway from "@alchemy.run/railway";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";

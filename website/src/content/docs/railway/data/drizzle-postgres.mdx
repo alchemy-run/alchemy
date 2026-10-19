@@ -55,7 +55,7 @@ Commit the schema, SQL, and snapshots together rather than generating migrations
 
 ```typescript
 // src/db.ts
-import * as Railway from "alchemy/Railway";
+import * as Railway from "@alchemy.run/railway";
 import { Site } from "./project.ts";
 
 export const Db = Railway.Postgres("Db", { project: Site });

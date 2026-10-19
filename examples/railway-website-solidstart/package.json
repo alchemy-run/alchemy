@@ -15,6 +15,7 @@
     "test": "bun test"
   },
   "dependencies": {
+    "@alchemy.run/railway": "workspace:*",
     "@solidjs/router": "catalog:",
     "@solidjs/start": "catalog:",
     "@solidjs/vite-plugin-nitro-2": "catalog:",

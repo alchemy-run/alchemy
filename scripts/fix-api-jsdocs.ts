@@ -11,6 +11,15 @@ const roots = [
   path.join(import.meta.dir, "../packages/axiom/src"),
   path.join(import.meta.dir, "../packages/doppler/src"),
   path.join(import.meta.dir, "../packages/infisical/src"),
+  path.join(import.meta.dir, "../packages/turso/src"),
+  path.join(import.meta.dir, "../packages/planetscale/src"),
+  path.join(import.meta.dir, "../packages/neon/src"),
+  path.join(import.meta.dir, "../packages/prisma/src"),
+  path.join(import.meta.dir, "../packages/hetzner/src"),
+  path.join(import.meta.dir, "../packages/railway/src"),
+  path.join(import.meta.dir, "../packages/fly/src"),
+  path.join(import.meta.dir, "../packages/github/src"),
+  path.join(import.meta.dir, "../packages/stripe/src"),
 ];
 
 const pageTag = /^\s*\*\s+@(resource|binding|layer|primitive)\b/;

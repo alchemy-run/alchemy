@@ -1,7 +1,7 @@
+import * as Turso from "@alchemy.run/turso";
 import { expect } from "alchemy-test";
 import * as AWS from "alchemy/AWS";
 import * as Test from "alchemy/Test/Alchemy";
-import * as Turso from "alchemy/Turso";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";

@@ -1,7 +1,7 @@
 import * as Drizzle from "@alchemy.run/drizzle";
+import * as Planetscale from "@alchemy.run/planetscale";
 import * as Alchemy from "alchemy";
 import * as Cloudflare from "alchemy/Cloudflare";
-import * as Planetscale from "alchemy/Planetscale";
 import * as Effect from "effect/Effect";
 
 /**
