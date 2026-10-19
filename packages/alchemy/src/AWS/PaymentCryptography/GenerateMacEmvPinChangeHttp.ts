@@ -18,6 +18,7 @@ import type { Key } from "./Key.ts";
 export const GenerateMacEmvPinChangeHttp = Layer.effect(
   GenerateMacEmvPinChange,
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const generateMacEmvPinChange = yield* AWSBindings.withCredentials(
       paymentcryptographydata.generateMacEmvPinChange,
     );
@@ -36,7 +37,7 @@ export const GenerateMacEmvPinChangeHttp = Layer.effect(
           secureMessagingIntegrityKey,
           secureMessagingConfidentialityKey,
         ]) {
-          yield* AWSBindings.bind`AWS.PaymentCryptography.GenerateMacEmvPinChange(${key})`({
+          yield* bind`AWS.PaymentCryptography.GenerateMacEmvPinChange(${key})`({
             policyStatements: [
               {
                 Effect: "Allow",

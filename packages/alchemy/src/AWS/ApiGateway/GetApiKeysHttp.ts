@@ -2,7 +2,7 @@ import * as ag from "@distilled.cloud/aws/api-gateway";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as AWSBindings from "../AWSBindings.ts";
-import { registerApiGatewayBinding } from "./BindingHttp.ts";
+import { RegisterApiGatewayBinding } from "./BindingHttp.ts";
 import { GetApiKeys, type GetApiKeysRequest } from "./GetApiKeys.ts";
 
 /**
@@ -13,6 +13,7 @@ import { GetApiKeys, type GetApiKeysRequest } from "./GetApiKeys.ts";
 export const GetApiKeysHttp = Layer.effect(
   GetApiKeys,
   Effect.gen(function* () {
+    const registerApiGatewayBinding = yield* RegisterApiGatewayBinding;
     const getApiKeys = yield* AWSBindings.withCredentials(ag.getApiKeys);
     return Effect.fn(function* () {
       yield* registerApiGatewayBinding({

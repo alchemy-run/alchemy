@@ -26,12 +26,13 @@ export const makeDlmPolicyHttpBinding = <I extends { PolicyId: string }, A, E, R
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (policy: LifecyclePolicy) {
       const PolicyId = yield* policy.policyId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}(${policy})`({
+        yield* bind`${options.tag}(${policy})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -65,11 +66,12 @@ export const makeDlmAccountHttpBinding = <I, A, E, R>(options: {
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}()`({
+        yield* bind`${options.tag}()`({
           policyStatements: [
             {
               Effect: "Allow",

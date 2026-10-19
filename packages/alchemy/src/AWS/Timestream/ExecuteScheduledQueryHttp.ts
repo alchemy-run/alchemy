@@ -15,6 +15,7 @@ import type { ScheduledQuery } from "./ScheduledQuery.ts";
 export const ExecuteScheduledQueryHttp = Layer.effect(
   ExecuteScheduledQuery,
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     // Yield-first captures the operations' services (Credentials/Region/
     // HttpClient) at layer init so the runtime callable is requirement-free.
     const executeScheduledQuery = yield* AWSBindings.withCredentials(TSQ.executeScheduledQuery);
@@ -23,7 +24,7 @@ export const ExecuteScheduledQueryHttp = Layer.effect(
     return Effect.fn(function* (scheduledQuery: ScheduledQuery) {
       const ScheduledQueryArn = yield* scheduledQuery.scheduledQueryArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`AWS.Timestream.ExecuteScheduledQuery(${scheduledQuery})`({
+        yield* bind`AWS.Timestream.ExecuteScheduledQuery(${scheduledQuery})`({
           policyStatements: [
             {
               Effect: "Allow",

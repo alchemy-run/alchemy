@@ -31,12 +31,13 @@ export const makeGlacierVaultHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (vault: Vault) {
       const vaultName = yield* vault.vaultName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}(${vault})`({
+        yield* bind`${options.tag}(${vault})`({
           policyStatements: [
             {
               Effect: "Allow",

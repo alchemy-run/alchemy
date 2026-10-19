@@ -20,10 +20,11 @@ import type { Domain } from "./Domain.ts";
  * Deploy-time half of a SimpleDB binding: grants `sdb:{operation}` on the
  * domain's ARN to the host Function. No-op at runtime.
  */
-export const registerSimpleDbBinding = (operation: string, domain: Domain) =>
-  Effect.gen(function* () {
+export const RegisterSimpleDbBinding = Effect.gen(function* () {
+  const bind = yield* AWSBindings.Bind;
+  return Effect.fn(function* (operation: string, domain: Domain) {
     if (!globalThis.__ALCHEMY_RUNTIME__) {
-      yield* AWSBindings.bind`AWS.SimpleDB.${operation}(${domain})`({
+      yield* bind`AWS.SimpleDB.${operation}(${domain})`({
         policyStatements: [
           {
             Effect: "Allow",
@@ -34,6 +35,7 @@ export const registerSimpleDbBinding = (operation: string, domain: Domain) =>
       });
     }
   });
+});
 
 /**
  * Builds the full binding implementation for a SimpleDB operation whose
@@ -46,6 +48,7 @@ export const makeSimpleDbBinding = <Req extends { DomainName: string }, A, E, R>
   readonly method: Effect.Effect<(input: Req) => Effect.Effect<A, E>, never, R>;
 }) =>
   Effect.gen(function* () {
+    const registerSimpleDbBinding = yield* RegisterSimpleDbBinding;
     const call = yield* AWSBindings.withCredentials(options.method);
     return Effect.fn(function* (domain: Domain) {
       const domainName = yield* domain.domainName;

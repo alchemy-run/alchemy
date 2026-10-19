@@ -15,9 +15,9 @@ import { createInternalTags, createTagsList, hasTags } from "../../Tags.ts";
 import { sha256 } from "../../Util/sha256.ts";
 import { zipCode } from "../../Util/zip.ts";
 import { Assets } from "../Assets.ts";
+import { roleHostBundle } from "../AWSBindings.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
-import { nativeHostBundle } from "../NativeHost.ts";
 
 /**
  * Binding contract accepted by EC2-hosted runtimes: environment variables and
@@ -170,7 +170,7 @@ export const createEc2HostedSupport = ({
       plugins?: rolldown.RolldownPluginOption,
     ) {
       return yield* Bundle.build(
-        nativeHostBundle({
+        roleHostBundle({
           ...props.build?.input,
           input: entry,
           cwd,

@@ -1,5 +1,5 @@
 import * as Effect from "effect/Effect";
-import { bindGcpHost } from "../Host.ts";
+import * as GCPBindings from "../GCPBindings.ts";
 import { grantFor, type GcpHttpOp } from "../HttpBinding.ts";
 import type { Bucket } from "./Bucket.ts";
 
@@ -7,12 +7,15 @@ import type { Bucket } from "./Bucket.ts";
  * Grant `role` on the bound bucket's own IAM policy (not the project), the
  * way AWS S3 bindings scope statements to the bucket ARN.
  */
-export const grantOnBucket = (tag: string, bucket: Bucket, role: string) =>
-  bindGcpHost({
-    tag,
-    resource: bucket,
-    iam: [grantFor({ role, on: "storage.bucket" }, bucket.bucketName)],
+export const GrantOnBucket = Effect.gen(function* () {
+  const bind = yield* GCPBindings.Bind;
+  return Effect.fn(function* (tag: string, bucket: Bucket, role: string) {
+    if (globalThis.__ALCHEMY_RUNTIME__) return;
+    yield* bind`${tag}(${bucket})`({
+      iam: [grantFor({ role, on: "storage.bucket" }, bucket.bucketName)],
+    });
   });
+});
 
 /**
  * Shared HTTP scaffolding for Cloud Storage object metadata bindings
@@ -26,7 +29,8 @@ export const makeObjectHttpBinding = <I extends { bucket?: string }, A, E>(optio
   operation: GcpHttpOp<I, A, E>;
 }) =>
   Effect.gen(function* () {
-    const run = yield* options.operation;
+    const grantOnBucket = yield* GrantOnBucket;
+    const run = yield* GCPBindings.withCredentials(options.operation);
     return Effect.fn(function* (bucket: Bucket) {
       yield* grantOnBucket(options.tag, bucket, options.role);
       const bucketName = yield* bucket.bucketName;

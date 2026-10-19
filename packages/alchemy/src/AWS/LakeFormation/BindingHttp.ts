@@ -27,11 +27,12 @@ export const makeLakeFormationHttpBinding = <I extends object, A, E, R>(options:
   operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`AWS.LakeFormation.${options.capability}()`({
+        yield* bind`AWS.LakeFormation.${options.capability}()`({
           policyStatements: [
             {
               Effect: "Allow",

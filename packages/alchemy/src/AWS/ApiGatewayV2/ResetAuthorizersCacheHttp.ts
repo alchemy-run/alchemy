@@ -3,7 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Output from "../../Output.ts";
 import * as AWSBindings from "../AWSBindings.ts";
-import { registerApiGatewayV2Binding } from "./BindingHttp.ts";
+import { RegisterApiGatewayV2Binding } from "./BindingHttp.ts";
 import { ResetAuthorizersCache } from "./ResetAuthorizersCache.ts";
 import type { ApiGatewayV2Stage } from "./Stage.ts";
 
@@ -15,6 +15,7 @@ import type { ApiGatewayV2Stage } from "./Stage.ts";
 export const ResetAuthorizersCacheHttp = Layer.effect(
   ResetAuthorizersCache,
   Effect.gen(function* () {
+    const registerApiGatewayV2Binding = yield* RegisterApiGatewayV2Binding;
     const resetAuthorizersCache = yield* AWSBindings.withCredentials(agw2.resetAuthorizersCache);
     return Effect.fn(function* <S extends ApiGatewayV2Stage>(stage: S) {
       const ApiId = yield* stage.apiId;

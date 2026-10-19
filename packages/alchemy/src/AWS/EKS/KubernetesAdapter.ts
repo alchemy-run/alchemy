@@ -45,7 +45,6 @@ import type { PolicyStatement } from "../IAM/Policy.ts";
  * Registered by `AWS.providers()`; resolved dynamically by the
  * `Kubernetes.*` providers via the connection's `auth.kind`.
  */
-import { NATIVE_HOST_ENV } from "../NativeHost.ts";
 import {
   attachPolicyStatements,
   deleteAssociation,
@@ -520,9 +519,6 @@ export const EksKubernetesAdapter = () =>
           return {
             env: {
               AWS_REGION: auth.region ?? region,
-              // Marks the pod as a native AWS host for AWS bindings at
-              // runtime, whether or not alchemy bundled its image.
-              [NATIVE_HOST_ENV]: "AWS",
             },
             state: {
               kind: "aws-pod-identity" as const,

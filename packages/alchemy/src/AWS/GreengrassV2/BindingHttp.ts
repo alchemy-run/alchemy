@@ -27,12 +27,13 @@ export const makeGreengrassComponentHttpBinding = <I extends { arn: string }, A,
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (component: ComponentVersion) {
       const Arn = yield* component.arn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}(${component})`({
+        yield* bind`${options.tag}(${component})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -81,12 +82,13 @@ export const makeGreengrassDeploymentHttpBinding = <
   dependentActions?: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (deployment: Deployment) {
       const DeploymentId = yield* deployment.deploymentId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}(${deployment})`({
+        yield* bind`${options.tag}(${deployment})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -130,11 +132,12 @@ export const makeGreengrassAccountHttpBinding = <I, A, E, R>(options: {
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}()`({
+        yield* bind`${options.tag}()`({
           policyStatements: [
             {
               Effect: "Allow",

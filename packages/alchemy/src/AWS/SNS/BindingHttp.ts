@@ -30,11 +30,12 @@ export const makeSnsAccountHttpBinding = <I, A, E, R>(options: {
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}()`({
+        yield* bind`${options.tag}()`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -74,12 +75,13 @@ export const makeSnsTopicHttpBinding = <
   key: K;
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (topic: Topic) {
       const TopicArn = yield* topic.topicArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}(${topic})`({
+        yield* bind`${options.tag}(${topic})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -123,6 +125,7 @@ export const makeSnsSubscriptionHttpBinding = <
   key: K;
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (subscription: Subscription) {
@@ -130,7 +133,7 @@ export const makeSnsSubscriptionHttpBinding = <
         ? subscription.topicArn
         : subscription.subscriptionArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}(${subscription})`({
+        yield* bind`${options.tag}(${subscription})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -173,12 +176,13 @@ export const makeSnsPlatformHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (application: PlatformApplication) {
       const PlatformApplicationArn = yield* application.platformApplicationArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}(${application})`({
+        yield* bind`${options.tag}(${application})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -217,11 +221,12 @@ export const makeSnsEndpointHttpBinding = <I, A, E, R>(options: {
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (application: PlatformApplication) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}(${application})`({
+        yield* bind`${options.tag}(${application})`({
           policyStatements: [
             {
               Effect: "Allow",

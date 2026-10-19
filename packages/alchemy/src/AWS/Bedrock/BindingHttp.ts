@@ -39,6 +39,7 @@ export const makeModelScopedHttpBinding = <I extends { modelId: string }, A, E, 
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (model: string, ...additionalModels: string[]) {
@@ -47,7 +48,7 @@ export const makeModelScopedHttpBinding = <I extends { modelId: string }, A, E, 
         // Sort so the binding identity (SID + ARN list) is deterministic
         // regardless of argument order.
         const sorted = [...new Set([model, ...additionalModels])].sort();
-        yield* AWSBindings.bind`${options.tag}(${sorted.join(",")})`({
+        yield* bind`${options.tag}(${sorted.join(",")})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -90,12 +91,13 @@ export const makeKnowledgeBaseScopedHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* <K extends KnowledgeBase>(knowledgeBase: K) {
       const KnowledgeBaseId = yield* knowledgeBase.knowledgeBaseId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}(${knowledgeBase})`({
+        yield* bind`${options.tag}(${knowledgeBase})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -138,6 +140,7 @@ export const makeDataSourceScopedHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* <D extends DataSource>(dataSource: D) {
@@ -145,7 +148,7 @@ export const makeDataSourceScopedHttpBinding = <
       const DataSourceId = yield* dataSource.dataSourceId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const { accountId, region } = yield* currentEnv;
-        yield* AWSBindings.bind`${options.tag}(${dataSource})`({
+        yield* bind`${options.tag}(${dataSource})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -191,13 +194,14 @@ export const makeAgentAliasScopedHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* <AA extends AgentAlias>(alias: AA) {
       const AgentId = yield* alias.agentId;
       const AgentAliasId = yield* alias.agentAliasId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}(${alias})`({
+        yield* bind`${options.tag}(${alias})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -235,6 +239,7 @@ export const makeRagHttpBinding = <I, A, E, R>(options: {
   operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* <K extends KnowledgeBase>(knowledgeBase: K, ...models: string[]) {
@@ -249,7 +254,7 @@ export const makeRagHttpBinding = <I, A, E, R>(options: {
                 `arn:aws:bedrock:${region}::foundation-model/*`,
                 `arn:aws:bedrock:${region}:${accountId}:inference-profile/*`,
               ];
-        yield* AWSBindings.bind`${options.tag}(${knowledgeBase})`({
+        yield* bind`${options.tag}(${knowledgeBase})`({
           policyStatements: [
             {
               Effect: "Allow",

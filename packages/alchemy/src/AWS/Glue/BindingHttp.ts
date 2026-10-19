@@ -42,13 +42,14 @@ export const makeGlueJobHttpBinding = <I extends { JobName: string }, A, E, R>(o
   anyResource?: boolean;
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (job: Job) {
       // Outputs yield a DEFERRED effect — resolve again per invocation below.
       const JobName = yield* job.jobName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}(${job})`({
+        yield* bind`${options.tag}(${job})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -80,12 +81,13 @@ export const makeGlueCrawlerHttpBinding = <I extends { Name: string }, A, E, R>(
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (crawler: Crawler) {
       const Name = yield* crawler.crawlerName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}(${crawler})`({
+        yield* bind`${options.tag}(${crawler})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -124,13 +126,14 @@ export const makeGlueDatabaseHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (database: Database) {
       const DatabaseName = yield* database.databaseName;
       const CatalogId = yield* database.catalogId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}(${database})`({
+        yield* bind`${options.tag}(${database})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -190,6 +193,7 @@ export const makeGlueTableHttpBinding = <
   tableNameKey: K;
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (table: Table) {
@@ -197,7 +201,7 @@ export const makeGlueTableHttpBinding = <
       const TableName = yield* table.tableName;
       const CatalogId = yield* table.catalogId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}(${table})`({
+        yield* bind`${options.tag}(${table})`({
           policyStatements: [
             {
               Effect: "Allow",

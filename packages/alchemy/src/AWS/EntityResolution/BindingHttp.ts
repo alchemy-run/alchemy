@@ -22,12 +22,13 @@ export const makeWorkflowHttpBinding = <I extends { workflowName: string }, A, E
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (workflow: MatchingWorkflow | IdMappingWorkflow) {
       const WorkflowName = yield* workflow.workflowName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}(${workflow})`({
+        yield* bind`${options.tag}(${workflow})`({
           policyStatements: [
             {
               Effect: "Allow",

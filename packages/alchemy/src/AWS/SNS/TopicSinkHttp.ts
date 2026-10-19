@@ -31,11 +31,12 @@ const selectFailed = (
 export const TopicSinkHttp = Layer.effect(
   TopicSink,
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const publishBatch = yield* PublishBatch;
 
     return Effect.fn(function* (topic: Topic) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`AWS.SNS.TopicSink(${topic})`({
+        yield* bind`AWS.SNS.TopicSink(${topic})`({
           policyStatements: [
             {
               Effect: "Allow",

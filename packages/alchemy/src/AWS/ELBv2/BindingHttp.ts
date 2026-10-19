@@ -20,15 +20,16 @@ import type { TrustStore } from "./TrustStore.ts";
  * Instances registering themselves into a target group at boot).
  */
 
-const bindHost = (
-  tag: string,
-  actions: readonly string[],
-  resource: TargetGroup | LoadBalancer | TrustStore,
-  iamResource: Output.Output<string> | "*",
-) =>
-  Effect.gen(function* () {
+const BindHost = Effect.gen(function* () {
+  const bind = yield* AWSBindings.Bind;
+  return Effect.fn(function* (
+    tag: string,
+    actions: readonly string[],
+    resource: TargetGroup | LoadBalancer | TrustStore,
+    iamResource: Output.Output<string> | "*",
+  ) {
     if (!globalThis.__ALCHEMY_RUNTIME__) {
-      yield* AWSBindings.bind`${tag}(${resource})`({
+      yield* bind`${tag}(${resource})`({
         policyStatements: [
           {
             Effect: "Allow",
@@ -39,6 +40,7 @@ const bindHost = (
       });
     }
   });
+});
 
 /**
  * Build the impl Effect for a target-group-addressed operation: the runtime
@@ -67,6 +69,7 @@ export const makeTargetGroupHttpBinding = <
   resource?: "target-group" | "*";
 }) =>
   Effect.gen(function* () {
+    const bindHost = yield* BindHost;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (targetGroup: TargetGroup) {
@@ -115,6 +118,7 @@ export const makeLoadBalancerHttpBinding = <
   resource?: "load-balancer" | "*";
 }) =>
   Effect.gen(function* () {
+    const bindHost = yield* BindHost;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (loadBalancer: LoadBalancer) {
@@ -151,6 +155,7 @@ export const makeTrustStoreHttpBinding = <I extends { TrustStoreArn?: string }, 
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bindHost = yield* BindHost;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (trustStore: TrustStore) {

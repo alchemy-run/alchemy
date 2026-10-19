@@ -32,6 +32,7 @@ export const makeRolesAnywhereHttpBinding = <I, A, E, R>(options: {
   operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* () {
@@ -44,7 +45,7 @@ export const makeRolesAnywhereHttpBinding = <I, A, E, R>(options: {
             Resource: ["*"],
           },
         ];
-        yield* AWSBindings.bind`AWS.RolesAnywhere.${options.capability}()`({
+        yield* bind`AWS.RolesAnywhere.${options.capability}()`({
           policyStatements,
         });
       }

@@ -26,11 +26,12 @@ type WriteSendError = Exclude<
 export const RecordsSinkHttp = Layer.effect(
   RecordsSink,
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const writeRecords = yield* WriteRecords;
 
     return Effect.fn(function* (table: Table, props?: RecordsSinkProps) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`AWS.Timestream.RecordsSink(${table})`({
+        yield* bind`AWS.Timestream.RecordsSink(${table})`({
           policyStatements: [
             {
               Effect: "Allow",

@@ -8,11 +8,12 @@ import {
   type BatchWriteItemTables,
   sortBatchWriteItemTables,
 } from "./BatchWriteItem.ts";
-import { grantTables, tablesRegion } from "./BindingHttp.ts";
+import { GrantTables, tablesRegion } from "./BindingHttp.ts";
 
 export const BatchWriteItemHttp = Layer.effect(
   BatchWriteItem,
   Effect.gen(function* () {
+    const grantTables = yield* GrantTables;
     return Effect.fn(function* (...tables: BatchWriteItemTables) {
       const sortedTables = sortBatchWriteItemTables(tables);
       const tableNames = new Map(

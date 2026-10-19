@@ -21,6 +21,7 @@ const DSQL_PORT = 5432;
 export const ConnectHttp = Layer.effect(
   Connect,
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     // Captured at layer build so the runtime callable only requires
     // RuntimeContext — the presign resolves credentials lazily from the
     // service on every mint, so refreshed execution-role creds are honored.
@@ -34,7 +35,7 @@ export const ConnectHttp = Layer.effect(
 
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const prefix = connectEnvPrefix(cluster.LogicalId);
-        yield* AWSBindings.bind`AWS.DSQL.Connect(${cluster})`({
+        yield* bind`AWS.DSQL.Connect(${cluster})`({
           env: {
             [`${prefix}_HOST`]: cluster.endpoint,
           },

@@ -14,13 +14,14 @@ import { ListEventPredictions } from "./ListEventPredictions.ts";
 export const ListEventPredictionsHttp = Layer.effect(
   ListEventPredictions,
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(frauddetector.listEventPredictions);
 
     return Effect.fn(function* (detector: Detector) {
       // Output yields a DEFERRED effect — resolve again per invocation below.
       const DetectorId = yield* detector.detectorId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`AWS.FraudDetector.ListEventPredictions(${detector})`({
+        yield* bind`AWS.FraudDetector.ListEventPredictions(${detector})`({
           policyStatements: [
             {
               Effect: "Allow",

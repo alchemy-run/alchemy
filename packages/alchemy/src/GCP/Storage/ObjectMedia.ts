@@ -1,11 +1,13 @@
 import { Credentials } from "@distilled.cloud/gcp/Credentials";
 import type * as storage from "@distilled.cloud/gcp/storage_v1";
+import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import type * as HttpClientResponse from "effect/http/HttpClientResponse";
 import * as Schedule from "effect/Schedule";
+import * as GCPBindings from "../GCPBindings.ts";
 
 /**
  * Object content transfer over the Cloud Storage JSON API media endpoints
@@ -92,8 +94,11 @@ const transportFailure = (bucket: string, object: string) => (cause: { message?:
  * distilled operation).
  */
 export const makeObjectMedia = Effect.gen(function* () {
-  const credentials = yield* Credentials;
-  const http = yield* HttpClient.HttpClient;
+  const context = yield* GCPBindings.withCredentials(
+    Effect.context<Credentials | HttpClient.HttpClient>(),
+  );
+  const credentials = Context.get(context, Credentials);
+  const http = Context.get(context, HttpClient.HttpClient);
 
   // A failed token exchange (e.g. workload identity) fails the object request
   // with status 401 rather than leaking `GCPCredentialsError` into the

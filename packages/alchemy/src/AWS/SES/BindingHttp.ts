@@ -31,11 +31,12 @@ export const makeSESHttpBinding = <I, A, E, R>(options: {
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}()`({
+        yield* bind`${options.tag}()`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -70,12 +71,13 @@ export const makeTemplateScopedHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (template: EmailTemplate) {
       const TemplateName = yield* template.templateName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}(${template})`({
+        yield* bind`${options.tag}(${template})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -153,6 +155,7 @@ export const makeVerificationScopedHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (
@@ -202,7 +205,7 @@ export const makeVerificationScopedHttpBinding = <
         if (configurationSet) {
           resources.push(configurationSet.configurationSetArn);
         }
-        yield* AWSBindings.bind`${options.tag}(${label}, ${configurationSet ?? "none"})`({
+        yield* bind`${options.tag}(${label}, ${configurationSet ?? "none"})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -251,6 +254,7 @@ export const makeSendScopedHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* <Identity extends EmailIdentity>(
@@ -277,7 +281,7 @@ export const makeSendScopedHttpBinding = <
               : identityArn.replace(/:identity\//, ":identity/*@"),
           ),
         );
-        yield* AWSBindings.bind`${options.tag}(${identity}, ${configurationSet ?? "none"})`({
+        yield* bind`${options.tag}(${identity}, ${configurationSet ?? "none"})`({
           policyStatements: [
             {
               Effect: "Allow",

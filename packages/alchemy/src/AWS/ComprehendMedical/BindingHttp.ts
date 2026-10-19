@@ -39,6 +39,7 @@ export const makeComprehendMedicalHttpBinding = <I, A, E, R>(options: {
   passRole?: boolean;
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* () {
@@ -63,7 +64,7 @@ export const makeComprehendMedicalHttpBinding = <I, A, E, R>(options: {
             },
           });
         }
-        yield* AWSBindings.bind`AWS.ComprehendMedical.${options.capability}()`({
+        yield* bind`AWS.ComprehendMedical.${options.capability}()`({
           policyStatements,
         });
       }

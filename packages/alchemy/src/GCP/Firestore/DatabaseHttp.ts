@@ -1,6 +1,6 @@
 import * as firestore from "@distilled.cloud/gcp/firestore_v1";
 import * as Effect from "effect/Effect";
-import { bindGcpHost } from "../Host.ts";
+import * as GCPBindings from "../GCPBindings.ts";
 import { type BindingIam, grantFor } from "../HttpBinding.ts";
 import type { Database } from "./Database.ts";
 import type { DocumentSnapshot, ReadDatabaseClient } from "./ReadDatabase.ts";
@@ -48,12 +48,20 @@ const snapshot = (document: firestore.Document): DocumentSnapshot => ({
  * NOT exported from `index.ts`.
  */
 export const makeFirestoreDatabaseHelpers = Effect.gen(function* () {
-  const getDocument = yield* firestore.getProjectsDatabasesDocuments;
-  const listDocuments = yield* firestore.listProjectsDatabasesDocuments;
-  const runQuery = yield* firestore.runQueryProjectsDatabasesDocuments;
-  const patchDocument = yield* firestore.patchProjectsDatabasesDocuments;
-  const createDocument = yield* firestore.createDocumentProjectsDatabasesDocuments;
-  const deleteDocument = yield* firestore.deleteProjectsDatabasesDocuments;
+  const getDocument = yield* GCPBindings.withCredentials(firestore.getProjectsDatabasesDocuments);
+  const listDocuments = yield* GCPBindings.withCredentials(
+    firestore.listProjectsDatabasesDocuments,
+  );
+  const runQuery = yield* GCPBindings.withCredentials(firestore.runQueryProjectsDatabasesDocuments);
+  const patchDocument = yield* GCPBindings.withCredentials(
+    firestore.patchProjectsDatabasesDocuments,
+  );
+  const createDocument = yield* GCPBindings.withCredentials(
+    firestore.createDocumentProjectsDatabasesDocuments,
+  );
+  const deleteDocument = yield* GCPBindings.withCredentials(
+    firestore.deleteProjectsDatabasesDocuments,
+  );
 
   const makeRead = (databaseName: Effect.Effect<string>): ReadDatabaseClient => {
     const documentsRoot = Effect.map(databaseName, (db) => `${db}/documents`);
@@ -167,13 +175,14 @@ export const makeFirestoreDatabaseBinding = <Client>(options: {
   ) => Client;
 }) =>
   Effect.gen(function* () {
+    const bind = yield* GCPBindings.Bind;
     const helpers = yield* makeFirestoreDatabaseHelpers;
     return Effect.fn(function* (database: Database) {
-      yield* bindGcpHost({
-        tag: options.tag,
-        resource: database,
-        iam: [grantFor(options.iam, database.name)],
-      });
+      if (!globalThis.__ALCHEMY_RUNTIME__) {
+        yield* bind`${options.tag}(${database})`({
+          iam: [grantFor(options.iam, database.name)],
+        });
+      }
       const databaseName = yield* database.name;
       return options.makeClient(helpers, databaseName);
     });

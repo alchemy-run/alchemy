@@ -56,12 +56,13 @@ export const makeAppFlowHttpBinding = <
   options: AppFlowHttpBindingOptions<R, K, I, A, E, OpR>,
 ) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const operation = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (resource: R) {
       const Identifier = yield* options.identifier(resource);
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`AWS.AppFlow.${options.action}(${resource})`({
+        yield* bind`AWS.AppFlow.${options.action}(${resource})`({
           policyStatements: [
             {
               Effect: "Allow",

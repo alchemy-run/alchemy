@@ -39,13 +39,14 @@ export const makeCodeBuildProjectNameHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* <P extends Project>(project: P) {
       // Outputs yield a DEFERRED effect — resolve again per invocation below.
       const ProjectName = yield* project.projectName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}(${project})`({
+        yield* bind`${options.tag}(${project})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -86,11 +87,12 @@ export const makeCodeBuildProjectHttpBinding = <I, A, E, R>(options: {
   sandboxScoped?: boolean;
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* <P extends Project>(project: P) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}(${project})`({
+        yield* bind`${options.tag}(${project})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -136,12 +138,13 @@ export const makeCodeBuildReportGroupArnHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* <G extends ReportGroup>(reportGroup: G) {
       const ReportGroupArn = yield* reportGroup.reportGroupArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}(${reportGroup})`({
+        yield* bind`${options.tag}(${reportGroup})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -178,11 +181,12 @@ export const makeCodeBuildReportGroupHttpBinding = <I, A, E, R>(options: {
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* <G extends ReportGroup>(reportGroup: G) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}(${reportGroup})`({
+        yield* bind`${options.tag}(${reportGroup})`({
           policyStatements: [
             {
               Effect: "Allow",

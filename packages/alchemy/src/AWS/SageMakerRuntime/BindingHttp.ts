@@ -40,6 +40,7 @@ export const makeEndpointInvocationHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (endpoint: string, ...additionalEndpoints: string[]) {
@@ -48,7 +49,7 @@ export const makeEndpointInvocationHttpBinding = <
         // Sort so the binding identity (SID + ARN list) is deterministic
         // regardless of argument order.
         const sorted = [...new Set([endpoint, ...additionalEndpoints])].sort();
-        yield* AWSBindings.bind`${options.tag}(${sorted.join(",")})`({
+        yield* bind`${options.tag}(${sorted.join(",")})`({
           policyStatements: [
             {
               Effect: "Allow",

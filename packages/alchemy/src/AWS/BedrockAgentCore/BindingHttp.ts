@@ -53,12 +53,13 @@ export const makeAgentCoreHttpBinding = <
   arns: (resource: Res) => readonly Output.Output<string>[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (resource: Res) {
       const Identifier = yield* options.identifier(resource);
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}(${resource})`({
+        yield* bind`${options.tag}(${resource})`({
           policyStatements: [
             {
               Effect: "Allow",

@@ -57,13 +57,14 @@ export const makeRDSDataHttpBinding = <Req, I, A, E, R>(options: {
   ) => I;
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (cluster: DBCluster, bindOptions: RDSDataBindingOptions) {
       const resourceArn = yield* cluster.dbClusterArn;
       const secretArn = yield* bindOptions.secret.secretArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}(${cluster}, ${bindOptions.secret})`({
+        yield* bind`${options.tag}(${cluster}, ${bindOptions.secret})`({
           policyStatements: [
             {
               Effect: "Allow",

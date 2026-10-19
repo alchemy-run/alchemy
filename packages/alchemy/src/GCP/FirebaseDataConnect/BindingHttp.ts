@@ -1,5 +1,5 @@
 import * as Effect from "effect/Effect";
-import { bindGcpHost } from "../Host.ts";
+import * as GCPBindings from "../GCPBindings.ts";
 import { type BindingIam, type GcpHttpOp, grantFor } from "../HttpBinding.ts";
 import type { Service } from "./Service.ts";
 import type { ServicesConnector } from "./ServicesConnector.ts";
@@ -14,13 +14,14 @@ export const makeServiceHttpBinding = <I extends { name: string }, A, E>(options
   operation: GcpHttpOp<I, A, E>;
 }) =>
   Effect.gen(function* () {
-    const run = yield* options.operation;
+    const bind = yield* GCPBindings.Bind;
+    const run = yield* GCPBindings.withCredentials(options.operation);
     return Effect.fn(function* (service: Service) {
-      yield* bindGcpHost({
-        tag: options.tag,
-        resource: service,
-        iam: [grantFor(options.iam, service.name)],
-      });
+      if (!globalThis.__ALCHEMY_RUNTIME__) {
+        yield* bind`${options.tag}(${service})`({
+          iam: [grantFor(options.iam, service.name)],
+        });
+      }
       const name = yield* service.name;
       return Effect.fn(`${options.tag}(${service.LogicalId})`)(function* (
         request: Omit<I, "name">,
@@ -39,13 +40,14 @@ export const makeConnectorHttpBinding = <I extends { name: string }, A, E>(optio
   operation: GcpHttpOp<I, A, E>;
 }) =>
   Effect.gen(function* () {
-    const run = yield* options.operation;
+    const bind = yield* GCPBindings.Bind;
+    const run = yield* GCPBindings.withCredentials(options.operation);
     return Effect.fn(function* (connector: ServicesConnector) {
-      yield* bindGcpHost({
-        tag: options.tag,
-        resource: connector,
-        iam: [grantFor(options.iam, connector.name)],
-      });
+      if (!globalThis.__ALCHEMY_RUNTIME__) {
+        yield* bind`${options.tag}(${connector})`({
+          iam: [grantFor(options.iam, connector.name)],
+        });
+      }
       const name = yield* connector.name;
       return Effect.fn(`${options.tag}(${connector.LogicalId})`)(function* (
         request: Omit<I, "name">,

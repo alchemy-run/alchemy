@@ -8,12 +8,13 @@ import type { Workspace } from "./Workspace.ts";
 export const DescribeWorkspaceHttp = Layer.effect(
   DescribeWorkspace,
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const describeWorkspace = yield* AWSBindings.withCredentials(amp.describeWorkspace);
 
     return Effect.fn(function* (workspace: Workspace) {
       const WorkspaceId = yield* workspace.workspaceId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`AWS.AMP.DescribeWorkspace(${workspace})`({
+        yield* bind`AWS.AMP.DescribeWorkspace(${workspace})`({
           policyStatements: [
             {
               Effect: "Allow",

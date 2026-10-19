@@ -32,13 +32,14 @@ export const makeWabaScopedHttpBinding = <I extends { id: string }, A, E, R>(opt
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (account: LinkedWhatsAppBusinessAccount) {
       // Output yields a DEFERRED effect — resolve again per invocation below.
       const AccountId = yield* account.id;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}(${account})`({
+        yield* bind`${options.tag}(${account})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -71,11 +72,12 @@ export const makeWabaPhonePlaneHttpBinding = <I, A, E, R>(options: {
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (account: LinkedWhatsAppBusinessAccount) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}(${account})`({
+        yield* bind`${options.tag}(${account})`({
           policyStatements: [
             {
               Effect: "Allow",

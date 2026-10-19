@@ -62,13 +62,14 @@ export const makeIvsRealtimeStageHttpBinding = <
   prepare?: (request: Req) => Omit<I, K>;
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (stage: Stage) {
       // Output yields a DEFERRED effect — resolve again per invocation below.
       const StageArn = yield* stage.stageArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}(${stage})`({
+        yield* bind`${options.tag}(${stage})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -111,13 +112,14 @@ export const makeIvsRealtimeReplicationHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (sourceStage: Stage, destinationStage: Stage) {
       const SourceStageArn = yield* sourceStage.stageArn;
       const DestinationStageArn = yield* destinationStage.stageArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}(${sourceStage}, ${destinationStage})`({
+        yield* bind`${options.tag}(${sourceStage}, ${destinationStage})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -159,11 +161,12 @@ export const makeIvsRealtimeAccountHttpBinding = <I, A, E, R>(options: {
   resources?: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}()`({
+        yield* bind`${options.tag}()`({
           policyStatements: [
             {
               Effect: "Allow",

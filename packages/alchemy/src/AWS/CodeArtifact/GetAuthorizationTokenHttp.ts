@@ -18,13 +18,14 @@ import {
 export const GetAuthorizationTokenHttp = Layer.effect(
   GetAuthorizationToken,
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(codeartifact.getAuthorizationToken);
 
     return Effect.fn(function* (domain: Domain) {
       const DomainName = yield* domain.domainName;
       const Owner = yield* domain.owner;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`AWS.CodeArtifact.GetAuthorizationToken(${domain})`({
+        yield* bind`AWS.CodeArtifact.GetAuthorizationToken(${domain})`({
           policyStatements: [
             {
               Effect: "Allow",

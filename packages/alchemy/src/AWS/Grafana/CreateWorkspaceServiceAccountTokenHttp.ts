@@ -18,12 +18,13 @@ import type { Workspace } from "./Workspace.ts";
 export const CreateWorkspaceServiceAccountTokenHttp = Layer.effect(
   CreateWorkspaceServiceAccountToken,
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(grafana.createWorkspaceServiceAccountToken);
 
     return Effect.fn(function* (workspace: Workspace) {
       const workspaceId = yield* workspace.workspaceId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`AWS.Grafana.CreateWorkspaceServiceAccountToken(${workspace})`({
+        yield* bind`AWS.Grafana.CreateWorkspaceServiceAccountToken(${workspace})`({
           policyStatements: [
             {
               Effect: "Allow",

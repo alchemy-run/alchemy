@@ -23,12 +23,13 @@ export const makeRePostSpaceHttpBinding = <I extends { spaceId: string }, A, E, 
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (space: Space) {
       const spaceId = yield* space.spaceId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}(${space})`({
+        yield* bind`${options.tag}(${space})`({
           policyStatements: [
             {
               Effect: "Allow",

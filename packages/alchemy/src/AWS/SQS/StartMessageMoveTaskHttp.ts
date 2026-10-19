@@ -14,6 +14,7 @@ import { StartMessageMoveTask, type StartMessageMoveTaskRequest } from "./StartM
 export const StartMessageMoveTaskHttp = Layer.effect(
   StartMessageMoveTask,
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const startMessageMoveTask = yield* AWSBindings.withCredentials(sqs.startMessageMoveTask);
 
     return Effect.fn(function* (source: Queue, options?: { destination?: Queue }) {
@@ -21,7 +22,7 @@ export const StartMessageMoveTaskHttp = Layer.effect(
       const destination = options?.destination;
       const DestinationArn = destination ? yield* destination.queueArn : undefined;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`AWS.SQS.StartMessageMoveTask(${source})`({
+        yield* bind`AWS.SQS.StartMessageMoveTask(${source})`({
           policyStatements: [
             {
               Effect: "Allow",

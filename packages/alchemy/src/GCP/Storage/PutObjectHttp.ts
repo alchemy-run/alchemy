@@ -1,7 +1,7 @@
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import type { Bucket } from "./Bucket.ts";
-import { grantOnBucket } from "./ObjectHttp.ts";
+import { GrantOnBucket } from "./ObjectHttp.ts";
 import { makeObjectMedia } from "./ObjectMedia.ts";
 import { PutObject, type PutObjectRequest } from "./PutObject.ts";
 
@@ -14,6 +14,7 @@ import { PutObject, type PutObjectRequest } from "./PutObject.ts";
 export const PutObjectHttp = Layer.effect(
   PutObject,
   Effect.gen(function* () {
+    const grantOnBucket = yield* GrantOnBucket;
     const media = yield* makeObjectMedia;
     return Effect.fn(function* (bucket: Bucket) {
       yield* grantOnBucket("GCP.Storage.PutObject", bucket, "roles/storage.objectUser");

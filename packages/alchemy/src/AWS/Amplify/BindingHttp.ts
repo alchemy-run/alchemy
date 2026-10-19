@@ -33,12 +33,13 @@ export const makeAmplifyHttpBinding = <I extends { appId: string }, A, E, R>(
   options: AmplifyHttpBindingOptions<I, A, E, R>,
 ) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const operation = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (app: App) {
       const AppId = yield* app.appId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`AWS.Amplify.${options.name}(${app})`({
+        yield* bind`AWS.Amplify.${options.name}(${app})`({
           policyStatements: [
             {
               Effect: "Allow",

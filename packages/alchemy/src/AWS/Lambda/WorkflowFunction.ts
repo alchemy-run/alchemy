@@ -207,12 +207,13 @@ export const DurableFunctionEngine = <
     Layer.effect(
       WorkflowEngine.WorkflowEngine,
       Effect.gen(function* () {
+        const bind = yield* AWSBindings.Bind;
         const context = yield* Effect.context<LambdaServices>();
         const routes = new Map<string, Calls>();
         for (const host of hosts) {
           const fn = yield* host;
           if (!globalThis.__ALCHEMY_RUNTIME__) {
-            yield* AWSBindings.bind`AWS.Lambda.DurableFunctionEngine(${fn})`({
+            yield* bind`AWS.Lambda.DurableFunctionEngine(${fn})`({
               policyStatements: [
                 {
                   Effect: "Allow",

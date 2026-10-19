@@ -28,6 +28,7 @@ const glueTableArn = (workGroupArn: OutputType<string>) =>
 export const QueryHttp = Layer.effect(
   Query,
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const startQueryExecution = yield* AWSBindings.withCredentials(athena.startQueryExecution);
     const getQueryExecution = yield* AWSBindings.withCredentials(athena.getQueryExecution);
     const getQueryResults = yield* AWSBindings.withCredentials(athena.getQueryResults);
@@ -35,7 +36,7 @@ export const QueryHttp = Layer.effect(
     return Effect.fn(function* (workGroup: WorkGroup, resultsBucket: Bucket) {
       const WorkGroupName = yield* workGroup.workGroupName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`AWS.Athena.Query(${workGroup}, ${resultsBucket})`({
+        yield* bind`AWS.Athena.Query(${workGroup}, ${resultsBucket})`({
           policyStatements: [
             {
               Effect: "Allow",

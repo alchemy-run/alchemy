@@ -16,6 +16,7 @@ import {
 export const InstanceRefreshHttp = Layer.effect(
   InstanceRefresh,
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const start = yield* AWSBindings.withCredentials(autoscaling.startInstanceRefresh);
     const cancel = yield* AWSBindings.withCredentials(autoscaling.cancelInstanceRefresh);
     const rollback = yield* AWSBindings.withCredentials(autoscaling.rollbackInstanceRefresh);
@@ -24,7 +25,7 @@ export const InstanceRefreshHttp = Layer.effect(
     return Effect.fn(function* (group: AutoScalingGroup) {
       const AutoScalingGroupName = yield* group.autoScalingGroupName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`AWS.AutoScaling.InstanceRefresh(${group})`({
+        yield* bind`AWS.AutoScaling.InstanceRefresh(${group})`({
           policyStatements: [
             {
               Effect: "Allow",

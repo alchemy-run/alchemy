@@ -49,6 +49,7 @@ export const makeWriteTableHttpBinding = <Req, I, A, E, R>(options: {
   toRequest: (request: Req, names: { DatabaseName: string; TableName: string }) => I;
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     // Yield-first captures the operations' services (Credentials/Region/
     // HttpClient) at layer init so the runtime callable is requirement-free.
     const op = yield* AWSBindings.withCredentials(options.operation);
@@ -58,7 +59,7 @@ export const makeWriteTableHttpBinding = <Req, I, A, E, R>(options: {
       const DatabaseName = yield* table.databaseName;
       const TableName = yield* table.tableName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}(${table})`({
+        yield* bind`${options.tag}(${table})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -107,12 +108,13 @@ export const makeQueryTableHttpBinding = <I, A, E, R>(options: {
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
     const describeEndpoints = yield* AWSBindings.withCredentials(TSQ.describeEndpoints);
     const withQueryEndpoint = withEndpoint(discover("query", describeEndpoints({})));
     return Effect.fn(function* (table: Table) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}(${table})`({
+        yield* bind`${options.tag}(${table})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -144,12 +146,13 @@ export const makeWriteAccountHttpBinding = <I, A, E, R>(options: {
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
     const describeEndpoints = yield* AWSBindings.withCredentials(TSW.describeEndpoints);
     const withWriteEndpoint = withEndpoint(discover("write", describeEndpoints({})));
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}()`({
+        yield* bind`${options.tag}()`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -180,12 +183,13 @@ export const makeQueryAccountHttpBinding = <I, A, E, R>(options: {
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
     const describeEndpoints = yield* AWSBindings.withCredentials(TSQ.describeEndpoints);
     const withQueryEndpoint = withEndpoint(discover("query", describeEndpoints({})));
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}()`({
+        yield* bind`${options.tag}()`({
           policyStatements: [
             {
               Effect: "Allow",

@@ -53,6 +53,7 @@ export const makeOmicsResourceHttpBinding = <
   passRole?: boolean;
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (res: Res) {
@@ -61,7 +62,7 @@ export const makeOmicsResourceHttpBinding = <
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         // Inline (not a `PolicyStatement[]`-typed local) so the bind data's
         // `Input<…>` contextual typing accepts the `Output<string>` ARN.
-        yield* AWSBindings.bind`${options.tag}(${res})`({
+        yield* bind`${options.tag}(${res})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -107,11 +108,12 @@ export const makeOmicsAccountHttpBinding = <I, A, E, R>(options: {
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}()`({
+        yield* bind`${options.tag}()`({
           policyStatements: [
             {
               Effect: "Allow",

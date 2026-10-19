@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
 import * as Output from "../../Output.ts";
-import { bindGcpHost } from "../Host.ts";
+import * as GCPBindings from "../GCPBindings.ts";
 import { type BindingIam, type GcpHttpOp, grantFor } from "../HttpBinding.ts";
 import type { Instance } from "./Instance.ts";
 import type { User } from "./User.ts";
@@ -22,18 +22,19 @@ export const makeSqlInstanceHttpBinding = <
   operation: GcpHttpOp<I, A, E>;
 }) =>
   Effect.gen(function* () {
-    const run = yield* options.operation;
+    const bind = yield* GCPBindings.Bind;
+    const run = yield* GCPBindings.withCredentials(options.operation);
     return Effect.fn(function* (instance: Instance) {
-      yield* bindGcpHost({
-        tag: options.tag,
-        resource: instance,
-        iam: [
-          grantFor(
-            options.iam,
-            Output.interpolate`projects/${instance.project}/instances/${instance.instanceName}`,
-          ),
-        ],
-      });
+      if (!globalThis.__ALCHEMY_RUNTIME__) {
+        yield* bind`${options.tag}(${instance})`({
+          iam: [
+            grantFor(
+              options.iam,
+              Output.interpolate`projects/${instance.project}/instances/${instance.instanceName}`,
+            ),
+          ],
+        });
+      }
       const instanceName = yield* instance.instanceName;
       const project = yield* instance.project;
       return Effect.fn(`${options.tag}(${instance.LogicalId})`)(function* (
@@ -63,18 +64,19 @@ export const makeSqlUserHttpBinding = <
   operation: GcpHttpOp<I, A, E>;
 }) =>
   Effect.gen(function* () {
-    const run = yield* options.operation;
+    const bind = yield* GCPBindings.Bind;
+    const run = yield* GCPBindings.withCredentials(options.operation);
     return Effect.fn(function* (user: User) {
-      yield* bindGcpHost({
-        tag: options.tag,
-        resource: user,
-        iam: [
-          grantFor(
-            options.iam,
-            Output.interpolate`projects/${user.project}/instances/${user.instance}`,
-          ),
-        ],
-      });
+      if (!globalThis.__ALCHEMY_RUNTIME__) {
+        yield* bind`${options.tag}(${user})`({
+          iam: [
+            grantFor(
+              options.iam,
+              Output.interpolate`projects/${user.project}/instances/${user.instance}`,
+            ),
+          ],
+        });
+      }
       const userName = yield* user.userName;
       const instance = yield* user.instance;
       const project = yield* user.project;

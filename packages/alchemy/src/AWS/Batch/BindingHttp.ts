@@ -30,11 +30,12 @@ export const makeBatchJobHttpBinding = <I, A, E, R>(options: {
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (queue: JobQueue) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}(${queue})`({
+        yield* bind`${options.tag}(${queue})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -67,13 +68,14 @@ export const makeBatchQueueHttpBinding = <I extends { jobQueue?: string }, A, E,
   wildcardIam?: boolean;
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (queue: JobQueue) {
       // Outputs yield a DEFERRED effect — resolve again per invocation below.
       const JobQueueArn = yield* queue.jobQueueArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}(${queue})`({
+        yield* bind`${options.tag}(${queue})`({
           policyStatements: [
             {
               Effect: "Allow",

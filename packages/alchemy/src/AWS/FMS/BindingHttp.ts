@@ -42,13 +42,14 @@ export const makeFmsHttpBinding = <I extends object, A, E, R>(options: {
   pinToAdminRegion?: boolean;
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = options.pinToAdminRegion
       ? yield* options.operation.pipe(pinFms, AWSBindings.withCredentials)
       : yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`AWS.FMS.${options.capability}()`({
+        yield* bind`AWS.FMS.${options.capability}()`({
           policyStatements: [
             {
               Effect: "Allow",

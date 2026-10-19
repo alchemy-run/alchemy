@@ -54,12 +54,13 @@ export const makeControlTowerHttpBinding = <
   operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (resource: Res) {
       const Identifier = yield* options.identifier(resource);
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`AWS.ControlTower.${options.capability}(${resource})`({
+        yield* bind`AWS.ControlTower.${options.capability}(${resource})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -102,11 +103,12 @@ export const makeControlTowerAccountHttpBinding = <I extends object, A, E, R>(op
   operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`AWS.ControlTower.${options.capability}()`({
+        yield* bind`AWS.ControlTower.${options.capability}()`({
           policyStatements: [
             {
               Effect: "Allow",

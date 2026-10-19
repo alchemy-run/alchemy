@@ -34,13 +34,14 @@ export const makeTransferServerHttpBinding = <I extends { ServerId?: string }, A
   resource?: (server: Server) => string | Output.Output<string>;
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (server: Server) {
       // Outputs yield a DEFERRED effect — resolve again per invocation below.
       const ServerId = yield* server.serverId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}(${server})`({
+        yield* bind`${options.tag}(${server})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -78,6 +79,7 @@ export const makeTransferUserHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (user: User) {
@@ -85,7 +87,7 @@ export const makeTransferUserHttpBinding = <
       const ServerId = yield* user.serverId;
       const UserName = yield* user.userName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}(${user})`({
+        yield* bind`${options.tag}(${user})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -123,11 +125,12 @@ export const makeTransferAccountHttpBinding = <I, A, E, R>(options: {
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}()`({
+        yield* bind`${options.tag}()`({
           policyStatements: [
             {
               Effect: "Allow",

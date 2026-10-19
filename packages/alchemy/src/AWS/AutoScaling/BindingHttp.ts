@@ -35,12 +35,13 @@ export const makeGroupHttpBinding = <I extends object, A, E, R>(options: {
   resource?: "group" | "*";
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (group: AutoScalingGroup) {
       const AutoScalingGroupName = yield* group.autoScalingGroupName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}(${group})`({
+        yield* bind`${options.tag}(${group})`({
           policyStatements: [
             {
               Effect: "Allow",

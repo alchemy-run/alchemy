@@ -72,6 +72,7 @@ const selectFailed = (
 export const BusSinkHttp = Layer.effect(
   BusSink,
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const putEvents = yield* PutEvents;
 
     return Effect.fn(function* (bus?: EventBus) {
@@ -86,7 +87,7 @@ export const BusSinkHttp = Layer.effect(
           ? Output.interpolate`${bus.eventBusArn}`
           : (`arn:aws:events:${region}:${accountId}:event-bus/default` as const);
 
-        yield* AWSBindings.bind`AWS.EventBridge.BusSink(${bus ?? "default"})`({
+        yield* bind`AWS.EventBridge.BusSink(${bus ?? "default"})`({
           policyStatements: [
             {
               Effect: "Allow",

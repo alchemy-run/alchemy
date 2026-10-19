@@ -12,12 +12,13 @@ import type { Lexicon } from "./Lexicon.ts";
 export const GetLexiconHttp = Layer.effect(
   GetLexicon,
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const getLexicon = yield* AWSBindings.withCredentials(polly.getLexicon);
 
     return Effect.fn(function* <L extends Lexicon>(lexicon: L) {
       const Name = yield* lexicon.lexiconName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`AWS.Polly.GetLexicon(${lexicon})`({
+        yield* bind`AWS.Polly.GetLexicon(${lexicon})`({
           policyStatements: [
             {
               Effect: "Allow",

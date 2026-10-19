@@ -11,12 +11,13 @@ import { type Instance } from "./Instance.ts";
 export const DescribeInstanceHttp = Layer.effect(
   DescribeInstance,
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const describe = yield* AWSBindings.withCredentials(ec2.describeInstances);
 
     return Effect.fn(function* (instance: Instance) {
       const instanceId = yield* instance.instanceId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`AWS.EC2.DescribeInstance(${instance})`({
+        yield* bind`AWS.EC2.DescribeInstance(${instance})`({
           policyStatements: [
             {
               Effect: "Allow",

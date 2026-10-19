@@ -41,13 +41,14 @@ export const makeQuickSightDashboardHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (dashboard: Dashboard) {
       const DashboardId = yield* dashboard.dashboardId;
       const Arn = yield* dashboard.arn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}(${dashboard})`({
+        yield* bind`${options.tag}(${dashboard})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -91,13 +92,14 @@ export const makeQuickSightDataSetHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (dataSet: DataSet) {
       const DataSetId = yield* dataSet.dataSetId;
       const Arn = yield* dataSet.arn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}(${dataSet})`({
+        yield* bind`${options.tag}(${dataSet})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -147,13 +149,14 @@ export const makeQuickSightEmbedHttpBinding = <
   ) => Omit<I, "AwsAccountId">;
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (dashboard: Dashboard) {
       const DashboardId = yield* dashboard.dashboardId;
       const Arn = yield* dashboard.arn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}(${dashboard})`({
+        yield* bind`${options.tag}(${dashboard})`({
           policyStatements: [
             {
               Effect: "Allow",

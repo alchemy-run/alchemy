@@ -13,6 +13,7 @@ import type { ReplicationGroup } from "./ReplicationGroup.ts";
 export const ConnectReplicationGroupHttp = Layer.effect(
   ConnectReplicationGroup,
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     return Effect.fn(function* (group: ReplicationGroup, options?: ConnectReplicationGroupOptions) {
       const prefix = replicationGroupConnectEnvPrefix(group.LogicalId);
       // Outputs yield a deferred runtime effect. Keep the Output expressions
@@ -33,7 +34,7 @@ export const ConnectReplicationGroupHttp = Layer.effect(
         port === undefined ? "" : String(port),
       );
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`AWS.ElastiCache.ConnectReplicationGroup(${group})`({
+        yield* bind`AWS.ElastiCache.ConnectReplicationGroup(${group})`({
           env: {
             [`${prefix}_HOST`]: endpointHost,
             [`${prefix}_PORT`]: Output.interpolate`${endpointPort}`,
@@ -41,15 +42,13 @@ export const ConnectReplicationGroupHttp = Layer.effect(
             [`${prefix}_READER_HOST`]: readerHost,
             [`${prefix}_READER_PORT`]: readerPort,
           },
-          ...(options?.subnetIds || options?.securityGroupIds
-            ? {
-                vpc: {
-                  subnetIds: options?.subnetIds ?? [],
-                  securityGroupIds: options?.securityGroupIds ?? [],
-                },
-              }
-            : {}),
         });
+        if (options?.subnetIds || options?.securityGroupIds) {
+          yield* AWSBindings.bindVpc`AWS.ElastiCache.ConnectReplicationGroup(${group})`({
+            subnetIds: options?.subnetIds ?? [],
+            securityGroupIds: options?.securityGroupIds ?? [],
+          });
+        }
       }
       return Effect.gen(function* () {
         const host = unpackEnvValue<string>(process.env[`${prefix}_HOST`]);

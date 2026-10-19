@@ -25,6 +25,7 @@ const unwrap = (value: string | Redacted.Redacted<string> | undefined): string |
 export const ConnectHttp = Layer.effect(
   Connect,
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const getCredentials = yield* AWSBindings.withCredentials(serverless.getCredentials);
 
     return Effect.fn(function* (workgroup: Workgroup, options: ConnectOptions = {}) {
@@ -34,7 +35,7 @@ export const ConnectHttp = Layer.effect(
 
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const prefix = connectEnvPrefix(workgroup.LogicalId);
-        yield* AWSBindings.bind`AWS.RedshiftServerless.Connect(${workgroup})`({
+        yield* bind`AWS.RedshiftServerless.Connect(${workgroup})`({
           policyStatements: [
             {
               Effect: "Allow",

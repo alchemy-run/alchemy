@@ -85,6 +85,7 @@ export const makeAmpWorkspaceHttpBinding = <Client>(options: {
   makeClient: (send: AmpSend) => Client;
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const services = yield* AWSBindings.withCredentials(
       Effect.context<Credentials.Credentials | Region.Region>(),
     );
@@ -92,7 +93,7 @@ export const makeAmpWorkspaceHttpBinding = <Client>(options: {
     return Effect.fn(function* (workspace: Workspace) {
       const PrometheusEndpoint = yield* workspace.prometheusEndpoint;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`AWS.AMP.${options.name}(${workspace})`({
+        yield* bind`AWS.AMP.${options.name}(${workspace})`({
           policyStatements: [
             {
               Effect: "Allow",

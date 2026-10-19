@@ -14,6 +14,7 @@ import { UpdateIPSet, type UpdateIPSetRequest } from "./UpdateIPSet.ts";
 export const UpdateIPSetHttp = Layer.effect(
   UpdateIPSet,
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const get = yield* AWSBindings.withCredentials(wafv2.getIPSet);
     const update = yield* AWSBindings.withCredentials(wafv2.updateIPSet);
 
@@ -22,7 +23,7 @@ export const UpdateIPSetHttp = Layer.effect(
       const Id = yield* ipSet.ipSetId;
       const Scope = yield* ipSet.scope;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`AWS.WAFv2.UpdateIPSet(${ipSet})`({
+        yield* bind`AWS.WAFv2.UpdateIPSet(${ipSet})`({
           policyStatements: [
             {
               Effect: "Allow",

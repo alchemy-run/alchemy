@@ -31,12 +31,13 @@ export const makeMediaLiveChannelHttpBinding = <I extends { ChannelId: string },
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (channel: Channel) {
       const ChannelId = yield* channel.channelId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}(${channel})`({
+        yield* bind`${options.tag}(${channel})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -70,12 +71,13 @@ export const makeMediaLiveInputHttpBinding = <I extends { InputId: string }, A, 
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (input: Input) {
       const InputId = yield* input.inputId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}(${input})`({
+        yield* bind`${options.tag}(${input})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -109,11 +111,12 @@ export const makeMediaLiveAccountHttpBinding = <I, A, E, R>(options: {
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}()`({
+        yield* bind`${options.tag}()`({
           policyStatements: [
             {
               Effect: "Allow",

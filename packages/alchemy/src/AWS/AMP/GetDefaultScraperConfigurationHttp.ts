@@ -8,13 +8,14 @@ import { decodeDefinition } from "./internal.ts";
 export const GetDefaultScraperConfigurationHttp = Layer.effect(
   GetDefaultScraperConfiguration,
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const getDefaultScraperConfiguration = yield* AWSBindings.withCredentials(
       amp.getDefaultScraperConfiguration,
     );
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`AWS.AMP.GetDefaultScraperConfiguration()`({
+        yield* bind`AWS.AMP.GetDefaultScraperConfiguration()`({
           policyStatements: [
             {
               Effect: "Allow",

@@ -19,6 +19,7 @@ import {
 export const TableStreamsHttp = Layer.effect(
   TableStreams,
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const listStreams = yield* AWSBindings.withCredentials(keyspacesstreams.listStreams);
     const getStream = yield* AWSBindings.withCredentials(keyspacesstreams.getStream);
     const getShardIterator = yield* AWSBindings.withCredentials(keyspacesstreams.getShardIterator);
@@ -28,7 +29,7 @@ export const TableStreamsHttp = Layer.effect(
       const KeyspaceName = yield* table.keyspaceName;
       const TableName = yield* table.tableName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`AWS.Keyspaces.TableStreams(${table})`({
+        yield* bind`AWS.Keyspaces.TableStreams(${table})`({
           policyStatements: [
             {
               Effect: "Allow",

@@ -47,12 +47,13 @@ export const makeFisTemplateHttpBinding = <I, A, E, R>(options: {
   grantServiceLinkedRole?: boolean;
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (template: ExperimentTemplate) {
       const TemplateId = yield* template.id;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}(${template})`({
+        yield* bind`${options.tag}(${template})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -115,11 +116,12 @@ export const makeFisAccountHttpBinding = <I, A, E, R>(options: {
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}()`({
+        yield* bind`${options.tag}()`({
           policyStatements: [
             {
               Effect: "Allow",

@@ -34,6 +34,7 @@ export const makeAccountHttpBinding = <I, A, E, R>(options: {
   operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* () {
@@ -48,7 +49,7 @@ export const makeAccountHttpBinding = <I, A, E, R>(options: {
             Resource: ["*"],
           },
         ];
-        yield* AWSBindings.bind`AWS.Account.${options.capability}()`({
+        yield* bind`AWS.Account.${options.capability}()`({
           policyStatements,
         });
       }

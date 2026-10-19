@@ -79,6 +79,7 @@ export const makeOpenSearchDataPlaneBinding = <Client>(options: {
   makeClient: (send: OpenSearchSend) => Client;
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const services = yield* AWSBindings.withCredentials(
       Effect.context<Credentials.Credentials | Region.Region>(),
     );
@@ -86,7 +87,7 @@ export const makeOpenSearchDataPlaneBinding = <Client>(options: {
     return Effect.fn(function* (domain: Domain) {
       const Endpoint = yield* domain.endpoint;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`AWS.OpenSearch.${options.name}(${domain})`({
+        yield* bind`AWS.OpenSearch.${options.name}(${domain})`({
           policyStatements: [
             {
               Effect: "Allow",

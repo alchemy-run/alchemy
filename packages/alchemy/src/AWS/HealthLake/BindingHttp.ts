@@ -36,12 +36,13 @@ export const makeHealthLakeDatastoreHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (datastore: FHIRDatastore) {
       const DatastoreId = yield* datastore.datastoreId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}(${datastore})`({
+        yield* bind`${options.tag}(${datastore})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -89,13 +90,14 @@ export const makeHealthLakeStartJobHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (datastore: FHIRDatastore, dataAccessRole: Role) {
       const DatastoreId = yield* datastore.datastoreId;
       const RoleArn = yield* dataAccessRole.roleArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}(${datastore}, ${dataAccessRole})`({
+        yield* bind`${options.tag}(${datastore}, ${dataAccessRole})`({
           policyStatements: [
             {
               Effect: "Allow",

@@ -9,11 +9,12 @@ import {
   type BatchExecuteStatementTables,
   sortBatchExecuteStatementTables,
 } from "./BatchExecuteStatement.ts";
-import { grantTables, tablesRegion } from "./BindingHttp.ts";
+import { GrantTables, tablesRegion } from "./BindingHttp.ts";
 
 export const BatchExecuteStatementHttp = Layer.effect(
   BatchExecuteStatement,
   Effect.gen(function* () {
+    const grantTables = yield* GrantTables;
     return Effect.fn(function* (...tables: BatchExecuteStatementTables) {
       const sortedTables = sortBatchExecuteStatementTables(tables);
       yield* grantTables(

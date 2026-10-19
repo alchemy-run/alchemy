@@ -11,12 +11,13 @@ import { StartBrowserSession, type StartBrowserSessionRequest } from "./StartBro
 export const StartBrowserSessionHttp = Layer.effect(
   StartBrowserSession,
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const startBrowserSession = yield* AWSBindings.withCredentials(agentcore.startBrowserSession);
 
     return Effect.fn(function* <R extends BrowserCustom>(browser: R) {
       const Identifier = yield* browser.browserId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`AWS.BedrockAgentCore.StartBrowserSession(${browser})`({
+        yield* bind`AWS.BedrockAgentCore.StartBrowserSession(${browser})`({
           policyStatements: [
             {
               Effect: "Allow",

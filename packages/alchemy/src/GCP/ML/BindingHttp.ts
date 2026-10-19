@@ -1,5 +1,5 @@
 import * as Effect from "effect/Effect";
-import { bindGcpHost } from "../Host.ts";
+import * as GCPBindings from "../GCPBindings.ts";
 import { grantFor, type BindingIam, type GcpHttpOp } from "../HttpBinding.ts";
 import type { Model } from "./Model.ts";
 import type { ModelsVersion } from "./ModelsVersion.ts";
@@ -14,13 +14,14 @@ export const makeModelHttpBinding = <I extends { name?: string }, A, E>(options:
   operation: GcpHttpOp<I, A, E>;
 }) =>
   Effect.gen(function* () {
-    const run = yield* options.operation;
+    const bind = yield* GCPBindings.Bind;
+    const run = yield* GCPBindings.withCredentials(options.operation);
     return Effect.fn(function* (model: Model) {
-      yield* bindGcpHost({
-        tag: options.tag,
-        resource: model,
-        iam: [grantFor(options.iam, model.name)],
-      });
+      if (!globalThis.__ALCHEMY_RUNTIME__) {
+        yield* bind`${options.tag}(${model})`({
+          iam: [grantFor(options.iam, model.name)],
+        });
+      }
       const name = yield* model.name;
       return Effect.fn(`${options.tag}(${model.LogicalId})`)(function* (request?: Omit<I, "name">) {
         return yield* run({
@@ -41,13 +42,14 @@ export const makeVersionHttpBinding = <I extends { name?: string }, A, E>(option
   operation: GcpHttpOp<I, A, E>;
 }) =>
   Effect.gen(function* () {
-    const run = yield* options.operation;
+    const bind = yield* GCPBindings.Bind;
+    const run = yield* GCPBindings.withCredentials(options.operation);
     return Effect.fn(function* (version: ModelsVersion) {
-      yield* bindGcpHost({
-        tag: options.tag,
-        resource: version,
-        iam: [grantFor(options.iam, version.model)],
-      });
+      if (!globalThis.__ALCHEMY_RUNTIME__) {
+        yield* bind`${options.tag}(${version})`({
+          iam: [grantFor(options.iam, version.model)],
+        });
+      }
       const name = yield* version.name;
       return Effect.fn(`${options.tag}(${version.LogicalId})`)(function* (
         request?: Omit<I, "name">,

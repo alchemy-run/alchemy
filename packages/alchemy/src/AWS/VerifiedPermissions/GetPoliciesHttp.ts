@@ -8,12 +8,13 @@ import type { PolicyStore } from "./PolicyStore.ts";
 export const GetPoliciesHttp = Layer.effect(
   GetPolicies,
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const batchGetPolicy = yield* AWSBindings.withCredentials(AVP.batchGetPolicy);
 
     return Effect.fn(function* <S extends PolicyStore>(store: S) {
       const PolicyStoreId = yield* store.policyStoreId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`AWS.VerifiedPermissions.GetPolicies(${store})`({
+        yield* bind`AWS.VerifiedPermissions.GetPolicies(${store})`({
           policyStatements: [
             {
               Effect: "Allow",

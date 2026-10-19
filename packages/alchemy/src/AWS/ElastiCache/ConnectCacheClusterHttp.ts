@@ -13,25 +13,24 @@ import {
 export const ConnectCacheClusterHttp = Layer.effect(
   ConnectCacheCluster,
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     return Effect.fn(function* (cluster: CacheCluster, options?: ConnectCacheClusterOptions) {
       const prefix = cacheClusterConnectEnvPrefix(cluster.LogicalId);
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`AWS.ElastiCache.ConnectCacheCluster(${cluster})`({
+        yield* bind`AWS.ElastiCache.ConnectCacheCluster(${cluster})`({
           env: {
             [`${prefix}_ENDPOINTS`]: Output.map(cluster.endpoints, JSON.stringify),
             [`${prefix}_TLS`]: Output.map(cluster.transitEncryptionEnabled, (tls) =>
               String(tls ?? false),
             ),
           },
-          ...(options?.subnetIds || options?.securityGroupIds
-            ? {
-                vpc: {
-                  subnetIds: options?.subnetIds ?? [],
-                  securityGroupIds: options?.securityGroupIds ?? [],
-                },
-              }
-            : {}),
         });
+        if (options?.subnetIds || options?.securityGroupIds) {
+          yield* AWSBindings.bindVpc`AWS.ElastiCache.ConnectCacheCluster(${cluster})`({
+            subnetIds: options?.subnetIds ?? [],
+            securityGroupIds: options?.securityGroupIds ?? [],
+          });
+        }
       }
       return Effect.gen(function* () {
         const endpoints = unpackEnvValue<Array<{ address: string; port: number }>>(

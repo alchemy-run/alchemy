@@ -41,11 +41,12 @@ export const makeNotificationsHttpBinding = <I extends object, A, E, R>(options:
   operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* options.operation.pipe(pinNotificationsRegion, AWSBindings.withCredentials);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`AWS.Notifications.${options.capability}()`({
+        yield* bind`AWS.Notifications.${options.capability}()`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -87,12 +88,13 @@ export const makeNotificationConfigurationHttpBinding = <
   operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* options.operation.pipe(pinNotificationsRegion, AWSBindings.withCredentials);
 
     return Effect.fn(function* (configuration: NotificationConfiguration) {
       const configurationArn = yield* configuration.notificationConfigurationArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`AWS.Notifications.${options.capability}(${configuration})`({
+        yield* bind`AWS.Notifications.${options.capability}(${configuration})`({
           policyStatements: [
             {
               Effect: "Allow",

@@ -69,13 +69,14 @@ export const makeKafkaConnectHttpBinding = (options: {
   transactionActions?: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     return Effect.fn(function* (cluster: ServerlessCluster) {
       const BootstrapServers = yield* cluster.bootstrapBrokerStringSaslIam;
       const ClusterArn = yield* cluster.clusterArn;
 
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const prefix = connectEnvPrefix(cluster.LogicalId);
-        yield* AWSBindings.bind`${options.tag}(${cluster})`({
+        yield* bind`${options.tag}(${cluster})`({
           env: {
             [`${prefix}_BROKERS`]: cluster.bootstrapBrokerStringSaslIam,
             [`${prefix}_ARN`]: cluster.clusterArn,

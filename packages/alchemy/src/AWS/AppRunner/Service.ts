@@ -29,11 +29,11 @@ import {
 import { Stack } from "../../Stack.ts";
 import { createInternalTags, createTagsList, hasAlchemyTags, hasTags } from "../../Tags.ts";
 import { toSeconds } from "../../Util/Duration.ts";
+import { roleHostBundle } from "../AWSBindings.ts";
 import type { Credentials } from "../Credentials.ts";
 import { buildAndPushEcrImage } from "../ECR/Image.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
-import { nativeHostBundle } from "../NativeHost.ts";
 import type { Providers } from "../Providers.ts";
 import { readAppRunnerTags, syncAppRunnerTags, toWireTags } from "./internal.ts";
 
@@ -987,7 +987,7 @@ export const ServiceProvider = () =>
           plugins?: rolldown.RolldownPluginOption,
         ) {
           return yield* Bundle.build(
-            nativeHostBundle({
+            roleHostBundle({
               ...props.build?.input,
               input: entry,
               cwd,

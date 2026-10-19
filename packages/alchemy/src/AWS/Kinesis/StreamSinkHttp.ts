@@ -12,11 +12,12 @@ const encoder = new TextEncoder();
 export const StreamSinkHttp = Layer.effect(
   StreamSink,
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const putRecords = yield* PutRecords;
 
     return Effect.fn(function* (stream: Stream) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`AWS.Kinesis.StreamSink(${stream})`({
+        yield* bind`AWS.Kinesis.StreamSink(${stream})`({
           policyStatements: [
             {
               Effect: "Allow",

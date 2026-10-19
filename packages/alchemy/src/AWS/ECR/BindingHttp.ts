@@ -40,12 +40,13 @@ export const makeEcrRepositoryHttpBinding = <I extends RepositoryScopedRequest, 
   iamActions: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (repository: Repository) {
       const RepositoryName = yield* repository.repositoryName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`AWS.ECR.${options.capability}(${repository})`({
+        yield* bind`AWS.ECR.${options.capability}(${repository})`({
           policyStatements: [
             {
               Effect: "Allow",

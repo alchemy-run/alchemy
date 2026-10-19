@@ -47,11 +47,12 @@ export const makeCostExplorerHttpBinding = <
   operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* options.operation.pipe(pinCe, AWSBindings.withCredentials);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`AWS.CostExplorer.${options.capability}()`({
+        yield* bind`AWS.CostExplorer.${options.capability}()`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -94,12 +95,13 @@ export const makeAnomalyMonitorHttpBinding = <
   operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* options.operation.pipe(pinCe, AWSBindings.withCredentials);
 
     return Effect.fn(function* (monitor: AnomalyMonitor) {
       const MonitorArn = yield* monitor.monitorArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`AWS.CostExplorer.${options.capability}(${monitor})`({
+        yield* bind`AWS.CostExplorer.${options.capability}(${monitor})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -149,12 +151,13 @@ export const makeCostCategoryHttpBinding = <
   operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* options.operation.pipe(pinCe, AWSBindings.withCredentials);
 
     return Effect.fn(function* (category: CostCategory) {
       const CostCategoryArn = yield* category.costCategoryArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`AWS.CostExplorer.${options.capability}(${category})`({
+        yield* bind`AWS.CostExplorer.${options.capability}(${category})`({
           policyStatements: [
             {
               Effect: "Allow",
