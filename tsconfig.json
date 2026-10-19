@@ -145,6 +145,9 @@
       "path": "./packages/aws/tsconfig.json"
     },
     {
+      "path": "./packages/domain/tsconfig.json"
+    },
+    {
       "path": "./packages/integration-tests/tsconfig.json"
     },
     {

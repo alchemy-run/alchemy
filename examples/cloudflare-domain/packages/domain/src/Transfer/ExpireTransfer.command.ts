@@ -1,4 +1,4 @@
-import * as Domain from "alchemy/Domain";
+import * as Domain from "@alchemy.run/domain";
 import { TransferFailed } from "./FailTransfer.command.ts";
 import { TransferId } from "./Transfer.id.ts";
 

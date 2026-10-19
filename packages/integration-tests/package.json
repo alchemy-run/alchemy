@@ -13,6 +13,7 @@
     "@alchemy.run/axiom": "workspace:*",
     "@alchemy.run/cloudflare": "workspace:*",
     "@alchemy.run/cloudflare-runtime": "workspace:*",
+    "@alchemy.run/domain": "workspace:*",
     "@alchemy.run/drizzle": "workspace:*",
     "@alchemy.run/floci": "workspace:*",
     "@alchemy.run/fly": "workspace:*",

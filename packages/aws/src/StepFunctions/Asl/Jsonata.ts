@@ -15,7 +15,7 @@
  */
 
 /** Brand key carried by every {@link Expr} proxy. */
-export const ExprTypeId = Symbol.for("@alchemy.run/aws/StepFunctions/JsonataExpr");
+export const ExprTypeId = Symbol.for("alchemy/AWS/StepFunctions/JsonataExpr");
 export type ExprTypeId = typeof ExprTypeId;
 
 /** The value roots a JSONata path can start from. */

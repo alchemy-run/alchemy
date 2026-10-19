@@ -9,7 +9,7 @@ description: Run a domain model in a single process, for tests and for apps that
 
 ```typescript
 // packages/server/test/bankInMemory.ts
-import * as Domain from "alchemy/Domain";
+import * as Domain from "@alchemy.run/domain";
 import * as Layer from "effect/Layer";
 import { Bank, BankHandlers } from "@bank/domain/Bank.model";
 import { MemoryLedgerStore } from "@bank/domain/Ledger/LedgerStore";

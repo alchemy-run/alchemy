@@ -9,6 +9,7 @@
     {
       "path": "../packages/alchemy/tsconfig.json"
     },
+    { "path": "../packages/domain/tsconfig.json" },
     { "path": "../packages/aws/tsconfig.json" },
     { "path": "../packages/gcp/tsconfig.json" },
     { "path": "../packages/cloudflare/tsconfig.json" },

@@ -144,6 +144,11 @@ const config = {
       providerPrefix: "AWS",
       sourceDisplayPrefix: "packages/aws/src",
     },
+    {
+      srcRoot: path.join(import.meta.dir, "../packages/domain/src"),
+      providerPrefix: "Domain",
+      sourceDisplayPrefix: "packages/domain/src",
+    },
   ] satisfies SourceRoot[],
 };
 

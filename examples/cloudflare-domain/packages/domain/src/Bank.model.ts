@@ -1,4 +1,4 @@
-import * as Domain from "alchemy/Domain";
+import * as Domain from "@alchemy.run/domain";
 import * as Layer from "effect/Layer";
 import { Account } from "./Account/Account.aggregate.ts";
 import { AccountActivity } from "./Account/AccountActivity.view.ts";

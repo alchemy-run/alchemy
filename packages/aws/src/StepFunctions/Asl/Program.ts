@@ -17,7 +17,7 @@ import type { Expr, UnwrapExpr } from "./Jsonata.ts";
 import type { AslNode } from "./Node.ts";
 
 /** Brand distinguishing `SfnEffect` from `Effect` (and everything else). */
-export const SfnTypeId = Symbol.for("@alchemy.run/aws/StepFunctions/SfnEffect");
+export const SfnTypeId = Symbol.for("alchemy/AWS/StepFunctions/SfnEffect");
 export type SfnTypeId = typeof SfnTypeId;
 
 /**

@@ -382,7 +382,7 @@ class CurrentRun extends Context.Service<
     readonly clocks: Map<string, Duration.Duration>;
     readonly instance: WorkflowEngine.WorkflowInstance["Service"];
   }
->()("@alchemy.run/aws/Lambda/DurableWorkflows/CurrentRun") {}
+>()("alchemy/AWS/Lambda/DurableWorkflows/CurrentRun") {}
 
 const currentRun = (operation: string) =>
   Effect.flatMap(Effect.serviceOption(CurrentRun), (run) =>

@@ -506,6 +506,7 @@
     "tinyglobby": "catalog:"
   },
   "devDependencies": {
+    "@alchemy.run/domain": "workspace:*",
     "@alchemy.run/frontend-frameworks": "workspace:*",
     "@cloudflare/workers-types": "catalog:",
     "@effect/platform-bun": "catalog:",
@@ -518,6 +519,7 @@
     "vite": "catalog:"
   },
   "peerDependencies": {
+    "@alchemy.run/domain": "workspace:*",
     "@alchemy.run/frontend-frameworks": "workspace:*",
     "@effect/platform-bun": "catalog:",
     "@effect/platform-node": "catalog:",
@@ -526,6 +528,9 @@
     "vite": "catalog:"
   },
   "peerDependenciesMeta": {
+    "@alchemy.run/domain": {
+      "optional": true
+    },
     "@alchemy.run/frontend-frameworks": {
       "optional": true
     },

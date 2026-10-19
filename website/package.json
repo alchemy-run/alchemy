@@ -27,6 +27,7 @@
   "dependencies": {
     "@alchemy.run/aws": "workspace:*",
     "@alchemy.run/cloudflare": "workspace:*",
+    "@alchemy.run/domain": "workspace:*",
     "@alchemy.run/gcp": "workspace:*",
     "@alchemy.run/github": "workspace:*",
     "@astrojs/check": "catalog:",

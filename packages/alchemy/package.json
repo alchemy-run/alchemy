@@ -26,7 +26,6 @@
     "!bin/register-dev-mode.js",
     "lib",
     "src",
-    "skills",
     "NOTICE",
     "THIRD_PARTY_LICENSES.md"
   ],
@@ -47,7 +46,6 @@
     "./Kubernetes": "./src/Kubernetes/index.ts",
     "./Cli": "./src/Cli/index.ts",
     "./Cli/CliKit": "./src/Cli/CliKit/index.ts",
-    "./Domain": "./src/Domain/index.ts",
     "./Endpoint": "./src/Endpoint/index.ts",
     "./Runtime/Bootstrap/*": "./src/Runtime/Bootstrap/*.ts",
     "./Process": "./src/Process/index.ts",
@@ -131,11 +129,6 @@
         "types": "./lib/Cli/CliKit/index.d.ts",
         "bun": "./src/Cli/CliKit/index.ts",
         "default": "./lib/Cli/CliKit/index.js"
-      },
-      "./Domain": {
-        "types": "./lib/Domain/index.d.ts",
-        "bun": "./src/Domain/index.ts",
-        "default": "./lib/Domain/index.js"
       },
       "./Endpoint": {
         "types": "./lib/Endpoint/index.d.ts",

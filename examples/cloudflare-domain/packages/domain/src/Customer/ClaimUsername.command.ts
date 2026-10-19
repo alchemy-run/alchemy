@@ -1,4 +1,4 @@
-import * as Domain from "alchemy/Domain";
+import * as Domain from "@alchemy.run/domain";
 import { CustomerId } from "./Customer.id.ts";
 import { Username } from "./Username.ts";
 
