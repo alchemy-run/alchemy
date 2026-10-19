@@ -1192,9 +1192,10 @@ describe.concurrent(
     );
 
     // Cloudflare keeps a `secret_text` binding that a script upload omits, so
-    // a secret removed from `env` stayed bound to the deployed Worker.
+    // a secret removed from `env` stayed bound to the deployed Worker. The
+    // cleanup must not touch a secret set outside Alchemy.
     test.provider(
-      "a secret removed from env is unbound",
+      "a secret removed from env is unbound; one set outside Alchemy is kept",
       (stack) =>
         Effect.gen(function* () {
           const { accountId } = yield* yield* CloudflareEnvironment;
@@ -1217,9 +1218,16 @@ describe.concurrent(
             program({ DROPPED: Redacted.make("dropped"), KEPT: Redacted.make("kept") }),
           );
           expect(yield* secretBindings(v1.workerName)).toEqual(["DROPPED", "KEPT"]);
+          yield* workers.putScriptSecret({
+            accountId,
+            scriptName: v1.workerName,
+            name: "OUTSIDE",
+            text: "set-outside-alchemy",
+            type: "secret_text",
+          });
 
           const v2 = yield* stack.deploy(program({ KEPT: Redacted.make("kept") }));
-          expect(yield* secretBindings(v2.workerName)).toEqual(["KEPT"]);
+          expect(yield* secretBindings(v2.workerName)).toEqual(["KEPT", "OUTSIDE"]);
           expect(v2.secretNames).toEqual(["KEPT"]);
 
           const settledPlan = yield* stack.plan(program({ KEPT: Redacted.make("kept") }));

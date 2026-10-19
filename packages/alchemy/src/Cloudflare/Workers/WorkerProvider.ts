@@ -4040,24 +4040,33 @@ export const LiveWorkerProvider = () =>
         }
         // Cloudflare keeps a secret binding that a script upload omits, even
         // with an empty `keep_bindings`, so a secret dropped from `env` would
-        // stay bound forever. Delete every live secret this deploy did not
-        // upload — only after a full upload: a secret delete deploys a new
-        // version at 100%, which would end a gradual rollout.
-        const secretNames = getSecretNames(metadata.bindings);
+        // stay bound. Delete the secrets an earlier deploy uploaded and this
+        // one did not; secrets set outside Alchemy (`wrangler secret put`,
+        // the dashboard) are left alone. State written before `secretNames`
+        // existed falls back to the previous `env`. Deletes run only after a
+        // full upload: each one deploys a new version at 100%, which would
+        // end a gradual rollout, so a rollout keeps owning the removed names.
+        const uploadedSecretNames = getSecretNames(metadata.bindings);
+        const previousSecretNames =
+          output?.secretNames ??
+          Object.entries(olds?.env ?? {}).flatMap(([key, value]) =>
+            secretTextFromEnvValue(value) === undefined ? [] : [key],
+          );
+        const removedSecretNames = previousSecretNames.filter(
+          (secretName) => !uploadedSecretNames.includes(secretName),
+        );
         if (versionId === undefined) {
-          for (const binding of settings.bindings ?? []) {
-            if (isSecretBinding(binding) && !secretNames.includes(binding.name)) {
-              yield* session.note(`Deleting undeclared secret ${binding.name} ...`, {
-                kind: "status",
-              });
-              yield* workers.deleteScriptSecret({
-                accountId,
-                scriptName: name,
-                secretName: binding.name,
-              });
-            }
+          const liveSecretNames = getSecretNames(settings.bindings);
+          for (const secretName of removedSecretNames) {
+            if (!liveSecretNames.includes(secretName)) continue;
+            yield* session.note(`Deleting removed secret ${secretName} ...`, { kind: "status" });
+            yield* workers.deleteScriptSecret({ accountId, scriptName: name, secretName });
           }
         }
+        const secretNames =
+          versionId === undefined
+            ? uploadedSecretNames
+            : [...new Set([...uploadedSecretNames, ...removedSecretNames])].sort();
         const issuesEnabled = observability.issues?.enabled ?? false;
         if (
           versionId === undefined &&
@@ -4723,17 +4732,8 @@ export const LiveWorkerProvider = () =>
           // update even when nothing else changed, so reconcile re-records
           // the immutable Worker ID.
           const legacyWorkerId = cachedWorkerId(output.workerId, output.workerName) === undefined;
-          // Rows persisted before `secretNames` existed may still carry
-          // secrets their `env` dropped (Cloudflare keeps them across
-          // uploads). Plan one update so reconcile deletes them.
-          const legacySecrets =
-            !newIsVersion &&
-            !newIsPreview &&
-            newNamespace === undefined &&
-            output.secretNames === undefined;
           if (
             legacyWorkerId ||
-            legacySecrets ||
             domainsChanged ||
             routesChanged ||
             cronsChanged ||
@@ -5257,7 +5257,9 @@ export const LiveWorkerProvider = () =>
               // (a getPhas call per known zone on every read); carry the
               // cleanup list forward like any other stable cache.
               affinityZoneIds: output?.affinityZoneIds,
-              secretNames: getSecretNames(settings.bindings),
+              // Which secrets Alchemy uploaded is provider-managed state: the
+              // live list also holds secrets set outside Alchemy.
+              secretNames: output?.secretNames,
               versionId: uploadedVersionId,
             } satisfies Worker["Attributes"];
 
