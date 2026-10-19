@@ -19,6 +19,7 @@
     "test": "bun test"
   },
   "dependencies": {
+    "@alchemy.run/drizzle": "workspace:*",
     "@alchemy.run/frontend-frameworks": "workspace:*",
     "@distilled.cloud/fly-io": "workspace:*",
     "@effect/platform-node": "catalog:",

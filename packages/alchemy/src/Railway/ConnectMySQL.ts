@@ -15,7 +15,7 @@ import type { MySQL } from "./MySQL.ts";
  *
  * **Example:** Bind MySQL in a Service
  * ```typescript
- * import * as Drizzle from "alchemy/Drizzle/MySQL";
+ * import * as Drizzle from "@alchemy.run/drizzle/MySQL";
  *
  * const conn = yield* Railway.ConnectMySQL(Db);
  * const db = yield* Drizzle.MySQL(conn.connectionString);

@@ -299,7 +299,7 @@ catalogs:
       version: 1.20.1
     '@opentui/core':
       specifier: latest
-      version: 0.6.4
+      version: 0.6.6
     '@oxc-project/types':
       specifier: ^0.153.0
       version: 0.153.0
@@ -922,6 +922,9 @@ importers:
 
   examples/aws-aurora-drizzle:
     dependencies:
+      '@alchemy.run/drizzle':
+        specifier: workspace:*
+        version: link:../../packages/drizzle
       '@distilled.cloud/aws':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/aws
@@ -980,6 +983,9 @@ importers:
 
   examples/aws-dsql-drizzle:
     dependencies:
+      '@alchemy.run/drizzle':
+        specifier: workspace:*
+        version: link:../../packages/drizzle
       '@distilled.cloud/aws':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/aws
@@ -1769,6 +1775,9 @@ importers:
 
   examples/cloudflare-d1-drizzle:
     dependencies:
+      '@alchemy.run/drizzle':
+        specifier: workspace:*
+        version: link:../../packages/drizzle
       '@cloudflare/workers-types':
         specifier: 5.20261012.1
         version: 5.20261012.1
@@ -1943,6 +1952,9 @@ importers:
 
   examples/cloudflare-durable-object-sql:
     dependencies:
+      '@alchemy.run/drizzle':
+        specifier: workspace:*
+        version: link:../../packages/drizzle
       '@cloudflare/workers-types':
         specifier: 5.20261012.1
         version: 5.20261012.1
@@ -2087,6 +2099,9 @@ importers:
       '@alchemy.run/better-auth':
         specifier: workspace:*
         version: link:../../packages/better-auth
+      '@alchemy.run/git':
+        specifier: workspace:*
+        version: link:../../packages/git
       '@better-auth/api-key':
         specifier: 'catalog:'
         version: 1.7.7(@better-auth/core@1.7.7(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.2)(better-call@1.4.0(zod@4.5.4))(jose@6.2.8)(kysely@0.29.6)(nanostores@1.4.2))(@better-auth/utils@0.4.2)(better-auth@1.7.7(f32d9baad8dcd9b6a2d37a36efcac421))(better-call@1.4.0(zod@4.5.4))
@@ -2180,6 +2195,9 @@ importers:
 
   examples/cloudflare-neon-drizzle:
     dependencies:
+      '@alchemy.run/drizzle':
+        specifier: workspace:*
+        version: link:../../packages/drizzle
       '@cloudflare/workers-types':
         specifier: 5.20261012.1
         version: 5.20261012.1
@@ -2304,6 +2322,9 @@ importers:
 
   examples/cloudflare-planetscale-mysql-drizzle:
     dependencies:
+      '@alchemy.run/drizzle':
+        specifier: workspace:*
+        version: link:../../packages/drizzle
       '@cloudflare/workers-types':
         specifier: 5.20261012.1
         version: 5.20261012.1
@@ -2335,6 +2356,9 @@ importers:
 
   examples/cloudflare-planetscale-postgres-drizzle:
     dependencies:
+      '@alchemy.run/drizzle':
+        specifier: workspace:*
+        version: link:../../packages/drizzle
       '@cloudflare/workers-types':
         specifier: 5.20261012.1
         version: 5.20261012.1
@@ -2455,6 +2479,9 @@ importers:
 
   examples/cloudflare-tanstack-rpc-drizzle:
     dependencies:
+      '@alchemy.run/drizzle':
+        specifier: workspace:*
+        version: link:../../packages/drizzle
       '@effect/atom-react':
         specifier: 'catalog:'
         version: 4.0.4(effect@4.0.4)(react@19.3.0)(scheduler@0.28.0)
@@ -2553,6 +2580,9 @@ importers:
 
   examples/cloudflare-turso-drizzle:
     dependencies:
+      '@alchemy.run/drizzle':
+        specifier: workspace:*
+        version: link:../../packages/drizzle
       '@effect/platform-bun':
         specifier: 'catalog:'
         version: 4.0.4(effect@4.0.4)
@@ -3480,6 +3510,9 @@ importers:
 
   examples/fly-postgres:
     dependencies:
+      '@alchemy.run/drizzle':
+        specifier: workspace:*
+        version: link:../../packages/drizzle
       '@distilled.cloud/fly-io':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/fly-io
@@ -3949,6 +3982,9 @@ importers:
 
   examples/fly-website-vite:
     dependencies:
+      '@alchemy.run/drizzle':
+        specifier: workspace:*
+        version: link:../../packages/drizzle
       '@alchemy.run/frontend-frameworks':
         specifier: workspace:*
         version: link:../../packages/frontend-frameworks
@@ -4147,6 +4183,9 @@ importers:
 
   examples/gcp-cloud-sql-drizzle:
     dependencies:
+      '@alchemy.run/drizzle':
+        specifier: workspace:*
+        version: link:../../packages/drizzle
       '@distilled.cloud/gcp':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/gcp
@@ -4870,6 +4909,9 @@ importers:
 
   examples/hetzner-website-vite:
     dependencies:
+      '@alchemy.run/drizzle':
+        specifier: workspace:*
+        version: link:../../packages/drizzle
       '@alchemy.run/frontend-frameworks':
         specifier: workspace:*
         version: link:../../packages/frontend-frameworks
@@ -6514,6 +6556,9 @@ importers:
 
   examples/railway-service:
     dependencies:
+      '@alchemy.run/drizzle':
+        specifier: workspace:*
+        version: link:../../packages/drizzle
       '@distilled.cloud/railway':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/railway
@@ -6935,6 +6980,9 @@ importers:
 
   examples/railway-website-vite:
     dependencies:
+      '@alchemy.run/drizzle':
+        specifier: workspace:*
+        version: link:../../packages/drizzle
       '@alchemy.run/frontend-frameworks':
         specifier: workspace:*
         version: link:../../packages/frontend-frameworks
@@ -7143,6 +7191,28 @@ importers:
         specifier: 4.0.4
         version: 4.0.4
 
+  packages/acme:
+    dependencies:
+      '@distilled.cloud/acme':
+        specifier: workspace:*
+        version: link:../../submodules/distilled/packages/acme
+      '@distilled.cloud/cloudflare':
+        specifier: workspace:*
+        version: link:../../submodules/distilled/packages/cloudflare
+    devDependencies:
+      '@types/bun':
+        specifier: 'catalog:'
+        version: 1.4.3
+      alchemy:
+        specifier: workspace:*
+        version: link:../alchemy
+      effect:
+        specifier: 4.0.4
+        version: 4.0.4
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+
   packages/alchemy:
     dependencies:
       '@alchemy.run/cloudflare-runtime':
@@ -7157,9 +7227,6 @@ importers:
       '@alchemy.run/sigil':
         specifier: 'catalog:'
         version: 0.1.0-alpha.1(@types/react@19.3.0)(react-devtools-core@7.0.1)
-      '@distilled.cloud/acme':
-        specifier: workspace:*
-        version: link:../../submodules/distilled/packages/acme
       '@distilled.cloud/aws':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/aws
@@ -7214,12 +7281,6 @@ importers:
       '@effect/sql-d1':
         specifier: 'catalog:'
         version: 4.0.4(effect@4.0.4)
-      '@effect/sql-sqlite-do':
-        specifier: 'catalog:'
-        version: 4.0.4(effect@4.0.4)
-      '@libsql/client':
-        specifier: 'catalog:'
-        version: 0.17.4
       '@neon/functions':
         specifier: 'catalog:'
         version: 0.11.0(hono@4.13.13)
@@ -7238,12 +7299,6 @@ importers:
       capnweb:
         specifier: 'catalog:'
         version: 0.12.0
-      drizzle-kit:
-        specifier: 1.0.0-rc.5-ab785fc
-        version: 1.0.0-rc.5-ab785fc
-      drizzle-orm:
-        specifier: 1.0.0-rc.5-ab785fc
-        version: 1.0.0-rc.5-ab785fc(@cloudflare/workers-types@5.20261012.1)(@effect/sql-d1@4.0.4(effect@4.0.4))(@effect/sql-libsql@4.0.4(effect@4.0.4))(@effect/sql-mysql2@4.0.4(@types/node@26.6.5)(effect@4.0.4))(@effect/sql-pg@4.0.4(effect@4.0.4))(@effect/sql-sqlite-do@4.0.4(effect@4.0.4))(@electric-sql/pglite@0.3.15)(@libsql/client@0.17.4)(@neondatabase/serverless@1.1.0)(@types/pg@8.20.4)(arktype@2.2.8)(bun-types@1.4.3)(effect@4.0.4)(mysql2@3.24.5(@types/node@26.6.5))(pg@8.23.1)(valibot@1.2.0(typescript@7.0.2))(zod@4.5.4)
       fflate:
         specifier: 'catalog:'
         version: 0.8.3
@@ -7395,6 +7450,9 @@ importers:
       aws4fetch:
         specifier: 'catalog:'
         version: 1.0.20
+      drizzle-orm:
+        specifier: 1.0.0-rc.5-ab785fc
+        version: 1.0.0-rc.5-ab785fc(@cloudflare/workers-types@5.20261012.1)(@effect/sql-d1@4.0.4(effect@4.0.4))(@effect/sql-libsql@4.0.4(effect@4.0.4))(@effect/sql-mysql2@4.0.4(@types/node@26.6.5)(effect@4.0.4))(@effect/sql-pg@4.0.4(effect@4.0.4))(@effect/sql-sqlite-do@4.0.4(effect@4.0.4))(@electric-sql/pglite@0.3.15)(@libsql/client@0.17.4)(@neondatabase/serverless@1.1.0)(@types/pg@8.20.4)(arktype@2.2.8)(bun-types@1.4.3)(effect@4.0.4)(mysql2@3.24.5(@types/node@26.6.5))(pg@8.23.1)(valibot@1.2.0(typescript@7.0.2))(zod@4.5.4)
       effect:
         specifier: 4.0.4
         version: 4.0.4
@@ -7493,7 +7551,7 @@ importers:
         version: 4.0.4(effect@4.0.4)
       '@opentui/core':
         specifier: 'catalog:'
-        version: 0.6.4(typescript@7.0.2)(web-tree-sitter@0.25.10)
+        version: 0.6.6(typescript@7.0.2)(web-tree-sitter@0.25.10)
       effect:
         specifier: 4.0.4
         version: 4.0.4
@@ -7707,6 +7765,46 @@ importers:
       vite:
         specifier: 'catalog:'
         version: 8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1)
+
+  packages/drizzle:
+    dependencies:
+      '@effect/sql-d1':
+        specifier: 'catalog:'
+        version: 4.0.4(effect@4.0.4)
+      '@effect/sql-sqlite-do':
+        specifier: 'catalog:'
+        version: 4.0.4(effect@4.0.4)
+      drizzle-kit:
+        specifier: 1.0.0-rc.5-ab785fc
+        version: 1.0.0-rc.5-ab785fc
+    devDependencies:
+      '@cloudflare/workers-types':
+        specifier: 5.20261012.1
+        version: 5.20261012.1
+      '@effect/sql-libsql':
+        specifier: 'catalog:'
+        version: 4.0.4(effect@4.0.4)
+      '@effect/sql-mysql2':
+        specifier: 'catalog:'
+        version: 4.0.4(@types/node@26.6.5)(effect@4.0.4)
+      '@effect/sql-pg':
+        specifier: 'catalog:'
+        version: 4.0.4(effect@4.0.4)
+      '@types/bun':
+        specifier: 'catalog:'
+        version: 1.4.3
+      alchemy:
+        specifier: workspace:*
+        version: link:../alchemy
+      drizzle-orm:
+        specifier: 1.0.0-rc.5-ab785fc
+        version: 1.0.0-rc.5-ab785fc(@cloudflare/workers-types@5.20261012.1)(@effect/sql-d1@4.0.4(effect@4.0.4))(@effect/sql-libsql@4.0.4(effect@4.0.4))(@effect/sql-mysql2@4.0.4(@types/node@26.6.5)(effect@4.0.4))(@effect/sql-pg@4.0.4(effect@4.0.4))(@effect/sql-sqlite-do@4.0.4(effect@4.0.4))(@electric-sql/pglite@0.3.15)(@libsql/client@0.17.4)(@neondatabase/serverless@1.1.0)(@types/pg@8.20.4)(arktype@2.2.8)(bun-types@1.4.3)(effect@4.0.4)(mysql2@3.24.5(@types/node@26.6.5))(pg@8.23.1)(valibot@1.2.0(typescript@7.0.2))(zod@4.5.4)
+      effect:
+        specifier: 4.0.4
+        version: 4.0.4
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
 
   packages/floci:
     devDependencies:
@@ -8512,6 +8610,102 @@ importers:
 
   packages/frontend-frameworks/src/nextjs/wrangler-stub: {}
 
+  packages/git:
+    devDependencies:
+      '@cloudflare/workers-types':
+        specifier: 5.20261012.1
+        version: 5.20261012.1
+      '@types/bun':
+        specifier: 'catalog:'
+        version: 1.4.3
+      alchemy:
+        specifier: workspace:*
+        version: link:../alchemy
+      effect:
+        specifier: 4.0.4
+        version: 4.0.4
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+
+  packages/integration-tests:
+    devDependencies:
+      '@alchemy.run/acme':
+        specifier: workspace:*
+        version: link:../acme
+      '@alchemy.run/drizzle':
+        specifier: workspace:*
+        version: link:../drizzle
+      '@alchemy.run/git':
+        specifier: workspace:*
+        version: link:../git
+      '@cloudflare/workers-types':
+        specifier: 5.20261012.1
+        version: 5.20261012.1
+      '@distilled.cloud/acme':
+        specifier: workspace:*
+        version: link:../../submodules/distilled/packages/acme
+      '@distilled.cloud/aws':
+        specifier: workspace:*
+        version: link:../../submodules/distilled/packages/aws
+      '@distilled.cloud/cloudflare':
+        specifier: workspace:*
+        version: link:../../submodules/distilled/packages/cloudflare
+      '@distilled.cloud/core':
+        specifier: workspace:*
+        version: link:../../submodules/distilled/packages/core
+      '@distilled.cloud/fly-io':
+        specifier: workspace:*
+        version: link:../../submodules/distilled/packages/fly-io
+      '@distilled.cloud/gcp':
+        specifier: workspace:*
+        version: link:../../submodules/distilled/packages/gcp
+      '@distilled.cloud/railway':
+        specifier: workspace:*
+        version: link:../../submodules/distilled/packages/railway
+      '@distilled.cloud/zerossl':
+        specifier: workspace:*
+        version: link:../../submodules/distilled/packages/zerossl
+      '@effect/platform-bun':
+        specifier: 'catalog:'
+        version: 4.0.4(effect@4.0.4)
+      '@effect/sql-pg':
+        specifier: 'catalog:'
+        version: 4.0.4(effect@4.0.4)
+      '@libsql/client':
+        specifier: 'catalog:'
+        version: 0.17.4
+      '@types/bun':
+        specifier: 'catalog:'
+        version: 1.4.3
+      '@types/pg':
+        specifier: 'catalog:'
+        version: 8.20.4
+      alchemy:
+        specifier: workspace:*
+        version: link:../alchemy
+      alchemy-test:
+        specifier: workspace:*
+        version: link:../alchemy-test
+      drizzle-orm:
+        specifier: 1.0.0-rc.5-ab785fc
+        version: 1.0.0-rc.5-ab785fc(@cloudflare/workers-types@5.20261012.1)(@effect/sql-d1@4.0.4(effect@4.0.4))(@effect/sql-libsql@4.0.4(effect@4.0.4))(@effect/sql-mysql2@4.0.4(@types/node@26.6.5)(effect@4.0.4))(@effect/sql-pg@4.0.4(effect@4.0.4))(@effect/sql-sqlite-do@4.0.4(effect@4.0.4))(@electric-sql/pglite@0.3.15)(@libsql/client@0.17.4)(@neondatabase/serverless@1.1.0)(@types/pg@8.20.4)(arktype@2.2.8)(bun-types@1.4.3)(effect@4.0.4)(mysql2@3.24.5(@types/node@26.6.5))(pg@8.23.1)(valibot@1.2.0(typescript@7.0.2))(zod@4.5.4)
+      effect:
+        specifier: 4.0.4
+        version: 4.0.4
+      mysql2:
+        specifier: 3.24.5
+        version: 3.24.5(@types/node@26.6.5)
+      pathe:
+        specifier: 'catalog:'
+        version: 2.0.3
+      pg:
+        specifier: 'catalog:'
+        version: 8.23.1
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+
   packages/node-utils:
     dependencies:
       chokidar:
@@ -8552,6 +8746,24 @@ importers:
       '@types/bun':
         specifier: 'catalog:'
         version: 1.4.3
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+
+  packages/sqlite:
+    devDependencies:
+      '@libsql/client':
+        specifier: 'catalog:'
+        version: 0.17.4
+      '@types/bun':
+        specifier: 'catalog:'
+        version: 1.4.3
+      alchemy:
+        specifier: workspace:*
+        version: link:../alchemy
+      effect:
+        specifier: 4.0.4
+        version: 4.0.4
       typescript:
         specifier: 'catalog:'
         version: 7.0.2
@@ -13613,50 +13825,50 @@ packages:
     resolution: {integrity: sha512-eSYWTm620tTk45EKSedaUL8MFYI8hW164hIXsgIHyxu3VobUB3fFCu5t0hQby6OoWRPsG1KkKUG2M5UadiLiVg==}
     engines: {node: '>=14'}
 
-  '@opentui/core-darwin-arm64@0.6.4':
-    resolution: {integrity: sha512-mZRj5dwR9+wvota0WDgGwYe3xiNzr4ZTpXcSDB2/vPCjuT5npvO9Y1KQWnNBtI85aOtszBHKirXtVqMk0/kjPQ==}
+  '@opentui/core-darwin-arm64@0.6.6':
+    resolution: {integrity: sha512-pETue+Rm0lVUzJQfdd4ra0zqdqtzObxC4aBsPsRnAg/wc8RCSisT7oxudZyGaTq39Lashnp5R6i7QWPK4HvxLQ==}
     cpu: [arm64]
     os: [darwin]
 
-  '@opentui/core-darwin-x64@0.6.4':
-    resolution: {integrity: sha512-9Oa2QPLwg0AFy5EAXCQnIxOphPyCo/g476PBfyl32hUKbSxscKJeq1fvepZBdD3kAzSZFGzIroUZ2FhLg2b2kw==}
+  '@opentui/core-darwin-x64@0.6.6':
+    resolution: {integrity: sha512-nexiM1l4rrUEz68t9XgdpaU5RcBH2ebHCsxw9UAGHBSlE477x6vjlaO8bvfdvx1k8vBbGir8y8zDWgkraE0cdA==}
     cpu: [x64]
     os: [darwin]
 
-  '@opentui/core-linux-arm64-musl@0.6.4':
-    resolution: {integrity: sha512-eKRQ13r146JPCuL2NeHcj9i86arZOk9XGJkFc63x7y1iH7YFxgA5sx/KevsqmLNl3F8LE3j+RhX3HPAlmR/KrQ==}
+  '@opentui/core-linux-arm64-musl@0.6.6':
+    resolution: {integrity: sha512-FU10EOCQT0+B6JU6oo/RmFCZqKJ2XNB8diLXCsAJzspMrtRngXV84MfyOiNcR6o033O7SdHdep+6PoXfU6RZQw==}
     cpu: [arm64]
     os: [linux]
     libc: [musl]
 
-  '@opentui/core-linux-arm64@0.6.4':
-    resolution: {integrity: sha512-pstmXbojEysbDiP6SSfDxk7nD6Sy/xFy+AhEfZstV8SKUHGZAbrLep4GnggL5Q5/soy5gQtQTcaaFhK4LtQNxw==}
+  '@opentui/core-linux-arm64@0.6.6':
+    resolution: {integrity: sha512-EXKW3Rmhnv3zkca2sqNBmVXm43TWCHqC/UI4fSDml9WfjZcvdbw+mJ8TEBMe818hwkLOn16bJ/behb3GIVZiZQ==}
     cpu: [arm64]
     os: [linux]
 
-  '@opentui/core-linux-x64-musl@0.6.4':
-    resolution: {integrity: sha512-1DW/t/7hJc9HpDzmkrZ6pKbXH2uEjOY3Uwo1FlHGZSRy6XMjireF2iU+ucJKO+Krsu07c8hVAOxFQb+sqkLscQ==}
+  '@opentui/core-linux-x64-musl@0.6.6':
+    resolution: {integrity: sha512-NtRUvk2j7O88JYdVy6aIZyEN31wuHg2cDTsQ13UAoXaGkTc/o3cz8Z7Z1PAA8y5lduZkHWmUd9jhItsfWU8uQw==}
     cpu: [x64]
     os: [linux]
     libc: [musl]
 
-  '@opentui/core-linux-x64@0.6.4':
-    resolution: {integrity: sha512-QVEzBYhjq0T2kzrH2qpvn4trUA+XPJyp5ASEsDbcnihyMFtStdj6wggJ8Ufp+EIeEuf1bi7STv7Ui9MtvgQ2+w==}
+  '@opentui/core-linux-x64@0.6.6':
+    resolution: {integrity: sha512-MNAAsU2+ywpYfJkZ+EYr02nh0yc9egBWRCFAcKvZiYiCbxCoSTmO1c03LbUMlZ/zUlYOi5ZtwzSNi6rhrQZNkw==}
     cpu: [x64]
     os: [linux]
 
-  '@opentui/core-win32-arm64@0.6.4':
-    resolution: {integrity: sha512-KmFGqYoQ+ZbDbZrx7GNXxu/mt06zyBOwIDXKdsiUFgC6sZODz69QGN4xpLhF+popDVCjDyLtFxKW0vMfIOXSXA==}
+  '@opentui/core-win32-arm64@0.6.6':
+    resolution: {integrity: sha512-Z4bJDA04uCDvXFCquDnbCihof5hMVDP7cGBME4fv/zrKuVMQlQlLGwyExQiG+8vmSZeSeNU0ks+p1g3ewL+3ew==}
     cpu: [arm64]
     os: [win32]
 
-  '@opentui/core-win32-x64@0.6.4':
-    resolution: {integrity: sha512-NzgXKe+AIrQGXMESc+ScyL6T55h4m7IEA09r8BpxgjwfzMSRzGvI9//0Ps8bQNnGXIDURH8zuS11SWneKhbL3A==}
+  '@opentui/core-win32-x64@0.6.6':
+    resolution: {integrity: sha512-i3IMd1uviUlJICRjzxPf8LJaxQXkZGHHm/ExqWkymvbUI+FjP/2XWC/JMqO7pD39GIb+lkv5Wte3bxQGvXx8Hg==}
     cpu: [x64]
     os: [win32]
 
-  '@opentui/core@0.6.4':
-    resolution: {integrity: sha512-8ZCywvSi9A8H5IoDyrw3sKpPkzimsJ+CoUuQWg0bSKLVLh/tYJDmOsFFOnlRzUZPnhGRV8rtLlR613NoEIytig==}
+  '@opentui/core@0.6.6':
+    resolution: {integrity: sha512-GhlGB8iG4YDzL6hIaxAYUZpHXDy76sQKuI6mQiCFCKXjfv6xH53pEcPX5gn+qYYYPjfjSaUevAVZBaS5Srtl/g==}
     engines: {bun: '>=1.3.14', node: '>=26.4.0'}
     peerDependencies:
       web-tree-sitter: 0.25.10
@@ -30475,31 +30687,31 @@ snapshots:
 
   '@opentelemetry/semantic-conventions@1.43.0': {}
 
-  '@opentui/core-darwin-arm64@0.6.4':
+  '@opentui/core-darwin-arm64@0.6.6':
     optional: true
 
-  '@opentui/core-darwin-x64@0.6.4':
+  '@opentui/core-darwin-x64@0.6.6':
     optional: true
 
-  '@opentui/core-linux-arm64-musl@0.6.4':
+  '@opentui/core-linux-arm64-musl@0.6.6':
     optional: true
 
-  '@opentui/core-linux-arm64@0.6.4':
+  '@opentui/core-linux-arm64@0.6.6':
     optional: true
 
-  '@opentui/core-linux-x64-musl@0.6.4':
+  '@opentui/core-linux-x64-musl@0.6.6':
     optional: true
 
-  '@opentui/core-linux-x64@0.6.4':
+  '@opentui/core-linux-x64@0.6.6':
     optional: true
 
-  '@opentui/core-win32-arm64@0.6.4':
+  '@opentui/core-win32-arm64@0.6.6':
     optional: true
 
-  '@opentui/core-win32-x64@0.6.4':
+  '@opentui/core-win32-x64@0.6.6':
     optional: true
 
-  '@opentui/core@0.6.4(typescript@7.0.2)(web-tree-sitter@0.25.10)':
+  '@opentui/core@0.6.6(typescript@7.0.2)(web-tree-sitter@0.25.10)':
     dependencies:
       bun-ffi-structs: 0.3.1(typescript@7.0.2)
       diff: 9.0.0
@@ -30507,14 +30719,14 @@ snapshots:
       string-width: 7.2.0
       web-tree-sitter: 0.25.10
     optionalDependencies:
-      '@opentui/core-darwin-arm64': 0.6.4
-      '@opentui/core-darwin-x64': 0.6.4
-      '@opentui/core-linux-arm64': 0.6.4
-      '@opentui/core-linux-arm64-musl': 0.6.4
-      '@opentui/core-linux-x64': 0.6.4
-      '@opentui/core-linux-x64-musl': 0.6.4
-      '@opentui/core-win32-arm64': 0.6.4
-      '@opentui/core-win32-x64': 0.6.4
+      '@opentui/core-darwin-arm64': 0.6.6
+      '@opentui/core-darwin-x64': 0.6.6
+      '@opentui/core-linux-arm64': 0.6.6
+      '@opentui/core-linux-arm64-musl': 0.6.6
+      '@opentui/core-linux-x64': 0.6.6
+      '@opentui/core-linux-x64-musl': 0.6.6
+      '@opentui/core-win32-arm64': 0.6.6
+      '@opentui/core-win32-x64': 0.6.6
     transitivePeerDependencies:
       - typescript
 

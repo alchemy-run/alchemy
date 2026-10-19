@@ -37,7 +37,7 @@ issuance allowance.
 Create `resources.ts`:
 
 ```typescript
-import * as ACME from "alchemy/ACME";
+import * as ACME from "@alchemy.run/acme";
 import * as Config from "effect/Config";
 
 export const Issuer = ACME.Account("Issuer", {
@@ -114,7 +114,7 @@ serialization; possession of a DNS token alone is not tenant authorization.
 ```typescript
 const issued = yield* issuer.issue({
   identifiers: ["api.example.com"],
-  solver: Cloudflare.DNS.acmeDnsSolver(dns),
+  solver: ACME.Cloudflare.zoneSolver(dns),
 });
 ```
 
@@ -139,7 +139,7 @@ Create `issuer-worker.ts`. This complete file combines the bindings, authorizati
 and two operations above:
 
 ```typescript
-import * as ACME from "alchemy/ACME";
+import * as ACME from "@alchemy.run/acme";
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Config from "effect/Config";
 import * as Duration from "effect/Duration";
@@ -173,7 +173,7 @@ export default class IssuerWorker extends Cloudflare.Worker<IssuerWorker>()(
         if (pathname === "/issue") {
           const issued = yield* issuer.issue({
             identifiers: ["api.example.com"],
-            solver: Cloudflare.DNS.acmeDnsSolver(dns),
+            solver: ACME.Cloudflare.zoneSolver(dns),
           });
           return yield* HttpServerResponse.json(
             {
@@ -239,7 +239,7 @@ Create `alchemy.run.ts`:
 
 ```typescript
 import * as Alchemy from "alchemy";
-import * as ACME from "alchemy/ACME";
+import * as ACME from "@alchemy.run/acme";
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";

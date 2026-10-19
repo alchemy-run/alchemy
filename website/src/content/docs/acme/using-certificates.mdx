@@ -76,7 +76,7 @@ with your own values:
 
 ```typescript
 import * as Alchemy from "alchemy";
-import * as ACME from "alchemy/ACME";
+import * as ACME from "@alchemy.run/acme";
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Fly from "alchemy/Fly";
 import * as Config from "effect/Config";
@@ -103,7 +103,7 @@ export default Alchemy.Stack(
     const certificate = yield* ACME.Certificate("Site", {
       account,
       identifiers: ["example.com"],
-      solver: Cloudflare.DNS.AcmeSolver({
+      solver: ACME.Cloudflare.ZoneSolver({
         zoneId: Config.String("CLOUDFLARE_ZONE_ID"),
       }),
     });

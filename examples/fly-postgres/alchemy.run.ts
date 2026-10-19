@@ -1,10 +1,10 @@
+import * as Drizzle from "@alchemy.run/drizzle";
 /**
  * Fly.io Managed Postgres + Drizzle, queried from an HTTP Service.
  *
  * Billed (~$38/mo Basic).
  */
 import * as Alchemy from "alchemy";
-import * as Drizzle from "alchemy/Drizzle";
 import * as Fly from "alchemy/Fly";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";

@@ -321,7 +321,7 @@ const MySQLResource = Resource<MySQL>("Railway.MySQL");
  *
  * **Example:** Bind and query
  * ```typescript
- * import * as Drizzle from "alchemy/Drizzle/MySQL";
+ * import * as Drizzle from "@alchemy.run/drizzle/MySQL";
  * import * as HttpServerResponse from "effect/http/HttpServerResponse";
  *
  * export default class Api extends Railway.Service<Api>()(

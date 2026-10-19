@@ -13,7 +13,7 @@ enabled. [Cloudflare setup](/cloudflare/setup) connects one.
 
 ## Install
 
-<PackageManagers add="alchemy" />
+<PackageManagers add="alchemy @alchemy.run/git" />
 
 ## Define the host
 
@@ -21,7 +21,7 @@ enabled. [Cloudflare setup](/cloudflare/setup) connects one.
 // src/git.ts
 import * as Alchemy from "alchemy";
 import * as Cloudflare from "alchemy/Cloudflare";
-import * as Git from "alchemy/Git";
+import * as Git from "@alchemy.run/git";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as HttpRouter from "effect/http/HttpRouter";
