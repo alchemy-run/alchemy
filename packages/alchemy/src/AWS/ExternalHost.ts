@@ -53,16 +53,10 @@ export const externalAwsAccess = Effect.fn(function* (host: ResourceLike) {
   if (cached !== undefined) return cached;
 
   const id = host.LogicalId;
-  // Yielding a resource class gives a constructor whose providers are the
-  // host stack's (the same way the Cloudflare `*Http` bindings mint tokens).
-  const IamUser = yield* User;
-  const IamAccessKey = yield* AccessKey;
-  const IamRole = yield* Role;
-
   // The user may assume any role that trusts it; the role's trust policy is
   // what restricts assumption to this user, which avoids a User↔Role ARN
   // dependency cycle.
-  const user = yield* IamUser(`${id}User`, {
+  const user = yield* User(`${id}User`, {
     inlinePolicies: {
       AssumeRole: {
         Version: "2012-10-17",
@@ -70,10 +64,10 @@ export const externalAwsAccess = Effect.fn(function* (host: ResourceLike) {
       },
     },
   });
-  const accessKey = yield* IamAccessKey(`${id}AccessKey`, {
+  const accessKey = yield* AccessKey(`${id}AccessKey`, {
     userName: user.userName,
   });
-  const role = yield* IamRole(`${id}Role`, {
+  const role = yield* Role(`${id}Role`, {
     assumeRolePolicyDocument: {
       Version: "2012-10-17",
       Statement: [
