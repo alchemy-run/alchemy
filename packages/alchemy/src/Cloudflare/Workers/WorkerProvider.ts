@@ -1577,7 +1577,15 @@ export const LiveWorkerProvider = () =>
         for (const zoneId of zoneIds) {
           const entrypoint = yield* rulesets
             .getPhasForZone({ zoneId, rulesetPhase: "http_request_dynamic_redirect" })
-            .pipe(Effect.orElseSucceed(() => undefined));
+            // Only a missing entrypoint (code 10003) means no rules yet. The SDK also
+            // tags 10001, an auth or internal error, as RulesetNotFound. Any failure
+            // must stop here: the PUT below replaces the whole phase, so reading it
+            // as empty would delete every other rule in the zone.
+            .pipe(
+              Effect.catchTag("RulesetNotFound", (error) =>
+                error.code === 10003 ? Effect.succeed(undefined) : Effect.fail(error),
+              ),
+            );
           const existingRules = entrypoint?.rules ?? [];
           const ourDesired = desired
             .filter((hostname) => params.zoneIdByHostname.get(hostname) === zoneId)
@@ -1667,7 +1675,15 @@ export const LiveWorkerProvider = () =>
               : [];
           const entrypoint = yield* rulesets
             .getPhasForZone({ zoneId, rulesetPhase: "http_request_late_transform" })
-            .pipe(Effect.orElseSucceed(() => undefined));
+            // Only a missing entrypoint (code 10003) means no rules yet. The SDK also
+            // tags 10001, an auth or internal error, as RulesetNotFound. Any failure
+            // must stop here: the PUT below replaces the whole phase, so reading it
+            // as empty would delete every other rule in the zone.
+            .pipe(
+              Effect.catchTag("RulesetNotFound", (error) =>
+                error.code === 10003 ? Effect.succeed(undefined) : Effect.fail(error),
+              ),
+            );
           const existingRules = entrypoint?.rules ?? [];
           const isOurs = (rule: { description?: string | null }) =>
             (rule.description ?? "").startsWith(prefix);
