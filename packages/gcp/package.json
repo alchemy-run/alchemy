@@ -216,6 +216,7 @@
   "dependencies": {
     "@alchemy.run/docker": "workspace:*",
     "@alchemy.run/kubernetes": "workspace:*",
+    "@alchemy.run/redis": "workspace:*",
     "@distilled.cloud/core": "workspace:*",
     "@distilled.cloud/gcp": "workspace:*",
     "rolldown": "catalog:"

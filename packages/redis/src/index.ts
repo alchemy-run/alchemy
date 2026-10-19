@@ -1,7 +1,7 @@
 /**
  * Cloud-agnostic Redis runtime client. Fly and Railway resources bind
  * `REDIS_URL`; this module speaks RESP over that URL. Import from
- * `alchemy/Redis`.
+ * `@alchemy.run/redis`.
  *
  * The codec is a complete RESP2 parser (plus RESP3 types) reimplemented
  * in TypeScript after the official spec and the algorithm in
@@ -13,7 +13,7 @@
  *
  * @example
  * ```typescript
- * import * as Redis from "alchemy/Redis";
+ * import * as Redis from "@alchemy.run/redis";
  *
  * const cache = Redis.makeReadWrite(url);
  * yield* cache.set("marker", "hello");

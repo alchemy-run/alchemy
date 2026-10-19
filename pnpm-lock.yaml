@@ -779,6 +779,9 @@ importers:
       '@alchemy.run/railway':
         specifier: workspace:*
         version: link:packages/railway
+      '@alchemy.run/redis':
+        specifier: workspace:*
+        version: link:packages/redis
       '@alchemy.run/stripe':
         specifier: workspace:*
         version: link:packages/stripe
@@ -8653,6 +8656,9 @@ importers:
       '@alchemy.run/docker':
         specifier: workspace:*
         version: link:../docker
+      '@alchemy.run/redis':
+        specifier: workspace:*
+        version: link:../redis
       '@distilled.cloud/aws':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/aws
@@ -9488,6 +9494,9 @@ importers:
       '@alchemy.run/kubernetes':
         specifier: workspace:*
         version: link:../kubernetes
+      '@alchemy.run/redis':
+        specifier: workspace:*
+        version: link:../redis
       '@distilled.cloud/core':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/core
@@ -9678,6 +9687,9 @@ importers:
       '@alchemy.run/railway':
         specifier: workspace:*
         version: link:../railway
+      '@alchemy.run/redis':
+        specifier: workspace:*
+        version: link:../redis
       '@alchemy.run/stripe':
         specifier: workspace:*
         version: link:../stripe
@@ -10128,6 +10140,9 @@ importers:
       '@alchemy.run/docker':
         specifier: workspace:*
         version: link:../docker
+      '@alchemy.run/redis':
+        specifier: workspace:*
+        version: link:../redis
       '@distilled.cloud/aws':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/aws
@@ -10165,6 +10180,24 @@ importers:
       pg:
         specifier: 'catalog:'
         version: 8.23.1
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+
+  packages/redis:
+    devDependencies:
+      '@types/bun':
+        specifier: 'catalog:'
+        version: 1.4.3
+      '@types/node':
+        specifier: 'catalog:'
+        version: 26.6.5
+      alchemy:
+        specifier: workspace:*
+        version: link:../alchemy
+      effect:
+        specifier: 4.0.4
+        version: 4.0.4
       typescript:
         specifier: 'catalog:'
         version: 7.0.2
@@ -11456,6 +11489,9 @@ importers:
       '@alchemy.run/kubernetes':
         specifier: workspace:*
         version: link:../packages/kubernetes
+      '@alchemy.run/redis':
+        specifier: workspace:*
+        version: link:../packages/redis
       '@astrojs/check':
         specifier: 'catalog:'
         version: 0.9.10(prettier@3.9.6)(typescript@7.0.2)

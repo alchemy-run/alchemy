@@ -154,6 +154,9 @@
       "path": "./packages/kubernetes/tsconfig.json"
     },
     {
+      "path": "./packages/redis/tsconfig.json"
+    },
+    {
       "path": "./packages/integration-tests/tsconfig.json"
     },
     {

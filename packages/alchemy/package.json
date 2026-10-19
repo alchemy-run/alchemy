@@ -47,7 +47,6 @@
     "./Endpoint": "./src/Endpoint/index.ts",
     "./Runtime/Bootstrap/*": "./src/Runtime/Bootstrap/*.ts",
     "./Process": "./src/Process/index.ts",
-    "./Redis": "./src/Redis/index.ts",
     "./TUI": "./src/TUI/index.ts",
     "./Secrets": "./src/Secrets/index.ts",
     "./Server": "./src/Server/index.ts",
@@ -132,11 +131,6 @@
         "types": "./lib/Process/index.d.ts",
         "bun": "./src/Process/index.ts",
         "default": "./lib/Process/index.js"
-      },
-      "./Redis": {
-        "types": "./lib/Redis/index.d.ts",
-        "bun": "./src/Redis/index.ts",
-        "default": "./lib/Redis/index.js"
       },
       "./TUI": {
         "types": "./lib/TUI/index.d.ts",

@@ -1,7 +1,7 @@
+import type { Url } from "@alchemy.run/redis";
+import { UrlMissing as RedisUrlMissing } from "@alchemy.run/redis";
 import * as redis from "@distilled.cloud/gcp/redis_v1";
 import * as Output from "alchemy/Output";
-import type { Url } from "alchemy/Redis";
-import { UrlMissing as RedisUrlMissing } from "alchemy/Redis";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";

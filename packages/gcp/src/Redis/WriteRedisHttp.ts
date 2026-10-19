@@ -1,4 +1,4 @@
-import { makeWrite } from "alchemy/Redis";
+import { makeWrite } from "@alchemy.run/redis";
 import * as Layer from "effect/Layer";
 import { makeRedisBinding } from "./RedisBinding.ts";
 import { WriteRedis } from "./WriteRedis.ts";

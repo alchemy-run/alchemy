@@ -1,7 +1,4 @@
-import { describe, expect, it } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as Result from "effect/Result";
-import * as Redis from "@/Redis/index.ts";
+import * as Redis from "@alchemy.run/redis";
 import {
   encodeError,
   encodeInteger,
@@ -9,7 +6,10 @@ import {
   encodeReply,
   encodeSimpleString,
   Parser,
-} from "@/Redis/Resp.ts";
+} from "@alchemy.run/redis/Resp";
+import { describe, expect, it } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as Result from "effect/Result";
 
 type Session = { parser: Parser; authed: boolean };
 

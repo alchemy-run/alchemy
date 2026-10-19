@@ -1,7 +1,7 @@
+import type { Url } from "@alchemy.run/redis";
+import { UrlMissing as RedisUrlMissing } from "@alchemy.run/redis";
 import * as Binding from "alchemy/Binding";
 import * as Output from "alchemy/Output";
-import type { Url } from "alchemy/Redis";
-import { UrlMissing as RedisUrlMissing } from "alchemy/Redis";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
@@ -18,7 +18,7 @@ export const REDIS_URL_ENV = "REDIS_URL";
  * reference (`${{RedisName.REDIS_URL}}`). Runtime commands use that URL
  * internally — callers never read `Config.Redacted`.
  *
- * The RESP client lives in `alchemy/Redis`. This file only wires the
+ * The RESP client lives in `@alchemy.run/redis`. This file only wires the
  * Railway host binding.
  *
  * NOT exported from `index.ts`.

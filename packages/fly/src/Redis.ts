@@ -24,7 +24,10 @@ export const REDIS_ADDON_TYPE = "upstash_redis";
 export const REDIS_PROVIDER = "upstash_redis";
 export const REDIS_URL_ENV = "REDIS_URL";
 
-export { CommandError as RedisCommandError, UrlMissing as RedisUrlMissing } from "alchemy/Redis";
+export {
+  CommandError as RedisCommandError,
+  UrlMissing as RedisUrlMissing,
+} from "@alchemy.run/redis";
 
 export interface RedisProps {
   /**

@@ -1,12 +1,12 @@
+import type { ReadClient } from "@alchemy.run/redis";
 import * as Binding from "alchemy/Binding";
-import type { ReadClient } from "alchemy/Redis";
 import type * as Effect from "effect/Effect";
 import type { Instance } from "./Instance.ts";
 
 /**
  * Bind a Memorystore {@link Instance} with read access.
  *
- * Uses the shared `alchemy/Redis` RESP client. Provide
+ * Uses the shared `@alchemy.run/redis` RESP client. Provide
  * {@link ReadRedisHttp}. The host receives only the instance endpoint; when
  * AUTH is enabled the runtime fetches the AUTH string with
  * `instances.getAuthString`, so the host is granted `roles/redis.admin`

@@ -1,5 +1,5 @@
+import type { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Effect from "effect/Effect";
-import type { RuntimeContext } from "../RuntimeContext.ts";
 import type { CommandError, UrlMissing } from "./Errors.ts";
 import { command, commandPipeline } from "./Protocol.ts";
 import type { Arg, Reply } from "./Resp.ts";
@@ -281,7 +281,7 @@ export const makeWrite = (url: Url): WriteClient => ({
  * directly via `command` / `run` / `connect`.
  *
  * ```typescript
- * import * as Redis from "alchemy/Redis";
+ * import * as Redis from "@alchemy.run/redis";
  *
  * const cache = Redis.make(url);
  * yield* cache.set("marker", "hello");

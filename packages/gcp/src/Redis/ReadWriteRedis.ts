@@ -1,12 +1,12 @@
+import type { ReadWriteClient } from "@alchemy.run/redis";
 import * as Binding from "alchemy/Binding";
-import type { ReadWriteClient } from "alchemy/Redis";
 import type * as Effect from "effect/Effect";
 import type { Instance } from "./Instance.ts";
 
 /**
  * Bind a Memorystore {@link Instance} with read + write access.
  *
- * Uses the shared `alchemy/Redis` RESP client. Provide
+ * Uses the shared `@alchemy.run/redis` RESP client. Provide
  * {@link ReadWriteRedisHttp}.
  *
  * ### Read/Write

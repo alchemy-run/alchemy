@@ -1,5 +1,4 @@
-import { describe, expect, test } from "alchemy-test";
-import { ProtocolError, ReplyError } from "@/Redis/Errors.ts";
+import { ProtocolError, ReplyError } from "@alchemy.run/redis/Errors";
 import {
   decode,
   decodeAll,
@@ -17,7 +16,8 @@ import {
   Parser,
   type ParseResult,
   type Reply,
-} from "@/Redis/Resp.ts";
+} from "@alchemy.run/redis/Resp";
+import { describe, expect, test } from "alchemy-test";
 
 const utf8 = new TextEncoder();
 const bytes = (value: string): Uint8Array => utf8.encode(value);
