@@ -175,7 +175,6 @@
     "@alchemy.run/node-utils": "workspace:*",
     "@alchemy.run/sigil": "catalog:",
     "@distilled.cloud/core": "workspace:*",
-    "@effect/sql-d1": "catalog:",
     "capnweb": "catalog:",
     "fflate": "catalog:",
     "pathe": "catalog:",
@@ -191,7 +190,6 @@
     "@cloudflare/workers-types": "catalog:",
     "@effect/platform-bun": "catalog:",
     "@effect/platform-node": "catalog:",
-    "@effect/sql-libsql": "catalog:",
     "@effect/sql-mysql2": "catalog:",
     "@effect/sql-pg": "catalog:",
     "@effect/vitest": "catalog:",
@@ -260,7 +258,6 @@
     "@alchemy.run/frontend-frameworks": "workspace:*",
     "@effect/platform-bun": "catalog:",
     "@effect/platform-node": "catalog:",
-    "@effect/sql-libsql": "catalog:",
     "@effect/sql-mysql2": "catalog:",
     "@effect/sql-pg": "catalog:",
     "@effect/vitest": "catalog:",
@@ -283,9 +280,6 @@
       "optional": true
     },
     "@effect/platform-node": {
-      "optional": true
-    },
-    "@effect/sql-libsql": {
       "optional": true
     },
     "@effect/sql-mysql2": {

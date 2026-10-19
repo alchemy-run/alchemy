@@ -1,9 +1,9 @@
+import type { LibSQLConfig, LibSQLSource } from "@alchemy.run/turso/LibSQL";
 // `@effect/sql-libsql` (and @libsql/client underneath) are optional peers —
 // value imports are deferred to first use so `@alchemy.run/drizzle` resolves
 // without them installed.
 import type * as LibsqlClient from "@effect/sql-libsql/LibsqlClient";
 import { makeExecutionMemo } from "alchemy/Runtime/ExecutionMemo";
-import type { LibSQLConfig, LibSQLSource } from "alchemy/SQL/LibSQL";
 import { proxyChain } from "alchemy/Util/proxy-chain";
 import type { AnyRelations, EmptyRelations } from "drizzle-orm";
 import type { EffectLibsqlDatabase } from "drizzle-orm/effect-libsql";

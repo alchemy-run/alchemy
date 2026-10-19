@@ -1,11 +1,11 @@
 import type * as runtime from "@cloudflare/workers-types";
 import * as D1Client from "@effect/sql-d1/D1Client";
+import { makeExecutionMemo } from "alchemy/Runtime/ExecutionMemo";
+import { proxyChain } from "alchemy/Util/proxy-chain";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Sql from "effect/sql/SqlClient";
-import { makeExecutionMemo } from "../Runtime/ExecutionMemo.ts";
-import { proxyChain } from "../Util/proxy-chain.ts";
 
 /**
  * A source of the raw Cloudflare `D1Database` binding. Structurally matches
@@ -31,7 +31,7 @@ export type D1Config = Omit<D1Client.D1ClientConfig, "db">;
  * resolved once at Worker init and used from any handler:
  *
  * ```typescript
- * import * as SQL from "alchemy/SQL/D1";
+ * import * as SQL from "@alchemy.run/cloudflare/D1/Sql";
  *
  * const d1 = yield* Cloudflare.D1.QueryDatabase(Db);
  * const sql = yield* SQL.D1(d1);

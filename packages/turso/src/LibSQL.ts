@@ -1,11 +1,11 @@
 import * as LibsqlClient from "@effect/sql-libsql/LibsqlClient";
+import { makeExecutionMemo } from "alchemy/Runtime/ExecutionMemo";
+import { proxyChain } from "alchemy/Util/proxy-chain";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import type * as Redacted from "effect/Redacted";
 import * as Sql from "effect/sql/SqlClient";
-import { makeExecutionMemo } from "../Runtime/ExecutionMemo.ts";
-import { proxyChain } from "../Util/proxy-chain.ts";
 
 /**
  * Where to reach a libSQL database: its URL and (for remote databases) an
@@ -39,7 +39,7 @@ const resolve = <A, E, R>(value: A | Effect.Effect<A, E, R>) =>
  * resolved once at init and used from any handler:
  *
  * ```typescript
- * import * as SQL from "alchemy/SQL/LibSQL";
+ * import * as SQL from "@alchemy.run/turso/LibSQL";
  *
  * const conn = yield* Turso.Connect(Db);
  * const sql = yield* SQL.LibSQL(conn);

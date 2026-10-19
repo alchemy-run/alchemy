@@ -1,7 +1,7 @@
 import * as Lambda from "@alchemy.run/aws/Lambda";
 import * as Drizzle from "@alchemy.run/drizzle/LibSQL";
 import * as Turso from "@alchemy.run/turso";
-import * as SQL from "alchemy/SQL/LibSQL";
+import * as SQL from "@alchemy.run/turso/LibSQL";
 import { sql as drizzleSql } from "drizzle-orm";
 import * as Effect from "effect/Effect";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";

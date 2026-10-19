@@ -1,6 +1,6 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as SQL from "@alchemy.run/cloudflare/D1/Sql";
 import * as Http from "alchemy/Http";
-import * as SQL from "alchemy/SQL/D1";
 import * as Effect from "effect/Effect";
 import * as HttpApiBuilder from "effect/http-api/HttpApiBuilder";
 import * as HttpRouter from "effect/http/HttpRouter";

@@ -59,6 +59,7 @@
   },
   "devDependencies": {
     "@alchemy.run/cloudflare": "workspace:*",
+    "@alchemy.run/turso": "workspace:*",
     "@cloudflare/workers-types": "catalog:",
     "@effect/sql-libsql": "catalog:",
     "@effect/sql-mysql2": "catalog:",
@@ -71,6 +72,7 @@
   },
   "peerDependencies": {
     "@alchemy.run/cloudflare": "workspace:*",
+    "@alchemy.run/turso": "workspace:*",
     "@effect/sql-libsql": "catalog:",
     "@effect/sql-mysql2": "catalog:",
     "@effect/sql-pg": "catalog:",
@@ -81,6 +83,9 @@
   },
   "peerDependenciesMeta": {
     "@alchemy.run/cloudflare": {
+      "optional": true
+    },
+    "@alchemy.run/turso": {
       "optional": true
     },
     "@effect/sql-libsql": {

@@ -7920,9 +7920,6 @@ importers:
       '@distilled.cloud/core':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/core
-      '@effect/sql-d1':
-        specifier: 'catalog:'
-        version: 4.0.4(effect@4.0.4)
       capnweb:
         specifier: 'catalog:'
         version: 0.12.0
@@ -7966,9 +7963,6 @@ importers:
       '@effect/platform-node':
         specifier: 'catalog:'
         version: 4.0.4(effect@4.0.4)(redis@6.2.1)
-      '@effect/sql-libsql':
-        specifier: 'catalog:'
-        version: 4.0.4(effect@4.0.4)
       '@effect/sql-mysql2':
         specifier: 'catalog:'
         version: 4.0.4(@types/node@26.6.5)(effect@4.0.4)
@@ -8347,6 +8341,9 @@ importers:
       '@distilled.cloud/iceberg':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/iceberg
+      '@effect/sql-d1':
+        specifier: 'catalog:'
+        version: 4.0.4(effect@4.0.4)
       pathe:
         specifier: 'catalog:'
         version: 2.0.3
@@ -8611,6 +8608,9 @@ importers:
       '@alchemy.run/cloudflare':
         specifier: workspace:*
         version: link:../cloudflare
+      '@alchemy.run/turso':
+        specifier: workspace:*
+        version: link:../turso
       '@cloudflare/workers-types':
         specifier: 5.20261012.1
         version: 5.20261012.1
@@ -10251,6 +10251,9 @@ importers:
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/turso
     devDependencies:
+      '@effect/sql-libsql':
+        specifier: 'catalog:'
+        version: 4.0.4(effect@4.0.4)
       '@types/bun':
         specifier: 'catalog:'
         version: 1.4.3

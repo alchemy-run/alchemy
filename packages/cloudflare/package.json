@@ -54,6 +54,7 @@
     "./Credentials": "./src/Credentials.ts",
     "./D1/Database": "./src/D1/Database.ts",
     "./D1/QueryDatabase": "./src/D1/QueryDatabase.ts",
+    "./D1/Sql": "./src/D1/Sql.ts",
     "./EdgeSession": "./src/EdgeSession.ts",
     "./Email/Rule": "./src/Email/Rule.ts",
     "./Email/retry": "./src/Email/retry.ts",
@@ -251,6 +252,12 @@
         "bun": "./src/D1/QueryDatabase.ts",
         "worker": "./src/D1/QueryDatabase.ts",
         "default": "./lib/D1/QueryDatabase.js"
+      },
+      "./D1/Sql": {
+        "types": "./lib/D1/Sql.d.ts",
+        "bun": "./src/D1/Sql.ts",
+        "worker": "./src/D1/Sql.ts",
+        "default": "./lib/D1/Sql.js"
       },
       "./EdgeSession": {
         "types": "./lib/EdgeSession.d.ts",
@@ -502,6 +509,7 @@
     "@distilled.cloud/cloudflare": "workspace:*",
     "@distilled.cloud/core": "workspace:*",
     "@distilled.cloud/iceberg": "workspace:*",
+    "@effect/sql-d1": "catalog:",
     "pathe": "catalog:",
     "rolldown": "catalog:",
     "tinyglobby": "catalog:"
