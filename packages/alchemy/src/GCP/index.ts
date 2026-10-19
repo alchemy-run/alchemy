@@ -4,6 +4,7 @@ export * from "./Environment.ts";
 export * from "./Labels.ts";
 export * from "./Providers.ts";
 export * from "./Region.ts";
+export * from "./StateStore/index.ts";
 export * as AIPlatform from "./AIPlatform/index.ts";
 export * as AnalyticsHub from "./AnalyticsHub/index.ts";
 export * as ArtifactRegistry from "./ArtifactRegistry/index.ts";
