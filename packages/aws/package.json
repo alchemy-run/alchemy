@@ -1319,7 +1319,6 @@
   },
   "dependencies": {
     "@alchemy.run/docker": "workspace:*",
-    "@alchemy.run/floci": "workspace:*",
     "@alchemy.run/kubernetes": "workspace:*",
     "@alchemy.run/sql": "workspace:*",
     "@distilled.cloud/aws": "workspace:*",

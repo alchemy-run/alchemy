@@ -1,6 +1,6 @@
-import * as Floci from "@alchemy.run/floci";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import * as Floci from "./Floci.ts";
 
 /**
  * `alchemy dev` trusts the local AWS emulator's CA bundle, once it has been

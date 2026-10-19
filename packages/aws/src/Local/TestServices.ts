@@ -1,7 +1,7 @@
-import * as Floci from "@alchemy.run/floci";
 import type { TestServices } from "alchemy/Contributions";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import { DEFAULT_LOCAL_ENDPOINT } from "../AuthProvider.ts";
+import * as Floci from "./Floci.ts";
 import { flociServices } from "./FlociServices.ts";
 
 /**

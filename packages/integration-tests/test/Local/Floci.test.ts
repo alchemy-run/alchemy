@@ -1,4 +1,4 @@
-import { ensureFloci } from "@alchemy.run/floci";
+import { ensureFloci } from "@alchemy.run/aws/Local/Floci";
 import { expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
 

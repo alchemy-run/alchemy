@@ -1,6 +1,5 @@
 import * as NodeCrypto from "node:crypto";
 import * as NodeOs from "node:os";
-import * as Floci from "@alchemy.run/floci";
 import * as DistilledAuth from "@distilled.cloud/aws/Auth";
 import type { CredentialsError } from "@distilled.cloud/aws/Credentials";
 import {
@@ -52,6 +51,7 @@ import * as Ref from "effect/Ref";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import * as Endpoint from "./Endpoint.ts";
+import * as Floci from "./Local/Floci.ts";
 import * as Region from "./Region.ts";
 
 export const AWS_AUTH_PROVIDER_NAME = "AWS";

@@ -1,7 +1,5 @@
 /** @effect-diagnostics anyUnknownInErrorContext:off */
 
-import * as Floci from "@alchemy.run/floci";
-import type { FlociError } from "@alchemy.run/floci";
 import { Credentials } from "@distilled.cloud/aws/Credentials";
 import type { RegionName } from "@distilled.cloud/aws/Region";
 import * as ProviderLayer from "alchemy/Local/ProviderLayer";
@@ -14,6 +12,8 @@ import { DEFAULT_LOCAL_ENDPOINT, LOCAL_ACCOUNT_ID } from "../AuthProvider.ts";
 import * as Endpoint from "../Endpoint.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import * as Region from "../Region.ts";
+import * as Floci from "./Floci.ts";
+import type { FlociError } from "./Floci.ts";
 import { provideProviderContext } from "./ProviderContext.ts";
 
 /**

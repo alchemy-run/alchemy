@@ -1,5 +1,5 @@
 import { execFile, spawnSync } from "node:child_process";
-import * as Floci from "@alchemy.run/floci";
+import * as Floci from "@alchemy.run/aws/Local/Floci";
 import { describe, expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
 /**

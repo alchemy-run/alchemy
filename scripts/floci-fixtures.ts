@@ -13,7 +13,7 @@ import { createHash, randomBytes, randomUUID } from "node:crypto";
  * `ALCHEMY_TEST_DEV=1`. The OAM sink lives in a second emulator account,
  * selected by a 12-digit access key (Floci core/common/AccountResolver.java).
  */
-import * as Floci from "@alchemy.run/floci";
+import * as Floci from "@alchemy.run/aws/Local/Floci";
 import * as acm from "@distilled.cloud/aws/acm";
 import * as autoscaling from "@distilled.cloud/aws/auto-scaling";
 import * as controltower from "@distilled.cloud/aws/controltower";

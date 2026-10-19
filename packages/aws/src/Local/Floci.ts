@@ -4,7 +4,7 @@ import * as net from "node:net";
 import * as os from "node:os";
 import * as path from "node:path";
 /**
- * `@alchemy.run/floci` — Effect-native manager for the
+ * `@alchemy.run/aws/Local/Floci` — Effect-native manager for the
  * [floci](https://floci.io) local cloud emulator.
  *
  * alchemy's AWS local dev points its providers at a floci endpoint. This

@@ -74,7 +74,6 @@
     { "path": "../kubernetes/tsconfig.json" },
     { "path": "../domain/tsconfig.json" },
     { "path": "../aws/tsconfig.json" },
-    { "path": "../floci/tsconfig.json" },
     { "path": "../gcp/tsconfig.json" },
     { "path": "../alchemy-test/tsconfig.json" },
     { "path": "../git/tsconfig.json" },

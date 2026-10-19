@@ -67,9 +67,6 @@
       "path": "./packages/frontend-frameworks/tsconfig.json"
     },
     {
-      "path": "./packages/floci/tsconfig.json"
-    },
-    {
       "path": "./packages/cloudflare-test-tools/tsconfig.json"
     },
     {
