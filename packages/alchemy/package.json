@@ -51,9 +51,7 @@
     "./Construct": "./src/Construct/index.ts",
     "./Bundle": "./src/Bundle/index.ts",
     "./Docker": "./src/Docker/index.ts",
-    "./Doppler": "./src/Doppler/index.ts",
     "./Http": "./src/Http/index.ts",
-    "./Infisical": "./src/Infisical/index.ts",
     "./Kubernetes": "./src/Kubernetes/index.ts",
     "./Cli": "./src/Cli/index.ts",
     "./Cli/CliKit": "./src/Cli/CliKit/index.ts",
@@ -66,7 +64,6 @@
     "./Cloudflare/Workers/*": "./src/Cloudflare/Workers/*.ts",
     "./Cloudflare/R2/*": "./src/Cloudflare/R2/*.ts",
     "./Domain": "./src/Domain/index.ts",
-    "./Axiom": "./src/Axiom/index.ts",
     "./GCP": "./src/GCP/index.ts",
     "./GCP/Contributions": "./src/GCP/Contributions.ts",
     "./GCP/*": "./src/GCP/*/index.ts",
@@ -197,20 +194,10 @@
         "bun": "./src/Docker/index.ts",
         "default": "./lib/Docker/index.js"
       },
-      "./Doppler": {
-        "types": "./lib/Doppler/index.d.ts",
-        "bun": "./src/Doppler/index.ts",
-        "default": "./lib/Doppler/index.js"
-      },
       "./Http": {
         "types": "./lib/Http/index.d.ts",
         "bun": "./src/Http/index.ts",
         "default": "./lib/Http/index.js"
-      },
-      "./Infisical": {
-        "types": "./lib/Infisical/index.d.ts",
-        "bun": "./src/Infisical/index.ts",
-        "default": "./lib/Infisical/index.js"
       },
       "./Kubernetes": {
         "types": "./lib/Kubernetes/index.d.ts",
@@ -271,11 +258,6 @@
         "types": "./lib/Domain/index.d.ts",
         "bun": "./src/Domain/index.ts",
         "default": "./lib/Domain/index.js"
-      },
-      "./Axiom": {
-        "types": "./lib/Axiom/index.d.ts",
-        "bun": "./src/Axiom/index.ts",
-        "default": "./lib/Axiom/index.js"
       },
       "./GCP": {
         "types": "./lib/GCP/index.d.ts",
@@ -435,15 +417,12 @@
     "@alchemy.run/node-utils": "workspace:*",
     "@alchemy.run/sigil": "catalog:",
     "@distilled.cloud/aws": "workspace:*",
-    "@distilled.cloud/axiom": "workspace:*",
     "@distilled.cloud/cloudflare": "workspace:*",
     "@distilled.cloud/core": "workspace:*",
-    "@distilled.cloud/doppler": "workspace:*",
     "@distilled.cloud/fly-io": "workspace:*",
     "@distilled.cloud/gcp": "workspace:*",
     "@distilled.cloud/hetzner": "workspace:*",
     "@distilled.cloud/iceberg": "workspace:*",
-    "@distilled.cloud/infisical": "workspace:*",
     "@distilled.cloud/neon": "workspace:*",
     "@distilled.cloud/planetscale": "workspace:*",
     "@distilled.cloud/prisma": "workspace:*",
@@ -613,14 +592,11 @@
   "alchemy": {
     "contributes": [
       "alchemy/AWS/Contributions",
-      "alchemy/Axiom/Contributions",
       "alchemy/Cloudflare/Contributions",
-      "alchemy/Doppler/Contributions",
       "alchemy/Fly/Contributions",
       "alchemy/GCP/Contributions",
       "alchemy/GitHub/Contributions",
       "alchemy/Hetzner/Contributions",
-      "alchemy/Infisical/Contributions",
       "alchemy/Neon/Contributions",
       "alchemy/Planetscale/Contributions",
       "alchemy/Prisma/Contributions",

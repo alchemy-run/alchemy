@@ -29,6 +29,7 @@
     "shiki": "catalog:"
   },
   "devDependencies": {
+    "@alchemy.run/axiom": "workspace:*",
     "@cloudflare/workers-types": "catalog:",
     "@tailwindcss/vite": "catalog:",
     "@types/react": "catalog:",
