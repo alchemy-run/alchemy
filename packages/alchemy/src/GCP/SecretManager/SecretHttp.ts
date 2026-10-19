@@ -1,6 +1,6 @@
 import * as secretmanager from "@distilled.cloud/gcp/secretmanager_v1";
 import * as Effect from "effect/Effect";
-import { bindGcpHost } from "../Host.ts";
+import * as GCPBindings from "../GCPBindings.ts";
 import { grantFor, type BindingIam } from "../HttpBinding.ts";
 import type { SecretBindingTarget } from "./BindingHttp.ts";
 import type { ReadSecretClient } from "./ReadSecret.ts";
@@ -30,10 +30,10 @@ const versionName = (secretName: string, version: string) =>
   version.includes("/versions/") ? version : `${secretName}/versions/${version}`;
 
 export const makeSecretHelpers = Effect.gen(function* () {
-  const access = yield* secretmanager.accessProjectsSecretsVersions;
-  const addVersion = yield* secretmanager.addVersionProjectsSecrets;
-  const disable = yield* secretmanager.disableProjectsSecretsVersions;
-  const destroy = yield* secretmanager.destroyProjectsSecretsVersions;
+  const access = yield* GCPBindings.withCredentials(secretmanager.accessProjectsSecretsVersions);
+  const addVersion = yield* GCPBindings.withCredentials(secretmanager.addVersionProjectsSecrets);
+  const disable = yield* GCPBindings.withCredentials(secretmanager.disableProjectsSecretsVersions);
+  const destroy = yield* GCPBindings.withCredentials(secretmanager.destroyProjectsSecretsVersions);
 
   const makeRead = (secretName: Effect.Effect<string>): ReadSecretClient => {
     const accessBytes = (version?: string) =>
@@ -100,11 +100,11 @@ export const makeSecretAccessBinding = <Client>(options: {
     return Effect.fn(function* (secret: SecretBindingTarget) {
       // `name` is `projects/p/secrets/s` or, for regional secrets,
       // `projects/p/locations/l/secrets/s`; both are secret IAM targets.
-      yield* bindGcpHost({
-        tag: options.tag,
-        resource: secret,
-        iam: options.grants.map((grant) => grantFor(grant, secret.name)),
-      });
+      if (!globalThis.__ALCHEMY_RUNTIME__) {
+        yield* GCPBindings.bind`${options.tag}(${secret})`({
+          iam: options.grants.map((grant) => grantFor(grant, secret.name)),
+        });
+      }
       const secretName = yield* secret.name;
       return options.makeClient(helpers, secretName);
     });

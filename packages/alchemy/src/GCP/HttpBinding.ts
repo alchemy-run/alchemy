@@ -2,14 +2,16 @@ import type { GcpOpContext } from "@distilled.cloud/gcp/Protocol";
 import * as Effect from "effect/Effect";
 import type { Input } from "../Input.ts";
 import * as Output from "../Output.ts";
-import { bindGcpHost, type GcpIamGrant } from "./Host.ts";
+import * as GCPBindings from "./GCPBindings.ts";
+import { type GcpIamGrant } from "./Host.ts";
 import type { GcpIamResourceKind } from "./IamPolicy.ts";
 
 /**
- * Distilled ops are `OperationMethod`s: yield them once at Layer
- * construction so the inner runtime Effect is `Effect<A, E>` and does
- * not leak `GcpOpContext`. Do not `provideService` Credentials/HttpClient
- * here — the host Layer already provides them.
+ * Distilled ops are `OperationMethod`s: resolve them once at Layer
+ * construction through `GCPBindings.withCredentials`, so the inner runtime
+ * Effect is `Effect<A, E>` and does not leak `GcpOpContext`. A native host's
+ * Layer provides Credentials/HttpClient; `withCredentials` provides them
+ * for an external host.
  */
 export type GcpHttpOp<I, A, E> = Effect.Effect<
   (input: I) => Effect.Effect<A, E>,
@@ -77,14 +79,14 @@ export const makeNamedHttpBinding = <
   resourceName: (resource: Resource) => Output.Output<string, never>;
 }) =>
   Effect.gen(function* () {
-    const run = yield* options.operation;
+    const run = yield* GCPBindings.withCredentials(options.operation);
     return Effect.fn(function* (resource: Resource) {
       const resourceName = options.resourceName(resource);
-      yield* bindGcpHost({
-        tag: options.tag,
-        resource,
-        iam: [grantFor(options.iam, resourceName)],
-      });
+      if (!globalThis.__ALCHEMY_RUNTIME__) {
+        yield* GCPBindings.bind`${options.tag}(${resource})`({
+          iam: [grantFor(options.iam, resourceName)],
+        });
+      }
       const name = yield* resourceName;
       return Effect.fn(`${options.tag}(${resource.LogicalId})`)(function* (
         request?: Omit<I, "name">,

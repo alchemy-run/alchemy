@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
 import type { Output } from "../../Output.ts";
-import { bindGcpHost } from "../Host.ts";
+import * as GCPBindings from "../GCPBindings.ts";
 import { type BindingIam, type GcpHttpOp } from "../HttpBinding.ts";
 
 /**
@@ -22,13 +22,11 @@ export const makeOracleNameHttpBinding = <
   operation: GcpHttpOp<I, A, E>;
 }) =>
   Effect.gen(function* () {
-    const run = yield* options.operation;
+    const run = yield* GCPBindings.withCredentials(options.operation);
     return Effect.fn(function* (resource: Resource) {
-      yield* bindGcpHost({
-        tag: options.tag,
-        resource: resource,
-        iam: [{ role: options.iam.role }],
-      });
+      if (!globalThis.__ALCHEMY_RUNTIME__) {
+        yield* GCPBindings.bind`${options.tag}(${resource})`({ iam: [{ role: options.iam.role }] });
+      }
       const name = yield* resource.name;
       return Effect.fn(`${options.tag}(${resource.LogicalId})`)(function* (
         request?: Omit<I, "name">,

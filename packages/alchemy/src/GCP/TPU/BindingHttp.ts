@@ -1,5 +1,5 @@
 import * as Effect from "effect/Effect";
-import { bindGcpHost } from "../Host.ts";
+import * as GCPBindings from "../GCPBindings.ts";
 import { type BindingIam, type GcpHttpOp, grantFor } from "../HttpBinding.ts";
 import type { Node } from "./Node.ts";
 import type { QueuedResource } from "./QueuedResource.ts";
@@ -14,13 +14,13 @@ export const makeTpuNodeHttpBinding = <I extends { name?: string }, A, E>(option
   operation: GcpHttpOp<I, A, E>;
 }) =>
   Effect.gen(function* () {
-    const run = yield* options.operation;
+    const run = yield* GCPBindings.withCredentials(options.operation);
     return Effect.fn(function* (node: Node) {
-      yield* bindGcpHost({
-        tag: options.tag,
-        resource: node,
-        iam: [grantFor(options.iam, node.name)],
-      });
+      if (!globalThis.__ALCHEMY_RUNTIME__) {
+        yield* GCPBindings.bind`${options.tag}(${node})`({
+          iam: [grantFor(options.iam, node.name)],
+        });
+      }
       const name = yield* node.name;
       return Effect.fn(`${options.tag}(${node.LogicalId})`)(function* (request?: Omit<I, "name">) {
         return yield* run({
@@ -41,13 +41,13 @@ export const makeTpuQueuedResourceHttpBinding = <I extends { name?: string }, A,
   operation: GcpHttpOp<I, A, E>;
 }) =>
   Effect.gen(function* () {
-    const run = yield* options.operation;
+    const run = yield* GCPBindings.withCredentials(options.operation);
     return Effect.fn(function* (resource: QueuedResource) {
-      yield* bindGcpHost({
-        tag: options.tag,
-        resource: resource,
-        iam: [grantFor(options.iam, resource.name)],
-      });
+      if (!globalThis.__ALCHEMY_RUNTIME__) {
+        yield* GCPBindings.bind`${options.tag}(${resource})`({
+          iam: [grantFor(options.iam, resource.name)],
+        });
+      }
       const name = yield* resource.name;
       return Effect.fn(`${options.tag}(${resource.LogicalId})`)(function* (
         request?: Omit<I, "name">,

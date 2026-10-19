@@ -1,5 +1,5 @@
 import * as Effect from "effect/Effect";
-import { bindGcpHost } from "../Host.ts";
+import * as GCPBindings from "../GCPBindings.ts";
 import { grantFor, type BindingIam, type GcpHttpOp } from "../HttpBinding.ts";
 import type { Note } from "./Note.ts";
 import type { Occurrence } from "./Occurrence.ts";
@@ -14,13 +14,13 @@ export const makeNoteHttpBinding = <I extends { name?: string }, A, E>(options: 
   operation: GcpHttpOp<I, A, E>;
 }) =>
   Effect.gen(function* () {
-    const run = yield* options.operation;
+    const run = yield* GCPBindings.withCredentials(options.operation);
     return Effect.fn(function* (note: Note) {
-      yield* bindGcpHost({
-        tag: options.tag,
-        resource: note,
-        iam: [grantFor(options.iam, note.name)],
-      });
+      if (!globalThis.__ALCHEMY_RUNTIME__) {
+        yield* GCPBindings.bind`${options.tag}(${note})`({
+          iam: [grantFor(options.iam, note.name)],
+        });
+      }
       const name = yield* note.name;
       return Effect.fn(`${options.tag}(${note.LogicalId})`)(function* (request?: Omit<I, "name">) {
         return yield* run({
@@ -37,13 +37,13 @@ export const makeOccurrenceHttpBinding = <I extends { name?: string }, A, E>(opt
   operation: GcpHttpOp<I, A, E>;
 }) =>
   Effect.gen(function* () {
-    const run = yield* options.operation;
+    const run = yield* GCPBindings.withCredentials(options.operation);
     return Effect.fn(function* (occurrence: Occurrence) {
-      yield* bindGcpHost({
-        tag: options.tag,
-        resource: occurrence,
-        iam: [grantFor(options.iam, occurrence.name)],
-      });
+      if (!globalThis.__ALCHEMY_RUNTIME__) {
+        yield* GCPBindings.bind`${options.tag}(${occurrence})`({
+          iam: [grantFor(options.iam, occurrence.name)],
+        });
+      }
       const name = yield* occurrence.name;
       return Effect.fn(`${options.tag}(${occurrence.LogicalId})`)(function* (
         request?: Omit<I, "name">,

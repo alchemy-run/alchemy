@@ -1,5 +1,6 @@
 import * as storage from "@distilled.cloud/gcp/storage_v1";
 import * as Effect from "effect/Effect";
+import * as GCPBindings from "../GCPBindings.ts";
 import type { Bucket } from "./Bucket.ts";
 import { grantOnBucket } from "./ObjectHttp.ts";
 import { makeObjectMedia } from "./ObjectMedia.ts";
@@ -15,9 +16,9 @@ import type { WriteBucketClient } from "./WriteBucket.ts";
  */
 export const makeStorageBucketHelpers = Effect.gen(function* () {
   const media = yield* makeObjectMedia;
-  const getObject = yield* storage.getObjects;
-  const listObjects = yield* storage.listObjects;
-  const deleteObject = yield* storage.deleteObjects;
+  const getObject = yield* GCPBindings.withCredentials(storage.getObjects);
+  const listObjects = yield* GCPBindings.withCredentials(storage.listObjects);
+  const deleteObject = yield* GCPBindings.withCredentials(storage.deleteObjects);
 
   const makeRead = (bucketName: Effect.Effect<string>): ReadBucketClient => ({
     head: (object) =>

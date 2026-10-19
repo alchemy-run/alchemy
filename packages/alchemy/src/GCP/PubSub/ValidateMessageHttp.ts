@@ -1,7 +1,7 @@
 import * as pubsub from "@distilled.cloud/gcp/pubsub_v1";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { bindGcpHost } from "../Host.ts";
+import * as GCPBindings from "../GCPBindings.ts";
 import type { Schema } from "./Schema.ts";
 import { ValidateMessage, type ValidateMessageRequest } from "./ValidateMessage.ts";
 
@@ -14,14 +14,14 @@ import { ValidateMessage, type ValidateMessageRequest } from "./ValidateMessage.
 export const ValidateMessageHttp = Layer.effect(
   ValidateMessage,
   Effect.gen(function* () {
-    const validate = yield* pubsub.validateMessageProjectsSchemas;
+    const validate = yield* GCPBindings.withCredentials(pubsub.validateMessageProjectsSchemas);
     return Effect.fn(function* (schema: Schema) {
-      yield* bindGcpHost({
-        tag: "GCP.PubSub.ValidateMessage",
-        resource: schema,
-        // schemas.validate is checked on the parent project, not the schema.
-        iam: [{ role: "roles/pubsub.viewer" }],
-      });
+      if (!globalThis.__ALCHEMY_RUNTIME__) {
+        yield* GCPBindings.bind`GCP.PubSub.ValidateMessage(${schema})`({
+          // schemas.validate is checked on the parent project, not the schema.
+          iam: [{ role: "roles/pubsub.viewer" }],
+        });
+      }
       const name = yield* schema.name;
       const project = yield* schema.project;
       return Effect.fn(`GCP.PubSub.ValidateMessage(${schema.LogicalId})`)(function* (

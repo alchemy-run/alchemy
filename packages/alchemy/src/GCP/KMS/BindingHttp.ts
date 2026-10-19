@@ -1,5 +1,5 @@
 import * as Effect from "effect/Effect";
-import { bindGcpHost } from "../Host.ts";
+import * as GCPBindings from "../GCPBindings.ts";
 import { grantFor, type BindingIam, type GcpHttpOp } from "../HttpBinding.ts";
 import type { CryptoKey } from "./CryptoKey.ts";
 
@@ -13,13 +13,11 @@ export const makeCryptoKeyHttpBinding = <I extends { name?: string }, A, E>(opti
   operation: GcpHttpOp<I, A, E>;
 }) =>
   Effect.gen(function* () {
-    const run = yield* options.operation;
+    const run = yield* GCPBindings.withCredentials(options.operation);
     return Effect.fn(function* (key: CryptoKey) {
-      yield* bindGcpHost({
-        tag: options.tag,
-        resource: key,
-        iam: [grantFor(options.iam, key.name)],
-      });
+      if (!globalThis.__ALCHEMY_RUNTIME__) {
+        yield* GCPBindings.bind`${options.tag}(${key})`({ iam: [grantFor(options.iam, key.name)] });
+      }
       const name = yield* key.name;
       return Effect.fn(`${options.tag}(${key.LogicalId})`)(function* (request?: Omit<I, "name">) {
         return yield* run({

@@ -1,5 +1,5 @@
 import * as Effect from "effect/Effect";
-import { bindGcpHost } from "../Host.ts";
+import * as GCPBindings from "../GCPBindings.ts";
 import { type BindingIam, type GcpHttpOp, grantFor } from "../HttpBinding.ts";
 import type { Repository } from "./Repository.ts";
 
@@ -17,11 +17,11 @@ export const makeRepositoryHttpBinding = <I extends { repository: string }, A, E
       ? yield* options.operation as GcpHttpOp<I, A, E>
       : (options.operation as (input: I) => Effect.Effect<A, E>);
     return Effect.fn(function* <T extends Repository>(repository: T) {
-      yield* bindGcpHost({
-        tag: options.tag,
-        resource: repository,
-        iam: [grantFor(options.iam, repository.name)],
-      });
+      if (!globalThis.__ALCHEMY_RUNTIME__) {
+        yield* GCPBindings.bind`${options.tag}(${repository})`({
+          iam: [grantFor(options.iam, repository.name)],
+        });
+      }
       const name = yield* repository.name;
       return Effect.fn(`${options.tag}(${repository.LogicalId})`)(function* (
         request?: Omit<I, "repository">,

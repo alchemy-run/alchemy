@@ -1,7 +1,7 @@
 import { Credentials } from "@distilled.cloud/gcp/Credentials";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
-import { bindGcpHost } from "../Host.ts";
+import * as GCPBindings from "../GCPBindings.ts";
 import { type BindingIam, grantFor } from "../HttpBinding.ts";
 import type { ConnectionsEntityTypesEntity } from "./ConnectionsEntityTypesEntity.ts";
 
@@ -22,13 +22,13 @@ export const makeEntityHttpBinding = <I extends { name: string }, A, E>(options:
   operation: GcpHttpOp<I, A, E>;
 }) =>
   Effect.gen(function* () {
-    const run = yield* options.operation;
+    const run = yield* GCPBindings.withCredentials(options.operation);
     return Effect.fn(function* (entity: ConnectionsEntityTypesEntity) {
-      yield* bindGcpHost({
-        tag: options.tag,
-        resource: entity,
-        iam: [grantFor(options.iam, entity.name)],
-      });
+      if (!globalThis.__ALCHEMY_RUNTIME__) {
+        yield* GCPBindings.bind`${options.tag}(${entity})`({
+          iam: [grantFor(options.iam, entity.name)],
+        });
+      }
       const name = yield* entity.name;
       return Effect.fn(`${options.tag}(${entity.LogicalId})`)(function* (
         request?: Omit<I, "name">,

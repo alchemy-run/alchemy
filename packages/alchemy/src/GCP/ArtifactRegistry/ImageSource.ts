@@ -36,6 +36,7 @@ import { sha256, sha256Object } from "../../Util/sha256.ts";
 import { Credentials } from "../Credentials.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import { createInternalLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
+import { nativeHostBundle } from "../NativeHost.ts";
 import { waitForDeleteOperation, waitForOperation } from "./internal.ts";
 
 export interface BundledImageSource {
@@ -329,7 +330,8 @@ export const makeImageSource = Effect.gen(function* () {
     inputOptions: rolldown.InputOptions;
     outputOptions: rolldown.OutputOptions;
   } => ({
-    inputOptions: {
+    // Images here run on Cloud Run or GKE: native GCP hosts.
+    inputOptions: nativeHostBundle({
       ...source.build?.input,
       input: entry,
       cwd,
@@ -344,7 +346,7 @@ export const makeImageSource = Effect.gen(function* () {
         ...source.build?.input?.resolve,
       },
       plugins: [source.build?.input?.plugins, plugins],
-    },
+    }),
     outputOptions: {
       ...source.build?.output,
       format: "esm",

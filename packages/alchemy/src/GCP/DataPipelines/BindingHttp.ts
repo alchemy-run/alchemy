@@ -1,7 +1,7 @@
 import { Credentials } from "@distilled.cloud/gcp/Credentials";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
-import { bindGcpHost } from "../Host.ts";
+import * as GCPBindings from "../GCPBindings.ts";
 import { type BindingIam, grantFor } from "../HttpBinding.ts";
 import type { Pipeline } from "./Pipeline.ts";
 
@@ -24,13 +24,13 @@ export const makePipelineHttpBinding = <I extends { name?: string }, A, E>(optio
     ((input: I) => Effect.Effect<A, E, Credentials | HttpClient.HttpClient>);
 }) =>
   Effect.gen(function* () {
-    const run = yield* options.operation;
+    const run = yield* GCPBindings.withCredentials(options.operation);
     return Effect.fn(function* (pipeline: Pipeline) {
-      yield* bindGcpHost({
-        tag: options.tag,
-        resource: pipeline,
-        iam: [grantFor(options.iam, pipeline.name)],
-      });
+      if (!globalThis.__ALCHEMY_RUNTIME__) {
+        yield* GCPBindings.bind`${options.tag}(${pipeline})`({
+          iam: [grantFor(options.iam, pipeline.name)],
+        });
+      }
       const name = yield* pipeline.name;
       return Effect.fn(`${options.tag}(${pipeline.LogicalId})`)(function* (
         request?: Omit<I, "name">,

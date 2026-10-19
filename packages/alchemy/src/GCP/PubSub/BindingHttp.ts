@@ -1,5 +1,5 @@
 import * as Effect from "effect/Effect";
-import { bindGcpHost } from "../Host.ts";
+import * as GCPBindings from "../GCPBindings.ts";
 import { grantFor, type BindingIam, type GcpHttpOp } from "../HttpBinding.ts";
 import type { Subscription } from "./Subscription.ts";
 import type { Topic } from "./Topic.ts";
@@ -14,14 +14,14 @@ export const makeTopicHttpBinding = <I extends { topic: string }, A, E>(options:
   operation: GcpHttpOp<I, A, E>;
 }) =>
   Effect.gen(function* () {
-    const run = yield* options.operation;
+    const run = yield* GCPBindings.withCredentials(options.operation);
     return Effect.fn(function* (topic: Topic) {
       const name = yield* topic.name;
-      yield* bindGcpHost({
-        tag: options.tag,
-        resource: topic,
-        iam: [grantFor(options.iam, topic.name)],
-      });
+      if (!globalThis.__ALCHEMY_RUNTIME__) {
+        yield* GCPBindings.bind`${options.tag}(${topic})`({
+          iam: [grantFor(options.iam, topic.name)],
+        });
+      }
       return Effect.fn(`${options.tag}(${topic.LogicalId})`)(function* (request: Omit<I, "topic">) {
         return yield* run({
           ...request,
@@ -37,14 +37,14 @@ export const makeSubscriptionHttpBinding = <I extends { subscription: string }, 
   operation: GcpHttpOp<I, A, E>;
 }) =>
   Effect.gen(function* () {
-    const run = yield* options.operation;
+    const run = yield* GCPBindings.withCredentials(options.operation);
     return Effect.fn(function* (subscription: Subscription) {
       const name = yield* subscription.name;
-      yield* bindGcpHost({
-        tag: options.tag,
-        resource: subscription,
-        iam: [grantFor(options.iam, subscription.name)],
-      });
+      if (!globalThis.__ALCHEMY_RUNTIME__) {
+        yield* GCPBindings.bind`${options.tag}(${subscription})`({
+          iam: [grantFor(options.iam, subscription.name)],
+        });
+      }
       return Effect.fn(`${options.tag}(${subscription.LogicalId})`)(function* (
         request: Omit<I, "subscription">,
       ) {

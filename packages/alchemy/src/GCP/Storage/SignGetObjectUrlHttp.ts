@@ -5,7 +5,8 @@ import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Layer from "effect/Layer";
-import { bindGcpHost, HOST_SERVICE_ACCOUNT } from "../Host.ts";
+import * as GCPBindings from "../GCPBindings.ts";
+import { HOST_SERVICE_ACCOUNT } from "../Host.ts";
 import { grantFor } from "../HttpBinding.ts";
 import type { Bucket } from "./Bucket.ts";
 import {
@@ -49,7 +50,9 @@ export const SignGetObjectUrlHttp = Layer.effect(
   SignGetObjectUrl,
   Effect.gen(function* () {
     const http = yield* HttpClient.HttpClient;
-    const signBlob = yield* iamcredentials.signBlobProjectsServiceAccounts;
+    const signBlob = yield* GCPBindings.withCredentials(
+      iamcredentials.signBlobProjectsServiceAccounts,
+    );
     let ownEmail: string | undefined;
 
     const serviceAccountEmail = Effect.gen(function* () {
@@ -79,22 +82,26 @@ export const SignGetObjectUrlHttp = Layer.effect(
     );
 
     return Effect.fn(function* (bucket: Bucket) {
-      yield* bindGcpHost({
-        tag: "GCP.Storage.SignGetObjectUrl",
-        resource: bucket,
-        iam: [
-          // A signed URL carries the signer's own object permissions.
-          grantFor({ role: "roles/storage.objectViewer", on: "storage.bucket" }, bucket.bucketName),
-          // signBlob as itself, and on no other account.
-          {
-            role: "roles/iam.serviceAccountTokenCreator",
-            resource: {
-              kind: "iam.serviceAccount",
-              name: HOST_SERVICE_ACCOUNT,
+      yield* GCPBindings.requireNativeHost("GCP.Storage.SignGetObjectUrl");
+      if (!globalThis.__ALCHEMY_RUNTIME__) {
+        yield* GCPBindings.bind`GCP.Storage.SignGetObjectUrl(${bucket})`({
+          iam: [
+            // A signed URL carries the signer's own object permissions.
+            grantFor(
+              { role: "roles/storage.objectViewer", on: "storage.bucket" },
+              bucket.bucketName,
+            ),
+            // signBlob as itself, and on no other account.
+            {
+              role: "roles/iam.serviceAccountTokenCreator",
+              resource: {
+                kind: "iam.serviceAccount",
+                name: HOST_SERVICE_ACCOUNT,
+              },
             },
-          },
-        ],
-      });
+          ],
+        });
+      }
       const bucketName = yield* bucket.bucketName;
       return Effect.fn(`GCP.Storage.SignGetObjectUrl(${bucket.LogicalId})`)(function* (
         request: SignGetObjectUrlRequest,

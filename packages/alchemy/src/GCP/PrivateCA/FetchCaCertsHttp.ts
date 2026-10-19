@@ -1,7 +1,7 @@
 import * as privateca from "@distilled.cloud/gcp/privateca_v1";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { bindGcpHost } from "../Host.ts";
+import * as GCPBindings from "../GCPBindings.ts";
 import { grantFor } from "../HttpBinding.ts";
 import type { CaPool } from "./CaPool.ts";
 import { FetchCaCerts, type FetchCaCertsRequest } from "./FetchCaCerts.ts";
@@ -15,14 +15,17 @@ import { FetchCaCerts, type FetchCaCertsRequest } from "./FetchCaCerts.ts";
 export const FetchCaCertsHttp = Layer.effect(
   FetchCaCerts,
   Effect.gen(function* () {
-    const fetchCaCertsProjectsLocationsCaPools =
-      yield* privateca.fetchCaCertsProjectsLocationsCaPools;
+    const fetchCaCertsProjectsLocationsCaPools = yield* GCPBindings.withCredentials(
+      privateca.fetchCaCertsProjectsLocationsCaPools,
+    );
     return Effect.fn(function* <P extends CaPool>(pool: P) {
-      yield* bindGcpHost({
-        tag: "GCP.PrivateCA.FetchCaCerts",
-        resource: pool,
-        iam: [grantFor({ role: "roles/privateca.poolReader", on: "privateca.caPool" }, pool.name)],
-      });
+      if (!globalThis.__ALCHEMY_RUNTIME__) {
+        yield* GCPBindings.bind`GCP.PrivateCA.FetchCaCerts(${pool})`({
+          iam: [
+            grantFor({ role: "roles/privateca.poolReader", on: "privateca.caPool" }, pool.name),
+          ],
+        });
+      }
       const name = yield* pool.name;
       return Effect.fn(`GCP.PrivateCA.FetchCaCerts(${pool.LogicalId})`)(function* (
         request?: FetchCaCertsRequest,

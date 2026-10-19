@@ -1,5 +1,5 @@
 import * as Effect from "effect/Effect";
-import { bindGcpHost } from "../Host.ts";
+import * as GCPBindings from "../GCPBindings.ts";
 import { type BindingIam, type GcpHttpOp, grantFor } from "../HttpBinding.ts";
 import type { Database } from "./Database.ts";
 
@@ -13,13 +13,13 @@ export const makeDocumentHttpBinding = <I extends { name: string }, A, E>(option
   operation: GcpHttpOp<I, A, E>;
 }) =>
   Effect.gen(function* () {
-    const run = yield* options.operation;
+    const run = yield* GCPBindings.withCredentials(options.operation);
     return Effect.fn(function* (database: Database) {
-      yield* bindGcpHost({
-        tag: options.tag,
-        resource: database,
-        iam: [grantFor(options.iam, database.name)],
-      });
+      if (!globalThis.__ALCHEMY_RUNTIME__) {
+        yield* GCPBindings.bind`${options.tag}(${database})`({
+          iam: [grantFor(options.iam, database.name)],
+        });
+      }
       const name = yield* database.name;
       return Effect.fn(`${options.tag}(${database.LogicalId})`)(function* (
         request: Omit<I, "name"> & { documentPath: string },

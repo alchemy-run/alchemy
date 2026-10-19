@@ -1,6 +1,6 @@
 import * as bigquery from "@distilled.cloud/gcp/bigquery_v2";
 import * as Effect from "effect/Effect";
-import { bindGcpHost } from "../Host.ts";
+import * as GCPBindings from "../GCPBindings.ts";
 import { type BindingIam, grantFor } from "../HttpBinding.ts";
 import { type ListTableResult, QueryNotComplete, type ReadTableClient } from "./ReadTable.ts";
 import { decodeRows, encodeRow, queryParameter } from "./Rows.ts";
@@ -63,11 +63,11 @@ const remainingRows = <E>(
  * NOT exported from `index.ts`.
  */
 export const makeBigQueryTableHelpers = Effect.gen(function* () {
-  const getTable = yield* bigquery.getTables;
-  const listTabledata = yield* bigquery.listTabledata;
-  const queryJobs = yield* bigquery.queryJobs;
-  const getQueryResults = yield* bigquery.getQueryResultsJobs;
-  const insertAll = yield* bigquery.insertAllTabledata;
+  const getTable = yield* GCPBindings.withCredentials(bigquery.getTables);
+  const listTabledata = yield* GCPBindings.withCredentials(bigquery.listTabledata);
+  const queryJobs = yield* GCPBindings.withCredentials(bigquery.queryJobs);
+  const getQueryResults = yield* GCPBindings.withCredentials(bigquery.getQueryResultsJobs);
+  const insertAll = yield* GCPBindings.withCredentials(bigquery.insertAllTabledata);
 
   const makeRead = (table: Effect.Effect<TableRef>): ReadTableClient => ({
     list: (
@@ -210,11 +210,11 @@ export const makeBigQueryTableBinding = <Client>(options: {
   Effect.gen(function* () {
     const helpers = yield* makeBigQueryTableHelpers;
     return Effect.fn(function* (table: Table) {
-      yield* bindGcpHost({
-        tag: options.tag,
-        resource: table,
-        iam: options.iam.map((iam) => grantFor(iam, table.name)),
-      });
+      if (!globalThis.__ALCHEMY_RUNTIME__) {
+        yield* GCPBindings.bind`${options.tag}(${table})`({
+          iam: options.iam.map((iam) => grantFor(iam, table.name)),
+        });
+      }
       const project = yield* table.project;
       const datasetId = yield* table.datasetId;
       const tableId = yield* table.tableId;

@@ -1,7 +1,7 @@
 import * as spanner from "@distilled.cloud/gcp/spanner_v1";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { bindGcpHost } from "../Host.ts";
+import * as GCPBindings from "../GCPBindings.ts";
 import { grantFor } from "../HttpBinding.ts";
 import type { Database } from "./Database.ts";
 import { GetDdl, type GetDdlRequest } from "./GetDdl.ts";
@@ -15,15 +15,20 @@ import { GetDdl, type GetDdlRequest } from "./GetDdl.ts";
 export const GetDdlHttp = Layer.effect(
   GetDdl,
   Effect.gen(function* () {
-    const getDdlProjectsInstancesDatabases = yield* spanner.getDdlProjectsInstancesDatabases;
+    const getDdlProjectsInstancesDatabases = yield* GCPBindings.withCredentials(
+      spanner.getDdlProjectsInstancesDatabases,
+    );
     return Effect.fn(function* (database: Database) {
-      yield* bindGcpHost({
-        tag: "GCP.Spanner.GetDdl",
-        resource: database,
-        iam: [
-          grantFor({ role: "roles/spanner.databaseReader", on: "spanner.database" }, database.name),
-        ],
-      });
+      if (!globalThis.__ALCHEMY_RUNTIME__) {
+        yield* GCPBindings.bind`GCP.Spanner.GetDdl(${database})`({
+          iam: [
+            grantFor(
+              { role: "roles/spanner.databaseReader", on: "spanner.database" },
+              database.name,
+            ),
+          ],
+        });
+      }
       const name = yield* database.name;
       return Effect.fn(`GCP.Spanner.GetDdl(${database.LogicalId})`)(function* (
         request?: GetDdlRequest,

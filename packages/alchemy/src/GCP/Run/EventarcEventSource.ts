@@ -14,7 +14,7 @@ import {
   type EventarcEventSourceService,
 } from "../Eventarc/EventSource.ts";
 import { Trigger, type EventFilter } from "../Eventarc/Trigger.ts";
-import { bindGcpHost } from "../Host.ts";
+import * as GCPBindings from "../GCPBindings.ts";
 import { Member } from "../IAM/Member.ts";
 import {
   grantSelfInvoker,
@@ -125,11 +125,11 @@ export const EventarcEventSource = Layer.effect(
         const env = yield* GcpEnvironment.current;
         // Requested through the host's own bindings, so the host's IAM sync
         // keeps it on every redeploy instead of revoking it as out of band.
-        yield* bindGcpHost({
-          tag: "GCP.Eventarc.EventSource",
-          resource: { LogicalId: id },
-          iam: [{ role: "roles/eventarc.eventReceiver" }],
-        });
+        if (!globalThis.__ALCHEMY_RUNTIME__) {
+          yield* GCPBindings.bind`GCP.Eventarc.EventSource(${{ LogicalId: id }})`({
+            iam: [{ role: "roles/eventarc.eventReceiver" }],
+          });
+        }
         yield* Namespace.push(
           host.LogicalId,
           Effect.gen(function* () {
