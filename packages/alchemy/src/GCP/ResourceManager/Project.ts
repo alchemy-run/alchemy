@@ -25,9 +25,10 @@ import {
   isDeleteRequested,
   lastSegment,
   projectIdFromOperation,
-  resolveParent,
+  normalizeHierarchyParent,
   resourceNameFromOperation,
   sameHierarchyParent,
+  tryResolveParent,
   waitForOperation,
   waitForCreate,
 } from "./internal.ts";
@@ -42,7 +43,8 @@ export type ProjectProps = {
   projectId?: string;
   /**
    * Parent `organizations/{org}` or `folders/{folder}`. Defaults to the
-   * current project's parent. Changing parent moves the project.
+   * current project's parent, or no parent for a standalone project.
+   * Changing parent moves the project.
    */
   parent?: string;
   /**
@@ -65,7 +67,7 @@ export type Project = Resource<
     name: string;
     /** User-assigned project id. */
     projectId: string;
-    /** Parent `organizations/{org}` or `folders/{folder}`. */
+    /** Parent `organizations/{org}` or `folders/{folder}`, or empty when standalone. */
     parent: string;
     /** User-assigned display name. */
     displayName: string | undefined;
@@ -296,7 +298,15 @@ export const ProjectProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const projectId = yield* toProjectId(id, news.projectId, output?.projectId);
-      const parent = yield* resolveParent(news.parent, output?.parent);
+      // A recorded empty parent keeps standalone projects out of the ambient hierarchy.
+      const parent =
+        news.parent !== undefined && news.parent.length > 0
+          ? normalizeHierarchyParent(news.parent)
+          : output?.parent !== undefined
+            ? output.parent.length > 0
+              ? normalizeHierarchyParent(output.parent)
+              : ""
+            : ((yield* tryResolveParent()) ?? "");
       const displayName = sanitizeDisplayName(news.displayName, projectId);
       const desiredLabels = {
         ...toLabels(news.labels),
@@ -310,7 +320,7 @@ export const ProjectProvider = () =>
           .createProjects({
             body: {
               projectId,
-              parent,
+              parent: parent || undefined,
               displayName,
               labels: desiredLabels,
             },
