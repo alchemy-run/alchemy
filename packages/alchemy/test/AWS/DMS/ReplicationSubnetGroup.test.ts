@@ -7,7 +7,7 @@ import * as AWS from "@/AWS";
 import { ReplicationSubnetGroup } from "@/AWS/DMS";
 import { Subnet, Vpc } from "@/AWS/EC2";
 import * as Test from "@/Test/Alchemy";
-import { reapDmsOrphans } from "./reap.ts";
+import { DMS_SUBNET_GROUP_VPC, reapDmsOrphans } from "./reap.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -40,7 +40,7 @@ test.provider(
       yield* stack.destroy();
       // A previous hard-killed run (in-memory scratch state) may have
       // orphaned the VPC fixture — reap it out-of-band before deploying.
-      yield* reapDmsOrphans;
+      yield* reapDmsOrphans(DMS_SUBNET_GROUP_VPC);
 
       // Resolve three AZs so the update can swap the subnet set.
       const azResult = yield* ec2.describeAvailabilityZones({});
@@ -51,7 +51,9 @@ test.provider(
 
       const { group, subnetCId } = yield* stack.deploy(
         Effect.gen(function* () {
-          const vpc = yield* Vpc("DmsVpc", { cidrBlock: "10.91.0.0/16" });
+          const vpc = yield* Vpc(DMS_SUBNET_GROUP_VPC.logicalId, {
+            cidrBlock: DMS_SUBNET_GROUP_VPC.cidr,
+          });
           const subnetA = yield* Subnet("DmsSubnetA", {
             vpcId: vpc.vpcId,
             cidrBlock: "10.91.1.0/24",
@@ -91,7 +93,9 @@ test.provider(
       // Update: swap one subnet + change the description.
       const { group: updated } = yield* stack.deploy(
         Effect.gen(function* () {
-          const vpc = yield* Vpc("DmsVpc", { cidrBlock: "10.91.0.0/16" });
+          const vpc = yield* Vpc(DMS_SUBNET_GROUP_VPC.logicalId, {
+            cidrBlock: DMS_SUBNET_GROUP_VPC.cidr,
+          });
           const subnetA = yield* Subnet("DmsSubnetA", {
             vpcId: vpc.vpcId,
             cidrBlock: "10.91.1.0/24",
@@ -134,7 +138,7 @@ test.provider(
       // scratch destroy) fails: the reaper deletes the VPC fixture out-of-band
       // with idempotent typed calls. `orDie` — a finalizer must not swallow
       // its own failure silently.
-      Effect.ensuring(reapDmsOrphans.pipe(Effect.orDie)),
+      Effect.ensuring(reapDmsOrphans(DMS_SUBNET_GROUP_VPC).pipe(Effect.orDie)),
     ),
   {
     tags: ["provider:aws", "provider:aws:dms", "provider:aws:ec2", "live"],

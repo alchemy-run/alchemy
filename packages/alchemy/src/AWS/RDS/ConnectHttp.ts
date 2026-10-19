@@ -4,11 +4,10 @@ import * as secretsmanager from "@distilled.cloud/aws/secrets-manager";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
-import * as Binding from "../../Binding.ts";
 import * as Output from "../../Output.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import { generateDbAuthToken } from "../Connection/DbAuthToken.ts";
 import { formatSqlConnectionUrl } from "../Connection/internal.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
 import { Connect, type ConnectOptions, type ConnectResource } from "./Connect.ts";
 
 /**
@@ -48,10 +47,12 @@ const dbUserArn = (resource: ConnectResource, username: string) => {
 export const ConnectHttp = Layer.effect(
   Connect,
   Effect.gen(function* () {
-    const getSecretValue = yield* secretsmanager.getSecretValue;
+    const getSecretValue = yield* AWSBindings.withCredentials(secretsmanager.getSecretValue);
     // Ambient AWS identity for the IAM-auth token presign — captured at
     // layer build so the runtime client stays `RuntimeContext`-colored.
-    const services = yield* Effect.context<Credentials.Credentials | Region.Region>();
+    const services = yield* AWSBindings.withCredentials(
+      Effect.context<Credentials.Credentials | Region.Region>(),
+    );
 
     return Effect.fn(function* (resource: ConnectResource, options: ConnectOptions) {
       const SecretId = options.auth === "iam" ? undefined : yield* options.secret.secretArn;
@@ -67,43 +68,40 @@ export const ConnectHttp = Layer.effect(
             : undefined;
 
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          // DECISION #5: VPC attachment is requested declaratively through
-          // the host's `vpc` binding channel (and remains available as a
-          // plain Function prop for the manual case).
-          const vpc =
-            options.subnetIds !== undefined || options.securityGroupIds !== undefined
-              ? {
-                  vpc: {
-                    subnetIds: options.subnetIds ?? [],
-                    securityGroupIds: options.securityGroupIds ?? [],
-                  },
-                }
-              : {};
-          if (options.auth === "iam") {
-            yield* host.bind`Allow(${host}, AWS.RDS.Connect(${resource}))`({
-              policyStatements: [
-                {
-                  Effect: "Allow",
-                  Action: ["rds-db:connect"],
-                  Resource: [dbUserArn(resource, options.username)],
+        // DECISION #5: VPC attachment is requested declaratively through
+        // the host's `vpc` binding channel (and remains available as a
+        // plain Function prop for the manual case).
+        const vpc =
+          options.subnetIds !== undefined || options.securityGroupIds !== undefined
+            ? {
+                vpc: {
+                  subnetIds: options.subnetIds ?? [],
+                  securityGroupIds: options.securityGroupIds ?? [],
                 },
-              ],
-              ...vpc,
-            });
-          } else {
-            yield* host.bind`Allow(${host}, AWS.RDS.Connect(${options.secret}))`({
-              policyStatements: [
-                {
-                  Effect: "Allow",
-                  Action: ["secretsmanager:GetSecretValue", "secretsmanager:DescribeSecret"],
-                  Resource: [options.secret.secretArn],
-                },
-              ],
-              ...vpc,
-            });
-          }
+              }
+            : {};
+        if (options.auth === "iam") {
+          yield* AWSBindings.bind`AWS.RDS.Connect(${resource})`({
+            policyStatements: [
+              {
+                Effect: "Allow",
+                Action: ["rds-db:connect"],
+                Resource: [dbUserArn(resource, options.username)],
+              },
+            ],
+            ...vpc,
+          });
+        } else {
+          yield* AWSBindings.bind`AWS.RDS.Connect(${options.secret})`({
+            policyStatements: [
+              {
+                Effect: "Allow",
+                Action: ["secretsmanager:GetSecretValue", "secretsmanager:DescribeSecret"],
+                Resource: [options.secret.secretArn],
+              },
+            ],
+            ...vpc,
+          });
         }
       }
 

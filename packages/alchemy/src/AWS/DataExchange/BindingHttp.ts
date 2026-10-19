@@ -1,8 +1,7 @@
 import * as Effect from "effect/Effect";
-import * as Binding from "../../Binding.ts";
 import * as Output from "../../Output.ts";
 import type { Output as OutputType } from "../../Output.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { DataSet } from "./DataSet.ts";
 import type { Revision } from "./Revision.ts";
 
@@ -70,23 +69,20 @@ export const makeDataSetHttpBinding = <I extends { DataSetId: string }, A, E, R>
   resources?: (dataSet: DataSet) => OutputType<string>[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (dataSet: DataSet) {
       const DataSetId = yield* dataSet.dataSetId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}(${dataSet}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: (options.resources ?? dataSetArns)(dataSet),
-              },
-            ],
-          });
-        }
+        yield* AWSBindings.bind`${options.tag}(${dataSet})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: (options.resources ?? dataSetArns)(dataSet),
+            },
+          ],
+        });
       }
       return Effect.fn(`${options.tag}(${dataSet.LogicalId})`)(function* (
         request?: Omit<I, "DataSetId">,
@@ -119,24 +115,21 @@ export const makeRevisionHttpBinding = <
   resources?: (revision: Revision) => OutputType<string>[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (revision: Revision) {
       const DataSetId = yield* revision.dataSetId;
       const RevisionId = yield* revision.revisionId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}(${revision}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: (options.resources ?? revisionArns)(revision),
-              },
-            ],
-          });
-        }
+        yield* AWSBindings.bind`${options.tag}(${revision})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: (options.resources ?? revisionArns)(revision),
+            },
+          ],
+        });
       }
       return Effect.fn(`${options.tag}(${revision.LogicalId})`)(function* (
         request?: Omit<I, "DataSetId" | "RevisionId">,
@@ -167,22 +160,19 @@ export const makeDataExchangeAccountHttpBinding = <I, A, E, R>(options: {
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}())`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: ["*"],
-              },
-            ],
-          });
-        }
+        yield* AWSBindings.bind`${options.tag}()`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: ["*"],
+            },
+          ],
+        });
       }
       return Effect.fn(options.tag)(function* (request?: I) {
         return yield* op((request ?? {}) as I);

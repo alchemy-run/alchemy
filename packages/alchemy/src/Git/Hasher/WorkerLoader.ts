@@ -28,8 +28,10 @@ import * as Effect from "effect/Effect";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Layer from "effect/Layer";
 import * as Semaphore from "effect/Semaphore";
+/* oxlint-disable alchemy/package-boundaries -- package split phase 3: Git is built on Cloudflare (plus S3 blobs, Lambda hasher); becomes integration subpaths */
 import type { Worker, WorkerEnvironment } from "../../Cloudflare/Workers/Worker.ts";
 import { WorkerLoader } from "../../Cloudflare/Workers/WorkerLoader.ts";
+/* oxlint-enable alchemy/package-boundaries */
 import { hashBounds, resolveDeltas, scanPart } from "../Protocol/PartialScan.ts";
 import { Hasher, type HasherShape } from "./Hasher.ts";
 import {

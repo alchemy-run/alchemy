@@ -1,7 +1,6 @@
 import * as Effect from "effect/Effect";
-import * as Binding from "../../Binding.ts";
 import * as Output from "../../Output.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { PlaybackConfiguration } from "./PlaybackConfiguration.ts";
 
 /**
@@ -29,24 +28,21 @@ export const makeMediaTailorHttpBinding = <I, A, E, R>(options: {
   operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, AWS.MediaTailor.${options.capability}())`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.iamActions],
-                // Channel-assembly resource names are runtime parameters;
-                // their ARNs are unknowable at deploy time.
-                Resource: ["*"],
-              },
-            ],
-          });
-        }
+        yield* AWSBindings.bind`AWS.MediaTailor.${options.capability}()`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.iamActions],
+              // Channel-assembly resource names are runtime parameters;
+              // their ARNs are unknowable at deploy time.
+              Resource: ["*"],
+            },
+          ],
+        });
       }
       return Effect.fn(`AWS.MediaTailor.${options.capability}`)(function* (request: I) {
         return yield* op(request);
@@ -78,38 +74,35 @@ export const makeMediaTailorPlaybackHttpBinding = <
   operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (config: PlaybackConfiguration) {
       const name = yield* config.name;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, AWS.MediaTailor.${options.capability}(${config}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.iamActions],
-                Resource: [
-                  Output.interpolate`${config.playbackConfigurationArn}`,
-                  // Prefetch schedules live in a sibling ARN space:
-                  // arn:…:prefetchSchedule/{configurationName}/{name}
-                  Output.map(
-                    config.playbackConfigurationArn,
-                    (arn) => `${arn.replace(":playbackConfiguration/", ":prefetchSchedule/")}/*`,
-                  ),
-                  // ListPrefetchSchedules is authorized against the bare
-                  // account/region wildcard `…:prefetchSchedule/*` (the
-                  // configuration name is not part of the authorization
-                  // resource), so every prefetch binding also grants it.
-                  Output.map(config.playbackConfigurationArn, (arn) =>
-                    arn.replace(/:playbackConfiguration\/.*$/, ":prefetchSchedule/*"),
-                  ),
-                ],
-              },
-            ],
-          });
-        }
+        yield* AWSBindings.bind`AWS.MediaTailor.${options.capability}(${config})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.iamActions],
+              Resource: [
+                Output.interpolate`${config.playbackConfigurationArn}`,
+                // Prefetch schedules live in a sibling ARN space:
+                // arn:…:prefetchSchedule/{configurationName}/{name}
+                Output.map(
+                  config.playbackConfigurationArn,
+                  (arn) => `${arn.replace(":playbackConfiguration/", ":prefetchSchedule/")}/*`,
+                ),
+                // ListPrefetchSchedules is authorized against the bare
+                // account/region wildcard `…:prefetchSchedule/*` (the
+                // configuration name is not part of the authorization
+                // resource), so every prefetch binding also grants it.
+                Output.map(config.playbackConfigurationArn, (arn) =>
+                  arn.replace(/:playbackConfiguration\/.*$/, ":prefetchSchedule/*"),
+                ),
+              ],
+            },
+          ],
+        });
       }
       return Effect.fn(`AWS.MediaTailor.${options.capability}(${config.LogicalId})`)(function* (
         request: Omit<I, "PlaybackConfigurationName">,

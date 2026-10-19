@@ -100,6 +100,10 @@ packages/alchemy/src/AWS/EC2/Vpc.ts            # VPC resource + provider
 packages/alchemy/src/AWS/EC2/Subnet.ts         # Subnet resource + provider
 ```
 
+## Package boundaries
+
+Splitting `packages/alchemy/src` into a provider-free core plus one package per provider is ongoing work. The `alchemy/package-boundaries` lint rule ([scripts/oxlint/alchemy.ts](./scripts/oxlint/alchemy.ts)) flags cross-provider imports and host-type checks. Until the split lands, a change that needs one may suppress the rule with an `oxlint-disable-next-line alchemy/package-boundaries -- <reason>` comment.
+
 # The Resource Factory Process
 
 Alchemy resource coverage is produced as a **software factory**: fleets of agents implement and live-test IaC resources in waves, and every API mismatch the tests surface is fed back as a patch to distilled. The factory was used to take Cloudflare from 36 to 239 cataloged resources (250 test files / 600+ test cases, 1000+ patched operations) and is the template for every future provider.
@@ -189,7 +193,7 @@ This is the only doc generator that produces user-facing output. ([scripts/gener
 
 1. Discovers documented files across its configured source roots — `packages/alchemy/src/{Cloud}/{Service}/` plus flat single-provider packages like `packages/better-auth/src/` (mapped onto a synthetic provider directory, e.g. `BetterAuth/`)
 2. Parses TypeScript with the native TypeScript API (`typescript-api` tooling alias)
-3. Extracts the page-level summary plus Markdown section/example blocks from JSDoc on the export tagged `@resource`, `@binding`, or `@layer`
+3. Extracts the page-level summary plus Markdown section/example blocks from JSDoc on the export tagged `@resource`, `@binding`, `@layer`, or `@primitive` (a building block exported as its module's `make`, e.g. `Domain.Event`; its page is named after the file)
 4. Writes one markdown file per page at `website/src/content/docs/providers/{Provider}/{Name}.md`
 
 **Layer pages** (`@layer`) document exported Layer factories — the pluggable implementations of a Context service (e.g. better-auth's database layers). Alongside the shared tags, a Layer declares what it satisfies and needs:
@@ -218,7 +222,7 @@ export const Neon = (url: ConnectionSource, options?: NeonOptions): Layer.Layer<
 Both render as a metadata line under the page's `Source:` blockquote. Every Layer implementation should carry these annotations — a Layer without them is an undocumented integration surface.
 
 Keep all API-generator metadata tags (`@resource`, `@binding`, `@layer`,
-`@product`, `@category`, `@provides`, and `@peer`) together at the very end of
+`@primitive`, `@product`, `@category`, `@provides`, and `@peer`) together at the very end of
 the JSDoc block. Do not put prose, sections, or examples after them: TypeScript
 treats subsequent content as part of the block tag, which breaks editor JSDoc
 rendering. The generator also supports `@group` as an alias for `@category` and

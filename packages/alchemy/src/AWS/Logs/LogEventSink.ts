@@ -2,7 +2,7 @@ import type * as Logs from "@distilled.cloud/aws/cloudwatch-logs";
 import type * as Effect from "effect/Effect";
 import type * as Sink from "effect/Sink";
 import * as Binding from "../../Binding.ts";
-import type { BatchRetryExhaustedError } from "../internal/BatchedSink.ts";
+import type { BatchRetryExhaustedError } from "../../Util/BatchedSink.ts";
 import type { LogGroup } from "./LogGroup.ts";
 
 export interface LogEventSinkProps {

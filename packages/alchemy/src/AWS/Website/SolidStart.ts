@@ -8,7 +8,10 @@ export const SOLIDSTART_FRAMEWORK_SPECIFIER = "@alchemy.run/frontend-frameworks/
 /** The AWS Lambda deploy target for the SolidStart build. */
 export const SOLIDSTART_AWS_TARGET_SPECIFIER = "@alchemy.run/frontend-frameworks/solidstart/aws";
 
-export interface SolidStartProps extends FrameworkSiteProps {
+/** The Node deploy target for the Lambda Web Function server (the default). */
+export const SOLIDSTART_WEB_TARGET_SPECIFIER = "@alchemy.run/frontend-frameworks/solidstart/node";
+
+export type SolidStartProps = FrameworkSiteProps<{
   /**
    * Nitro options forwarded into the nitro plugin the integration appends
    * (prerendering, route rules, storage, ...). `preset` is owned by the
@@ -22,13 +25,20 @@ export interface SolidStartProps extends FrameworkSiteProps {
    * which a config file cannot.
    */
   nitro?: Record<string, unknown>;
-}
+}>;
 
 /**
  * Deploy a [SolidStart](https://start.solidjs.com) application to AWS: the
- * SSR server on a streaming Lambda Function URL, static assets (prerendered
- * pages included) in S3, and a CloudFront distribution whose edge router
- * serves uploaded files from S3 and forwards everything else to the server.
+ * SSR server on a Lambda Web Function, static assets (prerendered pages
+ * included) in S3, and a CloudFront distribution whose edge router serves
+ * uploaded files from S3 and forwards everything else to the server.
+ *
+ * The server runs on a Lambda Web Function: the framework's Node server
+ * (built with the `@alchemy.run/frontend-frameworks/solidstart/node` deploy
+ * target) serves many requests per environment and streams responses. Set
+ * `server: "function"` to use a Lambda Function behind a streaming Function
+ * URL instead, built with the `/aws` target below, for Regions without Web
+ * Functions.
  *
  * The build runs through `@alchemy.run/frontend-frameworks/solidstart` with
  * the `@alchemy.run/frontend-frameworks/solidstart/aws` deploy target — both
@@ -86,12 +96,13 @@ export interface SolidStartProps extends FrameworkSiteProps {
  *
  * @resource
  */
-export const SolidStart = (id: string, props: InputProps<SolidStartProps> = {}) => {
+export const SolidStart = (id: string, props: InputProps<SolidStartProps, "server"> = {}) => {
   const p = props as SolidStartProps;
   return makeFrameworkSite(id, props, {
     name: "SolidStart",
     framework: SOLIDSTART_FRAMEWORK_SPECIFIER,
     target: SOLIDSTART_AWS_TARGET_SPECIFIER,
+    webTarget: SOLIDSTART_WEB_TARGET_SPECIFIER,
     options: { nitro: p.nitro },
   }).pipe(Namespace.push(id));
 };

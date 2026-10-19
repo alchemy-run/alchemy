@@ -1,6 +1,8 @@
 import { expect } from "alchemy-test";
+import * as Cause from "effect/Cause";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
 import * as Result from "effect/Result";
@@ -9,6 +11,7 @@ import * as Cloudflare from "@/Cloudflare/index.ts";
 import { LOCAL_ACCOUNT_ID } from "@/Cloudflare/LocalAccount.ts";
 import * as Alchemy from "@/index.ts";
 import * as Test from "@/Test/Alchemy";
+import HttpBindingWorker from "./fixtures/http-binding-worker.ts";
 
 const noCredentials = Layer.effect(
   ConfigProvider.ConfigProvider,
@@ -153,6 +156,23 @@ test.provider(
         });
       }
       yield* stack.destroy();
+    }).pipe(Effect.provide(noCredentials)),
+  { tags: ["local", "provider:cloudflare"], timeout: 60_000 },
+);
+
+test.provider(
+  "*Http bindings on local resources fail with HttpBindingUnsupportedInDev",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const exit = yield* Effect.exit(stack.deploy(HttpBindingWorker));
+      yield* stack.destroy();
+      expect(Exit.isFailure(exit)).toBe(true);
+      if (Exit.isFailure(exit)) {
+        const failure = Cause.pretty(exit.cause);
+        expect(failure).toContain("Cloudflare.HttpBindingUnsupportedInDev");
+        expect(failure).toContain("Cloudflare.R2.Bucket HttpBindingBucket is emulated locally");
+      }
     }).pipe(Effect.provide(noCredentials)),
   { tags: ["local", "provider:cloudflare"], timeout: 60_000 },
 );

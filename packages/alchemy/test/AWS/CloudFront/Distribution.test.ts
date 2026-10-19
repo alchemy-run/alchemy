@@ -25,6 +25,9 @@ import * as Test from "@/Test/Alchemy";
 const { test } = Test.make({ providers: AWS.providers() });
 
 const runLive = !process.env.FAST;
+// Web Functions are live-only; the Floci sweep (`ALCHEMY_TEST_DEV=1`) points
+// every AWS client at the emulator, which does not emulate them.
+const runWebFunctions = runLive && process.env.ALCHEMY_TEST_DEV !== "1";
 
 const webFunctionMain = fileURLToPath(new URL("./fixtures/web-function.ts", import.meta.url));
 
@@ -396,7 +399,7 @@ describe(
       { tags: ["provider:aws:lambda"], timeout: 60_000 },
     );
 
-    test.provider.skipIf(!runLive)(
+    test.provider.skipIf(!runWebFunctions)(
       "webFunction origin: CloudFront signs requests to an IamAuth Web Function",
       (stack) =>
         Effect.gen(function* () {
@@ -492,7 +495,7 @@ describe(
       { tags: ["provider:aws:lambda"], timeout: DEPLOY_DELETE_TIMEOUT },
     );
 
-    test.provider.skipIf(!runLive)(
+    test.provider.skipIf(!runWebFunctions)(
       "webFunction origin: a multi-Region Web Function is signed with SigV4A",
       (stack) =>
         Effect.gen(function* () {

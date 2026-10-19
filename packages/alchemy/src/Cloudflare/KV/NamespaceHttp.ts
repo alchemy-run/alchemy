@@ -7,6 +7,7 @@ import { AccountApiToken } from "../ApiToken/AccountApiToken.ts";
 import type { PermissionGroupRef } from "../ApiToken/Common.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Credentials } from "../Credentials.ts";
+import { requireLiveResource } from "../HttpBindingDev.ts";
 import { authorizeWith } from "../HttpClientUtils.ts";
 import type { InstantNamespace } from "./InstantNamespace.ts";
 import type { Namespace } from "./Namespace.ts";
@@ -26,12 +27,12 @@ export const makeHttpKVNamespaceBinding = <Client>(options: {
   Effect.gen(function* () {
     const Token = yield* AccountApiToken;
     const self = yield* Self;
-    const env = yield* CloudflareEnvironment;
 
     return Effect.fn(function* (namespace: Namespace | InstantNamespace) {
-      const { accountId } = yield* env;
+      if (!globalThis.__ALCHEMY_RUNTIME__) yield* requireLiveResource(namespace);
       const token = yield* Token(`${self.LogicalId}Token`);
       if (!globalThis.__ALCHEMY_RUNTIME__) {
+        const { accountId } = yield* CloudflareEnvironment.current;
         yield* token.bind`${namespace.LogicalId}`({
           policies: [
             {

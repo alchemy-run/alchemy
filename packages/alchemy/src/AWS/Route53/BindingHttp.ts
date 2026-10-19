@@ -1,7 +1,6 @@
 import * as Effect from "effect/Effect";
-import * as Binding from "../../Binding.ts";
 import * as Output from "../../Output.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { HealthCheck } from "./HealthCheck.ts";
 import type { HostedZone } from "./HostedZone.ts";
 
@@ -44,26 +43,23 @@ export const makeRoute53ZoneHttpBinding = <I, A, E, R>(options: {
   wildcardIam?: boolean;
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const op = yield* AWSBindings.withCredentials(options.operation);
     const requestKey = options.requestKey ?? "HostedZoneId";
 
     return Effect.fn(function* (zone: HostedZone) {
       const zoneId = yield* zone.id;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}(${zone}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: options.wildcardIam
-                  ? ["*"]
-                  : [Output.interpolate`arn:aws:route53:::hostedzone/${zone.id}`],
-              },
-            ],
-          });
-        }
+        yield* AWSBindings.bind`${options.tag}(${zone})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: options.wildcardIam
+                ? ["*"]
+                : [Output.interpolate`arn:aws:route53:::hostedzone/${zone.id}`],
+            },
+          ],
+        });
       }
       return Effect.fn(`${options.tag}(${zone.LogicalId})`)(function* (
         request?: Omit<I, "HostedZoneId" | "Id">,
@@ -96,23 +92,20 @@ export const makeRoute53HealthCheckHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (healthCheck: HealthCheck) {
       const healthCheckId = yield* healthCheck.id;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}(${healthCheck}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: [Output.interpolate`arn:aws:route53:::healthcheck/${healthCheck.id}`],
-              },
-            ],
-          });
-        }
+        yield* AWSBindings.bind`${options.tag}(${healthCheck})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: [Output.interpolate`arn:aws:route53:::healthcheck/${healthCheck.id}`],
+            },
+          ],
+        });
       }
       return Effect.fn(`${options.tag}(${healthCheck.LogicalId})`)(function* (
         request?: Omit<I, "HealthCheckId">,
@@ -144,22 +137,19 @@ export const makeRoute53AccountHttpBinding = <I, A, E, R>(options: {
   resources?: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}())`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: [...(options.resources ?? ["*"])],
-              },
-            ],
-          });
-        }
+        yield* AWSBindings.bind`${options.tag}()`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: [...(options.resources ?? ["*"])],
+            },
+          ],
+        });
       }
       return Effect.fn(options.tag)(function* (request?: I) {
         return yield* op((request ?? {}) as I);

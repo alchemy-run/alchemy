@@ -33,6 +33,7 @@ import type { Credentials } from "../Credentials.ts";
 import { buildAndPushEcrImage } from "../ECR/Image.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
+import { nativeHostBundle } from "../NativeHost.ts";
 import type { Providers } from "../Providers.ts";
 import { readAppRunnerTags, syncAppRunnerTags, toWireTags } from "./internal.ts";
 
@@ -986,7 +987,7 @@ export const ServiceProvider = () =>
           plugins?: rolldown.RolldownPluginOption,
         ) {
           return yield* Bundle.build(
-            {
+            nativeHostBundle({
               ...props.build?.input,
               input: entry,
               cwd,
@@ -1004,7 +1005,7 @@ export const ServiceProvider = () =>
                 ...props.build?.input?.resolve,
               },
               plugins: [props.build?.input?.plugins, plugins],
-            },
+            }),
             {
               ...props.build?.output,
               format: "esm",

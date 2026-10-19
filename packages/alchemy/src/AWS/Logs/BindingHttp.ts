@@ -1,7 +1,6 @@
 import * as Effect from "effect/Effect";
-import * as Binding from "../../Binding.ts";
 import * as Output from "../../Output.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { LogGroup } from "./LogGroup.ts";
 
 /**
@@ -53,29 +52,26 @@ export const makeLogGroupHttpBinding = <I, A, E, R>(options: {
   injectLogGroupName?: boolean;
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const op = yield* AWSBindings.withCredentials(options.operation);
     const inject = options.injectLogGroupName ?? true;
 
     return Effect.fn(function* <G extends LogGroup>(logGroup: G) {
       const LogGroupName = yield* logGroup.logGroupName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}(${logGroup}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource:
-                  options.iamResources === "all"
-                    ? ["*"]
-                    : options.iamResources === "streams"
-                      ? [Output.interpolate`${logGroup.logGroupArn}:*`]
-                      : [logGroup.logGroupArn, Output.interpolate`${logGroup.logGroupArn}:*`],
-              },
-            ],
-          });
-        }
+        yield* AWSBindings.bind`${options.tag}(${logGroup})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource:
+                options.iamResources === "all"
+                  ? ["*"]
+                  : options.iamResources === "streams"
+                    ? [Output.interpolate`${logGroup.logGroupArn}:*`]
+                    : [logGroup.logGroupArn, Output.interpolate`${logGroup.logGroupArn}:*`],
+            },
+          ],
+        });
       }
       return Effect.fn(`${options.tag}(${logGroup.LogicalId})`)(function* (
         request?: Omit<I, "logGroupName">,

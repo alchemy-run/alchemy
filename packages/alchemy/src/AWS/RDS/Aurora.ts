@@ -3,6 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import type { Input } from "../../Input.ts";
 import * as Namespace from "../../Namespace.ts";
+import { MigrationError, type MigrationsInput } from "../../SQL/Migrations/index.ts";
 import { toWireSeconds } from "../../Util/Duration.ts";
 import type { SecurityGroupId } from "../EC2/SecurityGroup.ts";
 import type { SubnetId } from "../EC2/Subnet.ts";
@@ -49,6 +50,7 @@ import {
   type DBSubnetGroupProps,
   type DBSubnetGroup as DBSubnetGroupResource,
 } from "./DBSubnetGroup.ts";
+import type { MigrationsTransport } from "./Migrations.ts";
 
 export interface AuroraSecretProps extends Omit<
   SecretProps,
@@ -178,6 +180,9 @@ export interface AuroraProps {
     | "dbParameterGroupName"
     | "vpcSecurityGroupIds"
     | "tags"
+    | "migrations"
+    | "migrationsTransport"
+    | "migrationsSecretArn"
   > & {
     tags?: Record<string, Input<string>>;
   };
@@ -186,6 +191,25 @@ export interface AuroraProps {
    * @default true
    */
   dataApi?: boolean;
+  /**
+   * SQL migrations to apply to `databaseName` on deploy, once the writer is
+   * available. Accepts a directory path, a `Drizzle.Schema` resource, or
+   * `{ dir, table? }`.
+   *
+   * Bookkeeping always lives in Alchemy's `__alchemy_migrations` table. A
+   * database previously migrated by drizzle-kit or Prisma is adopted by a
+   * one-way conversion on first deploy. Over the Data API each statement is
+   * its own call: put each statement in its own file or separate statements
+   * with `--> statement-breakpoint` (drizzle-kit's default).
+   */
+  migrations?: MigrationsInput;
+  /**
+   * How `migrations` reach the cluster: `"data-api"`, `"direct"` (a
+   * connection from the deploying machine), or an `AWS.RDS.MigrationRunner`
+   * Lambda inside the VPC.
+   * @default "data-api" when `dataApi` is enabled, otherwise "direct"
+   */
+  migrationsTransport?: MigrationsTransport;
   /**
    * Backup retention period (e.g. `"7 days"`), forwarded to the cluster.
    */
@@ -336,6 +360,31 @@ const inferProxyEngineFamily = (engine: string) => {
  * });
  * ```
  *
+ * ### Migrations
+ * **Example:** Apply migrations once the writer is up
+ * ```typescript
+ * const db = yield* AWS.RDS.Aurora("AppDb", {
+ *   subnetIds: [privateSubnetA.subnetId, privateSubnetB.subnetId],
+ *   securityGroupIds: [databaseSecurityGroup.groupId],
+ *   migrations: "./migrations",
+ * });
+ * ```
+ *
+ * **Example:** Apply migrations through an in-VPC runner without the Data API
+ * ```typescript
+ * const runner = yield* AWS.RDS.MigrationRunner("MigrationRunner", {
+ *   subnetIds: [privateSubnetA.subnetId, privateSubnetB.subnetId],
+ *   securityGroupIds: [runnerSecurityGroup.groupId],
+ * });
+ * const db = yield* AWS.RDS.Aurora("AppDb", {
+ *   subnetIds: [privateSubnetA.subnetId, privateSubnetB.subnetId],
+ *   securityGroupIds: [databaseSecurityGroup.groupId],
+ *   dataApi: false,
+ *   migrations: "./migrations",
+ *   migrationsTransport: runner,
+ * });
+ * ```
+ *
  * ### Querying from a Function
  * **Example:** Query over the Data API
  * ```typescript
@@ -355,6 +404,20 @@ export const Aurora = (id: string, props: AuroraProps) =>
     id,
     Effect.gen(function* () {
       const engine = props.engine ?? "aurora-postgresql";
+      if (props.migrationsTransport === "data-api" && props.dataApi === false) {
+        return yield* Effect.die(
+          new MigrationError({
+            message: `Aurora '${id}': migrationsTransport "data-api" requires "dataApi" to be enabled.`,
+          }),
+        );
+      }
+      if (props.migrations && engine !== "aurora-postgresql" && engine !== "aurora-mysql") {
+        return yield* Effect.die(
+          new MigrationError({
+            message: `Aurora '${id}': "migrations" support the "aurora-postgresql" and "aurora-mysql" engines (got "${engine}").`,
+          }),
+        );
+      }
       const engineVersion = props.engineVersion;
       const databaseName = props.databaseName ?? "app";
       const username = props.secret?.username ?? "app";
@@ -505,6 +568,9 @@ export const Aurora = (id: string, props: AuroraProps) =>
           props.instance?.enablePerformanceInsights ?? props.monitoring?.performanceInsights,
         tags: mergeTags(commonTags, props.instance?.tags),
         ...props.instance,
+        migrations: props.migrations,
+        migrationsTransport: props.migrationsTransport,
+        migrationsSecretArn: props.migrations ? secret.secretArn : undefined,
       });
 
       const readers = yield* Effect.all(

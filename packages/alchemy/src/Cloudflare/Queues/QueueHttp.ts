@@ -7,6 +7,7 @@ import { AccountApiToken } from "../ApiToken/AccountApiToken.ts";
 import type { PermissionGroupRef } from "../ApiToken/Common.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Credentials } from "../Credentials.ts";
+import { requireLiveResource } from "../HttpBindingDev.ts";
 import type { Queue } from "./Queue.ts";
 import { SendError } from "./QueueTypes.ts";
 
@@ -43,12 +44,12 @@ export const makeHttpQueueBinding = <Client>(options: {
   Effect.gen(function* () {
     const Token = yield* AccountApiToken;
     const self = yield* Self;
-    const env = yield* CloudflareEnvironment;
 
     return Effect.fn(function* (queue: Queue) {
-      const { accountId } = yield* env;
+      if (!globalThis.__ALCHEMY_RUNTIME__) yield* requireLiveResource(queue);
       const token = yield* Token(`${self.LogicalId}Token`);
       if (!globalThis.__ALCHEMY_RUNTIME__) {
+        const { accountId } = yield* CloudflareEnvironment.current;
         yield* token.bind`${queue.LogicalId}`({
           policies: [
             {

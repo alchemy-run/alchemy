@@ -1,7 +1,6 @@
 import * as Effect from "effect/Effect";
-import * as Binding from "../../Binding.ts";
 import * as Output from "../../Output.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { JobTemplate } from "./JobTemplate.ts";
 import type { VirtualCluster } from "./VirtualCluster.ts";
 
@@ -52,18 +51,15 @@ export const makeEMRContainersVirtualClusterHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (virtualCluster: VirtualCluster) {
       // Outputs yield a DEFERRED effect — resolve again per invocation below.
       const VirtualClusterId = yield* virtualCluster.virtualClusterId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}(${virtualCluster}))`({
-            policyStatements: [virtualClusterPolicyStatement(virtualCluster, options.actions)],
-          });
-        }
+        yield* AWSBindings.bind`${options.tag}(${virtualCluster})`({
+          policyStatements: [virtualClusterPolicyStatement(virtualCluster, options.actions)],
+        });
       }
       return Effect.fn(`${options.tag}(${virtualCluster.LogicalId})`)(function* (
         request?: Omit<I, "virtualClusterId">,
@@ -96,23 +92,20 @@ export const makeEMRContainersJobTemplateHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (template: JobTemplate) {
       const JobTemplateId = yield* template.jobTemplateId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}(${template}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: [template.jobTemplateArn],
-              },
-            ],
-          });
-        }
+        yield* AWSBindings.bind`${options.tag}(${template})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: [template.jobTemplateArn],
+            },
+          ],
+        });
       }
       return Effect.fn(`${options.tag}(${template.LogicalId})`)(function* (
         request?: Omit<I, "id">,
@@ -136,22 +129,19 @@ export const makeEMRContainersAccountHttpBinding = <I, A, E, R>(options: {
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}())`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: ["*"],
-              },
-            ],
-          });
-        }
+        yield* AWSBindings.bind`${options.tag}()`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: ["*"],
+            },
+          ],
+        });
       }
       return Effect.fn(options.tag)(function* (request?: I) {
         return yield* op((request ?? {}) as I);

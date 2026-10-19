@@ -1,7 +1,5 @@
 import * as Effect from "effect/Effect";
-import * as Binding from "../../Binding.ts";
-import { isInstance } from "../EC2/Instance.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { AutoScalingGroup } from "./AutoScalingGroup.ts";
 
 /**
@@ -37,23 +35,20 @@ export const makeGroupHttpBinding = <I extends object, A, E, R>(options: {
   resource?: "group" | "*";
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (group: AutoScalingGroup) {
       const AutoScalingGroupName = yield* group.autoScalingGroupName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host) || isInstance(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}(${group}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: options.resource === "*" ? ["*"] : [group.autoScalingGroupArn],
-              },
-            ],
-          });
-        }
+        yield* AWSBindings.bind`${options.tag}(${group})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: options.resource === "*" ? ["*"] : [group.autoScalingGroupArn],
+            },
+          ],
+        });
       }
       return Effect.fn(`${options.tag}(${group.LogicalId})`)(function* (
         request?: Omit<I, "AutoScalingGroupName">,

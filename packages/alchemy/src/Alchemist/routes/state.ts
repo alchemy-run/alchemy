@@ -4,8 +4,10 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import { AuthProviders } from "../../Auth/AuthProvider.ts";
 import { withProfileOverride } from "../../Auth/Resolve.ts";
+/* oxlint-disable alchemy/package-boundaries -- package split phase 2: provider-specific routes; become plugin `stateStores` / `cli` */
 import * as AwsState from "../../AWS/StateStore/State.ts";
 import * as CloudflareState from "../../Cloudflare/StateStore/State.ts";
+/* oxlint-enable alchemy/package-boundaries */
 import * as State from "../../State/index.ts";
 import { loadConfigProvider } from "../../Util/ConfigProvider.ts";
 import { open, StackEntrypointError, type Target } from "../Session.ts";

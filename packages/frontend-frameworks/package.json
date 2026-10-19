@@ -125,6 +125,10 @@
       "worker": "./dist/nextjs/node.js",
       "import": "./dist/nextjs/node.js"
     },
+    "./nextjs/cache-handler": {
+      "types": "./dist/nextjs/cache-handler.d.ts",
+      "import": "./dist/nextjs/cache-handler.js"
+    },
     "./nextjs/source": {
       "types": "./dist/nextjs/source.d.ts",
       "bun": "./dist/nextjs/source.js",

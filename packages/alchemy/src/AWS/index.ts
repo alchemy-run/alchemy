@@ -2,6 +2,8 @@ export * from "./Arn.ts";
 export * from "./Assets.ts";
 export * from "./Bootstrap.ts";
 export * from "./Environment.ts";
+export * as AWSBindings from "./AWSBindings.ts";
+export { isNativeHost, type NativeHost } from "./NativeHost.ts";
 export * from "./Providers.ts";
 export * from "./StateStore/index.ts";
 
@@ -189,6 +191,7 @@ export * as Schemas from "./Schemas/index.ts";
 export * as SecretsManager from "./SecretsManager/index.ts";
 export * as SecurityHub from "./SecurityHub/index.ts";
 export * as SecurityLake from "./SecurityLake/index.ts";
+export * as Server from "./Server/index.ts";
 export * as ServiceCatalog from "./ServiceCatalog/index.ts";
 export * as ServiceQuotas from "./ServiceQuotas/index.ts";
 export * as SES from "./SES/index.ts";

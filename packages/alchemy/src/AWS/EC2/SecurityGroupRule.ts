@@ -10,7 +10,7 @@ import { Resource } from "../../Resource.ts";
 import { Stack } from "../../Stack.ts";
 import { State, isActionState } from "../../State/State.ts";
 import { createInternalTags, createTagsList, diffTags } from "../../Tags.ts";
-import { canonicalCidr } from "../../Utils/ip-address.ts";
+import { canonicalCidr } from "../../Util/ip-address.ts";
 import type { Providers } from "../Providers.ts";
 import {
   getDefaultVpcDefaultSecurityGroupId,

@@ -1,24 +1,33 @@
 import * as ec2 from "@distilled.cloud/aws/ec2";
+import * as Lambda from "@distilled.cloud/aws/lambda";
 import * as rds from "@distilled.cloud/aws/rds";
+import * as rdsdata from "@distilled.cloud/aws/rds-data";
 import * as secretsmanager from "@distilled.cloud/aws/secrets-manager";
 import { describe, expect } from "alchemy-test";
+import * as Cause from "effect/Cause";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as FileSystem from "effect/FileSystem";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientResponse from "effect/http/HttpClientResponse";
+import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
 import * as AWS from "@/AWS";
 import { Network } from "@/AWS/EC2/Network";
 import { SecurityGroup } from "@/AWS/EC2/SecurityGroup";
 import { AWSEnvironment } from "@/AWS/Environment.ts";
 import { normalizePolicyDocument, type PolicyDocument } from "@/AWS/IAM/Policy.ts";
-import { DBCluster, DBInstance, type DBInstanceProps } from "@/AWS/RDS";
+import { DBCluster, DBInstance, MigrationRunner, type DBInstanceProps } from "@/AWS/RDS";
+import { Aurora, type AuroraProps } from "@/AWS/RDS/Aurora.ts";
 import { DBParameterGroup } from "@/AWS/RDS/DBParameterGroup";
 import { DBSubnetGroup } from "@/AWS/RDS/DBSubnetGroup.ts";
 import * as Drift from "@/Drift";
 import * as Provider from "@/Provider";
+import { importPg } from "@/SQL/PostgresDriver.ts";
 import { State } from "@/State";
 import * as Test from "@/Test/Alchemy";
 
@@ -2468,6 +2477,322 @@ lifecycle(2, process.env.RDS_TEST_LIFECYCLE)(
   {
     tags: ["provider:aws", "provider:aws:ec2", "provider:aws:rds", "live"],
     timeout: INSTANCE_TIMEOUT,
+  },
+);
+
+// Both guards fire while the stack is built, before any cloud call.
+test.provider(
+  "Aurora rejects the Data API transport without the Data API, and non-Aurora engines",
+  (stack) =>
+    Effect.gen(function* () {
+      const rejection = (props: Partial<AuroraProps>) =>
+        Effect.gen(function* () {
+          const exit = yield* Effect.exit(
+            stack.deploy(
+              Aurora("RejectedMigrationsDb", {
+                subnetIds: [],
+                securityGroupIds: [],
+                migrations: "./migrations",
+                ...props,
+              }),
+            ),
+          );
+          expect(Exit.isFailure(exit)).toBe(true);
+          return Exit.isFailure(exit) ? Cause.pretty(exit.cause) : "";
+        });
+
+      yield* stack.destroy();
+      expect(yield* rejection({ dataApi: false, migrationsTransport: "data-api" })).toContain(
+        'migrationsTransport "data-api" requires "dataApi" to be enabled',
+      );
+      expect(yield* rejection({ engine: "postgres" })).toContain(
+        '"migrations" support the "aurora-postgresql" and "aurora-mysql" engines',
+      );
+      yield* stack.destroy();
+    }),
+  { tags: ["provider:aws", "provider:aws:rds", "live"] },
+);
+
+// An Aurora cluster plus writer takes ~15+ minutes to create and delete,
+// far beyond the default test budget. The fixture SQL is valid in both
+// dialects, so each engine runs the same case in its own lane.
+for (const { lane, engine, cidrBlock } of [
+  { lane: 7, engine: "aurora-postgresql", cidrBlock: "10.53.0.0/16" },
+  { lane: 8, engine: "aurora-mysql", cidrBlock: "10.54.0.0/16" },
+]) {
+  lifecycle(lane, process.env.AWS_TEST_RDS_DBINSTANCE)(
+    `Aurora writer applies migrations over the Data API, then only pending ones (${engine})`,
+    (stack) =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const migrationsDir = yield* fs.makeTempDirectoryScoped({
+          prefix: "alchemy-aurora-migrations-",
+        });
+        yield* fs.writeFileString(
+          path.join(migrationsDir, "0001_users.sql"),
+          "CREATE TABLE users (id SERIAL PRIMARY KEY, name TEXT NOT NULL);",
+        );
+        const deployDb = stack.deploy(
+          Effect.gen(function* () {
+            const net = yield* Network("MigrationsNet", { cidrBlock });
+            const securityGroup = yield* SecurityGroup("MigrationsDbSecurityGroup", {
+              vpcId: net.vpcId,
+              description: "alchemy Aurora migrations test",
+            });
+            const db = yield* Aurora("MigrationsDb", {
+              engine,
+              subnetIds: net.privateSubnetIds,
+              securityGroupIds: [securityGroup.groupId],
+              migrations: migrationsDir,
+            });
+            return {
+              clusterArn: db.cluster.dbClusterArn,
+              secretArn: db.secret.secretArn,
+              writer: db.writer,
+            };
+          }),
+        );
+
+        yield* stack.destroy();
+
+        const created = yield* deployDb;
+        expect(created.writer.migrationsTable).toEqual("__alchemy_migrations");
+        expect(Object.keys(created.writer.migrationsHashes)).toEqual(["0001_users.sql"]);
+
+        yield* fs.writeFileString(
+          path.join(migrationsDir, "0002_posts.sql"),
+          "CREATE TABLE posts (id SERIAL PRIMARY KEY, title TEXT NOT NULL);",
+        );
+        const updated = yield* deployDb;
+        expect(updated.clusterArn).toEqual(created.clusterArn);
+        expect(updated.writer.dbiResourceId).toEqual(created.writer.dbiResourceId);
+        expect(Object.keys(updated.writer.migrationsHashes).sort()).toEqual([
+          "0001_users.sql",
+          "0002_posts.sql",
+        ]);
+
+        // Out-of-band: the bookkeeping rows via the Data API.
+        const applied = yield* rdsdata.executeStatement({
+          resourceArn: created.clusterArn,
+          secretArn: created.secretArn,
+          database: "app",
+          sql: "SELECT name FROM __alchemy_migrations ORDER BY id;",
+          formatRecordsAs: "JSON",
+        });
+        expect(JSON.parse(applied.formattedRecords ?? "[]")).toEqual([
+          { name: "0001_users.sql" },
+          { name: "0002_posts.sql" },
+        ]);
+
+        yield* stack.destroy();
+      }),
+    {
+      tags: ["provider:aws", "provider:aws:ec2", "provider:aws:rds", "live"],
+      timeout: LONG_INSTANCE_TIMEOUT,
+    },
+  );
+}
+
+// Writes `0001_users.sql` into a fresh temp directory; the returned `add`
+// writes later migrations into the same directory between deploys.
+const migrationsFixture = Effect.gen(function* () {
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const dir = yield* fs.makeTempDirectoryScoped({ prefix: "alchemy-rds-migrations-" });
+  const add = (name: string, sql: string) => fs.writeFileString(path.join(dir, name), sql);
+  yield* add("0001_users.sql", "CREATE TABLE users (id INT PRIMARY KEY, name TEXT NOT NULL);");
+  return { dir, add };
+});
+
+const readSecretCredentials = Effect.fn(function* (secretArn: string) {
+  const value = yield* secretsmanager.getSecretValue({ SecretId: secretArn });
+  const secretString =
+    typeof value.SecretString === "string"
+      ? value.SecretString
+      : Redacted.value(value.SecretString!);
+  return JSON.parse(secretString) as { username: string; password: string };
+});
+
+// A public PostgreSQL instance reachable only from this machine's address.
+lifecycle(4, process.env.AWS_TEST_RDS_DBINSTANCE)(
+  "standalone PostgreSQL applies migrations directly from the deploying machine",
+  (stack) =>
+    Effect.gen(function* () {
+      const migrations = yield* migrationsFixture;
+      const ip = yield* HttpClient.get("https://checkip.amazonaws.com").pipe(
+        Effect.flatMap((response) => response.text),
+        Effect.map((text) => text.trim()),
+      );
+      const deployDb = stack.deploy(
+        Effect.gen(function* () {
+          const net = yield* Network("DirectMigrationsNet", { cidrBlock: "10.55.0.0/16" });
+          const subnetGroup = yield* DBSubnetGroup("DirectMigrationsSubnets", {
+            description: "alchemy direct migrations test",
+            subnetIds: net.publicSubnetIds,
+          });
+          const securityGroup = yield* SecurityGroup("DirectMigrationsSg", {
+            vpcId: net.vpcId,
+            description: "alchemy direct migrations test",
+            ingress: [{ ipProtocol: "tcp", fromPort: 5432, toPort: 5432, cidrIpv4: `${ip}/32` }],
+          });
+          return yield* DBInstance("DirectMigrationsDb", {
+            engine: "postgres",
+            dbInstanceClass: "db.t4g.micro",
+            allocatedStorage: 20,
+            dbName: "app",
+            masterUsername: "app",
+            manageMasterUserPassword: true,
+            publiclyAccessible: true,
+            dbSubnetGroupName: subnetGroup.dbSubnetGroupName,
+            vpcSecurityGroupIds: [securityGroup.groupId],
+            migrations: migrations.dir,
+            migrationsTransport: "direct",
+          });
+        }),
+      );
+
+      yield* stack.destroy();
+
+      const created = yield* deployDb;
+      expect(Object.keys(created.migrationsHashes)).toEqual(["0001_users.sql"]);
+
+      yield* migrations.add(
+        "0002_posts.sql",
+        "CREATE TABLE posts (id INT PRIMARY KEY, title TEXT NOT NULL);",
+      );
+      const updated = yield* deployDb;
+      expect(updated.dbiResourceId).toEqual(created.dbiResourceId);
+      expect(Object.keys(updated.migrationsHashes).sort()).toEqual([
+        "0001_users.sql",
+        "0002_posts.sql",
+      ]);
+
+      // Out-of-band: read the bookkeeping rows over our own connection.
+      const credentials = yield* readSecretCredentials(updated.masterUserSecretArn!);
+      const rows = yield* Effect.acquireUseRelease(
+        Effect.tryPromise(async () => {
+          const { Client } = await importPg();
+          const client = new Client({
+            host: updated.endpointAddress,
+            port: updated.endpointPort,
+            database: "app",
+            user: credentials.username,
+            password: credentials.password,
+            ssl: { rejectUnauthorized: false },
+          });
+          await client.connect();
+          return client;
+        }),
+        (client) =>
+          Effect.tryPromise(() =>
+            client.query("SELECT name FROM __alchemy_migrations ORDER BY id;"),
+          ).pipe(Effect.map((result) => result.rows)),
+        (client) => Effect.promise(() => client.end()),
+      );
+      expect(rows).toEqual([{ name: "0001_users.sql" }, { name: "0002_posts.sql" }]);
+
+      yield* stack.destroy();
+    }),
+  {
+    tags: ["provider:aws", "provider:aws:ec2", "provider:aws:rds", "live"],
+    timeout: LONG_INSTANCE_TIMEOUT,
+  },
+);
+
+// A private MySQL instance only the in-VPC runner can reach.
+lifecycle(5, process.env.AWS_TEST_RDS_DBINSTANCE)(
+  "private MySQL applies migrations through an in-VPC MigrationRunner",
+  (stack) =>
+    Effect.gen(function* () {
+      const migrations = yield* migrationsFixture;
+      const deployDb = stack.deploy(
+        Effect.gen(function* () {
+          const net = yield* Network("RunnerMigrationsNet", { cidrBlock: "10.56.0.0/16" });
+          const subnetGroup = yield* DBSubnetGroup("RunnerMigrationsSubnets", {
+            description: "alchemy runner migrations test",
+            subnetIds: net.privateSubnetIds,
+          });
+          const runnerSecurityGroup = yield* SecurityGroup("RunnerMigrationsRunnerSg", {
+            vpcId: net.vpcId,
+            description: "alchemy migration runner",
+          });
+          const databaseSecurityGroup = yield* SecurityGroup("RunnerMigrationsDbSg", {
+            vpcId: net.vpcId,
+            description: "alchemy runner migrations database",
+            ingress: [
+              {
+                ipProtocol: "tcp",
+                fromPort: 3306,
+                toPort: 3306,
+                referencedGroupId: runnerSecurityGroup.groupId,
+              },
+            ],
+          });
+          const runner = yield* MigrationRunner("RunnerMigrationsRunner", {
+            subnetIds: net.privateSubnetIds,
+            securityGroupIds: [runnerSecurityGroup.groupId],
+          });
+          const db = yield* DBInstance("RunnerMigrationsDb", {
+            engine: "mysql",
+            dbInstanceClass: "db.t4g.micro",
+            allocatedStorage: 20,
+            dbName: "app",
+            masterUsername: "app",
+            manageMasterUserPassword: true,
+            publiclyAccessible: false,
+            dbSubnetGroupName: subnetGroup.dbSubnetGroupName,
+            vpcSecurityGroupIds: [databaseSecurityGroup.groupId],
+            migrations: migrations.dir,
+            migrationsTransport: runner,
+          });
+          return { db, runnerArn: runner.functionArn };
+        }),
+      );
+
+      yield* stack.destroy();
+
+      const created = yield* deployDb;
+      expect(Object.keys(created.db.migrationsHashes)).toEqual(["0001_users.sql"]);
+
+      yield* migrations.add(
+        "0002_posts.sql",
+        "CREATE TABLE posts (id INT PRIMARY KEY, title TEXT NOT NULL);",
+      );
+      const updated = yield* deployDb;
+      expect(updated.db.dbiResourceId).toEqual(created.db.dbiResourceId);
+      expect(Object.keys(updated.db.migrationsHashes).sort()).toEqual([
+        "0001_users.sql",
+        "0002_posts.sql",
+      ]);
+
+      // Out-of-band: the database is private, so query it through the runner.
+      const credentials = yield* readSecretCredentials(updated.db.masterUserSecretArn!);
+      const response = yield* Lambda.invoke({
+        FunctionName: updated.runnerArn,
+        Payload: JSON.stringify({
+          op: "query",
+          target: {
+            dialect: "mysql",
+            host: updated.db.endpointAddress,
+            port: updated.db.endpointPort,
+            database: "app",
+            ...credentials,
+          },
+          sql: "SELECT name FROM __alchemy_migrations ORDER BY id;",
+        }),
+      });
+      const body = yield* response.Payload!.pipe(Stream.decodeText(), Stream.mkString);
+      expect(JSON.parse(body)).toEqual({
+        ok: true,
+        rows: [{ name: "0001_users.sql" }, { name: "0002_posts.sql" }],
+      });
+
+      yield* stack.destroy();
+    }),
+  {
+    tags: ["provider:aws", "provider:aws:ec2", "provider:aws:lambda", "provider:aws:rds", "live"],
+    timeout: LONG_INSTANCE_TIMEOUT,
   },
 );
 

@@ -8,7 +8,10 @@ export const NUXT_FRAMEWORK_SPECIFIER = "@alchemy.run/frontend-frameworks/nuxt";
 /** The AWS Lambda deploy target for the Nuxt build. */
 export const NUXT_AWS_TARGET_SPECIFIER = "@alchemy.run/frontend-frameworks/nuxt/aws";
 
-export interface NuxtProps extends FrameworkSiteProps {
+/** The Node deploy target for the Lambda Web Function server (the default). */
+export const NUXT_WEB_TARGET_SPECIFIER = "@alchemy.run/frontend-frameworks/nuxt/node";
+
+export type NuxtProps = FrameworkSiteProps<{
   /**
    * Nuxt config overrides merged over the project's own `nuxt.config.ts`
    * (the highest-priority c12 layer — a value here wins over the file).
@@ -22,13 +25,20 @@ export interface NuxtProps extends FrameworkSiteProps {
    * overridden here.
    */
   nuxt?: Record<string, unknown>;
-}
+}>;
 
 /**
- * Deploy a Nuxt application to AWS: the nitro server on a streaming Lambda
- * Function URL, static assets (prerendered pages included) in S3, and a
+ * Deploy a Nuxt application to AWS: the nitro server on a Lambda Web
+ * Function, static assets (prerendered pages included) in S3, and a
  * CloudFront distribution whose edge router serves uploaded files from S3
  * and forwards everything else to the server.
+ *
+ * The server runs on a Lambda Web Function: the framework's Node server
+ * (built with the `@alchemy.run/frontend-frameworks/nuxt/node` deploy
+ * target) serves many requests per environment and streams responses. Set
+ * `server: "function"` to use a Lambda Function behind a streaming Function
+ * URL instead, built with the `/aws` target below, for Regions without Web
+ * Functions.
  *
  * The build runs through `@alchemy.run/frontend-frameworks/nuxt` with the
  * `@alchemy.run/frontend-frameworks/nuxt/aws` deploy target (nitro's `aws-lambda` preset,
@@ -88,12 +98,13 @@ export interface NuxtProps extends FrameworkSiteProps {
  *
  * @resource
  */
-export const Nuxt = (id: string, props: InputProps<NuxtProps> = {}) => {
+export const Nuxt = (id: string, props: InputProps<NuxtProps, "server"> = {}) => {
   const p = props as NuxtProps;
   return makeFrameworkSite(id, props, {
     name: "Nuxt",
     framework: NUXT_FRAMEWORK_SPECIFIER,
     target: NUXT_AWS_TARGET_SPECIFIER,
+    webTarget: NUXT_WEB_TARGET_SPECIFIER,
     options: p.nuxt !== undefined ? { nuxt: p.nuxt } : undefined,
   }).pipe(Namespace.push(id));
 };

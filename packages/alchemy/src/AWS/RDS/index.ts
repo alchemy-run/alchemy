@@ -40,6 +40,8 @@ export * from "./DescribePendingMaintenanceActions.ts";
 export * from "./DescribePendingMaintenanceActionsHttp.ts";
 export * from "./FailoverDBCluster.ts";
 export * from "./FailoverDBClusterHttp.ts";
+export * from "./MigrationRunner.ts";
+export type { MigrationsTransport } from "./Migrations.ts";
 export * from "./RdsEventSource.ts";
 export * from "./RebootDBInstance.ts";
 export * from "./RebootDBInstanceHttp.ts";
