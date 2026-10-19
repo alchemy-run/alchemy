@@ -40,6 +40,7 @@ export const makeCurHttpBinding = <I extends object, A, E, R>(options: {
   operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* options.operation.pipe(pinCur, AWSBindings.withCredentials);
 
     return Effect.fn(function* () {
@@ -51,7 +52,7 @@ export const makeCurHttpBinding = <I extends object, A, E, R>(options: {
             Resource: ["*"],
           },
         ];
-        yield* AWSBindings.bind`AWS.CostAndUsageReport.${options.capability}()`({
+        yield* bind`AWS.CostAndUsageReport.${options.capability}()`({
           policyStatements,
         });
       }
@@ -88,12 +89,13 @@ export const makeReportDefinitionHttpBinding = <
   operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* options.operation.pipe(pinCur, AWSBindings.withCredentials);
 
     return Effect.fn(function* (report: ReportDefinition) {
       const ReportName = yield* report.reportName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`AWS.CostAndUsageReport.${options.capability}(${report})`({
+        yield* bind`AWS.CostAndUsageReport.${options.capability}(${report})`({
           policyStatements: [
             {
               Effect: "Allow",

@@ -10,13 +10,14 @@ import { StartBackupJob, type StartBackupJobRequest } from "./StartBackupJob.ts"
 export const StartBackupJobHttp = Layer.effect(
   StartBackupJob,
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const startBackupJob = yield* AWSBindings.withCredentials(backup.startBackupJob);
 
     return Effect.fn(function* <R extends Role>(vault: BackupVault, backupRole: R) {
       const BackupVaultName = yield* vault.backupVaultName;
       const RoleArn = yield* backupRole.roleArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`AWS.Backup.StartBackupJob(${vault}, ${backupRole})`({
+        yield* bind`AWS.Backup.StartBackupJob(${vault}, ${backupRole})`({
           policyStatements: [
             {
               Effect: "Allow",

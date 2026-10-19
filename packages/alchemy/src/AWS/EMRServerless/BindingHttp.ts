@@ -40,6 +40,7 @@ export const makeEmrServerlessHttpBinding = <I, A, E, R>(options: {
   passRole?: boolean;
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (application: Application) {
@@ -60,7 +61,7 @@ export const makeEmrServerlessHttpBinding = <I, A, E, R>(options: {
               },
             ]
           : [];
-        yield* AWSBindings.bind`${options.tag}(${application})`({
+        yield* bind`${options.tag}(${application})`({
           policyStatements: [
             {
               Effect: "Allow",

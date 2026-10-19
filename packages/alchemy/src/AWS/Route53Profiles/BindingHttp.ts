@@ -29,12 +29,13 @@ export const makeProfilesHttpBinding = <I extends { ProfileId?: string }, A, E, 
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (profile: Profile) {
       const ProfileId = yield* profile.profileId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}(${profile})`({
+        yield* bind`${options.tag}(${profile})`({
           policyStatements: [
             {
               Effect: "Allow",

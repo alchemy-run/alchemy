@@ -64,12 +64,13 @@ export const makeEcsClusterHttpBinding = <I extends { cluster?: string }, A, E, 
   resources: readonly EcsClusterIamResource[] | "cluster-condition";
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (cluster: Cluster) {
       const ClusterArn = yield* cluster.clusterArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}(${cluster})`({
+        yield* bind`${options.tag}(${cluster})`({
           policyStatements: [
             options.resources === "cluster-condition"
               ? {
@@ -135,13 +136,14 @@ export const makeEcsTaskLaunchHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (cluster: Cluster, task: Task) {
       const ClusterArn = yield* cluster.clusterArn;
       const TaskDefinitionArn = yield* task.taskDefinitionArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}(${cluster}, ${task})`({
+        yield* bind`${options.tag}(${cluster}, ${task})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -208,13 +210,14 @@ export const makeEcsServiceHttpBinding = <I, A, E, R>(options: {
   inject?: boolean;
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (service: Service) {
       const ServiceArn = yield* service.serviceArn;
       const ClusterArn = yield* service.clusterArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}(${service})`({
+        yield* bind`${options.tag}(${service})`({
           policyStatements: [
             {
               Effect: "Allow",

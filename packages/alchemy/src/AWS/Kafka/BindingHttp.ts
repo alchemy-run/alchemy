@@ -47,12 +47,13 @@ export const makeKafkaClusterHttpBinding = <I extends { ClusterArn: string }, A,
   topicScoped?: boolean;
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (cluster: ServerlessCluster) {
       const ClusterArn = yield* cluster.clusterArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}(${cluster})`({
+        yield* bind`${options.tag}(${cluster})`({
           policyStatements: [
             {
               Effect: "Allow",

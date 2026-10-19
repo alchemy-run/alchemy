@@ -36,12 +36,13 @@ export const makeMediaConnectFlowHttpBinding = <I extends { FlowArn: string }, A
   extraResources?: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (flow: Flow) {
       const FlowArn = yield* flow.flowArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}(${flow})`({
+        yield* bind`${options.tag}(${flow})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -75,11 +76,12 @@ export const makeMediaConnectAccountHttpBinding = <I, A, E, R>(options: {
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}()`({
+        yield* bind`${options.tag}()`({
           policyStatements: [
             {
               Effect: "Allow",

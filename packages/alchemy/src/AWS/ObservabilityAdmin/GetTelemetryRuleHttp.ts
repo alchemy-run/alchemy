@@ -14,12 +14,13 @@ import type { TelemetryRule } from "./TelemetryRule.ts";
 export const GetTelemetryRuleHttp = Layer.effect(
   GetTelemetryRule,
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const getTelemetryRule = yield* AWSBindings.withCredentials(obs.getTelemetryRule);
 
     return Effect.fn(function* (rule: TelemetryRule) {
       const RuleIdentifier = yield* rule.ruleName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`AWS.ObservabilityAdmin.GetTelemetryRule(${rule})`({
+        yield* bind`AWS.ObservabilityAdmin.GetTelemetryRule(${rule})`({
           policyStatements: [
             {
               Effect: "Allow",

@@ -62,6 +62,7 @@ export const makeAppConfigHttpBinding = <
   Layer.effect(
     service,
     Effect.gen(function* () {
+      const bind = yield* AWSBindings.Bind;
       const operation = yield* AWSBindings.withCredentials(options.operation);
 
       return Effect.fn(function* (...args: Parameters<Shape>) {
@@ -81,7 +82,7 @@ export const makeAppConfigHttpBinding = <
             region: string;
           }>;
           const { actions, resources } = iam({ accountId, region });
-          yield* AWSBindings.bind`${service.key}(${label})`({
+          yield* bind`${service.key}(${label})`({
             policyStatements: [
               {
                 Effect: "Allow",

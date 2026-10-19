@@ -5,7 +5,8 @@ import * as Redacted from "effect/Redacted";
 import * as Output from "../../Output.ts";
 import type { Url } from "../../Redis/index.ts";
 import { UrlMissing as RedisUrlMissing } from "../../Redis/index.ts";
-import { bindGcpHost, type GcpIamGrant } from "../Host.ts";
+import * as GCPBindings from "../GCPBindings.ts";
+import { type GcpIamGrant } from "../Host.ts";
 import type { Instance } from "./Instance.ts";
 
 export const REDIS_URL_ENV = "REDIS_URL";
@@ -69,13 +70,14 @@ export const makeRedisBinding = <Client>(options: {
   makeClient: (url: Url) => Client;
 }) =>
   Effect.gen(function* () {
-    const getAuthString = yield* redis.getAuthStringProjectsLocationsInstances;
+    const bind = yield* GCPBindings.Bind;
+    const getAuthString = yield* GCPBindings.withCredentials(
+      redis.getAuthStringProjectsLocationsInstances,
+    );
     return Effect.fn(function* (instance: Instance) {
-      yield* bindGcpHost({
-        tag: options.tag,
-        resource: instance,
-        iam: [authGrantOf(instance)],
-      });
+      if (!globalThis.__ALCHEMY_RUNTIME__) {
+        yield* bind`${options.tag}(${instance})`({ iam: [authGrantOf(instance)] });
+      }
       // A composed Output's binding key is its inspect string, which embeds
       // the mapping functions' source — and that differs between the
       // deploy-time source and the bundled runtime. Name it per instance.

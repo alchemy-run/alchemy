@@ -41,13 +41,14 @@ export const makeSmsVoicePhoneNumberHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (phoneNumber: PhoneNumber) {
       // Output yields a DEFERRED effect — resolve again per invocation below.
       const PhoneNumberArn = yield* phoneNumber.phoneNumberArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}(${phoneNumber})`({
+        yield* bind`${options.tag}(${phoneNumber})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -90,13 +91,14 @@ export const makeSmsVoiceOptOutListHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (optOutList: OptOutList) {
       // Output yields a DEFERRED effect — resolve again per invocation below.
       const OptOutListArn = yield* optOutList.optOutListArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}(${optOutList})`({
+        yield* bind`${options.tag}(${optOutList})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -130,11 +132,12 @@ export const makeSmsVoiceAccountHttpBinding = <I, A, E, R>(options: {
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}()`({
+        yield* bind`${options.tag}()`({
           policyStatements: [
             {
               Effect: "Allow",

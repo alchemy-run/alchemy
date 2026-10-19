@@ -30,13 +30,14 @@ export const makeDataBrewJobHttpBinding = <I extends { Name?: string }, A, E, R>
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* <J extends Job>(job: J) {
       // Outputs yield a DEFERRED effect — resolve again per invocation below.
       const JobName = yield* job.jobName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}(${job})`({
+        yield* bind`${options.tag}(${job})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -66,12 +67,13 @@ export const makeDataBrewProjectHttpBinding = <I extends { Name?: string }, A, E
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* <P extends Project>(project: P) {
       const ProjectName = yield* project.projectName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}(${project})`({
+        yield* bind`${options.tag}(${project})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -103,12 +105,13 @@ export const makeDataBrewRecipeHttpBinding = <I extends { Name?: string }, A, E,
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* <Rec extends Recipe>(recipe: Rec) {
       const RecipeName = yield* recipe.recipeName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}(${recipe})`({
+        yield* bind`${options.tag}(${recipe})`({
           policyStatements: [
             {
               Effect: "Allow",

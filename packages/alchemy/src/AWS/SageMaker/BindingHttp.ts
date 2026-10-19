@@ -29,12 +29,13 @@ export const makeFeatureGroupHttpBinding = <Req, I, A, E, R>(options: {
   prepare: (request: Req, featureGroupName: string) => I;
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (featureGroup: FeatureGroup) {
       const FeatureGroupName = yield* featureGroup.featureGroupName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}(${featureGroup})`({
+        yield* bind`${options.tag}(${featureGroup})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -66,12 +67,13 @@ export const makeEndpointHttpBinding = <I extends { EndpointName?: string }, A, 
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (endpoint: Endpoint) {
       const EndpointName = yield* endpoint.endpointName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}(${endpoint})`({
+        yield* bind`${options.tag}(${endpoint})`({
           policyStatements: [
             {
               Effect: "Allow",

@@ -11,12 +11,13 @@ import { DescribeAutoScalingGroup } from "./DescribeAutoScalingGroup.ts";
 export const DescribeAutoScalingGroupHttp = Layer.effect(
   DescribeAutoScalingGroup,
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const describe = yield* AWSBindings.withCredentials(autoscaling.describeAutoScalingGroups);
 
     return Effect.fn(function* (group: AutoScalingGroup) {
       const AutoScalingGroupName = yield* group.autoScalingGroupName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`AWS.AutoScaling.DescribeAutoScalingGroup(${group})`({
+        yield* bind`AWS.AutoScaling.DescribeAutoScalingGroup(${group})`({
           policyStatements: [
             {
               Effect: "Allow",

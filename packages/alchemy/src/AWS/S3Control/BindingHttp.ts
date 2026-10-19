@@ -56,13 +56,14 @@ export const makeS3ControlAccessPointHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (accessPoint: AccessPoint) {
       const AccountId = yield* accessPoint.accountId;
       const Name = yield* accessPoint.accessPointName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}(${accessPoint})`({
+        yield* bind`${options.tag}(${accessPoint})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -105,13 +106,14 @@ export const makeS3ControlMrapHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* options.operation.pipe(inMrapRegion, AWSBindings.withCredentials);
 
     return Effect.fn(function* (mrap: MultiRegionAccessPoint) {
       const AccountId = yield* mrap.accountId;
       const Mrap = yield* mrap.multiRegionAccessPointArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}(${mrap})`({
+        yield* bind`${options.tag}(${mrap})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -157,6 +159,7 @@ export const makeS3ControlAccountHttpBinding = <I extends { AccountId: string },
   passRole?: boolean;
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
     const getCallerIdentity = yield* AWSBindings.withCredentials(sts.getCallerIdentity);
 
@@ -180,7 +183,7 @@ export const makeS3ControlAccountHttpBinding = <I extends { AccountId: string },
             Resource: ["*"],
           });
         }
-        yield* AWSBindings.bind`${options.tag}()`({
+        yield* bind`${options.tag}()`({
           policyStatements,
         });
       }

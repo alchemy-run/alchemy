@@ -19,6 +19,7 @@ import {
 export const IdentityPoolAuthHttp = Layer.effect(
   IdentityPoolAuth,
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const getId = yield* AWSBindings.withCredentials(ci.getId);
     const getCredentialsForIdentity = yield* AWSBindings.withCredentials(
       ci.getCredentialsForIdentity,
@@ -31,7 +32,7 @@ export const IdentityPoolAuthHttp = Layer.effect(
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         // No IAM is required for the public identity flows; the binding is
         // recorded so the identity pool deploys before the function.
-        yield* AWSBindings.bind`AWS.Cognito.IdentityPoolAuth(${pool})`({
+        yield* bind`AWS.Cognito.IdentityPoolAuth(${pool})`({
           policyStatements: [],
         });
       }

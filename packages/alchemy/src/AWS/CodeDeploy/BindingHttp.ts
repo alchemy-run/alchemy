@@ -43,6 +43,7 @@ export const makeCodeDeployGroupNameHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* <G extends DeploymentGroup>(group: G) {
@@ -50,7 +51,7 @@ export const makeCodeDeployGroupNameHttpBinding = <
       const ApplicationName = yield* group.applicationName;
       const DeploymentGroupName = yield* group.deploymentGroupName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}(${group})`({
+        yield* bind`${options.tag}(${group})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -89,11 +90,12 @@ export const makeCodeDeployGroupHttpBinding = <I, A, E, R>(options: {
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* <G extends DeploymentGroup>(group: G) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}(${group})`({
+        yield* bind`${options.tag}(${group})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -129,12 +131,13 @@ export const makeCodeDeployApplicationHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* <P extends Application>(application: P) {
       const ApplicationName = yield* application.applicationName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}(${application})`({
+        yield* bind`${options.tag}(${application})`({
           policyStatements: [
             {
               Effect: "Allow",

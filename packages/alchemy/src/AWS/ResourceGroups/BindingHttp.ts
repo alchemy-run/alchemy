@@ -35,6 +35,7 @@ export const makeResourceGroupsGroupHttpBinding = <I extends { Group?: string },
   supportingActions?: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (group: Group) {
@@ -51,7 +52,7 @@ export const makeResourceGroupsGroupHttpBinding = <I extends { Group?: string },
                 },
               ]
             : [];
-        yield* AWSBindings.bind`${options.tag}(${group})`({
+        yield* bind`${options.tag}(${group})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -86,11 +87,12 @@ export const makeResourceGroupsAccountHttpBinding = <I, A, E, R>(options: {
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}()`({
+        yield* bind`${options.tag}()`({
           policyStatements: [
             {
               Effect: "Allow",

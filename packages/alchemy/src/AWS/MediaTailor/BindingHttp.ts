@@ -28,11 +28,12 @@ export const makeMediaTailorHttpBinding = <I, A, E, R>(options: {
   operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`AWS.MediaTailor.${options.capability}()`({
+        yield* bind`AWS.MediaTailor.${options.capability}()`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -74,12 +75,13 @@ export const makeMediaTailorPlaybackHttpBinding = <
   operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (config: PlaybackConfiguration) {
       const name = yield* config.name;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`AWS.MediaTailor.${options.capability}(${config})`({
+        yield* bind`AWS.MediaTailor.${options.capability}(${config})`({
           policyStatements: [
             {
               Effect: "Allow",

@@ -20,12 +20,13 @@ import type { ResolverRule } from "./ResolverRule.ts";
 export const ListResolverRuleAssociationsHttp = Layer.effect(
   ListResolverRuleAssociations,
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(r53r.listResolverRuleAssociations);
 
     return Effect.fn(function* (rule: ResolverRule) {
       const ResolverRuleId = yield* rule.resolverRuleId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`AWS.Route53Resolver.ListResolverRuleAssociations(${rule})`({
+        yield* bind`AWS.Route53Resolver.ListResolverRuleAssociations(${rule})`({
           policyStatements: [
             {
               Effect: "Allow",

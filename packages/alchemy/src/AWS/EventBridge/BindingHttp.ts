@@ -54,6 +54,7 @@ export const makeEventBridgeAccountHttpBinding = <I, A, E, R>(options: {
   resources?: (env: { accountId: string; region: string }) => readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* () {
@@ -62,7 +63,7 @@ export const makeEventBridgeAccountHttpBinding = <I, A, E, R>(options: {
           accountId: string;
           region: string;
         }>;
-        yield* AWSBindings.bind`${options.tag}()`({
+        yield* bind`${options.tag}()`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -103,6 +104,7 @@ export const makeEventBridgeBusHttpBinding = <I, A, E, R>(options: {
   resources?: (env: { accountId: string; region: string }) => readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (bus?: EventBus) {
@@ -120,7 +122,7 @@ export const makeEventBridgeBusHttpBinding = <I, A, E, R>(options: {
           ? Output.interpolate`${bus.eventBusArn}`
           : (`arn:aws:events:${region}:${accountId}:event-bus/default` as const);
 
-        yield* AWSBindings.bind`${options.tag}(${bus ?? "default"})`({
+        yield* bind`${options.tag}(${bus ?? "default"})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -160,13 +162,14 @@ export const makeEventBridgeRuleHttpBinding = <I, A, E, R>(options: {
   ruleNameKey: string;
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (rule: Rule) {
       const RuleName = yield* rule.ruleName;
       const EventBusName = yield* rule.eventBusName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}(${rule})`({
+        yield* bind`${options.tag}(${rule})`({
           policyStatements: [
             {
               Effect: "Allow",

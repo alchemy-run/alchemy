@@ -115,10 +115,10 @@ const imagePolicyStatements = <Req, Res, Err, Self>(
 
 /**
  * Build a MicroVM runtime binding bound to a {@link MicrovmImage}. At deploy it
- * grants the IAM statements to the host via `AWSBindings.bind` — a native
- * host's own role, or the role minted for an external host. At runtime it
- * calls the distilled operation resolved with `AWSBindings.withCredentials`,
- * signing in the image's region on an external host.
+ * grants the IAM statements to the host via `AWSBindings.Bind`: the host's
+ * own role, or the Role Alchemy creates for it. At runtime it calls the
+ * distilled operation resolved with `AWSBindings.withCredentials`, signing in
+ * the image's region on a host with a created key.
  */
 export const makeImageBinding = <Req, Res, Err, Self>(
   options: ImageBindingOptions<Req, Res, Err, Self>,
@@ -126,20 +126,21 @@ export const makeImageBinding = <Req, Res, Err, Self>(
   Layer.effect(
     options.binding as any,
     Effect.gen(function* () {
+      const bind = yield* AWSBindings.Bind;
       return Effect.fn(function* (image: MicrovmImage) {
         // Accessors (registered on the host at deploy, resolved at runtime).
         const imageArn = yield* image.imageArn;
         // Region is derived from the resolved image ARN — via `Effect.map` of
         // the accessor, NOT a second Output binding (whose env key would embed
         // the mapper's source text and is brittle).
-        // resolved per bind because an external host signs in the image's own region
+        // resolved per bind because a host with a created key signs in the image's own region
         const run = yield* AWSBindings.withCredentials(
           options.operation,
           Effect.succeed(Effect.map(imageArn, regionFromArn)),
         );
 
         if (!globalThis.__ALCHEMY_RUNTIME__) {
-          yield* AWSBindings.bind`AWS.Lambda.${options.name}(${image})`({
+          yield* bind`AWS.Lambda.${options.name}(${image})`({
             policyStatements: imagePolicyStatements(image, options),
           });
         }
@@ -178,10 +179,11 @@ export const makeAccountBinding = <Req, Res, Err, Self>(
   Layer.effect(
     options.binding as any,
     Effect.gen(function* () {
+      const bind = yield* AWSBindings.Bind;
       const run = yield* AWSBindings.withCredentials(options.operation);
       return Effect.fn(function* () {
         if (!globalThis.__ALCHEMY_RUNTIME__) {
-          yield* AWSBindings.bind`AWS.Lambda.${options.name}()`({
+          yield* bind`AWS.Lambda.${options.name}()`({
             policyStatements: [{ Effect: "Allow", Action: options.actions, Resource: ["*"] }],
           });
         }

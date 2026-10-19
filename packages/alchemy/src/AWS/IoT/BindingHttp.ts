@@ -38,11 +38,12 @@ export const makeIotAccountHttpBinding = <I, A, E, R>(options: {
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}()`({
+        yield* bind`${options.tag}()`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -73,12 +74,13 @@ export const makeIotThingHttpBinding = <I extends { thingName: string }, A, E, R
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (thing: Thing) {
       const thingName = yield* thing.thingName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}(${thing})`({
+        yield* bind`${options.tag}(${thing})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -119,12 +121,13 @@ export const makeIotTopicHttpBinding = <I, A, E, R>(options: {
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (topicFilter?: string) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const { accountId, region } = yield* currentEnvironment;
-        yield* AWSBindings.bind`${options.tag}(${topicFilter ?? "*"})`({
+        yield* bind`${options.tag}(${topicFilter ?? "*"})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -158,12 +161,13 @@ export const makeIotClientHttpBinding = <I, A, E, R>(options: {
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (clientIdFilter?: string) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const { accountId, region } = yield* currentEnvironment;
-        yield* AWSBindings.bind`${options.tag}(${clientIdFilter ?? "*"})`({
+        yield* bind`${options.tag}(${clientIdFilter ?? "*"})`({
           policyStatements: [
             {
               Effect: "Allow",

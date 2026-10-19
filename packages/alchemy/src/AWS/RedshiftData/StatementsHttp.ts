@@ -25,6 +25,7 @@ const isTerminal = (status: string | undefined): boolean =>
 export const StatementsHttp = Layer.effect(
   Statements,
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const executeStatement = yield* AWSBindings.withCredentials(data.executeStatement);
     const batchExecuteStatement = yield* AWSBindings.withCredentials(data.batchExecuteStatement);
     const describeStatement = yield* AWSBindings.withCredentials(data.describeStatement);
@@ -40,7 +41,7 @@ export const StatementsHttp = Layer.effect(
     return Effect.fn(function* (workgroup: Workgroup, options: StatementsOptions = {}) {
       const workgroupName = yield* workgroup.workgroupName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`AWS.RedshiftData.Statements(${workgroup})`({
+        yield* bind`AWS.RedshiftData.Statements(${workgroup})`({
           policyStatements: [
             {
               // Workgroup-scoped Data API actions (submit statements and

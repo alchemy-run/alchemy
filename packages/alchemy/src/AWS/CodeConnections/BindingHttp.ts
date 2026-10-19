@@ -37,12 +37,13 @@ export const makeConnectionScopedHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (connection: Connection) {
       const ConnectionArn = yield* connection.connectionArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}(${connection})`({
+        yield* bind`${options.tag}(${connection})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -83,12 +84,13 @@ export const makeRepositoryLinkScopedHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (repositoryLink: RepositoryLink) {
       const RepositoryLinkId = yield* repositoryLink.repositoryLinkId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}(${repositoryLink})`({
+        yield* bind`${options.tag}(${repositoryLink})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -130,13 +132,14 @@ export const makeSyncConfigurationScopedHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (syncConfiguration: SyncConfiguration) {
       const ResourceName = yield* syncConfiguration.resourceName;
       const SyncType = yield* syncConfiguration.syncType;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}(${syncConfiguration})`({
+        yield* bind`${options.tag}(${syncConfiguration})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -171,11 +174,12 @@ export const makeCodeConnectionsAccountHttpBinding = <I, A, E, R>(options: {
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}()`({
+        yield* bind`${options.tag}()`({
           policyStatements: [
             {
               Effect: "Allow",

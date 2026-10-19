@@ -5,7 +5,7 @@ import {
   type ImageRegistryTarget,
   type ImageSourceLike,
 } from "../../Docker/ImageSource.ts";
-import { nativeHostBundle } from "../NativeHost.ts";
+import { roleHostBundle } from "../AWSBindings.ts";
 import { getEcrRegistryCredentials } from "./Image.ts";
 
 /**
@@ -108,13 +108,13 @@ await bootstrap(entrypoint);
 `;
 
 /**
- * An ECR image runs on a native AWS host (ECS, EKS), so a bundled `main`
- * folds `__ALCHEMY_NATIVE_HOST__` to `"AWS"` (see `nativeHostBundle`).
+ * An ECR image runs on ECS or EKS, as an IAM role, so a bundled `main` is
+ * built with {@link roleHostBundle}.
  */
-const onNativeHost = <S extends ImageSourceLike>(source: S): S =>
+const onRoleHost = <S extends ImageSourceLike>(source: S): S =>
   source.main === undefined
     ? source
-    : { ...source, build: { ...source.build, input: nativeHostBundle(source.build?.input ?? {}) } };
+    : { ...source, build: { ...source.build, input: roleHostBundle(source.build?.input ?? {}) } };
 
 /**
  * Init-time constructor for the ECR image-source resolver: the shared
@@ -185,7 +185,7 @@ export const makeImageSource = Effect.gen(function* () {
       credentials: getEcrRegistryCredentials,
     } satisfies ImageRegistryTarget<any>;
     const resolved = yield* images.resolve(
-      { ...options, source: onNativeHost(options.source) },
+      { ...options, source: onRoleHost(options.source) },
       target,
     );
     return {
@@ -197,9 +197,9 @@ export const makeImageSource = Effect.gen(function* () {
   });
 
   const hash = (options: Parameters<typeof images.hash>[0]) =>
-    images.hash({ ...options, source: onNativeHost(options.source) });
+    images.hash({ ...options, source: onRoleHost(options.source) });
   const watchMain = (options: Parameters<typeof images.watchMain>[0]) =>
-    images.watchMain({ ...options, source: onNativeHost(options.source) });
+    images.watchMain({ ...options, source: onRoleHost(options.source) });
 
   return { resolve, hash, watchMain };
 });

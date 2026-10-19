@@ -16,6 +16,7 @@ import type { Repository } from "./Repository.ts";
 export const CopyPackageVersionsHttp = Layer.effect(
   CopyPackageVersions,
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(codeartifact.copyPackageVersions);
 
     return Effect.fn(function* (repository: Repository) {
@@ -23,7 +24,7 @@ export const CopyPackageVersionsHttp = Layer.effect(
       const DomainOwner = yield* repository.domainOwner;
       const RepositoryName = yield* repository.repositoryName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`AWS.CodeArtifact.CopyPackageVersions(${repository})`({
+        yield* bind`AWS.CodeArtifact.CopyPackageVersions(${repository})`({
           policyStatements: [
             {
               Effect: "Allow",

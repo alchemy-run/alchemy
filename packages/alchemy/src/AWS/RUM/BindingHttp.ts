@@ -18,14 +18,15 @@ import type { AppMonitor } from "./AppMonitor.ts";
  * the hosting Function and grant `actions` on the monitor's ARN. A no-op
  * inside the deployed runtime.
  */
-export const bindRumAppMonitorPolicy = (options: {
-  tag: string;
-  monitor: AppMonitor;
-  actions: readonly string[];
-}) =>
-  Effect.gen(function* () {
+export const BindRumAppMonitorPolicy = Effect.gen(function* () {
+  const bind = yield* AWSBindings.Bind;
+  return Effect.fn(function* (options: {
+    tag: string;
+    monitor: AppMonitor;
+    actions: readonly string[];
+  }) {
     if (!globalThis.__ALCHEMY_RUNTIME__) {
-      yield* AWSBindings.bind`${options.tag}(${options.monitor})`({
+      yield* bind`${options.tag}(${options.monitor})`({
         policyStatements: [
           {
             Effect: "Allow",
@@ -36,6 +37,7 @@ export const bindRumAppMonitorPolicy = (options: {
       });
     }
   });
+});
 
 /**
  * Build the impl Effect for an operation scoped to a single bound
@@ -52,6 +54,7 @@ export const makeRumAppMonitorHttpBinding = <I extends { Name: string }, A, E, R
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bindRumAppMonitorPolicy = yield* BindRumAppMonitorPolicy;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (monitor: AppMonitor) {

@@ -11,7 +11,7 @@ import type { Function } from "./Function.ts";
  * the builders below. Everything except the operation, the IAM action list,
  * and the granted ARNs is boilerplate. How the host reaches AWS (native vs
  * external, see `AWSBindings.ts`) is handled by `AWSBindings.withCredentials`
- * and `AWSBindings.bind`.
+ * and `AWSBindings.Bind`.
  */
 
 /** Region segment of an AWS ARN (`arn:partition:service:<region>:...`). */
@@ -29,7 +29,7 @@ export const makeFunctionHttpBinding = <I extends { FunctionName?: string }, A, 
   /**
    * The distilled operation; `FunctionName` is injected from the function.
    * Resolved with the host's credentials (see `AWSBindings.withCredentials`),
-   * signing in the function's region on an external host.
+   * signing in the function's region on a host with a created key.
    */
   operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
   /** IAM actions granted on `resources`. */
@@ -38,15 +38,16 @@ export const makeFunctionHttpBinding = <I extends { FunctionName?: string }, A, 
   resources?: (func: Function) => (string | OutputType<string>)[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     return Effect.fn(function* (func: Function) {
       const FunctionArn = yield* func.functionArn;
-      // resolved per bind because an external host signs in the function's own region
+      // resolved per bind because a host with a created key signs in the function's own region
       const op = yield* AWSBindings.withCredentials(
         options.operation,
         Effect.succeed(Effect.map(FunctionArn, regionFromArn)),
       );
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}(${func})`({
+        yield* bind`${options.tag}(${func})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -80,11 +81,12 @@ export const makeLambdaAccountHttpBinding = <I, A, E, R>(options: {
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}()`({
+        yield* bind`${options.tag}()`({
           policyStatements: [
             {
               Effect: "Allow",

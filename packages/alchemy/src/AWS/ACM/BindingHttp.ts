@@ -65,12 +65,13 @@ export const makeAcmCertificateHttpBinding = <Req extends object, Out, Err>(
   config: AcmHttpBindingConfig<Req, Out, Err>,
 ) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* config.operation.pipe(withAcmRegion, AWSBindings.withCredentials);
 
     return Effect.fn(function* (certificate: Certificate) {
       const CertificateArn = yield* certificate.certificateArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`AWS.ACM.${config.capability}(${certificate})`({
+        yield* bind`AWS.ACM.${config.capability}(${certificate})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -128,11 +129,12 @@ export const makeAcmAccountHttpBinding = <Req extends object, Out, Err>(
   config: AcmAccountHttpBindingConfig<Req, Out, Err>,
 ) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* config.operation.pipe(withAcmRegion, AWSBindings.withCredentials);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`AWS.ACM.${config.capability}()`({
+        yield* bind`AWS.ACM.${config.capability}()`({
           policyStatements: [
             {
               Effect: "Allow",

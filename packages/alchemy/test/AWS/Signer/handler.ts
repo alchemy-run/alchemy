@@ -45,6 +45,7 @@ export default SignerTestFunction.make(
     memorySize: 512,
   },
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     // The profile under test: AWS-managed Lambda code-signing material.
     const profile = yield* Signer.SigningProfile("BindingsProfile", {
       platformId: "AWSLambda-SHA384-ECDSA",
@@ -81,7 +82,7 @@ export default SignerTestFunction.make(
     // job ("S3 bucket … not accessible") — grant the documented signing-
     // caller set the object-level bindings above don't cover.
     if (!globalThis.__ALCHEMY_RUNTIME__) {
-      yield* AWSBindings.bind`SignerSourceDestinationBucketAccess`({
+      yield* bind`SignerSourceDestinationBucketAccess`({
         policyStatements: [
           {
             Effect: "Allow",

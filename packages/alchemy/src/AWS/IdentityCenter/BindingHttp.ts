@@ -46,6 +46,7 @@ export const makeIdentityStoreHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (instance: Instance) {
@@ -54,7 +55,7 @@ export const makeIdentityStoreHttpBinding = <
         const { accountId } = yield* AWSEnvironment.current as unknown as Effect.Effect<{
           accountId: string;
         }>;
-        yield* AWSBindings.bind`${options.tag}(${instance})`({
+        yield* bind`${options.tag}(${instance})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -103,12 +104,13 @@ export const makeIdentityCenterInstanceHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (instance: Instance) {
       const InstanceArn = yield* instance.instanceArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}(${instance})`({
+        yield* bind`${options.tag}(${instance})`({
           policyStatements: [
             {
               Effect: "Allow",

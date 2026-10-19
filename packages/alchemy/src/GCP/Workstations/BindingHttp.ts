@@ -1,5 +1,5 @@
 import * as Effect from "effect/Effect";
-import { bindGcpHost } from "../Host.ts";
+import * as GCPBindings from "../GCPBindings.ts";
 import { type BindingIam, type GcpHttpOp, grantFor } from "../HttpBinding.ts";
 import type { WorkstationCluster } from "./WorkstationCluster.ts";
 import type { WorkstationClustersWorkstationConfig } from "./WorkstationClustersWorkstationConfig.ts";
@@ -15,13 +15,14 @@ export const makeClusterHttpBinding = <I extends { name?: string }, A, E>(option
   operation: GcpHttpOp<I, A, E>;
 }) =>
   Effect.gen(function* () {
-    const run = yield* options.operation;
+    const bind = yield* GCPBindings.Bind;
+    const run = yield* GCPBindings.withCredentials(options.operation);
     return Effect.fn(function* (cluster: WorkstationCluster) {
-      yield* bindGcpHost({
-        tag: options.tag,
-        resource: cluster,
-        iam: [grantFor(options.iam, cluster.name)],
-      });
+      if (!globalThis.__ALCHEMY_RUNTIME__) {
+        yield* bind`${options.tag}(${cluster})`({
+          iam: [grantFor(options.iam, cluster.name)],
+        });
+      }
       const name = yield* cluster.name;
       return Effect.fn(`${options.tag}(${cluster.LogicalId})`)(function* (
         request?: Omit<I, "name">,
@@ -40,13 +41,14 @@ export const makeConfigHttpBinding = <I extends { name?: string }, A, E>(options
   operation: GcpHttpOp<I, A, E>;
 }) =>
   Effect.gen(function* () {
-    const run = yield* options.operation;
+    const bind = yield* GCPBindings.Bind;
+    const run = yield* GCPBindings.withCredentials(options.operation);
     return Effect.fn(function* (config: WorkstationClustersWorkstationConfig) {
-      yield* bindGcpHost({
-        tag: options.tag,
-        resource: config,
-        iam: [grantFor(options.iam, config.name)],
-      });
+      if (!globalThis.__ALCHEMY_RUNTIME__) {
+        yield* bind`${options.tag}(${config})`({
+          iam: [grantFor(options.iam, config.name)],
+        });
+      }
       const name = yield* config.name;
       return Effect.fn(`${options.tag}(${config.LogicalId})`)(function* (
         request?: Omit<I, "name">,
@@ -65,13 +67,14 @@ export const makeWorkstationHttpBinding = <I extends { name?: string }, A, E>(op
   operation: GcpHttpOp<I, A, E>;
 }) =>
   Effect.gen(function* () {
-    const run = yield* options.operation;
+    const bind = yield* GCPBindings.Bind;
+    const run = yield* GCPBindings.withCredentials(options.operation);
     return Effect.fn(function* (workstation: WorkstationClustersWorkstationConfigsWorkstation) {
-      yield* bindGcpHost({
-        tag: options.tag,
-        resource: workstation,
-        iam: [grantFor(options.iam, workstation.name)],
-      });
+      if (!globalThis.__ALCHEMY_RUNTIME__) {
+        yield* bind`${options.tag}(${workstation})`({
+          iam: [grantFor(options.iam, workstation.name)],
+        });
+      }
       const name = yield* workstation.name;
       return Effect.fn(`${options.tag}(${workstation.LogicalId})`)(function* (
         request?: Omit<I, "name">,
@@ -94,13 +97,14 @@ export const makeGenerateAccessTokenHttpBinding = <
   operation: GcpHttpOp<I, A, E>;
 }) =>
   Effect.gen(function* () {
-    const run = yield* options.operation;
+    const bind = yield* GCPBindings.Bind;
+    const run = yield* GCPBindings.withCredentials(options.operation);
     return Effect.fn(function* (workstation: WorkstationClustersWorkstationConfigsWorkstation) {
-      yield* bindGcpHost({
-        tag: options.tag,
-        resource: workstation,
-        iam: [grantFor(options.iam, workstation.name)],
-      });
+      if (!globalThis.__ALCHEMY_RUNTIME__) {
+        yield* bind`${options.tag}(${workstation})`({
+          iam: [grantFor(options.iam, workstation.name)],
+        });
+      }
       const name = yield* workstation.name;
       return Effect.fn(`${options.tag}(${workstation.LogicalId})`)(function* (
         request?: Omit<I, "workstation">,

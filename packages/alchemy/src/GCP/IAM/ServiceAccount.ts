@@ -9,6 +9,7 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
+import { revokeHostIam, syncHostIam, type AppliedIamGrant, type GcpIamGrant } from "../Host.ts";
 import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 
@@ -57,10 +58,18 @@ export type ServiceAccount = Resource<
     description: string | undefined;
     /** Whether the account is disabled. */
     disabled: boolean | undefined;
+    /** Roles granted through bindings, revoked once no binding asks for them. */
+    iamGrants?: AppliedIamGrant[];
   },
-  never,
+  ServiceAccountBinding,
   Providers
 >;
+
+/** What a binding grants a {@link ServiceAccount}. */
+export type ServiceAccountBinding = {
+  /** Roles to grant the account, each on one resource (or the project). */
+  iam?: GcpIamGrant[];
+};
 
 /**
  * A user-managed Google Cloud IAM service account.
@@ -229,7 +238,7 @@ export const ServiceAccountProvider = () =>
           );
       }),
 
-    reconcile: Effect.fn(function* ({ id, news, output }) {
+    reconcile: Effect.fn(function* ({ id, news, output, bindings }) {
       const env = yield* GcpEnvironment.current;
       const project = news.project ?? output?.project ?? env.project;
       const accountId = yield* toAccountId(id, news.accountId, output?.accountId);
@@ -304,10 +313,24 @@ export const ServiceAccountProvider = () =>
           description: patched.description ?? desiredDescription,
         };
       }
-      return toAttrs(current, project);
+
+      // Sync the roles bindings grant the account. Roles it holds for other
+      // reasons (e.g. a `GCP.IAM.Member`) are used but never revoked.
+      const attrs = toAttrs(current, project);
+      if (bindings.length === 0 && (output?.iamGrants ?? []).length === 0) return attrs;
+      const { grants } = yield* syncHostIam({
+        project: attrs.project,
+        serviceAccount: attrs.email,
+        managed: false,
+        bindings,
+        previous: output?.iamGrants,
+      });
+      return { ...attrs, iamGrants: grants };
     }),
 
     delete: Effect.fn(function* ({ output }) {
+      // Revoke first, so no `deleted:serviceAccount:` members linger.
+      yield* revokeHostIam({ serviceAccount: output.email, grants: output.iamGrants ?? [] });
       yield* iam
         .deleteProjectsServiceAccounts({ name: output.name })
         .pipe(Effect.catchTag("NotFound", () => Effect.void));

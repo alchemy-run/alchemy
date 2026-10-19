@@ -52,12 +52,13 @@ export const makeKendraIndexHttpBinding = <
   prepare?: (request: Req) => Omit<I, "IndexId">;
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (index: Index) {
       const IndexId = yield* index.id;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}(${index})`({
+        yield* bind`${options.tag}(${index})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -108,13 +109,14 @@ export const makeKendraDataSourceHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (dataSource: DataSource) {
       const IndexId = yield* dataSource.indexId;
       const Id = yield* dataSource.id;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}(${dataSource})`({
+        yield* bind`${options.tag}(${dataSource})`({
           policyStatements: [
             {
               Effect: "Allow",

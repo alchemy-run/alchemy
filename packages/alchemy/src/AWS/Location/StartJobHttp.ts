@@ -14,12 +14,13 @@ import { StartJob, type StartJobRequest } from "./StartJob.ts";
 export const StartJobHttp = Layer.effect(
   StartJob,
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const startJob = yield* AWSBindings.withCredentials(location.startJob);
 
     return Effect.fn(function* (executionRole: Role) {
       const RoleArn = yield* executionRole.roleArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`AWS.Location.StartJob(${executionRole})`({
+        yield* bind`AWS.Location.StartJob(${executionRole})`({
           policyStatements: [
             // Jobs are named at runtime, so their ARNs are unknowable at
             // deploy time.

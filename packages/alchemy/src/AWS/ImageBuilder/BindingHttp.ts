@@ -35,13 +35,14 @@ export const makeImageBuilderPipelineHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (pipeline: ImagePipeline) {
       // Outputs yield a DEFERRED effect — resolve again per invocation below.
       const PipelineArn = yield* pipeline.imagePipelineArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}(${pipeline})`({
+        yield* bind`${options.tag}(${pipeline})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -78,11 +79,12 @@ export const makeImageBuilderAccountHttpBinding = <I, A, E, R>(options: {
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}()`({
+        yield* bind`${options.tag}()`({
           policyStatements: [
             {
               Effect: "Allow",

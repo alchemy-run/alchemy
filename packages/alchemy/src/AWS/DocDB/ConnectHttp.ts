@@ -15,6 +15,7 @@ import type { DBCluster } from "./DBCluster.ts";
 export const ConnectHttp = Layer.effect(
   Connect,
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const getSecretValue = yield* AWSBindings.withCredentials(secretsmanager.getSecretValue);
 
     return Effect.fn(function* (cluster: DBCluster, options?: ConnectOptions) {
@@ -28,17 +29,14 @@ export const ConnectHttp = Layer.effect(
         : yield* cluster.masterUserSecretArn;
 
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        // DocumentDB is VPC-only — request the host's VPC attachment
-        // declaratively through the `vpc` binding channel.
+        // DocumentDB is VPC-only: attach the host to the cluster's VPC.
         const vpc =
           options?.subnetIds !== undefined || options?.securityGroupIds !== undefined
             ? {
-                vpc: {
-                  subnetIds: options?.subnetIds ?? [],
-                  securityGroupIds: options?.securityGroupIds ?? [],
-                },
+                subnetIds: options?.subnetIds ?? [],
+                securityGroupIds: options?.securityGroupIds ?? [],
               }
-            : {};
+            : undefined;
         const secretResource = options?.secret
           ? options.secret.secretArn
           : Output.map(cluster.masterUserSecretArn, (arn) => {
@@ -51,7 +49,7 @@ export const ConnectHttp = Layer.effect(
               return arn;
             });
         const prefix = connectEnvPrefix(cluster.LogicalId);
-        yield* AWSBindings.bind`AWS.DocDB.Connect(${cluster})`({
+        yield* bind`AWS.DocDB.Connect(${cluster})`({
           env: {
             [`${prefix}_HOST`]: cluster.endpoint,
             // Lambda environment variables are strings — stringify the port.
@@ -64,8 +62,10 @@ export const ConnectHttp = Layer.effect(
               Resource: [secretResource],
             },
           ],
-          ...vpc,
         });
+        if (vpc !== undefined) {
+          yield* AWSBindings.bindVpc`AWS.DocDB.Connect(${cluster})`(vpc);
+        }
       }
 
       return Effect.gen(function* () {

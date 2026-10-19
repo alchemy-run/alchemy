@@ -1,9 +1,10 @@
 import * as aiplatform from "@distilled.cloud/gcp/aiplatform_v1";
 import { Credentials } from "@distilled.cloud/gcp/Credentials";
+import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { GcpProjectMissing } from "../Environment.ts";
-import { bindGcpHost } from "../Host.ts";
+import * as GCPBindings from "../GCPBindings.ts";
 import {
   GenerateContent,
   type GenerateContentClient,
@@ -22,10 +23,16 @@ const TAG = "GCP.AIPlatform.GenerateContent";
 export const GenerateContentHttp = Layer.effect(
   GenerateContent,
   Effect.gen(function* () {
-    const generateContent = yield* aiplatform.generateContentProjectsLocationsPublishersModels;
+    const bind = yield* GCPBindings.Bind;
+    const generateContent = yield* GCPBindings.withCredentials(
+      aiplatform.generateContentProjectsLocationsPublishersModels,
+    );
     // The project is the caller's own: deploy credentials at plan time,
     // the metadata server inside Cloud Run / Cloud Functions.
-    const credentials = yield* Credentials;
+    const credentials = Context.get(
+      yield* GCPBindings.withCredentials(Effect.context<Credentials>()),
+      Credentials,
+    );
     const project = credentials.pipe(
       Effect.flatMap(({ project }) =>
         project
@@ -46,13 +53,13 @@ export const GenerateContentHttp = Layer.effect(
       } = typeof target === "string" ? { model: target } : target;
       const id = `${publisher}/${model}@${location}`;
 
-      yield* bindGcpHost({
-        tag: TAG,
-        resource: { LogicalId: id },
-        // Publisher models have no resource IAM policy; aiplatform.user is
-        // the narrowest predefined role carrying aiplatform.endpoints.predict.
-        iam: [{ role: "roles/aiplatform.user" }],
-      });
+      if (!globalThis.__ALCHEMY_RUNTIME__) {
+        yield* bind`${TAG}(${{ LogicalId: id }})`({
+          // Publisher models have no resource IAM policy; aiplatform.user is
+          // the narrowest predefined role carrying aiplatform.endpoints.predict.
+          iam: [{ role: "roles/aiplatform.user" }],
+        });
+      }
 
       const generate = Effect.fn(`${TAG}(${id})`)(function* (request: GenerateContentRequest) {
         return yield* generateContent({

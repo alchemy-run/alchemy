@@ -14,13 +14,14 @@ import type { VirtualCluster } from "./VirtualCluster.ts";
 export const DescribeVirtualClusterHttp = Layer.effect(
   DescribeVirtualCluster,
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(emrc.describeVirtualCluster);
 
     return Effect.fn(function* (virtualCluster: VirtualCluster) {
       // Outputs yield a DEFERRED effect — resolve again per invocation below.
       const VirtualClusterId = yield* virtualCluster.virtualClusterId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`AWS.EMRContainers.DescribeVirtualCluster(${virtualCluster})`({
+        yield* bind`AWS.EMRContainers.DescribeVirtualCluster(${virtualCluster})`({
           policyStatements: [
             {
               Effect: "Allow",

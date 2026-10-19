@@ -41,6 +41,7 @@ export const makeForecastHttpBinding = <I, A, E, R>(options: {
   passRole?: boolean;
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* () {
@@ -65,7 +66,7 @@ export const makeForecastHttpBinding = <I, A, E, R>(options: {
             },
           });
         }
-        yield* AWSBindings.bind`AWS.Forecast.${options.capability}()`({
+        yield* bind`AWS.Forecast.${options.capability}()`({
           policyStatements,
         });
       }

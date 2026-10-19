@@ -2,7 +2,7 @@ import { Credentials } from "@distilled.cloud/gcp/Credentials";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import type { Output } from "../../Output.ts";
-import { bindGcpHost } from "../Host.ts";
+import * as GCPBindings from "../GCPBindings.ts";
 import { type BindingIam, grantFor } from "../HttpBinding.ts";
 
 type GcpHttpOp<I, A, E> = Effect.Effect<
@@ -32,13 +32,14 @@ export const makeManagedKafkaHttpBinding =
     operation: GcpHttpOp<I, A, E>;
   }) =>
     Effect.gen(function* () {
-      const run = yield* options.operation;
+      const bind = yield* GCPBindings.Bind;
+      const run = yield* GCPBindings.withCredentials(options.operation);
       return Effect.fn(function* (resource: Resource) {
-        yield* bindGcpHost({
-          tag: options.tag,
-          resource: resource,
-          iam: [grantFor(options.iam, resource.name)],
-        });
+        if (!globalThis.__ALCHEMY_RUNTIME__) {
+          yield* bind`${options.tag}(${resource})`({
+            iam: [grantFor(options.iam, resource.name)],
+          });
+        }
         const name = yield* resource.name;
         return Effect.fn(`${options.tag}(${resource.LogicalId})`)(function* (
           request?: Omit<I, "name">,

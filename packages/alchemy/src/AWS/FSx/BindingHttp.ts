@@ -47,12 +47,13 @@ export const makeFSxFileSystemHttpBinding = <
   extraResourceArns?: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (fileSystem: FileSystem) {
       const FileSystemId = yield* fileSystem.fileSystemId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}(${fileSystem})`({
+        yield* bind`${options.tag}(${fileSystem})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -95,11 +96,12 @@ export const makeFSxAccountHttpBinding = <I, A, E, R>(options: {
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}()`({
+        yield* bind`${options.tag}()`({
           policyStatements: [
             {
               Effect: "Allow",

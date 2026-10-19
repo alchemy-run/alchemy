@@ -41,6 +41,7 @@ export const makeStreamMediaHttpBinding = <
   operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     // Yield-first captures the operations' services (Credentials/Region/
     // HttpClient) at layer init so the runtime callable is requirement-free.
     const getDataEndpoint = yield* AWSBindings.withCredentials(kv.getDataEndpoint);
@@ -49,7 +50,7 @@ export const makeStreamMediaHttpBinding = <
     return Effect.fn(function* (stream: Stream) {
       const StreamArn = yield* stream.streamArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}(${stream})`({
+        yield* bind`${options.tag}(${stream})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -106,6 +107,7 @@ export const makeChannelSignalingHttpBinding = <
   operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     // Yield-first captures the operations' services (Credentials/Region/
     // HttpClient) at layer init so the runtime callable is requirement-free.
     const getSignalingChannelEndpoint = yield* AWSBindings.withCredentials(
@@ -116,7 +118,7 @@ export const makeChannelSignalingHttpBinding = <
     return Effect.fn(function* (channel: SignalingChannel) {
       const ChannelArn = yield* channel.channelArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}(${channel})`({
+        yield* bind`${options.tag}(${channel})`({
           policyStatements: [
             {
               Effect: "Allow",

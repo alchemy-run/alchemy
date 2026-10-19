@@ -3,11 +3,12 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as AWSBindings from "../AWSBindings.ts";
 import { BatchGetItem, type BatchGetItemRequest, type BatchGetItemTables } from "./BatchGetItem.ts";
-import { grantTables, tablesRegion } from "./BindingHttp.ts";
+import { GrantTables, tablesRegion } from "./BindingHttp.ts";
 
 export const BatchGetItemHttp = Layer.effect(
   BatchGetItem,
   Effect.gen(function* () {
+    const grantTables = yield* GrantTables;
     return Effect.fn(function* (...tables: BatchGetItemTables) {
       const sortedTables = sortTables(tables);
       const tableNames = new Map(

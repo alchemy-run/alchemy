@@ -27,12 +27,13 @@ export const makeKmsKeyHttpBinding = <I extends { KeyId?: string }, A, E, R>(opt
   actions: readonly `kms:${string}`[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (key: KeyLike) {
       const KeyId = typeof key === "string" ? Effect.succeed(key) : yield* key.keyId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}(${key})`({
+        yield* bind`${options.tag}(${key})`({
           policyStatements: [keyPolicyStatement(options.actions, key)],
         });
       }
@@ -57,11 +58,12 @@ export const makeKmsAccountHttpBinding = <I, A, E, R>(options: {
   actions: readonly `kms:${string}`[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}()`({
+        yield* bind`${options.tag}()`({
           policyStatements: [
             {
               Effect: "Allow",

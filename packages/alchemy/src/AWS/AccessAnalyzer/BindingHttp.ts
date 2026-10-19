@@ -26,12 +26,13 @@ export const makeAnalyzerScopedHttpBinding = <I extends { analyzerArn: string },
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (analyzer: Analyzer) {
       const AnalyzerArn = yield* analyzer.analyzerArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}(${analyzer})`({
+        yield* bind`${options.tag}(${analyzer})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -67,11 +68,12 @@ export const makeAccessAnalyzerAccountHttpBinding = <I, A, E, R>(options: {
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}()`({
+        yield* bind`${options.tag}()`({
           policyStatements: [
             {
               Effect: "Allow",

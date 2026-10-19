@@ -17,6 +17,7 @@ import { StartReplay, type StartReplayRequest } from "./StartReplay.ts";
 export const StartReplayHttp = Layer.effect(
   StartReplay,
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const startReplay = yield* AWSBindings.withCredentials(eventbridge.startReplay);
 
     return Effect.fn(function* (archive: Archive) {
@@ -27,7 +28,7 @@ export const StartReplayHttp = Layer.effect(
           accountId: string;
           region: string;
         }>;
-        yield* AWSBindings.bind`AWS.EventBridge.StartReplay(${archive})`({
+        yield* bind`AWS.EventBridge.StartReplay(${archive})`({
           policyStatements: [
             {
               Effect: "Allow",

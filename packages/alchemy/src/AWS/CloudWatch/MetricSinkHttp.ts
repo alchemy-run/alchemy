@@ -18,11 +18,12 @@ const MAX_BYTES = 1_000_000;
 export const MetricSinkHttp = Layer.effect(
   MetricSink,
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const putMetricData = yield* PutMetricData;
 
     return Effect.fn(function* (props: MetricSinkProps) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`AWS.CloudWatch.MetricSink(${props.Namespace})`({
+        yield* bind`AWS.CloudWatch.MetricSink(${props.Namespace})`({
           policyStatements: [
             {
               Effect: "Allow",

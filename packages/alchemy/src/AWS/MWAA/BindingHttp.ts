@@ -52,12 +52,13 @@ export const makeMWAAEnvironmentHttpBinding = <I extends { Name: string }, A, E,
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (environment: Environment) {
       const Name = yield* environment.environmentName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}(${environment})`({
+        yield* bind`${options.tag}(${environment})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -93,13 +94,14 @@ export const makeMWAAAirflowRoleHttpBinding = <I extends { Name: string }, A, E,
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (environment: Environment, roleOptions?: AirflowRoleOptions) {
       const Name = yield* environment.environmentName;
       const airflowRole = roleOptions?.airflowRole ?? "Admin";
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}(${environment}, ${airflowRole})`({
+        yield* bind`${options.tag}(${environment}, ${airflowRole})`({
           policyStatements: [
             {
               Effect: "Allow",

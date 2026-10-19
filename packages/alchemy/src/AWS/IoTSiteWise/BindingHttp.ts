@@ -35,13 +35,14 @@ export const makeSiteWiseAssetHttpBinding = <I, A, E, R, Req>(options: {
   prepare: (request: Req, assetId: string) => I;
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (asset: Asset) {
       // Output yields a DEFERRED effect — resolve again per invocation below.
       const AssetId = yield* asset.assetId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`AWS.IoTSiteWise.${options.capability}(${asset})`({
+        yield* bind`AWS.IoTSiteWise.${options.capability}(${asset})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -75,11 +76,12 @@ export const makeSiteWiseAccountHttpBinding = <I, A, E, R>(options: {
   operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`AWS.IoTSiteWise.${options.capability}()`({
+        yield* bind`AWS.IoTSiteWise.${options.capability}()`({
           policyStatements: [
             {
               Effect: "Allow",

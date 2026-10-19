@@ -1526,6 +1526,10 @@ import {
   ServiceAccountProvider as IamServiceAccountProvider,
 } from "./IAM/ServiceAccount.ts";
 import {
+  ServiceAccountKey as IamServiceAccountKey,
+  ServiceAccountKeyProvider as IamServiceAccountKeyProvider,
+} from "./IAM/ServiceAccountKey.ts";
+import {
   BrandsIdentityAwareProxyClient,
   BrandsIdentityAwareProxyClientProvider,
 } from "./IAP/BrandsIdentityAwareProxyClient.ts";
@@ -3583,6 +3587,7 @@ const makeProviders = () =>
           SasportalSignedNodesDeploymentsDevice,
           JobTemplate,
           IamServiceAccount,
+          IamServiceAccountKey,
           ProjectService,
         ]) as unknown as Effect.Effect<{ providers: Record<string, any> }, never, never>).providers,
       );
@@ -4704,6 +4709,7 @@ const makeProviders = () =>
                 HostServiceAccountProvider(),
                 IamMemberProvider(),
                 IamServiceAccountProvider(),
+                IamServiceAccountKeyProvider(),
                 ProjectServiceProvider(),
                 SasportalSignedCustomersDeploymentsDeviceProvider(),
                 SasportalSignedNodesDeploymentsDeviceProvider(),

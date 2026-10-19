@@ -12,12 +12,13 @@ import { CreateLanguageModel, type CreateLanguageModelRequest } from "./CreateLa
 export const CreateLanguageModelHttp = Layer.effect(
   CreateLanguageModel,
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const createLanguageModel = yield* AWSBindings.withCredentials(transcribe.createLanguageModel);
 
     return Effect.fn(function* <Rl extends Role>(dataAccessRole: Rl) {
       const RoleArn = yield* dataAccessRole.roleArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`AWS.Transcribe.CreateLanguageModel(${dataAccessRole})`({
+        yield* bind`AWS.Transcribe.CreateLanguageModel(${dataAccessRole})`({
           policyStatements: [
             {
               Effect: "Allow",

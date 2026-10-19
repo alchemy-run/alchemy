@@ -28,11 +28,12 @@ export const makeRdsAccountHttpBinding = <I, A, E, R>(options: {
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}()`({
+        yield* bind`${options.tag}()`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -71,13 +72,14 @@ export const makeRdsClusterHttpBinding = <
   extraResources?: (clusterArn: string) => string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (cluster: DBCluster) {
       const Identifier = yield* cluster.dbClusterIdentifier;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const resources = options.extraResources;
-        yield* AWSBindings.bind`${options.tag}(${cluster})`({
+        yield* bind`${options.tag}(${cluster})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -123,13 +125,14 @@ export const makeRdsInstanceHttpBinding = <
   extraResources?: (instanceArn: string) => string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (instance: DBInstance) {
       const Identifier = yield* instance.dbInstanceIdentifier;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const resources = options.extraResources;
-        yield* AWSBindings.bind`${options.tag}(${instance})`({
+        yield* bind`${options.tag}(${instance})`({
           policyStatements: [
             {
               Effect: "Allow",

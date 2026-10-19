@@ -2,7 +2,7 @@ import * as ag from "@distilled.cloud/aws/api-gateway";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as AWSBindings from "../AWSBindings.ts";
-import { registerApiGatewayBinding } from "./BindingHttp.ts";
+import { RegisterApiGatewayBinding } from "./BindingHttp.ts";
 import { DeleteApiKey, type DeleteApiKeyRequest } from "./DeleteApiKey.ts";
 
 /**
@@ -13,6 +13,7 @@ import { DeleteApiKey, type DeleteApiKeyRequest } from "./DeleteApiKey.ts";
 export const DeleteApiKeyHttp = Layer.effect(
   DeleteApiKey,
   Effect.gen(function* () {
+    const registerApiGatewayBinding = yield* RegisterApiGatewayBinding;
     const deleteApiKey = yield* AWSBindings.withCredentials(ag.deleteApiKey);
     return Effect.fn(function* () {
       yield* registerApiGatewayBinding({

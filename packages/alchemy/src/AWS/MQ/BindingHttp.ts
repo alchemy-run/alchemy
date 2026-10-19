@@ -52,12 +52,13 @@ export const makeMqBrokerHttpBinding = <Req extends object, Out, Err>(
   config: MqBrokerHttpBindingConfig<Req, Out, Err>,
 ) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(config.operation);
 
     return Effect.fn(function* (broker: Broker) {
       const BrokerId = yield* broker.brokerId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`AWS.MQ.${config.capability}(${broker})`({
+        yield* bind`AWS.MQ.${config.capability}(${broker})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -103,11 +104,12 @@ export const makeMqAccountHttpBinding = <Req extends object, Out, Err>(
   config: MqAccountHttpBindingConfig<Req, Out, Err>,
 ) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(config.operation);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`AWS.MQ.${config.capability}()`({
+        yield* bind`AWS.MQ.${config.capability}()`({
           policyStatements: [
             {
               Effect: "Allow",

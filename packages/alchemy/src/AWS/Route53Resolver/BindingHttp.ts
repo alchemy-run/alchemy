@@ -40,12 +40,13 @@ export const makeRoute53ResolverEndpointHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (endpoint: ResolverEndpoint) {
       const ResolverEndpointId = yield* endpoint.resolverEndpointId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}(${endpoint})`({
+        yield* bind`${options.tag}(${endpoint})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -86,12 +87,13 @@ export const makeRoute53ResolverRuleHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (rule: ResolverRule) {
       const ResolverRuleId = yield* rule.resolverRuleId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}(${rule})`({
+        yield* bind`${options.tag}(${rule})`({
           policyStatements: [
             {
               Effect: "Allow",

@@ -33,11 +33,12 @@ export const makeKinesisAnalyticsAccountHttpBinding = <I, A, E, R>(options: {
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}()`({
+        yield* bind`${options.tag}()`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -67,13 +68,14 @@ export const makeKinesisAnalyticsHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* <App extends Application>(application: App) {
       // Outputs yield a DEFERRED effect — resolve again per invocation below.
       const ApplicationName = yield* application.applicationName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}(${application})`({
+        yield* bind`${options.tag}(${application})`({
           policyStatements: [
             {
               Effect: "Allow",

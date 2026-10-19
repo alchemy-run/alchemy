@@ -25,6 +25,7 @@ import type { GraphqlApi } from "./GraphqlApi.ts";
 export const GraphQLHttp = Layer.effect(
   GraphQL,
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     // Resolve the ambient distilled context once at layer construction —
     // credentials themselves are re-read per request (SSO/STS rotate).
     const services = yield* AWSBindings.withCredentials(
@@ -37,7 +38,7 @@ export const GraphQLHttp = Layer.effect(
       const GraphqlUrl = yield* api.graphqlUrl;
 
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`AWS.AppSync.GraphQL(${api})`({
+        yield* bind`AWS.AppSync.GraphQL(${api})`({
           policyStatements: [
             {
               Effect: "Allow",

@@ -3,7 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { makeBatchedSink } from "../../Util/BatchedSink.ts";
 import { BatchWriteItem } from "./BatchWriteItem.ts";
-import { grantTables } from "./BindingHttp.ts";
+import { GrantTables } from "./BindingHttp.ts";
 import type { Table } from "./Table.ts";
 import { TableSink, type TableSinkEntry } from "./TableSink.ts";
 
@@ -47,6 +47,7 @@ const selectUnprocessed = (
 export const TableSinkHttp = Layer.effect(
   TableSink,
   Effect.gen(function* () {
+    const grantTables = yield* GrantTables;
     const batchWriteItem = yield* BatchWriteItem;
 
     return Effect.fn(function* (table: Table) {

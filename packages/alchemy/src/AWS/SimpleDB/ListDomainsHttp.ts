@@ -13,11 +13,12 @@ import { ListDomains } from "./ListDomains.ts";
 export const ListDomainsHttp = Layer.effect(
   ListDomains,
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const listDomains = yield* AWSBindings.withCredentials(sdb.listDomains);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`AWS.SimpleDB.ListDomains()`({
+        yield* bind`AWS.SimpleDB.ListDomains()`({
           policyStatements: [
             {
               Effect: "Allow",

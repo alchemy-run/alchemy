@@ -17,25 +17,23 @@ import { Connect, connectEnvPrefix, type ConnectOptions } from "./Connect.ts";
 export const ConnectHttp = Layer.effect(
   Connect,
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     return Effect.fn(function* (cluster: Cluster, options?: ConnectOptions) {
       const Host = yield* cluster.endpointAddress;
       const Port = yield* cluster.endpointPort;
       const Tls = yield* cluster.tlsEnabled;
 
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        // MemoryDB is VPC-only — request the host's VPC attachment
-        // declaratively through the `vpc` binding channel.
+        // MemoryDB is VPC-only: attach the host to the cluster's VPC.
         const vpc =
           options?.subnetIds !== undefined || options?.securityGroupIds !== undefined
             ? {
-                vpc: {
-                  subnetIds: options?.subnetIds ?? [],
-                  securityGroupIds: options?.securityGroupIds ?? [],
-                },
+                subnetIds: options?.subnetIds ?? [],
+                securityGroupIds: options?.securityGroupIds ?? [],
               }
-            : {};
+            : undefined;
         const prefix = connectEnvPrefix(cluster.LogicalId);
-        yield* AWSBindings.bind`AWS.MemoryDB.Connect(${cluster})`({
+        yield* bind`AWS.MemoryDB.Connect(${cluster})`({
           env: {
             [`${prefix}_HOST`]: cluster.endpointAddress,
             // Lambda environment variables are strings — stringify the port.
@@ -53,8 +51,10 @@ export const ConnectHttp = Layer.effect(
               ],
             },
           ],
-          ...vpc,
         });
+        if (vpc !== undefined) {
+          yield* AWSBindings.bindVpc`AWS.MemoryDB.Connect(${cluster})`(vpc);
+        }
       }
 
       return Effect.gen(function* () {

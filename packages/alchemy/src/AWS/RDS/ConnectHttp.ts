@@ -47,6 +47,7 @@ const dbUserArn = (resource: ConnectResource, username: string) => {
 export const ConnectHttp = Layer.effect(
   Connect,
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const getSecretValue = yield* AWSBindings.withCredentials(secretsmanager.getSecretValue);
     // Ambient AWS identity for the IAM-auth token presign — captured at
     // layer build so the runtime client stays `RuntimeContext`-colored.
@@ -68,20 +69,17 @@ export const ConnectHttp = Layer.effect(
             : undefined;
 
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        // DECISION #5: VPC attachment is requested declaratively through
-        // the host's `vpc` binding channel (and remains available as a
-        // plain Function prop for the manual case).
+        // Attach the host to the database's VPC (also available as a plain
+        // Function prop for the manual case).
         const vpc =
           options.subnetIds !== undefined || options.securityGroupIds !== undefined
             ? {
-                vpc: {
-                  subnetIds: options.subnetIds ?? [],
-                  securityGroupIds: options.securityGroupIds ?? [],
-                },
+                subnetIds: options.subnetIds ?? [],
+                securityGroupIds: options.securityGroupIds ?? [],
               }
-            : {};
+            : undefined;
         if (options.auth === "iam") {
-          yield* AWSBindings.bind`AWS.RDS.Connect(${resource})`({
+          yield* bind`AWS.RDS.Connect(${resource})`({
             policyStatements: [
               {
                 Effect: "Allow",
@@ -89,10 +87,9 @@ export const ConnectHttp = Layer.effect(
                 Resource: [dbUserArn(resource, options.username)],
               },
             ],
-            ...vpc,
           });
         } else {
-          yield* AWSBindings.bind`AWS.RDS.Connect(${options.secret})`({
+          yield* bind`AWS.RDS.Connect(${options.secret})`({
             policyStatements: [
               {
                 Effect: "Allow",
@@ -100,8 +97,10 @@ export const ConnectHttp = Layer.effect(
                 Resource: [options.secret.secretArn],
               },
             ],
-            ...vpc,
           });
+        }
+        if (vpc !== undefined) {
+          yield* AWSBindings.bindVpc`AWS.RDS.Connect(${resource})`(vpc);
         }
       }
 

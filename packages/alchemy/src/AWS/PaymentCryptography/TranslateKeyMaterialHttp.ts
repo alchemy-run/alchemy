@@ -18,6 +18,7 @@ import { TranslateKeyMaterial, type TranslateKeyMaterialRequest } from "./Transl
 export const TranslateKeyMaterialHttp = Layer.effect(
   TranslateKeyMaterial,
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const translateKeyMaterial = yield* AWSBindings.withCredentials(
       paymentcryptographydata.translateKeyMaterial,
     );
@@ -25,7 +26,7 @@ export const TranslateKeyMaterialHttp = Layer.effect(
     return Effect.fn(function* (...keys: readonly [Key, ...Key[]]) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         for (const key of keys) {
-          yield* AWSBindings.bind`AWS.PaymentCryptography.TranslateKeyMaterial(${key})`({
+          yield* bind`AWS.PaymentCryptography.TranslateKeyMaterial(${key})`({
             policyStatements: [
               {
                 Effect: "Allow",

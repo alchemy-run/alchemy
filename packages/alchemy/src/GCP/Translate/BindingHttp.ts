@@ -1,5 +1,5 @@
 import * as Effect from "effect/Effect";
-import { bindGcpHost } from "../Host.ts";
+import * as GCPBindings from "../GCPBindings.ts";
 import { grantFor, type BindingIam, type GcpHttpOp } from "../HttpBinding.ts";
 import type { AdaptiveMtDataset } from "./AdaptiveMtDataset.ts";
 import type { GlossariesGlossaryEntry } from "./GlossariesGlossaryEntry.ts";
@@ -19,13 +19,14 @@ const makeNamedHttpBinding = <
   operation: GcpHttpOp<I, A, E>;
 }) =>
   Effect.gen(function* () {
+    const bind = yield* GCPBindings.Bind;
     const run = yield* closeOver(options.operation);
     return Effect.fn(function* (resource: Resource) {
-      yield* bindGcpHost({
-        tag: options.tag,
-        resource: resource,
-        iam: [grantFor(options.iam, resource.name)],
-      });
+      if (!globalThis.__ALCHEMY_RUNTIME__) {
+        yield* bind`${options.tag}(${resource})`({
+          iam: [grantFor(options.iam, resource.name)],
+        });
+      }
       const name = yield* resource.name;
       return Effect.fn(`${options.tag}(${resource.LogicalId})`)(function* (
         request?: Omit<I, "name">,
@@ -50,13 +51,14 @@ const makeLocationParentHttpBinding = <
   withBody: (name: string, request: Omit<I, "parent"> | undefined) => I;
 }) =>
   Effect.gen(function* () {
+    const bind = yield* GCPBindings.Bind;
     const run = yield* closeOver(options.operation);
     return Effect.fn(function* (resource: Resource) {
-      yield* bindGcpHost({
-        tag: options.tag,
-        resource: resource,
-        iam: [grantFor(options.iam, resource.name)],
-      });
+      if (!globalThis.__ALCHEMY_RUNTIME__) {
+        yield* bind`${options.tag}(${resource})`({
+          iam: [grantFor(options.iam, resource.name)],
+        });
+      }
       const name = yield* resource.name;
       return Effect.fn(`${options.tag}(${resource.LogicalId})`)(function* (
         request?: Omit<I, "parent">,

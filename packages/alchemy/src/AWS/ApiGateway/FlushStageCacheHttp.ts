@@ -3,7 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Output from "../../Output.ts";
 import * as AWSBindings from "../AWSBindings.ts";
-import { registerApiGatewayBinding } from "./BindingHttp.ts";
+import { RegisterApiGatewayBinding } from "./BindingHttp.ts";
 import { FlushStageCache } from "./FlushStageCache.ts";
 import type { ApiGatewayStage } from "./Stage.ts";
 
@@ -15,6 +15,7 @@ import type { ApiGatewayStage } from "./Stage.ts";
 export const FlushStageCacheHttp = Layer.effect(
   FlushStageCache,
   Effect.gen(function* () {
+    const registerApiGatewayBinding = yield* RegisterApiGatewayBinding;
     const flushStageCache = yield* AWSBindings.withCredentials(ag.flushStageCache);
     return Effect.fn(function* <S extends ApiGatewayStage>(stage: S) {
       const RestApiId = yield* stage.restApiId;

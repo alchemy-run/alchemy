@@ -33,13 +33,14 @@ export const makeFraudDetectorDetectorHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (detector: Detector) {
       // Output yields a DEFERRED effect — resolve again per invocation below.
       const DetectorId = yield* detector.detectorId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}(${detector})`({
+        yield* bind`${options.tag}(${detector})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -80,13 +81,14 @@ export const makeFraudDetectorListHttpBinding = <I extends { name: string }, A, 
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (list: List) {
       // Output yields a DEFERRED effect — resolve again per invocation below.
       const ListName = yield* list.name;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}(${list})`({
+        yield* bind`${options.tag}(${list})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -117,13 +119,14 @@ export const makeFraudDetectorEventTypeHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (eventType: EventType) {
       // Output yields a DEFERRED effect — resolve again per invocation below.
       const EventTypeName = yield* eventType.name;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}(${eventType})`({
+        yield* bind`${options.tag}(${eventType})`({
           policyStatements: [
             {
               Effect: "Allow",

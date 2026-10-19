@@ -1,7 +1,7 @@
 import * as firebaseappcheck from "@distilled.cloud/gcp/firebaseappcheck_v1";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { bindGcpHost } from "../Host.ts";
+import * as GCPBindings from "../GCPBindings.ts";
 import type { AppsDebugToken } from "./AppsDebugToken.ts";
 import { ExchangeDebugToken, type ExchangeDebugTokenRequest } from "./ExchangeDebugToken.ts";
 
@@ -14,15 +14,18 @@ import { ExchangeDebugToken, type ExchangeDebugTokenRequest } from "./ExchangeDe
 export const ExchangeDebugTokenHttp = Layer.effect(
   ExchangeDebugToken,
   Effect.gen(function* () {
-    const exchange = yield* firebaseappcheck.exchangeDebugTokenProjectsApps;
+    const bind = yield* GCPBindings.Bind;
+    const exchange = yield* GCPBindings.withCredentials(
+      firebaseappcheck.exchangeDebugTokenProjectsApps,
+    );
     return Effect.fn(function* (debugToken: AppsDebugToken) {
-      yield* bindGcpHost({
-        tag: "GCP.FirebaseAppCheck.ExchangeDebugToken",
-        resource: debugToken,
-        // exchangeDebugToken is not IAM-gated; the debug token secret is the
-        // credential.
-        iam: [],
-      });
+      if (!globalThis.__ALCHEMY_RUNTIME__) {
+        yield* bind`GCP.FirebaseAppCheck.ExchangeDebugToken(${debugToken})`({
+          // exchangeDebugToken is not IAM-gated; the debug token secret is the
+          // credential.
+          iam: [],
+        });
+      }
       const app = yield* debugToken.app;
       const secret = yield* debugToken.token;
       return Effect.fn(`GCP.FirebaseAppCheck.ExchangeDebugToken(${debugToken.LogicalId})`)(

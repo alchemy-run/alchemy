@@ -38,13 +38,14 @@ export const makeIvsChatRoomHttpBinding = <
   prepare?: (request: Req) => Omit<I, "roomIdentifier">;
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (room: Room) {
       // Output yields a DEFERRED effect — resolve again per invocation below.
       const RoomArn = yield* room.roomArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}(${room})`({
+        yield* bind`${options.tag}(${room})`({
           policyStatements: [
             {
               Effect: "Allow",

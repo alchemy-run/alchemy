@@ -32,11 +32,12 @@ export const makeTextractHttpBinding = <I extends object, A, E, R>(options: {
   operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`AWS.Textract.${options.capability}()`({
+        yield* bind`AWS.Textract.${options.capability}()`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -68,12 +69,13 @@ export const makeTextractAdapterHttpBinding = <I extends { AdapterId?: string },
   operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* <Ad extends Adapter>(adapter: Ad) {
       const AdapterId = yield* adapter.adapterId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`AWS.Textract.${options.capability}(${adapter})`({
+        yield* bind`AWS.Textract.${options.capability}(${adapter})`({
           policyStatements: [
             {
               Effect: "Allow",

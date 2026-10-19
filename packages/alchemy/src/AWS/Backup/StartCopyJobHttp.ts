@@ -10,13 +10,14 @@ import { StartCopyJob, type StartCopyJobRequest } from "./StartCopyJob.ts";
 export const StartCopyJobHttp = Layer.effect(
   StartCopyJob,
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const startCopyJob = yield* AWSBindings.withCredentials(backup.startCopyJob);
 
     return Effect.fn(function* <R extends Role>(sourceVault: BackupVault, copyRole: R) {
       const SourceBackupVaultName = yield* sourceVault.backupVaultName;
       const RoleArn = yield* copyRole.roleArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`AWS.Backup.StartCopyJob(${sourceVault}, ${copyRole})`({
+        yield* bind`AWS.Backup.StartCopyJob(${sourceVault}, ${copyRole})`({
           policyStatements: [
             // StartCopyJob authorizes on the recovery point's underlying
             // resource ARN and CopyIntoBackupVault on the destination

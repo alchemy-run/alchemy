@@ -14,11 +14,12 @@ import type { DeploymentGroup } from "./DeploymentGroup.ts";
 export const BatchGetDeploymentsHttp = Layer.effect(
   BatchGetDeployments,
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(codedeploy.batchGetDeployments);
 
     return Effect.fn(function* <G extends DeploymentGroup>(group: G) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`AWS.CodeDeploy.BatchGetDeployments(${group})`({
+        yield* bind`AWS.CodeDeploy.BatchGetDeployments(${group})`({
           policyStatements: [
             {
               Effect: "Allow",

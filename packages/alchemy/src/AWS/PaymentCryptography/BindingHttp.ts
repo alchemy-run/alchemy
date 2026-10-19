@@ -34,13 +34,14 @@ export const makePaymentCryptographyKeyHttpBinding = <
   actions: readonly `payment-cryptography:${string}`[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* <K extends Key>(key: K) {
       // Outputs yield a DEFERRED effect — resolve again per invocation below.
       const KeyArn = yield* key.keyArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}(${key})`({
+        yield* bind`${options.tag}(${key})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -86,6 +87,7 @@ export const makePaymentCryptographyKeyPairHttpBinding = <
   keyFields: readonly [F1, F2];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* <A1 extends Key, A2 extends Key>(first: A1, second: A2) {
@@ -93,7 +95,7 @@ export const makePaymentCryptographyKeyPairHttpBinding = <
       const SecondArn = yield* second.keyArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         for (const key of [first, second]) {
-          yield* AWSBindings.bind`${options.tag}(${key})`({
+          yield* bind`${options.tag}(${key})`({
             policyStatements: [
               {
                 Effect: "Allow",

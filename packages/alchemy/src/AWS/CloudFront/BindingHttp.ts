@@ -34,12 +34,13 @@ export const makeDistributionScopedHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (distribution: Distribution) {
       const DistributionId = yield* distribution.distributionId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}(${distribution})`({
+        yield* bind`${options.tag}(${distribution})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -79,6 +80,7 @@ export const makeKeyValueStoreScopedHttpBinding = <I extends { KvsARN: string },
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     // The distilled Region service value is `Effect<RegionName>`, not a raw
     // string (see `withKvsRegion` in common.ts).
     const op = yield* AWSBindings.withCredentials(options.operation).pipe(
@@ -88,7 +90,7 @@ export const makeKeyValueStoreScopedHttpBinding = <I extends { KvsARN: string },
     return Effect.fn(function* (store: KeyValueStore) {
       const KvsARN = yield* store.keyValueStoreArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}(${store})`({
+        yield* bind`${options.tag}(${store})`({
           policyStatements: [
             {
               Effect: "Allow",

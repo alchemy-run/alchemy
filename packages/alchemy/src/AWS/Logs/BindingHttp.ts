@@ -52,13 +52,14 @@ export const makeLogGroupHttpBinding = <I, A, E, R>(options: {
   injectLogGroupName?: boolean;
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
     const inject = options.injectLogGroupName ?? true;
 
     return Effect.fn(function* <G extends LogGroup>(logGroup: G) {
       const LogGroupName = yield* logGroup.logGroupName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}(${logGroup})`({
+        yield* bind`${options.tag}(${logGroup})`({
           policyStatements: [
             {
               Effect: "Allow",

@@ -32,11 +32,12 @@ const selectFailed = (
 export const QueueSinkHttp = Layer.effect(
   QueueSink,
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const sendMessageBatch = yield* SendMessageBatch;
 
     return Effect.fn(function* (queue: Queue) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`AWS.SQS.QueueSink(${queue})`({
+        yield* bind`AWS.SQS.QueueSink(${queue})`({
           policyStatements: [
             {
               Effect: "Allow",

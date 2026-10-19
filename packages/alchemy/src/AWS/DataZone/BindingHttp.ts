@@ -33,12 +33,13 @@ export const makeDataZoneDomainHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (domain: Domain) {
       const DomainId = yield* domain.domainId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}(${domain})`({
+        yield* bind`${options.tag}(${domain})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -77,13 +78,14 @@ export const makeDataZoneEnvironmentHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (environment: Environment) {
       const DomainId = yield* environment.domainId;
       const EnvironmentId = yield* environment.environmentId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`${options.tag}(${environment})`({
+        yield* bind`${options.tag}(${environment})`({
           policyStatements: [
             {
               Effect: "Allow",

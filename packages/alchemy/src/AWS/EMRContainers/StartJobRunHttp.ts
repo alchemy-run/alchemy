@@ -9,6 +9,7 @@ import type { VirtualCluster } from "./VirtualCluster.ts";
 export const StartJobRunHttp = Layer.effect(
   StartJobRun,
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(emrc.startJobRun);
 
     // Bespoke (not the shared builder): `clientToken` is required on the wire
@@ -17,7 +18,7 @@ export const StartJobRunHttp = Layer.effect(
     return Effect.fn(function* (virtualCluster: VirtualCluster) {
       const VirtualClusterId = yield* virtualCluster.virtualClusterId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`AWS.EMRContainers.StartJobRun(${virtualCluster})`({
+        yield* bind`AWS.EMRContainers.StartJobRun(${virtualCluster})`({
           policyStatements: [
             virtualClusterPolicyStatement(virtualCluster, ["emr-containers:StartJobRun"]),
           ],

@@ -13,6 +13,7 @@ import { ReEncrypt, type ReEncryptRequest } from "./ReEncrypt.ts";
 export const ReEncryptHttp = Layer.effect(
   ReEncrypt,
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const reEncrypt = yield* AWSBindings.withCredentials(kms.reEncrypt);
 
     return Effect.fn(function* (destination: KeyLike, source?: KeyLike) {
@@ -24,7 +25,7 @@ export const ReEncryptHttp = Layer.effect(
       const SourceKeyId =
         typeof from === "string" ? Effect.succeed<string>(from) : yield* from.keyId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`AWS.KMS.ReEncrypt(${destination}, ${from})`({
+        yield* bind`AWS.KMS.ReEncrypt(${destination}, ${from})`({
           policyStatements:
             source === undefined
               ? [keyPolicyStatement(["kms:ReEncryptFrom", "kms:ReEncryptTo"], destination)]

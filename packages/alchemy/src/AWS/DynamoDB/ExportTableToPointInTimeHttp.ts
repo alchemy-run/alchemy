@@ -5,7 +5,7 @@ import * as Output from "../../Output.ts";
 import * as AWSBindings from "../AWSBindings.ts";
 import { regionFromArn } from "../Lambda/BindingHttp.ts";
 import type { Bucket } from "../S3/Bucket.ts";
-import { grantTables } from "./BindingHttp.ts";
+import { GrantTables } from "./BindingHttp.ts";
 import {
   ExportTableToPointInTime,
   type ExportTableToPointInTimeRequest,
@@ -15,6 +15,7 @@ import type { Table } from "./Table.ts";
 export const ExportTableToPointInTimeHttp = Layer.effect(
   ExportTableToPointInTime,
   Effect.gen(function* () {
+    const grantTables = yield* GrantTables;
     return Effect.fn(function* <T extends Table, B extends Bucket>(table: T, bucket: B) {
       const TableArn = yield* table.tableArn;
       const S3Bucket = yield* bucket.bucketName;

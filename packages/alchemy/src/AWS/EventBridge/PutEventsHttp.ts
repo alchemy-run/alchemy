@@ -16,6 +16,7 @@ import { PutEvents, type PutEventsRequest } from "./PutEvents.ts";
 export const PutEventsHttp = Layer.effect(
   PutEvents,
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const putEvents = yield* AWSBindings.withCredentials(eventbridge.putEvents);
 
     return Effect.fn(function* (bus?: EventBus) {
@@ -33,7 +34,7 @@ export const PutEventsHttp = Layer.effect(
           ? Output.interpolate`${bus.eventBusArn}`
           : (`arn:aws:events:${region}:${accountId}:event-bus/default` as const);
 
-        yield* AWSBindings.bind`AWS.EventBridge.PutEvents(${bus ?? "default"})`({
+        yield* bind`AWS.EventBridge.PutEvents(${bus ?? "default"})`({
           policyStatements: [
             {
               Effect: "Allow",

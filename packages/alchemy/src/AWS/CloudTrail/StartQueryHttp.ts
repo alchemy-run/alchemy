@@ -14,12 +14,13 @@ import { StartQuery, type StartQueryRequest } from "./StartQuery.ts";
 export const StartQueryHttp = Layer.effect(
   StartQuery,
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const startQuery = yield* AWSBindings.withCredentials(cloudtrail.startQuery);
 
     return Effect.fn(function* (store: EventDataStore) {
       const Arn = yield* store.eventDataStoreArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`AWS.CloudTrail.StartQuery(${store})`({
+        yield* bind`AWS.CloudTrail.StartQuery(${store})`({
           policyStatements: [
             {
               Effect: "Allow",

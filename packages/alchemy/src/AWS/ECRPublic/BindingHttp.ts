@@ -52,12 +52,13 @@ export const makePublicRepositoryHttpBinding = <
   operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* options.operation.pipe(pinEcrPublic, AWSBindings.withCredentials);
 
     return Effect.fn(function* (repository: PublicRepository) {
       const RepositoryName = yield* repository.repositoryName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`AWS.ECRPublic.${options.capability}(${repository})`({
+        yield* bind`AWS.ECRPublic.${options.capability}(${repository})`({
           policyStatements: [
             {
               Effect: "Allow",
@@ -101,11 +102,12 @@ export const makePublicRegistryHttpBinding = <I extends object, A, E, R>(options
   operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* options.operation.pipe(pinEcrPublic, AWSBindings.withCredentials);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`AWS.ECRPublic.${options.capability}()`({
+        yield* bind`AWS.ECRPublic.${options.capability}()`({
           policyStatements: [
             {
               Effect: "Allow",

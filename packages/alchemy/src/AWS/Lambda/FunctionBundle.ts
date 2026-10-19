@@ -30,7 +30,7 @@ import {
 import * as TempRoot from "../../Bundle/TempRoot.ts";
 import { sha256, sha256Object } from "../../Util/sha256.ts";
 import { zipCode, zipFiles, type ZipFile } from "../../Util/zip.ts";
-import { nativeHostBundle } from "../NativeHost.ts";
+import { roleHostBundle } from "../AWSBindings.ts";
 import type { FunctionArchitecture, FunctionZipProps } from "./Function.ts";
 
 /**
@@ -204,7 +204,7 @@ export default await bootstrap(entrypoint);
         );
 
     return {
-      inputOptions: nativeHostBundle({
+      inputOptions: roleHostBundle({
         ...inputOptions,
         input: realMain,
         cwd,

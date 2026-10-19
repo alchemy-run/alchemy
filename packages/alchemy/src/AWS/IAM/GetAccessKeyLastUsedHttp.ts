@@ -13,12 +13,13 @@ import { GetAccessKeyLastUsed } from "./GetAccessKeyLastUsed.ts";
 export const GetAccessKeyLastUsedHttp = Layer.effect(
   GetAccessKeyLastUsed,
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const op = yield* AWSBindings.withCredentials(iam.getAccessKeyLastUsed);
 
     return Effect.fn(function* <K extends AccessKey>(accessKey: K) {
       const AccessKeyId = yield* accessKey.accessKeyId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`AWS.IAM.GetAccessKeyLastUsed(${accessKey})`({
+        yield* bind`AWS.IAM.GetAccessKeyLastUsed(${accessKey})`({
           policyStatements: [
             {
               Effect: "Allow",

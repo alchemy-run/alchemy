@@ -7,11 +7,12 @@ import { ListWorkspaces, type ListWorkspacesRequest } from "./ListWorkspaces.ts"
 export const ListWorkspacesHttp = Layer.effect(
   ListWorkspaces,
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const listWorkspaces = yield* AWSBindings.withCredentials(amp.listWorkspaces);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* AWSBindings.bind`AWS.AMP.ListWorkspaces()`({
+        yield* bind`AWS.AMP.ListWorkspaces()`({
           policyStatements: [
             {
               Effect: "Allow",
