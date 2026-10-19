@@ -1,10 +1,10 @@
-import * as Alchemy from "alchemy";
+import * as AI from "./ai/index.ts";
 import { Bash } from "./tools/Bash.ts";
 import { EditFile, ReadFile, WriteFile } from "./tools/Fs.ts";
 import { Grep } from "./tools/Grep.ts";
 import { Sql } from "./tools/Sql.ts";
 
-export class ReleaseBlogger extends (Alchemy.Agent<ReleaseBlogger>()("Blogger")`
+export class ReleaseBlogger extends (AI.Agent<ReleaseBlogger>()("Blogger")`
 You are the Release Blogger. Your job is to turn a merged pull request into a
 release blog post under website/src/content/docs/blog/.
 

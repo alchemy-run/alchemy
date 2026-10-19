@@ -34,7 +34,6 @@
   "exports": {
     ".": "./src/index.ts",
     "./*": "./src/*.ts",
-    "./AI": "./src/AI/index.ts",
     "./Workflows": "./src/Workflows.ts",
     "./Auth": "./src/Auth/index.ts",
     "./Alchemist": "./src/Alchemist/index.ts",
@@ -66,11 +65,6 @@
         "types": "./lib/*.d.ts",
         "bun": "./src/*.ts",
         "default": "./lib/*.js"
-      },
-      "./AI": {
-        "types": "./lib/AI/index.d.ts",
-        "bun": "./src/AI/index.ts",
-        "default": "./lib/AI/index.js"
       },
       "./Workflows": {
         "types": "./lib/Workflows.d.ts",

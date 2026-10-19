@@ -1,6 +1,6 @@
-import * as AI from "alchemy/AI";
 import * as Effect from "effect/Effect";
 import * as S from "effect/Schema";
+import * as AI from "../ai/index.ts";
 
 export const cmd = AI.Parameter("cmd")(S.String.pipe(S.optional))`The command to run.`;
 

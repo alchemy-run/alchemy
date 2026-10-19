@@ -1,7 +1,7 @@
+import type { RuntimeContext } from "alchemy/RuntimeContext";
+import { effectClass } from "alchemy/Util/effect";
 import type * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
-import type { RuntimeContext } from "../RuntimeContext.ts";
-import { effectClass } from "../Util/effect.ts";
 import type { ToolImpl } from "./Tool.ts";
 
 export type Services<Refs extends any[]> = Refs[number] extends infer A

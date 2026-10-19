@@ -1,6 +1,6 @@
+import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
-import type { RuntimeContext } from "../RuntimeContext.ts";
 import type { Parameter } from "./Parameter.ts";
 
 export type ToolParameters<Refs> = {
