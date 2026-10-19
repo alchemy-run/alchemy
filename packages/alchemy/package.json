@@ -34,19 +34,14 @@
   "exports": {
     ".": "./src/index.ts",
     "./*": "./src/*.ts",
-    "./Workflows": "./src/Workflows.ts",
     "./Auth": "./src/Auth/index.ts",
     "./Alchemist": "./src/Alchemist/index.ts",
     "./Command": "./src/Command/index.ts",
-    "./Construct": "./src/Construct/index.ts",
     "./Bundle": "./src/Bundle/index.ts",
     "./Http": "./src/Http/index.ts",
     "./Cli": "./src/Cli/index.ts",
     "./Cli/CliKit": "./src/Cli/CliKit/index.ts",
-    "./Endpoint": "./src/Endpoint/index.ts",
     "./Runtime/Bootstrap/*": "./src/Runtime/Bootstrap/*.ts",
-    "./Process": "./src/Process/index.ts",
-    "./TUI": "./src/TUI/index.ts",
     "./Secrets": "./src/Secrets/index.ts",
     "./Server": "./src/Server/index.ts",
     "./State": "./src/State/index.ts",
@@ -66,11 +61,6 @@
         "bun": "./src/*.ts",
         "default": "./lib/*.js"
       },
-      "./Workflows": {
-        "types": "./lib/Workflows.d.ts",
-        "bun": "./src/Workflows.ts",
-        "default": "./lib/Workflows.js"
-      },
       "./Auth": {
         "types": "./lib/Auth/index.d.ts",
         "bun": "./src/Auth/index.ts",
@@ -85,11 +75,6 @@
         "types": "./lib/Command/index.d.ts",
         "bun": "./src/Command/index.ts",
         "default": "./lib/Command/index.js"
-      },
-      "./Construct": {
-        "types": "./lib/Construct/index.d.ts",
-        "bun": "./src/Construct/index.ts",
-        "default": "./lib/Construct/index.js"
       },
       "./Bundle": {
         "types": "./lib/Bundle/index.d.ts",
@@ -111,25 +96,10 @@
         "bun": "./src/Cli/CliKit/index.ts",
         "default": "./lib/Cli/CliKit/index.js"
       },
-      "./Endpoint": {
-        "types": "./lib/Endpoint/index.d.ts",
-        "bun": "./src/Endpoint/index.ts",
-        "default": "./lib/Endpoint/index.js"
-      },
       "./Runtime/Bootstrap/*": {
         "types": "./src/Runtime/Bootstrap/*.ts",
         "bun": "./src/Runtime/Bootstrap/*.ts",
         "default": "./src/Runtime/Bootstrap/*.ts"
-      },
-      "./Process": {
-        "types": "./lib/Process/index.d.ts",
-        "bun": "./src/Process/index.ts",
-        "default": "./lib/Process/index.js"
-      },
-      "./TUI": {
-        "types": "./lib/TUI/index.d.ts",
-        "bun": "./src/TUI/index.ts",
-        "default": "./lib/TUI/index.js"
       },
       "./Secrets": {
         "types": "./lib/Secrets/index.d.ts",
@@ -161,7 +131,7 @@
     "build:package": "node scripts/build.ts",
     "clear:state": "cd ../../ && bun clear:state",
     "pretest": "pnpm -w ensure:built",
-    "test": "alchemy-test --exclude test/Railway",
+    "test": "alchemy-test",
     "nuke": "cd ../../ && bun nuke"
   },
   "dependencies": {
