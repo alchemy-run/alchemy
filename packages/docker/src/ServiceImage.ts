@@ -45,14 +45,14 @@ export interface ResolvedServiceImage {
 
 /**
  * The generated entry for `Docker.Service` containers: a shim importing only
- * `alchemy/Runtime/Bootstrap/Docker` plus the user's `main` — see that
+ * `@alchemy.run/docker/Bootstrap` plus the user's `main` — see that
  * module for why the entry never imports alchemy's own dependencies.
  */
 export const makeServiceBunBootstrap =
   (handler: string) =>
   (importPath: string): string =>
     `
-import { bootstrap } from "alchemy/Runtime/Bootstrap/Docker";
+import { bootstrap } from "@alchemy.run/docker/Bootstrap";
 import { ${handler} as entrypoint } from ${JSON.stringify(importPath)};
 
 await bootstrap(entrypoint);

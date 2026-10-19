@@ -1,7 +1,7 @@
 /**
  * Process bootstrap for the hosted `AWS.EC2.Instance` program (a systemd
  * unit running bun). The generated entry imports this module and the user's
- * `main`, nothing else — see `alchemy/Runtime/Bootstrap/Process` for why.
+ * `main`, nothing else — see `alchemy/Runtime/Bootstrap` for why.
  */
 import * as Credentials from "@distilled.cloud/aws/Credentials";
 import * as Region from "@distilled.cloud/aws/Region";
@@ -13,7 +13,7 @@ import {
   resolveProgram,
   runProcess,
   stackFromEnv,
-} from "alchemy/Runtime/Bootstrap/Process";
+} from "alchemy/Runtime/Bootstrap";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";

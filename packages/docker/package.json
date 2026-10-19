@@ -28,6 +28,7 @@
   "sideEffects": false,
   "exports": {
     ".": "./src/index.ts",
+    "./Bootstrap": "./src/Bootstrap.ts",
     "./*": "./src/*.ts",
     "./package.json": "./package.json"
   },
@@ -37,6 +38,11 @@
         "types": "./lib/index.d.ts",
         "bun": "./src/index.ts",
         "default": "./lib/index.js"
+      },
+      "./Bootstrap": {
+        "types": "./src/Bootstrap.ts",
+        "bun": "./src/Bootstrap.ts",
+        "default": "./src/Bootstrap.ts"
       },
       "./*": {
         "types": "./lib/*.d.ts",
@@ -55,6 +61,7 @@
     "rolldown": "catalog:"
   },
   "devDependencies": {
+    "@effect/platform-bun": "catalog:",
     "@types/bun": "catalog:",
     "@types/node": "catalog:",
     "alchemy": "workspace:*",
@@ -62,7 +69,13 @@
     "typescript": "catalog:"
   },
   "peerDependencies": {
+    "@effect/platform-bun": "catalog:",
     "alchemy": "workspace:*",
     "effect": "catalog:"
+  },
+  "peerDependenciesMeta": {
+    "@effect/platform-bun": {
+      "optional": true
+    }
   }
 }

@@ -1,18 +1,18 @@
 /**
  * Process bootstrap for `Fly.Service` and `Fly.Sprite` (a Node process
  * serving the bundled program). The generated entry imports this module
- * and the user's `main`, nothing else — see `alchemy/Runtime/Bootstrap/Process` for why.
+ * and the user's `main`, nothing else — see `alchemy/Runtime/Bootstrap` for why.
  */
 import { NodeServices } from "@effect/platform-node";
 import { NodeHttpServer } from "alchemy/Http";
 import { reifyBoundConfigProvider } from "alchemy/Runtime";
-import { ManagedHttpShutdown } from "alchemy/Runtime/Bootstrap/ManagedHttpShutdown";
 import {
   entrypointLayer,
   resolveProgram,
   runProcess,
   stackFromEnv,
-} from "alchemy/Runtime/Bootstrap/Process";
+} from "alchemy/Runtime/Bootstrap";
+import { ManagedHttpShutdown } from "alchemy/Runtime/ManagedHttpShutdown";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";

@@ -3554,7 +3554,7 @@ describe(
           expect(JSON.parse(manifest)).toMatchObject({ entrypoint: "bundle/index.js" });
           // The generated entry is a shim over @alchemy.run/prisma/Bootstrap;
           // its label and the shared "bootstrap starting" message are separate
-          // literals joined at runtime (see Runtime/Bootstrap/Process.ts).
+          // literals joined at runtime (see Runtime/Bootstrap.ts).
           expect(bundle).toContain("Prisma Compute");
           expect(bundle).toContain("bootstrap starting");
           expect(bundle).toMatch(/hostname\s*:\s*["'`]0\.0\.0\.0["'`]/);

@@ -10,7 +10,7 @@ import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Scope from "effect/Scope";
-import { ManagedHttpShutdown } from "./Runtime/Bootstrap/ManagedHttpShutdown.ts";
+import { ManagedHttpShutdown } from "./Runtime/ManagedHttpShutdown.ts";
 
 export type HttpEffect<Req = never> = Effect.Effect<
   HttpServerResponse.HttpServerResponse,

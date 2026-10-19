@@ -18,7 +18,7 @@ const bareImports = (result: Bundle.BundleOutput) =>
     .filter((line) => /^import\b/.test(line))
     .filter((line) => !/["'](\.\/|node:)/.test(line));
 
-/** Every generated-entry bootstrap module: core's and each provider's `Bootstrap`. */
+/** Every generated-entry bootstrap module: each provider's `Bootstrap`. */
 const BOOTSTRAP_MODULES = [
   "@alchemy.run/aws/Bootstrap/Ecs",
   "@alchemy.run/aws/Bootstrap/AppRunner",
@@ -27,14 +27,14 @@ const BOOTSTRAP_MODULES = [
   "@alchemy.run/aws/Bootstrap/Lambda",
   "@alchemy.run/aws/Bootstrap/MicrovmBun",
   "@alchemy.run/aws/Bootstrap/MicrovmNode",
-  "alchemy/Runtime/Bootstrap/Docker",
+  "@alchemy.run/docker/Bootstrap",
 ] as const;
 
 layer(NodeServices.layer)("generated entry bootstraps", (it) => {
   // The contract every platform's generated entry relies on: a consumer
-  // project that has `alchemy` installed and NOTHING else reachable (bun's
-  // isolated linker / pnpm) must be able to bundle
-  // `alchemy/Runtime/Bootstrap/<Platform>` — i.e. alchemy's own dependencies
+  // project that has the provider installed and NOTHING else reachable (bun's
+  // isolated linker / pnpm) must be able to bundle the provider's
+  // `Bootstrap` module — i.e. alchemy's own dependencies
   // (`@distilled.cloud/*`, `@effect/platform-*`) resolve from alchemy's
   // location, never from the consumer's. Before the bootstraps became real
   // modules, the entry imported those directly and an isolated project left
@@ -45,7 +45,11 @@ layer(NodeServices.layer)("generated entry bootstraps", (it) => {
       `${specifier} bundles from an isolated project`,
       () =>
         Effect.gen(function* () {
-          const project = isolatedProject(`bootstrap-${name.toLowerCase()}`, import.meta.filename);
+          // The consumer depends on the provider that generated the entry.
+          const provider = specifier.split("/").slice(0, 2).join("/");
+          const project = isolatedProject(`bootstrap-${name.toLowerCase()}`, import.meta.filename, [
+            provider,
+          ]);
           yield* materializeIsolatedProject(project);
           const virtualEntryPlugin = yield* Bundle.virtualEntryPlugin;
           // The exact production condition sets: bun modules resolve

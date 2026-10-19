@@ -1,7 +1,7 @@
 /**
  * Process bootstrap for `GCP.Run.Service`. The generated entry imports
  * this module and the user's `main`, nothing else — see
- * `alchemy/Runtime/Bootstrap/Process` for why.
+ * `alchemy/Runtime/Bootstrap` for why.
  *
  * Runtime credentials come from the Cloud Run metadata server (the
  * service's runtime service account), so HTTP bindings call GCP with
@@ -15,7 +15,7 @@ import {
   resolveProgram,
   runProcess,
   stackFromEnv,
-} from "alchemy/Runtime/Bootstrap/Process";
+} from "alchemy/Runtime/Bootstrap";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";

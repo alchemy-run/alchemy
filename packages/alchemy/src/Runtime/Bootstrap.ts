@@ -10,8 +10,9 @@
  * left external and the process died at boot with `Cannot find module`.
  *
  * Now the generated entry is a three-line shim that imports ONLY
- * `alchemy/Runtime/Bootstrap/<Platform>` (resolvable from any consumer —
- * `alchemy` is its direct dependency) plus the user's `main`. Everything
+ * the provider's `Bootstrap` module (e.g. `@alchemy.run/aws/Bootstrap/Ecs`,
+ * resolvable from any consumer — the provider is its direct dependency) plus
+ * the user's `main`. Everything
  * alchemy needs lives in these real modules, whose imports resolve by the
  * ordinary rule: from the file that wrote them.
  *
@@ -23,10 +24,10 @@ import * as Config from "effect/Config";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { makeEntrypointLayer } from "../../Runtime.ts";
-import { Self } from "../../Self.ts";
-import { Stack } from "../../Stack.ts";
-import { provideProcessTelemetry } from "../../Telemetry.ts";
+import { makeEntrypointLayer } from "../Runtime.ts";
+import { Self } from "../Self.ts";
+import { Stack } from "../Stack.ts";
+import { provideProcessTelemetry } from "../Telemetry.ts";
 import { withManagedHttpShutdown } from "./ManagedHttpShutdown.ts";
 
 /**

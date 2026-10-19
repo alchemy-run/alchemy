@@ -8409,6 +8409,9 @@ importers:
         specifier: 1.2.13
         version: 1.2.13
     devDependencies:
+      '@effect/platform-bun':
+        specifier: 'catalog:'
+        version: 4.0.4(effect@4.0.4)
       '@types/bun':
         specifier: 'catalog:'
         version: 1.4.3

@@ -1,7 +1,7 @@
 /**
  * Bootstrap for `AWS.Lambda.Function` (zip, Node runtime). The generated
  * entry imports this module and the user's `main`, and re-exports the
- * handler this returns — see `alchemy/Runtime/Bootstrap/Process` for why the entry is a
+ * handler this returns — see `alchemy/Runtime/Bootstrap` for why the entry is a
  * shim.
  */
 import * as Credentials from "@distilled.cloud/aws/Credentials";
@@ -9,7 +9,7 @@ import * as Endpoint from "@distilled.cloud/aws/Endpoint";
 import * as Region from "@distilled.cloud/aws/Region";
 import { layer as nodeServicesLayer } from "@effect/platform-node/NodeServices";
 import { reifyBoundConfigProvider } from "alchemy/Runtime";
-import { entrypointLayer, entrypointTag, stackFromEnv } from "alchemy/Runtime/Bootstrap/Process";
+import { entrypointLayer, entrypointTag, stackFromEnv } from "alchemy/Runtime/Bootstrap";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";

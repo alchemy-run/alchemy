@@ -41,7 +41,8 @@
     "./Http": "./src/Http/index.ts",
     "./Cli": "./src/Cli/index.ts",
     "./Cli/CliKit": "./src/Cli/CliKit/index.ts",
-    "./Runtime/Bootstrap/*": "./src/Runtime/Bootstrap/*.ts",
+    "./Runtime/Bootstrap": "./src/Runtime/Bootstrap.ts",
+    "./Runtime/ManagedHttpShutdown": "./src/Runtime/ManagedHttpShutdown.ts",
     "./Secrets": "./src/Secrets/index.ts",
     "./Server": "./src/Server/index.ts",
     "./State": "./src/State/index.ts",
@@ -96,10 +97,15 @@
         "bun": "./src/Cli/CliKit/index.ts",
         "default": "./lib/Cli/CliKit/index.js"
       },
-      "./Runtime/Bootstrap/*": {
-        "types": "./src/Runtime/Bootstrap/*.ts",
-        "bun": "./src/Runtime/Bootstrap/*.ts",
-        "default": "./src/Runtime/Bootstrap/*.ts"
+      "./Runtime/Bootstrap": {
+        "types": "./src/Runtime/Bootstrap.ts",
+        "bun": "./src/Runtime/Bootstrap.ts",
+        "default": "./src/Runtime/Bootstrap.ts"
+      },
+      "./Runtime/ManagedHttpShutdown": {
+        "types": "./src/Runtime/ManagedHttpShutdown.ts",
+        "bun": "./src/Runtime/ManagedHttpShutdown.ts",
+        "default": "./src/Runtime/ManagedHttpShutdown.ts"
       },
       "./Secrets": {
         "types": "./lib/Secrets/index.d.ts",

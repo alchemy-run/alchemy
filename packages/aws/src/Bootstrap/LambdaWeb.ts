@@ -1,7 +1,7 @@
 /**
  * Bootstrap for an Effect `AWS.Lambda.WebFunction` (zip, Node runtime). The
  * generated entry imports this module and the user's `main` — see
- * `alchemy/Runtime/Bootstrap/Process` for why the entry is a shim.
+ * `alchemy/Runtime/Bootstrap` for why the entry is a shim.
  *
  * Unlike an Event Function, a Web Function is a plain HTTP server: the
  * bundled program's `fetch` handler is served by Effect's Node HTTP server
@@ -15,13 +15,13 @@ import * as Region from "@distilled.cloud/aws/Region";
 import { NodeServices } from "@effect/platform-node";
 import { NodeHttpServer } from "alchemy/Http";
 import { reifyBoundConfigProvider } from "alchemy/Runtime";
-import { ManagedHttpShutdown } from "alchemy/Runtime/Bootstrap/ManagedHttpShutdown";
 import {
   entrypointLayer,
   resolveProgram,
   runProcess,
   stackFromEnv,
-} from "alchemy/Runtime/Bootstrap/Process";
+} from "alchemy/Runtime/Bootstrap";
+import { ManagedHttpShutdown } from "alchemy/Runtime/ManagedHttpShutdown";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";

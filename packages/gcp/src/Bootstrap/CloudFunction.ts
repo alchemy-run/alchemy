@@ -16,7 +16,7 @@
 import { NodeServices } from "@effect/platform-node";
 import { HttpServer, safeHttpEffect } from "alchemy/Http";
 import { reifyBoundConfigProvider } from "alchemy/Runtime";
-import { entrypointLayer, resolveProgram, stackFromEnv } from "alchemy/Runtime/Bootstrap/Process";
+import { entrypointLayer, resolveProgram, stackFromEnv } from "alchemy/Runtime/Bootstrap";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Context from "effect/Context";
 import * as Deferred from "effect/Deferred";
