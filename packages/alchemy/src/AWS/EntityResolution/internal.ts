@@ -68,7 +68,7 @@ export const retryRolePropagation = <A, E, R>(
 ): Effect.Effect<A, E, R> =>
   Effect.retry(self, {
     while: (e) =>
-      e instanceof entityresolution.AccessDeniedException &&
+      entityresolution.AccessDeniedException.is(e) &&
       typeof e.message === "string" &&
       (e.message.includes("assuming the passed role") ||
         e.message.includes("does not have access")),

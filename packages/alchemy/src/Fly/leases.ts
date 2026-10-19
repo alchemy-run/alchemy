@@ -26,11 +26,11 @@ const retrySchedule = <E>(): Schedule.Schedule<Duration.Duration, E> =>
   Schedule.exponential("500 millis").pipe(
     Schedule.modifyDelay<Duration.Duration, E>(({ input, duration }) =>
       Effect.succeed(
-        (input instanceof TooManyRequests ||
-          input instanceof InternalServerError ||
-          input instanceof BadGateway ||
-          input instanceof ServiceUnavailable ||
-          input instanceof GatewayTimeout) &&
+        (TooManyRequests.is(input) ||
+          InternalServerError.is(input) ||
+          BadGateway.is(input) ||
+          ServiceUnavailable.is(input) ||
+          GatewayTimeout.is(input)) &&
           input.retryAfter
           ? Math.min(Duration.toMillis(input.retryAfter), 60_000)
           : Math.min(Duration.toMillis(duration), 5_000),

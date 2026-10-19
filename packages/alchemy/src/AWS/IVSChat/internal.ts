@@ -77,7 +77,7 @@ export const retryWhileHandlerPermissionPropagating = <A, E, R>(
 ): Effect.Effect<A, E, R> =>
   Effect.retry(self, {
     while: (e): boolean =>
-      e instanceof ivschat.ValidationException && e.message.includes("invalid lambda permission"),
+      ivschat.ValidationException.is(e) && e.message.includes("invalid lambda permission"),
     schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(10)]),
   });
 
