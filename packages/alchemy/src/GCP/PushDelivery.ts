@@ -98,8 +98,7 @@ const expectedAudience = (request: HttpServerRequest, path: string) =>
 export const grantSelfInvoker = (host: PushHost) =>
   Effect.gen(function* () {
     const endpoint = hostEndpoint(host);
-    const member = yield* Member;
-    yield* member(`${host.LogicalId}-PushInvoker`, {
+    yield* Member(`${host.LogicalId}-PushInvoker`, {
       kind: "run.service",
       name: endpoint.invokerService,
       role: "roles/run.invoker",
