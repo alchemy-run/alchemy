@@ -93,7 +93,11 @@ test.provider(
   },
 );
 
-test.provider(
+// Pins the live diff's plan-time bundle hash. Dev mode (ALCHEMY_TEST_DEV=1)
+// plans content-only changes as noop and hot-swaps them from the watch loop
+// (covered by Function.local.test.ts), and the fixture's function-valued
+// `build.external` cannot cross the dev sidecar's RPC boundary.
+test.provider.skipIf(process.env.ALCHEMY_TEST_DEV === "1")(
   "Effect-native function updates when its source changes",
   (stack) =>
     Effect.gen(function* () {

@@ -1,8 +1,7 @@
 import * as Effect from "effect/Effect";
-import * as Binding from "../../Binding.ts";
 import * as Output from "../../Output.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import { AWSEnvironment } from "../Environment.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
 import type { AgentAlias } from "./AgentAlias.ts";
 import type { DataSource } from "./DataSource.ts";
 import type { KnowledgeBase } from "./KnowledgeBase.ts";
@@ -40,28 +39,25 @@ export const makeModelScopedHttpBinding = <I extends { modelId: string }, A, E, 
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (model: string, ...additionalModels: string[]) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          const { accountId, region } = yield* currentEnv;
-          // Sort so the binding identity (SID + ARN list) is deterministic
-          // regardless of argument order.
-          const sorted = [...new Set([model, ...additionalModels])].sort();
-          yield* host.bind`Allow(${host}, ${options.tag}(${sorted.join(",")}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: [
-                  ...new Set(sorted.flatMap((id) => bedrockModelArns(region, accountId, id))),
-                ],
-              },
-            ],
-          });
-        }
+        const { accountId, region } = yield* currentEnv;
+        // Sort so the binding identity (SID + ARN list) is deterministic
+        // regardless of argument order.
+        const sorted = [...new Set([model, ...additionalModels])].sort();
+        yield* AWSBindings.bind`${options.tag}(${sorted.join(",")})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: [
+                ...new Set(sorted.flatMap((id) => bedrockModelArns(region, accountId, id))),
+              ],
+            },
+          ],
+        });
       }
       return Effect.fn(`${options.tag}(${model})`)(function* (
         request: Omit<I, "modelId"> & { modelId?: string },
@@ -94,23 +90,20 @@ export const makeKnowledgeBaseScopedHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* <K extends KnowledgeBase>(knowledgeBase: K) {
       const KnowledgeBaseId = yield* knowledgeBase.knowledgeBaseId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}(${knowledgeBase}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: [knowledgeBase.knowledgeBaseArn],
-              },
-            ],
-          });
-        }
+        yield* AWSBindings.bind`${options.tag}(${knowledgeBase})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: [knowledgeBase.knowledgeBaseArn],
+            },
+          ],
+        });
       }
       return Effect.fn(`${options.tag}(${knowledgeBase.LogicalId})`)(function* (
         request: Omit<I, "knowledgeBaseId">,
@@ -145,31 +138,26 @@ export const makeDataSourceScopedHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* <D extends DataSource>(dataSource: D) {
       const KnowledgeBaseId = yield* dataSource.knowledgeBaseId;
       const DataSourceId = yield* dataSource.dataSourceId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          const { accountId, region } = yield* currentEnv;
-          yield* host.bind`Allow(${host}, ${options.tag}(${dataSource}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: [
-                  dataSource.knowledgeBaseId.pipe(
-                    Output.map(
-                      (id) => `arn:aws:bedrock:${region}:${accountId}:knowledge-base/${id}`,
-                    ),
-                  ),
-                ],
-              },
-            ],
-          });
-        }
+        const { accountId, region } = yield* currentEnv;
+        yield* AWSBindings.bind`${options.tag}(${dataSource})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: [
+                dataSource.knowledgeBaseId.pipe(
+                  Output.map((id) => `arn:aws:bedrock:${region}:${accountId}:knowledge-base/${id}`),
+                ),
+              ],
+            },
+          ],
+        });
       }
       return Effect.fn(`${options.tag}(${dataSource.LogicalId})`)(function* (
         request: Omit<I, "knowledgeBaseId" | "dataSourceId">,
@@ -203,24 +191,21 @@ export const makeAgentAliasScopedHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* <AA extends AgentAlias>(alias: AA) {
       const AgentId = yield* alias.agentId;
       const AgentAliasId = yield* alias.agentAliasId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}(${alias}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: [alias.agentAliasArn],
-              },
-            ],
-          });
-        }
+        yield* AWSBindings.bind`${options.tag}(${alias})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: [alias.agentAliasArn],
+            },
+          ],
+        });
       }
       return Effect.fn(`${options.tag}(${alias.LogicalId})`)(function* (
         request: Omit<I, "agentId" | "agentAliasId">,
@@ -250,37 +235,34 @@ export const makeRagHttpBinding = <I, A, E, R>(options: {
   operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* <K extends KnowledgeBase>(knowledgeBase: K, ...models: string[]) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          const { accountId, region } = yield* currentEnv;
-          // Scope InvokeModel to the named models, or all foundation models +
-          // cross-region inference profiles when the caller names none.
-          const modelResources =
-            models.length > 0
-              ? [...new Set(models.flatMap((id) => bedrockModelArns(region, accountId, id)))]
-              : [
-                  `arn:aws:bedrock:${region}::foundation-model/*`,
-                  `arn:aws:bedrock:${region}:${accountId}:inference-profile/*`,
-                ];
-          yield* host.bind`Allow(${host}, ${options.tag}(${knowledgeBase}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: ["bedrock:Retrieve", "bedrock:RetrieveAndGenerate"],
-                Resource: [knowledgeBase.knowledgeBaseArn],
-              },
-              {
-                Effect: "Allow",
-                Action: ["bedrock:InvokeModel"],
-                Resource: modelResources,
-              },
-            ],
-          });
-        }
+        const { accountId, region } = yield* currentEnv;
+        // Scope InvokeModel to the named models, or all foundation models +
+        // cross-region inference profiles when the caller names none.
+        const modelResources =
+          models.length > 0
+            ? [...new Set(models.flatMap((id) => bedrockModelArns(region, accountId, id)))]
+            : [
+                `arn:aws:bedrock:${region}::foundation-model/*`,
+                `arn:aws:bedrock:${region}:${accountId}:inference-profile/*`,
+              ];
+        yield* AWSBindings.bind`${options.tag}(${knowledgeBase})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: ["bedrock:Retrieve", "bedrock:RetrieveAndGenerate"],
+              Resource: [knowledgeBase.knowledgeBaseArn],
+            },
+            {
+              Effect: "Allow",
+              Action: ["bedrock:InvokeModel"],
+              Resource: modelResources,
+            },
+          ],
+        });
       }
       return Effect.fn(`${options.tag}(${knowledgeBase.LogicalId})`)(function* (request: I) {
         return yield* op(request);

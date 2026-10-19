@@ -1,5 +1,4 @@
 import { expect, test } from "alchemy-test";
-import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
@@ -37,19 +36,25 @@ const runtimeMode = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
     );
   });
 
+// The deployed host's RuntimeContext, holding what the binding bound at deploy.
+const hostRuntime = (bound: Record<string, string>) =>
+  Layer.succeed(RuntimeContext, {
+    Type: "Neon.Function",
+    id: "Fn",
+    env: {},
+    get: <T>(key: string) => Effect.succeed(bound[key] as T | undefined),
+    set: (key: string) => Effect.succeed(key),
+  });
+
 const services = (injected: boolean, environment?: Record<string, string>) =>
   QueryAIGatewayHttp.pipe(
     Layer.provideMerge(
       Layer.mergeAll(
-        RuntimeContext.phantom,
-        Layer.succeed(
-          ConfigProvider.ConfigProvider,
-          ConfigProvider.fromUnknown({
-            [backendEnvKey(gateway.FQN, "AI_GATEWAY_URL")]: "https://branch.invalid",
-            [backendEnvKey(gateway.FQN, "AI_GATEWAY_TOKEN")]: "managed-scoped-token",
-            [backendEnvKey(gateway.FQN, "AI_GATEWAY_INJECTED")]: injected ? "yes" : "no",
-          }),
-        ),
+        hostRuntime({
+          [backendEnvKey(gateway.FQN, "AI_GATEWAY_URL")]: "https://branch.invalid",
+          [backendEnvKey(gateway.FQN, "AI_GATEWAY_TOKEN")]: "managed-scoped-token",
+          [backendEnvKey(gateway.FQN, "AI_GATEWAY_INJECTED")]: injected ? "yes" : "no",
+        }),
         environment ? Layer.succeed(FunctionEnvironment, environment) : Layer.empty,
       ),
     ),

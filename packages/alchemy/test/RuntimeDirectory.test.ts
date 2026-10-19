@@ -22,7 +22,7 @@ import { copyTree, hashExtraFiles } from "@/Util/extraFiles";
 import { isPathWithin } from "@/Util/isPathWithin";
 import { PlatformServices } from "@/Util/PlatformServices";
 import { sha256 } from "@/Util/sha256";
-import { resourceContext } from "./Utils/ResourceContext.ts";
+import { resourceContext } from "./Util/ResourceContext.ts";
 
 /**
  * Runs a Worker build the way the engine runs a provider lifecycle call: with

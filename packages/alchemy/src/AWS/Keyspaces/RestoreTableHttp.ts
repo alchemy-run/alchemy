@@ -1,9 +1,8 @@
 import * as keyspaces from "@distilled.cloud/aws/keyspaces";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Binding from "../../Binding.ts";
 import * as Output from "../../Output.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { Keyspace } from "./Keyspace.ts";
 import { RestoreTable, type RestoreTableRequest } from "./RestoreTable.ts";
 import type { Table } from "./Table.ts";
@@ -17,7 +16,7 @@ import type { Table } from "./Table.ts";
 export const RestoreTableHttp = Layer.effect(
   RestoreTable,
   Effect.gen(function* () {
-    const restoreTable = yield* keyspaces.restoreTable;
+    const restoreTable = yield* AWSBindings.withCredentials(keyspaces.restoreTable);
 
     return Effect.fn(function* <From extends Table, To extends Keyspace>(
       source: From,
@@ -27,30 +26,25 @@ export const RestoreTableHttp = Layer.effect(
       const SourceTableName = yield* source.tableName;
       const TargetKeyspaceName = yield* targetKeyspace.keyspaceName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, AWS.Keyspaces.RestoreTable(${source}, ${targetKeyspace}))`(
+        yield* AWSBindings.bind`AWS.Keyspaces.RestoreTable(${source}, ${targetKeyspace})`({
+          policyStatements: [
             {
-              policyStatements: [
-                {
-                  Effect: "Allow",
-                  Action: ["cassandra:Select"],
-                  Resource: [source.tableArn],
-                },
-                {
-                  // The keyspace ARN ends with a trailing slash
-                  // (`.../keyspace/name/`), so its tables match `table/*`.
-                  Effect: "Allow",
-                  Action: ["cassandra:Restore", "cassandra:Create", "cassandra:TagResource"],
-                  Resource: [
-                    targetKeyspace.keyspaceArn,
-                    Output.interpolate`${targetKeyspace.keyspaceArn}table/*`,
-                  ],
-                },
+              Effect: "Allow",
+              Action: ["cassandra:Select"],
+              Resource: [source.tableArn],
+            },
+            {
+              // The keyspace ARN ends with a trailing slash
+              // (`.../keyspace/name/`), so its tables match `table/*`.
+              Effect: "Allow",
+              Action: ["cassandra:Restore", "cassandra:Create", "cassandra:TagResource"],
+              Resource: [
+                targetKeyspace.keyspaceArn,
+                Output.interpolate`${targetKeyspace.keyspaceArn}table/*`,
               ],
             },
-          );
-        }
+          ],
+        });
       }
       return Effect.fn(`AWS.Keyspaces.RestoreTable(${source.LogicalId})`)(function* (
         request: RestoreTableRequest,

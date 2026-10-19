@@ -28,6 +28,7 @@ const collectorWorker = () =>
 
 interface CollectedSpan {
   name: string;
+  kind?: number;
   status?: { code?: number };
   attributes?: { key: string; value: Record<string, unknown> }[];
 }
@@ -48,11 +49,14 @@ const rootSpanSummary = (collected: unknown) =>
     status: span.status?.code,
   }));
 
-// The `http.server` spans for one path.
+// OTLP SPAN_KIND_SERVER: the HttpMiddleware tracer's root span per request.
+const SERVER_SPAN_KIND = 2;
+
+// The HTTP server root spans for one path.
 const rootSpansFor = (collected: unknown, path: string): CollectedSpan[] =>
   collectedSpans(collected).filter(
     (span) =>
-      span.name.startsWith("http.server") &&
+      span.kind === SERVER_SPAN_KIND &&
       span.attributes?.some(
         (attribute) => attribute.key === "url.path" && attribute.value.stringValue === path,
       ),
@@ -128,8 +132,9 @@ describe(
             timeout: "120 seconds",
             label: "lambda service.name",
           });
-          // http.server root span from the HttpMiddleware tracer.
-          yield* expectUrlContains(collected, "http.server GET");
+          // HTTP server root span from the HttpMiddleware tracer, named
+          // after the request method.
+          yield* expectUrlContains(collected, '"name":"GET"');
           // Child span from Effect.fn instrumentation.
           yield* expectUrlContains(collected, "lambda.child-span");
           // Log record shipped by the OTLP logger.

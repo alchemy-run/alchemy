@@ -1,3 +1,4 @@
+import * as Effect from "effect/Effect";
 /**
  * Shared scaffolding for RDS Data API HTTP bindings.
  *
@@ -12,9 +13,7 @@
  * `database`/`schema`) into the wire request. Everything except the
  * operation, the IAM action, and the request shaping is boilerplate.
  */
-import * as Effect from "effect/Effect";
-import * as Binding from "../../Binding.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { DBCluster } from "../RDS/DBCluster.ts";
 import type { Secret } from "../SecretsManager/Secret.ts";
 
@@ -58,29 +57,26 @@ export const makeRDSDataHttpBinding = <Req, I, A, E, R>(options: {
   ) => I;
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (cluster: DBCluster, bindOptions: RDSDataBindingOptions) {
       const resourceArn = yield* cluster.dbClusterArn;
       const secretArn = yield* bindOptions.secret.secretArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}(${cluster}, ${bindOptions.secret}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [options.action],
-                Resource: [cluster.dbClusterArn, bindOptions.secret.secretArn],
-              },
-              {
-                Effect: "Allow",
-                Action: ["secretsmanager:GetSecretValue", "secretsmanager:DescribeSecret"],
-                Resource: [bindOptions.secret.secretArn],
-              },
-            ],
-          });
-        }
+        yield* AWSBindings.bind`${options.tag}(${cluster}, ${bindOptions.secret})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [options.action],
+              Resource: [cluster.dbClusterArn, bindOptions.secret.secretArn],
+            },
+            {
+              Effect: "Allow",
+              Action: ["secretsmanager:GetSecretValue", "secretsmanager:DescribeSecret"],
+              Resource: [bindOptions.secret.secretArn],
+            },
+          ],
+        });
       }
       return Effect.fn(`${options.tag}(${cluster.LogicalId})`)(function* (
         // optional so zero-arg callables (`BeginTransaction`) conform to

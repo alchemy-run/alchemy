@@ -1,8 +1,7 @@
 import * as Effect from "effect/Effect";
-import * as Binding from "../../Binding.ts";
 import * as Output from "../../Output.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
-import { isInstance, type Instance } from "./Instance.ts";
+import * as AWSBindings from "../AWSBindings.ts";
+import { type Instance } from "./Instance.ts";
 import type { SecurityGroup } from "./SecurityGroup.ts";
 import type { Volume } from "./Volume.ts";
 
@@ -41,24 +40,21 @@ export const makeInstanceHttpBinding = <I extends object, A, E, R>(options: {
   resource?: "instance" | "*";
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (instance: Instance) {
       const instanceId = yield* instance.instanceId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host) || isInstance(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}(${instance}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource:
-                  options.resource === "*" ? ["*"] : [Output.interpolate`${instance.instanceArn}`],
-              },
-            ],
-          });
-        }
+        yield* AWSBindings.bind`${options.tag}(${instance})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource:
+                options.resource === "*" ? ["*"] : [Output.interpolate`${instance.instanceArn}`],
+            },
+          ],
+        });
       }
       return Effect.fn(`${options.tag}(${instance.LogicalId})`)(function* (
         request?: Omit<I, "InstanceId" | "InstanceIds">,
@@ -87,23 +83,20 @@ export const makeSecurityGroupHttpBinding = <I extends object, A, E, R>(options:
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (group: SecurityGroup) {
       const groupId = yield* group.groupId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host) || isInstance(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}(${group}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: [Output.interpolate`${group.groupArn}`],
-              },
-            ],
-          });
-        }
+        yield* AWSBindings.bind`${options.tag}(${group})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: [Output.interpolate`${group.groupArn}`],
+            },
+          ],
+        });
       }
       return Effect.fn(`${options.tag}(${group.LogicalId})`)(function* (
         request: Omit<I, "GroupId" | "GroupName">,
@@ -134,26 +127,23 @@ export const makeVolumeHttpBinding = <I extends object, A, E, R>(options: {
   extraResources?: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (volume: Volume) {
       const volumeId = yield* volume.volumeId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host) || isInstance(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}(${volume}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: [
-                  Output.interpolate`${volume.volumeArn}`,
-                  ...(options.extraResources ?? []),
-                ],
-              },
-            ],
-          });
-        }
+        yield* AWSBindings.bind`${options.tag}(${volume})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: [
+                Output.interpolate`${volume.volumeArn}`,
+                ...(options.extraResources ?? []),
+              ],
+            },
+          ],
+        });
       }
       return Effect.fn(`${options.tag}(${volume.LogicalId})`)(function* (
         request?: Omit<I, "VolumeId">,

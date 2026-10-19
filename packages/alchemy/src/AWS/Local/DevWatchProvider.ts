@@ -39,12 +39,12 @@ import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
 import * as Scope from "effect/Scope";
 import * as Semaphore from "effect/Semaphore";
-import { havePropsChanged, isResolved, stripEffects } from "../../Diff.ts";
+import { diffBindings, havePropsChanged, isResolved, stripEffects } from "../../Diff.ts";
 import { canonicalHash } from "../../Local/LocalProvider.ts";
 import * as RpcProvider from "../../Local/RpcProvider.ts";
 import type { Platform } from "../../Platform.ts";
 import type { ProviderService } from "../../Provider.ts";
-import type { ResourceClassLike, ResourceLike } from "../../Resource.ts";
+import type { ResourceBinding, ResourceClassLike, ResourceLike } from "../../Resource.ts";
 import { moduleExtension } from "../../Util/Node.ts";
 import { flociServices } from "./FlociServices.ts";
 import { withProviderContext } from "./ProviderContext.ts";
@@ -83,6 +83,19 @@ export interface DevWatchContext<Props, Attrs> {
    * on the same logical id.
    */
   readonly rerunReconcile: Effect.Effect<Attrs, unknown>;
+  /**
+   * {@link rerunReconcile}, gated on a staleness check that runs INSIDE the
+   * per-id lock against the freshest attributes. A trigger can fire while an
+   * engine reconcile for the same id holds the lock; by the time the lock
+   * frees, that reconcile may already have published exactly the content the
+   * trigger saw, and re-running would register a redundant revision and reap
+   * the one the engine just recorded. A check made before waiting on the
+   * lock cannot see that. Returns the current attributes untouched when
+   * `isStale` resolves `false`.
+   */
+  readonly rerunReconcileIfStale: (
+    isStale: (current: Attrs) => Effect.Effect<boolean, unknown, any>,
+  ) => Effect.Effect<Attrs, unknown>;
 }
 
 /**
@@ -296,46 +309,54 @@ export const makeDevWatchProvider = <
           attrs,
         };
         watches.set(input.id, entry);
+        // One watcher-driven reconcile, UNLOCKED: callers take the per-id lock.
+        const rerun = Effect.gen(function* () {
+          const previous = entry.attrs as Attrs | undefined;
+          const rerunNews =
+            spec.transformReconcileNews !== undefined
+              ? yield* spec
+                  .transformReconcileNews({
+                    id: input.id,
+                    news: stripEffects(entry.lastInput.news) as Props,
+                  })
+                  .pipe(Effect.provide(services))
+              : entry.lastInput.news;
+          const fresh = yield* wrapped.reconcile(
+            withSafeSession({
+              ...entry.lastInput,
+              news: rerunNews,
+              olds: entry.lastInput.news,
+              output: entry.attrs,
+            }) as any,
+          );
+          entry.attrs = fresh;
+          if (spec.onReconciled !== undefined) {
+            yield* spec
+              .onReconciled({
+                id: input.id,
+                news: stripEffects(entry.lastInput.news) as Props,
+                previous,
+                attrs: fresh as Attrs,
+              })
+              .pipe(Effect.provide(services));
+          }
+          return fresh as Attrs;
+        });
         const ctx: DevWatchContext<Props, Attrs> = {
           id: input.id,
           instanceId: input.instanceId,
           news: strippedNews as Props,
           attrs: attrs as Attrs,
           currentAttrs: Effect.sync(() => entry.attrs as Attrs),
-          rerunReconcile: withLock(input.id)(
-            Effect.gen(function* () {
-              const previous = entry.attrs as Attrs | undefined;
-              const rerunNews =
-                spec.transformReconcileNews !== undefined
-                  ? yield* spec
-                      .transformReconcileNews({
-                        id: input.id,
-                        news: stripEffects(entry.lastInput.news) as Props,
-                      })
-                      .pipe(Effect.provide(services))
-                  : entry.lastInput.news;
-              const fresh = yield* wrapped.reconcile(
-                withSafeSession({
-                  ...entry.lastInput,
-                  news: rerunNews,
-                  olds: entry.lastInput.news,
-                  output: entry.attrs,
-                }) as any,
-              );
-              entry.attrs = fresh;
-              if (spec.onReconciled !== undefined) {
-                yield* spec
-                  .onReconciled({
-                    id: input.id,
-                    news: stripEffects(entry.lastInput.news) as Props,
-                    previous,
-                    attrs: fresh as Attrs,
-                  })
-                  .pipe(Effect.provide(services));
-              }
-              return fresh as Attrs;
-            }),
-          ) as Effect.Effect<Attrs, unknown>,
+          rerunReconcile: withLock(input.id)(rerun) as Effect.Effect<Attrs, unknown>,
+          rerunReconcileIfStale: (isStale) =>
+            withLock(input.id)(
+              Effect.gen(function* () {
+                const current = entry.attrs as Attrs;
+                if (!(yield* isStale(current).pipe(Effect.provide(services)))) return current;
+                return yield* rerun;
+              }),
+            ) as Effect.Effect<Attrs, unknown>,
         };
         const fiber = yield* spec.startWatch(ctx).pipe(
           Effect.provide(services),
@@ -371,11 +392,15 @@ export const makeDevWatchProvider = <
           olds,
           news: rawNews,
           output,
+          oldBindings = [],
+          newBindings = [],
         }: {
           id: string;
           olds: Props;
           news: Props;
           output: Attrs | undefined;
+          oldBindings?: ResourceBinding[];
+          newBindings?: ResourceBinding[];
         }) {
           // Runtime props (an Effect-native Function's handler, a Layer)
           // arrive as Effects, which `isResolved` classifies as unresolved.
@@ -415,6 +440,13 @@ export const makeDevWatchProvider = <
           const persistedHash = yield* canonicalHash(output as object);
           const watcherHash = yield* canonicalHash(entry.attrs as object);
           if (persistedHash !== watcherHash) {
+            return { action: "update" as const };
+          }
+          // Binding data (env vars, policy statements) is applied by
+          // reconcile, not the watch loop. An explicit `noop` is final — the
+          // engine does not re-check bindings after it — so a binding-only
+          // change must plan an update here.
+          if (diffBindings(oldBindings, newBindings).some((b) => b.action !== "noop")) {
             return { action: "update" as const };
           }
           if (!havePropsChanged(normalize(olds), normalize(news)!)) {

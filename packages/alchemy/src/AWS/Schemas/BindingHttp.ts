@@ -1,7 +1,6 @@
 import * as Effect from "effect/Effect";
-import * as Binding from "../../Binding.ts";
 import * as Output from "../../Output.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { Discoverer } from "./Discoverer.ts";
 import type { Registry } from "./Registry.ts";
 import type { Schema } from "./Schema.ts";
@@ -35,24 +34,21 @@ export const makeSchemasSchemaHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (schema: Schema) {
       const RegistryName = yield* schema.registryName;
       const SchemaName = yield* schema.schemaName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}(${schema}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: [schema.schemaArn],
-              },
-            ],
-          });
-        }
+        yield* AWSBindings.bind`${options.tag}(${schema})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: [schema.schemaArn],
+            },
+          ],
+        });
       }
       return Effect.fn(`${options.tag}(${schema.LogicalId})`)(function* (
         request?: Omit<I, "RegistryName" | "SchemaName">,
@@ -87,31 +83,28 @@ export const makeSchemasRegistryHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (registry: Registry) {
       const RegistryName = yield* registry.registryName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}(${registry}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: [
+        yield* AWSBindings.bind`${options.tag}(${registry})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: [
+                registry.registryArn,
+                // Registry-scoped reads (e.g. SearchSchemas) authorize
+                // against the schema-type ARN keyed by the registry name.
+                Output.map(
                   registry.registryArn,
-                  // Registry-scoped reads (e.g. SearchSchemas) authorize
-                  // against the schema-type ARN keyed by the registry name.
-                  Output.map(
-                    registry.registryArn,
-                    (arn) => `${arn.replace(":registry/", ":schema/")}*`,
-                  ),
-                ],
-              },
-            ],
-          });
-        }
+                  (arn) => `${arn.replace(":registry/", ":schema/")}*`,
+                ),
+              ],
+            },
+          ],
+        });
       }
       return Effect.fn(`${options.tag}(${registry.LogicalId})`)(function* (
         request?: Omit<I, "RegistryName">,
@@ -152,45 +145,42 @@ export const makeSchemasDiscovererHttpBinding = <
   ruleActions?: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (discoverer: Discoverer) {
       const DiscovererId = yield* discoverer.discovererId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          // The managed rule is named `Schemas-{discovererId}` but TRUNCATED
-          // to EventBridge's 64-char rule-name limit, so the grant wildcards
-          // the name under the `Schemas-` prefix instead of interpolating
-          // the full discoverer id.
-          const toRuleArn = (busSegment: string) =>
-            Output.map(
-              discoverer.discovererArn,
-              (arn) =>
-                `${arn.replace(":schemas:", ":events:").split(":discoverer/")[0]}:rule/${busSegment}Schemas-*`,
-            );
-          yield* host.bind`Allow(${host}, ${options.tag}(${discoverer}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: [discoverer.discovererArn],
-              },
-              ...(options.ruleActions !== undefined
-                ? [
-                    {
-                      Effect: "Allow" as const,
-                      Action: [...options.ruleActions],
-                      // The managed rule lives on the discovered bus
-                      // (`rule/{busName}/Schemas-{id}`) or, for the default
-                      // bus, directly under `rule/Schemas-{id}`.
-                      Resource: [toRuleArn("*/"), toRuleArn("")],
-                    },
-                  ]
-                : []),
-            ],
-          });
-        }
+        // The managed rule is named `Schemas-{discovererId}` but TRUNCATED
+        // to EventBridge's 64-char rule-name limit, so the grant wildcards
+        // the name under the `Schemas-` prefix instead of interpolating
+        // the full discoverer id.
+        const toRuleArn = (busSegment: string) =>
+          Output.map(
+            discoverer.discovererArn,
+            (arn) =>
+              `${arn.replace(":schemas:", ":events:").split(":discoverer/")[0]}:rule/${busSegment}Schemas-*`,
+          );
+        yield* AWSBindings.bind`${options.tag}(${discoverer})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: [discoverer.discovererArn],
+            },
+            ...(options.ruleActions !== undefined
+              ? [
+                  {
+                    Effect: "Allow" as const,
+                    Action: [...options.ruleActions],
+                    // The managed rule lives on the discovered bus
+                    // (`rule/{busName}/Schemas-{id}`) or, for the default
+                    // bus, directly under `rule/Schemas-{id}`.
+                    Resource: [toRuleArn("*/"), toRuleArn("")],
+                  },
+                ]
+              : []),
+          ],
+        });
       }
       return Effect.fn(`${options.tag}(${discoverer.LogicalId})`)(function* (
         request?: Omit<I, "DiscovererId">,
@@ -218,22 +208,19 @@ export const makeSchemasAccountHttpBinding = <I, A, E, R>(options: {
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}())`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: ["*"],
-              },
-            ],
-          });
-        }
+        yield* AWSBindings.bind`${options.tag}()`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: ["*"],
+            },
+          ],
+        });
       }
       return Effect.fn(options.tag)(function* (request?: I) {
         return yield* op((request ?? {}) as I);

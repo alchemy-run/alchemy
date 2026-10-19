@@ -299,7 +299,7 @@ catalogs:
       version: 1.20.1
     '@opentui/core':
       specifier: latest
-      version: 0.6.2
+      version: 0.6.4
     '@oxc-project/types':
       specifier: ^0.153.0
       version: 0.153.0
@@ -743,6 +743,9 @@ importers:
 
   .:
     devDependencies:
+      '@alchemy.run/floci':
+        specifier: workspace:*
+        version: link:packages/floci
       '@alchemy.run/pkg':
         specifier: workspace:*
         version: link:packages/pkg
@@ -1813,6 +1816,130 @@ importers:
       alchemy-test:
         specifier: workspace:*
         version: link:../../packages/alchemy-test
+
+  examples/cloudflare-domain:
+    dependencies:
+      '@bank/domain':
+        specifier: workspace:*
+        version: link:packages/domain
+      '@bank/server':
+        specifier: workspace:*
+        version: link:packages/server
+      '@bank/web':
+        specifier: workspace:*
+        version: link:packages/web
+      '@distilled.cloud/stripe':
+        specifier: workspace:*
+        version: link:../../submodules/distilled/packages/stripe
+      '@effect/platform-bun':
+        specifier: 'catalog:'
+        version: 4.0.4(effect@4.0.4)
+      '@effect/platform-node':
+        specifier: 'catalog:'
+        version: 4.0.4(effect@4.0.4)(redis@6.2.1)
+      alchemy:
+        specifier: workspace:*
+        version: link:../../packages/alchemy
+      effect:
+        specifier: 4.0.4
+        version: 4.0.4
+    devDependencies:
+      '@cloudflare/workers-types':
+        specifier: 5.20261012.1
+        version: 5.20261012.1
+      '@effect/platform-browser':
+        specifier: 4.0.4
+        version: 4.0.4(effect@4.0.4)
+      '@effect/vitest':
+        specifier: 'catalog:'
+        version: 4.0.4(effect@4.0.4)(vitest@5.0.4(@types/node@26.6.5)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1)))
+      '@foldkit/vite-plugin':
+        specifier: 'catalog:'
+        version: 0.26.0(effect@4.0.4)(foldkit@0.165.0(@effect/platform-browser@4.0.4(effect@4.0.4))(effect@4.0.4))(redis@6.2.1)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))
+      foldkit:
+        specifier: 'catalog:'
+        version: 0.165.0(@effect/platform-browser@4.0.4(effect@4.0.4))(effect@4.0.4)
+      vite:
+        specifier: 'catalog:'
+        version: 8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1)
+      vitest:
+        specifier: 'catalog:'
+        version: 5.0.4(@types/node@26.6.5)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))
+
+  examples/cloudflare-domain/packages/domain:
+    dependencies:
+      alchemy:
+        specifier: workspace:*
+        version: link:../../../../packages/alchemy
+      effect:
+        specifier: 4.0.4
+        version: 4.0.4
+    devDependencies:
+      '@effect/vitest':
+        specifier: 'catalog:'
+        version: 4.0.4(effect@4.0.4)(vitest@5.0.4(@types/node@26.6.5)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1)))
+      vitest:
+        specifier: 'catalog:'
+        version: 5.0.4(@types/node@26.6.5)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))
+
+  examples/cloudflare-domain/packages/server:
+    dependencies:
+      '@bank/domain':
+        specifier: workspace:*
+        version: link:../domain
+      '@cloudflare/workers-types':
+        specifier: 5.20261012.1
+        version: 5.20261012.1
+      '@distilled.cloud/stripe':
+        specifier: workspace:*
+        version: link:../../../../submodules/distilled/packages/stripe
+      '@effect/platform-node':
+        specifier: 'catalog:'
+        version: 4.0.4(effect@4.0.4)(redis@6.2.1)
+      alchemy:
+        specifier: workspace:*
+        version: link:../../../../packages/alchemy
+      effect:
+        specifier: 4.0.4
+        version: 4.0.4
+    devDependencies:
+      '@effect/vitest':
+        specifier: 'catalog:'
+        version: 4.0.4(effect@4.0.4)(vitest@5.0.4(@types/node@26.6.5)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1)))
+      vitest:
+        specifier: 'catalog:'
+        version: 5.0.4(@types/node@26.6.5)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))
+
+  examples/cloudflare-domain/packages/web:
+    dependencies:
+      '@bank/domain':
+        specifier: workspace:*
+        version: link:../domain
+      '@effect/platform-browser':
+        specifier: 4.0.4
+        version: 4.0.4(effect@4.0.4)
+      alchemy:
+        specifier: workspace:*
+        version: link:../../../../packages/alchemy
+      effect:
+        specifier: 4.0.4
+        version: 4.0.4
+      foldkit:
+        specifier: 'catalog:'
+        version: 0.165.0(@effect/platform-browser@4.0.4(effect@4.0.4))(effect@4.0.4)
+    devDependencies:
+      '@effect/vitest':
+        specifier: 'catalog:'
+        version: 4.0.4(effect@4.0.4)(vitest@5.0.4(@types/node@26.6.5)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1)))
+      '@foldkit/vite-plugin':
+        specifier: 'catalog:'
+        version: 0.26.0(effect@4.0.4)(foldkit@0.165.0(@effect/platform-browser@4.0.4(effect@4.0.4))(effect@4.0.4))(redis@6.2.1)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))
+      vite:
+        specifier: 'catalog:'
+        version: 8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1)
+      vitest:
+        specifier: 'catalog:'
+        version: 5.0.4(@types/node@26.6.5)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))
 
   examples/cloudflare-durable-object-sql:
     dependencies:
@@ -7366,7 +7493,7 @@ importers:
         version: 4.0.4(effect@4.0.4)
       '@opentui/core':
         specifier: 'catalog:'
-        version: 0.6.2(typescript@7.0.2)(web-tree-sitter@0.25.10)
+        version: 0.6.4(typescript@7.0.2)(web-tree-sitter@0.25.10)
       effect:
         specifier: 4.0.4
         version: 4.0.4
@@ -13486,50 +13613,50 @@ packages:
     resolution: {integrity: sha512-eSYWTm620tTk45EKSedaUL8MFYI8hW164hIXsgIHyxu3VobUB3fFCu5t0hQby6OoWRPsG1KkKUG2M5UadiLiVg==}
     engines: {node: '>=14'}
 
-  '@opentui/core-darwin-arm64@0.6.2':
-    resolution: {integrity: sha512-BzjkMA+1PQdZfQ221WLiTKETq3d2h1MILpMbtMhMGg0bBXExr6E205jCnnze/3ZxqFnQYROQpxvAu6FSqKcuiA==}
+  '@opentui/core-darwin-arm64@0.6.4':
+    resolution: {integrity: sha512-mZRj5dwR9+wvota0WDgGwYe3xiNzr4ZTpXcSDB2/vPCjuT5npvO9Y1KQWnNBtI85aOtszBHKirXtVqMk0/kjPQ==}
     cpu: [arm64]
     os: [darwin]
 
-  '@opentui/core-darwin-x64@0.6.2':
-    resolution: {integrity: sha512-q0UhQ8f0Q9wc0+CHE99aO68o6lCwSMFsZwIsDs738k1idNY+sLS0uPxDtYr26HrOUw8AvqQ+wqPz9sst2HWmZQ==}
+  '@opentui/core-darwin-x64@0.6.4':
+    resolution: {integrity: sha512-9Oa2QPLwg0AFy5EAXCQnIxOphPyCo/g476PBfyl32hUKbSxscKJeq1fvepZBdD3kAzSZFGzIroUZ2FhLg2b2kw==}
     cpu: [x64]
     os: [darwin]
 
-  '@opentui/core-linux-arm64-musl@0.6.2':
-    resolution: {integrity: sha512-IsBAr1m0DsljfwfMpBvnTIew2xehoP6L9j/nxdH7+fhYEcmnd1eMObaVasdUBFog+VCZHDFUabM8JbX8eQ60rQ==}
+  '@opentui/core-linux-arm64-musl@0.6.4':
+    resolution: {integrity: sha512-eKRQ13r146JPCuL2NeHcj9i86arZOk9XGJkFc63x7y1iH7YFxgA5sx/KevsqmLNl3F8LE3j+RhX3HPAlmR/KrQ==}
     cpu: [arm64]
     os: [linux]
     libc: [musl]
 
-  '@opentui/core-linux-arm64@0.6.2':
-    resolution: {integrity: sha512-3TXZj471XruW8idOKSB2YeTJ/dW8XhZasJSigqlHya7rdXVAd/TIl50RUCnL5EyLpUpKjHvj8XDljpO3CluBqQ==}
+  '@opentui/core-linux-arm64@0.6.4':
+    resolution: {integrity: sha512-pstmXbojEysbDiP6SSfDxk7nD6Sy/xFy+AhEfZstV8SKUHGZAbrLep4GnggL5Q5/soy5gQtQTcaaFhK4LtQNxw==}
     cpu: [arm64]
     os: [linux]
 
-  '@opentui/core-linux-x64-musl@0.6.2':
-    resolution: {integrity: sha512-7g1X66UtnOC+ahVYt/cF2A6p81//Wkrr2km71K1WR36dOuJToJ4x5c4w1B4BuD87h3o7ilgKJz7HvY//VB4Txw==}
+  '@opentui/core-linux-x64-musl@0.6.4':
+    resolution: {integrity: sha512-1DW/t/7hJc9HpDzmkrZ6pKbXH2uEjOY3Uwo1FlHGZSRy6XMjireF2iU+ucJKO+Krsu07c8hVAOxFQb+sqkLscQ==}
     cpu: [x64]
     os: [linux]
     libc: [musl]
 
-  '@opentui/core-linux-x64@0.6.2':
-    resolution: {integrity: sha512-dRjB5f13W3UH/5eM/+fL7+G6ZCsQlxteAWOcMoVuA1xYbditF1HUtFvPGt/q651yMMmB3uA541O5gK6D+ssgsQ==}
+  '@opentui/core-linux-x64@0.6.4':
+    resolution: {integrity: sha512-QVEzBYhjq0T2kzrH2qpvn4trUA+XPJyp5ASEsDbcnihyMFtStdj6wggJ8Ufp+EIeEuf1bi7STv7Ui9MtvgQ2+w==}
     cpu: [x64]
     os: [linux]
 
-  '@opentui/core-win32-arm64@0.6.2':
-    resolution: {integrity: sha512-fZ9u6Adqz573hJ3rUJS6oVtKntSgkSHqZj4Srz+qXw3lDoG/EVdU9vyBWBrXtGIuSQ5O7t1HPDHYOyOBH/bb/w==}
+  '@opentui/core-win32-arm64@0.6.4':
+    resolution: {integrity: sha512-KmFGqYoQ+ZbDbZrx7GNXxu/mt06zyBOwIDXKdsiUFgC6sZODz69QGN4xpLhF+popDVCjDyLtFxKW0vMfIOXSXA==}
     cpu: [arm64]
     os: [win32]
 
-  '@opentui/core-win32-x64@0.6.2':
-    resolution: {integrity: sha512-ZBWSOWdopTsplyyVaeh49kJaD2nRNExmrzhz+KoD1/zPFjtgH6lN5FSyXQLXBkWSv44zlFSQa+tKhypHePqs/Q==}
+  '@opentui/core-win32-x64@0.6.4':
+    resolution: {integrity: sha512-NzgXKe+AIrQGXMESc+ScyL6T55h4m7IEA09r8BpxgjwfzMSRzGvI9//0Ps8bQNnGXIDURH8zuS11SWneKhbL3A==}
     cpu: [x64]
     os: [win32]
 
-  '@opentui/core@0.6.2':
-    resolution: {integrity: sha512-zK5fxhp57OAJrAON0rNu2Y/sBPLy407rlHj+J9fmsWLCOIcXvsrWkXg2+mDala8yvrsB2afNeXweYA6jSH3F3w==}
+  '@opentui/core@0.6.4':
+    resolution: {integrity: sha512-8ZCywvSi9A8H5IoDyrw3sKpPkzimsJ+CoUuQWg0bSKLVLh/tYJDmOsFFOnlRzUZPnhGRV8rtLlR613NoEIytig==}
     engines: {bun: '>=1.3.14', node: '>=26.4.0'}
     peerDependencies:
       web-tree-sitter: 0.25.10
@@ -30348,31 +30475,31 @@ snapshots:
 
   '@opentelemetry/semantic-conventions@1.43.0': {}
 
-  '@opentui/core-darwin-arm64@0.6.2':
+  '@opentui/core-darwin-arm64@0.6.4':
     optional: true
 
-  '@opentui/core-darwin-x64@0.6.2':
+  '@opentui/core-darwin-x64@0.6.4':
     optional: true
 
-  '@opentui/core-linux-arm64-musl@0.6.2':
+  '@opentui/core-linux-arm64-musl@0.6.4':
     optional: true
 
-  '@opentui/core-linux-arm64@0.6.2':
+  '@opentui/core-linux-arm64@0.6.4':
     optional: true
 
-  '@opentui/core-linux-x64-musl@0.6.2':
+  '@opentui/core-linux-x64-musl@0.6.4':
     optional: true
 
-  '@opentui/core-linux-x64@0.6.2':
+  '@opentui/core-linux-x64@0.6.4':
     optional: true
 
-  '@opentui/core-win32-arm64@0.6.2':
+  '@opentui/core-win32-arm64@0.6.4':
     optional: true
 
-  '@opentui/core-win32-x64@0.6.2':
+  '@opentui/core-win32-x64@0.6.4':
     optional: true
 
-  '@opentui/core@0.6.2(typescript@7.0.2)(web-tree-sitter@0.25.10)':
+  '@opentui/core@0.6.4(typescript@7.0.2)(web-tree-sitter@0.25.10)':
     dependencies:
       bun-ffi-structs: 0.3.1(typescript@7.0.2)
       diff: 9.0.0
@@ -30380,14 +30507,14 @@ snapshots:
       string-width: 7.2.0
       web-tree-sitter: 0.25.10
     optionalDependencies:
-      '@opentui/core-darwin-arm64': 0.6.2
-      '@opentui/core-darwin-x64': 0.6.2
-      '@opentui/core-linux-arm64': 0.6.2
-      '@opentui/core-linux-arm64-musl': 0.6.2
-      '@opentui/core-linux-x64': 0.6.2
-      '@opentui/core-linux-x64-musl': 0.6.2
-      '@opentui/core-win32-arm64': 0.6.2
-      '@opentui/core-win32-x64': 0.6.2
+      '@opentui/core-darwin-arm64': 0.6.4
+      '@opentui/core-darwin-x64': 0.6.4
+      '@opentui/core-linux-arm64': 0.6.4
+      '@opentui/core-linux-arm64-musl': 0.6.4
+      '@opentui/core-linux-x64': 0.6.4
+      '@opentui/core-linux-x64-musl': 0.6.4
+      '@opentui/core-win32-arm64': 0.6.4
+      '@opentui/core-win32-x64': 0.6.4
     transitivePeerDependencies:
       - typescript
 

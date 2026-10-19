@@ -81,9 +81,18 @@ describe.concurrent.each([
       yield* request(`${output.url}/ready`).pipe(
         Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 30 }),
       );
+      // A Workflow class can take a while to reach every Worker version after
+      // a deploy: wait until a run actually completes.
+      yield* Effect.gen(function* () {
+        const id = yield* freshId("probe");
+        const result = yield* request<RunStatus>(`${output.url}/run/Greet/${id}`, "POST");
+        if (result._tag !== "Completed") {
+          return yield* new NotReady({ message: JSON.stringify(result) });
+        }
+      }).pipe(Effect.retry({ schedule: Schedule.spaced("3 seconds"), times: 30 }));
       return output;
     }),
-    { timeout: 120_000 },
+    { timeout: 240_000 },
   );
   afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack), { timeout: 60_000 });
 

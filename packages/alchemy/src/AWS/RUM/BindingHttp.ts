@@ -1,6 +1,5 @@
 import * as Effect from "effect/Effect";
-import * as Binding from "../../Binding.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { AppMonitor } from "./AppMonitor.ts";
 
 /**
@@ -26,18 +25,15 @@ export const bindRumAppMonitorPolicy = (options: {
 }) =>
   Effect.gen(function* () {
     if (!globalThis.__ALCHEMY_RUNTIME__) {
-      const host = yield* Binding.Host;
-      if (isBindingHost(host)) {
-        yield* host.bind`Allow(${host}, ${options.tag}(${options.monitor}))`({
-          policyStatements: [
-            {
-              Effect: "Allow",
-              Action: [...options.actions],
-              Resource: [options.monitor.appMonitorArn],
-            },
-          ],
-        });
-      }
+      yield* AWSBindings.bind`${options.tag}(${options.monitor})`({
+        policyStatements: [
+          {
+            Effect: "Allow",
+            Action: [...options.actions],
+            Resource: [options.monitor.appMonitorArn],
+          },
+        ],
+      });
     }
   });
 
@@ -56,7 +52,7 @@ export const makeRumAppMonitorHttpBinding = <I extends { Name: string }, A, E, R
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (monitor: AppMonitor) {
       const Name = yield* monitor.appMonitorName;

@@ -15,7 +15,6 @@ import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import { Workflow, WorkflowEngine } from "effect/workflow";
-import * as Binding from "../../Binding.ts";
 import type { InputProps } from "../../Input.ts";
 import * as Output from "../../Output.ts";
 import {
@@ -28,6 +27,7 @@ import {
   payloadCodec,
 } from "../../WorkflowEncoding.ts";
 import { type Implemented, implemented } from "../../Workflows.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import { DurableStep } from "./Durable.ts";
 import {
   DurableFunction,
@@ -35,7 +35,7 @@ import {
   type DurableFunctionInitServices,
   type DurableFunctionProps,
 } from "./DurableFunction.ts";
-import { Function, isBindingHost } from "./Function.ts";
+import { Function } from "./Function.ts";
 
 type WorkflowNames<W> = W extends Workflow.Workflow<infer Name, any, any, any> ? Name : never;
 
@@ -208,12 +208,11 @@ export const DurableFunctionEngine = <
       WorkflowEngine.WorkflowEngine,
       Effect.gen(function* () {
         const context = yield* Effect.context<LambdaServices>();
-        const caller = yield* Binding.Host;
         const routes = new Map<string, Calls>();
         for (const host of hosts) {
           const fn = yield* host;
-          if (!globalThis.__ALCHEMY_RUNTIME__ && isBindingHost(caller)) {
-            yield* caller.bind`Allow(${caller}, AWS.Lambda.DurableFunctionEngine(${fn}))`({
+          if (!globalThis.__ALCHEMY_RUNTIME__) {
+            yield* AWSBindings.bind`AWS.Lambda.DurableFunctionEngine(${fn})`({
               policyStatements: [
                 {
                   Effect: "Allow",

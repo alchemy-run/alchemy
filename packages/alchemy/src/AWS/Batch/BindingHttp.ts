@@ -1,7 +1,6 @@
 import * as Effect from "effect/Effect";
-import * as Binding from "../../Binding.ts";
 import * as Output from "../../Output.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { JobQueue } from "./JobQueue.ts";
 
 /**
@@ -31,22 +30,19 @@ export const makeBatchJobHttpBinding = <I, A, E, R>(options: {
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (queue: JobQueue) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}(${queue}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: ["*"],
-              },
-            ],
-          });
-        }
+        yield* AWSBindings.bind`${options.tag}(${queue})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: ["*"],
+            },
+          ],
+        });
       }
       return Effect.fn(`${options.tag}(${queue.LogicalId})`)(function* (request: I) {
         return yield* op(request);
@@ -71,24 +67,21 @@ export const makeBatchQueueHttpBinding = <I extends { jobQueue?: string }, A, E,
   wildcardIam?: boolean;
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (queue: JobQueue) {
       // Outputs yield a DEFERRED effect — resolve again per invocation below.
       const JobQueueArn = yield* queue.jobQueueArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}(${queue}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: options.wildcardIam ? ["*"] : [Output.interpolate`${queue.jobQueueArn}`],
-              },
-            ],
-          });
-        }
+        yield* AWSBindings.bind`${options.tag}(${queue})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: options.wildcardIam ? ["*"] : [Output.interpolate`${queue.jobQueueArn}`],
+            },
+          ],
+        });
       }
       return Effect.fn(`${options.tag}(${queue.LogicalId})`)(function* (
         request?: Omit<I, "jobQueue">,

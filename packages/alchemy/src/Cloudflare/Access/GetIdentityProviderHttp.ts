@@ -45,7 +45,6 @@ export const GetIdentityProviderHttp = Layer.effect(
   GetIdentityProvider,
   Effect.gen(function* () {
     const Token = yield* AccountApiToken;
-    const env = yield* CloudflareEnvironment;
     const ambientCredentials = yield* Effect.serviceOption(Credentials).pipe(
       Effect.map(Option.getOrUndefined),
     );
@@ -64,7 +63,7 @@ export const GetIdentityProviderHttp = Layer.effect(
         // Worker so the client can authenticate at runtime.
         const token = yield* Token(`${host.LogicalId}Token`);
         if (!globalThis.__ALCHEMY_RUNTIME__) {
-          const { accountId } = yield* env;
+          const { accountId } = yield* CloudflareEnvironment.current;
           yield* token.bind("Cloudflare.Access.GetIdentityProvider", {
             policies: [
               {
@@ -98,7 +97,7 @@ export const GetIdentityProviderHttp = Layer.effect(
           ),
         );
       }
-      const { accountId } = yield* env;
+      const { accountId } = yield* CloudflareEnvironment.current;
       return makeGetIdentityProviderClient(
         {
           authorize: (eff) =>

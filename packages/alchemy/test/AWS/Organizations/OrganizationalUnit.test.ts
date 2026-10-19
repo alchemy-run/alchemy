@@ -4,9 +4,9 @@ import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import * as AWS from "@/AWS";
 import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
+import * as OrganizationLease from "./OrganizationLease.ts";
 
-const { test } = Test.make({ providers: AWS.providers() });
+const { test } = OrganizationLease.make({ providers: AWS.providers() }, "shared");
 
 // Tree-structured enumeration: `list()` walks the org tree (listRoots ->
 // recursive listOrganizationalUnitsForParent) and hydrates each OU into the

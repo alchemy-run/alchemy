@@ -2,20 +2,21 @@ import * as DynamoDB from "@distilled.cloud/aws/dynamodb";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Output from "../../Output.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import {
   BatchExecuteStatement,
   type BatchExecuteStatementRequest,
   type BatchExecuteStatementTables,
   sortBatchExecuteStatementTables,
 } from "./BatchExecuteStatement.ts";
-import { grantTables, signed, tablesRegion } from "./BindingHttp.ts";
+import { grantTables, tablesRegion } from "./BindingHttp.ts";
 
 export const BatchExecuteStatementHttp = Layer.effect(
   BatchExecuteStatement,
   Effect.gen(function* () {
     return Effect.fn(function* (...tables: BatchExecuteStatementTables) {
       const sortedTables = sortBatchExecuteStatementTables(tables);
-      const access = yield* grantTables(
+      yield* grantTables(
         `AWS.DynamoDB.BatchExecuteStatement(${sortedTables.map((table) => table.LogicalId).join(", ")})`,
         () => [
           {
@@ -33,11 +34,14 @@ export const BatchExecuteStatementHttp = Layer.effect(
           },
         ],
       );
-      const region = yield* tablesRegion(access, sortedTables);
+      const batchExecuteStatement = yield* AWSBindings.withCredentials(
+        DynamoDB.batchExecuteStatement,
+        tablesRegion(sortedTables),
+      );
       return Effect.fn(`AWS.DynamoDB.BatchExecuteStatement(${sortedTables})`)(function* (
         request: BatchExecuteStatementRequest,
       ) {
-        return yield* signed(access, region, DynamoDB.batchExecuteStatement(request));
+        return yield* batchExecuteStatement(request);
       });
     });
   }),

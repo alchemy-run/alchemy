@@ -22,6 +22,7 @@ import * as Layer from "effect/Layer";
  * if (entry === undefined) return yield* new RepoNotFound({ owner: "acme", repo: "web" });
  * ```
  */
+// oxlint-disable-next-line alchemy/package-boundaries -- package split phase 3: Git is built on Cloudflare (plus S3 blobs, Lambda hasher); becomes integration subpaths
 import * as Cloudflare from "../Cloudflare/index.ts";
 import type { RuntimeContext } from "../RuntimeContext.ts";
 import { RepoAlreadyExists, ValidationError } from "./Api.ts";

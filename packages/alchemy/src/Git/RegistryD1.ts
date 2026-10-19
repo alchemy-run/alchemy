@@ -36,9 +36,11 @@
 import type * as runtime from "@cloudflare/workers-types";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+/* oxlint-disable alchemy/package-boundaries -- package split phase 3: Git is built on Cloudflare (plus S3 blobs, Lambda hasher); becomes integration subpaths */
 import type { Database } from "../Cloudflare/D1/Database.ts";
 import type { QueryDatabaseClient } from "../Cloudflare/D1/QueryDatabase.ts";
 import * as Cloudflare from "../Cloudflare/index.ts";
+/* oxlint-enable alchemy/package-boundaries */
 import type { RuntimeContext } from "../RuntimeContext.ts";
 import { RepoAlreadyExists, ValidationError } from "./Api.ts";
 import { StoreError } from "./Protocol/Store.ts";

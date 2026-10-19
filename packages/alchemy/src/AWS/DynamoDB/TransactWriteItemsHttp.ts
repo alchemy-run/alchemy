@@ -1,7 +1,8 @@
 import * as DynamoDB from "@distilled.cloud/aws/dynamodb";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { grantTables, signed, tablesRegion } from "./BindingHttp.ts";
+import * as AWSBindings from "../AWSBindings.ts";
+import { grantTables, tablesRegion } from "./BindingHttp.ts";
 import {
   TransactWriteItems,
   type TransactWriteItemsRequest,
@@ -31,7 +32,7 @@ export const TransactWriteItemsHttp = Layer.effect(
         return yield* TableName;
       });
 
-      const access = yield* grantTables(
+      yield* grantTables(
         `AWS.DynamoDB.TransactWriteItems(${sortedTables.map((table) => table.LogicalId).join(", ")})`,
         () => [
           {
@@ -46,7 +47,10 @@ export const TransactWriteItemsHttp = Layer.effect(
           },
         ],
       );
-      const region = yield* tablesRegion(access, sortedTables);
+      const transactWriteItems = yield* AWSBindings.withCredentials(
+        DynamoDB.transactWriteItems,
+        tablesRegion(sortedTables),
+      );
 
       return Effect.fn(`AWS.DynamoDB.TransactWriteItems(${sortedTables})`)(function* (
         request: TransactWriteItemsRequest,
@@ -91,14 +95,10 @@ export const TransactWriteItemsHttp = Layer.effect(
           }),
         );
 
-        return yield* signed(
-          access,
-          region,
-          DynamoDB.transactWriteItems({
-            ...request,
-            TransactItems: transactItems,
-          }),
-        );
+        return yield* transactWriteItems({
+          ...request,
+          TransactItems: transactItems,
+        });
       });
     });
   }),

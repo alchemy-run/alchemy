@@ -6,6 +6,7 @@ import { Self } from "../../Self.ts";
 import { AccountApiToken } from "../ApiToken/AccountApiToken.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Credentials } from "../Credentials.ts";
+import { requireLiveResource } from "../HttpBindingDev.ts";
 import { authorizeWith } from "../HttpClientUtils.ts";
 import { isLegacyPipeline, type LegacyPipeline } from "./LegacyPipeline.ts";
 import type { Stream } from "./Stream.ts";
@@ -79,13 +80,13 @@ export const makeHttpStreamBinding = <Client>(options: {
   Effect.gen(function* () {
     const Token = yield* AccountApiToken;
     const self = yield* Self;
-    const env = yield* CloudflareEnvironment;
 
     return Effect.fn(function* (stream: Stream<any> | LegacyPipeline) {
       if (isLegacyPipeline(stream)) return yield* legacyPipelineUnsupported(options.layer);
-      const { accountId } = yield* env;
+      if (!globalThis.__ALCHEMY_RUNTIME__) yield* requireLiveResource(stream);
       const token = yield* Token(`${self.LogicalId}Token`);
       if (!globalThis.__ALCHEMY_RUNTIME__) {
+        const { accountId } = yield* CloudflareEnvironment.current;
         yield* token.bind`${stream.LogicalId}`({
           policies: [
             {
