@@ -49,9 +49,23 @@ export interface StaticSiteProps<Bindings extends WorkerBindingProps = {}>
    */
   dev?: {
     /**
+     * Port of the local Worker that serves the site when no
+     * {@link command} is given. Defaults to the Worker's own default.
+     */
+    port?: number;
+    /**
+     * When `true`, fail instead of falling back to another port if
+     * {@link port} is in use. Applies only without {@link command}.
+     */
+    strictPort?: boolean;
+    /**
+     * Host the local Worker binds to when no {@link command} is given.
+     */
+    host?: string;
+    /**
      * Shell command to run as the local dev server (e.g. `npm run dev`).
      */
-    command: string;
+    command?: string;
     /**
      * Working directory for {@link command}. Defaults to
      * {@link Command.BuildProps.cwd} (the build command's `cwd`), or
@@ -258,7 +272,7 @@ const makeStaticSite = <const Bindings extends WorkerBindingProps = {}, Req = ne
     // the sidecar owns the process lifecycle (survives user-code HMR),
     // skip the build, and tell Worker not to start a local instance.
     const dev =
-      ctx.dev && props.dev
+      ctx.dev && props.dev?.command
         ? yield* Command.Dev("Dev", {
             command: props.dev.command,
             cwd: props.dev.cwd ?? (typeof props.cwd === "string" ? props.cwd : undefined),
@@ -304,7 +318,15 @@ const makeStaticSite = <const Bindings extends WorkerBindingProps = {}, Req = ne
       // Opt out of the local Worker in dev when the external DevCommand
       // is serving the content. The Worker resource still exists in
       // state with a stub Attributes shape.
-      dev: dev ? { mode: "external", url: dev.url } : undefined,
+      dev: dev
+        ? { mode: "external", url: dev.url }
+        : props.dev
+          ? {
+              port: props.dev.port,
+              strictPort: props.dev.strictPort,
+              host: props.dev.host,
+            }
+          : undefined,
       script: props.script,
     }).pipe(renamedFrom(`${id}/Worker`));
   });
