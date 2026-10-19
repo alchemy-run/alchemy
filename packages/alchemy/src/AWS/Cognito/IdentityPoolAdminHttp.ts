@@ -1,8 +1,7 @@
 import * as ci from "@distilled.cloud/aws/cognito-identity";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Binding from "../../Binding.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import { cognitoMethods } from "./BindingHttp.ts";
 import type { IdentityPool } from "./IdentityPool.ts";
 import { IdentityPoolAdmin, type IdentityPoolAdminClient } from "./IdentityPoolAdmin.ts";
@@ -19,43 +18,45 @@ type IdentityPoolIdField = Pick<ci.ListIdentitiesInput, "IdentityPoolId">;
 export const IdentityPoolAdminHttp = Layer.effect(
   IdentityPoolAdmin,
   Effect.gen(function* () {
-    const describeIdentity = yield* ci.describeIdentity;
-    const listIdentities = yield* ci.listIdentities;
-    const deleteIdentities = yield* ci.deleteIdentities;
-    const lookupDeveloperIdentity = yield* ci.lookupDeveloperIdentity;
-    const mergeDeveloperIdentities = yield* ci.mergeDeveloperIdentities;
-    const unlinkDeveloperIdentity = yield* ci.unlinkDeveloperIdentity;
-    const getOpenIdTokenForDeveloperIdentity = yield* ci.getOpenIdTokenForDeveloperIdentity;
+    const bind = yield* AWSBindings.Bind;
+    const describeIdentity = yield* AWSBindings.withCredentials(ci.describeIdentity);
+    const listIdentities = yield* AWSBindings.withCredentials(ci.listIdentities);
+    const deleteIdentities = yield* AWSBindings.withCredentials(ci.deleteIdentities);
+    const lookupDeveloperIdentity = yield* AWSBindings.withCredentials(ci.lookupDeveloperIdentity);
+    const mergeDeveloperIdentities = yield* AWSBindings.withCredentials(
+      ci.mergeDeveloperIdentities,
+    );
+    const unlinkDeveloperIdentity = yield* AWSBindings.withCredentials(ci.unlinkDeveloperIdentity);
+    const getOpenIdTokenForDeveloperIdentity = yield* AWSBindings.withCredentials(
+      ci.getOpenIdTokenForDeveloperIdentity,
+    );
 
     return Effect.fn(function* <P extends IdentityPool>(pool: P) {
       const IdentityPoolId = yield* pool.identityPoolId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, AWS.Cognito.IdentityPoolAdmin(${pool}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [
-                  "cognito-identity:GetOpenIdTokenForDeveloperIdentity",
-                  "cognito-identity:ListIdentities",
-                  "cognito-identity:LookupDeveloperIdentity",
-                  "cognito-identity:MergeDeveloperIdentities",
-                  "cognito-identity:UnlinkDeveloperIdentity",
-                ],
-                Resource: [pool.identityPoolArn],
-              },
-              {
-                Effect: "Allow",
-                // These act on identity IDs, which have no ARN form —
-                // Cognito Identity does not support resource-level
-                // scoping for them.
-                Action: ["cognito-identity:DeleteIdentities", "cognito-identity:DescribeIdentity"],
-                Resource: ["*"],
-              },
-            ],
-          });
-        }
+        yield* bind`AWS.Cognito.IdentityPoolAdmin(${pool})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [
+                "cognito-identity:GetOpenIdTokenForDeveloperIdentity",
+                "cognito-identity:ListIdentities",
+                "cognito-identity:LookupDeveloperIdentity",
+                "cognito-identity:MergeDeveloperIdentities",
+                "cognito-identity:UnlinkDeveloperIdentity",
+              ],
+              Resource: [pool.identityPoolArn],
+            },
+            {
+              Effect: "Allow",
+              // These act on identity IDs, which have no ARN form —
+              // Cognito Identity does not support resource-level
+              // scoping for them.
+              Action: ["cognito-identity:DeleteIdentities", "cognito-identity:DescribeIdentity"],
+              Resource: ["*"],
+            },
+          ],
+        });
       }
       const methods = cognitoMethods("AWS.Cognito.IdentityPoolAdmin", pool.LogicalId);
       const withPool = methods.injecting(

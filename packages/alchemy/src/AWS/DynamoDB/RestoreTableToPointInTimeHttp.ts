@@ -1,7 +1,8 @@
 import * as DynamoDB from "@distilled.cloud/aws/dynamodb";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { grantTables, signed, tablesRegion } from "./BindingHttp.ts";
+import * as AWSBindings from "../AWSBindings.ts";
+import { GrantTables, tablesRegion } from "./BindingHttp.ts";
 import {
   RestoreTableToPointInTime,
   type RestoreTableToPointInTimeRequest,
@@ -11,10 +12,11 @@ import type { Table } from "./Table.ts";
 export const RestoreTableToPointInTimeHttp = Layer.effect(
   RestoreTableToPointInTime,
   Effect.gen(function* () {
+    const grantTables = yield* GrantTables;
     return Effect.fn(function* <From extends Table, To extends Table>(from: From, to: To) {
       const SourceTableName = yield* from.tableName;
       const TargetTableName = yield* to.tableName;
-      const access = yield* grantTables(
+      yield* grantTables(
         `AWS.DynamoDB.RestoreTableToPointInTime(${from.LogicalId}, ${to.LogicalId})`,
         () => [
           {
@@ -38,19 +40,18 @@ export const RestoreTableToPointInTimeHttp = Layer.effect(
         ],
       );
       // Restores stay in-region: both tables must share it.
-      const region = yield* tablesRegion(access, [from, to]);
+      const restoreTableToPointInTime = yield* AWSBindings.withCredentials(
+        DynamoDB.restoreTableToPointInTime,
+        tablesRegion([from, to]),
+      );
       return Effect.fn(
         `AWS.DynamoDB.RestoreTableToPointInTime(${from.LogicalId}, ${to.LogicalId})`,
       )(function* (request: RestoreTableToPointInTimeRequest) {
-        return yield* signed(
-          access,
-          region,
-          DynamoDB.restoreTableToPointInTime({
-            ...request,
-            SourceTableName: yield* SourceTableName,
-            TargetTableName: yield* TargetTableName,
-          }),
-        );
+        return yield* restoreTableToPointInTime({
+          ...request,
+          SourceTableName: yield* SourceTableName,
+          TargetTableName: yield* TargetTableName,
+        });
       });
     });
   }),

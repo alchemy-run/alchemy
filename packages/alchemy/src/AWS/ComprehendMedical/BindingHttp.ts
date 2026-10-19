@@ -1,7 +1,6 @@
 import * as Effect from "effect/Effect";
-import * as Binding from "../../Binding.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
 
 /**
  * Shared HTTP scaffolding for the Comprehend Medical runtime bindings.
@@ -40,36 +39,34 @@ export const makeComprehendMedicalHttpBinding = <I, A, E, R>(options: {
   passRole?: boolean;
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const bind = yield* AWSBindings.Bind;
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          const policyStatements: PolicyStatement[] = [
-            {
-              Effect: "Allow",
-              Action: [...options.iamActions],
-              // Comprehend Medical actions have no resource-level IAM.
-              Resource: ["*"],
-            },
-          ];
-          if (options.passRole) {
-            policyStatements.push({
-              Effect: "Allow",
-              Action: ["iam:PassRole"],
-              Resource: ["*"],
-              Condition: {
-                StringEquals: {
-                  "iam:PassedToService": "comprehendmedical.amazonaws.com",
-                },
+        const policyStatements: PolicyStatement[] = [
+          {
+            Effect: "Allow",
+            Action: [...options.iamActions],
+            // Comprehend Medical actions have no resource-level IAM.
+            Resource: ["*"],
+          },
+        ];
+        if (options.passRole) {
+          policyStatements.push({
+            Effect: "Allow",
+            Action: ["iam:PassRole"],
+            Resource: ["*"],
+            Condition: {
+              StringEquals: {
+                "iam:PassedToService": "comprehendmedical.amazonaws.com",
               },
-            });
-          }
-          yield* host.bind`Allow(${host}, AWS.ComprehendMedical.${options.capability}())`({
-            policyStatements,
+            },
           });
         }
+        yield* bind`AWS.ComprehendMedical.${options.capability}()`({
+          policyStatements,
+        });
       }
       return Effect.fn(`AWS.ComprehendMedical.${options.capability}`)(function* (request: I) {
         return yield* op(request);

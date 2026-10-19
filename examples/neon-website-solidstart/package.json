@@ -16,6 +16,7 @@
     "build": "vite build"
   },
   "dependencies": {
+    "@alchemy.run/neon": "workspace:*",
     "@solidjs/router": "catalog:",
     "@solidjs/start": "catalog:",
     "@solidjs/vite-plugin-nitro-2": "catalog:",

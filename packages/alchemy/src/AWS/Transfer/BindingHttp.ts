@@ -1,7 +1,6 @@
 import * as Effect from "effect/Effect";
-import * as Binding from "../../Binding.ts";
 import * as Output from "../../Output.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { Server } from "./Server.ts";
 import type { User } from "./User.ts";
 
@@ -35,24 +34,22 @@ export const makeTransferServerHttpBinding = <I extends { ServerId?: string }, A
   resource?: (server: Server) => string | Output.Output<string>;
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const bind = yield* AWSBindings.Bind;
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (server: Server) {
       // Outputs yield a DEFERRED effect — resolve again per invocation below.
       const ServerId = yield* server.serverId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}(${server}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: [options.resource?.(server) ?? Output.interpolate`${server.arn}`],
-              },
-            ],
-          });
-        }
+        yield* bind`${options.tag}(${server})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: [options.resource?.(server) ?? Output.interpolate`${server.arn}`],
+            },
+          ],
+        });
       }
       return Effect.fn(`${options.tag}(${server.LogicalId})`)(function* (
         request?: Omit<I, "ServerId">,
@@ -82,25 +79,23 @@ export const makeTransferUserHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const bind = yield* AWSBindings.Bind;
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (user: User) {
       // Outputs yield a DEFERRED effect — resolve again per invocation below.
       const ServerId = yield* user.serverId;
       const UserName = yield* user.userName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}(${user}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: [Output.interpolate`${user.arn}`],
-              },
-            ],
-          });
-        }
+        yield* bind`${options.tag}(${user})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: [Output.interpolate`${user.arn}`],
+            },
+          ],
+        });
       }
       return Effect.fn(`${options.tag}(${user.LogicalId})`)(function* (
         request?: Omit<I, "ServerId" | "UserName">,
@@ -130,22 +125,20 @@ export const makeTransferAccountHttpBinding = <I, A, E, R>(options: {
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const bind = yield* AWSBindings.Bind;
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}())`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: ["*"],
-              },
-            ],
-          });
-        }
+        yield* bind`${options.tag}()`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: ["*"],
+            },
+          ],
+        });
       }
       return Effect.fn(options.tag)(function* (request: I) {
         return yield* op(request);

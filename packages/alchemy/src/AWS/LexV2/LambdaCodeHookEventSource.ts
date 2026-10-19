@@ -52,7 +52,7 @@ export const LambdaCodeHookEventSource = Layer.effect(
   CodeHookEventSource,
   Effect.gen(function* () {
     // this layer can only be used in a Lambda Function
-    const host = yield* Lambda.Function;
+    const host = yield* Lambda.eventSourceHost("AWS.LexV2.LambdaCodeHookEventSource");
 
     return Effect.fn(function* <Req = never>(
       alias: BotAlias,

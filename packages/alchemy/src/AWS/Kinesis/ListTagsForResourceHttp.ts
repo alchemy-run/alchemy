@@ -1,8 +1,7 @@
 import * as Kinesis from "@distilled.cloud/aws/kinesis";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Binding from "../../Binding.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import {
   ListTagsForResource,
   type ListTagsForResourceRequest,
@@ -12,23 +11,21 @@ import {
 export const ListTagsForResourceHttp = Layer.effect(
   ListTagsForResource,
   Effect.gen(function* () {
-    const listTagsForResource = yield* Kinesis.listTagsForResource;
+    const bind = yield* AWSBindings.Bind;
+    const listTagsForResource = yield* AWSBindings.withCredentials(Kinesis.listTagsForResource);
 
     return Effect.fn(function* (resource: TaggableResource) {
       const ResourceARN = yield* getResourceArn(resource);
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, AWS.Kinesis.ListTagsForResource(${resource}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: ["kinesis:ListTagsForResource"],
-                Resource: [getResourceArn(resource)],
-              },
-            ],
-          });
-        }
+        yield* bind`AWS.Kinesis.ListTagsForResource(${resource})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: ["kinesis:ListTagsForResource"],
+              Resource: [getResourceArn(resource)],
+            },
+          ],
+        });
       }
       return Effect.fn(`AWS.Kinesis.ListTagsForResource(${resource.LogicalId})`)(function* (
         request?: ListTagsForResourceRequest,

@@ -36,6 +36,21 @@ const assertRuntimeGone = (agentRuntimeId: string) =>
     Effect.retry({ schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(18)]) }),
   );
 
+const runtimeRole = () =>
+  Role("RuntimeRole", {
+    assumeRolePolicyDocument: {
+      Version: "2012-10-17",
+      Statement: [
+        {
+          Effect: "Allow",
+          Principal: { Service: "bedrock-agentcore.amazonaws.com" },
+          Action: ["sts:AssumeRole"],
+        },
+      ],
+    },
+    managedPolicyArns: ["arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly"],
+  });
+
 // The full lifecycle needs a deployable agent container image in ECR —
 // something a CI account cannot fabricate cheaply. Gate behind
 // AWS_TEST_AGENTCORE=1 and provide the image via AWS_TEST_AGENTCORE_IMAGE
@@ -49,19 +64,7 @@ test.provider.skipIf(!process.env.AWS_TEST_AGENTCORE || !process.env.AWS_TEST_AG
 
       const { runtime } = yield* stack.deploy(
         Effect.gen(function* () {
-          const role = yield* Role("RuntimeRole", {
-            assumeRolePolicyDocument: {
-              Version: "2012-10-17",
-              Statement: [
-                {
-                  Effect: "Allow",
-                  Principal: { Service: "bedrock-agentcore.amazonaws.com" },
-                  Action: ["sts:AssumeRole"],
-                },
-              ],
-            },
-            managedPolicyArns: ["arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly"],
-          });
+          const role = yield* runtimeRole();
           const runtime = yield* Runtime("TestAgent", {
             agentRuntimeArtifact: {
               containerConfiguration: { containerUri: process.env.AWS_TEST_AGENTCORE_IMAGE! },
@@ -88,5 +91,54 @@ test.provider.skipIf(!process.env.AWS_TEST_AGENTCORE || !process.env.AWS_TEST_AG
   {
     tags: ["provider:aws", "provider:aws:bedrockagentcore", "provider:aws:iam", "live"],
     timeout: 600_000,
+  },
+);
+
+test.provider.skipIf(!process.env.AWS_TEST_AGENTCORE || !process.env.AWS_TEST_AGENTCORE_IMAGE)(
+  "move an agent runtime to platform V2 and keep it there across unrelated updates",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const lifecycleConfiguration = { idleRuntimeSessionTimeout: 600, maxLifetime: 7200 };
+      const deploy = (props: { platformVersion?: string; description?: string }) =>
+        stack.deploy(
+          Effect.gen(function* () {
+            const role = yield* runtimeRole();
+            return yield* Runtime("PlatformAgent", {
+              agentRuntimeArtifact: {
+                containerConfiguration: { containerUri: process.env.AWS_TEST_AGENTCORE_IMAGE! },
+              },
+              roleArn: role.roleArn,
+              lifecycleConfiguration,
+              ...props,
+            });
+          }),
+        );
+
+      const v1 = yield* deploy({});
+      const observedV1 = yield* control.getAgentRuntime({ agentRuntimeId: v1.agentRuntimeId });
+      expect(observedV1.platformVersion).not.toBe("V2");
+
+      const v2 = yield* deploy({ platformVersion: "V2" });
+      expect(v2.agentRuntimeId).toBe(v1.agentRuntimeId);
+      const observedV2 = yield* control.getAgentRuntime({ agentRuntimeId: v2.agentRuntimeId });
+      expect(observedV2).toMatchObject({ platformVersion: "V2", status: "READY" });
+      expect(observedV2.lifecycleConfiguration).toMatchObject(lifecycleConfiguration);
+
+      // dropping the prop while another field changes leaves the platform alone
+      const updated = yield* deploy({ description: "updated" });
+      const observedAfter = yield* control.getAgentRuntime({
+        agentRuntimeId: updated.agentRuntimeId,
+      });
+      expect(observedAfter.platformVersion).toBe("V2");
+      expect(observedAfter.agentRuntimeVersion).not.toBe(observedV2.agentRuntimeVersion);
+
+      yield* stack.destroy();
+      yield* assertRuntimeGone(v1.agentRuntimeId);
+    }),
+  {
+    tags: ["provider:aws", "provider:aws:bedrockagentcore", "provider:aws:iam", "live"],
+    timeout: 900_000,
   },
 );

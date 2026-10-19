@@ -1,6 +1,5 @@
 import * as Effect from "effect/Effect";
-import * as Binding from "../../Binding.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import { withPricingRegion } from "./internal.ts";
 
 /**
@@ -28,24 +27,22 @@ export const makePricingHttpBinding = <I extends object, A, E, R>(options: {
   operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     // Capture the client with the region pinned to us-east-1 — the Price
     // List Query API is not served from most regions.
-    const op = yield* withPricingRegion(options.operation);
+    const op = yield* options.operation.pipe(withPricingRegion, AWSBindings.withCredentials);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, AWS.Pricing.${options.capability}())`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.iamActions],
-                Resource: ["*"],
-              },
-            ],
-          });
-        }
+        yield* bind`AWS.Pricing.${options.capability}()`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.iamActions],
+              Resource: ["*"],
+            },
+          ],
+        });
       }
       return Effect.fn(`AWS.Pricing.${options.capability}`)(function* (request?: I) {
         // The region must also be pinned at the call site: the yield-time

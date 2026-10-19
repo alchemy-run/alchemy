@@ -1,0 +1,547 @@
+{
+  "name": "@alchemy.run/cloudflare",
+  "version": "2.0.0-beta.83",
+  "description": "Cloudflare Workers, Durable Objects, storage, networking and the Cloudflare state store for Alchemy.",
+  "keywords": [
+    "alchemy",
+    "cloudflare",
+    "durable-objects",
+    "effect",
+    "infrastructure-as-code",
+    "workers"
+  ],
+  "homepage": "https://alchemy.run",
+  "bugs": {
+    "url": "https://github.com/alchemy-run/alchemy/issues"
+  },
+  "license": "Apache-2.0",
+  "author": "Sam Goodwin <sam@alchemy.run>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/alchemy-run/alchemy.git",
+    "directory": "packages/cloudflare"
+  },
+  "files": [
+    "lib",
+    "src"
+  ],
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": "./src/index.ts",
+    "./Contributions": "./src/Contributions.ts",
+    "./Bridge": "./src/Bridge.ts",
+    "./RpcWebSocketClient": "./src/Workers/RpcWebSocketClient.ts",
+    "./Bootstrap/*": "./src/Bootstrap/*.ts",
+    "./*": "./src/*/index.ts",
+    "./Workers/*": "./src/Workers/*.ts",
+    "./R2/*": "./src/R2/*.ts",
+    "./AI/LanguageModel": "./src/AI/LanguageModel.ts",
+    "./Alchemist/StateStore": "./src/Alchemist/StateStore.ts",
+    "./ApiShield/Operation": "./src/ApiShield/Operation.ts",
+    "./Artifacts/ReadWriteNamespace": "./src/Artifacts/ReadWriteNamespace.ts",
+    "./Auth/AuthConfig": "./src/Auth/AuthConfig.ts",
+    "./Auth/OAuthClient": "./src/Auth/OAuthClient.ts",
+    "./Auth/OAuthScopes": "./src/Auth/OAuthScopes.ts",
+    "./Auth/TokenPolicy": "./src/Auth/TokenPolicy.ts",
+    "./CloudflareEnvironment": "./src/CloudflareEnvironment.ts",
+    "./CloudflareEnvironmentService": "./src/CloudflareEnvironmentService.ts",
+    "./Containers/ContainerBundle": "./src/Containers/ContainerBundle.ts",
+    "./Containers/ContainerImagePreparation": "./src/Containers/ContainerImagePreparation.ts",
+    "./Containers/ContainerPlatform": "./src/Containers/ContainerPlatform.ts",
+    "./Containers/ContainerPublication": "./src/Containers/ContainerPublication.ts",
+    "./Containers/DurableObjectApplication": "./src/Containers/DurableObjectApplication.ts",
+    "./Credentials": "./src/Credentials.ts",
+    "./D1/Database": "./src/D1/Database.ts",
+    "./D1/QueryDatabase": "./src/D1/QueryDatabase.ts",
+    "./EdgeSession": "./src/EdgeSession.ts",
+    "./Email/Rule": "./src/Email/Rule.ts",
+    "./Email/retry": "./src/Email/retry.ts",
+    "./Fetcher": "./src/Fetcher.ts",
+    "./Gateway/Certificate": "./src/Gateway/Certificate.ts",
+    "./Hyperdrive/Connection": "./src/Hyperdrive/Connection.ts",
+    "./Images/Images": "./src/Images/Images.ts",
+    "./K2/K2Codec": "./src/K2/K2Codec.ts",
+    "./K2/K2Http": "./src/K2/K2Http.ts",
+    "./K2/K2Types": "./src/K2/K2Types.ts",
+    "./K2/ReadSubscriptionHttp": "./src/K2/ReadSubscriptionHttp.ts",
+    "./K2/StreamSinkBatch": "./src/K2/StreamSinkBatch.ts",
+    "./K2/WriteStream": "./src/K2/WriteStream.ts",
+    "./K2/WriteStreamBinding": "./src/K2/WriteStreamBinding.ts",
+    "./K2/WriteStreamClient": "./src/K2/WriteStreamClient.ts",
+    "./KV/Namespace": "./src/KV/Namespace.ts",
+    "./KV/ReadNamespace": "./src/KV/ReadNamespace.ts",
+    "./KV/WriteNamespace": "./src/KV/WriteNamespace.ts",
+    "./LocalAccount": "./src/LocalAccount.ts",
+    "./LocalRuntime": "./src/LocalRuntime.ts",
+    "./Providers": "./src/Providers.ts",
+    "./Queues/EventSource": "./src/Queues/EventSource.ts",
+    "./Queues/Queue": "./src/Queues/Queue.ts",
+    "./Queues/QueueSinkBatch": "./src/Queues/QueueSinkBatch.ts",
+    "./Queues/QueueTypes": "./src/Queues/QueueTypes.ts",
+    "./Queues/Subscription": "./src/Queues/Subscription.ts",
+    "./Queues/WriteQueue": "./src/Queues/WriteQueue.ts",
+    "./SecretsStore/ReadSecret": "./src/SecretsStore/ReadSecret.ts",
+    "./Speed/TestSchedule": "./src/Speed/TestSchedule.ts",
+    "./StateStore/Api": "./src/StateStore/Api.ts",
+    "./StateStore/CredentialsFile": "./src/StateStore/CredentialsFile.ts",
+    "./StateStore/State": "./src/StateStore/State.ts",
+    "./TokenValidation/Configuration": "./src/TokenValidation/Configuration.ts",
+    "./Vectorize/VectorizeIndex": "./src/Vectorize/VectorizeIndex.ts",
+    "./Workflows/Workflow": "./src/Workflows/Workflow.ts",
+    "./Workflows/WorkflowBridge": "./src/Workflows/WorkflowBridge.ts",
+    "./Workflows/WorkflowName": "./src/Workflows/WorkflowName.ts",
+    "./Workflows/WorkflowRuntime": "./src/Workflows/WorkflowRuntime.ts",
+    "./Zone/lookup": "./src/Zone/lookup.ts",
+    "./package.json": "./package.json"
+  },
+  "publishConfig": {
+    "exports": {
+      ".": {
+        "types": "./lib/index.d.ts",
+        "bun": "./src/index.ts",
+        "worker": "./src/index.ts",
+        "default": "./lib/index.js"
+      },
+      "./Contributions": {
+        "types": "./lib/Contributions.d.ts",
+        "bun": "./src/Contributions.ts",
+        "worker": "./src/Contributions.ts",
+        "default": "./lib/Contributions.js"
+      },
+      "./Bridge": {
+        "types": "./lib/Bridge.d.ts",
+        "bun": "./src/Bridge.ts",
+        "worker": "./src/Bridge.ts",
+        "default": "./lib/Bridge.js"
+      },
+      "./RpcWebSocketClient": {
+        "types": "./lib/Workers/RpcWebSocketClient.d.ts",
+        "bun": "./src/Workers/RpcWebSocketClient.ts",
+        "worker": "./src/Workers/RpcWebSocketClient.ts",
+        "default": "./lib/Workers/RpcWebSocketClient.js"
+      },
+      "./Bootstrap/*": {
+        "types": "./src/Bootstrap/*.ts",
+        "bun": "./src/Bootstrap/*.ts",
+        "default": "./src/Bootstrap/*.ts"
+      },
+      "./*": {
+        "types": "./lib/*/index.d.ts",
+        "bun": "./src/*/index.ts",
+        "worker": "./src/*/index.ts",
+        "default": "./lib/*/index.js"
+      },
+      "./Workers/*": {
+        "types": "./lib/Workers/*.d.ts",
+        "bun": "./src/Workers/*.ts",
+        "worker": "./src/Workers/*.ts",
+        "default": "./lib/Workers/*.js"
+      },
+      "./R2/*": {
+        "types": "./lib/R2/*.d.ts",
+        "bun": "./src/R2/*.ts",
+        "worker": "./src/R2/*.ts",
+        "default": "./lib/R2/*.js"
+      },
+      "./AI/LanguageModel": {
+        "types": "./lib/AI/LanguageModel.d.ts",
+        "bun": "./src/AI/LanguageModel.ts",
+        "worker": "./src/AI/LanguageModel.ts",
+        "default": "./lib/AI/LanguageModel.js"
+      },
+      "./Alchemist/StateStore": {
+        "types": "./lib/Alchemist/StateStore.d.ts",
+        "bun": "./src/Alchemist/StateStore.ts",
+        "worker": "./src/Alchemist/StateStore.ts",
+        "default": "./lib/Alchemist/StateStore.js"
+      },
+      "./ApiShield/Operation": {
+        "types": "./lib/ApiShield/Operation.d.ts",
+        "bun": "./src/ApiShield/Operation.ts",
+        "worker": "./src/ApiShield/Operation.ts",
+        "default": "./lib/ApiShield/Operation.js"
+      },
+      "./Artifacts/ReadWriteNamespace": {
+        "types": "./lib/Artifacts/ReadWriteNamespace.d.ts",
+        "bun": "./src/Artifacts/ReadWriteNamespace.ts",
+        "worker": "./src/Artifacts/ReadWriteNamespace.ts",
+        "default": "./lib/Artifacts/ReadWriteNamespace.js"
+      },
+      "./Auth/AuthConfig": {
+        "types": "./lib/Auth/AuthConfig.d.ts",
+        "bun": "./src/Auth/AuthConfig.ts",
+        "worker": "./src/Auth/AuthConfig.ts",
+        "default": "./lib/Auth/AuthConfig.js"
+      },
+      "./Auth/OAuthClient": {
+        "types": "./lib/Auth/OAuthClient.d.ts",
+        "bun": "./src/Auth/OAuthClient.ts",
+        "worker": "./src/Auth/OAuthClient.ts",
+        "default": "./lib/Auth/OAuthClient.js"
+      },
+      "./Auth/OAuthScopes": {
+        "types": "./lib/Auth/OAuthScopes.d.ts",
+        "bun": "./src/Auth/OAuthScopes.ts",
+        "worker": "./src/Auth/OAuthScopes.ts",
+        "default": "./lib/Auth/OAuthScopes.js"
+      },
+      "./Auth/TokenPolicy": {
+        "types": "./lib/Auth/TokenPolicy.d.ts",
+        "bun": "./src/Auth/TokenPolicy.ts",
+        "worker": "./src/Auth/TokenPolicy.ts",
+        "default": "./lib/Auth/TokenPolicy.js"
+      },
+      "./CloudflareEnvironment": {
+        "types": "./lib/CloudflareEnvironment.d.ts",
+        "bun": "./src/CloudflareEnvironment.ts",
+        "worker": "./src/CloudflareEnvironment.ts",
+        "default": "./lib/CloudflareEnvironment.js"
+      },
+      "./CloudflareEnvironmentService": {
+        "types": "./lib/CloudflareEnvironmentService.d.ts",
+        "bun": "./src/CloudflareEnvironmentService.ts",
+        "worker": "./src/CloudflareEnvironmentService.ts",
+        "default": "./lib/CloudflareEnvironmentService.js"
+      },
+      "./Containers/ContainerBundle": {
+        "types": "./lib/Containers/ContainerBundle.d.ts",
+        "bun": "./src/Containers/ContainerBundle.ts",
+        "worker": "./src/Containers/ContainerBundle.ts",
+        "default": "./lib/Containers/ContainerBundle.js"
+      },
+      "./Containers/ContainerImagePreparation": {
+        "types": "./lib/Containers/ContainerImagePreparation.d.ts",
+        "bun": "./src/Containers/ContainerImagePreparation.ts",
+        "worker": "./src/Containers/ContainerImagePreparation.ts",
+        "default": "./lib/Containers/ContainerImagePreparation.js"
+      },
+      "./Containers/ContainerPlatform": {
+        "types": "./lib/Containers/ContainerPlatform.d.ts",
+        "bun": "./src/Containers/ContainerPlatform.ts",
+        "worker": "./src/Containers/ContainerPlatform.ts",
+        "default": "./lib/Containers/ContainerPlatform.js"
+      },
+      "./Containers/ContainerPublication": {
+        "types": "./lib/Containers/ContainerPublication.d.ts",
+        "bun": "./src/Containers/ContainerPublication.ts",
+        "worker": "./src/Containers/ContainerPublication.ts",
+        "default": "./lib/Containers/ContainerPublication.js"
+      },
+      "./Containers/DurableObjectApplication": {
+        "types": "./lib/Containers/DurableObjectApplication.d.ts",
+        "bun": "./src/Containers/DurableObjectApplication.ts",
+        "worker": "./src/Containers/DurableObjectApplication.ts",
+        "default": "./lib/Containers/DurableObjectApplication.js"
+      },
+      "./Credentials": {
+        "types": "./lib/Credentials.d.ts",
+        "bun": "./src/Credentials.ts",
+        "worker": "./src/Credentials.ts",
+        "default": "./lib/Credentials.js"
+      },
+      "./D1/Database": {
+        "types": "./lib/D1/Database.d.ts",
+        "bun": "./src/D1/Database.ts",
+        "worker": "./src/D1/Database.ts",
+        "default": "./lib/D1/Database.js"
+      },
+      "./D1/QueryDatabase": {
+        "types": "./lib/D1/QueryDatabase.d.ts",
+        "bun": "./src/D1/QueryDatabase.ts",
+        "worker": "./src/D1/QueryDatabase.ts",
+        "default": "./lib/D1/QueryDatabase.js"
+      },
+      "./EdgeSession": {
+        "types": "./lib/EdgeSession.d.ts",
+        "bun": "./src/EdgeSession.ts",
+        "worker": "./src/EdgeSession.ts",
+        "default": "./lib/EdgeSession.js"
+      },
+      "./Email/Rule": {
+        "types": "./lib/Email/Rule.d.ts",
+        "bun": "./src/Email/Rule.ts",
+        "worker": "./src/Email/Rule.ts",
+        "default": "./lib/Email/Rule.js"
+      },
+      "./Email/retry": {
+        "types": "./lib/Email/retry.d.ts",
+        "bun": "./src/Email/retry.ts",
+        "worker": "./src/Email/retry.ts",
+        "default": "./lib/Email/retry.js"
+      },
+      "./Fetcher": {
+        "types": "./lib/Fetcher.d.ts",
+        "bun": "./src/Fetcher.ts",
+        "worker": "./src/Fetcher.ts",
+        "default": "./lib/Fetcher.js"
+      },
+      "./Gateway/Certificate": {
+        "types": "./lib/Gateway/Certificate.d.ts",
+        "bun": "./src/Gateway/Certificate.ts",
+        "worker": "./src/Gateway/Certificate.ts",
+        "default": "./lib/Gateway/Certificate.js"
+      },
+      "./Hyperdrive/Connection": {
+        "types": "./lib/Hyperdrive/Connection.d.ts",
+        "bun": "./src/Hyperdrive/Connection.ts",
+        "worker": "./src/Hyperdrive/Connection.ts",
+        "default": "./lib/Hyperdrive/Connection.js"
+      },
+      "./Images/Images": {
+        "types": "./lib/Images/Images.d.ts",
+        "bun": "./src/Images/Images.ts",
+        "worker": "./src/Images/Images.ts",
+        "default": "./lib/Images/Images.js"
+      },
+      "./K2/K2Codec": {
+        "types": "./lib/K2/K2Codec.d.ts",
+        "bun": "./src/K2/K2Codec.ts",
+        "worker": "./src/K2/K2Codec.ts",
+        "default": "./lib/K2/K2Codec.js"
+      },
+      "./K2/K2Http": {
+        "types": "./lib/K2/K2Http.d.ts",
+        "bun": "./src/K2/K2Http.ts",
+        "worker": "./src/K2/K2Http.ts",
+        "default": "./lib/K2/K2Http.js"
+      },
+      "./K2/K2Types": {
+        "types": "./lib/K2/K2Types.d.ts",
+        "bun": "./src/K2/K2Types.ts",
+        "worker": "./src/K2/K2Types.ts",
+        "default": "./lib/K2/K2Types.js"
+      },
+      "./K2/ReadSubscriptionHttp": {
+        "types": "./lib/K2/ReadSubscriptionHttp.d.ts",
+        "bun": "./src/K2/ReadSubscriptionHttp.ts",
+        "worker": "./src/K2/ReadSubscriptionHttp.ts",
+        "default": "./lib/K2/ReadSubscriptionHttp.js"
+      },
+      "./K2/StreamSinkBatch": {
+        "types": "./lib/K2/StreamSinkBatch.d.ts",
+        "bun": "./src/K2/StreamSinkBatch.ts",
+        "worker": "./src/K2/StreamSinkBatch.ts",
+        "default": "./lib/K2/StreamSinkBatch.js"
+      },
+      "./K2/WriteStream": {
+        "types": "./lib/K2/WriteStream.d.ts",
+        "bun": "./src/K2/WriteStream.ts",
+        "worker": "./src/K2/WriteStream.ts",
+        "default": "./lib/K2/WriteStream.js"
+      },
+      "./K2/WriteStreamBinding": {
+        "types": "./lib/K2/WriteStreamBinding.d.ts",
+        "bun": "./src/K2/WriteStreamBinding.ts",
+        "worker": "./src/K2/WriteStreamBinding.ts",
+        "default": "./lib/K2/WriteStreamBinding.js"
+      },
+      "./K2/WriteStreamClient": {
+        "types": "./lib/K2/WriteStreamClient.d.ts",
+        "bun": "./src/K2/WriteStreamClient.ts",
+        "worker": "./src/K2/WriteStreamClient.ts",
+        "default": "./lib/K2/WriteStreamClient.js"
+      },
+      "./KV/Namespace": {
+        "types": "./lib/KV/Namespace.d.ts",
+        "bun": "./src/KV/Namespace.ts",
+        "worker": "./src/KV/Namespace.ts",
+        "default": "./lib/KV/Namespace.js"
+      },
+      "./KV/ReadNamespace": {
+        "types": "./lib/KV/ReadNamespace.d.ts",
+        "bun": "./src/KV/ReadNamespace.ts",
+        "worker": "./src/KV/ReadNamespace.ts",
+        "default": "./lib/KV/ReadNamespace.js"
+      },
+      "./KV/WriteNamespace": {
+        "types": "./lib/KV/WriteNamespace.d.ts",
+        "bun": "./src/KV/WriteNamespace.ts",
+        "worker": "./src/KV/WriteNamespace.ts",
+        "default": "./lib/KV/WriteNamespace.js"
+      },
+      "./LocalAccount": {
+        "types": "./lib/LocalAccount.d.ts",
+        "bun": "./src/LocalAccount.ts",
+        "worker": "./src/LocalAccount.ts",
+        "default": "./lib/LocalAccount.js"
+      },
+      "./LocalRuntime": {
+        "types": "./lib/LocalRuntime.d.ts",
+        "bun": "./src/LocalRuntime.ts",
+        "worker": "./src/LocalRuntime.ts",
+        "default": "./lib/LocalRuntime.js"
+      },
+      "./Providers": {
+        "types": "./lib/Providers.d.ts",
+        "bun": "./src/Providers.ts",
+        "worker": "./src/Providers.ts",
+        "default": "./lib/Providers.js"
+      },
+      "./Queues/EventSource": {
+        "types": "./lib/Queues/EventSource.d.ts",
+        "bun": "./src/Queues/EventSource.ts",
+        "worker": "./src/Queues/EventSource.ts",
+        "default": "./lib/Queues/EventSource.js"
+      },
+      "./Queues/Queue": {
+        "types": "./lib/Queues/Queue.d.ts",
+        "bun": "./src/Queues/Queue.ts",
+        "worker": "./src/Queues/Queue.ts",
+        "default": "./lib/Queues/Queue.js"
+      },
+      "./Queues/QueueSinkBatch": {
+        "types": "./lib/Queues/QueueSinkBatch.d.ts",
+        "bun": "./src/Queues/QueueSinkBatch.ts",
+        "worker": "./src/Queues/QueueSinkBatch.ts",
+        "default": "./lib/Queues/QueueSinkBatch.js"
+      },
+      "./Queues/QueueTypes": {
+        "types": "./lib/Queues/QueueTypes.d.ts",
+        "bun": "./src/Queues/QueueTypes.ts",
+        "worker": "./src/Queues/QueueTypes.ts",
+        "default": "./lib/Queues/QueueTypes.js"
+      },
+      "./Queues/Subscription": {
+        "types": "./lib/Queues/Subscription.d.ts",
+        "bun": "./src/Queues/Subscription.ts",
+        "worker": "./src/Queues/Subscription.ts",
+        "default": "./lib/Queues/Subscription.js"
+      },
+      "./Queues/WriteQueue": {
+        "types": "./lib/Queues/WriteQueue.d.ts",
+        "bun": "./src/Queues/WriteQueue.ts",
+        "worker": "./src/Queues/WriteQueue.ts",
+        "default": "./lib/Queues/WriteQueue.js"
+      },
+      "./SecretsStore/ReadSecret": {
+        "types": "./lib/SecretsStore/ReadSecret.d.ts",
+        "bun": "./src/SecretsStore/ReadSecret.ts",
+        "worker": "./src/SecretsStore/ReadSecret.ts",
+        "default": "./lib/SecretsStore/ReadSecret.js"
+      },
+      "./Speed/TestSchedule": {
+        "types": "./lib/Speed/TestSchedule.d.ts",
+        "bun": "./src/Speed/TestSchedule.ts",
+        "worker": "./src/Speed/TestSchedule.ts",
+        "default": "./lib/Speed/TestSchedule.js"
+      },
+      "./StateStore/Api": {
+        "types": "./lib/StateStore/Api.d.ts",
+        "bun": "./src/StateStore/Api.ts",
+        "worker": "./src/StateStore/Api.ts",
+        "default": "./lib/StateStore/Api.js"
+      },
+      "./StateStore/CredentialsFile": {
+        "types": "./lib/StateStore/CredentialsFile.d.ts",
+        "bun": "./src/StateStore/CredentialsFile.ts",
+        "worker": "./src/StateStore/CredentialsFile.ts",
+        "default": "./lib/StateStore/CredentialsFile.js"
+      },
+      "./StateStore/State": {
+        "types": "./lib/StateStore/State.d.ts",
+        "bun": "./src/StateStore/State.ts",
+        "worker": "./src/StateStore/State.ts",
+        "default": "./lib/StateStore/State.js"
+      },
+      "./TokenValidation/Configuration": {
+        "types": "./lib/TokenValidation/Configuration.d.ts",
+        "bun": "./src/TokenValidation/Configuration.ts",
+        "worker": "./src/TokenValidation/Configuration.ts",
+        "default": "./lib/TokenValidation/Configuration.js"
+      },
+      "./Vectorize/VectorizeIndex": {
+        "types": "./lib/Vectorize/VectorizeIndex.d.ts",
+        "bun": "./src/Vectorize/VectorizeIndex.ts",
+        "worker": "./src/Vectorize/VectorizeIndex.ts",
+        "default": "./lib/Vectorize/VectorizeIndex.js"
+      },
+      "./Workflows/Workflow": {
+        "types": "./lib/Workflows/Workflow.d.ts",
+        "bun": "./src/Workflows/Workflow.ts",
+        "worker": "./src/Workflows/Workflow.ts",
+        "default": "./lib/Workflows/Workflow.js"
+      },
+      "./Workflows/WorkflowBridge": {
+        "types": "./lib/Workflows/WorkflowBridge.d.ts",
+        "bun": "./src/Workflows/WorkflowBridge.ts",
+        "worker": "./src/Workflows/WorkflowBridge.ts",
+        "default": "./lib/Workflows/WorkflowBridge.js"
+      },
+      "./Workflows/WorkflowName": {
+        "types": "./lib/Workflows/WorkflowName.d.ts",
+        "bun": "./src/Workflows/WorkflowName.ts",
+        "worker": "./src/Workflows/WorkflowName.ts",
+        "default": "./lib/Workflows/WorkflowName.js"
+      },
+      "./Workflows/WorkflowRuntime": {
+        "types": "./lib/Workflows/WorkflowRuntime.d.ts",
+        "bun": "./src/Workflows/WorkflowRuntime.ts",
+        "worker": "./src/Workflows/WorkflowRuntime.ts",
+        "default": "./lib/Workflows/WorkflowRuntime.js"
+      },
+      "./Zone/lookup": {
+        "types": "./lib/Zone/lookup.d.ts",
+        "bun": "./src/Zone/lookup.ts",
+        "worker": "./src/Zone/lookup.ts",
+        "default": "./lib/Zone/lookup.js"
+      },
+      "./package.json": "./package.json"
+    },
+    "access": "public"
+  },
+  "scripts": {
+    "build": "pnpm -r --filter \"{.}...\" run build:package",
+    "build:package": "node scripts/build.ts"
+  },
+  "dependencies": {
+    "@alchemy.run/acme": "workspace:*",
+    "@alchemy.run/cloudflare-runtime": "workspace:*",
+    "@distilled.cloud/aws": "workspace:*",
+    "@distilled.cloud/cloudflare": "workspace:*",
+    "@distilled.cloud/core": "workspace:*",
+    "@distilled.cloud/iceberg": "workspace:*",
+    "pathe": "catalog:",
+    "rolldown": "catalog:",
+    "tinyglobby": "catalog:"
+  },
+  "devDependencies": {
+    "@alchemy.run/frontend-frameworks": "workspace:*",
+    "@cloudflare/workers-types": "catalog:",
+    "@effect/platform-bun": "catalog:",
+    "@effect/platform-node": "catalog:",
+    "@types/bun": "catalog:",
+    "@types/node": "catalog:",
+    "alchemy": "workspace:*",
+    "effect": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:"
+  },
+  "peerDependencies": {
+    "@alchemy.run/frontend-frameworks": "workspace:*",
+    "@effect/platform-bun": "catalog:",
+    "@effect/platform-node": "catalog:",
+    "alchemy": "workspace:*",
+    "effect": "catalog:",
+    "vite": "catalog:"
+  },
+  "peerDependenciesMeta": {
+    "@alchemy.run/frontend-frameworks": {
+      "optional": true
+    },
+    "@effect/platform-bun": {
+      "optional": true
+    },
+    "@effect/platform-node": {
+      "optional": true
+    },
+    "vite": {
+      "optional": true
+    }
+  },
+  "alchemy": {
+    "contributes": [
+      "@alchemy.run/cloudflare/Contributions"
+    ]
+  }
+}

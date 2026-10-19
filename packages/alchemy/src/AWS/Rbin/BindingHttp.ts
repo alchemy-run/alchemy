@@ -1,6 +1,5 @@
 import * as Effect from "effect/Effect";
-import * as Binding from "../../Binding.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { Rule } from "./Rule.ts";
 
 /**
@@ -27,23 +26,21 @@ export const makeRbinRuleHttpBinding = <I extends { Identifier: string }, A, E, 
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const bind = yield* AWSBindings.Bind;
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (rule: Rule) {
       const Identifier = yield* rule.identifier;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}(${rule}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: [rule.ruleArn],
-              },
-            ],
-          });
-        }
+        yield* bind`${options.tag}(${rule})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: [rule.ruleArn],
+            },
+          ],
+        });
       }
       return Effect.fn(`${options.tag}(${rule.LogicalId})`)(function* (
         request?: Omit<I, "Identifier">,
@@ -69,22 +66,20 @@ export const makeRbinAccountHttpBinding = <I, A, E, R>(options: {
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const bind = yield* AWSBindings.Bind;
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}())`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: ["*"],
-              },
-            ],
-          });
-        }
+        yield* bind`${options.tag}()`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: ["*"],
+            },
+          ],
+        });
       }
       return Effect.fn(options.tag)(function* (request: I) {
         return yield* op(request);

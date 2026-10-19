@@ -49,6 +49,91 @@ const config = {
       providerPrefix: "BetterAuth",
       sourceDisplayPrefix: "packages/better-auth/src",
     },
+    {
+      srcRoot: path.join(import.meta.dir, "../packages/git/src"),
+      providerPrefix: "Git",
+      sourceDisplayPrefix: "packages/git/src",
+    },
+    {
+      srcRoot: path.join(import.meta.dir, "../packages/drizzle/src"),
+      providerPrefix: "Drizzle",
+      sourceDisplayPrefix: "packages/drizzle/src",
+    },
+    {
+      srcRoot: path.join(import.meta.dir, "../packages/sqlite/src"),
+      providerPrefix: "SQLite",
+      sourceDisplayPrefix: "packages/sqlite/src",
+    },
+    {
+      srcRoot: path.join(import.meta.dir, "../packages/acme/src"),
+      providerPrefix: "ACME",
+      sourceDisplayPrefix: "packages/acme/src",
+    },
+    {
+      srcRoot: path.join(import.meta.dir, "../packages/axiom/src"),
+      providerPrefix: "Axiom",
+      sourceDisplayPrefix: "packages/axiom/src",
+    },
+    {
+      srcRoot: path.join(import.meta.dir, "../packages/doppler/src"),
+      providerPrefix: "Doppler",
+      sourceDisplayPrefix: "packages/doppler/src",
+    },
+    {
+      srcRoot: path.join(import.meta.dir, "../packages/infisical/src"),
+      providerPrefix: "Infisical",
+      sourceDisplayPrefix: "packages/infisical/src",
+    },
+    {
+      srcRoot: path.join(import.meta.dir, "../packages/turso/src"),
+      providerPrefix: "Turso",
+      sourceDisplayPrefix: "packages/turso/src",
+    },
+    {
+      srcRoot: path.join(import.meta.dir, "../packages/planetscale/src"),
+      providerPrefix: "Planetscale",
+      sourceDisplayPrefix: "packages/planetscale/src",
+    },
+    {
+      srcRoot: path.join(import.meta.dir, "../packages/neon/src"),
+      providerPrefix: "Neon",
+      sourceDisplayPrefix: "packages/neon/src",
+    },
+    {
+      srcRoot: path.join(import.meta.dir, "../packages/prisma/src"),
+      providerPrefix: "Prisma",
+      sourceDisplayPrefix: "packages/prisma/src",
+    },
+    {
+      srcRoot: path.join(import.meta.dir, "../packages/hetzner/src"),
+      providerPrefix: "Hetzner",
+      sourceDisplayPrefix: "packages/hetzner/src",
+    },
+    {
+      srcRoot: path.join(import.meta.dir, "../packages/railway/src"),
+      providerPrefix: "Railway",
+      sourceDisplayPrefix: "packages/railway/src",
+    },
+    {
+      srcRoot: path.join(import.meta.dir, "../packages/fly/src"),
+      providerPrefix: "Fly",
+      sourceDisplayPrefix: "packages/fly/src",
+    },
+    {
+      srcRoot: path.join(import.meta.dir, "../packages/github/src"),
+      providerPrefix: "GitHub",
+      sourceDisplayPrefix: "packages/github/src",
+    },
+    {
+      srcRoot: path.join(import.meta.dir, "../packages/stripe/src"),
+      providerPrefix: "Stripe",
+      sourceDisplayPrefix: "packages/stripe/src",
+    },
+    {
+      srcRoot: path.join(import.meta.dir, "../packages/cloudflare/src"),
+      providerPrefix: "Cloudflare",
+      sourceDisplayPrefix: "packages/cloudflare/src",
+    },
   ] satisfies SourceRoot[],
 };
 
@@ -159,6 +244,11 @@ interface ParsedJSDoc {
   hasBindingTag: boolean;
   /** `@layer` — a Layer factory providing a Context service. */
   hasLayerTag: boolean;
+  /**
+   * `@primitive` — a building block exported as a module's `make` (e.g.
+   * `Domain.Event`). Its page is named after the file, not the export.
+   */
+  hasPrimitiveTag: boolean;
   /** `@provides <Service.Tag>` — service tags the Layer satisfies. */
   provides: string[];
   /** `@peer <package>` — optional peer dependencies the Layer needs. */
@@ -202,6 +292,7 @@ function parseJSDoc(node: Node, markers?: MarkerContext): ParsedJSDoc {
       hasResourceTag: false,
       hasBindingTag: false,
       hasLayerTag: false,
+      hasPrimitiveTag: false,
       provides: [],
       peers: [],
       category: "",
@@ -218,6 +309,7 @@ function parseJSDoc(node: Node, markers?: MarkerContext): ParsedJSDoc {
   let hasResourceTag = false;
   let hasBindingTag = false;
   let hasLayerTag = false;
+  let hasPrimitiveTag = false;
   let category = "";
   let product = "";
   let sawTag = false;
@@ -297,6 +389,9 @@ function parseJSDoc(node: Node, markers?: MarkerContext): ParsedJSDoc {
         case "layer":
           hasLayerTag = true;
           break;
+        case "primitive":
+          hasPrimitiveTag = true;
+          break;
         case "provides":
           if (value) provides.push(value);
           break;
@@ -348,6 +443,7 @@ function parseJSDoc(node: Node, markers?: MarkerContext): ParsedJSDoc {
     hasResourceTag,
     hasBindingTag,
     hasLayerTag,
+    hasPrimitiveTag,
     provides,
     peers,
     category,
@@ -474,10 +570,13 @@ export function findTaggedPrimary(
 
   for (const node of candidates) {
     const doc = parseJSDoc(node, markers);
-    if (!doc.hasResourceTag && !doc.hasBindingTag && !doc.hasLayerTag) {
+    if (!doc.hasResourceTag && !doc.hasBindingTag && !doc.hasLayerTag && !doc.hasPrimitiveTag) {
       continue;
     }
-    const name = declName(node);
+    // A primitive is its module's `make`; the page is named after the module.
+    const name = doc.hasPrimitiveTag
+      ? path.basename(sourceFile.fileName).replace(/\.tsx?$/, "")
+      : declName(node);
     if (!name) continue;
     const category = doc.category;
     const product = doc.product;
@@ -512,6 +611,7 @@ export function findTaggedPrimary(
       hasResourceTag: doc.hasResourceTag,
       hasBindingTag: doc.hasBindingTag,
       hasLayerTag: doc.hasLayerTag,
+      hasPrimitiveTag: doc.hasPrimitiveTag,
       provides: doc.provides,
       peers: doc.peers,
     };

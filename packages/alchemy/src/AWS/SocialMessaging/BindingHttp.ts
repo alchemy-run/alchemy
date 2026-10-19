@@ -1,6 +1,5 @@
 import * as Effect from "effect/Effect";
-import * as Binding from "../../Binding.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { LinkedWhatsAppBusinessAccount } from "./LinkedWhatsAppBusinessAccount.ts";
 
 /**
@@ -33,24 +32,22 @@ export const makeWabaScopedHttpBinding = <I extends { id: string }, A, E, R>(opt
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const bind = yield* AWSBindings.Bind;
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (account: LinkedWhatsAppBusinessAccount) {
       // Output yields a DEFERRED effect — resolve again per invocation below.
       const AccountId = yield* account.id;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}(${account}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: [account.arn],
-              },
-            ],
-          });
-        }
+        yield* bind`${options.tag}(${account})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: [account.arn],
+            },
+          ],
+        });
       }
       return Effect.fn(`${options.tag}(${account.LogicalId})`)(function* (request?: Omit<I, "id">) {
         return yield* op({ ...request, id: yield* AccountId } as I);
@@ -75,22 +72,20 @@ export const makeWabaPhonePlaneHttpBinding = <I, A, E, R>(options: {
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const bind = yield* AWSBindings.Bind;
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (account: LinkedWhatsAppBusinessAccount) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}(${account}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: ["*"],
-              },
-            ],
-          });
-        }
+        yield* bind`${options.tag}(${account})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: ["*"],
+            },
+          ],
+        });
       }
       return Effect.fn(`${options.tag}(${account.LogicalId})`)(function* (request: I) {
         return yield* op(request);

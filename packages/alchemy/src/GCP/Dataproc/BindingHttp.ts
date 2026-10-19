@@ -1,5 +1,5 @@
 import * as Effect from "effect/Effect";
-import { bindGcpHost } from "../Host.ts";
+import * as GCPBindings from "../GCPBindings.ts";
 import { type BindingIam, type GcpHttpOp, grantFor } from "../HttpBinding.ts";
 import type { Cluster } from "./Cluster.ts";
 
@@ -17,13 +17,14 @@ export const makeDataprocClusterHttpBinding = <
   operation: GcpHttpOp<I, A, E>;
 }) =>
   Effect.gen(function* () {
-    const run = yield* options.operation;
+    const bind = yield* GCPBindings.Bind;
+    const run = yield* GCPBindings.withCredentials(options.operation);
     return Effect.fn(function* (cluster: Cluster) {
-      yield* bindGcpHost({
-        tag: options.tag,
-        resource: cluster,
-        iam: [grantFor(options.iam, cluster.name)],
-      });
+      if (!globalThis.__ALCHEMY_RUNTIME__) {
+        yield* bind`${options.tag}(${cluster})`({
+          iam: [grantFor(options.iam, cluster.name)],
+        });
+      }
       const clusterName = yield* cluster.clusterName;
       const region = yield* cluster.region;
       const project = yield* cluster.project;

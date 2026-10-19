@@ -32,7 +32,9 @@ export const buildMicrovmDockerfile = (
       ? // `bun.sh/install` unpacks a zip, so the minimal MicroVM base needs
         // `unzip` (and `tar`) present before the installer runs.
         "RUN dnf install -y unzip tar && curl -fsSL https://bun.sh/install | bash && ln -s /root/.bun/bin/bun /usr/local/bin/bun && dnf clean all"
-      : "RUN dnf install -y nodejs && dnf clean all";
+      : // AL2023's default `nodejs` is Node 18, which lacks the global WebCrypto
+        // that AWS request signing needs; `nodejs24` also links `node`.
+        "RUN dnf install -y nodejs24 && dnf clean all";
   const runtimeBin = runtime === "bun" ? "bun" : "node";
   return [
     base,
@@ -127,8 +129,8 @@ export const bundleMicrovmProgram = Effect.fn(function* ({
           (importPath) => `
 import { bootstrap } from ${JSON.stringify(
             runtime === "bun"
-              ? "alchemy/Runtime/Bootstrap/MicrovmBun"
-              : "alchemy/Runtime/Bootstrap/MicrovmNode",
+              ? "alchemy/AWS/Bootstrap/MicrovmBun"
+              : "alchemy/AWS/Bootstrap/MicrovmNode",
           )};
 import ${handler === "default" ? "entrypoint" : `{ ${handler} as entrypoint }`} from ${JSON.stringify(importPath)};
 

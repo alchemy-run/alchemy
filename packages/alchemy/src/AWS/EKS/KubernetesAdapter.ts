@@ -1,25 +1,3 @@
-/**
- * The `aws-eks` {@link ClusterAdapter}: everything platform-specific about
- * running `Kubernetes.*` workloads on Amazon EKS.
- *
- * - **connect** — SigV4 bearer tokens (STS presign) against the cluster
- *   endpoint, re-describing the cluster when the connection doesn't carry
- *   endpoint/CA (or they've gone stale).
- * - **identity** — EKS Pod Identity: a generated IAM role +
- *   `PodIdentityAssociation`, with `policyStatements` host bindings landed
- *   as the role's inline policy.
- * - **registry** — a per-workload ECR repository; `main` programs are
- *   bundled, `context` Dockerfiles built, and `image` refs mirrored into
- *   it.
- * - **bootstrap** — generated container entries wiring the AWS credential
- *   chain so Pod Identity's container-credentials endpoint resolves inside
- *   the pod.
- * - **loadBalancerDefaults** — EKS Auto Mode's `loadBalancerClass` and the
- *   internet-facing NLB scheme.
- *
- * Registered by `AWS.providers()`; resolved dynamically by the
- * `Kubernetes.*` providers via the connection's `auth.kind`.
- */
 import { Credentials } from "@distilled.cloud/aws/Credentials";
 import * as ecr from "@distilled.cloud/aws/ecr";
 import * as eks from "@distilled.cloud/aws/eks";
@@ -45,6 +23,28 @@ import { Self } from "../../Self.ts";
 import { makeImageSource, type ImageSourceLike } from "../ECR/ImageSource.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
+/**
+ * The `aws-eks` {@link ClusterAdapter}: everything platform-specific about
+ * running `Kubernetes.*` workloads on Amazon EKS.
+ *
+ * - **connect** — SigV4 bearer tokens (STS presign) against the cluster
+ *   endpoint, re-describing the cluster when the connection doesn't carry
+ *   endpoint/CA (or they've gone stale).
+ * - **identity** — EKS Pod Identity: a generated IAM role +
+ *   `PodIdentityAssociation`, with `policyStatements` host bindings landed
+ *   as the role's inline policy.
+ * - **registry** — a per-workload ECR repository; `main` programs are
+ *   bundled, `context` Dockerfiles built, and `image` refs mirrored into
+ *   it.
+ * - **bootstrap** — generated container entries wiring the AWS credential
+ *   chain so Pod Identity's container-credentials endpoint resolves inside
+ *   the pod.
+ * - **loadBalancerDefaults** — EKS Auto Mode's `loadBalancerClass` and the
+ *   internet-facing NLB scheme.
+ *
+ * Registered by `AWS.providers()`; resolved dynamically by the
+ * `Kubernetes.*` providers via the connection's `auth.kind`.
+ */
 import {
   attachPolicyStatements,
   deleteAssociation,
@@ -517,7 +517,9 @@ export const EksKubernetesAdapter = () =>
           const { region } = yield* AWSEnvironment.current;
 
           return {
-            env: { AWS_REGION: auth.region ?? region },
+            env: {
+              AWS_REGION: auth.region ?? region,
+            },
             state: {
               kind: "aws-pod-identity" as const,
               roleArn,

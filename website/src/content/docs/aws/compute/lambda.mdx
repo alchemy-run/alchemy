@@ -14,6 +14,13 @@ through the same pattern: S3 notifications
 (`Lambda.StreamEventSource`), and DynamoDB Streams
 (`Lambda.TableEventSource`).
 
+:::tip
+For an API or web app, use a
+[Lambda Web Function](/aws/compute/web-functions). It serves many
+requests per environment and streams responses. Use a Lambda Function
+for event sources.
+:::
+
 This page stands up the smallest possible function — a public
 HTTP endpoint — which the [S3](/aws/data/s3),
 [DynamoDB](/aws/data/dynamodb), [SQS](/aws/messaging/sqs), and

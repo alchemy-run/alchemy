@@ -1,12 +1,14 @@
 import * as DynamoDB from "@distilled.cloud/aws/dynamodb";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as AWSBindings from "../AWSBindings.ts";
 import { BatchGetItem, type BatchGetItemRequest, type BatchGetItemTables } from "./BatchGetItem.ts";
-import { grantTables, signed, tablesRegion } from "./BindingHttp.ts";
+import { GrantTables, tablesRegion } from "./BindingHttp.ts";
 
 export const BatchGetItemHttp = Layer.effect(
   BatchGetItem,
   Effect.gen(function* () {
+    const grantTables = yield* GrantTables;
     return Effect.fn(function* (...tables: BatchGetItemTables) {
       const sortedTables = sortTables(tables);
       const tableNames = new Map(
@@ -27,7 +29,7 @@ export const BatchGetItemHttp = Layer.effect(
         return yield* TableName;
       });
 
-      const access = yield* grantTables(
+      yield* grantTables(
         `AWS.DynamoDB.BatchGetItem(${sortedTables.map((table) => table.LogicalId).join(", ")})`,
         () => [
           {
@@ -37,7 +39,10 @@ export const BatchGetItemHttp = Layer.effect(
           },
         ],
       );
-      const region = yield* tablesRegion(access, sortedTables);
+      const batchGetItem = yield* AWSBindings.withCredentials(
+        DynamoDB.batchGetItem,
+        tablesRegion(sortedTables),
+      );
 
       return Effect.fn(`AWS.DynamoDB.BatchGetItem(${sortedTables})`)(function* (
         request: BatchGetItemRequest,
@@ -50,14 +55,10 @@ export const BatchGetItemHttp = Layer.effect(
             }),
         );
 
-        return yield* signed(
-          access,
-          region,
-          DynamoDB.batchGetItem({
-            ...request,
-            RequestItems: Object.fromEntries(requestItems),
-          }),
-        );
+        return yield* batchGetItem({
+          ...request,
+          RequestItems: Object.fromEntries(requestItems),
+        });
       });
     });
   }),

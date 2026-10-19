@@ -57,7 +57,7 @@ export const RestApiEventSource = Layer.effect(
   AGRestApiEventSource,
   Effect.gen(function* () {
     // this layer can only be used in a Lambda Function
-    const host = yield* Lambda.Function;
+    const host = yield* Lambda.eventSourceHost("AWS.Lambda.RestApiEventSource");
     const Resource = yield* GatewayResource;
     const Method = yield* MethodResource;
     const Permission = yield* LambdaPermission;

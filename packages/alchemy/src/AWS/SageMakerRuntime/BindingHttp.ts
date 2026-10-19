@@ -1,7 +1,6 @@
 import * as Effect from "effect/Effect";
-import * as Binding from "../../Binding.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import { AWSEnvironment } from "../Environment.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
 
 /**
  * Shared scaffolding for AWS SageMaker Runtime HTTP bindings.
@@ -41,28 +40,26 @@ export const makeEndpointInvocationHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const bind = yield* AWSBindings.Bind;
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (endpoint: string, ...additionalEndpoints: string[]) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          const { accountId, region } = yield* currentEnv;
-          // Sort so the binding identity (SID + ARN list) is deterministic
-          // regardless of argument order.
-          const sorted = [...new Set([endpoint, ...additionalEndpoints])].sort();
-          yield* host.bind`Allow(${host}, ${options.tag}(${sorted.join(",")}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: sorted.map(
-                  (name) => `arn:aws:sagemaker:${region}:${accountId}:endpoint/${name}`,
-                ),
-              },
-            ],
-          });
-        }
+        const { accountId, region } = yield* currentEnv;
+        // Sort so the binding identity (SID + ARN list) is deterministic
+        // regardless of argument order.
+        const sorted = [...new Set([endpoint, ...additionalEndpoints])].sort();
+        yield* bind`${options.tag}(${sorted.join(",")})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: sorted.map(
+                (name) => `arn:aws:sagemaker:${region}:${accountId}:endpoint/${name}`,
+              ),
+            },
+          ],
+        });
       }
       return Effect.fn(`${options.tag}(${endpoint})`)(function* (
         request: Omit<I, "EndpointName"> & { EndpointName?: string },

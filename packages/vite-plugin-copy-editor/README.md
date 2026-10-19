@@ -31,6 +31,9 @@ Works with `.astro`, `.html`, `.jsx`, `.tsx`, `.vue`, and `.svelte` files
 element may contain only text and plain HTML tags; elements containing
 `{expressions}` or components are rejected with an explanation in the browser.
 
+Limit editing to some pages with `pages`, a predicate over the URL pathname
+(e.g. `copyEditor({ pages: (p) => p === "/" })`); other pages load no editor.
+
 ## Markdown sections
 
 Content that comes from markdown (docs pages, a CMS, generated reference) can

@@ -1,32 +1,29 @@
 import * as AVP from "@distilled.cloud/aws/verifiedpermissions";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Binding from "../../Binding.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import { GetPolicies, type GetPoliciesRequest } from "./GetPolicies.ts";
 import type { PolicyStore } from "./PolicyStore.ts";
 
 export const GetPoliciesHttp = Layer.effect(
   GetPolicies,
   Effect.gen(function* () {
-    const batchGetPolicy = yield* AVP.batchGetPolicy;
+    const bind = yield* AWSBindings.Bind;
+    const batchGetPolicy = yield* AWSBindings.withCredentials(AVP.batchGetPolicy);
 
     return Effect.fn(function* <S extends PolicyStore>(store: S) {
       const PolicyStoreId = yield* store.policyStoreId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, AWS.VerifiedPermissions.GetPolicies(${store}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                // BatchGetPolicy authorizes under verifiedpermissions:GetPolicy
-                Action: ["verifiedpermissions:GetPolicy", "verifiedpermissions:BatchGetPolicy"],
-                Resource: [store.policyStoreArn],
-              },
-            ],
-          });
-        }
+        yield* bind`AWS.VerifiedPermissions.GetPolicies(${store})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              // BatchGetPolicy authorizes under verifiedpermissions:GetPolicy
+              Action: ["verifiedpermissions:GetPolicy", "verifiedpermissions:BatchGetPolicy"],
+              Resource: [store.policyStoreArn],
+            },
+          ],
+        });
       }
       const label = store.LogicalId;
       return {

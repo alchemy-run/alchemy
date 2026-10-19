@@ -1,9 +1,8 @@
 import * as Effect from "effect/Effect";
-import * as Binding from "../../Binding.ts";
 import type { Input } from "../../Input.ts";
 import * as Output from "../../Output.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import { AWSEnvironment } from "../Environment.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
 import type { ConfigurationSet } from "./ConfigurationSet.ts";
 import type { EmailIdentity } from "./EmailIdentity.ts";
 import type { EmailTemplate } from "./EmailTemplate.ts";
@@ -32,22 +31,20 @@ export const makeSESHttpBinding = <I, A, E, R>(options: {
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const bind = yield* AWSBindings.Bind;
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}())`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: ["*"],
-              },
-            ],
-          });
-        }
+        yield* bind`${options.tag}()`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: ["*"],
+            },
+          ],
+        });
       }
       return Effect.fn(options.tag)(function* (request?: I) {
         return yield* op((request ?? {}) as I);
@@ -74,23 +71,21 @@ export const makeTemplateScopedHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const bind = yield* AWSBindings.Bind;
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (template: EmailTemplate) {
       const TemplateName = yield* template.templateName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}(${template}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: [template.templateArn],
-              },
-            ],
-          });
-        }
+        yield* bind`${options.tag}(${template})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: [template.templateArn],
+            },
+          ],
+        });
       }
       return Effect.fn(`${options.tag}(${template.LogicalId})`)(function* (
         request: Omit<I, "TemplateName">,
@@ -160,7 +155,8 @@ export const makeVerificationScopedHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const bind = yield* AWSBindings.Bind;
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (
       identity: EmailIdentity | EmailIdentityRef,
@@ -171,59 +167,53 @@ export const makeVerificationScopedHttpBinding = <
         : undefined;
       const label = isEmailIdentityRef(identity) ? identity.emailIdentity : identity.LogicalId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          // Authorize the identity being verified: the address itself, or
-          // every address at the domain when a domain is bound. The account's
-          // custom verification email templates are granted alongside, since
-          // the request also names one.
-          const resources: Input<string>[] = [];
-          if (isEmailIdentityRef(identity)) {
-            const { accountId, region } =
-              yield* AWSEnvironment.current as unknown as Effect.Effect<{
-                accountId: string;
-                region: string;
-              }>;
-            const base = `arn:aws:ses:${region}:${accountId}`;
-            const name = identity.emailIdentity;
-            resources.push(
-              `${base}:identity/${name}`,
-              // A domain reference also authorizes addresses at that domain.
-              name.includes("@") ? `${base}:identity/${name}` : `${base}:identity/*@${name}`,
-              `${base}:custom-verification-email-template/*`,
-            );
-          } else {
-            resources.push(
-              identity.identityArn,
-              Output.all(identity.identityArn).pipe(
-                Output.map(([identityArn]) =>
-                  identityArn.includes("@")
-                    ? identityArn
-                    : identityArn.replace(/:identity\//, ":identity/*@"),
-                ),
+        // Authorize the identity being verified: the address itself, or
+        // every address at the domain when a domain is bound. The account's
+        // custom verification email templates are granted alongside, since
+        // the request also names one.
+        const resources: Input<string>[] = [];
+        if (isEmailIdentityRef(identity)) {
+          const { accountId, region } = yield* AWSEnvironment.current as unknown as Effect.Effect<{
+            accountId: string;
+            region: string;
+          }>;
+          const base = `arn:aws:ses:${region}:${accountId}`;
+          const name = identity.emailIdentity;
+          resources.push(
+            `${base}:identity/${name}`,
+            // A domain reference also authorizes addresses at that domain.
+            name.includes("@") ? `${base}:identity/${name}` : `${base}:identity/*@${name}`,
+            `${base}:custom-verification-email-template/*`,
+          );
+        } else {
+          resources.push(
+            identity.identityArn,
+            Output.all(identity.identityArn).pipe(
+              Output.map(([identityArn]) =>
+                identityArn.includes("@")
+                  ? identityArn
+                  : identityArn.replace(/:identity\//, ":identity/*@"),
               ),
-              Output.all(identity.identityArn).pipe(
-                Output.map(([identityArn]) =>
-                  identityArn.replace(/:identity\/.*$/, ":custom-verification-email-template/*"),
-                ),
+            ),
+            Output.all(identity.identityArn).pipe(
+              Output.map(([identityArn]) =>
+                identityArn.replace(/:identity\/.*$/, ":custom-verification-email-template/*"),
               ),
-            );
-          }
-          if (configurationSet) {
-            resources.push(configurationSet.configurationSetArn);
-          }
-          yield* host.bind`Allow(${host}, ${options.tag}(${label}, ${configurationSet ?? "none"}))`(
-            {
-              policyStatements: [
-                {
-                  Effect: "Allow",
-                  Action: [...options.actions],
-                  Resource: resources,
-                },
-              ],
-            },
+            ),
           );
         }
+        if (configurationSet) {
+          resources.push(configurationSet.configurationSetArn);
+        }
+        yield* bind`${options.tag}(${label}, ${configurationSet ?? "none"})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: resources,
+            },
+          ],
+        });
       }
       return Effect.fn(`${options.tag}(${label})`)(function* (
         request: Omit<I, "ConfigurationSetName">,
@@ -264,7 +254,8 @@ export const makeSendScopedHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const bind = yield* AWSBindings.Bind;
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* <Identity extends EmailIdentity>(
       identity: Identity,
@@ -275,40 +266,35 @@ export const makeSendScopedHttpBinding = <
         ? yield* configurationSet.configurationSetName
         : undefined;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          // Templated sends are authorized against the template resource, so
-          // grant the account's templates alongside the bound identity.
-          const templateArns = Output.all(identity.identityArn).pipe(
-            Output.map(([identityArn]) => identityArn.replace(/:identity\/.*$/, ":template/*")),
-          );
-          // For a domain identity, SES authorizes the send against the
-          // identity ARN of the FROM address (identity/user@domain), not the
-          // domain identity ARN — grant addresses at the domain too.
-          const addressArns = Output.all(identity.identityArn).pipe(
-            Output.map(([identityArn]) =>
-              identityArn.includes("@")
-                ? identityArn
-                : identityArn.replace(/:identity\//, ":identity/*@"),
-            ),
-          );
-          yield* host.bind`Allow(${host}, ${options.tag}(${identity}, ${configurationSet ?? "none"}))`(
+        // Templated sends are authorized against the template resource, so
+        // grant the account's templates alongside the bound identity.
+        const templateArns = Output.all(identity.identityArn).pipe(
+          Output.map(([identityArn]) => identityArn.replace(/:identity\/.*$/, ":template/*")),
+        );
+        // For a domain identity, SES authorizes the send against the
+        // identity ARN of the FROM address (identity/user@domain), not the
+        // domain identity ARN — grant addresses at the domain too.
+        const addressArns = Output.all(identity.identityArn).pipe(
+          Output.map(([identityArn]) =>
+            identityArn.includes("@")
+              ? identityArn
+              : identityArn.replace(/:identity\//, ":identity/*@"),
+          ),
+        );
+        yield* bind`${options.tag}(${identity}, ${configurationSet ?? "none"})`({
+          policyStatements: [
             {
-              policyStatements: [
-                {
-                  Effect: "Allow",
-                  Action: [...options.actions],
-                  Resource: [
-                    identity.identityArn,
-                    addressArns,
-                    templateArns,
-                    ...(configurationSet ? [configurationSet.configurationSetArn] : []),
-                  ],
-                },
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: [
+                identity.identityArn,
+                addressArns,
+                templateArns,
+                ...(configurationSet ? [configurationSet.configurationSetArn] : []),
               ],
             },
-          );
-        }
+          ],
+        });
       }
       return Effect.fn(`${options.tag}(${identity.LogicalId})`)(function* (
         request: Omit<I, "ConfigurationSetName">,

@@ -1,6 +1,5 @@
 import * as Effect from "effect/Effect";
-import * as Binding from "../../Binding.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { Domain } from "./Domain.ts";
 
 /**
@@ -21,23 +20,22 @@ import type { Domain } from "./Domain.ts";
  * Deploy-time half of a SimpleDB binding: grants `sdb:{operation}` on the
  * domain's ARN to the host Function. No-op at runtime.
  */
-export const registerSimpleDbBinding = (operation: string, domain: Domain) =>
-  Effect.gen(function* () {
+export const RegisterSimpleDbBinding = Effect.gen(function* () {
+  const bind = yield* AWSBindings.Bind;
+  return Effect.fn(function* (operation: string, domain: Domain) {
     if (!globalThis.__ALCHEMY_RUNTIME__) {
-      const host = yield* Binding.Host;
-      if (isBindingHost(host)) {
-        yield* host.bind`Allow(${host}, AWS.SimpleDB.${operation}(${domain}))`({
-          policyStatements: [
-            {
-              Effect: "Allow",
-              Action: [`sdb:${operation}`],
-              Resource: [domain.domainArn],
-            },
-          ],
-        });
-      }
+      yield* bind`AWS.SimpleDB.${operation}(${domain})`({
+        policyStatements: [
+          {
+            Effect: "Allow",
+            Action: [`sdb:${operation}`],
+            Resource: [domain.domainArn],
+          },
+        ],
+      });
     }
   });
+});
 
 /**
  * Builds the full binding implementation for a SimpleDB operation whose
@@ -50,7 +48,8 @@ export const makeSimpleDbBinding = <Req extends { DomainName: string }, A, E, R>
   readonly method: Effect.Effect<(input: Req) => Effect.Effect<A, E>, never, R>;
 }) =>
   Effect.gen(function* () {
-    const call = yield* options.method;
+    const registerSimpleDbBinding = yield* RegisterSimpleDbBinding;
+    const call = yield* AWSBindings.withCredentials(options.method);
     return Effect.fn(function* (domain: Domain) {
       const domainName = yield* domain.domainName;
       yield* registerSimpleDbBinding(options.operation, domain);

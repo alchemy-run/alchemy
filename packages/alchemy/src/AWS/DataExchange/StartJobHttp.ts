@@ -1,8 +1,7 @@
 import * as dataexchange from "@distilled.cloud/aws/dataexchange";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Binding from "../../Binding.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import { StartJob } from "./StartJob.ts";
 
 /**
@@ -18,36 +17,34 @@ import { StartJob } from "./StartJob.ts";
 export const StartJobHttp = Layer.effect(
   StartJob,
   Effect.gen(function* () {
-    const op = yield* dataexchange.startJob;
+    const bind = yield* AWSBindings.Bind;
+    const op = yield* AWSBindings.withCredentials(dataexchange.startJob);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, AWS.DataExchange.StartJob())`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [
-                  "dataexchange:StartJob",
-                  "dataexchange:CreateAsset",
-                  "dataexchange:GetAsset",
-                ],
-                Resource: ["*"],
-              },
-              {
-                Effect: "Allow",
-                Action: ["s3:GetObject", "s3:PutObject", "s3:PutObjectAcl"],
-                Resource: ["arn:aws:s3:::*aws-data-exchange*"],
-                Condition: {
-                  "ForAnyValue:StringEquals": {
-                    "aws:CalledVia": ["dataexchange.amazonaws.com"],
-                  },
+        yield* bind`AWS.DataExchange.StartJob()`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [
+                "dataexchange:StartJob",
+                "dataexchange:CreateAsset",
+                "dataexchange:GetAsset",
+              ],
+              Resource: ["*"],
+            },
+            {
+              Effect: "Allow",
+              Action: ["s3:GetObject", "s3:PutObject", "s3:PutObjectAcl"],
+              Resource: ["arn:aws:s3:::*aws-data-exchange*"],
+              Condition: {
+                "ForAnyValue:StringEquals": {
+                  "aws:CalledVia": ["dataexchange.amazonaws.com"],
                 },
               },
-            ],
-          });
-        }
+            },
+          ],
+        });
       }
       return Effect.fn("AWS.DataExchange.StartJob")(function* (
         request: dataexchange.StartJobRequest,

@@ -1,6 +1,7 @@
 import * as cloudbuild from "@distilled.cloud/gcp/cloudbuild_v2";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as GCPBindings from "../GCPBindings.ts";
 import { AccessReadWriteToken } from "./AccessReadWriteToken.ts";
 import { makeRepositoryHttpBinding } from "./BindingHttp.ts";
 
@@ -13,7 +14,9 @@ import { makeRepositoryHttpBinding } from "./BindingHttp.ts";
 export const AccessReadWriteTokenHttp = Layer.effect(
   AccessReadWriteToken,
   Effect.gen(function* () {
-    const access = yield* cloudbuild.accessReadWriteTokenProjectsLocationsConnectionsRepositories;
+    const access = yield* GCPBindings.withCredentials(
+      cloudbuild.accessReadWriteTokenProjectsLocationsConnectionsRepositories,
+    );
     return yield* makeRepositoryHttpBinding<
       cloudbuild.AccessReadWriteTokenProjectsLocationsConnectionsRepositoriesRequest,
       cloudbuild.FetchReadWriteTokenResponse,

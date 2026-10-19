@@ -1,8 +1,7 @@
 import * as Effect from "effect/Effect";
-import * as Binding from "../../Binding.ts";
 import * as Output from "../../Output.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { Role } from "../IAM/Role.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
 
 /**
  * Shared scaffolding for AWS Comprehend HTTP bindings.
@@ -31,22 +30,20 @@ export const makeComprehendHttpBinding = <I, A, E, R>(options: {
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const bind = yield* AWSBindings.Bind;
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}())`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: ["*"],
-              },
-            ],
-          });
-        }
+        yield* bind`${options.tag}()`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: ["*"],
+            },
+          ],
+        });
       }
       return Effect.fn(options.tag)(function* (request?: I) {
         return yield* op((request ?? {}) as I);
@@ -77,35 +74,33 @@ export const makeComprehendStartJobHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const bind = yield* AWSBindings.Bind;
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* <Rl extends Role>(dataAccessRole: Rl) {
       const RoleArn = yield* dataAccessRole.roleArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}(${dataAccessRole}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: ["*"],
-              },
-              // CRITICAL: without iam:PassRole on the data-access role,
-              // Start*Job fails only at runtime with an AccessDenied.
-              {
-                Effect: "Allow",
-                Action: ["iam:PassRole"],
-                Resource: [Output.interpolate`${dataAccessRole.roleArn}`],
-                Condition: {
-                  StringEquals: {
-                    "iam:PassedToService": "comprehend.amazonaws.com",
-                  },
+        yield* bind`${options.tag}(${dataAccessRole})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: ["*"],
+            },
+            // CRITICAL: without iam:PassRole on the data-access role,
+            // Start*Job fails only at runtime with an AccessDenied.
+            {
+              Effect: "Allow",
+              Action: ["iam:PassRole"],
+              Resource: [Output.interpolate`${dataAccessRole.roleArn}`],
+              Condition: {
+                StringEquals: {
+                  "iam:PassedToService": "comprehend.amazonaws.com",
                 },
               },
-            ],
-          });
-        }
+            },
+          ],
+        });
       }
       return Effect.fn(`${options.tag}(${dataAccessRole.LogicalId})`)(function* (
         request: Omit<I, "DataAccessRoleArn"> & {

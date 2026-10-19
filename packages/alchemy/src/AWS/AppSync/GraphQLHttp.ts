@@ -4,9 +4,8 @@ import * as SigV4 from "@distilled.cloud/aws/SigV4";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
-import * as Binding from "../../Binding.ts";
 import * as Output from "../../Output.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import {
   GraphQL,
   GraphQLApiError,
@@ -26,9 +25,12 @@ import type { GraphqlApi } from "./GraphqlApi.ts";
 export const GraphQLHttp = Layer.effect(
   GraphQL,
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     // Resolve the ambient distilled context once at layer construction —
     // credentials themselves are re-read per request (SSO/STS rotate).
-    const services = yield* Effect.context<Credentials.Credentials | Region.Region>();
+    const services = yield* AWSBindings.withCredentials(
+      Effect.context<Credentials.Credentials | Region.Region>(),
+    );
 
     return Effect.fn(function* (api: GraphqlApi) {
       // Outputs yield DEFERRED effects — resolving them here registers the
@@ -36,18 +38,15 @@ export const GraphQLHttp = Layer.effect(
       const GraphqlUrl = yield* api.graphqlUrl;
 
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, AWS.AppSync.GraphQL(${api}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: ["appsync:GraphQL"],
-                Resource: [Output.interpolate`${api.apiArn}/types/*/fields/*`],
-              },
-            ],
-          });
-        }
+        yield* bind`AWS.AppSync.GraphQL(${api})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: ["appsync:GraphQL"],
+              Resource: [Output.interpolate`${api.apiArn}/types/*/fields/*`],
+            },
+          ],
+        });
       }
 
       const execute = Effect.fn(`AWS.AppSync.GraphQL(${api.LogicalId})`)(function* (

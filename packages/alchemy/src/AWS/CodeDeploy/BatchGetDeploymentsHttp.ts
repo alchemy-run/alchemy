@@ -1,8 +1,7 @@
 import * as codedeploy from "@distilled.cloud/aws/codedeploy";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Binding from "../../Binding.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import { BatchGetDeployments } from "./BatchGetDeployments.ts";
 import type { DeploymentGroup } from "./DeploymentGroup.ts";
 
@@ -15,22 +14,20 @@ import type { DeploymentGroup } from "./DeploymentGroup.ts";
 export const BatchGetDeploymentsHttp = Layer.effect(
   BatchGetDeployments,
   Effect.gen(function* () {
-    const op = yield* codedeploy.batchGetDeployments;
+    const bind = yield* AWSBindings.Bind;
+    const op = yield* AWSBindings.withCredentials(codedeploy.batchGetDeployments);
 
     return Effect.fn(function* <G extends DeploymentGroup>(group: G) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, AWS.CodeDeploy.BatchGetDeployments(${group}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: ["codedeploy:BatchGetDeployments"],
-                Resource: ["*"],
-              },
-            ],
-          });
-        }
+        yield* bind`AWS.CodeDeploy.BatchGetDeployments(${group})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: ["codedeploy:BatchGetDeployments"],
+              Resource: ["*"],
+            },
+          ],
+        });
       }
       return Effect.fn(`AWS.CodeDeploy.BatchGetDeployments(${group.LogicalId})`)(function* (
         request: codedeploy.BatchGetDeploymentsInput,

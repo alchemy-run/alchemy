@@ -1,8 +1,11 @@
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
+import * as Binding from "../../Binding.ts";
+import type { Input } from "../../Input.ts";
 import * as Output from "../../Output.ts";
-import { bindGcpHost } from "../Host.ts";
+import * as GCPBindings from "../GCPBindings.ts";
+import type { GcpHostBinding } from "../Host.ts";
 import { CLOUD_SQL_MOUNT_PATH } from "../HostRuntime.ts";
 import { grantFor } from "../HttpBinding.ts";
 import { ReadSecret } from "../SecretManager/ReadSecret.ts";
@@ -41,23 +44,37 @@ const socketUrl = (options: {
 export const ConnectHttp = Layer.effect(
   Connect,
   Effect.gen(function* () {
+    const bind = yield* GCPBindings.Bind;
     const readSecret = yield* ReadSecret;
     return Effect.fn(function* (instance: Instance, options: ConnectOptions) {
-      yield* bindGcpHost({
-        tag: "GCP.SQL.Connect",
-        resource: instance,
-        // Cloud SQL has no instance-level IAM policy; an IAM Condition
-        // scopes the project grant to this instance.
-        iam: [
-          grantFor(
-            { role: "roles/cloudsql.client", scopeByCondition: true },
-            Output.interpolate`projects/${instance.project}/instances/${instance.instanceName}`,
-          ),
-        ],
-        cloudSqlInstances: [
-          Output.interpolate`${instance.project}:${instance.region}:${instance.instanceName}`,
-        ],
-      });
+      if (!globalThis.__ALCHEMY_RUNTIME__) {
+        // Connects over the socket volume Cloud Run mounts for the host.
+        yield* GCPBindings.requireServiceAccountHost("GCP.SQL.Connect");
+        yield* bind`GCP.SQL.Connect(${instance})`({
+          // Cloud SQL has no instance-level IAM policy; an IAM Condition
+          // scopes the project grant to this instance.
+          iam: [
+            grantFor(
+              { role: "roles/cloudsql.client", scopeByCondition: true },
+              Output.interpolate`projects/${instance.project}/instances/${instance.instanceName}`,
+            ),
+          ],
+        });
+        const host = yield* Binding.Host;
+        if (host !== undefined) {
+          const bindHost = (host as unknown as { bind: unknown }).bind as (
+            label: TemplateStringsArray,
+            ...args: unknown[]
+          ) => (data: {
+            cloudSqlInstances: Input<GcpHostBinding["cloudSqlInstances"]>;
+          }) => Effect.Effect<void>;
+          yield* bindHost`GCP.SQL.Socket(${instance})`({
+            cloudSqlInstances: [
+              Output.interpolate`${instance.project}:${instance.region}:${instance.instanceName}`,
+            ],
+          });
+        }
+      }
       const password = yield* readSecret(options.passwordSecret);
       const project = yield* instance.project;
       const region = yield* instance.region;

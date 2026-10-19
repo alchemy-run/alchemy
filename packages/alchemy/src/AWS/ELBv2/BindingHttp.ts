@@ -1,9 +1,6 @@
 import * as Effect from "effect/Effect";
-import * as Binding from "../../Binding.ts";
 import * as Output from "../../Output.ts";
-import { isInstance } from "../EC2/Instance.ts";
-import { isTask } from "../ECS/Task.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { LoadBalancer } from "./LoadBalancer.ts";
 import type { TargetGroup } from "./TargetGroup.ts";
 import type { TrustStore } from "./TrustStore.ts";
@@ -23,28 +20,27 @@ import type { TrustStore } from "./TrustStore.ts";
  * Instances registering themselves into a target group at boot).
  */
 
-const bindHost = (
-  tag: string,
-  actions: readonly string[],
-  resource: TargetGroup | LoadBalancer | TrustStore,
-  iamResource: Output.Output<string> | "*",
-) =>
-  Effect.gen(function* () {
+const BindHost = Effect.gen(function* () {
+  const bind = yield* AWSBindings.Bind;
+  return Effect.fn(function* (
+    tag: string,
+    actions: readonly string[],
+    resource: TargetGroup | LoadBalancer | TrustStore,
+    iamResource: Output.Output<string> | "*",
+  ) {
     if (!globalThis.__ALCHEMY_RUNTIME__) {
-      const host = yield* Binding.Host;
-      if (isBindingHost(host) || isTask(host) || isInstance(host)) {
-        yield* host.bind`Allow(${host}, ${tag}(${resource}))`({
-          policyStatements: [
-            {
-              Effect: "Allow",
-              Action: [...actions],
-              Resource: [iamResource === "*" ? "*" : iamResource],
-            },
-          ],
-        });
-      }
+      yield* bind`${tag}(${resource})`({
+        policyStatements: [
+          {
+            Effect: "Allow",
+            Action: [...actions],
+            Resource: [iamResource === "*" ? "*" : iamResource],
+          },
+        ],
+      });
     }
   });
+});
 
 /**
  * Build the impl Effect for a target-group-addressed operation: the runtime
@@ -73,7 +69,8 @@ export const makeTargetGroupHttpBinding = <
   resource?: "target-group" | "*";
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const bindHost = yield* BindHost;
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (targetGroup: TargetGroup) {
       const TargetGroupArn = yield* targetGroup.targetGroupArn;
@@ -121,7 +118,8 @@ export const makeLoadBalancerHttpBinding = <
   resource?: "load-balancer" | "*";
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const bindHost = yield* BindHost;
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (loadBalancer: LoadBalancer) {
       const LoadBalancerArn = yield* loadBalancer.loadBalancerArn;
@@ -157,7 +155,8 @@ export const makeTrustStoreHttpBinding = <I extends { TrustStoreArn?: string }, 
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const bindHost = yield* BindHost;
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (trustStore: TrustStore) {
       const TrustStoreArn = yield* trustStore.trustStoreArn;

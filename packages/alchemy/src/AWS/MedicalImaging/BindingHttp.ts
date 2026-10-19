@@ -1,8 +1,7 @@
 import * as Effect from "effect/Effect";
-import * as Binding from "../../Binding.ts";
 import * as Output from "../../Output.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { Role } from "../IAM/Role.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
 import type { Datastore } from "./Datastore.ts";
 
 /**
@@ -40,26 +39,24 @@ export const makeMedicalImagingDatastoreHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const bind = yield* AWSBindings.Bind;
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (datastore: Datastore) {
       const DatastoreId = yield* datastore.datastoreId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}(${datastore}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: [
-                  Output.interpolate`${datastore.datastoreArn}`,
-                  Output.interpolate`${datastore.datastoreArn}/imageset/*`,
-                ],
-              },
-            ],
-          });
-        }
+        yield* bind`${options.tag}(${datastore})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: [
+                Output.interpolate`${datastore.datastoreArn}`,
+                Output.interpolate`${datastore.datastoreArn}/imageset/*`,
+              ],
+            },
+          ],
+        });
       }
       return Effect.fn(`${options.tag}(${datastore.LogicalId})`)(function* (
         request?: Omit<I, "datastoreId">,
@@ -100,37 +97,35 @@ export const makeMedicalImagingStartJobHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const bind = yield* AWSBindings.Bind;
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (datastore: Datastore, dataAccessRole: Role) {
       const DatastoreId = yield* datastore.datastoreId;
       const RoleArn = yield* dataAccessRole.roleArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}(${datastore}, ${dataAccessRole}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: [Output.interpolate`${datastore.datastoreArn}`],
-              },
-              // CRITICAL: without iam:PassRole on the data-access role,
-              // StartDICOMImportJob fails only at runtime with an
-              // AccessDenied.
-              {
-                Effect: "Allow",
-                Action: ["iam:PassRole"],
-                Resource: [Output.interpolate`${dataAccessRole.roleArn}`],
-                Condition: {
-                  StringEquals: {
-                    "iam:PassedToService": "medical-imaging.amazonaws.com",
-                  },
+        yield* bind`${options.tag}(${datastore}, ${dataAccessRole})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: [Output.interpolate`${datastore.datastoreArn}`],
+            },
+            // CRITICAL: without iam:PassRole on the data-access role,
+            // StartDICOMImportJob fails only at runtime with an
+            // AccessDenied.
+            {
+              Effect: "Allow",
+              Action: ["iam:PassRole"],
+              Resource: [Output.interpolate`${dataAccessRole.roleArn}`],
+              Condition: {
+                StringEquals: {
+                  "iam:PassedToService": "medical-imaging.amazonaws.com",
                 },
               },
-            ],
-          });
-        }
+            },
+          ],
+        });
       }
       return Effect.fn(`${options.tag}(${datastore.LogicalId})`)(function* (
         request: Omit<I, "datastoreId" | "dataAccessRoleArn"> & {

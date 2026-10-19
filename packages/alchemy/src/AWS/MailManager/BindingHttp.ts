@@ -1,7 +1,6 @@
 import * as Effect from "effect/Effect";
-import * as Binding from "../../Binding.ts";
 import type { Input } from "../../Input.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { AddressList } from "./AddressList.ts";
 import type { Archive } from "./Archive.ts";
 
@@ -14,16 +13,16 @@ import type { Archive } from "./Archive.ts";
  * IAM action list is boilerplate.
  */
 
-const registerHostPolicy = Effect.fn(function* (
-  tag: string,
-  resource: AddressList | Archive,
-  arn: Input<string>,
-  actions: readonly string[],
-) {
-  if (!globalThis.__ALCHEMY_RUNTIME__) {
-    const host = yield* Binding.Host;
-    if (isBindingHost(host)) {
-      yield* host.bind`Allow(${host}, ${tag}(${resource}))`({
+const RegisterHostPolicy = Effect.gen(function* () {
+  const bind = yield* AWSBindings.Bind;
+  return Effect.fn(function* (
+    tag: string,
+    resource: AddressList | Archive,
+    arn: Input<string>,
+    actions: readonly string[],
+  ) {
+    if (!globalThis.__ALCHEMY_RUNTIME__) {
+      yield* bind`${tag}(${resource})`({
         policyStatements: [
           {
             Effect: "Allow",
@@ -33,7 +32,7 @@ const registerHostPolicy = Effect.fn(function* (
         ],
       });
     }
-  }
+  });
 });
 
 /**
@@ -51,7 +50,8 @@ export const makeAddressListHttpBinding = <I extends { AddressListId: string }, 
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const registerHostPolicy = yield* RegisterHostPolicy;
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (list: AddressList) {
       const AddressListId = yield* list.addressListId;
@@ -80,7 +80,8 @@ export const makeAddressListJobHttpBinding = <I, A, E, R>(options: {
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const registerHostPolicy = yield* RegisterHostPolicy;
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (list: AddressList) {
       yield* registerHostPolicy(options.tag, list, list.addressListArn, options.actions);
@@ -105,7 +106,8 @@ export const makeArchiveHttpBinding = <I extends { ArchiveId: string }, A, E, R>
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const registerHostPolicy = yield* RegisterHostPolicy;
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (archive: Archive) {
       const ArchiveId = yield* archive.archiveId;
@@ -135,7 +137,8 @@ export const makeArchiveTaskHttpBinding = <I, A, E, R>(options: {
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const registerHostPolicy = yield* RegisterHostPolicy;
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (archive: Archive) {
       yield* registerHostPolicy(options.tag, archive, archive.archiveArn, options.actions);

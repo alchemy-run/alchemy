@@ -1,7 +1,6 @@
 import * as Effect from "effect/Effect";
-import * as Binding from "../../Binding.ts";
 import * as Output from "../../Output.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { Table } from "./Table.ts";
 import type { TableBucket } from "./TableBucket.ts";
 
@@ -35,28 +34,26 @@ export const makeS3TablesTableBucketHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const bind = yield* AWSBindings.Bind;
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (tableBucket: TableBucket) {
       const tableBucketARN = yield* tableBucket.tableBucketArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}(${tableBucket}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: [
-                  Output.interpolate`${tableBucket.tableBucketArn}`,
-                  // List operations authorize against the namespaces/tables
-                  // under the bucket, e.g. `…:bucket/name/table/*`.
-                  Output.interpolate`${tableBucket.tableBucketArn}/*`,
-                ],
-              },
-            ],
-          });
-        }
+        yield* bind`${options.tag}(${tableBucket})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: [
+                Output.interpolate`${tableBucket.tableBucketArn}`,
+                // List operations authorize against the namespaces/tables
+                // under the bucket, e.g. `…:bucket/name/table/*`.
+                Output.interpolate`${tableBucket.tableBucketArn}/*`,
+              ],
+            },
+          ],
+        });
       }
       return Effect.fn(`${options.tag}(${tableBucket.LogicalId})`)(function* (
         request?: Omit<I, "tableBucketARN">,
@@ -91,25 +88,23 @@ export const makeS3TablesTableHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const bind = yield* AWSBindings.Bind;
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (table: Table) {
       const tableBucketARN = yield* table.tableBucketArn;
       const namespace = yield* table.namespace;
       const name = yield* table.name;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}(${table}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: [Output.interpolate`${table.tableArn}`],
-              },
-            ],
-          });
-        }
+        yield* bind`${options.tag}(${table})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: [Output.interpolate`${table.tableArn}`],
+            },
+          ],
+        });
       }
       return Effect.fn(`${options.tag}(${table.LogicalId})`)(function* (
         request?: Omit<I, "tableBucketARN" | "namespace" | "name">,

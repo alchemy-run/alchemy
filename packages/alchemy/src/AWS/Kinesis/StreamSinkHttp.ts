@@ -1,9 +1,8 @@
 import type * as Kinesis from "@distilled.cloud/aws/kinesis";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Binding from "../../Binding.ts";
-import { makeBatchedSink } from "../internal/BatchedSink.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
+import { makeBatchedSink } from "../../Util/BatchedSink.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import { PutRecords } from "./PutRecords.ts";
 import type { Stream } from "./Stream.ts";
 import { StreamSink, type StreamSinkRecord } from "./StreamSink.ts";
@@ -13,22 +12,20 @@ const encoder = new TextEncoder();
 export const StreamSinkHttp = Layer.effect(
   StreamSink,
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     const putRecords = yield* PutRecords;
 
     return Effect.fn(function* (stream: Stream) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, AWS.Kinesis.StreamSink(${stream}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: ["kinesis:PutRecords"],
-                Resource: [stream.streamArn],
-              },
-            ],
-          });
-        }
+        yield* bind`AWS.Kinesis.StreamSink(${stream})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: ["kinesis:PutRecords"],
+              Resource: [stream.streamArn],
+            },
+          ],
+        });
       }
       const publish = yield* putRecords(stream);
       return makeBatchedSink<StreamSinkRecord, Kinesis.PutRecordsOutput, Kinesis.PutRecordsError>({

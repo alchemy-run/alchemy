@@ -2,8 +2,7 @@ import type { Credentials } from "@distilled.cloud/aws/Credentials";
 import type { Region as AwsRegion } from "@distilled.cloud/aws/Region";
 import * as Effect from "effect/Effect";
 import type * as HttpClient from "effect/http/HttpClient";
-import * as Binding from "../../Binding.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { BotAlias } from "./BotAlias.ts";
 
 /**
@@ -52,24 +51,22 @@ export const makeLexAliasHttpBinding = <Req extends object, Out, Err>(
   config: LexAliasHttpBindingConfig<Req, Out, Err>,
 ) =>
   Effect.gen(function* () {
-    const op = yield* config.operation;
+    const bind = yield* AWSBindings.Bind;
+    const op = yield* AWSBindings.withCredentials(config.operation);
 
     return Effect.fn(function* (alias: BotAlias) {
       const BotId = yield* alias.botId;
       const BotAliasId = yield* alias.botAliasId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, AWS.LexV2.${config.capability}(${alias}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...config.iamActions],
-                Resource: [alias.botAliasArn],
-              },
-            ],
-          });
-        }
+        yield* bind`AWS.LexV2.${config.capability}(${alias})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...config.iamActions],
+              Resource: [alias.botAliasArn],
+            },
+          ],
+        });
       }
       return Effect.fn(`AWS.LexV2.${config.capability}(${alias.LogicalId})`)(function* (
         request: Req,

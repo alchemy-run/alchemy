@@ -90,7 +90,7 @@ profile) to provision the IAM role CI will use.
 // stacks/github.ts
 import * as Alchemy from "alchemy";
 import * as AWS from "alchemy/AWS";
-import * as GitHub from "alchemy/GitHub";
+import * as GitHub from "@alchemy.run/github";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 
@@ -333,7 +333,7 @@ Post the live URL as a comment on every PR. Update `alchemy.run.ts`:
 // alchemy.run.ts
 import * as Alchemy from "alchemy";
 import * as AWS from "alchemy/AWS";
-+import * as GitHub from "alchemy/GitHub";
++import * as GitHub from "@alchemy.run/github";
 +import * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";
 +import * as Layer from "effect/Layer";

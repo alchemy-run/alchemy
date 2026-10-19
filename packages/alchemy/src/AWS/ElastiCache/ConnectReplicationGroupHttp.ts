@@ -1,9 +1,8 @@
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Binding from "../../Binding.ts";
 import * as Output from "../../Output.ts";
 import { unpackEnvValue } from "../../RuntimeContext.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import {
   ConnectReplicationGroup,
   replicationGroupConnectEnvPrefix,
@@ -14,6 +13,7 @@ import type { ReplicationGroup } from "./ReplicationGroup.ts";
 export const ConnectReplicationGroupHttp = Layer.effect(
   ConnectReplicationGroup,
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     return Effect.fn(function* (group: ReplicationGroup, options?: ConnectReplicationGroupOptions) {
       const prefix = replicationGroupConnectEnvPrefix(group.LogicalId);
       // Outputs yield a deferred runtime effect. Keep the Output expressions
@@ -34,24 +34,19 @@ export const ConnectReplicationGroupHttp = Layer.effect(
         port === undefined ? "" : String(port),
       );
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, AWS.ElastiCache.ConnectReplicationGroup(${group}))`({
-            env: {
-              [`${prefix}_HOST`]: endpointHost,
-              [`${prefix}_PORT`]: Output.interpolate`${endpointPort}`,
-              [`${prefix}_TLS`]: Output.map(group.transitEncryptionEnabled, String),
-              [`${prefix}_READER_HOST`]: readerHost,
-              [`${prefix}_READER_PORT`]: readerPort,
-            },
-            ...(options?.subnetIds || options?.securityGroupIds
-              ? {
-                  vpc: {
-                    subnetIds: options?.subnetIds ?? [],
-                    securityGroupIds: options?.securityGroupIds ?? [],
-                  },
-                }
-              : {}),
+        yield* bind`AWS.ElastiCache.ConnectReplicationGroup(${group})`({
+          env: {
+            [`${prefix}_HOST`]: endpointHost,
+            [`${prefix}_PORT`]: Output.interpolate`${endpointPort}`,
+            [`${prefix}_TLS`]: Output.map(group.transitEncryptionEnabled, String),
+            [`${prefix}_READER_HOST`]: readerHost,
+            [`${prefix}_READER_PORT`]: readerPort,
+          },
+        });
+        if (options?.subnetIds || options?.securityGroupIds) {
+          yield* AWSBindings.bindVpc`AWS.ElastiCache.ConnectReplicationGroup(${group})`({
+            subnetIds: options?.subnetIds ?? [],
+            securityGroupIds: options?.securityGroupIds ?? [],
           });
         }
       }

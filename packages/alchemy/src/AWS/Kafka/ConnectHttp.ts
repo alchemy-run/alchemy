@@ -1,7 +1,6 @@
 import * as Effect from "effect/Effect";
-import * as Binding from "../../Binding.ts";
 import * as Output from "../../Output.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import { groupArnGlob, topicArnGlob, transactionalIdArnGlob } from "./BindingHttp.ts";
 import { connectEnvPrefix } from "./Connect.ts";
 import type { ServerlessCluster } from "./ServerlessCluster.ts";
@@ -70,51 +69,49 @@ export const makeKafkaConnectHttpBinding = (options: {
   transactionActions?: readonly string[];
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     return Effect.fn(function* (cluster: ServerlessCluster) {
       const BootstrapServers = yield* cluster.bootstrapBrokerStringSaslIam;
       const ClusterArn = yield* cluster.clusterArn;
 
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          const prefix = connectEnvPrefix(cluster.LogicalId);
-          yield* host.bind`Allow(${host}, ${options.tag}(${cluster}))`({
-            env: {
-              [`${prefix}_BROKERS`]: cluster.bootstrapBrokerStringSaslIam,
-              [`${prefix}_ARN`]: cluster.clusterArn,
+        const prefix = connectEnvPrefix(cluster.LogicalId);
+        yield* bind`${options.tag}(${cluster})`({
+          env: {
+            [`${prefix}_BROKERS`]: cluster.bootstrapBrokerStringSaslIam,
+            [`${prefix}_ARN`]: cluster.clusterArn,
+          },
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.clusterActions],
+              Resource: [Output.interpolate`${cluster.clusterArn}`],
             },
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.clusterActions],
-                Resource: [Output.interpolate`${cluster.clusterArn}`],
-              },
-              {
-                Effect: "Allow",
-                Action: [...options.topicActions],
-                Resource: [cluster.clusterArn.pipe(Output.map(topicArnGlob))],
-              },
-              ...(options.groupActions?.length
-                ? [
-                    {
-                      Effect: "Allow" as const,
-                      Action: [...options.groupActions],
-                      Resource: [cluster.clusterArn.pipe(Output.map(groupArnGlob))],
-                    },
-                  ]
-                : []),
-              ...(options.transactionActions?.length
-                ? [
-                    {
-                      Effect: "Allow" as const,
-                      Action: [...options.transactionActions],
-                      Resource: [cluster.clusterArn.pipe(Output.map(transactionalIdArnGlob))],
-                    },
-                  ]
-                : []),
-            ],
-          });
-        }
+            {
+              Effect: "Allow",
+              Action: [...options.topicActions],
+              Resource: [cluster.clusterArn.pipe(Output.map(topicArnGlob))],
+            },
+            ...(options.groupActions?.length
+              ? [
+                  {
+                    Effect: "Allow" as const,
+                    Action: [...options.groupActions],
+                    Resource: [cluster.clusterArn.pipe(Output.map(groupArnGlob))],
+                  },
+                ]
+              : []),
+            ...(options.transactionActions?.length
+              ? [
+                  {
+                    Effect: "Allow" as const,
+                    Action: [...options.transactionActions],
+                    Resource: [cluster.clusterArn.pipe(Output.map(transactionalIdArnGlob))],
+                  },
+                ]
+              : []),
+          ],
+        });
       }
 
       return Effect.gen(function* () {

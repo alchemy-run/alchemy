@@ -1,8 +1,7 @@
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Binding from "../../Binding.ts";
 import * as Output from "../../Output.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import { Connect, connectEnvPrefix } from "./Connect.ts";
 import type { ServerlessCache } from "./ServerlessCache.ts";
 
@@ -17,6 +16,7 @@ import type { ServerlessCache } from "./ServerlessCache.ts";
 export const ConnectHttp = Layer.effect(
   Connect,
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     return Effect.fn(function* (cache: ServerlessCache) {
       const Host = yield* cache.endpointAddress;
       const Port = yield* cache.endpointPort;
@@ -24,19 +24,16 @@ export const ConnectHttp = Layer.effect(
       const ReaderPort = yield* cache.readerEndpointPort;
 
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          const prefix = connectEnvPrefix(cache.LogicalId);
-          yield* host.bind`Allow(${host}, AWS.ElastiCache.Connect(${cache}))`({
-            env: {
-              [`${prefix}_HOST`]: cache.endpointAddress,
-              // Lambda environment variables are strings — stringify the port.
-              [`${prefix}_PORT`]: Output.interpolate`${cache.endpointPort}`,
-              // Serverless caches are TLS-only.
-              [`${prefix}_TLS`]: "true",
-            },
-          });
-        }
+        const prefix = connectEnvPrefix(cache.LogicalId);
+        yield* bind`AWS.ElastiCache.Connect(${cache})`({
+          env: {
+            [`${prefix}_HOST`]: cache.endpointAddress,
+            // Lambda environment variables are strings — stringify the port.
+            [`${prefix}_PORT`]: Output.interpolate`${cache.endpointPort}`,
+            // Serverless caches are TLS-only.
+            [`${prefix}_TLS`]: "true",
+          },
+        });
       }
 
       return Effect.gen(function* () {

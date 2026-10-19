@@ -29,6 +29,7 @@ import {
 import { Stack } from "../../Stack.ts";
 import { createInternalTags, createTagsList, diffTags, hasTags } from "../../Tags.ts";
 import { toWireSeconds } from "../../Util/Duration.ts";
+import { roleHostBundle } from "../AWSBindings.ts";
 import type { Credentials } from "../Credentials.ts";
 import { buildAndPushEcrImage } from "../ECR/Image.ts";
 import { AWSEnvironment, type AccountID } from "../Environment.ts";
@@ -813,7 +814,7 @@ export const JobDefinitionProvider = () =>
           plugins?: rolldown.RolldownPluginOption,
         ) {
           return yield* Bundle.build(
-            {
+            roleHostBundle({
               ...props.build?.input,
               input: entry,
               cwd,
@@ -831,7 +832,7 @@ export const JobDefinitionProvider = () =>
                 ...props.build?.input?.resolve,
               },
               plugins: [props.build?.input?.plugins, plugins],
-            },
+            }),
             {
               ...props.build?.output,
               format: "esm",
@@ -849,7 +850,7 @@ export const JobDefinitionProvider = () =>
               realMain,
               virtualEntryPlugin(
                 (importPath) => `
-import { bootstrap } from "alchemy/Runtime/Bootstrap/Batch";
+import { bootstrap } from "alchemy/AWS/Bootstrap/Batch";
 import { ${handler} as entrypoint } from ${JSON.stringify(importPath)};
 
 await bootstrap(entrypoint);

@@ -1,8 +1,7 @@
 import { Endpoint } from "@distilled.cloud/aws";
 import * as kv from "@distilled.cloud/aws/kinesis-video";
 import * as Effect from "effect/Effect";
-import * as Binding from "../../Binding.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import { discoverDataEndpoint, discoverSignalingEndpoint } from "./internal.ts";
 import type { SignalingChannel } from "./SignalingChannel.ts";
 import type { Stream } from "./Stream.ts";
@@ -42,30 +41,28 @@ export const makeStreamMediaHttpBinding = <
   operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     // Yield-first captures the operations' services (Credentials/Region/
     // HttpClient) at layer init so the runtime callable is requirement-free.
-    const getDataEndpoint = yield* kv.getDataEndpoint;
-    const op = yield* options.operation;
+    const getDataEndpoint = yield* AWSBindings.withCredentials(kv.getDataEndpoint);
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (stream: Stream) {
       const StreamArn = yield* stream.streamArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}(${stream}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [
-                  // the data plane requires per-stream endpoint discovery
-                  "kinesisvideo:GetDataEndpoint",
-                  ...options.actions,
-                ],
-                Resource: [stream.streamArn],
-              },
-            ],
-          });
-        }
+        yield* bind`${options.tag}(${stream})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [
+                // the data plane requires per-stream endpoint discovery
+                "kinesisvideo:GetDataEndpoint",
+                ...options.actions,
+              ],
+              Resource: [stream.streamArn],
+            },
+          ],
+        });
       }
       return Effect.fn(`${options.tag}(${stream.LogicalId})`)(function* (
         request?: Omit<I, "StreamARN" | "StreamName">,
@@ -110,30 +107,30 @@ export const makeChannelSignalingHttpBinding = <
   operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
 }) =>
   Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
     // Yield-first captures the operations' services (Credentials/Region/
     // HttpClient) at layer init so the runtime callable is requirement-free.
-    const getSignalingChannelEndpoint = yield* kv.getSignalingChannelEndpoint;
-    const op = yield* options.operation;
+    const getSignalingChannelEndpoint = yield* AWSBindings.withCredentials(
+      kv.getSignalingChannelEndpoint,
+    );
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (channel: SignalingChannel) {
       const ChannelArn = yield* channel.channelArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}(${channel}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [
-                  // the data plane requires per-channel endpoint discovery
-                  "kinesisvideo:GetSignalingChannelEndpoint",
-                  ...options.actions,
-                ],
-                Resource: [channel.channelArn],
-              },
-            ],
-          });
-        }
+        yield* bind`${options.tag}(${channel})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [
+                // the data plane requires per-channel endpoint discovery
+                "kinesisvideo:GetSignalingChannelEndpoint",
+                ...options.actions,
+              ],
+              Resource: [channel.channelArn],
+            },
+          ],
+        });
       }
       return Effect.fn(`${options.tag}(${channel.LogicalId})`)(function* (request?: Omit<I, K>) {
         const channelArn = yield* ChannelArn;

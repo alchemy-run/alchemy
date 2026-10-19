@@ -1,7 +1,6 @@
 import type * as aas from "@distilled.cloud/aws/application-auto-scaling";
 import * as Effect from "effect/Effect";
-import * as Binding from "../../Binding.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { ScalableTarget } from "./ScalableTarget.ts";
 import type { ScalingPolicy } from "./ScalingPolicy.ts";
 
@@ -41,25 +40,23 @@ export const makeTargetScopedHttpBinding = <I extends TargetTriple, A, E, R>(opt
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const bind = yield* AWSBindings.Bind;
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (target: ScalableTarget) {
       const ServiceNamespace = yield* target.serviceNamespace;
       const ResourceId = yield* target.resourceId;
       const ScalableDimension = yield* target.scalableDimension;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}(${target}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: ["*"],
-              },
-            ],
-          });
-        }
+        yield* bind`${options.tag}(${target})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: ["*"],
+            },
+          ],
+        });
       }
       return Effect.fn(`${options.tag}(${target.LogicalId})`)(function* (
         request?: Omit<I, keyof TargetTriple>,
@@ -93,7 +90,8 @@ export const makePolicyScopedHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const bind = yield* AWSBindings.Bind;
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (policy: ScalingPolicy) {
       const ServiceNamespace = yield* policy.serviceNamespace;
@@ -101,18 +99,15 @@ export const makePolicyScopedHttpBinding = <
       const ScalableDimension = yield* policy.scalableDimension;
       const PolicyName = yield* policy.policyName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}(${policy}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: ["*"],
-              },
-            ],
-          });
-        }
+        yield* bind`${options.tag}(${policy})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: ["*"],
+            },
+          ],
+        });
       }
       return Effect.fn(`${options.tag}(${policy.LogicalId})`)(function* (
         request: Omit<I, keyof TargetTriple | "PolicyName">,

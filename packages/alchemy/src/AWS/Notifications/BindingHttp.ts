@@ -1,6 +1,5 @@
 import * as Effect from "effect/Effect";
-import * as Binding from "../../Binding.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import { pinNotificationsRegion } from "./internal.ts";
 import type { NotificationConfiguration } from "./NotificationConfiguration.ts";
 
@@ -42,22 +41,20 @@ export const makeNotificationsHttpBinding = <I extends object, A, E, R>(options:
   operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
 }) =>
   Effect.gen(function* () {
-    const op = yield* pinNotificationsRegion(options.operation);
+    const bind = yield* AWSBindings.Bind;
+    const op = yield* options.operation.pipe(pinNotificationsRegion, AWSBindings.withCredentials);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, AWS.Notifications.${options.capability}())`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.iamActions],
-                Resource: ["*"],
-              },
-            ],
-          });
-        }
+        yield* bind`AWS.Notifications.${options.capability}()`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.iamActions],
+              Resource: ["*"],
+            },
+          ],
+        });
       }
       return Effect.fn(`AWS.Notifications.${options.capability}`)(function* (request?: I) {
         // The region must also be pinned at the call site: the yield-time
@@ -91,25 +88,21 @@ export const makeNotificationConfigurationHttpBinding = <
   operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
 }) =>
   Effect.gen(function* () {
-    const op = yield* pinNotificationsRegion(options.operation);
+    const bind = yield* AWSBindings.Bind;
+    const op = yield* options.operation.pipe(pinNotificationsRegion, AWSBindings.withCredentials);
 
     return Effect.fn(function* (configuration: NotificationConfiguration) {
       const configurationArn = yield* configuration.notificationConfigurationArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, AWS.Notifications.${options.capability}(${configuration}))`(
+        yield* bind`AWS.Notifications.${options.capability}(${configuration})`({
+          policyStatements: [
             {
-              policyStatements: [
-                {
-                  Effect: "Allow",
-                  Action: [...options.iamActions],
-                  Resource: [configuration.notificationConfigurationArn],
-                },
-              ],
+              Effect: "Allow",
+              Action: [...options.iamActions],
+              Resource: [configuration.notificationConfigurationArn],
             },
-          );
-        }
+          ],
+        });
       }
       return Effect.fn(`AWS.Notifications.${options.capability}(${configuration.LogicalId})`)(
         function* (request?: Omit<I, "notificationConfigurationArn">) {

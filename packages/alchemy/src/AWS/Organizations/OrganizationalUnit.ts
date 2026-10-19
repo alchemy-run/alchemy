@@ -249,9 +249,17 @@ const collectDescendantOUIds = (
 > =>
   Effect.gen(function* () {
     if (parentIds.length === 0) return [];
-    const childLists = yield* Effect.forEach(parentIds, (parentId) => listOUsForParent(parentId), {
-      concurrency: 10,
-    });
+    const childLists = yield* Effect.forEach(
+      parentIds,
+      (parentId) =>
+        listOUsForParent(parentId).pipe(
+          // The OU was deleted after its parent was listed — skip its subtree.
+          Effect.catchTag("ParentNotFoundException", () =>
+            Effect.succeed<organizations.OrganizationalUnit[]>([]),
+          ),
+        ),
+      { concurrency: 10 },
+    );
     const childIds = childLists
       .flat()
       .map((ou) => ou.Id)

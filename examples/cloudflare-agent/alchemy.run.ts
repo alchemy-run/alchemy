@@ -1,6 +1,6 @@
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as GitHub from "@alchemy.run/github";
 import * as Alchemy from "alchemy";
-import * as Cloudflare from "alchemy/Cloudflare";
-import * as GitHub from "alchemy/GitHub";
 import { Layer } from "effect";
 import * as Effect from "effect/Effect";
 import DevBoxLive from "./src/DevBox.ts";

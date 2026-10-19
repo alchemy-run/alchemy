@@ -1,8 +1,7 @@
 import * as appsignals from "@distilled.cloud/aws/application-signals";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Binding from "../../Binding.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import { GetInstrumentationConfigurationStatus } from "./GetInstrumentationConfigurationStatus.ts";
 import type { InstrumentationConfiguration } from "./InstrumentationConfiguration.ts";
 
@@ -15,7 +14,8 @@ import type { InstrumentationConfiguration } from "./InstrumentationConfiguratio
 export const GetInstrumentationConfigurationStatusHttp = Layer.effect(
   GetInstrumentationConfigurationStatus,
   Effect.gen(function* () {
-    const op = yield* appsignals.getInstrumentationConfigurationStatus;
+    const bind = yield* AWSBindings.Bind;
+    const op = yield* AWSBindings.withCredentials(appsignals.getInstrumentationConfigurationStatus);
     const tag = "AWS.ApplicationSignals.GetInstrumentationConfigurationStatus";
 
     return Effect.fn(function* (configuration: InstrumentationConfiguration) {
@@ -25,20 +25,17 @@ export const GetInstrumentationConfigurationStatusHttp = Layer.effect(
       const SignalType = yield* configuration.signalType;
       const LocationHash = yield* configuration.locationHash;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${tag}(${configuration}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: ["application-signals:GetInstrumentationConfigurationStatus"],
-                // The dynamic-instrumentation actions do not document
-                // resource-level permission support.
-                Resource: ["*"],
-              },
-            ],
-          });
-        }
+        yield* bind`${tag}(${configuration})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: ["application-signals:GetInstrumentationConfigurationStatus"],
+              // The dynamic-instrumentation actions do not document
+              // resource-level permission support.
+              Resource: ["*"],
+            },
+          ],
+        });
       }
       return Effect.fn(`${tag}(${configuration.LogicalId})`)(function* (
         request?: Omit<

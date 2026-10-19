@@ -1,8 +1,7 @@
 import * as Effect from "effect/Effect";
-import * as Binding from "../../Binding.ts";
 import * as Output from "../../Output.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import { AWSEnvironment } from "../Environment.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
 import type { Thing } from "./Thing.ts";
 
 /**
@@ -39,22 +38,20 @@ export const makeIotAccountHttpBinding = <I, A, E, R>(options: {
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const bind = yield* AWSBindings.Bind;
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}())`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: ["*"],
-              },
-            ],
-          });
-        }
+        yield* bind`${options.tag}()`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: ["*"],
+            },
+          ],
+        });
       }
       return Effect.fn(options.tag)(function* (request?: I) {
         return yield* op((request ?? {}) as I);
@@ -77,26 +74,24 @@ export const makeIotThingHttpBinding = <I extends { thingName: string }, A, E, R
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const bind = yield* AWSBindings.Bind;
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (thing: Thing) {
       const thingName = yield* thing.thingName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}(${thing}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                // `thing/<name>` authorizes the classic shadow and the
-                // registry; `thing/<name>/*` authorizes NAMED shadows,
-                // whose IAM resource is `thing/<thingName>/<shadowName>`.
-                Resource: [thing.thingArn, Output.interpolate`${thing.thingArn}/*`],
-              },
-            ],
-          });
-        }
+        yield* bind`${options.tag}(${thing})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              // `thing/<name>` authorizes the classic shadow and the
+              // registry; `thing/<name>/*` authorizes NAMED shadows,
+              // whose IAM resource is `thing/<thingName>/<shadowName>`.
+              Resource: [thing.thingArn, Output.interpolate`${thing.thingArn}/*`],
+            },
+          ],
+        });
       }
       return Effect.fn(`${options.tag}(${thing.LogicalId})`)(function* (
         request?: Omit<I, "thingName">,
@@ -126,23 +121,21 @@ export const makeIotTopicHttpBinding = <I, A, E, R>(options: {
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const bind = yield* AWSBindings.Bind;
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (topicFilter?: string) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          const { accountId, region } = yield* currentEnvironment;
-          yield* host.bind`Allow(${host}, ${options.tag}(${topicFilter ?? "*"}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: [`arn:aws:iot:${region}:${accountId}:topic/${topicFilter ?? "*"}`],
-              },
-            ],
-          });
-        }
+        const { accountId, region } = yield* currentEnvironment;
+        yield* bind`${options.tag}(${topicFilter ?? "*"})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: [`arn:aws:iot:${region}:${accountId}:topic/${topicFilter ?? "*"}`],
+            },
+          ],
+        });
       }
       return Effect.fn(`${options.tag}(${topicFilter ?? "*"})`)(function* (request: I) {
         return yield* op(request);
@@ -168,23 +161,21 @@ export const makeIotClientHttpBinding = <I, A, E, R>(options: {
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const bind = yield* AWSBindings.Bind;
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (clientIdFilter?: string) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          const { accountId, region } = yield* currentEnvironment;
-          yield* host.bind`Allow(${host}, ${options.tag}(${clientIdFilter ?? "*"}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: [`arn:aws:iot:${region}:${accountId}:client/${clientIdFilter ?? "*"}`],
-              },
-            ],
-          });
-        }
+        const { accountId, region } = yield* currentEnvironment;
+        yield* bind`${options.tag}(${clientIdFilter ?? "*"})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: [`arn:aws:iot:${region}:${accountId}:client/${clientIdFilter ?? "*"}`],
+            },
+          ],
+        });
       }
       return Effect.fn(`${options.tag}(${clientIdFilter ?? "*"})`)(function* (request: I) {
         return yield* op(request);

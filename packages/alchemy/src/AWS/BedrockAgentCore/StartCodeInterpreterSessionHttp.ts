@@ -1,9 +1,8 @@
 import * as agentcore from "@distilled.cloud/aws/bedrock-agentcore";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Binding from "../../Binding.ts";
 import { toWireSeconds } from "../../Util/Duration.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { CodeInterpreter } from "./CodeInterpreter.ts";
 import {
   StartCodeInterpreterSession,
@@ -15,25 +14,23 @@ import {
 export const StartCodeInterpreterSessionHttp = Layer.effect(
   StartCodeInterpreterSession,
   Effect.gen(function* () {
-    const startCodeInterpreterSession = yield* agentcore.startCodeInterpreterSession;
+    const bind = yield* AWSBindings.Bind;
+    const startCodeInterpreterSession = yield* AWSBindings.withCredentials(
+      agentcore.startCodeInterpreterSession,
+    );
 
     return Effect.fn(function* <R extends CodeInterpreter>(codeInterpreter: R) {
       const Identifier = yield* codeInterpreter.codeInterpreterId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, AWS.BedrockAgentCore.StartCodeInterpreterSession(${codeInterpreter}))`(
+        yield* bind`AWS.BedrockAgentCore.StartCodeInterpreterSession(${codeInterpreter})`({
+          policyStatements: [
             {
-              policyStatements: [
-                {
-                  Effect: "Allow",
-                  Action: ["bedrock-agentcore:StartCodeInterpreterSession"],
-                  Resource: [codeInterpreter.codeInterpreterArn],
-                },
-              ],
+              Effect: "Allow",
+              Action: ["bedrock-agentcore:StartCodeInterpreterSession"],
+              Resource: [codeInterpreter.codeInterpreterArn],
             },
-          );
-        }
+          ],
+        });
       }
       return Effect.fn(
         `AWS.BedrockAgentCore.StartCodeInterpreterSession(${codeInterpreter.LogicalId})`,

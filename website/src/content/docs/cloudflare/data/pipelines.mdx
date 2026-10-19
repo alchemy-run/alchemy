@@ -24,7 +24,7 @@ field list, which Cloudflare enforces.
 
 ```typescript
 // src/Events.ts
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Schema from "effect/Schema";
 
 export const PageView = Schema.Struct({
@@ -55,7 +55,7 @@ encodes each value with the schema before sending it.
 
 ```typescript
 // src/Api.ts
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
@@ -134,7 +134,7 @@ resource to the sink so it is created after the catalog is enabled:
 ```typescript
 // alchemy.run.ts
 import * as Alchemy from "alchemy";
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import { PageViews } from "./src/Events.ts";

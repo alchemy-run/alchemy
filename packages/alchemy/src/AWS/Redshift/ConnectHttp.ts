@@ -2,11 +2,10 @@ import * as redshift from "@distilled.cloud/aws/redshift";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
-import * as Binding from "../../Binding.ts";
 import * as Output from "../../Output.ts";
 import { toWireSeconds } from "../../Util/Duration.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import { formatSqlConnectionUrl } from "../Connection/internal.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
 import type { Cluster } from "./Cluster.ts";
 import { Connect, connectEnvPrefix, type ConnectOptions } from "./Connect.ts";
 
@@ -26,8 +25,13 @@ const unwrap = (value: string | Redacted.Redacted<string> | undefined): string |
 export const ConnectHttp = Layer.effect(
   Connect,
   Effect.gen(function* () {
-    const getClusterCredentials = yield* redshift.getClusterCredentials;
-    const getClusterCredentialsWithIAM = yield* redshift.getClusterCredentialsWithIAM;
+    const bind = yield* AWSBindings.Bind;
+    const getClusterCredentials = yield* AWSBindings.withCredentials(
+      redshift.getClusterCredentials,
+    );
+    const getClusterCredentialsWithIAM = yield* AWSBindings.withCredentials(
+      redshift.getClusterCredentialsWithIAM,
+    );
 
     return Effect.fn(function* (cluster: Cluster, options: ConnectOptions = {}) {
       const ClusterIdentifier = yield* cluster.clusterIdentifier;
@@ -36,64 +40,61 @@ export const ConnectHttp = Layer.effect(
       const DbName = yield* cluster.dbName;
 
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          // `arn:aws:redshift:{region}:{acct}` — the cluster ARN minus its
-          // `:cluster:{id}` suffix; base for the dbname/dbuser/dbgroup ARNs
-          // that scope the GetClusterCredentials* actions.
-          const arnBase = Output.map(cluster.clusterArn, (arn) =>
-            arn.slice(0, arn.lastIndexOf(":cluster:")),
-          );
-          const database = options.database ?? cluster.dbName;
-          const dbNameArn = Output.interpolate`${arnBase}:dbname:${cluster.clusterIdentifier}/${database}`;
-          const prefix = connectEnvPrefix(cluster.LogicalId);
-          // The binding id must be unique per credential strategy: a Function
-          // that connects to the same cluster both as its IAM identity and as
-          // a named database user needs BOTH policy statements, and binds that
-          // share an id collapse into one (the last one wins).
-          const strategy = options.dbUser !== undefined ? `, ${options.dbUser}` : "";
-          yield* host.bind`Allow(${host}, AWS.Redshift.Connect(${cluster}${strategy}))`({
-            policyStatements:
-              options.dbUser !== undefined
-                ? [
-                    {
-                      Effect: "Allow" as const,
-                      Action: [
-                        "redshift:GetClusterCredentials",
-                        ...(options.autoCreate ? ["redshift:CreateClusterUser"] : []),
-                      ],
-                      Resource: [
-                        Output.interpolate`${arnBase}:dbuser:${cluster.clusterIdentifier}/${options.dbUser}`,
-                        dbNameArn,
-                      ],
-                    },
-                    ...(options.dbGroups && options.dbGroups.length > 0
-                      ? [
-                          {
-                            Effect: "Allow" as const,
-                            Action: ["redshift:JoinGroup"],
-                            Resource: options.dbGroups.map(
-                              (group) =>
-                                Output.interpolate`${arnBase}:dbgroup:${cluster.clusterIdentifier}/${group}`,
-                            ),
-                          },
-                        ]
-                      : []),
-                  ]
-                : [
-                    {
-                      Effect: "Allow" as const,
-                      Action: ["redshift:GetClusterCredentialsWithIAM"],
-                      Resource: [dbNameArn],
-                    },
-                  ],
-            env: {
-              [`${prefix}_HOST`]: cluster.endpointAddress,
-              // Lambda environment variables are strings — stringify the port.
-              [`${prefix}_PORT`]: Output.interpolate`${cluster.endpointPort}`,
-            },
-          });
-        }
+        // `arn:aws:redshift:{region}:{acct}` — the cluster ARN minus its
+        // `:cluster:{id}` suffix; base for the dbname/dbuser/dbgroup ARNs
+        // that scope the GetClusterCredentials* actions.
+        const arnBase = Output.map(cluster.clusterArn, (arn) =>
+          arn.slice(0, arn.lastIndexOf(":cluster:")),
+        );
+        const database = options.database ?? cluster.dbName;
+        const dbNameArn = Output.interpolate`${arnBase}:dbname:${cluster.clusterIdentifier}/${database}`;
+        const prefix = connectEnvPrefix(cluster.LogicalId);
+        // The binding id must be unique per credential strategy: a Function
+        // that connects to the same cluster both as its IAM identity and as
+        // a named database user needs BOTH policy statements, and binds that
+        // share an id collapse into one (the last one wins).
+        const strategy = options.dbUser !== undefined ? `, ${options.dbUser}` : "";
+        yield* bind`AWS.Redshift.Connect(${cluster}${strategy})`({
+          policyStatements:
+            options.dbUser !== undefined
+              ? [
+                  {
+                    Effect: "Allow" as const,
+                    Action: [
+                      "redshift:GetClusterCredentials",
+                      ...(options.autoCreate ? ["redshift:CreateClusterUser"] : []),
+                    ],
+                    Resource: [
+                      Output.interpolate`${arnBase}:dbuser:${cluster.clusterIdentifier}/${options.dbUser}`,
+                      dbNameArn,
+                    ],
+                  },
+                  ...(options.dbGroups && options.dbGroups.length > 0
+                    ? [
+                        {
+                          Effect: "Allow" as const,
+                          Action: ["redshift:JoinGroup"],
+                          Resource: options.dbGroups.map(
+                            (group) =>
+                              Output.interpolate`${arnBase}:dbgroup:${cluster.clusterIdentifier}/${group}`,
+                          ),
+                        },
+                      ]
+                    : []),
+                ]
+              : [
+                  {
+                    Effect: "Allow" as const,
+                    Action: ["redshift:GetClusterCredentialsWithIAM"],
+                    Resource: [dbNameArn],
+                  },
+                ],
+          env: {
+            [`${prefix}_HOST`]: cluster.endpointAddress,
+            // Lambda environment variables are strings — stringify the port.
+            [`${prefix}_PORT`]: Output.interpolate`${cluster.endpointPort}`,
+          },
+        });
       }
 
       return Effect.gen(function* () {

@@ -1,7 +1,6 @@
 import * as Effect from "effect/Effect";
-import * as Binding from "../../Binding.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
 
 /**
  * Shared HTTP scaffolding for the Amazon Forecast runtime bindings.
@@ -42,36 +41,34 @@ export const makeForecastHttpBinding = <I, A, E, R>(options: {
   passRole?: boolean;
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const bind = yield* AWSBindings.Bind;
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          const policyStatements: PolicyStatement[] = [
-            {
-              Effect: "Allow",
-              Action: [...options.iamActions],
-              // Runtime-created Forecast ARNs are unknowable at deploy time.
-              Resource: ["*"],
-            },
-          ];
-          if (options.passRole) {
-            policyStatements.push({
-              Effect: "Allow",
-              Action: ["iam:PassRole"],
-              Resource: ["*"],
-              Condition: {
-                StringEquals: {
-                  "iam:PassedToService": "forecast.amazonaws.com",
-                },
+        const policyStatements: PolicyStatement[] = [
+          {
+            Effect: "Allow",
+            Action: [...options.iamActions],
+            // Runtime-created Forecast ARNs are unknowable at deploy time.
+            Resource: ["*"],
+          },
+        ];
+        if (options.passRole) {
+          policyStatements.push({
+            Effect: "Allow",
+            Action: ["iam:PassRole"],
+            Resource: ["*"],
+            Condition: {
+              StringEquals: {
+                "iam:PassedToService": "forecast.amazonaws.com",
               },
-            });
-          }
-          yield* host.bind`Allow(${host}, AWS.Forecast.${options.capability}())`({
-            policyStatements,
+            },
           });
         }
+        yield* bind`AWS.Forecast.${options.capability}()`({
+          policyStatements,
+        });
       }
       return Effect.fn(`AWS.Forecast.${options.capability}`)(function* (request: I) {
         return yield* op(request);

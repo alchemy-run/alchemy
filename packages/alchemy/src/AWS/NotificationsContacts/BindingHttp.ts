@@ -1,6 +1,5 @@
 import * as Effect from "effect/Effect";
-import * as Binding from "../../Binding.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import { Region } from "../Region.ts";
 import type { EmailContact } from "./EmailContact.ts";
 
@@ -41,24 +40,22 @@ export const makeEmailContactHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* pinContactsRegion(options.operation);
+    const bind = yield* AWSBindings.Bind;
+    const op = yield* options.operation.pipe(pinContactsRegion, AWSBindings.withCredentials);
 
     return Effect.fn(function* (contact: EmailContact) {
       // Output yields a DEFERRED effect — resolve again per invocation below.
       const ContactArn = yield* contact.emailContactArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}(${contact}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: [contact.emailContactArn],
-              },
-            ],
-          });
-        }
+        yield* bind`${options.tag}(${contact})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: [contact.emailContactArn],
+            },
+          ],
+        });
       }
       return Effect.fn(`${options.tag}(${contact.LogicalId})`)(function* (request?: Req) {
         const arn = yield* ContactArn;

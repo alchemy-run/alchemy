@@ -29,6 +29,15 @@
     "shiki": "catalog:"
   },
   "devDependencies": {
+    "@alchemy.run/axiom": "workspace:*",
+    "@alchemy.run/cloudflare": "workspace:*",
+    "@alchemy.run/fly": "workspace:*",
+    "@alchemy.run/github": "workspace:*",
+    "@alchemy.run/hetzner": "workspace:*",
+    "@alchemy.run/neon": "workspace:*",
+    "@alchemy.run/planetscale": "workspace:*",
+    "@alchemy.run/prisma": "workspace:*",
+    "@alchemy.run/railway": "workspace:*",
     "@cloudflare/workers-types": "catalog:",
     "@tailwindcss/vite": "catalog:",
     "@types/react": "catalog:",

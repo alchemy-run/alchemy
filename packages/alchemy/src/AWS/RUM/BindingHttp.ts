@@ -1,6 +1,5 @@
 import * as Effect from "effect/Effect";
-import * as Binding from "../../Binding.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { AppMonitor } from "./AppMonitor.ts";
 
 /**
@@ -19,27 +18,26 @@ import type { AppMonitor } from "./AppMonitor.ts";
  * the hosting Function and grant `actions` on the monitor's ARN. A no-op
  * inside the deployed runtime.
  */
-export const bindRumAppMonitorPolicy = (options: {
-  tag: string;
-  monitor: AppMonitor;
-  actions: readonly string[];
-}) =>
-  Effect.gen(function* () {
+export const BindRumAppMonitorPolicy = Effect.gen(function* () {
+  const bind = yield* AWSBindings.Bind;
+  return Effect.fn(function* (options: {
+    tag: string;
+    monitor: AppMonitor;
+    actions: readonly string[];
+  }) {
     if (!globalThis.__ALCHEMY_RUNTIME__) {
-      const host = yield* Binding.Host;
-      if (isBindingHost(host)) {
-        yield* host.bind`Allow(${host}, ${options.tag}(${options.monitor}))`({
-          policyStatements: [
-            {
-              Effect: "Allow",
-              Action: [...options.actions],
-              Resource: [options.monitor.appMonitorArn],
-            },
-          ],
-        });
-      }
+      yield* bind`${options.tag}(${options.monitor})`({
+        policyStatements: [
+          {
+            Effect: "Allow",
+            Action: [...options.actions],
+            Resource: [options.monitor.appMonitorArn],
+          },
+        ],
+      });
     }
   });
+});
 
 /**
  * Build the impl Effect for an operation scoped to a single bound
@@ -56,7 +54,8 @@ export const makeRumAppMonitorHttpBinding = <I extends { Name: string }, A, E, R
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const bindRumAppMonitorPolicy = yield* BindRumAppMonitorPolicy;
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (monitor: AppMonitor) {
       const Name = yield* monitor.appMonitorName;

@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
 import type { Database } from "../Firestore/Database.ts";
-import { bindGcpHost } from "../Host.ts";
+import * as GCPBindings from "../GCPBindings.ts";
 import { type BindingIam, type GcpHttpOp, grantFor } from "../HttpBinding.ts";
 
 /**
@@ -42,13 +42,14 @@ export const makeDatastoreHttpBinding = <
   operation: GcpHttpOp<I, A, E>;
 }) =>
   Effect.gen(function* () {
-    const run = yield* options.operation;
+    const bind = yield* GCPBindings.Bind;
+    const run = yield* GCPBindings.withCredentials(options.operation);
     return Effect.fn(function* (database: Database) {
-      yield* bindGcpHost({
-        tag: options.tag,
-        resource: database,
-        iam: [grantFor(options.iam, database.name)],
-      });
+      if (!globalThis.__ALCHEMY_RUNTIME__) {
+        yield* bind`${options.tag}(${database})`({
+          iam: [grantFor(options.iam, database.name)],
+        });
+      }
       const project = yield* database.project;
       const databaseId = yield* database.databaseId;
       return Effect.fn(`${options.tag}(${database.LogicalId})`)(function* (

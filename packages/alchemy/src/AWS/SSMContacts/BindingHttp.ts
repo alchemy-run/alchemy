@@ -1,3 +1,4 @@
+import * as Effect from "effect/Effect";
 /**
  * Shared scaffolding for the Incident Manager Contacts (SSM Contacts) HTTP
  * bindings.
@@ -20,9 +21,7 @@
  *   the caller's request as-is and are granted on `*` — engagement and page
  *   ARNs are minted at runtime and cannot be scoped statically.
  */
-import * as Effect from "effect/Effect";
-import * as Binding from "../../Binding.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { Contact } from "./Contact.ts";
 import type { ContactChannel } from "./ContactChannel.ts";
 import type { Rotation } from "./Rotation.ts";
@@ -42,23 +41,21 @@ export const makeContactHttpBinding = <I extends { ContactId: string }, A, E, R>
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const bind = yield* AWSBindings.Bind;
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (contact: Contact) {
       const ContactArn = yield* contact.contactArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}(${contact}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: [contact.contactArn],
-              },
-            ],
-          });
-        }
+        yield* bind`${options.tag}(${contact})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: [contact.contactArn],
+            },
+          ],
+        });
       }
       return Effect.fn(`${options.tag}(${contact.LogicalId})`)(function* (
         request?: Omit<I, "ContactId">,
@@ -91,23 +88,21 @@ export const makeContactChannelHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const bind = yield* AWSBindings.Bind;
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (channel: ContactChannel) {
       const ChannelArn = yield* channel.contactChannelArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}(${channel}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: [channel.contactChannelArn],
-              },
-            ],
-          });
-        }
+        yield* bind`${options.tag}(${channel})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: [channel.contactChannelArn],
+            },
+          ],
+        });
       }
       return Effect.fn(`${options.tag}(${channel.LogicalId})`)(function* (
         request?: Omit<I, "ContactChannelId">,
@@ -135,23 +130,21 @@ export const makeRotationHttpBinding = <I extends { RotationId: string }, A, E, 
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const bind = yield* AWSBindings.Bind;
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (rotation: Rotation) {
       const RotationArn = yield* rotation.rotationArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}(${rotation}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: [rotation.rotationArn],
-              },
-            ],
-          });
-        }
+        yield* bind`${options.tag}(${rotation})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: [rotation.rotationArn],
+            },
+          ],
+        });
       }
       return Effect.fn(`${options.tag}(${rotation.LogicalId})`)(function* (
         request?: Omit<I, "RotationId">,
@@ -179,22 +172,20 @@ export const makeAccountHttpBinding = <I, A, E, R>(options: {
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const bind = yield* AWSBindings.Bind;
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}())`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: ["*"],
-              },
-            ],
-          });
-        }
+        yield* bind`${options.tag}()`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: ["*"],
+            },
+          ],
+        });
       }
       return Effect.fn(options.tag)(function* (request?: I) {
         return yield* op((request ?? {}) as I);

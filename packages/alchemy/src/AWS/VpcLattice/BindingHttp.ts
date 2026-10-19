@@ -1,7 +1,6 @@
 import * as Effect from "effect/Effect";
-import * as Binding from "../../Binding.ts";
 import * as Output from "../../Output.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { TargetGroup } from "./TargetGroup.ts";
 
 /**
@@ -36,23 +35,21 @@ export const makeVpcLatticeTargetGroupHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const bind = yield* AWSBindings.Bind;
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (targetGroup: TargetGroup) {
       const targetGroupIdentifier = yield* targetGroup.targetGroupId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}(${targetGroup}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: [Output.interpolate`${targetGroup.targetGroupArn}`],
-              },
-            ],
-          });
-        }
+        yield* bind`${options.tag}(${targetGroup})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: [Output.interpolate`${targetGroup.targetGroupArn}`],
+            },
+          ],
+        });
       }
       return Effect.fn(`${options.tag}(${targetGroup.LogicalId})`)(function* (
         request: Omit<I, "targetGroupIdentifier">,

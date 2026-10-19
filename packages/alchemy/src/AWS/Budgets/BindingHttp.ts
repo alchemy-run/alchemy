@@ -1,7 +1,6 @@
 import * as Effect from "effect/Effect";
-import * as Binding from "../../Binding.ts";
 import * as Output from "../../Output.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { Budget } from "./Budget.ts";
 import type { BudgetAction } from "./BudgetAction.ts";
 
@@ -38,24 +37,22 @@ export const makeBudgetHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const bind = yield* AWSBindings.Bind;
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (budget: Budget) {
       const AccountId = yield* budget.accountId;
       const BudgetName = yield* budget.budgetName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}(${budget}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: [Output.interpolate`${budget.budgetArn}`],
-              },
-            ],
-          });
-        }
+        yield* bind`${options.tag}(${budget})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: [Output.interpolate`${budget.budgetArn}`],
+            },
+          ],
+        });
       }
       return Effect.fn(`${options.tag}(${budget.LogicalId})`)(function* (
         request?: Omit<I, "AccountId" | "BudgetName">,
@@ -89,25 +86,23 @@ export const makeBudgetActionHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const bind = yield* AWSBindings.Bind;
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (action: BudgetAction) {
       const AccountId = yield* action.accountId;
       const BudgetName = yield* action.budgetName;
       const ActionId = yield* action.actionId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}(${action}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: [Output.interpolate`${action.actionArn}`],
-              },
-            ],
-          });
-        }
+        yield* bind`${options.tag}(${action})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: [Output.interpolate`${action.actionArn}`],
+            },
+          ],
+        });
       }
       return Effect.fn(`${options.tag}(${action.LogicalId})`)(function* (
         request: Omit<I, "AccountId" | "BudgetName" | "ActionId">,

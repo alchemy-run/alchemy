@@ -1,6 +1,6 @@
 import * as pubsub from "@distilled.cloud/gcp/pubsub_v1";
 import * as Effect from "effect/Effect";
-import { bindGcpHost } from "../Host.ts";
+import * as GCPBindings from "../GCPBindings.ts";
 import { grantFor, type BindingIam } from "../HttpBinding.ts";
 import type { PulledMessage, ReadSubscriptionClient } from "./ReadSubscription.ts";
 import type { Subscription } from "./Subscription.ts";
@@ -50,13 +50,14 @@ const decode = (received: pubsub.ReceivedMessage): PulledMessage => {
 };
 
 export const makeWriteTopicBinding = Effect.gen(function* () {
-  const publish = yield* pubsub.publishProjectsTopics;
+  const bind = yield* GCPBindings.Bind;
+  const publish = yield* GCPBindings.withCredentials(pubsub.publishProjectsTopics);
   return Effect.fn(function* (topic: Topic) {
-    yield* bindGcpHost({
-      tag: "GCP.PubSub.WriteTopic",
-      resource: topic,
-      iam: [grantFor(writeTopicGrant, topic.name)],
-    });
+    if (!globalThis.__ALCHEMY_RUNTIME__) {
+      yield* bind`GCP.PubSub.WriteTopic(${topic})`({
+        iam: [grantFor(writeTopicGrant, topic.name)],
+      });
+    }
     const topicName = yield* topic.name;
     const publishBatch = (messages: ReadonlyArray<PublishMessage>) =>
       messages.length === 0
@@ -79,15 +80,18 @@ export const makeWriteTopicBinding = Effect.gen(function* () {
 });
 
 export const makeReadSubscriptionBinding = Effect.gen(function* () {
-  const pull = yield* pubsub.pullProjectsSubscriptions;
-  const acknowledge = yield* pubsub.acknowledgeProjectsSubscriptions;
-  const modifyAckDeadline = yield* pubsub.modifyAckDeadlineProjectsSubscriptions;
+  const bind = yield* GCPBindings.Bind;
+  const pull = yield* GCPBindings.withCredentials(pubsub.pullProjectsSubscriptions);
+  const acknowledge = yield* GCPBindings.withCredentials(pubsub.acknowledgeProjectsSubscriptions);
+  const modifyAckDeadline = yield* GCPBindings.withCredentials(
+    pubsub.modifyAckDeadlineProjectsSubscriptions,
+  );
   return Effect.fn(function* (subscription: Subscription) {
-    yield* bindGcpHost({
-      tag: "GCP.PubSub.ReadSubscription",
-      resource: subscription,
-      iam: [grantFor(readSubscriptionGrant, subscription.name)],
-    });
+    if (!globalThis.__ALCHEMY_RUNTIME__) {
+      yield* bind`GCP.PubSub.ReadSubscription(${subscription})`({
+        iam: [grantFor(readSubscriptionGrant, subscription.name)],
+      });
+    }
     const subscriptionName = yield* subscription.name;
     return {
       pull: (options) =>

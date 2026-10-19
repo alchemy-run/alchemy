@@ -1,7 +1,6 @@
 import * as Effect from "effect/Effect";
-import * as Binding from "../../Binding.ts";
 import * as Output from "../../Output.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { Crawler } from "./Crawler.ts";
 import type { Database } from "./Database.ts";
 import type { Job } from "./Job.ts";
@@ -43,24 +42,22 @@ export const makeGlueJobHttpBinding = <I extends { JobName: string }, A, E, R>(o
   anyResource?: boolean;
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const bind = yield* AWSBindings.Bind;
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (job: Job) {
       // Outputs yield a DEFERRED effect — resolve again per invocation below.
       const JobName = yield* job.jobName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}(${job}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: options.anyResource ? ["*"] : [job.jobArn],
-              },
-            ],
-          });
-        }
+        yield* bind`${options.tag}(${job})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: options.anyResource ? ["*"] : [job.jobArn],
+            },
+          ],
+        });
       }
       return Effect.fn(`${options.tag}(${job.LogicalId})`)(function* (
         request?: Omit<I, "JobName">,
@@ -84,23 +81,21 @@ export const makeGlueCrawlerHttpBinding = <I extends { Name: string }, A, E, R>(
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const bind = yield* AWSBindings.Bind;
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (crawler: Crawler) {
       const Name = yield* crawler.crawlerName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}(${crawler}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: [crawler.crawlerArn],
-              },
-            ],
-          });
-        }
+        yield* bind`${options.tag}(${crawler})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: [crawler.crawlerArn],
+            },
+          ],
+        });
       }
       return Effect.fn(`${options.tag}(${crawler.LogicalId})`)(function* (
         request?: Omit<I, "Name">,
@@ -131,35 +126,33 @@ export const makeGlueDatabaseHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const bind = yield* AWSBindings.Bind;
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (database: Database) {
       const DatabaseName = yield* database.databaseName;
       const CatalogId = yield* database.catalogId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}(${database}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: [
-                  // arn:…:database/{db} → arn:…:catalog
-                  Output.map(database.databaseArn, (arn) =>
-                    arn.replace(/:database\/.*$/, ":catalog"),
-                  ),
+        yield* bind`${options.tag}(${database})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: [
+                // arn:…:database/{db} → arn:…:catalog
+                Output.map(database.databaseArn, (arn) =>
+                  arn.replace(/:database\/.*$/, ":catalog"),
+                ),
+                database.databaseArn,
+                // arn:…:database/{db} → arn:…:table/{db}/*
+                Output.map(
                   database.databaseArn,
-                  // arn:…:database/{db} → arn:…:table/{db}/*
-                  Output.map(
-                    database.databaseArn,
-                    (arn) => `${arn.replace(":database/", ":table/")}/*`,
-                  ),
-                ],
-              },
-            ],
-          });
-        }
+                  (arn) => `${arn.replace(":database/", ":table/")}/*`,
+                ),
+              ],
+            },
+          ],
+        });
       }
       return Effect.fn(`${options.tag}(${database.LogicalId})`)(function* (
         request?: Omit<I, "DatabaseName" | "CatalogId">,
@@ -200,33 +193,31 @@ export const makeGlueTableHttpBinding = <
   tableNameKey: K;
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const bind = yield* AWSBindings.Bind;
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (table: Table) {
       const DatabaseName = yield* table.databaseName;
       const TableName = yield* table.tableName;
       const CatalogId = yield* table.catalogId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}(${table}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: [
-                  // arn:…:table/{db}/{tbl} → arn:…:catalog
-                  Output.map(table.tableArn, (arn) => arn.replace(/:table\/.*$/, ":catalog")),
-                  // arn:…:table/{db}/{tbl} → arn:…:database/{db}
-                  Output.map(table.tableArn, (arn) =>
-                    arn.replace(/:table\/([^/]+)\/.*$/, ":database/$1"),
-                  ),
-                  table.tableArn,
-                ],
-              },
-            ],
-          });
-        }
+        yield* bind`${options.tag}(${table})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: [
+                // arn:…:table/{db}/{tbl} → arn:…:catalog
+                Output.map(table.tableArn, (arn) => arn.replace(/:table\/.*$/, ":catalog")),
+                // arn:…:table/{db}/{tbl} → arn:…:database/{db}
+                Output.map(table.tableArn, (arn) =>
+                  arn.replace(/:table\/([^/]+)\/.*$/, ":database/$1"),
+                ),
+                table.tableArn,
+              ],
+            },
+          ],
+        });
       }
       return Effect.fn(`${options.tag}(${table.LogicalId})`)(function* (
         request?: Omit<I, "DatabaseName" | "CatalogId" | K>,

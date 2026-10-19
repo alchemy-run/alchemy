@@ -1,9 +1,7 @@
 import * as autoscaling from "@distilled.cloud/aws/auto-scaling";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Binding from "../../Binding.ts";
-import { isInstance } from "../EC2/Instance.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { AutoScalingGroup } from "./AutoScalingGroup.ts";
 import {
   InstanceRefresh,
@@ -18,35 +16,33 @@ import {
 export const InstanceRefreshHttp = Layer.effect(
   InstanceRefresh,
   Effect.gen(function* () {
-    const start = yield* autoscaling.startInstanceRefresh;
-    const cancel = yield* autoscaling.cancelInstanceRefresh;
-    const rollback = yield* autoscaling.rollbackInstanceRefresh;
-    const describe = yield* autoscaling.describeInstanceRefreshes;
+    const bind = yield* AWSBindings.Bind;
+    const start = yield* AWSBindings.withCredentials(autoscaling.startInstanceRefresh);
+    const cancel = yield* AWSBindings.withCredentials(autoscaling.cancelInstanceRefresh);
+    const rollback = yield* AWSBindings.withCredentials(autoscaling.rollbackInstanceRefresh);
+    const describe = yield* AWSBindings.withCredentials(autoscaling.describeInstanceRefreshes);
 
     return Effect.fn(function* (group: AutoScalingGroup) {
       const AutoScalingGroupName = yield* group.autoScalingGroupName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host) || isInstance(host)) {
-          yield* host.bind`Allow(${host}, AWS.AutoScaling.InstanceRefresh(${group}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [
-                  "autoscaling:StartInstanceRefresh",
-                  "autoscaling:CancelInstanceRefresh",
-                  "autoscaling:RollbackInstanceRefresh",
-                ],
-                Resource: [group.autoScalingGroupArn],
-              },
-              {
-                Effect: "Allow",
-                Action: ["autoscaling:DescribeInstanceRefreshes"],
-                Resource: ["*"],
-              },
-            ],
-          });
-        }
+        yield* bind`AWS.AutoScaling.InstanceRefresh(${group})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [
+                "autoscaling:StartInstanceRefresh",
+                "autoscaling:CancelInstanceRefresh",
+                "autoscaling:RollbackInstanceRefresh",
+              ],
+              Resource: [group.autoScalingGroupArn],
+            },
+            {
+              Effect: "Allow",
+              Action: ["autoscaling:DescribeInstanceRefreshes"],
+              Resource: ["*"],
+            },
+          ],
+        });
       }
       return {
         start: Effect.fn(`AWS.AutoScaling.StartInstanceRefresh(${group.LogicalId})`)(function* (

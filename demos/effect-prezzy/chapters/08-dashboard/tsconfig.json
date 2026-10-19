@@ -7,5 +7,8 @@
     "types": ["bun", "@cloudflare/workers-types", "vite/client"],
     "jsx": "react-jsx"
   },
-  "references": [{ "path": "../../../../packages/alchemy/tsconfig.json" }]
+  "references": [
+    { "path": "../../../../packages/alchemy/tsconfig.json" },
+    { "path": "../../../../packages/neon/tsconfig.json" }
+  ]
 }

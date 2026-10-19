@@ -1,7 +1,7 @@
 import * as recaptchaenterprise from "@distilled.cloud/gcp/recaptchaenterprise_v1";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { bindGcpHost } from "../Host.ts";
+import * as GCPBindings from "../GCPBindings.ts";
 import { CreateAssessment, type CreateAssessmentRequest } from "./CreateAssessment.ts";
 import { lastSegment } from "./internal.ts";
 import type { Key } from "./Key.ts";
@@ -15,14 +15,17 @@ import type { Key } from "./Key.ts";
 export const CreateAssessmentHttp = Layer.effect(
   CreateAssessment,
   Effect.gen(function* () {
-    const createProjectsAssessments = yield* recaptchaenterprise.createProjectsAssessments;
+    const bind = yield* GCPBindings.Bind;
+    const createProjectsAssessments = yield* GCPBindings.withCredentials(
+      recaptchaenterprise.createProjectsAssessments,
+    );
     return Effect.fn(function* <K extends Key>(key: K) {
-      yield* bindGcpHost({
-        tag: "GCP.RecaptchaEnterprise.CreateAssessment",
-        resource: key,
-        // reCAPTCHA keys have no resource-level IAM.
-        iam: [{ role: "roles/recaptchaenterprise.agent" }],
-      });
+      if (!globalThis.__ALCHEMY_RUNTIME__) {
+        yield* bind`GCP.RecaptchaEnterprise.CreateAssessment(${key})`({
+          // reCAPTCHA keys have no resource-level IAM.
+          iam: [{ role: "roles/recaptchaenterprise.agent" }],
+        });
+      }
       const name = yield* key.name;
       return Effect.fn(`GCP.RecaptchaEnterprise.CreateAssessment(${key.LogicalId})`)(function* (
         request?: CreateAssessmentRequest,

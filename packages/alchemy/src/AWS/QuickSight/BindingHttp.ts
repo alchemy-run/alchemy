@@ -1,7 +1,6 @@
 import * as Effect from "effect/Effect";
-import * as Binding from "../../Binding.ts";
 import * as Output from "../../Output.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { Dashboard } from "./Dashboard.ts";
 import type { DataSet } from "./DataSet.ts";
 
@@ -42,24 +41,22 @@ export const makeQuickSightDashboardHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const bind = yield* AWSBindings.Bind;
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (dashboard: Dashboard) {
       const DashboardId = yield* dashboard.dashboardId;
       const Arn = yield* dashboard.arn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}(${dashboard}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: [dashboard.arn],
-              },
-            ],
-          });
-        }
+        yield* bind`${options.tag}(${dashboard})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: [dashboard.arn],
+            },
+          ],
+        });
       }
       return Effect.fn(`${options.tag}(${dashboard.LogicalId})`)(function* (
         request: Omit<I, "AwsAccountId" | "DashboardId">,
@@ -95,24 +92,22 @@ export const makeQuickSightDataSetHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const bind = yield* AWSBindings.Bind;
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (dataSet: DataSet) {
       const DataSetId = yield* dataSet.dataSetId;
       const Arn = yield* dataSet.arn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}(${dataSet}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: [dataSet.arn, Output.interpolate`${dataSet.arn}/ingestion/*`],
-              },
-            ],
-          });
-        }
+        yield* bind`${options.tag}(${dataSet})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: [dataSet.arn, Output.interpolate`${dataSet.arn}/ingestion/*`],
+            },
+          ],
+        });
       }
       return Effect.fn(`${options.tag}(${dataSet.LogicalId})`)(function* (
         request?: Omit<I, "AwsAccountId" | "DataSetId">,
@@ -154,24 +149,22 @@ export const makeQuickSightEmbedHttpBinding = <
   ) => Omit<I, "AwsAccountId">;
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const bind = yield* AWSBindings.Bind;
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (dashboard: Dashboard) {
       const DashboardId = yield* dashboard.dashboardId;
       const Arn = yield* dashboard.arn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}(${dashboard}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: ["*"],
-              },
-            ],
-          });
-        }
+        yield* bind`${options.tag}(${dashboard})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: ["*"],
+            },
+          ],
+        });
       }
       return Effect.fn(`${options.tag}(${dashboard.LogicalId})`)(function* (request: Req) {
         const arn = yield* Arn;

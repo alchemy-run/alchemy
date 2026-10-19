@@ -22,7 +22,7 @@ export const isKinesisStreamEvent = (event: any): event is lambda.KinesisStreamE
 export const StreamEventSource = Layer.effect(
   KinesisStreamEventSource,
   Effect.gen(function* () {
-    const host = yield* Lambda.Function;
+    const host = yield* Lambda.eventSourceHost("AWS.Lambda.StreamEventSource");
     const Mapping = yield* EventSourceMapping;
 
     return Effect.fn(function* <StreamReq = never, Req = never>(

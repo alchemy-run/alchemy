@@ -1,6 +1,7 @@
 export * from "./AuthProvider.ts";
 export * from "./Credentials.ts";
 export * from "./Environment.ts";
+export * as GCPBindings from "./GCPBindings.ts";
 export * from "./Labels.ts";
 export * from "./Providers.ts";
 export * from "./Region.ts";

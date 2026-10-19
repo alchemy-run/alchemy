@@ -1,6 +1,5 @@
 import * as Effect from "effect/Effect";
-import * as Binding from "../../Binding.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { Repository } from "./Repository.ts";
 
 /**
@@ -41,23 +40,21 @@ export const makeEcrRepositoryHttpBinding = <I extends RepositoryScopedRequest, 
   iamActions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const bind = yield* AWSBindings.Bind;
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (repository: Repository) {
       const RepositoryName = yield* repository.repositoryName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, AWS.ECR.${options.capability}(${repository}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.iamActions],
-                Resource: [repository.repositoryArn],
-              },
-            ],
-          });
-        }
+        yield* bind`AWS.ECR.${options.capability}(${repository})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.iamActions],
+              Resource: [repository.repositoryArn],
+            },
+          ],
+        });
       }
       // The request is optional at the impl level so contracts whose
       // remaining fields are all optional (DescribeImages, ListImages, …) can

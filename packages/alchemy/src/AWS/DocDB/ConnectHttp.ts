@@ -2,9 +2,8 @@ import * as secretsmanager from "@distilled.cloud/aws/secrets-manager";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
-import * as Binding from "../../Binding.ts";
 import * as Output from "../../Output.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import {
   Connect,
   connectEnvPrefix,
@@ -16,7 +15,8 @@ import type { DBCluster } from "./DBCluster.ts";
 export const ConnectHttp = Layer.effect(
   Connect,
   Effect.gen(function* () {
-    const getSecretValue = yield* secretsmanager.getSecretValue;
+    const bind = yield* AWSBindings.Bind;
+    const getSecretValue = yield* AWSBindings.withCredentials(secretsmanager.getSecretValue);
 
     return Effect.fn(function* (cluster: DBCluster, options?: ConnectOptions) {
       const Host = yield* cluster.endpoint;
@@ -29,46 +29,42 @@ export const ConnectHttp = Layer.effect(
         : yield* cluster.masterUserSecretArn;
 
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          // DocumentDB is VPC-only — request the host's VPC attachment
-          // declaratively through the `vpc` binding channel.
-          const vpc =
-            options?.subnetIds !== undefined || options?.securityGroupIds !== undefined
-              ? {
-                  vpc: {
-                    subnetIds: options?.subnetIds ?? [],
-                    securityGroupIds: options?.securityGroupIds ?? [],
-                  },
-                }
-              : {};
-          const secretResource = options?.secret
-            ? options.secret.secretArn
-            : Output.map(cluster.masterUserSecretArn, (arn) => {
-                if (arn === undefined) {
-                  throw new Error(
-                    `AWS.DocDB.Connect(${cluster.LogicalId}): the cluster has no managed master user secret — ` +
-                      `set manageMasterUserPassword: true on the cluster or pass options.secret`,
-                  );
-                }
-                return arn;
-              });
-          const prefix = connectEnvPrefix(cluster.LogicalId);
-          yield* host.bind`Allow(${host}, AWS.DocDB.Connect(${cluster}))`({
-            env: {
-              [`${prefix}_HOST`]: cluster.endpoint,
-              // Lambda environment variables are strings — stringify the port.
-              [`${prefix}_PORT`]: Output.interpolate`${cluster.port}`,
+        // DocumentDB is VPC-only: attach the host to the cluster's VPC.
+        const vpc =
+          options?.subnetIds !== undefined || options?.securityGroupIds !== undefined
+            ? {
+                subnetIds: options?.subnetIds ?? [],
+                securityGroupIds: options?.securityGroupIds ?? [],
+              }
+            : undefined;
+        const secretResource = options?.secret
+          ? options.secret.secretArn
+          : Output.map(cluster.masterUserSecretArn, (arn) => {
+              if (arn === undefined) {
+                throw new Error(
+                  `AWS.DocDB.Connect(${cluster.LogicalId}): the cluster has no managed master user secret — ` +
+                    `set manageMasterUserPassword: true on the cluster or pass options.secret`,
+                );
+              }
+              return arn;
+            });
+        const prefix = connectEnvPrefix(cluster.LogicalId);
+        yield* bind`AWS.DocDB.Connect(${cluster})`({
+          env: {
+            [`${prefix}_HOST`]: cluster.endpoint,
+            // Lambda environment variables are strings — stringify the port.
+            [`${prefix}_PORT`]: Output.interpolate`${cluster.port}`,
+          },
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: ["secretsmanager:GetSecretValue", "secretsmanager:DescribeSecret"],
+              Resource: [secretResource],
             },
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: ["secretsmanager:GetSecretValue", "secretsmanager:DescribeSecret"],
-                Resource: [secretResource],
-              },
-            ],
-            ...vpc,
-          });
+          ],
+        });
+        if (vpc !== undefined) {
+          yield* AWSBindings.bindVpc`AWS.DocDB.Connect(${cluster})`(vpc);
         }
       }
 

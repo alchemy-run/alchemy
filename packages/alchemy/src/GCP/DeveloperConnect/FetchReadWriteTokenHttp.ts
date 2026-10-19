@@ -1,6 +1,7 @@
 import * as developerconnect from "@distilled.cloud/gcp/developerconnect_v1";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as GCPBindings from "../GCPBindings.ts";
 import { makeGitRepositoryLinkHttpBinding } from "./BindingHttp.ts";
 import { FetchReadWriteToken } from "./FetchReadWriteToken.ts";
 
@@ -20,8 +21,9 @@ export const FetchReadWriteTokenHttp = Layer.effect(
     tag: "GCP.DeveloperConnect.FetchReadWriteToken",
     iam: { role: "roles/developerconnect.tokenAccessor" },
     operation: Effect.gen(function* () {
-      const call =
-        yield* developerconnect.fetchReadWriteTokenProjectsLocationsConnectionsGitRepositoryLinks;
+      const call = yield* GCPBindings.withCredentials(
+        developerconnect.fetchReadWriteTokenProjectsLocationsConnectionsGitRepositoryLinks,
+      );
       return (
         input: developerconnect.FetchReadWriteTokenProjectsLocationsConnectionsGitRepositoryLinksRequest,
       ) => call(input);

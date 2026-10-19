@@ -23,7 +23,7 @@ the WebSocket handshake. Create `src/room.ts`:
 
 ```typescript
 // src/room.ts
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Effect from "effect/Effect";
 
 export default class Room extends Cloudflare.DurableObject<Room>()(
@@ -58,7 +58,7 @@ what later:
 
 ```diff lang="typescript"
 // src/room.ts
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Effect from "effect/Effect";
 
 export default class Room extends Cloudflare.DurableObject<Room>()(
@@ -365,7 +365,7 @@ to the matching DO instance:
 
 ```diff lang="typescript"
 // src/worker.ts
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Effect from "effect/Effect";
 +import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
@@ -425,7 +425,7 @@ per run:
 
 ```typescript
 // test/integ.test.ts
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Test from "alchemy/Test/Bun";
 import { expect } from "bun:test";
 import * as Deferred from "effect/Deferred";

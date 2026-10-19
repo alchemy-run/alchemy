@@ -1,4 +1,5 @@
 import { expect } from "bun:test";
+import * as Neon from "@alchemy.run/neon";
 import {
   DeleteObjectCommand,
   ListObjectsV2Command,
@@ -7,7 +8,6 @@ import {
 } from "@aws-sdk/client-s3";
 import * as SDK from "@distilled.cloud/neon";
 import * as Alchemy from "alchemy";
-import * as Neon from "alchemy/Neon";
 import * as SQL from "alchemy/SQL/Postgres";
 import * as Test from "alchemy/Test/Bun";
 import * as Effect from "effect/Effect";

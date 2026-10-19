@@ -1,8 +1,7 @@
 import * as Effect from "effect/Effect";
-import * as Binding from "../../Binding.ts";
 import * as Output from "../../Output.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import { AWSEnvironment } from "../Environment.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
 import type { Directory } from "./Directory.ts";
 
 /**
@@ -29,22 +28,20 @@ export const makeDirectoryServiceAccountHttpBinding = <I, A, E, R>(options: {
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const bind = yield* AWSBindings.Bind;
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}())`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: ["*"],
-              },
-            ],
-          });
-        }
+        yield* bind`${options.tag}()`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: ["*"],
+            },
+          ],
+        });
       }
       return Effect.fn(options.tag)(function* (request?: I) {
         return yield* op((request ?? {}) as I);
@@ -67,29 +64,27 @@ export const makeDirectoryHttpBinding = <I extends { DirectoryId?: string }, A, 
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const bind = yield* AWSBindings.Bind;
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (directory: Directory) {
       const DirectoryId = yield* directory.directoryId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          const { accountId, region } = yield* AWSEnvironment.current as unknown as Effect.Effect<{
-            accountId: string;
-            region: string;
-          }>;
-          yield* host.bind`Allow(${host}, ${options.tag}(${directory}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: [
-                  Output.interpolate`arn:aws:ds:${region}:${accountId}:directory/${directory.directoryId}`,
-                ],
-              },
-            ],
-          });
-        }
+        const { accountId, region } = yield* AWSEnvironment.current as unknown as Effect.Effect<{
+          accountId: string;
+          region: string;
+        }>;
+        yield* bind`${options.tag}(${directory})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: [
+                Output.interpolate`arn:aws:ds:${region}:${accountId}:directory/${directory.directoryId}`,
+              ],
+            },
+          ],
+        });
       }
       return Effect.fn(`${options.tag}(${directory.LogicalId})`)(function* (
         request?: Omit<I, "DirectoryId">,

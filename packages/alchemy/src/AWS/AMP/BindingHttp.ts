@@ -1,3 +1,9 @@
+import * as Credentials from "@distilled.cloud/aws/Credentials";
+import * as Region from "@distilled.cloud/aws/Region";
+import * as SigV4 from "@distilled.cloud/aws/SigV4";
+import type * as Duration from "effect/Duration";
+import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
 /**
  * Shared scaffolding for AMP data-plane HTTP bindings.
  *
@@ -11,15 +17,8 @@
  * NOT exported from `index.ts` — only the per-capability contracts and
  * `*Http` layers are public.
  */
-import * as Credentials from "@distilled.cloud/aws/Credentials";
-import * as Region from "@distilled.cloud/aws/Region";
-import * as SigV4 from "@distilled.cloud/aws/SigV4";
-import type * as Duration from "effect/Duration";
-import * as Effect from "effect/Effect";
-import * as Redacted from "effect/Redacted";
-import * as Binding from "../../Binding.ts";
 import { toWireSeconds } from "../../Util/Duration.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import { PrometheusApiError, type PrometheusTime } from "./PrometheusTypes.ts";
 import type { Workspace } from "./Workspace.ts";
 
@@ -86,23 +85,23 @@ export const makeAmpWorkspaceHttpBinding = <Client>(options: {
   makeClient: (send: AmpSend) => Client;
 }) =>
   Effect.gen(function* () {
-    const services = yield* Effect.context<Credentials.Credentials | Region.Region>();
+    const bind = yield* AWSBindings.Bind;
+    const services = yield* AWSBindings.withCredentials(
+      Effect.context<Credentials.Credentials | Region.Region>(),
+    );
 
     return Effect.fn(function* (workspace: Workspace) {
       const PrometheusEndpoint = yield* workspace.prometheusEndpoint;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, AWS.AMP.${options.name}(${workspace}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: options.iamActions,
-                Resource: [workspace.workspaceArn],
-              },
-            ],
-          });
-        }
+        yield* bind`AWS.AMP.${options.name}(${workspace})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: options.iamActions,
+              Resource: [workspace.workspaceArn],
+            },
+          ],
+        });
       }
 
       const send: AmpSend = Effect.fn(`AWS.AMP.${options.name}(${workspace.LogicalId})`)(function* (

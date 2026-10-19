@@ -2,7 +2,8 @@ import * as ag from "@distilled.cloud/aws/api-gateway";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Output from "../../Output.ts";
-import { registerApiGatewayBinding } from "./BindingHttp.ts";
+import * as AWSBindings from "../AWSBindings.ts";
+import { RegisterApiGatewayBinding } from "./BindingHttp.ts";
 import { FlushStageAuthorizersCache } from "./FlushStageAuthorizersCache.ts";
 import type { ApiGatewayStage } from "./Stage.ts";
 
@@ -14,7 +15,10 @@ import type { ApiGatewayStage } from "./Stage.ts";
 export const FlushStageAuthorizersCacheHttp = Layer.effect(
   FlushStageAuthorizersCache,
   Effect.gen(function* () {
-    const flushStageAuthorizersCache = yield* ag.flushStageAuthorizersCache;
+    const registerApiGatewayBinding = yield* RegisterApiGatewayBinding;
+    const flushStageAuthorizersCache = yield* AWSBindings.withCredentials(
+      ag.flushStageAuthorizersCache,
+    );
     return Effect.fn(function* <S extends ApiGatewayStage>(stage: S) {
       const RestApiId = yield* stage.restApiId;
       const StageName = yield* stage.stageName;

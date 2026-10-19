@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import { AlchemyContext } from "../../AlchemyContext.ts";
@@ -7,6 +9,8 @@ import * as Output from "../../Output.ts";
 import { ProviderModePolicy } from "../../ProviderMode.ts";
 import { Server, type ServerDevProps } from "../../Website/Server.ts";
 import { Function as LambdaFunction, type FunctionProps } from "../Lambda/Function.ts";
+import { WebFunction } from "../Lambda/WebFunction.ts";
+import { WebFunctionEndpoint } from "../Lambda/WebFunctionEndpoint.ts";
 import { asRouterDomain, registerDevRouterRoute } from "./DevRouterRoute.ts";
 import {
   normalizeWebsiteDomain,
@@ -17,13 +21,8 @@ import {
 } from "./shared.ts";
 import { makeKvSite, type StaticSiteProps } from "./StaticSite.ts";
 
-/**
- * Props shared by every framework website composite (SvelteKit, Nuxt,
- * Waku, Octane, Astro). Each composite extends this with its
- * framework-specific configuration, kept FLAT — the composite is the
- * framework, so framework keys need no namespace.
- */
-export interface FrameworkSiteProps {
+/** Props shared by every framework website, whatever runs its server. */
+export interface FrameworkSiteBaseProps {
   /**
    * Project root directory (the directory containing `package.json`).
    * @default "."
@@ -40,25 +39,10 @@ export interface FrameworkSiteProps {
    */
   env?: Record<string, any>;
   /**
-   * Memory allocated to the server function, in MB.
-   * @default 1024
-   */
-  memorySize?: number;
-  /**
    * Maximum server request duration.
    * @default 30 seconds
    */
   timeout?: Duration.Duration;
-  /**
-   * Server instruction set architecture.
-   * @default "x86_64"
-   */
-  architecture?: "x86_64" | "arm64";
-  /**
-   * Lambda runtime for the server function.
-   * @default "nodejs24.x"
-   */
-  runtime?: FunctionProps["runtime"];
   /**
    * Static asset upload configuration.
    */
@@ -108,14 +92,147 @@ export interface FrameworkSiteProps {
   tags?: Record<string, string>;
 }
 
+/** The SSR server on a Lambda Web Function (the default). */
+export interface WebFunctionServerProps {
+  /**
+   * What runs the SSR server: a Lambda Web Function, where the
+   * framework's Node server handles many requests per environment and
+   * streams responses. Set `"function"` for a Lambda Function instead.
+   * @default "web-function"
+   */
+  server?: "web-function";
+  /**
+   * Requests one Web Function environment serves at once (1–128).
+   * @default 64
+   */
+  maxConcurrencyPerEnvironment?: number;
+  /**
+   * Maximum Web Function environments per Region (2–10,000).
+   */
+  maxEnvironments?: number;
+  /**
+   * Additional AWS Regions to serve the SSR server from. The server's Web
+   * Function gets one global domain that routes each request to the
+   * nearest Region, and CloudFront forwards to it. Changing it gives the
+   * server a new domain; the site's URL stays the same.
+   */
+  regions?: string[];
+}
+
+/**
+ * The SSR server on a Lambda Function behind a streaming Function URL: for
+ * servers that need more than 2 GB of memory or x86_64, or Regions without
+ * Web Functions.
+ */
+export interface FunctionServerProps {
+  /** Run the SSR server on a Lambda Function behind a streaming Function URL. */
+  server: "function";
+  /**
+   * Memory allocated to the server function, in MB.
+   * @default 1024
+   */
+  memorySize?: number;
+  /**
+   * Server instruction set architecture.
+   * @default "x86_64"
+   */
+  architecture?: "x86_64" | "arm64";
+  /**
+   * Lambda runtime for the server function.
+   * @default "nodejs24.x"
+   */
+  runtime?: FunctionProps["runtime"];
+}
+
+/**
+ * Props of every framework website composite (SvelteKit, Nuxt, Waku,
+ * Octane, Astro, ...): the shared props, the framework's own (`Framework`,
+ * kept FLAT — the composite is the framework, so its keys need no
+ * namespace), and the props of the chosen `server`.
+ */
+export type FrameworkSiteProps<Framework = {}> = FrameworkSiteBaseProps &
+  Framework &
+  (WebFunctionServerProps | FunctionServerProps);
+
+/** `regions` serves a Web Function from several Regions; a Lambda Function can't. */
+export class WebsiteRegionsRequireWebFunction extends Data.TaggedError(
+  "WebsiteRegionsRequireWebFunction",
+)<{ site: string; message: string }> {}
+
+/** Fail at plan when `regions` is combined with `server: "function"`. */
+export const checkWebsiteRegions = (
+  site: string,
+  props: { server?: "web-function" | "function"; regions?: string[] },
+) =>
+  props.server === "function" && props.regions !== undefined && props.regions.length > 0
+    ? Effect.die(
+        new WebsiteRegionsRequireWebFunction({
+          site,
+          message: `"${site}": regions needs the Web Function server. Remove server: "function", or remove regions.`,
+        }),
+      )
+    : Effect.void;
+
+/**
+ * The endpoint CloudFront reaches a Web Function server through. Without
+ * `regions` that is the function's own endpoint. With them it is a
+ * `WebFunctionEndpoint` whose name follows the Region set: an endpoint's
+ * Regions can't change in place, so a new set is a new endpoint, created
+ * before CloudFront moves to it and deleted only after.
+ */
+export const siteEndpoint = Effect.fn(function* (
+  id: string,
+  server: WebFunction,
+  props: { regions?: string[]; maxEnvironments?: number },
+) {
+  if (props.regions === undefined || props.regions.length === 0) {
+    return { domainName: server.domainName, url: server.url };
+  }
+  const key = yield* Effect.sync(() =>
+    createHash("sha256")
+      .update([...new Set(props.regions)].sort().join(","))
+      .digest("hex")
+      .slice(0, 8),
+  );
+  const endpoint = yield* WebFunctionEndpoint(id, {
+    function: server,
+    endpointName: `edge-${key}`,
+    authType: "ApplicationManaged",
+    regions: props.regions,
+    maxEnvironments: props.maxEnvironments,
+  });
+  return { domainName: endpoint.domainName, url: endpoint.url };
+});
+
 /** Per-framework wiring for {@link makeFrameworkSite}. */
 export interface FrameworkSiteConfig {
   /** Display name used in error messages (e.g. `"SvelteKit"`). */
   name: string;
   /** Framework-integration module specifier. */
   framework: string;
-  /** AWS deploy-target module specifier. */
+  /** AWS Lambda deploy-target module specifier (`server: "function"`). */
   target: string;
+  /**
+   * Node deploy-target module specifier (`server: "web-function"`). Its
+   * serve entry listens on `AWS_LAMBDA_HTTP_ENDPOINT`. Without one the
+   * site always uses a Lambda Function.
+   */
+  webTarget?: string;
+  /**
+   * Packages installed into the Web Function instead of bundled (the
+   * framework's runtime when its server can't be bundled).
+   */
+  install?: ReadonlyArray<string>;
+  /**
+   * Build options for `server: "web-function"`, merged over `options`.
+   */
+  webOptions?: Record<string, unknown>;
+  /**
+   * Deploy the Node target's server directory as-is instead of bundling
+   * its serve entry, for servers that read files beside themselves at
+   * runtime (Octane's SSR `index.html`).
+   */
+  webPrebuilt?: boolean;
   /**
    * Framework-specific build options forwarded to the integration (e.g.
    * `{ kit }`, `{ nuxt }`, `{ astro }`). Must be JSON-serializable.
@@ -146,7 +263,7 @@ export interface FrameworkSiteConfig {
  */
 export const makeFrameworkSite = Effect.fn("AWS.Website.FrameworkSite")(function* (
   id: string,
-  propsIn: InputProps<FrameworkSiteProps>,
+  propsIn: InputProps<FrameworkSiteProps, "server">,
   config: FrameworkSiteConfig,
 ) {
   // Props accept `Input<T>` throughout (matching the Cloudflare
@@ -156,6 +273,7 @@ export const makeFrameworkSite = Effect.fn("AWS.Website.FrameworkSite")(function
   // need concrete values — passing an `Output` for those specific
   // fields is unsupported, same as on the Cloudflare side.
   const props = propsIn as FrameworkSiteProps;
+  yield* checkWebsiteRegions(`AWS.Website.${config.name} "${id}"`, props);
   const ctx = yield* AlchemyContext;
   const remoted = yield* ProviderModePolicy;
   const isLocal = ctx.dev && remoted !== true;
@@ -174,12 +292,14 @@ export const makeFrameworkSite = Effect.fn("AWS.Website.FrameworkSite")(function
       ? { ...props.dev, host: props.dev?.host ?? "0.0.0.0" }
       : props.dev;
 
+  const onWebFunction =
+    config.webTarget !== undefined && (props.server ?? "web-function") === "web-function";
   const build = yield* Server("Build", {
     framework: config.framework,
-    target: config.target,
+    target: onWebFunction ? config.webTarget! : config.target,
     root: props.rootDir,
     env: props.env,
-    options: config.options,
+    options: onWebFunction ? { ...config.options, ...config.webOptions } : config.options,
     memo: props.memo,
     dev,
   });
@@ -231,6 +351,41 @@ export const makeFrameworkSite = Effect.fn("AWS.Website.FrameworkSite")(function
     };
   }
 
+  if (onWebFunction) {
+    // The Node deploy target writes a complete server program
+    // (`serve-node.mjs`) that listens where Lambda says; bundle it like any
+    // async Web Function. Assets stay in S3 behind the edge router.
+    const server = yield* WebFunction("WebServer", {
+      main: build.serverEntry as unknown as string,
+      ...(config.webPrebuilt ? { bundle: false as const } : {}),
+      authType: "ApplicationManaged",
+      env: props.env,
+      timeout: props.timeout ?? Duration.seconds(30),
+      ...(props.server === "function"
+        ? {}
+        : {
+            maxConcurrencyPerEnvironment: props.maxConcurrencyPerEnvironment,
+            maxEnvironments: props.maxEnvironments,
+          }),
+      build:
+        config.install !== undefined && config.install.length > 0
+          ? { install: [...config.install] }
+          : undefined,
+    });
+    const endpoint = yield* siteEndpoint(
+      "ServerEndpoint",
+      server,
+      props.server === "function" ? {} : props,
+    );
+    const site = yield* makeKvSite(id, siteProps, { serverHost: endpoint.domainName });
+    return {
+      ...site,
+      build,
+      server,
+      serverUrl: endpoint.url,
+    };
+  }
+
   const server = yield* LambdaFunction("Server", {
     main: build.serverEntry as unknown as string,
     handler: "handler",
@@ -239,9 +394,9 @@ export const makeFrameworkSite = Effect.fn("AWS.Website.FrameworkSite")(function
     // as a complete Node deployment unit (entry + chunks) — ship it
     // as-is.
     bundle: false,
-    runtime: props.runtime ?? "nodejs24.x",
-    architecture: props.architecture,
-    memorySize: props.memorySize ?? 1024,
+    runtime: (props.server === "function" ? props.runtime : undefined) ?? "nodejs24.x",
+    architecture: props.server === "function" ? props.architecture : undefined,
+    memorySize: (props.server === "function" ? props.memorySize : undefined) ?? 1024,
     timeout: props.timeout ?? Duration.seconds(30),
     env: props.env,
     functionUrl: {

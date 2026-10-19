@@ -1,7 +1,6 @@
 import * as Effect from "effect/Effect";
-import * as Binding from "../../Binding.ts";
 import * as Output from "../../Output.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { Application } from "./Application.ts";
 import type { DeploymentGroup } from "./DeploymentGroup.ts";
 
@@ -44,25 +43,23 @@ export const makeCodeDeployGroupNameHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const bind = yield* AWSBindings.Bind;
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* <G extends DeploymentGroup>(group: G) {
       // Outputs yield a DEFERRED effect — resolve again per invocation below.
       const ApplicationName = yield* group.applicationName;
       const DeploymentGroupName = yield* group.deploymentGroupName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}(${group}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: [Output.interpolate`${group.deploymentGroupArn}`],
-              },
-            ],
-          });
-        }
+        yield* bind`${options.tag}(${group})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: [Output.interpolate`${group.deploymentGroupArn}`],
+            },
+          ],
+        });
       }
       return Effect.fn(`${options.tag}(${group.LogicalId})`)(function* (
         request?: Omit<I, "applicationName" | "deploymentGroupName">,
@@ -93,22 +90,20 @@ export const makeCodeDeployGroupHttpBinding = <I, A, E, R>(options: {
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const bind = yield* AWSBindings.Bind;
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* <G extends DeploymentGroup>(group: G) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}(${group}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: [Output.interpolate`${group.deploymentGroupArn}`],
-              },
-            ],
-          });
-        }
+        yield* bind`${options.tag}(${group})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: [Output.interpolate`${group.deploymentGroupArn}`],
+            },
+          ],
+        });
       }
       return Effect.fn(`${options.tag}(${group.LogicalId})`)(function* (request: I) {
         return yield* op(request);
@@ -136,23 +131,21 @@ export const makeCodeDeployApplicationHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const bind = yield* AWSBindings.Bind;
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* <P extends Application>(application: P) {
       const ApplicationName = yield* application.applicationName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}(${application}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: [Output.interpolate`${application.applicationArn}`],
-              },
-            ],
-          });
-        }
+        yield* bind`${options.tag}(${application})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: [Output.interpolate`${application.applicationArn}`],
+            },
+          ],
+        });
       }
       return Effect.fn(`${options.tag}(${application.LogicalId})`)(function* (
         request?: Omit<I, "applicationName">,

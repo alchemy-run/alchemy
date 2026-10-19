@@ -88,6 +88,60 @@
       "path": "./packages/better-auth/tsconfig.json"
     },
     {
+      "path": "./packages/git/tsconfig.json"
+    },
+    {
+      "path": "./packages/drizzle/tsconfig.json"
+    },
+    {
+      "path": "./packages/sqlite/tsconfig.json"
+    },
+    {
+      "path": "./packages/acme/tsconfig.json"
+    },
+    {
+      "path": "./packages/axiom/tsconfig.json"
+    },
+    {
+      "path": "./packages/doppler/tsconfig.json"
+    },
+    {
+      "path": "./packages/infisical/tsconfig.json"
+    },
+    {
+      "path": "./packages/turso/tsconfig.json"
+    },
+    {
+      "path": "./packages/planetscale/tsconfig.json"
+    },
+    {
+      "path": "./packages/neon/tsconfig.json"
+    },
+    {
+      "path": "./packages/prisma/tsconfig.json"
+    },
+    {
+      "path": "./packages/hetzner/tsconfig.json"
+    },
+    {
+      "path": "./packages/railway/tsconfig.json"
+    },
+    {
+      "path": "./packages/fly/tsconfig.json"
+    },
+    {
+      "path": "./packages/github/tsconfig.json"
+    },
+    {
+      "path": "./packages/stripe/tsconfig.json"
+    },
+    {
+      "path": "./packages/cloudflare/tsconfig.json"
+    },
+    {
+      "path": "./packages/integration-tests/tsconfig.json"
+    },
+    {
       "path": "./packages/pkg/tsconfig.json"
     },
     // TODO(sam): fix by upgrading starlight to ^0.39.2
@@ -210,6 +264,9 @@
     },
     {
       "path": "./examples/cloudflare-durable-object-sql/tsconfig.json"
+    },
+    {
+      "path": "./examples/cloudflare-domain/tsconfig.json"
     },
     {
       "path": "./examples/cloudflare-static-site/tsconfig.json"

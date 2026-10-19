@@ -1,6 +1,5 @@
 import * as Effect from "effect/Effect";
-import * as Binding from "../../Binding.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { Room } from "./Room.ts";
 
 /**
@@ -39,24 +38,22 @@ export const makeIvsChatRoomHttpBinding = <
   prepare?: (request: Req) => Omit<I, "roomIdentifier">;
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const bind = yield* AWSBindings.Bind;
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (room: Room) {
       // Output yields a DEFERRED effect — resolve again per invocation below.
       const RoomArn = yield* room.roomArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}(${room}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: [room.roomArn],
-              },
-            ],
-          });
-        }
+        yield* bind`${options.tag}(${room})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: [room.roomArn],
+            },
+          ],
+        });
       }
       return Effect.fn(`${options.tag}(${room.LogicalId})`)(function* (request: Req) {
         const roomIdentifier = yield* RoomArn;

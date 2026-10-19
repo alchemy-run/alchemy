@@ -1,8 +1,7 @@
 import * as paymentcryptographydata from "@distilled.cloud/aws/payment-cryptography-data";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Binding from "../../Binding.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import {
   GenerateMacEmvPinChange,
   type GenerateMacEmvPinChangeRequest,
@@ -19,7 +18,10 @@ import type { Key } from "./Key.ts";
 export const GenerateMacEmvPinChangeHttp = Layer.effect(
   GenerateMacEmvPinChange,
   Effect.gen(function* () {
-    const generateMacEmvPinChange = yield* paymentcryptographydata.generateMacEmvPinChange;
+    const bind = yield* AWSBindings.Bind;
+    const generateMacEmvPinChange = yield* AWSBindings.withCredentials(
+      paymentcryptographydata.generateMacEmvPinChange,
+    );
 
     return Effect.fn(function* <P extends Key, I extends Key, C extends Key>(
       newPinPek: P,
@@ -30,25 +32,20 @@ export const GenerateMacEmvPinChangeHttp = Layer.effect(
       const IntegrityKeyArn = yield* secureMessagingIntegrityKey.keyArn;
       const ConfidentialityKeyArn = yield* secureMessagingConfidentialityKey.keyArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          for (const key of [
-            newPinPek,
-            secureMessagingIntegrityKey,
-            secureMessagingConfidentialityKey,
-          ]) {
-            yield* host.bind`Allow(${host}, AWS.PaymentCryptography.GenerateMacEmvPinChange(${key}))`(
+        for (const key of [
+          newPinPek,
+          secureMessagingIntegrityKey,
+          secureMessagingConfidentialityKey,
+        ]) {
+          yield* bind`AWS.PaymentCryptography.GenerateMacEmvPinChange(${key})`({
+            policyStatements: [
               {
-                policyStatements: [
-                  {
-                    Effect: "Allow",
-                    Action: ["payment-cryptography:GenerateMacEmvPinChange"],
-                    Resource: [key.keyArn],
-                  },
-                ],
+                Effect: "Allow",
+                Action: ["payment-cryptography:GenerateMacEmvPinChange"],
+                Resource: [key.keyArn],
               },
-            );
-          }
+            ],
+          });
         }
       }
       return Effect.fn(`AWS.PaymentCryptography.GenerateMacEmvPinChange(${newPinPek.LogicalId})`)(

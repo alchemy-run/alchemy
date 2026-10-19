@@ -1,6 +1,5 @@
 import * as Effect from "effect/Effect";
-import * as Binding from "../../Binding.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { Space } from "./Space.ts";
 
 /**
@@ -24,23 +23,21 @@ export const makeRePostSpaceHttpBinding = <I extends { spaceId: string }, A, E, 
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const bind = yield* AWSBindings.Bind;
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (space: Space) {
       const spaceId = yield* space.spaceId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}(${space}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: [space.spaceArn],
-              },
-            ],
-          });
-        }
+        yield* bind`${options.tag}(${space})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: [space.spaceArn],
+            },
+          ],
+        });
       }
       return Effect.fn(`${options.tag}(${space.LogicalId})`)(function* (
         request?: Omit<I, "spaceId">,

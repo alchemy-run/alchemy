@@ -18,22 +18,16 @@ const bareImports = (result: Bundle.BundleOutput) =>
     .filter((line) => /^import\b/.test(line))
     .filter((line) => !/["'](\.\/|node:)/.test(line));
 
-/** Every generated-entry bootstrap module (see src/Runtime/Bootstrap). */
+/** Every generated-entry bootstrap module: core's and each provider's `Bootstrap`. */
 const BOOTSTRAP_MODULES = [
-  "Ecs",
-  "AppRunner",
-  "Batch",
-  "Ec2",
-  "Lambda",
-  "MicrovmBun",
-  "MicrovmNode",
-  "CloudflareContainerBun",
-  "CloudflareContainerNode",
-  "Docker",
-  "Fly",
-  "Hetzner",
-  "Prisma",
-  "Railway",
+  "alchemy/AWS/Bootstrap/Ecs",
+  "alchemy/AWS/Bootstrap/AppRunner",
+  "alchemy/AWS/Bootstrap/Batch",
+  "alchemy/AWS/Bootstrap/Ec2",
+  "alchemy/AWS/Bootstrap/Lambda",
+  "alchemy/AWS/Bootstrap/MicrovmBun",
+  "alchemy/AWS/Bootstrap/MicrovmNode",
+  "alchemy/Runtime/Bootstrap/Docker",
 ] as const;
 
 layer(NodeServices.layer)("generated entry bootstraps", (it) => {
@@ -45,9 +39,10 @@ layer(NodeServices.layer)("generated entry bootstraps", (it) => {
   // location, never from the consumer's. Before the bootstraps became real
   // modules, the entry imported those directly and an isolated project left
   // them external (the deployed process died with `Cannot find module`).
-  for (const name of BOOTSTRAP_MODULES) {
+  for (const specifier of BOOTSTRAP_MODULES) {
+    const name = specifier.split("/").slice(1).join("-");
     it.effect(
-      `alchemy/Runtime/Bootstrap/${name} bundles from an isolated project`,
+      `${specifier} bundles from an isolated project`,
       () =>
         Effect.gen(function* () {
           const project = isolatedProject(`bootstrap-${name.toLowerCase()}`, import.meta.filename);
@@ -58,7 +53,7 @@ layer(NodeServices.layer)("generated entry bootstraps", (it) => {
           // modules (Lambda zip, the *Node container variants) resolve
           // through `import` → `lib/*.js`, so this test requires a built
           // lib (`pnpm build`), exactly like a deployed Node bundle.
-          const isNode = name.endsWith("Node") || name === "Lambda";
+          const isNode = specifier.endsWith("Node") || specifier.endsWith("/Lambda");
 
           try {
             const result = yield* Bundle.build(
@@ -75,7 +70,7 @@ layer(NodeServices.layer)("generated entry bootstraps", (it) => {
                 plugins: [
                   virtualEntryPlugin(
                     () => `
-import * as bootstrap from ${JSON.stringify(`alchemy/Runtime/Bootstrap/${name}`)};
+import * as bootstrap from ${JSON.stringify(specifier)};
 export default bootstrap;
 `,
                   ),
@@ -120,7 +115,7 @@ export default bootstrap;
                 plugins: [
                   virtualEntryPlugin(
                     () => `
-import * as bootstrap from "alchemy/Runtime/Bootstrap/Ecs";
+import * as bootstrap from "alchemy/AWS/Bootstrap/Ecs";
 export default bootstrap;
 `,
                   ),
@@ -132,7 +127,7 @@ export default bootstrap;
           expect(Result.isFailure(result)).toBe(true);
           if (Result.isFailure(result)) {
             expect(result.failure.message).toContain(
-              'imports "alchemy/Runtime/Bootstrap/Ecs", which cannot be resolved',
+              'imports "alchemy/AWS/Bootstrap/Ecs", which cannot be resolved',
             );
           }
         } finally {

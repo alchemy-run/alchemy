@@ -1,6 +1,5 @@
 import * as Effect from "effect/Effect";
-import * as Binding from "../../Binding.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { Stream } from "./Stream.ts";
 import type { StreamConsumer } from "./StreamConsumer.ts";
 
@@ -31,22 +30,20 @@ export const makeKinesisAccountHttpBinding = <I, A, E, R>(options: {
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const bind = yield* AWSBindings.Bind;
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}())`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: ["*"],
-              },
-            ],
-          });
-        }
+        yield* bind`${options.tag}()`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: ["*"],
+            },
+          ],
+        });
       }
       return Effect.fn(options.tag)(function* (request?: I) {
         return yield* op((request ?? {}) as I);
@@ -78,23 +75,21 @@ export const makeStreamHttpBinding = <
   key: K;
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const bind = yield* AWSBindings.Bind;
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (stream: Stream) {
       const identity = yield* options.key === "StreamName" ? stream.streamName : stream.streamArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}(${stream}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: [stream.streamArn],
-              },
-            ],
-          });
-        }
+        yield* bind`${options.tag}(${stream})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: [stream.streamArn],
+            },
+          ],
+        });
       }
       return Effect.fn(`${options.tag}(${stream.LogicalId})`)(function* (request?: Omit<I, K>) {
         return yield* op({
@@ -120,23 +115,21 @@ export const makeConsumerHttpBinding = <I extends { ConsumerARN?: string }, A, E
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const bind = yield* AWSBindings.Bind;
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (consumer: StreamConsumer) {
       const ConsumerARN = yield* consumer.consumerArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}(${consumer}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: [consumer.consumerArn],
-              },
-            ],
-          });
-        }
+        yield* bind`${options.tag}(${consumer})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: [consumer.consumerArn],
+            },
+          ],
+        });
       }
       return Effect.fn(`${options.tag}(${consumer.LogicalId})`)(function* (
         request?: Omit<I, "ConsumerARN">,

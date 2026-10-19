@@ -1,3 +1,5 @@
+import type * as scheduler from "@distilled.cloud/aws/scheduler";
+import * as Effect from "effect/Effect";
 /**
  * Shared scaffolding for EventBridge Scheduler HTTP bindings.
  *
@@ -20,13 +22,10 @@
  *   `RoleArn` unless the request overrides it, and `FlexibleTimeWindow`
  *   defaults to `{ Mode: "OFF" }`.
  */
-import type * as scheduler from "@distilled.cloud/aws/scheduler";
-import * as Effect from "effect/Effect";
-import * as Binding from "../../Binding.ts";
 import * as Output from "../../Output.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { Role } from "../IAM/Role.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
 import type { ScheduleGroup } from "./ScheduleGroup.ts";
 
 /**
@@ -91,27 +90,25 @@ export const makeScheduleGroupScopedHttpBinding = <
   resourceScope?: "group" | "all";
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const bind = yield* AWSBindings.Bind;
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (group?: ScheduleGroup) {
       const GroupName = group ? yield* group.scheduleGroupName : undefined;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          const pattern =
-            options.resourceScope === "all"
-              ? yield* allSchedulesArnPattern
-              : yield* scheduleArnPattern(group);
-          yield* host.bind`Allow(${host}, ${options.tag}(${group ?? "default"}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.actions],
-                Resource: [pattern],
-              },
-            ],
-          });
-        }
+        const pattern =
+          options.resourceScope === "all"
+            ? yield* allSchedulesArnPattern
+            : yield* scheduleArnPattern(group);
+        yield* bind`${options.tag}(${group ?? "default"})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: [pattern],
+            },
+          ],
+        });
       }
       return Effect.fn(`${options.tag}(${group?.LogicalId ?? "default"})`)(function* (
         request?: Omit<I, "GroupName">,
@@ -152,39 +149,35 @@ export const makeScheduleWriteHttpBinding = <
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const bind = yield* AWSBindings.Bind;
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* <Ro extends Role>(executionRole: Ro, group?: ScheduleGroup) {
       const RoleArn = yield* executionRole.roleArn;
       const GroupName = group ? yield* group.scheduleGroupName : undefined;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          const pattern = yield* scheduleArnPattern(group);
-          yield* host.bind`Allow(${host}, ${options.tag}(${executionRole}, ${group ?? "default"}))`(
+        const pattern = yield* scheduleArnPattern(group);
+        yield* bind`${options.tag}(${executionRole}, ${group ?? "default"})`({
+          policyStatements: [
             {
-              policyStatements: [
-                {
-                  Effect: "Allow",
-                  Action: [...options.actions],
-                  Resource: [pattern],
-                },
-                // CRITICAL: without iam:PassRole on the execution role, the
-                // write fails only at runtime with an AccessDenied.
-                {
-                  Effect: "Allow",
-                  Action: ["iam:PassRole"],
-                  Resource: [Output.interpolate`${executionRole.roleArn}`],
-                  Condition: {
-                    StringEquals: {
-                      "iam:PassedToService": "scheduler.amazonaws.com",
-                    },
-                  },
-                },
-              ],
+              Effect: "Allow",
+              Action: [...options.actions],
+              Resource: [pattern],
             },
-          );
-        }
+            // CRITICAL: without iam:PassRole on the execution role, the
+            // write fails only at runtime with an AccessDenied.
+            {
+              Effect: "Allow",
+              Action: ["iam:PassRole"],
+              Resource: [Output.interpolate`${executionRole.roleArn}`],
+              Condition: {
+                StringEquals: {
+                  "iam:PassedToService": "scheduler.amazonaws.com",
+                },
+              },
+            },
+          ],
+        });
       }
       return Effect.fn(`${options.tag}(${executionRole.LogicalId})`)(function* (
         request: Omit<I, "GroupName" | "Target" | "FlexibleTimeWindow"> & {

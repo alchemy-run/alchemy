@@ -1,6 +1,5 @@
 import * as Effect from "effect/Effect";
-import * as Binding from "../../Binding.ts";
-import { isBindingHost } from "../Lambda/Function.ts";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { Asset } from "./Asset.ts";
 
 /**
@@ -36,24 +35,22 @@ export const makeSiteWiseAssetHttpBinding = <I, A, E, R, Req>(options: {
   prepare: (request: Req, assetId: string) => I;
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const bind = yield* AWSBindings.Bind;
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (asset: Asset) {
       // Output yields a DEFERRED effect — resolve again per invocation below.
       const AssetId = yield* asset.assetId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, AWS.IoTSiteWise.${options.capability}(${asset}))`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.iamActions],
-                Resource: [asset.assetArn],
-              },
-            ],
-          });
-        }
+        yield* bind`AWS.IoTSiteWise.${options.capability}(${asset})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.iamActions],
+              Resource: [asset.assetArn],
+            },
+          ],
+        });
       }
       return Effect.fn(`AWS.IoTSiteWise.${options.capability}(${asset.LogicalId})`)(function* (
         request: Req,
@@ -79,22 +76,20 @@ export const makeSiteWiseAccountHttpBinding = <I, A, E, R>(options: {
   operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
 }) =>
   Effect.gen(function* () {
-    const op = yield* options.operation;
+    const bind = yield* AWSBindings.Bind;
+    const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, AWS.IoTSiteWise.${options.capability}())`({
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: [...options.iamActions],
-                Resource: ["*"],
-              },
-            ],
-          });
-        }
+        yield* bind`AWS.IoTSiteWise.${options.capability}()`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [...options.iamActions],
+              Resource: ["*"],
+            },
+          ],
+        });
       }
       return Effect.fn(`AWS.IoTSiteWise.${options.capability}`)(function* (request: I) {
         return yield* op(request);

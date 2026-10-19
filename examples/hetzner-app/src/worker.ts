@@ -1,4 +1,4 @@
-import * as Hetzner from "alchemy/Hetzner";
+import * as Hetzner from "@alchemy.run/hetzner";
 import { ServerHost } from "alchemy/Server";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
