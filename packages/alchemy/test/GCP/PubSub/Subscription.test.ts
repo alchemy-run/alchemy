@@ -1,9 +1,13 @@
+import * as bigquery from "@distilled.cloud/gcp/bigquery_v2";
 import * as pubsub from "@distilled.cloud/gcp/pubsub_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as GCP from "@/GCP";
+import { GcpEnvironment } from "@/GCP/Environment";
+import { projectNumber } from "@/GCP/Host";
+import * as Output from "@/Output";
 import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -226,4 +230,119 @@ test.provider(
       expect(yield* waitUntilGone(out.inbox)).toEqual("gone");
     }).pipe(logLevel),
   { tags: ["provider:gcp", "provider:gcp:pubsub", "live"], timeout: 240_000 },
+);
+
+test.provider(
+  "writes messages to a BigQuery table",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      // Pub/Sub writes to BigQuery as the project's Pub/Sub service agent.
+      const { project } = yield* GcpEnvironment.current;
+      const agent = `serviceAccount:service-${yield* projectNumber(project)}@gcp-sa-pubsub.iam.gserviceaccount.com`;
+
+      const writerStack = Effect.gen(function* () {
+        const topic = yield* GCP.PubSub.Topic("Impressions", {});
+        const dataset = yield* GCP.BigQuery.Dataset("ImpressionsRaw", {
+          location: "US-CENTRAL1",
+          forceDestroy: true,
+        });
+        const table = yield* GCP.BigQuery.Table("ImpressionEvent", {
+          datasetId: dataset.datasetId,
+          schema: [
+            { name: "subscription_name", type: "STRING" },
+            { name: "message_id", type: "STRING" },
+            { name: "publish_time", type: "TIMESTAMP" },
+            { name: "data", type: "STRING" },
+            { name: "attributes", type: "STRING" },
+          ],
+        });
+        const writer = yield* GCP.IAM.Member("ImpressionsWriter", {
+          kind: "bigquery.table",
+          name: table.name,
+          role: "roles/bigquery.dataEditor",
+          member: agent,
+        });
+        return { topic, table, writer };
+      });
+
+      const bigqueryStack = (writeMetadata: boolean) =>
+        Effect.gen(function* () {
+          const { topic, table, writer } = yield* writerStack;
+          const subscription = yield* GCP.PubSub.Subscription("ImpressionsBigQuery", {
+            topic: topic.name,
+            bigqueryConfig: {
+              // Reading the grant orders the subscription after it: Pub/Sub
+              // checks the service agent's table access at create time.
+              table: Output.map(writer.name, (name) => {
+                const [, projectId, , datasetId, , tableId] = name.split("/");
+                return `${projectId}.${datasetId}.${tableId}`;
+              }),
+              writeMetadata,
+            },
+          });
+          return { topic, table, subscription };
+        });
+
+      // A fresh table grant can take up to a minute to reach Pub/Sub, which
+      // checks the writer's access when it creates the subscription.
+      yield* stack.deploy(writerStack);
+      yield* Effect.sleep("60 seconds");
+
+      const created = yield* stack.deploy(bigqueryStack(true));
+      const tableRef = `${created.table.project}.${created.table.datasetId}.${created.table.tableId}`;
+      expect(created.subscription.bigqueryConfig).toEqual({
+        table: tableRef,
+        useTopicSchema: false,
+        useTableSchema: false,
+        writeMetadata: true,
+        dropUnknownFields: false,
+      });
+
+      const fetched = yield* getSubscription(created.subscription.name);
+      expect(fetched.bigqueryConfig?.table).toEqual(tableRef);
+      expect(fetched.bigqueryConfig?.writeMetadata).toBe(true);
+
+      const published = yield* pubsub.publishProjectsTopics({
+        topic: created.topic.name,
+        body: { messages: [{ data: btoa("impression-1") }] },
+      });
+      const messageId = published.messageIds?.[0];
+      expect(messageId).toEqual(expect.any(String));
+
+      const rows = yield* bigquery
+        .queryJobs({
+          projectId: created.table.project,
+          body: {
+            query: `SELECT DISTINCT data, message_id FROM ${created.table.datasetId}.${created.table.tableId}`,
+            useLegacySql: false,
+            location: created.table.location,
+          },
+        })
+        .pipe(
+          Effect.map(({ rows = [] }) => rows.map((row) => row.f?.map((cell) => cell.v))),
+          Effect.repeat({
+            schedule: Schedule.spaced("2 seconds"),
+            until: (rows) => rows.length > 0,
+            times: 30,
+          }),
+        );
+      expect(rows).toEqual([["impression-1", messageId]]);
+
+      const updated = yield* stack.deploy(bigqueryStack(false));
+      expect(updated.subscription.name).toEqual(created.subscription.name);
+      expect(updated.subscription.bigqueryConfig).toMatchObject({
+        table: tableRef,
+        writeMetadata: false,
+      });
+
+      const fetchedUpdated = yield* getSubscription(updated.subscription.name);
+      expect(fetchedUpdated.bigqueryConfig?.table).toEqual(tableRef);
+      expect(fetchedUpdated.bigqueryConfig?.writeMetadata ?? false).toBe(false);
+
+      yield* stack.destroy();
+      expect(yield* waitUntilGone(created.subscription.name)).toEqual("gone");
+    }).pipe(logLevel),
+  { tags: ["provider:gcp", "provider:gcp:pubsub", "live"], timeout: 300_000 },
 );
