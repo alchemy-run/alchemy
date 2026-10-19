@@ -275,9 +275,6 @@
       "path": "./examples/aws-website-vite/tsconfig.json"
     },
     {
-      "path": "./examples/cloudflare-agent/tsconfig.json"
-    },
-    {
       "path": "./examples/cloudflare-preview-benchmark/tsconfig.json"
     },
     {

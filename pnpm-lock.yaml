@@ -1901,27 +1901,6 @@ importers:
         specifier: 'catalog:'
         version: 8.3.4(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1)
 
-  examples/cloudflare-agent:
-    dependencies:
-      '@alchemy.run/cloudflare':
-        specifier: workspace:*
-        version: link:../../packages/cloudflare
-      '@alchemy.run/github':
-        specifier: workspace:*
-        version: link:../../packages/github
-      '@effect/platform-bun':
-        specifier: 'catalog:'
-        version: 4.0.4(effect@4.0.4)
-      '@effect/platform-node':
-        specifier: 'catalog:'
-        version: 4.0.4(effect@4.0.4)(redis@6.2.1)
-      alchemy:
-        specifier: workspace:*
-        version: link:../../packages/alchemy
-      effect:
-        specifier: 4.0.4
-        version: 4.0.4
-
   examples/cloudflare-better-auth:
     dependencies:
       '@alchemy.run/better-auth':
