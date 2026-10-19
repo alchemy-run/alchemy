@@ -115,10 +115,10 @@ const imagePolicyStatements = <Req, Res, Err, Self>(
 
 /**
  * Build a MicroVM runtime binding bound to a {@link MicrovmImage}. At deploy it
- * grants the IAM statements to the host via `AWSBindings.bind` — a native
- * host's own role, or the role minted for an external host. At runtime it
- * calls the distilled operation resolved with `AWSBindings.withCredentials`,
- * signing in the image's region on an external host.
+ * grants the IAM statements to the host via `AWSBindings.bind`: the host's
+ * own role, or the Role Alchemy creates for it. At runtime it calls the
+ * distilled operation resolved with `AWSBindings.withCredentials`, signing in
+ * the image's region on a host with a created key.
  */
 export const makeImageBinding = <Req, Res, Err, Self>(
   options: ImageBindingOptions<Req, Res, Err, Self>,
@@ -132,7 +132,7 @@ export const makeImageBinding = <Req, Res, Err, Self>(
         // Region is derived from the resolved image ARN — via `Effect.map` of
         // the accessor, NOT a second Output binding (whose env key would embed
         // the mapper's source text and is brittle).
-        // resolved per bind because an external host signs in the image's own region
+        // resolved per bind because a host with a created key signs in the image's own region
         const run = yield* AWSBindings.withCredentials(
           options.operation,
           Effect.succeed(Effect.map(imageArn, regionFromArn)),

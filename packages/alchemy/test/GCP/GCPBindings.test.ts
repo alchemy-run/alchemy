@@ -1,34 +1,34 @@
 import { describe, expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as GCP from "@/GCP";
-import { isNativeHost } from "@/GCP/NativeHost.ts";
+import { runsAsServiceAccount } from "@/GCP/GCPBindings.ts";
 import type { ResourceLike } from "@/Resource.ts";
 
 const host = (Type: string, Props?: object) =>
   ({ Type, LogicalId: "Host", FQN: "Host", Props }) as ResourceLike;
 
-describe("GCP isNativeHost", { tags: ["unit", "provider:gcp", "local"] }, () => {
-  it("accepts GCP platforms", () => {
+describe("GCPBindings.runsAsServiceAccount", { tags: ["unit", "provider:gcp", "local"] }, () => {
+  it("accepts Cloud Run and Cloud Functions", () => {
     for (const Type of [
       "GCP.Run.Service",
       "GCP.Run.Job",
       "GCP.Run.WorkerPool",
       "GCP.CloudFunctions.Function",
     ]) {
-      expect(isNativeHost(host(Type))).toBe(true);
+      expect(runsAsServiceAccount(host(Type))).toBe(true);
     }
   });
 
-  it("accepts Kubernetes workloads on GKE, whose grants go to the cluster adapter", () => {
+  it("accepts Kubernetes workloads on GKE (Workload Identity)", () => {
     const gke = { Type: "GCP.Container.Cluster", LogicalId: "Cluster" };
-    expect(isNativeHost(host("Kubernetes.Deployment", { cluster: gke }))).toBe(true);
+    expect(runsAsServiceAccount(host("Kubernetes.Deployment", { cluster: gke }))).toBe(true);
     expect(
-      isNativeHost(
+      runsAsServiceAccount(
         host("Kubernetes.Job", { cluster: { auth: { kind: "gcp-gke", cluster: "c" } } }),
       ),
     ).toBe(true);
     expect(
-      isNativeHost(
+      runsAsServiceAccount(
         host("Kubernetes.Job", {
           cluster: { connection: { auth: { kind: "gcp-gke", cluster: "c" } } },
         }),
@@ -39,7 +39,7 @@ describe("GCP isNativeHost", { tags: ["unit", "provider:gcp", "local"] }, () => 
   it("accepts a Kubernetes workload on a GKE cluster ref", () =>
     Effect.gen(function* () {
       const cluster = yield* GCP.Container.Cluster.ref("Cluster");
-      expect(isNativeHost(host("Kubernetes.Deployment", { cluster }))).toBe(true);
+      expect(runsAsServiceAccount(host("Kubernetes.Deployment", { cluster }))).toBe(true);
     }).pipe(Effect.runSync));
 
   it("rejects Kubernetes workloads on other clusters", () => {
@@ -47,14 +47,13 @@ describe("GCP isNativeHost", { tags: ["unit", "provider:gcp", "local"] }, () => 
     const local = { Type: "Kubernetes.LocalCluster", LogicalId: "Cluster" };
     const kubeconfig = { auth: { kind: "kubeconfig", context: "prod" } };
     for (const cluster of [eks, local, kubeconfig, undefined]) {
-      expect(isNativeHost(host("Kubernetes.Deployment", { cluster }))).toBe(false);
+      expect(runsAsServiceAccount(host("Kubernetes.Deployment", { cluster }))).toBe(false);
     }
   });
 
-  it("rejects external hosts, GCP resources that aren't platforms, and no host", () => {
-    expect(isNativeHost(host("Cloudflare.Worker"))).toBe(false);
-    expect(isNativeHost(host("AWS.Lambda.Function"))).toBe(false);
-    expect(isNativeHost(host("GCP.Storage.Bucket"))).toBe(false);
-    expect(isNativeHost(undefined)).toBe(false);
+  it("rejects hosts outside GCP and GCP resources that run no code", () => {
+    expect(runsAsServiceAccount(host("Cloudflare.Worker"))).toBe(false);
+    expect(runsAsServiceAccount(host("AWS.Lambda.Function"))).toBe(false);
+    expect(runsAsServiceAccount(host("GCP.Storage.Bucket"))).toBe(false);
   });
 });

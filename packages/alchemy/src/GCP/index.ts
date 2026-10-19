@@ -3,7 +3,6 @@ export * from "./Credentials.ts";
 export * from "./Environment.ts";
 export * as GCPBindings from "./GCPBindings.ts";
 export * from "./Labels.ts";
-export { isNativeHost, type NativeHost } from "./NativeHost.ts";
 export * from "./Providers.ts";
 export * from "./Region.ts";
 export * as AIPlatform from "./AIPlatform/index.ts";

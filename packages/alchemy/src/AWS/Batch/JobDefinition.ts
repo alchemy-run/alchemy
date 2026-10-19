@@ -33,7 +33,6 @@ import type { Credentials } from "../Credentials.ts";
 import { buildAndPushEcrImage } from "../ECR/Image.ts";
 import { AWSEnvironment, type AccountID } from "../Environment.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
-import { nativeHostBundle } from "../NativeHost.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 
@@ -814,7 +813,7 @@ export const JobDefinitionProvider = () =>
           plugins?: rolldown.RolldownPluginOption,
         ) {
           return yield* Bundle.build(
-            nativeHostBundle({
+            {
               ...props.build?.input,
               input: entry,
               cwd,
@@ -832,7 +831,7 @@ export const JobDefinitionProvider = () =>
                 ...props.build?.input?.resolve,
               },
               plugins: [props.build?.input?.plugins, plugins],
-            }),
+            },
             {
               ...props.build?.output,
               format: "esm",

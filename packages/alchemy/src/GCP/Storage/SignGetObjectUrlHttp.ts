@@ -82,7 +82,7 @@ export const SignGetObjectUrlHttp = Layer.effect(
     );
 
     return Effect.fn(function* (bucket: Bucket) {
-      yield* GCPBindings.requireNativeHost("GCP.Storage.SignGetObjectUrl");
+      yield* GCPBindings.requireServiceAccountHost("GCP.Storage.SignGetObjectUrl");
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         yield* GCPBindings.bind`GCP.Storage.SignGetObjectUrl(${bucket})`({
           iam: [

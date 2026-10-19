@@ -3,7 +3,6 @@ export * from "./Assets.ts";
 export * from "./Bootstrap.ts";
 export * from "./Environment.ts";
 export * as AWSBindings from "./AWSBindings.ts";
-export { isNativeHost, type NativeHost } from "./NativeHost.ts";
 export * from "./Providers.ts";
 export * from "./StateStore/index.ts";
 

@@ -17,7 +17,6 @@ import { zipCode } from "../../Util/zip.ts";
 import { Assets } from "../Assets.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
-import { nativeHostBundle } from "../NativeHost.ts";
 
 /**
  * Binding contract accepted by EC2-hosted runtimes: environment variables and
@@ -170,7 +169,7 @@ export const createEc2HostedSupport = ({
       plugins?: rolldown.RolldownPluginOption,
     ) {
       return yield* Bundle.build(
-        nativeHostBundle({
+        {
           ...props.build?.input,
           input: entry,
           cwd,
@@ -188,7 +187,7 @@ export const createEc2HostedSupport = ({
             ...props.build?.input?.resolve,
           },
           plugins: [props.build?.input?.plugins, plugins],
-        }),
+        },
         {
           ...props.build?.output,
           format: "esm",

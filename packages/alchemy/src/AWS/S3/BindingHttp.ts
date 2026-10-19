@@ -13,12 +13,12 @@ import type { Bucket } from "./Bucket.ts";
  *
  * - the deploy-time half registers `Allow(host, tag(bucket))` with the
  *   requested actions on the bound bucket (object-level `${arn}/*` or the
- *   bucket ARN itself, per `iamResources`). On a native AWS host the
- *   statements go on the host's role; on an external host they go on the
- *   least-privilege role minted for it (see `AWSBindings.bind`);
+ *   bucket ARN itself, per `iamResources`). On a host that runs as an IAM
+ *   role the statements go on that role; on any other host they go on the
+ *   Role Alchemy creates for it (see `AWSBindings.bind`);
  * - the runtime callable injects the resolved bucket name as `Bucket`; the
- *   operation is resolved with `AWSBindings.withCredentials`, so an external
- *   host signs with its assumed role in the bucket's region.
+ *   operation is resolved with `AWSBindings.withCredentials`, so a host with
+ *   a created key signs with the assumed Role in the bucket's region.
  *
  * Genuinely-different bindings stay bespoke: `PresignGetObject` /
  * `PresignPutObject` (SigV4 presigners, not API operations).
@@ -29,7 +29,7 @@ export const makeBucketHttpBinding = <I extends { Bucket?: string }, A, E, R>(op
   /**
    * The distilled operation; `Bucket` is injected from the bound bucket.
    * Resolved with the host's credentials (see `AWSBindings.withCredentials`),
-   * signing in the bucket's region on an external host.
+   * signing in the bucket's region on a host with a created key.
    */
   operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
   /** IAM actions granted on the bound bucket. */
@@ -55,7 +55,7 @@ export const makeBucketHttpBinding = <I extends { Bucket?: string }, A, E, R>(op
     return Effect.fn(function* <B extends Bucket>(bucket: B) {
       const BucketName = yield* bucket.bucketName;
       const BucketRegion = yield* bucket.region;
-      // resolved per bind because an external host signs in the bucket's own region
+      // resolved per bind because a host with a created key signs in the bucket's own region
       const op = yield* AWSBindings.withCredentials(
         options.operation,
         Effect.succeed(BucketRegion),

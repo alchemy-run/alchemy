@@ -5,7 +5,6 @@ import {
   type ImageRegistryTarget,
   type ImageSourceLike,
 } from "../../Docker/ImageSource.ts";
-import { nativeHostBundle } from "../NativeHost.ts";
 import { getEcrRegistryCredentials } from "./Image.ts";
 
 /**
@@ -108,15 +107,6 @@ await bootstrap(entrypoint);
 `;
 
 /**
- * An ECR image runs on a native AWS host (ECS, EKS), so a bundled `main`
- * folds `__ALCHEMY_NATIVE_HOST__` to `"AWS"` (see `nativeHostBundle`).
- */
-const onNativeHost = <S extends ImageSourceLike>(source: S): S =>
-  source.main === undefined
-    ? source
-    : { ...source, build: { ...source.build, input: nativeHostBundle(source.build?.input ?? {}) } };
-
-/**
  * Init-time constructor for the ECR image-source resolver: the shared
  * container image pipeline pushing into an auto-created ECR repository.
  */
@@ -184,10 +174,7 @@ export const makeImageSource = Effect.gen(function* () {
       hasTag: hasTag(options.repositoryName),
       credentials: getEcrRegistryCredentials,
     } satisfies ImageRegistryTarget<any>;
-    const resolved = yield* images.resolve(
-      { ...options, source: onNativeHost(options.source) },
-      target,
-    );
+    const resolved = yield* images.resolve(options, target);
     return {
       imageUri: resolved.imageUri,
       repositoryName: options.repositoryName,
@@ -196,12 +183,7 @@ export const makeImageSource = Effect.gen(function* () {
     } satisfies ResolvedImage;
   });
 
-  const hash = (options: Parameters<typeof images.hash>[0]) =>
-    images.hash({ ...options, source: onNativeHost(options.source) });
-  const watchMain = (options: Parameters<typeof images.watchMain>[0]) =>
-    images.watchMain({ ...options, source: onNativeHost(options.source) });
-
-  return { resolve, hash, watchMain };
+  return { resolve, hash: images.hash, watchMain: images.watchMain };
 });
 
 /** The resolver service returned by {@link makeImageSource}. */

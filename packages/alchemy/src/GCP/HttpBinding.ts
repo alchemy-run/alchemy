@@ -9,9 +9,9 @@ import type { GcpIamResourceKind } from "./IamPolicy.ts";
 /**
  * Distilled ops are `OperationMethod`s: resolve them once at Layer
  * construction through `GCPBindings.withCredentials`, so the inner runtime
- * Effect is `Effect<A, E>` and does not leak `GcpOpContext`. A native host's
- * Layer provides Credentials/HttpClient; `withCredentials` provides them
- * for an external host.
+ * Effect is `Effect<A, E>` and does not leak `GcpOpContext`. On a host that
+ * runs as a service account its Layer provides Credentials/HttpClient; on
+ * any other host `withCredentials` provides them from the created key.
  */
 export type GcpHttpOp<I, A, E> = Effect.Effect<
   (input: I) => Effect.Effect<A, E>,

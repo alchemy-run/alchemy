@@ -23,15 +23,13 @@ export const ConnectCacheClusterHttp = Layer.effect(
               String(tls ?? false),
             ),
           },
-          ...(options?.subnetIds || options?.securityGroupIds
-            ? {
-                vpc: {
-                  subnetIds: options?.subnetIds ?? [],
-                  securityGroupIds: options?.securityGroupIds ?? [],
-                },
-              }
-            : {}),
         });
+        if (options?.subnetIds || options?.securityGroupIds) {
+          yield* AWSBindings.bindVpc`AWS.ElastiCache.ConnectCacheCluster(${cluster})`({
+            subnetIds: options?.subnetIds ?? [],
+            securityGroupIds: options?.securityGroupIds ?? [],
+          });
+        }
       }
       return Effect.gen(function* () {
         const endpoints = unpackEnvValue<Array<{ address: string; port: number }>>(

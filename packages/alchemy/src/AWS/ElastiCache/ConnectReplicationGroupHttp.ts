@@ -41,15 +41,13 @@ export const ConnectReplicationGroupHttp = Layer.effect(
             [`${prefix}_READER_HOST`]: readerHost,
             [`${prefix}_READER_PORT`]: readerPort,
           },
-          ...(options?.subnetIds || options?.securityGroupIds
-            ? {
-                vpc: {
-                  subnetIds: options?.subnetIds ?? [],
-                  securityGroupIds: options?.securityGroupIds ?? [],
-                },
-              }
-            : {}),
         });
+        if (options?.subnetIds || options?.securityGroupIds) {
+          yield* AWSBindings.bindVpc`AWS.ElastiCache.ConnectReplicationGroup(${group})`({
+            subnetIds: options?.subnetIds ?? [],
+            securityGroupIds: options?.securityGroupIds ?? [],
+          });
+        }
       }
       return Effect.gen(function* () {
         const host = unpackEnvValue<string>(process.env[`${prefix}_HOST`]);

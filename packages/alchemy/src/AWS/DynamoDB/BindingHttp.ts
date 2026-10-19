@@ -18,12 +18,11 @@ import type { Table } from "./Table.ts";
  *
  * Every binding works on any host (see `AWSBindings.ts`):
  *
- * - on a native AWS host the deploy-time grant goes on the host's role and
- *   requests use the ambient `Credentials` / `Region`;
- * - on an external host the grant goes on the least-privilege role minted
- *   for the host, and each operation is resolved with
- *   `AWSBindings.withCredentials` to sign with the assumed role in the bound
- *   table's region (parsed from its ARN).
+ * - on a host that runs as an IAM role the deploy-time grant goes on that
+ *   role and requests use the ambient `Credentials` / `Region`;
+ * - on any other host the grant goes on the Role Alchemy creates for it, and
+ *   each operation is resolved with `AWSBindings.withCredentials` to sign
+ *   with that Role in the bound table's region (parsed from its ARN).
  */
 
 /**
@@ -39,7 +38,7 @@ export const grantTables = (label: string, policyStatements: () => Input<PolicyS
   });
 
 /**
- * The region an external host signs requests in, for
+ * The region a host with a created key signs requests in, for
  * `AWSBindings.withCredentials`: the region of the bound tables, parsed from
  * their ARNs (which this binds onto the host). Tables bound together must
  * share one region.
@@ -77,7 +76,7 @@ export const makeAccountHttpBinding = <I, A, E, R>(options: {
   /**
    * The distilled operation, invoked with the caller's request as-is.
    * Resolved with the host's credentials (see `AWSBindings.withCredentials`),
-   * signing in the stack's region on an external host.
+   * signing in the stack's region on a host with a created key.
    */
   operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
   /** IAM actions granted on `*`. */
@@ -111,7 +110,7 @@ export const makeTableHttpBinding = <I extends { TableName?: string }, A, E, R>(
   /**
    * The distilled operation; `TableName` is injected from the table.
    * Resolved with the host's credentials (see `AWSBindings.withCredentials`),
-   * signing in the table's region on an external host.
+   * signing in the table's region on a host with a created key.
    */
   operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
   /** IAM actions granted on `resources`. */
@@ -122,7 +121,7 @@ export const makeTableHttpBinding = <I extends { TableName?: string }, A, E, R>(
   Effect.gen(function* () {
     return Effect.fn(function* (table: Table) {
       const TableName = yield* table.tableName;
-      // resolved per bind because an external host signs in the table's own region
+      // resolved per bind because a host with a created key signs in the table's own region
       const op = yield* AWSBindings.withCredentials(options.operation, tablesRegion([table]));
       yield* grantTables(`${options.tag}(${table.LogicalId})`, () => [
         {
@@ -162,7 +161,7 @@ export const makeTableArnHttpBinding = <
   /**
    * The distilled operation; the table ARN is injected under `key`.
    * Resolved with the host's credentials (see `AWSBindings.withCredentials`),
-   * signing in the table's region on an external host.
+   * signing in the table's region on a host with a created key.
    */
   operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
   /** IAM actions granted on `resources`. */
@@ -173,7 +172,7 @@ export const makeTableArnHttpBinding = <
   Effect.gen(function* () {
     return Effect.fn(function* (table: Table) {
       const TableArn = yield* table.tableArn;
-      // resolved per bind because an external host signs in the table's own region
+      // resolved per bind because a host with a created key signs in the table's own region
       const op = yield* AWSBindings.withCredentials(
         options.operation,
         Effect.succeed(Effect.map(TableArn, regionFromArn)),
@@ -206,7 +205,7 @@ export const makeTableIamHttpBinding = <I, A, E, R>(options: {
   /**
    * The distilled operation, invoked with the caller's request as-is.
    * Resolved with the host's credentials (see `AWSBindings.withCredentials`),
-   * signing in the table's region on an external host.
+   * signing in the table's region on a host with a created key.
    */
   operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
   /** IAM actions granted on `resources`. */
@@ -216,7 +215,7 @@ export const makeTableIamHttpBinding = <I, A, E, R>(options: {
 }) =>
   Effect.gen(function* () {
     return Effect.fn(function* (table: Table) {
-      // resolved per bind because an external host signs in the table's own region
+      // resolved per bind because a host with a created key signs in the table's own region
       const op = yield* AWSBindings.withCredentials(options.operation, tablesRegion([table]));
       yield* grantTables(`${options.tag}(${table.LogicalId})`, () => [
         {

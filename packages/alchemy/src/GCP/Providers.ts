@@ -1518,7 +1518,6 @@ import {
   DatasetsHl7V2StoresMessage,
   DatasetsHl7V2StoresMessageProvider,
 } from "./Healthcare/DatasetsHl7V2StoresMessage.ts";
-import { ExternalHostAccount, ExternalHostAccountProvider } from "./IAM/ExternalHostAccount.ts";
 import { HostServiceAccount, HostServiceAccountProvider } from "./IAM/HostServiceAccount.ts";
 import { Member as IamMember, MemberProvider as IamMemberProvider } from "./IAM/Member.ts";
 import { Policy as IamPolicy, PolicyProvider as IamPolicyProvider } from "./IAM/Policy.ts";
@@ -1526,6 +1525,10 @@ import {
   ServiceAccount as IamServiceAccount,
   ServiceAccountProvider as IamServiceAccountProvider,
 } from "./IAM/ServiceAccount.ts";
+import {
+  ServiceAccountKey as IamServiceAccountKey,
+  ServiceAccountKeyProvider as IamServiceAccountKeyProvider,
+} from "./IAM/ServiceAccountKey.ts";
 import {
   BrandsIdentityAwareProxyClient,
   BrandsIdentityAwareProxyClientProvider,
@@ -3574,7 +3577,6 @@ const makeProviders = () =>
           EnvironmentsApisRevisionsDebugsession,
           IamPolicy,
           HostServiceAccount,
-          ExternalHostAccount,
           IamMember,
         ]) as unknown as Effect.Effect<{ providers: Record<string, any> }, never, never>).providers,
       );
@@ -3585,6 +3587,7 @@ const makeProviders = () =>
           SasportalSignedNodesDeploymentsDevice,
           JobTemplate,
           IamServiceAccount,
+          IamServiceAccountKey,
           ProjectService,
         ]) as unknown as Effect.Effect<{ providers: Record<string, any> }, never, never>).providers,
       );
@@ -4704,9 +4707,9 @@ const makeProviders = () =>
                 EnvironmentsApisRevisionsDebugsessionProvider(),
                 IamPolicyProvider(),
                 HostServiceAccountProvider(),
-                ExternalHostAccountProvider(),
                 IamMemberProvider(),
                 IamServiceAccountProvider(),
+                IamServiceAccountKeyProvider(),
                 ProjectServiceProvider(),
                 SasportalSignedCustomersDeploymentsDeviceProvider(),
                 SasportalSignedNodesDeploymentsDeviceProvider(),

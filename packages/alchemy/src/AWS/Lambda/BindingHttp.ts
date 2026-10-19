@@ -29,7 +29,7 @@ export const makeFunctionHttpBinding = <I extends { FunctionName?: string }, A, 
   /**
    * The distilled operation; `FunctionName` is injected from the function.
    * Resolved with the host's credentials (see `AWSBindings.withCredentials`),
-   * signing in the function's region on an external host.
+   * signing in the function's region on a host with a created key.
    */
   operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
   /** IAM actions granted on `resources`. */
@@ -40,7 +40,7 @@ export const makeFunctionHttpBinding = <I extends { FunctionName?: string }, A, 
   Effect.gen(function* () {
     return Effect.fn(function* (func: Function) {
       const FunctionArn = yield* func.functionArn;
-      // resolved per bind because an external host signs in the function's own region
+      // resolved per bind because a host with a created key signs in the function's own region
       const op = yield* AWSBindings.withCredentials(
         options.operation,
         Effect.succeed(Effect.map(FunctionArn, regionFromArn)),

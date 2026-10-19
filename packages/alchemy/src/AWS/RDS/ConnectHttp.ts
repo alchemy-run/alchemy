@@ -68,18 +68,15 @@ export const ConnectHttp = Layer.effect(
             : undefined;
 
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        // DECISION #5: VPC attachment is requested declaratively through
-        // the host's `vpc` binding channel (and remains available as a
-        // plain Function prop for the manual case).
+        // Attach the host to the database's VPC (also available as a plain
+        // Function prop for the manual case).
         const vpc =
           options.subnetIds !== undefined || options.securityGroupIds !== undefined
             ? {
-                vpc: {
-                  subnetIds: options.subnetIds ?? [],
-                  securityGroupIds: options.securityGroupIds ?? [],
-                },
+                subnetIds: options.subnetIds ?? [],
+                securityGroupIds: options.securityGroupIds ?? [],
               }
-            : {};
+            : undefined;
         if (options.auth === "iam") {
           yield* AWSBindings.bind`AWS.RDS.Connect(${resource})`({
             policyStatements: [
@@ -89,7 +86,6 @@ export const ConnectHttp = Layer.effect(
                 Resource: [dbUserArn(resource, options.username)],
               },
             ],
-            ...vpc,
           });
         } else {
           yield* AWSBindings.bind`AWS.RDS.Connect(${options.secret})`({
@@ -100,8 +96,10 @@ export const ConnectHttp = Layer.effect(
                 Resource: [options.secret.secretArn],
               },
             ],
-            ...vpc,
           });
+        }
+        if (vpc !== undefined) {
+          yield* AWSBindings.bindVpc`AWS.RDS.Connect(${resource})`(vpc);
         }
       }
 

@@ -1,13 +1,13 @@
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as storage from "@distilled.cloud/gcp/storage_v1";
+import * as Alchemy from "alchemy";
 import { describe, expect } from "alchemy-test";
+import * as GCP from "alchemy/GCP";
+import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
-import * as Cloudflare from "@/Cloudflare";
-import * as GCP from "@/GCP";
-import * as Alchemy from "@/index.ts";
-import * as Test from "@/Test/Alchemy";
 import ExternalHostWorker, { Bucket } from "./fixtures/worker.ts";
 
 const providers = Layer.mergeAll(GCP.providers(), Cloudflare.providers());

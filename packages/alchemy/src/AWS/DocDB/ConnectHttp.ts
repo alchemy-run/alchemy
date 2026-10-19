@@ -28,17 +28,14 @@ export const ConnectHttp = Layer.effect(
         : yield* cluster.masterUserSecretArn;
 
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        // DocumentDB is VPC-only — request the host's VPC attachment
-        // declaratively through the `vpc` binding channel.
+        // DocumentDB is VPC-only: attach the host to the cluster's VPC.
         const vpc =
           options?.subnetIds !== undefined || options?.securityGroupIds !== undefined
             ? {
-                vpc: {
-                  subnetIds: options?.subnetIds ?? [],
-                  securityGroupIds: options?.securityGroupIds ?? [],
-                },
+                subnetIds: options?.subnetIds ?? [],
+                securityGroupIds: options?.securityGroupIds ?? [],
               }
-            : {};
+            : undefined;
         const secretResource = options?.secret
           ? options.secret.secretArn
           : Output.map(cluster.masterUserSecretArn, (arn) => {
@@ -64,8 +61,10 @@ export const ConnectHttp = Layer.effect(
               Resource: [secretResource],
             },
           ],
-          ...vpc,
         });
+        if (vpc !== undefined) {
+          yield* AWSBindings.bindVpc`AWS.DocDB.Connect(${cluster})`(vpc);
+        }
       }
 
       return Effect.gen(function* () {

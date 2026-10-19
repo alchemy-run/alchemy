@@ -1,11 +1,11 @@
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as GCP from "alchemy/GCP";
+import type { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Layer from "effect/Layer";
-import * as Cloudflare from "@/Cloudflare/index.ts";
-import * as GCP from "@/GCP";
-import type { RuntimeContext } from "@/RuntimeContext.ts";
 
 export const Bucket = GCP.Storage.Bucket("ExternalHostBucket", {
   location: "US-CENTRAL1",

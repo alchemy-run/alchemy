@@ -1,22 +1,37 @@
+import type { ResolvedCredentials } from "@distilled.cloud/aws/Credentials";
+import * as Endpoint from "@distilled.cloud/aws/Endpoint";
+import { Region, type RegionName } from "@distilled.cloud/aws/Region";
 import * as Effect from "effect/Effect";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Redacted from "effect/Redacted";
+import { AlchemyContext } from "../AlchemyContext.ts";
 import * as Binding from "../Binding.ts";
 import type { Input } from "../Input.ts";
-import { externalAwsAccess, externalHost, externalServices } from "./ExternalHost.ts";
+import * as Output from "../Output.ts";
+import { isResourceOfType, type ResourceLike } from "../Resource.ts";
+import { CurrentRuntimeContext } from "../RuntimeContext.ts";
+import { DEFAULT_LOCAL_ENDPOINT } from "./AuthProvider.ts";
+import { Credentials, makeAssumeRoleResolver } from "./Credentials.ts";
+import { AccessKey } from "./IAM/AccessKey.ts";
 import type { PolicyStatement } from "./IAM/Policy.ts";
-import { isNativeHost, type NativeHost } from "./NativeHost.ts";
+import { Role } from "./IAM/Role.ts";
+import { User } from "./IAM/User.ts";
+import { CurrentRegion } from "./Region.ts";
 
 /**
- * How a binding's host reaches AWS:
+ * How an AWS binding reaches AWS from its host:
  *
- * - **native host** (see `isNativeHost`): statements go on the host's own role and
- *   calls use its ambient credentials;
- * - **external host** (a Cloudflare Worker, Cloud Run, …): statements go on a
- *   role minted for the host (see `ExternalHost.ts`) and calls use that
- *   role's assumed credentials;
- * - **no host** (a script or deploy-time Action): nothing is bound and
- *   calls use the deployer's credentials.
+ * - the host runs as an IAM role (Lambda, ECS, EC2, …): statements go on that
+ *   role, and calls use its ambient credentials;
+ * - any other host (a Cloudflare Worker, Cloud Run, a GKE pod): Alchemy
+ *   creates an IAM User and AccessKey that may assume a Role, puts the
+ *   statements on the Role, and binds the key into the host's env;
+ * - no host (a script or deploy-time Action): nothing is bound and calls use
+ *   the deployer's credentials.
  *
- * Import it as a namespace. A binding resolves its operation with
+ * Import it as a namespace. A binding resolves its operations with
  * {@link withCredentials} when its layer is built, and binds to the host with
  * {@link bind} behind its own `__ALCHEMY_RUNTIME__` guard:
  *
@@ -37,75 +52,82 @@ import { isNativeHost, type NativeHost } from "./NativeHost.ts";
  * ```
  */
 
-/**
- * Resolve a distilled operation (or several, with `Effect.all`) with the
- * host's AWS credentials: as-is on a native host and for the deployer, with
- * the minted role's assumed credentials on an external host.
- *
- * A bundle built for an AWS host folds `__ALCHEMY_NATIVE_HOST__` to `"AWS"`,
- * which drops the external path, and `ExternalHost.ts` with it.
- *
- * @param region the region an external host signs in, e.g. a bucket's own.
- *   Evaluated only on an external host: the outer Effect when the operation
- *   is resolved (it may read resource attributes onto the host), the inner
- *   one per call.
- *   @default the stack's region
- */
-export const withCredentials = <Op>(
-  operation: Effect.Effect<Op, never, any>,
-  region?: Effect.Effect<Effect.Effect<string>, never, any>,
-): Effect.Effect<Op> =>
-  // The operation's requirements are the host's: ambient on a native host
-  // (and for the deployer, with no host), provided here otherwise.
-  globalThis.__ALCHEMY_NATIVE_HOST__ === "AWS"
-    ? (operation as Effect.Effect<Op>)
-    : Effect.gen(function* () {
-        const host = yield* Binding.Host;
-        if (host === undefined || isNativeHost(host)) {
-          return yield* operation as Effect.Effect<Op>;
-        }
-        // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- only reached with a host, whose init provides RuntimeContext
-        const access = yield* externalAwsAccess(host) as Effect.Effect<
-          Effect.Success<ReturnType<typeof externalAwsAccess>>
-        >;
-        return yield* (operation as Effect.Effect<Op>).pipe(
-          Effect.provide(
-            externalServices(
-              access,
-              region ? yield* region as Effect.Effect<Effect.Effect<string>> : access.region,
-            ),
-          ),
-        );
-      });
-
-/** The VPC a native host must attach to, e.g. to reach a VPC-only database. */
-export interface HostVpc {
-  readonly subnetIds: Input<string[]>;
-  readonly securityGroupIds: Input<string[]>;
-}
-
 /** What a binding attaches to its host. */
 export interface HostBinding {
   /** The IAM statements the binding needs. */
   readonly policyStatements?: Input<PolicyStatement>[];
   /** Env vars the binding reads at runtime. */
   readonly env?: Record<string, unknown>;
-  /**
-   * The VPC the host must attach to. Applies to native hosts only: an
-   * external host reaches AWS over the public internet.
-   */
-  readonly vpc?: HostVpc;
+}
+
+/** The VPC a host must attach to, e.g. to reach a VPC-only database. */
+export interface HostVpc {
+  readonly subnetIds: Input<string[]>;
+  readonly securityGroupIds: Input<string[]>;
 }
 
 /**
- * `host.bind` for AWS bindings, on whatever host the binding runs on: a
- * native host takes the statements on its own role and the env as its own;
- * an external host's minted role takes the statements and its env takes the
- * env; without a host nothing is bound. The label names the binding like
- * `host.bind`, and is recorded as `Allow(<host>, <label>)`.
- *
- * Deploy-only: call it behind `if (!globalThis.__ALCHEMY_RUNTIME__)` so the
- * bundler drops it from the host.
+ * Env vars holding the key Alchemy creates for a host that doesn't run as an
+ * IAM role. Only {@link bind} sets them, and only on that path, so at
+ * runtime their presence is the whole decision.
+ */
+const KEY_ENV = {
+  accessKeyId: "ALCHEMY_AWS_ACCESS_KEY_ID",
+  secretAccessKey: "ALCHEMY_AWS_SECRET_ACCESS_KEY",
+  roleArn: "ALCHEMY_AWS_ROLE_ARN",
+  region: "ALCHEMY_AWS_REGION",
+} as const;
+
+/**
+ * Whether a host runs its code as an IAM role: Lambda, ECS, EC2,
+ * AutoScaling, AppRunner, Batch, or a Kubernetes workload on an EKS cluster
+ * (Pod Identity). Not a Lambda `MicrovmImage`: an image has no role of its
+ * own (`RunMicrovm` takes one per launch). Deploy-time only: it reads the
+ * host's props.
+ */
+export const runsAsRole = (host: ResourceLike): boolean => {
+  switch (host.Type) {
+    case "AWS.Lambda.Function":
+    case "AWS.Lambda.WebFunction":
+    case "AWS.ECS.Task":
+    case "AWS.ECS.Service":
+    case "AWS.EC2.Instance":
+    case "AWS.AutoScaling.LaunchTemplate":
+    case "AWS.AppRunner.Service":
+    case "AWS.Batch.JobDefinition":
+      return true;
+    case "Kubernetes.Deployment":
+    case "Kubernetes.Job":
+      return isEksCluster(host.Props?.cluster);
+    default:
+      return false;
+  }
+};
+
+/** An `AWS.EKS.Cluster`, or a cluster connection authenticating as `aws-eks`. */
+const isEksCluster = (cluster: unknown): boolean => {
+  if (isResourceOfType(cluster, "AWS.EKS.Cluster")) return true;
+  const value = cluster as { auth?: { kind?: string }; connection?: { auth?: { kind?: string } } };
+  return value?.auth?.kind === "aws-eks" || value?.connection?.auth?.kind === "aws-eks";
+};
+
+/** Label a binding `<verb>(<host>, <label>)`, as `host.bind` records it. */
+const labelled = (verb: string, label: TemplateStringsArray): TemplateStringsArray => {
+  const strings = [`${verb}(`, `, ${label[0]}`, ...label.slice(1)];
+  strings[strings.length - 1] += ")";
+  return Object.assign(strings, { raw: strings }) as unknown as TemplateStringsArray;
+};
+
+type BindTarget = {
+  bind: (...args: unknown[]) => (data: unknown) => Effect.Effect<void>;
+};
+
+const toOutput = (value: unknown) => (Output.isOutput(value) ? value : Output.literal(value));
+
+/**
+ * Attach a binding to its host, labelled `Allow(<host>, <label>)`. Call it
+ * behind a literal `if (!globalThis.__ALCHEMY_RUNTIME__)` so the bundler
+ * drops it.
  */
 export const bind =
   (label: TemplateStringsArray, ...args: unknown[]) =>
@@ -113,18 +135,144 @@ export const bind =
     Effect.gen(function* () {
       const host = yield* Binding.Host;
       if (host === undefined) return;
-      const target = isNativeHost(host)
-        ? host
-        : // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- only reached with a host, whose init provides RuntimeContext
-          externalHost(host, yield* externalAwsAccess(host) as Effect.Effect<any>);
-      const strings = ["Allow(", `, ${label[0]}`, ...label.slice(1)];
-      strings[strings.length - 1] += ")";
-      const template = Object.assign(strings, { raw: strings }) as unknown as TemplateStringsArray;
-      yield* (
-        target.bind as unknown as (...args: unknown[]) => (data: HostBinding) => Effect.Effect<void>
-      )(
-        template,
-        target satisfies NativeHost,
-        ...args,
-      )(data);
+
+      if (runsAsRole(host)) {
+        return yield* (host as unknown as BindTarget).bind(
+          labelled("Allow", label),
+          host,
+          ...args,
+        )(data);
+      }
+
+      // Declared from inside a binding: the stack deploying the host provides
+      // `AWS.Providers`, so they aren't the binding's requirement. The user may
+      // assume any role that trusts it; the role's trust policy restricts
+      // assumption to this user, which avoids a User↔Role ARN cycle.
+      const id = host.LogicalId;
+      const user = yield* User(`${id}User`, {
+        inlinePolicies: {
+          AssumeRole: {
+            Version: "2012-10-17",
+            Statement: [{ Effect: "Allow", Action: ["sts:AssumeRole"], Resource: ["*"] }],
+          },
+        },
+      }) as Effect.Effect<User>;
+      const accessKey = yield* AccessKey(`${id}AccessKey`, {
+        userName: user.userName,
+      }) as Effect.Effect<AccessKey>;
+      const role = yield* Role(`${id}Role`, {
+        assumeRolePolicyDocument: {
+          Version: "2012-10-17",
+          Statement: [
+            { Effect: "Allow", Principal: { AWS: user.userArn }, Action: ["sts:AssumeRole"] },
+          ],
+        },
+      }) as Effect.Effect<Role>;
+      if (data.policyStatements !== undefined && data.policyStatements.length > 0) {
+        yield* (role as unknown as BindTarget).bind(
+          labelled("Allow", label),
+          host,
+          ...args,
+        )({ policyStatements: data.policyStatements });
+      }
+
+      const runtime = (yield* CurrentRuntimeContext)!;
+      yield* runtime.set(KEY_ENV.accessKeyId, accessKey.accessKeyId);
+      yield* runtime.set(KEY_ENV.secretAccessKey, accessKey.secretAccessKey);
+      yield* runtime.set(KEY_ENV.roleArn, role.roleArn);
+      yield* runtime.set(
+        KEY_ENV.region,
+        Output.fromEffect(CurrentRegion.pipe(Effect.orDie)) as Output.Output<string>,
+      );
+      // Local dev: STS and the bound operations run on the emulator, reached
+      // via the same `AWS_ENDPOINT_URL` the emulator injects into Lambdas.
+      const context = yield* Effect.serviceOption(AlchemyContext);
+      if (Option.isSome(context) && context.value.dev) {
+        yield* runtime.set("AWS_ENDPOINT_URL", Output.literal(DEFAULT_LOCAL_ENDPOINT));
+      }
+      for (const [key, value] of Object.entries(data.env ?? {})) {
+        yield* runtime.set(key, toOutput(value));
+      }
     });
+
+/**
+ * Attach the host to a VPC, labelled `Vpc(<host>, <label>)`. Only a host that
+ * runs as an IAM role has a VPC to attach; any other host reaches AWS over
+ * the internet, so this skips it. Call it behind a literal
+ * `if (!globalThis.__ALCHEMY_RUNTIME__)`.
+ */
+export const bindVpc =
+  (label: TemplateStringsArray, ...args: unknown[]) =>
+  (vpc: HostVpc): Effect.Effect<void> =>
+    Effect.gen(function* () {
+      const host = yield* Binding.Host;
+      if (host === undefined || !runsAsRole(host)) return;
+      yield* (host as unknown as BindTarget).bind(labelled("Vpc", label), host, ...args)({ vpc });
+    });
+
+/**
+ * Resolve a distilled operation (or several, with `Effect.all`) with the
+ * host's AWS credentials, once when the binding's layer is built: by
+ * assuming the Role {@link bind} created for this host if there is one,
+ * as-is otherwise (the host's own role, or the deployer).
+ *
+ * @param region the region a host with a created key signs in, e.g. a
+ *   bucket's own. Its outer Effect may read resource attributes onto the
+ *   host, so it also runs at deploy for those hosts.
+ *   @default the stack's region
+ */
+export const withCredentials = <Op>(
+  operation: Effect.Effect<Op, never, any>,
+  region?: Effect.Effect<Effect.Effect<string>, never, any>,
+): Effect.Effect<Op> =>
+  Effect.gen(function* () {
+    if (!globalThis.__ALCHEMY_RUNTIME__) {
+      const host = yield* Binding.Host;
+      if (region !== undefined && host !== undefined && !runsAsRole(host)) {
+        yield* region as Effect.Effect<Effect.Effect<string>>;
+      }
+      return yield* operation as Effect.Effect<Op>;
+    }
+
+    const runtime = yield* CurrentRuntimeContext;
+    const roleArn = runtime ? yield* runtime.get<string>(KEY_ENV.roleArn) : undefined;
+    if (runtime === undefined || roleArn === undefined) {
+      return yield* operation as Effect.Effect<Op>;
+    }
+
+    // The created user's key signs `AssumeRole`; read on each refresh.
+    const base = Layer.succeed(
+      Credentials,
+      Effect.gen(function* () {
+        const secret = yield* runtime.get<string | Redacted.Redacted<string>>(
+          KEY_ENV.secretAccessKey,
+        );
+        return {
+          accessKeyId: Redacted.make((yield* runtime.get<string>(KEY_ENV.accessKeyId)) ?? ""),
+          secretAccessKey: Redacted.isRedacted(secret) ? secret : Redacted.make(secret ?? ""),
+          sessionToken: undefined,
+          // STS is global; operations provide their own Region.
+          region: "us-east-1",
+        } satisfies ResolvedCredentials;
+      }),
+    );
+    const credentials = yield* makeAssumeRoleResolver({
+      roleArn: Effect.succeed(roleArn),
+      base,
+      region: "us-east-1",
+    });
+    const callRegion =
+      region !== undefined
+        ? yield* region as Effect.Effect<Effect.Effect<string>>
+        : Effect.map(runtime.get<string>(KEY_ENV.region), (value) => value ?? "us-east-1");
+    return yield* (operation as Effect.Effect<Op>).pipe(
+      Effect.provide(
+        Layer.mergeAll(
+          Layer.succeed(Credentials, credentials),
+          Layer.succeed(Region, callRegion as Effect.Effect<RegionName>),
+          Endpoint.fromEnv(),
+          FetchHttpClient.layer,
+        ),
+      ),
+    );
+  });
