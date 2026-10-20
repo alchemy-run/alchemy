@@ -95,6 +95,7 @@ catalog:
   "@playwright/test": "^1.64.0"
   "@prisma/orm-family-sql": "^8.0.0-rc.11"
   "@prisma/orm-postgres": "^8.0.0-rc.11"
+  partyserver: "^0.5.10"
   prisma: "^8.0.0-rc.15"
   arktype: "2.2.8"
   "@prisma/dev": "^0.20.0"

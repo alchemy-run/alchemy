@@ -28,6 +28,7 @@ const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Deb
 const tempRoot = pathe.resolve(import.meta.dirname, "../../../.tmp");
 const fixtureDir = pathe.resolve(import.meta.dirname, "vite-runtime-fixture");
 const containerFixtureDir = pathe.resolve(import.meta.dirname, "vite-container-runtime-fixture");
+const partyserverFixtureDir = pathe.resolve(import.meta.dirname, "vite-partyserver-fixture");
 const hotChannelFixtureDir = pathe.resolve(import.meta.dirname, "vite-hot-channel-fixture");
 
 type Mode = "live" | "dev";
@@ -208,7 +209,7 @@ const expectWorkflow = (url: string, prefix: string) =>
 
 // `websockets`: a Durable Object answers string and ArrayBuffer messages.
 const expectWebSocket = (url: string) =>
-  Effect.promise(
+  Effect.tryPromise(
     () =>
       new Promise<Array<string>>((resolve, reject) => {
         const socket = new WebSocket(`${url.replace(/^http/, "ws")}/websocket`);
@@ -519,6 +520,65 @@ describe.concurrent(
         timeout: 300_000,
       },
     );
+
+    // `partyserver`: PartyServer routes a room's WebSocket to its Durable
+    // Object, which answers the client's message (the playground's React
+    // client, driven here over a raw WebSocket).
+    for (const mode of ["live", "dev"] as const) {
+      (mode === "live" ? test : devTest).provider(
+        `Vite runtime: PartyServer rooms answer over WebSockets${mode === "dev" ? " (dev)" : ""}`,
+        (stack) =>
+          Effect.gen(function* () {
+            yield* stack.destroy();
+            const rootDir = yield* cloneFixture(partyserverFixtureDir, {
+              prefix: "alchemy-vite-partyserver-",
+              tempRoot,
+              entries: ["package.json", "index.html", "worker"],
+            });
+            const site = yield* stack.deploy(
+              Cloudflare.Website.Vite(`VitePartyServer${mode}`, {
+                rootDir,
+                main: "./worker/index.ts",
+                workersDev: true,
+                compatibility: { date: "2024-12-30" },
+                memo: { include: ["**/*"] },
+                assets: { notFoundHandling: "single-page-application" },
+                env: {
+                  MyServer: Cloudflare.DurableObject("MyServer", { className: "MyServer" }),
+                },
+                ...(mode === "dev" ? { dev: { port: 0 } } : {}),
+              }),
+            );
+            const url = site.url!.replace(/\/$/, "");
+            yield* expectResponse(`${url}/`, (res) =>
+              res.body.includes("Vite + PartyServer")
+                ? undefined
+                : `body ${res.body.slice(0, 120)}`,
+            );
+            const reply = yield* Effect.tryPromise(
+              () =>
+                new Promise<string>((resolve, reject) => {
+                  const socket = new WebSocket(
+                    `${url.replace(/^http/, "ws")}/parties/my-server/room1`,
+                  );
+                  const timer = setTimeout(() => reject(new Error("no reply")), 30_000);
+                  socket.addEventListener("open", () => socket.send("Hello from the client!"));
+                  socket.addEventListener("message", (event) => {
+                    clearTimeout(timer);
+                    socket.close();
+                    resolve(String(event.data));
+                  });
+                  socket.addEventListener("error", () => reject(new Error("websocket error")));
+                }),
+            ).pipe(Effect.retry({ times: 5, schedule: Schedule.spaced("3 seconds") }));
+            expect(reply).toBe("Message from the server: received 'Hello from the client!'");
+          }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.ignore)), logLevel),
+        {
+          tags: ["provider:cloudflare:worker", mode === "dev" ? "local" : "live"],
+          timeout: 300_000,
+        },
+      );
+    }
 
     // Miniflare's outbound `cf.image` mock (dev only: deployed, `cf.image`
     // needs a zone with Image Transformations, which workers.dev lacks).
