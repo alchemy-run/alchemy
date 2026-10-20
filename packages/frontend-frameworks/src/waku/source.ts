@@ -128,6 +128,7 @@ export type SourceRequirements = FileSystem.FileSystem | Path.Path;
 /** Mirror of alchemy `Cloudflare/Workers/Source.SourceProvider` (narrowed E/R). */
 export interface SourceProvider {
   readonly ownsAssets: boolean;
+  readonly devAssetsBinding?: boolean;
   readonly build: (
     ctx: SourceContext,
   ) => Effect.Effect<SourceBuildOutput, WakuSourceError, SourceRequirements>;
@@ -680,6 +681,8 @@ export const makeWakuSourceProvider = (
     // Waku's assets are a build product (`dist/public`), not a props-level
     // directory — the provider reads and diffs them itself.
     ownsAssets: true,
+    // Dev runs the Worker in workerd with the Vite plugin's assets service.
+    devAssetsBinding: true,
 
     build: Effect.fn(function* (ctx) {
       const path = yield* Path.Path;
