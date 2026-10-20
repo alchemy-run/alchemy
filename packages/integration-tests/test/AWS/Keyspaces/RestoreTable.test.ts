@@ -33,7 +33,7 @@ const deleteRestoredTable = keyspaces
         Effect.flatMap(() => Effect.fail(new Error(`'${RESTORED_TABLE}' still deleting`))),
         Effect.catchTag("ResourceNotFoundException", () => Effect.void),
         Effect.retry({
-          schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(20)]),
+          schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(36)]),
         }),
       ),
     ),
