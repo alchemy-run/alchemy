@@ -28,6 +28,7 @@ const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Deb
 
 const fixtureDir = pathe.resolve(import.meta.dirname, "vite-fixture");
 const spaFixtureDir = pathe.resolve(import.meta.dirname, "vite-spa-fixture");
+const serverOnlyFixtureDir = pathe.resolve(import.meta.dirname, "vite-server-only-fixture");
 const foldkitFixtureDir = pathe.resolve(import.meta.dirname, "foldkit-fixture");
 const doFixtureDir = pathe.resolve(import.meta.dirname, "vite-do-fixture");
 const containerFixtureDir = pathe.resolve(import.meta.dirname, "vite-container-fixture");
@@ -258,6 +259,43 @@ describe.concurrent(
           yield* expectUrlContains(`${site.url!}/`, marker, {
             timeout: "120 seconds",
             label: "spa marker",
+          });
+
+          yield* stack.destroy();
+          yield* waitForWorkerToBeDeleted(site.workerName, accountId);
+        }).pipe(logLevel),
+      { tags: ["provider:cloudflare:worker", "live"], timeout: 360_000 },
+    );
+
+    test.provider(
+      "Vite: server-only Worker (no index.html) uploads public/ and binds ASSETS",
+      (stack) =>
+        Effect.gen(function* () {
+          const { accountId } = yield* yield* CloudflareEnvironment;
+
+          yield* stack.destroy();
+
+          const rootDir = yield* cloneFixture(serverOnlyFixtureDir, {
+            prefix: "alchemy-vite-server-only-",
+            tempRoot,
+            entries: ["package.json", "vite.config.ts", "src", "public"],
+          });
+
+          const site = yield* stack.deploy(
+            Effect.gen(function* () {
+              return yield* Cloudflare.Website.Vite("FixViteServerOnly", {
+                ...viteProps(rootDir, ["src/**", "public/**", "package.json", "vite.config.ts"]),
+                main: "./src/index.ts",
+              });
+            }),
+          );
+
+          expect(site.url).toBeDefined();
+          yield* expectWorkerExists(site.workerName, accountId);
+          // The Worker reads `public/robots.txt` through `env.ASSETS`.
+          yield* expectUrlContains(`${site.url!}/robots.txt`, "User-agent", {
+            timeout: "120 seconds",
+            label: "server-only public asset",
           });
 
           yield* stack.destroy();
