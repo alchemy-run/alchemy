@@ -22,3 +22,10 @@ export interface EntryEnvironment {
   /** Id of the virtual module that classifies the entry module's exports. */
   exportTypesId: string;
 }
+
+/**
+ * Marks a Worker's uncaught `fetch` error, serialized as JSON, for the dev
+ * server to revive into Vite's error page (Miniflare's
+ * `MF-Experimental-Error-Stack`).
+ */
+export const HEADER_ERROR_STACK = "MF-Experimental-Error-Stack";

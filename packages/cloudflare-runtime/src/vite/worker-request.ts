@@ -4,6 +4,7 @@ import { finished } from "node:stream";
 import type { URL as NodeURL } from "node:url";
 import type * as vite from "vite";
 import { proxyRequestHeaders } from "./forwarded-host.ts";
+import { HEADER_ERROR_STACK } from "./module-runner/constants.shared.ts";
 
 /**
  * Forwards a dev or preview server request to the Worker runtime at `target`
@@ -19,6 +20,8 @@ export function forwardWorkerRequest(
   target: NodeURL,
   proxySharedSecret: string,
   logger: vite.Logger,
+  /** Receives the Worker's uncaught error, for Vite's error page. */
+  next?: (error: Error) => void,
 ): void {
   const client = request.socket;
   // The client hung up while earlier middlewares ran.
@@ -91,6 +94,20 @@ export function forwardWorkerRequest(
   });
   upstream.on("response", (workerResponse) => {
     answered = true;
+    if (next !== undefined && workerResponse.headers[HEADER_ERROR_STACK.toLowerCase()]) {
+      // The Worker threw: revive its error for Vite's error page, as
+      // `@cloudflare/vite-plugin` does.
+      const chunks: Array<Buffer> = [];
+      workerResponse.on("data", (chunk: Buffer) => chunks.push(chunk));
+      finished(workerResponse, (error) => {
+        if (error) {
+          fail(error);
+        } else if (settle()) {
+          next(reviveError(JSON.parse(Buffer.concat(chunks).toString("utf8"))));
+        }
+      });
+      return;
+    }
     response.writeHead(workerResponse.statusCode ?? 500, workerResponse.headers);
     workerResponse.pipe(response);
     // `pipe` alone would leave the client's response open forever when the
@@ -104,4 +121,21 @@ export function forwardWorkerRequest(
     });
   });
   request.pipe(upstream);
+}
+
+interface ReducedError {
+  readonly name?: string;
+  readonly message?: string;
+  readonly stack?: string;
+  readonly cause?: ReducedError;
+}
+
+/** Revives an error the Worker serialized with `reduceError`. */
+function reviveError(reduced: ReducedError): Error {
+  const error = new Error(reduced.message, {
+    cause: reduced.cause === undefined ? undefined : reviveError(reduced.cause),
+  });
+  if (reduced.name !== undefined) error.name = reduced.name;
+  if (reduced.stack !== undefined) error.stack = reduced.stack;
+  return error;
 }

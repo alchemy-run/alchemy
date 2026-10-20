@@ -1,5 +1,5 @@
 import { DurableObject, WorkerEntrypoint, WorkflowEntrypoint } from "cloudflare:workers";
-import { INIT_PATH } from "./constants.shared.ts";
+import { HEADER_ERROR_STACK, INIT_PATH } from "./constants.shared.ts";
 import type { Env as WrapperEnv } from "./env.worker.ts";
 import { stripInternalEnv } from "./env.worker.ts";
 import { getWorkerEntryExport } from "./module-runner.worker.ts";
@@ -151,6 +151,14 @@ export function createWorkerEntrypointWrapper(
         try {
           return await proxy();
         } catch (error) {
+          // The default export's errors go to Vite's error page, as under
+          // `@cloudflare/vite-plugin`: the dev server revives this response.
+          if (exportName === "default") {
+            return Response.json(reduceError(error), {
+              status: 500,
+              headers: { [HEADER_ERROR_STACK]: "true" },
+            });
+          }
           // oxlint-disable no-console
           console.error("Error calling fetch", error);
           throw error;
@@ -436,4 +444,18 @@ function getRpcProperty(
   }
 
   return Reflect.get(ctor.prototype, key, instance);
+}
+
+/**
+ * Serializes an error for the dev server to revive (Wrangler's
+ * `middleware-miniflare3-json-error.ts`).
+ */
+function reduceError(e: unknown): unknown {
+  const errorObj = (e ?? {}) as Record<string, unknown>;
+  return {
+    name: errorObj.name,
+    message: errorObj.message ?? String(e),
+    stack: errorObj.stack,
+    cause: errorObj.cause === undefined ? undefined : reduceError(errorObj.cause),
+  };
 }

@@ -277,7 +277,7 @@ export function dev(options: CloudflareVitePluginOptions): Array<vite.Plugin> {
             return next();
           }
           const url = new NodeURL(req.originalUrl ?? req.url ?? "/", address.toString());
-          forwardWorkerRequest(req, res, url, proxySharedSecret, server.config.logger);
+          forwardWorkerRequest(req, res, url, proxySharedSecret, server.config.logger, next);
         });
       }
 
@@ -287,7 +287,7 @@ export function dev(options: CloudflareVitePluginOptions): Array<vite.Plugin> {
           // one Vite didn't serve must not come back to the Worker.
           if (VITE_ASSET_REQUEST in req) return next();
           const url = new NodeURL(req.originalUrl ?? req.url ?? "/", address.toString());
-          forwardWorkerRequest(req, res, url, proxySharedSecret, server.config.logger);
+          forwardWorkerRequest(req, res, url, proxySharedSecret, server.config.logger, next);
         });
         if (options.dev?.middlewareOrder === "pre" && middlewareBoundary !== undefined) {
           // Move the proxy middleware from the end of the stack to directly

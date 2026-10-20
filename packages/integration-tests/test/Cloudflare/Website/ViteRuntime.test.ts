@@ -65,6 +65,7 @@ const childEnvironmentFixtureDir = pathe.resolve(
   import.meta.dirname,
   "vite-child-environment-fixture",
 );
+const errorsFixtureDir = pathe.resolve(import.meta.dirname, "vite-errors-fixture");
 const hotChannelFixtureDir = pathe.resolve(import.meta.dirname, "vite-hot-channel-fixture");
 
 type Mode = "live" | "dev";
@@ -1099,6 +1100,50 @@ describe.concurrent(
         tags: ["provider:cloudflare:worker", "local"],
         timeout: 300_000,
       },
+    );
+
+    // `errors` (dev only): an error thrown by the Worker comes back as Vite's
+    // error page, whose overlay shows the message and the source-mapped
+    // location.
+    devTest.provider(
+      "Vite runtime: Worker errors reach Vite's error page with source locations (dev)",
+      (stack) =>
+        Effect.gen(function* () {
+          yield* stack.destroy();
+          const rootDir = yield* cloneFixture(errorsFixtureDir, {
+            prefix: "alchemy-vite-errors-",
+            tempRoot,
+            entries: ["package.json", "src"],
+          });
+          const site = yield* stack.deploy(
+            Cloudflare.Website.Vite("ViteErrors", {
+              rootDir,
+              main: "./src/index.ts",
+              workersDev: true,
+              compatibility: { date: "2024-12-30" },
+              memo: { include: ["**/*"] },
+              env: { NAMED_ENTRYPOINT: Cloudflare.WorkerEntrypoint("NamedEntrypoint") },
+              dev: { port: 0 },
+            }),
+          );
+          const url = site.url!.replace(/\/$/, "");
+          yield* expectText(url, "Fallback");
+          for (const [path, message, location] of [
+            ["/default-export", "a is not defined", "src/index.ts:24:"],
+            // The stack shows where the entry called the named entrypoint
+            // (as the plugin notes).
+            ["/named-entrypoint", "b is not defined", "src/index.ts:"],
+          ] as const) {
+            const res = yield* Effect.tryPromise(async () => {
+              const response = await fetch(`${url}${path}`, { headers: { accept: "text/html" } });
+              return { status: response.status, body: await response.text() };
+            });
+            expect(res.status).toBe(500);
+            expect(res.body).toContain(message);
+            expect(res.body).toContain(location);
+          }
+        }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.ignore)), logLevel),
+      { tags: ["provider:cloudflare:worker", "local"], timeout: 300_000 },
     );
 
     // Miniflare's outbound `cf.image` mock (dev only: deployed, `cf.image`
