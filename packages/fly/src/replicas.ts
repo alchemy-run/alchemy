@@ -649,6 +649,13 @@ export const leaseSnapshot = Effect.fn(function* (
         const id = machine.id;
         yield* leases.acquire([id]).pipe(
           Effect.tap(() => Effect.sync(() => leased.add(id))),
+          // A just-created Machine can 404 on the lease API while it already
+          // lists; a Machine that is really gone is dropped by the GET below.
+          Effect.retry({
+            while: (error) => error._tag === "NotFound",
+            schedule: Schedule.spaced("1 second"),
+            times: 5,
+          }),
           Effect.catchTag("NotFound", () => Effect.void),
         );
       }),
