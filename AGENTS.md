@@ -228,11 +228,13 @@ export const Neon = (url: ConnectionSource, options?: NeonOptions): Layer.Layer<
 Both render as a metadata line under the page's `Source:` blockquote. Every Layer implementation should carry these annotations — a Layer without them is an undocumented integration surface.
 
 Keep all API-generator metadata tags (`@resource`, `@binding`, `@layer`,
-`@primitive`, `@product`, `@category`, `@provides`, and `@peer`) together at the very end of
+`@primitive`, `@product`, `@category`, `@title`, `@provides`, and `@peer`) together at the very end of
 the JSDoc block. Do not put prose, sections, or examples after them: TypeScript
 treats subsequent content as part of the block tag, which breaks editor JSDoc
 rendering. The generator also supports `@group` as an alias for `@category` and
-`@label` as an alias for `@product`.
+`@label` as an alias for `@product`. `@title <Heading>` overrides a section's
+heading, which is otherwise the export name, for when the name alone is ambiguous
+on its page (`SQL.D1` documents as `SQL` on the D1 page).
 
 After editing JSDoc on a resource, run `pnpm docs:gen` to refresh the website
 docs. Run `pnpm docs:check-jsdoc` to validate the source layout, or

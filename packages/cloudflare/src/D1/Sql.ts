@@ -49,6 +49,7 @@ export type D1Config = Omit<D1Client.D1ClientConfig, "db">;
  * plan-time invocations never touch D1.
  *
  * @binding
+ * @title SQL
  */
 export const D1 = <E = never, R = never>(database: D1DatabaseSource<E, R>, config?: D1Config) =>
   Effect.map(
