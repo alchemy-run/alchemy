@@ -38,6 +38,8 @@ pub struct Device {
     fetches: AtomicU64,
     flushes: AtomicU64,
     reused_blocks: u64,
+    /// The cache file started empty (sparse zeros) at attach.
+    fresh: bool,
 }
 
 /// What `status` reports.
@@ -100,6 +102,7 @@ impl Device {
             .open(cache_path)
             .with_context(|| format!("opening cache {}", cache_path.display()))?;
         cache.set_len(size)?; // sparse
+        let fresh = reused.is_none();
         let present = reused.unwrap_or_else(|| Bitmap::new(blocks));
         let reused_blocks = present.count();
         Ok(Self {
@@ -116,6 +119,7 @@ impl Device {
             fetches: AtomicU64::new(0),
             flushes: AtomicU64::new(0),
             reused_blocks,
+            fresh,
         })
     }
 
@@ -266,6 +270,40 @@ impl Device {
         }
     }
 
+    /// Makes every block present, so the cache file is a complete image of
+    /// the head (for tools that read an image file directly). Extents the
+    /// snapshot doesn't store are zero-filled without touching the store.
+    pub fn materialize(&self) -> Result<()> {
+        let base = self.base.lock().unwrap();
+        let extents = self.size / EXTENT_SIZE;
+        for extent in 0..extents {
+            let (first, last) = (extent * BLOCKS_PER_EXTENT, (extent + 1) * BLOCKS_PER_EXTENT);
+            if self.present.all(first, last) {
+                continue;
+            }
+            let stored = self.runtime.block_on(self.volume.entry(&base, extent))?;
+            if stored.is_some() {
+                self.ensure_present(&base, extent)?;
+                continue;
+            }
+            // A zero extent: clear what a reused cache may still hold.
+            for block in first..last {
+                if !self.present.get(block) {
+                    if !self.fresh {
+                        punch_zeros(&self.cache, block * BLOCK_SIZE, BLOCK_SIZE)?;
+                    }
+                    self.present.set(block);
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// The cache file: a complete image of the head after [`Device::materialize`].
+    pub fn cache_path(&self) -> &Path {
+        &self.cache_path
+    }
+
     pub fn status(&self) -> Status {
         let base = *self.base.lock().unwrap();
         Status {
@@ -346,6 +384,20 @@ impl Drop for Flusher {
             let _ = thread.join();
         }
     }
+}
+
+/// Zeros a range of the cache file, releasing its space where the OS can.
+fn punch_zeros(file: &File, offset: u64, len: u64) -> Result<()> {
+    #[cfg(target_os = "linux")]
+    {
+        use std::os::fd::AsRawFd;
+        let mode = libc::FALLOC_FL_PUNCH_HOLE | libc::FALLOC_FL_KEEP_SIZE;
+        if unsafe { libc::fallocate(file.as_raw_fd(), mode, offset as i64, len as i64) } == 0 {
+            return Ok(());
+        }
+    }
+    file.write_all_at(&vec![0; len as usize], offset)?;
+    Ok(())
 }
 
 fn extents(offset: u64, len: u64) -> std::ops::Range<u64> {

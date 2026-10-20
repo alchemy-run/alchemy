@@ -9,6 +9,8 @@
 //! blockd history --store <spec> --head <name> [--limit <n>]
 //! blockd attach  --store <spec> --head <name> --cache <file> (--nbd /dev/nbd0 | --fuse <mountpoint>)
 //!                [--control <socket>] [--flush-every <seconds>]
+//! blockd run     --store <spec> --head <name> --cache <file> --dir <dir> --command <sh> [--keep true]
+//!                (copy mode: extract, run, write back; for hosts that can't mount)
 //! blockd disconnect --nbd /dev/nbd0   (detach a device whose blockd died)
 //! blockd control --socket <socket> --request '{"op":"flush"}'
 //! ```
@@ -113,11 +115,29 @@ fn main() -> Result<()> {
         }
         "attach" => attach(&flags, store()?, &runtime)?,
         #[cfg(target_os = "linux")]
+        "run" => {
+            let device = blockd::Device::open(
+                std::sync::Arc::new(store()?),
+                flags.required("head")?,
+                std::path::Path::new(flags.required("cache")?),
+                runtime.handle().clone(),
+            )?;
+            let options = blockd::copy::RunOptions {
+                dir: flags.required("dir")?.into(),
+                command: flags.required("command")?.to_string(),
+                keep: flags.get("keep") == Some("true"),
+            };
+            let outcome = blockd::copy::run(&device, &options)?;
+            let snapshot = device.close()?;
+            tracing::info!("ran in copy mode: {outcome:?}, head at {snapshot}");
+            std::process::exit(outcome.exit_code);
+        }
+        #[cfg(target_os = "linux")]
         "disconnect" => {
             blockd::nbd::force_disconnect(std::path::Path::new(flags.required("nbd")?))?
         }
         _ => bail!(
-            "usage: blockd <create|import|fork|reset|drop|export|heads|history|attach|control|disconnect> …"
+            "usage: blockd <create|import|fork|reset|drop|export|heads|history|attach|run|control|disconnect> …"
         ),
     }
     Ok(())
