@@ -153,12 +153,17 @@ const expectJson = (url: string, expected: unknown) =>
     { label: `${url} → ${JSON.stringify(expected)}` },
   );
 
-// Fetches once, without retrying: for sequences where each call changes state.
+// For calls that change state (increments): retries only a response that
+// never reached the Worker (a Cloudflare HTML page while a fresh workers.dev
+// URL propagates), so the Worker handles each call once.
 const fetchText = (url: string, init?: RequestInit) =>
-  Effect.promise(async () => {
+  Effect.tryPromise(async () => {
     const response = await fetch(url, init);
-    return { status: response.status, body: await response.text() };
-  });
+    const body = await response.text();
+    if (/^\s*<(!DOCTYPE|html)/i.test(body))
+      throw new Error(`not from the Worker: ${response.status}`);
+    return { status: response.status, body };
+  }).pipe(Effect.retry({ times: 10, schedule: Schedule.spaced("2 seconds") }));
 
 const unique = () => crypto.randomUUID().slice(0, 8);
 
@@ -220,15 +225,24 @@ describe.concurrent(
   { tags: ["provider:cloudflare", "provider:cloudflare:website"] },
   () => {
     // `bindings/__tests__/worker.spec.ts`
-    runtimeTests("Vite runtime: KV, Images, Analytics Engine and Rate Limiting bindings", (url) =>
-      Effect.gen(function* () {
-        yield* expectText(`${url}/kv`, "KV binding works");
-        yield* expectText(`${url}/images`, "Images binding works");
-        yield* expectText(`${url}/ae`, "AE binding works");
-        // The limit is per key, so a fresh key starts with a full quota.
-        const limited = yield* fetchText(`${url}/rate-limit?key=${unique()}`);
-        expect(limited.body).toBe("Rate limit binding works: first: true, second: false");
-      }),
+    runtimeTests(
+      "Vite runtime: KV, Images, Analytics Engine and Rate Limiting bindings",
+      (url, mode) =>
+        Effect.gen(function* () {
+          yield* expectText(`${url}/kv`, "KV binding works");
+          yield* expectText(`${url}/images`, "Images binding works");
+          yield* expectText(`${url}/ae`, "AE binding works");
+          // The limit is per key, so a fresh key starts with a full quota.
+          // Deployed, rate limiting is eventually consistent (counts are not
+          // shared at once), so the second call is only checked in dev, where
+          // the plugin's spec runs.
+          const limited = yield* fetchText(`${url}/rate-limit?key=${unique()}`);
+          expect(limited.body).toMatch(
+            mode === "dev"
+              ? /^Rate limit binding works: first: true, second: false$/
+              : /^Rate limit binding works: first: true, second: (true|false)$/,
+          );
+        }),
     );
 
     // `durable-objects` and `block-concurrency-while`
