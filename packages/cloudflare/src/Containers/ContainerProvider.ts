@@ -8,6 +8,7 @@ import { AlchemyContext } from "alchemy/AlchemyContext";
 import { getStableContextDir } from "alchemy/Bundle/TempRoot";
 import { deepEqual, isResolved } from "alchemy/Diff";
 import { materializeImageContext } from "alchemy/Image/Context";
+import { renderImageLayers } from "alchemy/Image/Layer";
 import * as Provider from "alchemy/Provider";
 import type { ScopedPlanStatusSession } from "alchemy/Report";
 import { type ResourceBinding } from "alchemy/Resource";
@@ -506,10 +507,21 @@ export const LiveContainerProvider = () =>
               ),
             );
           }
-          const { context, dockerfile } = yield* materializeInlineDockerfileContext(id, content);
+          // Binding-contributed layers (a volume's blockd, say) go after the
+          // user's content, with their context sources beside the Dockerfile.
+          const layered = props.imageLayers?.length
+            ? renderImageLayers({ preamble: content, layers: props.imageLayers })
+            : content;
+          const { context, dockerfile } = yield* materializeInlineDockerfileContext(id, layered);
+          const sources = (props.imageLayers ?? []).flatMap((layer) => layer.context ?? []);
+          const contextDigest =
+            sources.length > 0
+              ? (yield* materializeImageContext({ context, sources })).digest
+              : undefined;
           const imageHash = (yield* sha256Object({
-            dockerfile: content,
+            dockerfile: layered,
             imageName: props.publish?.repository?.toLowerCase(),
+            ...(contextDigest !== undefined ? { contextDigest } : {}),
           })).slice(0, 16);
           return {
             build: { kind: "external" as const, context, dockerfile },

@@ -221,7 +221,9 @@ export const withProgramImage = <P extends AnyContainerApplicationProps>(
   env: Record<string, string | Redacted.Redacted<string>>,
 ): Effect.Effect<P & { imageLayers?: ImageLayer[] }, ContainerConfigurationError> =>
   Effect.gen(function* () {
-    if (props.schedulingPolicy !== "durable_object" || props.main === undefined) return props;
+    if (props.schedulingPolicy !== "durable_object") return props;
+    // An image without a program still takes its bindings' layers.
+    if (props.main === undefined) return withImageLayers(props, bindings);
     const secrets = Object.entries(env)
       .filter(([, value]) => Redacted.isRedacted(value))
       .map(([name]) => name);

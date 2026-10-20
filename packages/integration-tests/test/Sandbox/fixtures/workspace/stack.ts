@@ -1,10 +1,13 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
+import { DockerLive } from "@alchemy.run/docker/Docker";
 import * as Alchemy from "alchemy";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import WorkspaceWorker from "./worker.ts";
 import TestWorkspaceLive from "./workspace.cloudflare.ts";
 
-export const providers = Cloudflare.providers();
+// The machine's image builds from a Dockerfile, with Docker.
+export const providers = Layer.mergeAll(Cloudflare.providers(), DockerLive);
 export const state = Alchemy.inMemoryState();
 
 export default Alchemy.Stack(

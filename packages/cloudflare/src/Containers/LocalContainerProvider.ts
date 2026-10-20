@@ -2,6 +2,8 @@ import { isInlineDockerfile } from "@alchemy.run/docker/Dockerfile";
 import * as Artifacts from "alchemy/Artifacts";
 import { hashDirectory } from "alchemy/Command/Memo";
 import { isResolved } from "alchemy/Diff";
+import { materializeImageContext } from "alchemy/Image/Context";
+import { renderImageLayers } from "alchemy/Image/Layer";
 import * as RpcProvider from "alchemy/Local/RpcProvider";
 import type { ResourceBinding } from "alchemy/Resource";
 import { sha256Object } from "alchemy/Util/sha256";
@@ -113,13 +115,25 @@ export const LocalContainerProvider = () =>
                 ),
               );
             }
-            const { context } = yield* materializeInlineDockerfileContext(id, content);
+            // Binding-contributed layers, as the live provider applies them.
+            const layered = news.imageLayers?.length
+              ? renderImageLayers({ preamble: content, layers: news.imageLayers })
+              : content;
+            const { context } = yield* materializeInlineDockerfileContext(id, layered);
+            const sources = (news.imageLayers ?? []).flatMap((layer) => layer.context ?? []);
+            const contextDigest =
+              sources.length > 0
+                ? (yield* materializeImageContext({ context, sources })).digest
+                : undefined;
             return {
               dev: {
                 context: path.relative(process.cwd(), context),
                 dockerfile: "Dockerfile",
               } as DevContainerImage,
-              hash: yield* sha256Object({ dockerfile: content }),
+              hash: yield* sha256Object({
+                dockerfile: layered,
+                ...(contextDigest !== undefined ? { contextDigest } : {}),
+              }),
             };
           }
 

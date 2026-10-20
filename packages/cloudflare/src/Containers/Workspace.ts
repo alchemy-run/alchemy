@@ -48,7 +48,8 @@ export interface WorkspaceProps {
  * its own with a Durable Object per session (its head and its running
  * opens) and per machine (its container). Every Worker or Durable Object
  * that yields the workspace reaches them through bindings. Returns the Layer
- * that satisfies `yield* Workspace`: provide it on the stack.
+ * that satisfies `yield* Workspace`: provide it on the stack. The images
+ * build with Docker, so the stack's providers need `DockerLive`.
  *
  * ### Hosting a workspace
  * **Example:** A Node workspace with the repository checked out
@@ -104,8 +105,10 @@ export const Workspace = <const D extends SandboxWorkspace.Decl.Any>(
         bind: Effect.gen(function* () {
           const yielding = yield* CoreBinding.Host;
           if (!yielding || !isWorker(yielding)) return;
-          yield* sessionObject(id).from(host.workerName);
-          yield* machineObject(id).from(host.workerName);
+          // `.from` takes the Worker (an Effect of it): its script name is an
+          // Output until deploy.
+          yield* sessionObject(id).from(Effect.succeed(host) as never);
+          yield* machineObject(id).from(Effect.succeed(host) as never);
         }),
       } satisfies WorkspaceHostService;
     }).pipe(Effect.provide(volume)),

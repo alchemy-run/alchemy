@@ -132,7 +132,9 @@ export const volumeOf = (id: string) => VolumeDeclaration<any>()(id);
 const machineContainer = (id: string, dockerfile?: string) =>
   Container(className(id, "Box"), {
     schedulingPolicy: "durable_object",
-    ...(dockerfile ? { dockerfile: `${dockerfile}\nCMD ["sleep", "infinity"]\n` } : {}),
+    ...(dockerfile
+      ? { dockerfile: { content: `${dockerfile}\nCMD ["sleep", "infinity"]\n` } }
+      : {}),
   });
 
 const fail = (message: string, cause?: unknown) => new WorkspaceError({ message, cause });
@@ -221,7 +223,8 @@ const parseRecord = (text: string): HeadRecord | null => {
 const sessionImpl = (config: HostConfig) =>
   Effect.gen(function* () {
     const volume = yield* volumeOf(config.id);
-    const machines = yield* machineObject(config.id);
+    // Through this Worker's own script: the two objects reference each other.
+    const machines = yield* machineObject(config.id).from(thisWorker);
     const env = (yield* WorkerEnvironment) as Record<string, unknown> | undefined;
     const prefix = `volumes/${config.id}`;
     const bucket = () => env?.[volumeBucketBinding(config.id)] as cf.R2Bucket | undefined;
@@ -494,6 +497,9 @@ const sessionImpl = (config: HostConfig) =>
     });
   });
 
+/** The Worker this runs in, for `.from`: its objects reference each other. */
+const thisWorker = Effect.suspend(() => Worker) as unknown as Effect.Effect<never, never, Worker>;
+
 const asWorkspaceError = (error: { readonly message: string }) =>
   error instanceof WorkspaceError ? error : fail(error.message, error);
 
@@ -511,7 +517,7 @@ const machineImpl = (config: HostConfig, dockerfile?: string) =>
         Application: (Box as unknown as { Application: Effect.Effect<unknown> }).Application,
       }) as never,
     );
-    const sessions = yield* sessionObject(config.id);
+    const sessions = yield* sessionObject(config.id).from(thisWorker);
     return Effect.gen(function* () {
       const state = yield* DurableObjectState;
       let mounted: DiskMount | undefined;
