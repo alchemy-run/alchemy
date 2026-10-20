@@ -345,6 +345,11 @@ impl Device {
         }
         self.cache.sync_all()?;
         save_state(&state_path(&self.cache_path), &id, self.size, &self.present)?;
+        // Garbage collection stops sparing this lease's writes.
+        let lease = self.lease.lock().unwrap().clone();
+        if let Err(e) = self.runtime.block_on(self.volume.release(&lease)) {
+            tracing::warn!("releasing the lease on {} failed: {e}", self.head);
+        }
         Ok(id)
     }
 

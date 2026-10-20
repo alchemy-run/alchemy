@@ -47,7 +47,13 @@ pub struct GcReport {
     pub spared: usize,
     /// Folded or abandoned journal entries deleted.
     pub journal_deleted: usize,
+    /// Leases whose writes were spared.
+    pub live_leases: usize,
 }
+
+/// A lease marker older than this no longer holds collection back: its
+/// machine is long gone.
+const MARKER_LIFETIME: Duration = Duration::from_secs(24 * 3600);
 
 impl Volume {
     pub async fn gc(&self, options: &GcOptions) -> Result<GcReport> {
@@ -93,14 +99,32 @@ impl Volume {
             .collect();
         report.reachable = reachable.len();
 
-        // sweep
-        let cutoff = SystemTime::now() - options.grace;
+        // sweep: objects younger than the grace period, or written since the
+        // oldest live lease began, may belong to a commit in flight.
+        let records: HashMap<String, Head> = self.meta().list().await?.into_iter().collect();
+        let now = SystemTime::now();
+        let mut cutoff = now - options.grace;
+        for marker in self.blobs().list("leases/").await? {
+            let live = crate::lease::parse_marker(&marker.key).is_some_and(|(head, epoch)| {
+                records
+                    .get(head)
+                    .is_some_and(|record| !record.deleted && record.epoch == epoch)
+            }) && now
+                .duration_since(marker.modified)
+                .is_ok_and(|age| age < MARKER_LIFETIME);
+            if live {
+                cutoff = cutoff.min(marker.modified);
+                report.live_leases += 1;
+            } else if !options.dry_run {
+                self.blobs().delete(&marker.key).await?;
+            }
+        }
         for prefix in ["manifests/", "pages/", "packs/"] {
             for object in self.blobs().list(prefix).await? {
                 if reachable.contains(&object.key) {
                     continue;
                 }
-                if object.modified > cutoff {
+                if object.modified >= cutoff {
                     report.spared += 1;
                     continue;
                 }
@@ -113,7 +137,6 @@ impl Volume {
         }
         // Journal entries need no grace period: whether one is still needed is
         // decided by its head's record, and a record only ever moves forward.
-        let records: HashMap<String, Head> = self.meta().list().await?.into_iter().collect();
         for object in self.blobs().list("journal/").await? {
             let Some((head, epoch, seq)) = journal::parse_key(&object.key) else {
                 continue;

@@ -265,6 +265,58 @@ async fn garbage_collection_keeps_unfolded_journal_entries() {
     assert_eq!(read_disk(&volume, &next.snapshot()).await[1], 1);
 }
 
+#[tokio::test]
+async fn a_live_lease_holds_garbage_collection_back() {
+    let (volume, blobs) = memory();
+    volume.create("main", SIZE).await.unwrap();
+    let lease = volume.acquire("main").await.unwrap();
+    // An upload of a commit in flight: unreachable until its head moves.
+    blobs
+        .put("packs/in-flight", b"pending".to_vec())
+        .await
+        .unwrap();
+    let now = GcOptions {
+        grace: std::time::Duration::ZERO,
+        ..Default::default()
+    };
+    let report = volume.gc(&now).await.unwrap();
+    assert_eq!(report.live_leases, 1);
+    assert!(
+        blobs.exists("packs/in-flight").await.unwrap(),
+        "spared while its lease lives"
+    );
+
+    volume.release(&lease).await.unwrap();
+    volume.gc(&now).await.unwrap();
+    assert!(
+        !blobs.exists("packs/in-flight").await.unwrap(),
+        "collected once it ends"
+    );
+}
+
+#[tokio::test]
+async fn a_superseded_lease_no_longer_holds_collection_back() {
+    let (volume, blobs) = memory();
+    volume.create("main", SIZE).await.unwrap();
+    let _dead = volume.acquire("main").await.unwrap(); // its machine dies, never released
+    let live = volume.acquire("main").await.unwrap();
+    volume.release(&live).await.unwrap();
+    blobs.put("packs/orphan", b"x".to_vec()).await.unwrap();
+    let report = volume
+        .gc(&GcOptions {
+            grace: std::time::Duration::ZERO,
+            ..Default::default()
+        })
+        .await
+        .unwrap();
+    assert_eq!(report.live_leases, 0);
+    assert!(!blobs.exists("packs/orphan").await.unwrap());
+    assert!(
+        blobs.keys().iter().all(|key| !key.starts_with("leases/")),
+        "stale markers are deleted"
+    );
+}
+
 // ── simulation ─────────────────────────────────────────────────────────
 
 /// xorshift64*: deterministic, and enough for choosing operations.

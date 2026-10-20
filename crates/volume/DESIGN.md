@@ -200,20 +200,22 @@ measure.
 Mark and sweep from every head in `heads/`. Journal entries are kept or
 deleted by their head's record, with no age guess: an entry is needed only if
 it's at or past the record's position in the current epoch, or in the unfolded
-earlier journal. Snapshot objects (packs, pages, manifests) unreachable from
-any head are spared for a grace period (an hour) instead, because a commit
-uploads them a moment before it moves the head. On Cloudflare each machine
-runs a collection at most every six hours, after an `open` ends, off the
-caller's path.
+earlier journal. On Cloudflare each machine runs a collection at most every six
+hours, after an `open` ends, off the caller's path.
 
-That grace period is a guess that a commit finishes in time, and SlateDB's
+Snapshot objects (packs, pages, manifests) that no head reaches yet may belong
+to a commit in flight: it uploads them before it moves the head. A grace period
+alone (an hour) is a guess that the commit finishes in time, and SlateDB's
 GC-boundary RFC (0026) describes how such guesses fail: a writer that stalls
-past the window gets its objects deleted underneath it. What's left to build:
+past the window gets its objects deleted underneath it. So:
 
-- **The boundary is the oldest live lease.** Every object a lease writes is
-  newer than the lease. Collection would spare anything written after the
-  oldest active lease began, with no wall-clock guess. Sessions' leases live in
-  their own Durable Objects, so this needs an index of them.
+- **The boundary is the oldest live lease.** Every lease writes an empty
+  marker, `leases/{head}/{epoch}`, when it begins, and deletes it when it ends.
+  Collection spares anything written since the oldest marker that's still for
+  its head's current epoch (a superseded lease can't commit), however long ago
+  that was. A marker its machine never deleted stops counting once another
+  lease supersedes it, or after a day. Markers use the store's modification
+  time, so writers need no clock.
 - **A stale writer can't be resurrected.** Its epoch is fenced, so its objects
   are never pointed at, even if they're uploaded after collection.
 - **History has a retention policy.** Undo depth per session is a policy

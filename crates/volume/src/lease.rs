@@ -86,8 +86,22 @@ impl Volume {
             record,
             next: 0,
         };
+        // While this marker exists, garbage collection spares everything
+        // written after it: this lease's uploads, however long they stall.
+        self.blobs()
+            .put_new(&marker_key(head, lease.epoch()), Vec::new())
+            .await?;
         self.recover(&mut lease).await?;
         Ok(lease)
+    }
+
+    /// Ends `lease`: garbage collection stops sparing its writes. A lease
+    /// that's never released (its machine died) stops counting once another
+    /// lease supersedes it, or after a day.
+    pub async fn release(&self, lease: &Lease) -> Result<()> {
+        self.blobs()
+            .delete(&marker_key(&lease.head, lease.epoch()))
+            .await
     }
 
     /// Makes `blocks` durable as the lease's next journal entry. Fails with
@@ -236,4 +250,16 @@ impl Volume {
             let _ = self.journal().delete(head, epoch, seqs).await;
         }
     }
+}
+
+/// The marker a live lease keeps: `leases/{head}/{epoch}`, empty; its
+/// modification time is when the lease began.
+pub(crate) fn marker_key(head: &str, epoch: u64) -> String {
+    format!("leases/{head}/{epoch:016x}")
+}
+
+/// `(head, epoch)` of a lease marker key.
+pub(crate) fn parse_marker(key: &str) -> Option<(&str, u64)> {
+    let (head, epoch) = key.strip_prefix("leases/")?.split_once('/')?;
+    Some((head, u64::from_str_radix(epoch, 16).ok()?))
 }
