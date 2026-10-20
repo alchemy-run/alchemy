@@ -12,7 +12,7 @@ const WorkflowsWrappedBindingWorker = {
     loadInternalWorker("#cloudflare-runtime-core-worker/bindings/workflows/wrapped-binding.worker"),
 };
 import * as Storage from "../../globals/Storage.ts";
-import { DEFAULT_COMPATIBILITY_DATE, SERVICE_USER_WORKER } from "../../internal/constants.ts";
+import { SERVICE_USER_WORKER } from "../../internal/constants.ts";
 import {
   formatExtensionModule,
   formatInternalWorkerModules,
@@ -118,6 +118,8 @@ export const WorkflowsLive = Layer.effect(
   }),
 );
 
+const WORKFLOWS_ENGINE_COMPATIBILITY_DATE = "2024-10-22";
+
 const makeEngineService = ({
   workflow,
   compatibilityFlags,
@@ -129,8 +131,11 @@ const makeEngineService = ({
 }): WorkerdConfig.Service => ({
   name: `workflows:${workflow.workflowName}`,
   worker: {
-    compatibilityDate: DEFAULT_COMPATIBILITY_DATE,
-    compatibilityFlags: ["experimental", ...(compatibilityFlags ?? [])],
+    // Miniflare's engine date. The user Worker's flags are passed through, so
+    // this must predate every flag a user may set: on the internal default
+    // date, `nodejs_compat` is on by default and workerd rejects it.
+    compatibilityDate: WORKFLOWS_ENGINE_COMPATIBILITY_DATE,
+    compatibilityFlags: [...new Set(["experimental", ...(compatibilityFlags ?? [])])],
     modules,
     durableObjectNamespaces: [
       {

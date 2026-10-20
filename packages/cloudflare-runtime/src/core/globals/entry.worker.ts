@@ -14,6 +14,7 @@ import {
   BINDING_EMAIL_DIRECTORY,
   BINDING_EMAIL_DISK,
   PATH_EMAIL,
+  PATH_EMAIL_HANDLER,
   PATH_HANDLER_PREFIX,
 } from "./EmailOptions.shared.ts";
 import { BINDING_USER_WORKER_DIRECT, PATH_MODULE_RUNNER_INIT } from "./EntryOptions.shared.ts";
@@ -22,7 +23,11 @@ import {
   HEADER_ORIGINAL_URL,
   HEADER_PROXY_SHARED_SECRET,
 } from "./ProxyHeaders.shared.ts";
-import { PATH_SCHEDULED, PATH_SCHEDULED_LEGACY } from "./ScheduledOptions.shared.ts";
+import {
+  PATH_SCHEDULED,
+  PATH_SCHEDULED_HANDLER,
+  PATH_SCHEDULED_LEGACY,
+} from "./ScheduledOptions.shared.ts";
 
 interface Env {
   [BINDING_PROXY_SHARED_SECRET]: string;
@@ -427,11 +432,15 @@ export default <ExportedHandler<Env>>{
       }
     }
     // Trigger the user worker's `scheduled()` handler, mirroring Miniflare's
-    // `/cdn-cgi/handler/scheduled` route (`workers/core/scheduled.ts`).
+    // `/cdn-cgi/local/scheduled` route (`workers/core/scheduled.ts`).
     // Like the queue route above, this is always on: the entry socket only
     // binds 127.0.0.1 during local development, so there is no equivalent of
     // Miniflare's `unsafeTriggerHandlers` gate.
-    if (url.pathname === PATH_SCHEDULED || url.pathname === PATH_SCHEDULED_LEGACY) {
+    if (
+      url.pathname === PATH_SCHEDULED ||
+      url.pathname === PATH_SCHEDULED_HANDLER ||
+      url.pathname === PATH_SCHEDULED_LEGACY
+    ) {
       try {
         const time = url.searchParams.get("time");
         const result = await env[BINDING_USER_WORKER_DIRECT].scheduled({
@@ -455,12 +464,12 @@ export default <ExportedHandler<Env>>{
       }
     }
     // Dispatch an inbound email to the user worker's `email()` handler,
-    // mirroring Miniflare's `/cdn-cgi/handler/email` route
+    // mirroring Miniflare's `/cdn-cgi/local/email` route
     // (`workers/core/email.ts`). Like the scheduled route above, this is
     // always on. Errors thrown by the user's handler (including reply
     // validation failures propagated back over JSRPC) surface as a 500 with
     // the error stack, matching Miniflare's entry worker catch-all.
-    if (url.pathname === PATH_EMAIL) {
+    if (url.pathname === PATH_EMAIL || url.pathname === PATH_EMAIL_HANDLER) {
       try {
         return await handleEmail(url.searchParams, request as unknown as WorkersRequest, env);
       } catch (e) {

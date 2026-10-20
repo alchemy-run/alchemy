@@ -1458,9 +1458,13 @@ export const LocalWorkerProvider = () =>
           for (const { data } of bindings) {
             for (const binding of data?.bindings ?? []) {
               if (binding.type === "durable_object_namespace") {
+                // Only classes this Worker hosts get a namespace, as in the
+                // live provider's `getDurableObjectBindings`. A cross-script
+                // reference names another Worker, by an Output that is still
+                // unresolved here.
+                if (binding.scriptName !== undefined && binding.scriptName !== name) continue;
                 durableObjectNamespaces[binding.className] =
-                  binding.namespaceId ??
-                  encodeURIComponent(`${binding.scriptName!}-${binding.className}`);
+                  binding.namespaceId ?? encodeURIComponent(`${name}-${binding.className}`);
               }
             }
           }

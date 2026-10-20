@@ -41,6 +41,12 @@ export interface CloudflareVitePluginOptions<
   worker?: Omit<RuntimeWorker<B>, "compatibilityDate" | "compatibilityFlags" | "modules">;
   context?: Context.Context<RuntimeServices>;
   dev?: CloudflareVitePluginDevOptions;
+  /**
+   * Named entrypoints the Worker binds to itself. workerd resolves those
+   * bindings at startup, before the entry module has been evaluated and its
+   * exports detected, so the dev Worker must export them from the start.
+   */
+  entrypoints?: ReadonlyArray<string>;
 }
 
 /**

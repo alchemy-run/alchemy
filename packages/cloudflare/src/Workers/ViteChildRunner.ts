@@ -148,6 +148,9 @@ const program = Effect.scoped(
               viteEnvironments,
               worker: { ...runtimeWorker, bindings },
               context: runtimeContext,
+              entrypoints: bindingDescriptors.flatMap((binding) =>
+                binding.type === "self_service" && binding.entrypoint ? [binding.entrypoint] : [],
+              ),
             },
             { host: viteHost, port: vitePort, strictPort: false },
           ).pipe(Effect.map((server) => server.resolvedUrls?.local[0]));

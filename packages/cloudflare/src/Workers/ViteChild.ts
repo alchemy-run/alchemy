@@ -51,13 +51,12 @@ export const startViteChild = (
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
     const runner = resolveRunner("ViteChildRunner");
     const isBun = typeof globalThis.Bun !== "undefined";
-    // A source provider can pin the dev child to node (e.g. `next dev`
-    // cold-starts broken under bun). Honored only when node is installed;
-    // otherwise fall back to the engine's own runtime.
-    const nodeExecPath =
-      isBun && config.source?.descriptor.runtime === "node"
-        ? (globalThis.Bun.which("node") ?? undefined)
-        : undefined;
+    // The dev server runs on node, as `@cloudflare/vite-plugin`'s does,
+    // whenever node is installed; otherwise on the engine's own runtime.
+    // Bun 1.3's `node:http` drops all but the last of repeated response
+    // headers and never delivers bytes written to an upgraded socket, so a
+    // Vite dev server on it loses `server.headers` arrays and WebSockets.
+    const nodeExecPath = isBun ? (globalThis.Bun.which("node") ?? undefined) : undefined;
     // Redacted values can't cross the process boundary — the config is
     // plain data once unwrapped. bun's `v8.serialize` output is not
     // readable by real V8 (and vice versa), so a cross-runtime spawn
