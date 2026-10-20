@@ -23,7 +23,7 @@ These resources are billable. Deletion protection is disabled; destroy deletes t
 ## Create the cluster
 
 ```typescript
-import * as AWS from "alchemy/AWS";
+import * as AWS from "@alchemy.run/aws";
 
 export const Database = AWS.DSQL.Cluster("Database", {
   deletionProtectionEnabled: false,
@@ -64,7 +64,7 @@ The [deployment Action](https://github.com/alchemy-run/alchemy/blob/main/example
 ## Connect from Lambda
 
 ```typescript
-import * as Drizzle from "alchemy/Drizzle/Postgres";
+import * as Drizzle from "@alchemy.run/drizzle/Postgres";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 

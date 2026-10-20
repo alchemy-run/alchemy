@@ -1,5 +1,5 @@
 import { expect } from "bun:test";
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Test from "alchemy/Test/Bun";
 import * as Console from "effect/Console";
 import * as Data from "effect/Data";

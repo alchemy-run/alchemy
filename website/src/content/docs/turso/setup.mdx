@@ -3,6 +3,8 @@ title: Setup
 description: Give Alchemy a Turso API token.
 ---
 
+import PackageManagers from "../../../components/PackageManagers.astro";
+
 Sign up at [turso.tech](https://turso.tech), then create an API token with the [Turso CLI](https://docs.turso.tech/cli/introduction):
 
 ```sh
@@ -13,11 +15,15 @@ Turso only supports API tokens. There is no browser sign-in.
 
 ## Add the provider
 
-Add `Turso.providers()` next to your cloud's providers:
+Install `@alchemy.run/turso`:
+
+<PackageManagers add="@alchemy.run/turso" />
+
+Then add `Turso.providers()` next to your cloud's providers:
 
 ```typescript
 // alchemy.run.ts
-import * as Turso from "alchemy/Turso";
+import * as Turso from "@alchemy.run/turso";
 
 providers: Layer.mergeAll(Cloudflare.providers(), Turso.providers()),
 ```
