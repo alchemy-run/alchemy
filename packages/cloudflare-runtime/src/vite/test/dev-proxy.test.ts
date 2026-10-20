@@ -61,6 +61,29 @@ const send = (
     request.end(options.body);
   });
 
+// Listens on a free loopback port until the test finishes.
+const listen = async (server: NodeHttp.Server): Promise<NodeURL> => {
+  onTestFinished(() => {
+    server.closeAllConnections();
+    return new Promise<void>((resolve) => server.close(() => resolve()));
+  });
+  await new Promise<void>((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", resolve);
+  });
+  return new NodeURL(`http://127.0.0.1:${(server.address() as AddressInfo).port}`);
+};
+
+// Proxies every request to `runtime` the way the dev server does.
+const proxyTo = (runtime: NodeURL): Promise<NodeURL> => {
+  const logger = vite.createLogger("silent");
+  return listen(
+    NodeHttp.createServer((request, response) => {
+      forwardWorkerRequest(request, response, runtime, "secret", logger);
+    }),
+  );
+};
+
 test("stops the Worker's stream when the client hangs up", async () => {
   // An endless event stream, like a page's SSE subscription, counting the
   // chunks it is asked for.
@@ -150,17 +173,6 @@ test("streams the Worker's response while the request body is still arriving", a
 test("forwards each request on a connection of its own", async () => {
   // Stand-in for workerd having closed a connection the proxy still holds:
   // a second request on any connection finds it gone.
-  const listen = async (server: NodeHttp.Server): Promise<NodeURL> => {
-    onTestFinished(() => {
-      server.closeAllConnections();
-      return new Promise<void>((resolve) => server.close(() => resolve()));
-    });
-    await new Promise<void>((resolve, reject) => {
-      server.once("error", reject);
-      server.listen(0, "127.0.0.1", resolve);
-    });
-    return new NodeURL(`http://127.0.0.1:${(server.address() as AddressInfo).port}`);
-  };
   const served = new WeakSet<Socket>();
   const runtime = await listen(
     NodeHttp.createServer((request, response) => {
@@ -172,12 +184,7 @@ test("forwards each request on a connection of its own", async () => {
       response.end("worker");
     }),
   );
-  const logger = vite.createLogger("silent");
-  const proxy = await listen(
-    NodeHttp.createServer((request, response) => {
-      forwardWorkerRequest(request, response, runtime, "secret", logger);
-    }),
-  );
+  const proxy = await proxyTo(runtime);
 
   // `fetch` keeps the client's connection alive, so the proxy alone decides
   // whether its upstream connection is reused.
@@ -187,4 +194,28 @@ test("forwards each request on a connection of its own", async () => {
   };
   expect(await get()).toEqual({ status: 200, body: "worker" });
   expect(await get()).toEqual({ status: 200, body: "worker" });
+});
+
+test("reads the rest of the body when the Worker answers without it", async () => {
+  // Stand-in for workerd answering an upload before reading it, then closing
+  // the connection.
+  const runtime = await listen(
+    NodeHttp.createServer((request, response) => {
+      if (request.method === "POST") {
+        response.end("too large");
+        setTimeout(() => request.socket.destroy(), 5);
+        return;
+      }
+      response.end("ok");
+    }),
+  );
+  const proxy = await proxyTo(runtime);
+  const keptAlive = new NodeHttp.Agent({ keepAlive: true, maxSockets: 1 });
+  onTestFinished(() => keptAlive.destroy());
+
+  expect(
+    await send(proxy, { agent: keptAlive, method: "POST", body: Buffer.alloc(1024 * 1024, "a") }),
+  ).toEqual({ status: 200, body: "too large" });
+  // The connection that carried the upload serves the next request.
+  expect(await send(proxy, { agent: keptAlive })).toEqual({ status: 200, body: "ok" });
 });
