@@ -1,6 +1,7 @@
 import { execFileSync } from "node:child_process";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { describe, expect, it, layer } from "@effect/vitest";
+import * as ConfigProvider from "effect/ConfigProvider";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -238,11 +239,14 @@ layer(Layer.provide(DockerLive, Layer.merge(NodeServices.layer, SpawnerStub)))((
 });
 
 /**
- * A stub whose `docker image inspect` stdout is configurable per test, so
- * `getWorkerdDockerConfiguration`'s inspect-before-pull check on the egress
- * interceptor image can be exercised both ways (present vs absent locally).
- * All other commands (`docker pull`, `docker tag`, …) still succeed with
- * empty output, matching `SpawnerStub` above.
+ * A stub whose `docker image inspect` and `docker version` stdout is
+ * configurable per test, so `getWorkerdDockerConfiguration`'s
+ * inspect-before-pull check on the egress interceptor image can be
+ * exercised every way (absent, present, present for another architecture).
+ * Either command exits 1 when its stdout is empty; `version` is empty unless
+ * given. `docker image rm` exits 1 with `removeStderr` when that is given.
+ * All other commands (`docker pull`, …) still succeed with empty output,
+ * matching `SpawnerStub` above.
  *
  * `getWorkerdDockerConfiguration`'s pull/skip-pull decision runs on a
  * `forkDetach` fiber that starts as soon as the `Docker` layer is built —
@@ -251,10 +255,12 @@ layer(Layer.provide(DockerLive, Layer.merge(NodeServices.layer, SpawnerStub)))((
  * `spawned` array (returned alongside the layer) instead of resetting the
  * top-level one mid-test, which would race the fiber's own spawns.
  */
-const makeInspectStub = (
-  inspectStdout: string,
-  inspectExitCode?: Effect.Effect<ChildProcessSpawner.ExitCode>,
-) => {
+const makeInspectStub = (options: {
+  readonly inspect: string;
+  readonly inspectExitCode?: Effect.Effect<ChildProcessSpawner.ExitCode>;
+  readonly version?: string;
+  readonly removeStderr?: string;
+}) => {
   const spawned: Array<ReadonlyArray<string>> = [];
   const layer = Layer.succeed(
     ChildProcessSpawner.ChildProcessSpawner,
@@ -266,19 +272,31 @@ const makeInspectStub = (
         command._tag === "StandardCommand" &&
         command.args[0] === "image" &&
         command.args[1] === "inspect";
-      const stdout = isInspect ? inspectStdout : "";
+      const isVersion = command._tag === "StandardCommand" && command.args[0] === "version";
+      const removeFails =
+        command._tag === "StandardCommand" &&
+        command.args[0] === "image" &&
+        command.args[1] === "rm" &&
+        options.removeStderr !== undefined;
+      const stdout = isInspect ? options.inspect : isVersion ? (options.version ?? "") : "";
       return Effect.succeed(
         ChildProcessSpawner.makeHandle({
           pid: ChildProcessSpawner.ProcessId(1),
           exitCode:
-            isInspect && inspectExitCode
-              ? inspectExitCode
-              : Effect.succeed(ChildProcessSpawner.ExitCode(isInspect && stdout === "" ? 1 : 0)),
+            isInspect && options.inspectExitCode
+              ? options.inspectExitCode
+              : Effect.succeed(
+                  ChildProcessSpawner.ExitCode(
+                    removeFails || ((isInspect || isVersion) && stdout === "") ? 1 : 0,
+                  ),
+                ),
           isRunning: Effect.succeed(false),
           kill: () => Effect.void,
           stdin: Sink.drain,
           stdout: stdout ? Stream.make(new TextEncoder().encode(stdout)) : Stream.empty,
-          stderr: Stream.empty,
+          stderr: removeFails
+            ? Stream.make(new TextEncoder().encode(options.removeStderr))
+            : Stream.empty,
           all: Stream.empty,
           getInputFd: () => Sink.drain,
           getOutputFd: () => Stream.empty,
@@ -295,9 +313,9 @@ it.effect("interrupts Docker initialization when its owning scope closes", () =>
     const started = yield* Deferred.make<void>();
     const release = yield* Deferred.make<void>();
     let interrupted = false;
-    const initialization = makeInspectStub(
-      "sha256:deadbeef",
-      Deferred.succeed(started, undefined).pipe(
+    const initialization = makeInspectStub({
+      inspect: "sha256:deadbeef arm64",
+      inspectExitCode: Deferred.succeed(started, undefined).pipe(
         Effect.andThen(Deferred.await(release)),
         Effect.as(ChildProcessSpawner.ExitCode(0)),
         Effect.onInterrupt(() =>
@@ -306,7 +324,7 @@ it.effect("interrupts Docker initialization when its owning scope closes", () =>
           }),
         ),
       ),
-    );
+    });
     yield* Effect.gen(function* () {
       yield* Effect.scoped(
         Effect.gen(function* () {
@@ -321,48 +339,145 @@ it.effect("interrupts Docker initialization when its owning scope closes", () =>
   }),
 );
 
-const present = makeInspectStub("sha256:deadbeef");
+const INSPECT_INTERCEPTOR = [
+  "docker",
+  "image",
+  "inspect",
+  PINNED,
+  "--format",
+  "{{.Id}} {{.Architecture}}",
+];
+const SERVER_ARCH = ["docker", "version", "--format", "{{.Server.Arch}}"];
+/** Every `docker pull` and `docker image rm`, in spawn order. */
+const imageChanges = (spawned: ReadonlyArray<ReadonlyArray<string>>) =>
+  spawned.filter(([, verb, subverb]) => verb === "pull" || (verb === "image" && subverb === "rm"));
+
+const present = makeInspectStub({ inspect: "sha256:deadbeef amd64", version: "amd64" });
 layer(Layer.provide(DockerLive, Layer.merge(NodeServices.layer, present.layer)))((it) => {
   it.effect("skips the pull when the interceptor image is already present locally", () =>
     Effect.gen(function* () {
       const docker = yield* Docker;
       yield* docker.getWorkerdDockerConfiguration;
-      expect(present.spawned).toContainEqual([
-        "docker",
-        "image",
-        "inspect",
-        PINNED,
-        "--format",
-        "{{.Id}}",
-      ]);
-      expect(present.spawned.filter(([, verb]) => verb === "pull")).toEqual([]);
+      expect(present.spawned).toContainEqual(INSPECT_INTERCEPTOR);
+      expect(present.spawned).toContainEqual(SERVER_ARCH);
+      expect(imageChanges(present.spawned)).toEqual([]);
     }),
   );
 });
 
-const absent = makeInspectStub("");
+/**
+ * Older releases pulled the interceptor as `linux/amd64`. On an arm64 host
+ * that cached copy runs under emulation and exits with `setsockoptint:
+ * protocol not available`, and `docker pull` of the same digest refuses to
+ * replace it ("cannot overwrite digest"). It must be removed, then pulled
+ * again without `--platform`.
+ */
+const foreign = makeInspectStub({ inspect: "sha256:deadbeef amd64", version: "arm64" });
+layer(Layer.provide(DockerLive, Layer.merge(NodeServices.layer, foreign.layer)))((it) => {
+  it.effect("replaces a cached interceptor image built for another architecture", () =>
+    Effect.gen(function* () {
+      const docker = yield* Docker;
+      yield* docker.getWorkerdDockerConfiguration;
+      expect(imageChanges(foreign.spawned)).toEqual([
+        ["docker", "image", "rm", "sha256:deadbeef"],
+        ["docker", "pull", PINNED_WITHOUT_TAG],
+      ]);
+    }),
+  );
+});
+
+// A stopped container can still hold the image; the user must remove it.
+const stuck = makeInspectStub({
+  inspect: "sha256:deadbeef amd64",
+  version: "arm64",
+  removeStderr: "conflict: unable to delete deadbeef - image is being used by stopped container",
+});
+layer(Layer.provide(DockerLive, Layer.merge(NodeServices.layer, stuck.layer)))((it) => {
+  it.effect("fails with a hint when the foreign interceptor image cannot be removed", () =>
+    Effect.gen(function* () {
+      const docker = yield* Docker;
+      const result = yield* Effect.result(docker.getWorkerdDockerConfiguration);
+      expect(result._tag).toBe("Failure");
+      if (result._tag !== "Failure") return;
+      const error = result.failure as {
+        subtag: string;
+        hint?: string;
+        detail?: { stderr: string };
+      };
+      expect(error.subtag).toBe("DockerRemoveImageFailed");
+      expect(error.hint).toContain("docker image rm sha256:deadbeef");
+      expect(error.detail?.stderr).toContain("image is being used by stopped container");
+      expect(imageChanges(stuck.spawned)).toEqual([["docker", "image", "rm", "sha256:deadbeef"]]);
+    }),
+  );
+});
+
+// `docker version` exits 1 with no output: the cached image is kept.
+const unknownHost = makeInspectStub({ inspect: "sha256:deadbeef amd64" });
+layer(Layer.provide(DockerLive, Layer.merge(NodeServices.layer, unknownHost.layer)))((it) => {
+  it.effect("keeps the cached interceptor image when the host architecture is unknown", () =>
+    Effect.gen(function* () {
+      const docker = yield* Docker;
+      yield* docker.getWorkerdDockerConfiguration;
+      expect(unknownHost.spawned).toContainEqual(SERVER_ARCH);
+      expect(imageChanges(unknownHost.spawned)).toEqual([]);
+    }),
+  );
+});
+
+/**
+ * `CONTAINER_EGRESS_INTERCEPTOR_IMAGE` can name a local-only image that no
+ * registry can restore, so an override is never removed, whatever its
+ * architecture.
+ */
+const OVERRIDE = "alchemy-dev/proxy-everything:local";
+const overridden = makeInspectStub({ inspect: "sha256:deadbeef amd64", version: "arm64" });
+layer(
+  Layer.provide(
+    DockerLive,
+    Layer.mergeAll(
+      NodeServices.layer,
+      overridden.layer,
+      ConfigProvider.layerAdd(
+        ConfigProvider.fromUnknown({ CONTAINER_EGRESS_INTERCEPTOR_IMAGE: OVERRIDE }),
+        { asPrimary: true },
+      ),
+    ),
+  ),
+)((it) => {
+  it.effect("never removes an overridden interceptor image", () =>
+    Effect.gen(function* () {
+      const docker = yield* Docker;
+      const config = yield* docker.getWorkerdDockerConfiguration;
+      expect(config.localDocker?.containerEgressInterceptorImage).toBe(OVERRIDE);
+      expect(overridden.spawned).toContainEqual([
+        "docker",
+        "image",
+        "inspect",
+        OVERRIDE,
+        "--format",
+        "{{.Id}}",
+      ]);
+      expect(overridden.spawned.filter(([, verb]) => verb === "version")).toEqual([]);
+      expect(imageChanges(overridden.spawned)).toEqual([]);
+    }),
+  );
+});
+
+const absent = makeInspectStub({ inspect: "" });
 layer(Layer.provide(DockerLive, Layer.merge(NodeServices.layer, absent.layer)))((it) => {
   it.effect("pulls the interceptor image when it is not present locally", () =>
     Effect.gen(function* () {
       const docker = yield* Docker;
       yield* docker.getWorkerdDockerConfiguration;
-      expect(absent.spawned).toContainEqual([
-        "docker",
-        "image",
-        "inspect",
-        PINNED,
-        "--format",
-        "{{.Id}}",
-      ]);
+      expect(absent.spawned).toContainEqual(INSPECT_INTERCEPTOR);
       // Exactly one pull, with no `--platform`: the interceptor is a
       // host-side sidecar, so Docker must resolve the host-native variant
       // of this multi-arch image. Forcing `linux/amd64` here runs it
       // under emulation on arm64 hosts, where it exits 1 with
       // `setsockoptint: protocol not available` before workerd can create
       // the user container.
-      expect(absent.spawned.filter(([, verb]) => verb === "pull")).toEqual([
-        ["docker", "pull", PINNED_WITHOUT_TAG],
-      ]);
+      expect(imageChanges(absent.spawned)).toEqual([["docker", "pull", PINNED_WITHOUT_TAG]]);
     }),
   );
 });

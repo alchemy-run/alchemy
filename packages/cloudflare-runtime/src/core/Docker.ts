@@ -77,12 +77,10 @@ const DEV_CONTAINER_PREFIX = "alchemy-dev";
 
 const DockerHost = Config.String("DOCKER_HOST");
 const DockerBin = Config.String("DOCKER_BIN").pipe(Config.orElse(() => Config.succeed("docker")));
+const DEFAULT_CONTAINER_EGRESS_INTERCEPTOR_IMAGE =
+  "cloudflare/proxy-everything:3cb1195@sha256:0ef6716c52430096900b150d84a3302057d6cd2319dae7987128c85d0733e3c8";
 const ContainerEgressInterceptorImage = Config.String("CONTAINER_EGRESS_INTERCEPTOR_IMAGE").pipe(
-  Config.orElse(() =>
-    Config.succeed(
-      "cloudflare/proxy-everything:3cb1195@sha256:0ef6716c52430096900b150d84a3302057d6cd2319dae7987128c85d0733e3c8",
-    ),
-  ),
+  Config.orElse(() => Config.succeed(DEFAULT_CONTAINER_EGRESS_INTERCEPTOR_IMAGE)),
 );
 
 /**
@@ -444,6 +442,73 @@ export const DockerLive = Layer.effect(
           id?.trim() ? Effect.void : Effect.asVoid(pull({ imageUri, platform })),
         ),
       );
+
+    // The daemon's Go architecture name (`arm64`, `amd64`, `arm`, …) uses the
+    // same vocabulary as an image's `.Architecture`, unlike `docker info`'s
+    // kernel names (`aarch64`, `armv7l`). An empty result means "unknown":
+    // the caller then keeps the cached image.
+    const hostArchitecture = () =>
+      run(["version", "--format", "{{.Server.Arch}}"]).pipe(
+        Effect.map((result) => (result.exitCode === 0 ? result.stdout.trim() : "")),
+        Effect.orElseSucceed(() => ""),
+      );
+
+    const removeImage = (id: string, imageUri: string) =>
+      run(["image", "rm", id]).pipe(
+        Effect.mapError((cause) =>
+          SystemError.make({
+            subtag: "DockerRemoveImageFailed",
+            message: `Failed to remove image ${id} ("${imageUri}").`,
+            hint: `Remove it with \`docker image rm ${id}\` and retry.`,
+            detail: { bin, imageUri, id },
+            cause,
+          }),
+        ),
+        Effect.flatMap((result) =>
+          ensureExitZero(result, ({ exitCode, stdout, stderr }) =>
+            SystemError.make({
+              subtag: "DockerRemoveImageFailed",
+              message: `Failed to remove image ${id} ("${imageUri}").`,
+              hint: `Remove it with \`docker image rm ${id}\` and retry.`,
+              detail: { bin, imageUri, id, exitCode, stdout, stderr },
+            }),
+          ),
+        ),
+      );
+
+    /**
+     * Older releases pulled the egress interceptor as `linux/amd64`. On an
+     * arm64 host that cached copy passes `pullIfMissing`, so the sidecar
+     * runs under emulation and every container start fails with
+     * `setsockoptint: protocol not available`. A plain `docker pull` of the
+     * same digest does not replace it ("cannot overwrite digest"), so a
+     * cached default image built for another architecture is removed and
+     * pulled again. An overridden image is never removed: it can be a
+     * local-only tag that no registry can restore. When either architecture
+     * cannot be read, the cached image is kept.
+     */
+    const ensureEgressInterceptorImage = (imageUri: string) =>
+      imageUri !== DEFAULT_CONTAINER_EGRESS_INTERCEPTOR_IMAGE
+        ? pullIfMissing(imageUri)
+        : Effect.gen(function* () {
+            const [id, imageArchitecture] = yield* inspect(
+              imageUri,
+              "{{.Id}} {{.Architecture}}",
+            ).pipe(
+              Effect.map((stdout) => stdout.trim().split(" ")),
+              Effect.orElseSucceed(() => []),
+            );
+            if (!id) return yield* Effect.asVoid(pull({ imageUri }));
+            if (!imageArchitecture) return;
+            const host = yield* hostArchitecture();
+            if (!host || host === imageArchitecture) return;
+            yield* Effect.logWarning(
+              `The cached egress interceptor image ${id} is built for ${imageArchitecture}, but the Docker host is ${host}; the sidecar cannot start under emulation. Removing it and pulling "${imageUri}" for ${host}.`,
+            );
+            yield* removeImage(id, imageUri);
+            yield* pull({ imageUri });
+          });
+
     // workerd may create a container from an image nobody prepared, such as a
     // managed `cloudflare/*` image. Failed pulls are forgotten and retried.
     const ensuredImages = yield* Cache.makeWith(
@@ -524,8 +589,9 @@ export const DockerLive = Layer.effect(
       // fails with it. `docker image inspect` prints the image id when
       // present and empty stdout when absent (`run` reports the non-zero
       // exit rather than failing the effect), so only pull when the image
-      // is genuinely missing. The sidecar needs the host-native image.
-      pullIfMissing(containerEgressInterceptorImage),
+      // is genuinely missing. The sidecar needs the host-native image, so a
+      // cached default image built for another architecture is replaced.
+      ensureEgressInterceptorImage(containerEgressInterceptorImage),
       (socketPath) => ({
         localDocker: {
           socketPath,
