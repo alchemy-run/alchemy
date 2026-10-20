@@ -112,6 +112,11 @@ describe.concurrent(
             timeout: "60 seconds",
             label: "waku static asset",
           });
+          // The same file read by a server route through the `ASSETS` binding.
+          yield* expectUrlContains(`${site1.url!}/asset`, "hello from public/", {
+            timeout: "60 seconds",
+            label: "waku ASSETS binding",
+          });
 
           // SSG page prerendered at build time and served from assets.
           yield* expectUrlContains(`${site1.url!}/about`, "WAKU_ABOUT_STATIC_MARKER", {

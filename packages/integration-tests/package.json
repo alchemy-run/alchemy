@@ -111,6 +111,7 @@
     "typescript-api": "catalog:",
     "unenv": "catalog:",
     "uuid": "catalog:",
+    "vinext": "catalog:",
     "vite": "catalog:",
     "vocs": "catalog:",
     "waku": "catalog:",

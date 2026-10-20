@@ -101,6 +101,11 @@ describe.concurrent(
             timeout: "60 seconds",
             label: "static asset",
           });
+          // The same file read by a server route through the `ASSETS` binding.
+          yield* expectUrlContains(`${site1.url!}/api/asset`, "User-agent", {
+            timeout: "60 seconds",
+            label: "sveltekit ASSETS binding",
+          });
 
           // Prerendered page served from assets.
           yield* expectUrlContains(`${site1.url!}/prerendered`, "this-page-is-prerendered", {
