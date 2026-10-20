@@ -43,13 +43,13 @@ export default class RedisApi extends Fly.Service<RedisApi>()(
         const path = new URL(request.url, "http://service").pathname;
 
         if (path === "/health" || path === "/") {
-          const pong = yield* cache.ping().pipe(
-            Effect.map((body) => /pong/i.test(body)),
-            Effect.orElseSucceed(() => false),
+          const ping = yield* cache.ping().pipe(
+            Effect.map((body) => ({ pong: /pong/i.test(body), error: undefined })),
+            Effect.catch((error) => Effect.succeed({ pong: false, error: String(error) })),
           );
           const resolvedUrl = yield* url;
           return yield* HttpServerResponse.json({
-            pong,
+            ...ping,
             hasOutputUrl:
               resolvedUrl !== undefined &&
               Redacted.isRedacted(resolvedUrl) &&
