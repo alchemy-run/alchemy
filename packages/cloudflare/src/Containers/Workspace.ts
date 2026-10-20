@@ -1,8 +1,11 @@
+import type { MicrovmSandboxMemory } from "@alchemy.run/aws/Lambda/MicrovmSandbox";
+import { MicrovmSandbox } from "@alchemy.run/aws/Lambda/MicrovmSandbox";
 import type {
   Workspace as SandboxWorkspace,
   WorkspaceHostService,
 } from "@alchemy.run/sandbox/Workspace";
 import { workspaceHost } from "@alchemy.run/sandbox/Workspace";
+import type * as microvms from "@distilled.cloud/aws/lambda-microvms";
 import * as CoreBinding from "alchemy/Binding";
 import * as Output from "alchemy/Output";
 import * as Duration from "effect/Duration";
@@ -12,9 +15,11 @@ import type { Providers } from "../Providers.ts";
 import { Volume as R2Volume } from "../R2/Volume.ts";
 import { isWorker, type Worker } from "../Workers/Worker.ts";
 import type { ContainerInstanceType } from "./SandboxClient.ts";
+import machineProgram from "./WorkspaceMachine.ts";
 import {
   hostWorker,
   machineObject,
+  machineSandbox,
   sessionObject,
   volumeOf,
   WORKSPACE_HOST,
@@ -39,10 +44,20 @@ export interface WorkspaceProps {
    */
   readonly history?: number;
   readonly machine?: {
-    /** @default "standard-1" */
+    /** A Cloudflare container's instance type. @default "standard-1" */
     readonly instanceType?: ContainerInstanceType;
     /** Stop a machine this long after its last command. @default "5 minutes" */
     readonly idle?: Duration.Input;
+    /**
+     * Run machines on AWS Lambda MicroVMs instead of Cloudflare containers
+     * (the sessions stay on Cloudflare). Each machine's blockd reads and
+     * writes its head and journal in the bucket directly, so `fsync` is
+     * slower than on a container. Needs the AWS providers on the stack.
+     */
+    readonly lambda?: {
+      readonly memory: MicrovmSandboxMemory;
+      readonly cpuConfigurations?: microvms.CpuConfiguration[];
+    };
   };
 }
 
@@ -86,8 +101,25 @@ export const Workspace = <const D extends SandboxWorkspace.Decl.Any>(
     path: props.path,
     instanceType: props.machine?.instanceType ?? "standard-1",
     idleMs: Duration.toMillis(Duration.fromInputUnsafe(props.machine?.idle ?? "5 minutes")),
+    machine: props.machine?.lambda ? "lambda" : "container",
     ...(props.history !== undefined ? { history: props.history } : {}),
   };
+  const lambda = props.machine?.lambda;
+  // A MicroVM machine is a sandbox: its host builds the image (the
+  // workspace's Dockerfile, blockd, and the capabilities to mount).
+  const machines = lambda
+    ? MicrovmSandbox(
+        machineSandbox(id),
+        {
+          main: new URL(`./WorkspaceMachine${extensionOf(import.meta.url)}`, import.meta.url).href,
+          sizes: { machine: lambda.memory },
+          dockerfile: props.dockerfile,
+          additionalOsCapabilities: ["ALL"],
+          ...(lambda.cpuConfigurations ? { cpuConfigurations: lambda.cpuConfigurations } : {}),
+        },
+        machineProgram as never,
+      )
+    : Layer.empty;
   const volume = R2Volume(volumeOf(id), {
     ...(props.size !== undefined ? { size: props.size } : {}),
     base: { dockerfile: props.dockerfile, path: props.path },
@@ -117,7 +149,7 @@ export const Workspace = <const D extends SandboxWorkspace.Decl.Any>(
           yield* machineObject(id).from(Effect.succeed(host) as never);
         }),
       } satisfies WorkspaceHostService;
-    }).pipe(Effect.provide(volume)),
+    }).pipe(Effect.provide(Layer.merge(volume, machines))),
   ) as unknown as Layer.Layer<SandboxWorkspace.Host<SelfOf<D>>, never, Providers>;
 };
 

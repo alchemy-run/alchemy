@@ -1,5 +1,5 @@
 import type { SandboxClient, SandboxProcess } from "@alchemy.run/sandbox/Sandbox";
-import { SandboxError } from "@alchemy.run/sandbox/Sandbox";
+import { Sandbox as SandboxDeclaration, SandboxError } from "@alchemy.run/sandbox/Sandbox";
 import {
   Volume as VolumeDeclaration,
   type Disk,
@@ -25,6 +25,7 @@ import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerRequestModule from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
@@ -65,6 +66,8 @@ export interface HostConfig {
   readonly path: string;
   readonly instanceType: ContainerInstanceType;
   readonly idleMs: number;
+  /** What machines run on. */
+  readonly machine: "container" | "lambda";
   /** Snapshots kept per session by garbage collection; all when absent. */
   readonly history?: number;
 }
@@ -201,6 +204,10 @@ const machineContainer = (id: string, dockerfile?: string) =>
       ? { dockerfile: { content: `${dockerfile}\nCMD ["sleep", "infinity"]\n` } }
       : {}),
   });
+
+/** @internal A machine on a sandbox host other than Cloudflare's (a Lambda MicroVM). */
+export const machineSandbox = (id: string) =>
+  SandboxDeclaration<any, { size: "machine" }>()(className(id, "Vm"));
 
 const fail = (message: string, cause?: unknown) => new WorkspaceError({ message, cause });
 
@@ -690,11 +697,41 @@ const asWorkspaceError = (error: { readonly message: string }) =>
   error instanceof WorkspaceError ? error : fail(error.message, error);
 
 /**
- * @internal A machine: one container with blockd, serving one session's
- * mount at a time. It answers its blockd's head requests by asking the
- * session's Durable Object.
+ * What a machine runs on. A Cloudflare container answers its blockd's head
+ * and journal requests through a container control (the session's Durable
+ * Object holds both); a sandbox elsewhere (a Lambda MicroVM) has no control
+ * host, so its blockd reads and writes them in the store.
  */
-const machineImpl = (config: HostConfig, dockerfile?: string) =>
+interface MachineBackend {
+  readonly disk: Disk;
+  /** Run an argument vector and wait for it. */
+  readonly run: (
+    cmd: Array<string>,
+    options: { readonly cwd?: string; readonly env?: Record<string, string> },
+  ) => Effect.Effect<
+    { readonly exitCode: number; readonly stdout: ArrayBuffer; readonly stderr: ArrayBuffer },
+    { readonly message: string },
+    RuntimeContext
+  >;
+  /** Start (or re-grant) the machine for an open. */
+  readonly start: (
+    config: HostConfig,
+    egress: ReadonlyArray<never>,
+    ttlMs: number | undefined,
+  ) => Effect.Effect<void, { readonly message: string }, RuntimeContext>;
+  /** An HTTP request to a port on the machine. */
+  readonly port: (
+    port: number,
+    request: HttpServerRequest,
+  ) => Effect.Effect<HttpServerResponse.HttpServerResponse, unknown, RuntimeContext>;
+  /** Whether blockd reaches the session through a container control. */
+  readonly controls: boolean;
+  /** Stop the machine (it's idle). */
+  readonly stop: Effect.Effect<void, unknown, RuntimeContext>;
+}
+
+/** A Cloudflare container built from the workspace's Dockerfile. */
+const containerBackend = (config: HostConfig, dockerfile?: string) =>
   Effect.gen(function* () {
     const Box = machineContainer(config.id, dockerfile);
     const container = yield* Box;
@@ -703,63 +740,130 @@ const machineImpl = (config: HostConfig, dockerfile?: string) =>
         Application: (Box as unknown as { Application: Effect.Effect<unknown> }).Application,
       }) as never,
     );
+    return {
+      disk,
+      run: (cmd, options) =>
+        container.exec(cmd, options as never).pipe(
+          Effect.flatMap((process) => process.output()),
+          Effect.scoped,
+        ),
+      start: (hostConfig, egress, ttlMs) =>
+        Effect.gen(function* () {
+          yield* container.start({
+            instance: hostConfig.instanceType,
+            enableInternet: true,
+            egress,
+            ...(ttlMs !== undefined ? { ttl: ttlMs } : {}),
+          });
+          yield* container.setInactivityTimeout(hostConfig.idleMs);
+        }),
+      port: (port, request) =>
+        Effect.flatMap(container.getTcpPort(port), (tcp) => tcp.fetch(request)),
+      controls: true,
+      // The container's inactivity timeout stops it.
+      stop: Effect.void,
+    } satisfies MachineBackend;
+  });
+
+/** A sandbox hosted elsewhere: a Lambda MicroVM (`machine.lambda`). */
+const sandboxBackend = (config: HostConfig) =>
+  Effect.gen(function* () {
+    const Vm = machineSandbox(config.id);
+    const sandbox = yield* Vm;
+    const disk: Disk = yield* volumeOf(config.id).on(Vm);
+    return {
+      disk,
+      run: (cmd, options) =>
+        sandbox.exec(cmd, options).pipe(
+          Effect.flatMap((process) => process.output()),
+          Effect.scoped,
+        ),
+      start: (_hostConfig, egress, ttlMs) =>
+        sandbox.start({
+          size: "machine",
+          enableInternet: true,
+          egress,
+          ...(ttlMs !== undefined ? { ttl: ttlMs } : {}),
+        }),
+      port: (port, request) =>
+        Effect.gen(function* () {
+          const client = yield* sandbox.httpClient(port);
+          const response = yield* client.execute(HttpServerRequestModule.toClientRequest(request));
+          return HttpServerResponse.stream(response.stream, {
+            status: response.status,
+            headers: response.headers,
+          });
+        }),
+      controls: false,
+      stop: sandbox.stop(),
+    } satisfies MachineBackend;
+  });
+
+/**
+ * @internal A machine: one container or MicroVM with blockd, serving one
+ * session's mount at a time. A container's blockd reads and moves its head
+ * and appends its journal through the session's Durable Object.
+ */
+const machineImpl = (config: HostConfig, dockerfile?: string) =>
+  Effect.gen(function* () {
+    const backend: MachineBackend = yield* config.machine === "lambda"
+      ? sandboxBackend(config)
+      : containerBackend(config, dockerfile);
+    const { disk, run } = backend;
     const sessions = yield* sessionObject(config.id).from(thisWorker);
     return Effect.gen(function* () {
       const state = yield* DurableObjectState;
       let mounted: DiskMount | undefined;
-      /** A command in the container, waited for. */
-      const run = (
-        cmd: Array<string>,
-        options: { readonly cwd?: string; readonly env?: Record<string, string> },
-      ) =>
-        container.exec(cmd, options as never).pipe(
-          Effect.flatMap((process) => process.output()),
-          Effect.scoped,
-        );
 
-      registerControl(state.raw, {
-        key: "alchemy:workspace-heads",
-        host: HEADS_HOST,
-        handle: (request) =>
-          Effect.gen(function* () {
-            const url = new URL(request.url);
-            if (url.pathname.startsWith("/journal/")) {
-              const [session, epoch, seq] = url.pathname
-                .slice("/journal/".length)
-                .split("/")
-                .map(decodeURIComponent) as [string, string, string | undefined];
-              const method =
-                request.method === "POST" ? "POST" : request.method === "DELETE" ? "DELETE" : "GET";
-              const reply = yield* sessions.getByName(session).journal(session, {
-                method,
-                epoch: Number(epoch),
-                seq: Number(seq ?? url.searchParams.get("from") ?? 0),
-                ...(method === "DELETE" ? { to: Number(url.searchParams.get("to") ?? 0) } : {}),
-                ...(method === "POST"
-                  ? {
-                      body: new Uint8Array(yield* Effect.promise(() => request.arrayBuffer())),
-                    }
-                  : {}),
-              });
-              return new Response((reply.body as BodyInit | undefined) ?? null, {
+      if (backend.controls) {
+        registerControl(state.raw, {
+          key: "alchemy:workspace-heads",
+          host: HEADS_HOST,
+          handle: (request) =>
+            Effect.gen(function* () {
+              const url = new URL(request.url);
+              if (url.pathname.startsWith("/journal/")) {
+                const [session, epoch, seq] = url.pathname
+                  .slice("/journal/".length)
+                  .split("/")
+                  .map(decodeURIComponent) as [string, string, string | undefined];
+                const method =
+                  request.method === "POST"
+                    ? "POST"
+                    : request.method === "DELETE"
+                      ? "DELETE"
+                      : "GET";
+                const reply = yield* sessions.getByName(session).journal(session, {
+                  method,
+                  epoch: Number(epoch),
+                  seq: Number(seq ?? url.searchParams.get("from") ?? 0),
+                  ...(method === "DELETE" ? { to: Number(url.searchParams.get("to") ?? 0) } : {}),
+                  ...(method === "POST"
+                    ? {
+                        body: new Uint8Array(yield* Effect.promise(() => request.arrayBuffer())),
+                      }
+                    : {}),
+                });
+                return new Response((reply.body as BodyInit | undefined) ?? null, {
+                  status: reply.status,
+                });
+              }
+              const session = decodeURIComponent(url.pathname.replace(/^\/heads\/?/, ""));
+              if (!session) return new Response("[]", { status: 200 });
+              const method = request.method === "POST" ? "POST" : "GET";
+              const body = method === "POST" ? yield* Effect.promise(() => request.text()) : "";
+              const reply = yield* sessions.getByName(session).heads(session, method, body);
+              return new Response(reply.body, {
                 status: reply.status,
+                headers: { "content-type": "application/json" },
               });
-            }
-            const session = decodeURIComponent(url.pathname.replace(/^\/heads\/?/, ""));
-            if (!session) return new Response("[]", { status: 200 });
-            const method = request.method === "POST" ? "POST" : "GET";
-            const body = method === "POST" ? yield* Effect.promise(() => request.text()) : "";
-            const reply = yield* sessions.getByName(session).heads(session, method, body);
-            return new Response(reply.body, {
-              status: reply.status,
-              headers: { "content-type": "application/json" },
-            });
-          }).pipe(
-            Effect.catchCause((cause) =>
-              Effect.succeed(new Response(String(cause), { status: 503 })),
+            }).pipe(
+              Effect.catchCause((cause) =>
+                Effect.succeed(new Response(String(cause), { status: 503 })),
+              ),
             ),
-          ),
-      });
+        });
+      }
 
       /** Kill a blockd that won't detach, and whatever it left attached. */
       const forceDetach = (session: string) =>
@@ -788,7 +892,7 @@ const machineImpl = (config: HostConfig, dockerfile?: string) =>
         mounted = undefined;
         const detached = current
           ? yield* Effect.exit(current.detach)
-          : // This object restarted while the container kept the mount.
+          : // This object restarted while the machine kept the mount.
             yield* Effect.exit(
               run(
                 [
@@ -810,24 +914,25 @@ const machineImpl = (config: HostConfig, dockerfile?: string) =>
         return undefined;
       });
 
+      const IDLE_AT = "workspace:idle-at";
+
       return {
         mount: (session: string, hostConfig: HostConfig, egress: DelegatedEgress | undefined) =>
           Effect.gen(function* () {
             // Sessions only ask for a mount when they hold none: anything
             // mounted here is stale.
             if (mounted) yield* detach(mounted.head);
+            yield* state.storage.delete(IDLE_AT);
             // The open's grant replaces whatever the last one granted.
-            yield* container.start({
-              instance: hostConfig.instanceType,
-              enableInternet: true,
-              egress: egress ? delegate(egress) : [],
-              ...(egress ? { ttl: egress.ttlMs } : {}),
-            });
-            yield* container.setInactivityTimeout(hostConfig.idleMs);
+            yield* backend.start(hostConfig, egress ? delegate(egress) : [], egress?.ttlMs);
             mounted = yield* disk.mount(session, {
               dir: hostConfig.path,
-              heads: `http://${HEADS_HOST}/heads`,
-              journal: `http://${HEADS_HOST}/journal`,
+              ...(backend.controls
+                ? {
+                    heads: `http://${HEADS_HOST}/heads`,
+                    journal: `http://${HEADS_HOST}/journal`,
+                  }
+                : {}),
             });
             return { dir: mounted.dir };
           }).pipe(Effect.mapError((error) => asWorkspaceError(error))),
@@ -840,25 +945,21 @@ const machineImpl = (config: HostConfig, dockerfile?: string) =>
             readonly timeoutMs?: number;
           },
         ) =>
-          Effect.gen(function* () {
-            const process = yield* container.exec(["sh", "-c", command], {
-              cwd: options.cwd,
-              ...(options.env ? { env: options.env } : {}),
-            } as never);
-            const output = yield* process.output();
-            return {
+          run(["sh", "-c", command], {
+            cwd: options.cwd,
+            ...(options.env ? { env: options.env } : {}),
+          }).pipe(
+            Effect.map((output) => ({
               exitCode: output.exitCode,
               stdout: decode(output.stdout),
               stderr: decode(output.stderr),
-            };
-          }).pipe(
+            })),
             options.timeoutMs === undefined
               ? (effect) => effect
               : Effect.timeoutOrElse({
                   duration: Duration.millis(options.timeoutMs),
                   orElse: () => Effect.fail(fail(`${command} timed out`)),
                 }),
-            Effect.scoped,
             Effect.mapError((error) => asWorkspaceError(error)),
           ),
 
@@ -911,15 +1012,14 @@ const machineImpl = (config: HostConfig, dockerfile?: string) =>
             Effect.mapError((error) => asWorkspaceError(error)),
           ),
 
-        /** A port in the container: `x-alchemy-port` names it. */
+        /** A port on the machine: `x-alchemy-port` names it. */
         fetch: Effect.gen(function* () {
           const request = yield* HttpServerRequest;
           const port = Number(request.headers["x-alchemy-port"]);
           if (!Number.isInteger(port) || port <= 0) {
             return HttpServerResponse.text("x-alchemy-port is required\n", { status: 400 });
           }
-          const tcp = yield* container.getTcpPort(port);
-          return yield* tcp.fetch(request);
+          return yield* backend.port(port, request);
         }).pipe(
           Effect.catchCause((cause) =>
             Effect.succeed(HttpServerResponse.text(String(cause), { status: 502 })),
@@ -934,6 +1034,9 @@ const machineImpl = (config: HostConfig, dockerfile?: string) =>
         unmount: (session: string) =>
           Effect.gen(function* () {
             const snapshot = yield* detach(session);
+            // A machine that bills while it runs stops once it's been idle.
+            yield* state.storage.put(IDLE_AT, Date.now() + config.idleMs);
+            yield* state.storage.setAlarm(Date.now() + config.idleMs);
             // Collect garbage now and then, after an open, off the caller's path.
             const last = (yield* state.storage.get<number>("workspace:gc-at")) ?? 0;
             if (Date.now() - last > Duration.toMillis(GC_EVERY)) {
@@ -949,6 +1052,18 @@ const machineImpl = (config: HostConfig, dockerfile?: string) =>
             }
             return snapshot;
           }).pipe(Effect.mapError((error) => asWorkspaceError(error))),
+
+        alarm: () =>
+          Effect.gen(function* () {
+            const idleAt = yield* state.storage.get<number>(IDLE_AT);
+            if (mounted || idleAt === undefined || Date.now() < idleAt) return;
+            yield* state.storage.delete(IDLE_AT);
+            yield* backend.stop;
+          }).pipe(
+            Effect.catchCause((cause) =>
+              Effect.logWarning("stopping an idle machine failed", cause),
+            ),
+          ),
       };
     });
   });

@@ -73,6 +73,11 @@ export interface MicrovmSandboxProps<Size extends string = string> {
   readonly baseImage?: string;
   /** CPU architectures to build for. */
   readonly cpuConfigurations?: microvms.CpuConfiguration[];
+  /**
+   * Linux capabilities the program gets beyond the default set, e.g.
+   * `["ALL"]` to mount a filesystem (a workspace machine mounts its disk).
+   */
+  readonly additionalOsCapabilities?: microvms.Capability[];
   /** Logging for the images' builds and their MicroVMs. */
   readonly logging?: microvms.Logging;
   /**
