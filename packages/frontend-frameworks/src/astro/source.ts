@@ -37,7 +37,7 @@ import * as Path from "effect/Path";
 import type { PlatformError } from "effect/PlatformError";
 import * as Redacted from "effect/Redacted";
 import type * as Scope from "effect/Scope";
-import { runBuildChild } from "../core/BuildChild.ts";
+import { resolveBuildEnv, runBuildChild } from "../core/BuildChild.ts";
 import * as FrameworkCore from "../core/index.ts";
 import * as Astro from "./Astro.ts";
 import cloudflareTarget from "./cloudflare.ts";
@@ -749,25 +749,6 @@ const assetConfigFromProps = (
   }
   const { directory: _directory, path: _path, hash: _hash, ...config } = assets;
   return Object.keys(config).length > 0 ? config : undefined;
-};
-
-/**
- * Resolve the Worker env into the plain strings the build child applies to
- * its `process.env` — same filter as {@link applyWorkerEnvToProcess}, but
- * producing JSON-safe data that can cross the process boundary.
- */
-const resolveBuildEnv = (env: Record<string, unknown> | undefined): Record<string, string> => {
-  const out: Record<string, string> = {};
-  for (const [key, value] of Object.entries(env ?? {})) {
-    if (typeof value === "string") {
-      out[key] = value;
-    } else if (Redacted.isRedacted(value) && typeof Redacted.value(value) === "string") {
-      out[key] = Redacted.value(value) as string;
-    } else if (typeof value === "number" || typeof value === "boolean") {
-      out[key] = String(value);
-    }
-  }
-  return out;
 };
 
 /**

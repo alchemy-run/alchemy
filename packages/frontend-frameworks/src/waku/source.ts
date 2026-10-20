@@ -18,7 +18,7 @@ import * as Path from "effect/Path";
 import type { PlatformError } from "effect/PlatformError";
 import type * as Scope from "effect/Scope";
 import * as Semaphore from "effect/Semaphore";
-import { runBuildChild } from "../core/BuildChild.ts";
+import { resolveBuildEnv, runBuildChild } from "../core/BuildChild.ts";
 import * as FrameworkCore from "../core/index.ts";
 import { makeWakuCloudflareTarget } from "./cloudflare.ts";
 import { layer as wakuFrameworkLayer } from "./Waku.ts";
@@ -694,6 +694,7 @@ export const makeWakuSourceProvider = (
         module: integration.buildModule,
         rootDir,
         framework: integration.framework,
+        env: resolveBuildEnv(ctx.env),
         config: {
           rootDir,
           compatibilityDate: ctx.compatibility.date,

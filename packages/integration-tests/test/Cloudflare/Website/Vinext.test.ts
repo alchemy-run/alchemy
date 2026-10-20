@@ -3,11 +3,10 @@ import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnviron
 import { describe, expect } from "alchemy-test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
 import { MinimumLogLevel } from "effect/References";
 import * as pathe from "pathe";
 import { cloneFixture } from "../Utils/Fixture.ts";
-import { expectUrlContains } from "../Utils/Http.ts";
+import { expectClientChunkContains, expectUrlContains } from "../Utils/Http.ts";
 import { expectWorkerExists, waitForWorkerToBeDeleted } from "../Utils/Worker.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
@@ -58,24 +57,11 @@ describe.concurrent(
 
           // The declared `NEXT_PUBLIC_*` value is inlined into the deployed
           // client bundle.
-          const fs = yield* FileSystem.FileSystem;
-          const clientDir = pathe.join(rootDir, "dist", "client");
-          const chunks = (yield* fs.readDirectory(clientDir, { recursive: true })).filter((file) =>
-            file.endsWith(".js"),
-          );
-          const inlined = yield* Effect.filter(chunks, (file) =>
-            fs
-              .readFileString(pathe.join(clientDir, file))
-              .pipe(Effect.map((code) => code.includes(publicMarker))),
-          );
-          expect(inlined).toHaveLength(1);
-          yield* expectUrlContains(
-            `${site.url!}/${inlined[0]!.replaceAll("\\", "/")}`,
+          yield* expectClientChunkContains(
+            site.url!,
+            pathe.join(rootDir, "dist", "client"),
             publicMarker,
-            {
-              timeout: "60 seconds",
-              label: "vinext public env",
-            },
+            { timeout: "60 seconds", label: "vinext public env" },
           );
 
           // Static asset from `public/`.

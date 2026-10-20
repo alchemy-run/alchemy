@@ -32,7 +32,7 @@ import * as Path from "effect/Path";
 import type { PlatformError } from "effect/PlatformError";
 import * as Redacted from "effect/Redacted";
 import type * as Scope from "effect/Scope";
-import { runBuildChild } from "../core/BuildChild.ts";
+import { resolveBuildEnv, runBuildChild } from "../core/BuildChild.ts";
 import { toOutputFile, type BuildOutput } from "../core/BuildOutput.ts";
 import { resolveViteDevPort } from "../core/DevPort.ts";
 import { ModuleLoadError } from "../core/Loader.ts";
@@ -485,25 +485,6 @@ const loadVite = async (projectRoot: string): Promise<ViteModule> => {
   } catch {
     return await import("vite");
   }
-};
-
-/**
- * Resolve the Worker env into the plain strings the build child sees on
- * `process.env`, so Vinext inlines declared `NEXT_PUBLIC_*` values into the
- * client bundle. Declared values override the parent's.
- */
-const resolveBuildEnv = (env: Record<string, unknown> | undefined): Record<string, string> => {
-  const out: Record<string, string> = {};
-  for (const [key, value] of Object.entries(env ?? {})) {
-    if (typeof value === "string") {
-      out[key] = value;
-    } else if (Redacted.isRedacted(value) && typeof Redacted.value(value) === "string") {
-      out[key] = Redacted.value(value) as string;
-    } else if (typeof value === "number" || typeof value === "boolean") {
-      out[key] = String(value);
-    }
-  }
-  return out;
 };
 
 const getDefine = (env: Record<string, unknown>) =>

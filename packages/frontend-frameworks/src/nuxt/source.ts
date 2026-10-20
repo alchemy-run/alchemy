@@ -40,7 +40,7 @@ import type { PlatformError } from "effect/PlatformError";
 import * as Redacted from "effect/Redacted";
 import type * as Scope from "effect/Scope";
 import { glob } from "tinyglobby";
-import { runBuildChild } from "../core/BuildChild.ts";
+import { resolveBuildEnv, runBuildChild } from "../core/BuildChild.ts";
 import { makeCloudflareTarget } from "./cloudflare.ts";
 import { make as makeNuxt, type NuxtOptions } from "./Nuxt.ts";
 
@@ -569,6 +569,7 @@ export const makeNuxtSource = (options: NuxtSourceOptions): SourceProvider => {
         module: import.meta.url,
         rootDir,
         framework: "nuxt",
+        env: resolveBuildEnv(ctx.env),
         config: {
           rootDir,
           compatibilityDate: ctx.compatibility.date,
