@@ -1,5 +1,5 @@
+import { SessionError } from "@alchemy.run/ai";
 import type { RuntimeContext } from "alchemy";
-import { SessionError } from "alchemy/AI";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";

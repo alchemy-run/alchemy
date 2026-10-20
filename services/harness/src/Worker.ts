@@ -1,5 +1,5 @@
-import { SessionError } from "alchemy/AI";
-import * as Cloudflare from "alchemy/Cloudflare";
+import { SessionError } from "@alchemy.run/ai";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";

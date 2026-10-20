@@ -76,9 +76,9 @@ no configuration and no credentials, so it is cheap to import anywhere:
 
 ```ts
 // src/gateway.ts
-import * as Anthropic from "alchemy/Anthropic";
+import * as Anthropic from "@alchemy.run/anthropic";
 import * as Egress from "alchemy/Egress";
-import * as GitHub from "alchemy/GitHub";
+import * as GitHub from "@alchemy.run/github";
 
 export class WorkGateway extends Egress.Gateway<WorkGateway>()("WorkGateway", {
   model: Anthropic.Egress,
@@ -98,9 +98,9 @@ name, an extra one, or the wrong kind doesn't compile.
 
 ```ts
 // src/gateway.worker.ts
-import * as Anthropic from "alchemy/Anthropic";
-import * as Cloudflare from "alchemy/Cloudflare";
-import * as GitHub from "alchemy/GitHub";
+import * as Anthropic from "@alchemy.run/anthropic";
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as GitHub from "@alchemy.run/github";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import { WorkGateway } from "./gateway.ts";
@@ -137,9 +137,9 @@ subject carried in the signed grant, using a binding the constructor yielded:
 
 ```ts
 // src/gateway.lambda.ts — the same pattern on a Lambda with a function URL
-import * as AWS from "alchemy/AWS";
+import * as AWS from "@alchemy.run/aws";
 import * as Egress from "alchemy/Egress";
-import * as GitHub from "alchemy/GitHub";
+import * as GitHub from "@alchemy.run/github";
 import * as Effect from "effect/Effect";
 import { UserGateway } from "./gateway.ts";
 import { Credentials } from "./credentials.ts"; // a DynamoDB table of users' credentials
@@ -188,7 +188,7 @@ return {
 
 ```ts
 // src/Sandbox.ts — the shape the Durable Object uses: start, exec, setEgress, stop
-import * as AI from "alchemy/AI";
+import * as AI from "@alchemy.run/ai";
 
 // The declaration types start(): the sizes it takes, and the egress kinds it accepts.
 export class Sandbox extends AI.Sandbox<
@@ -212,8 +212,8 @@ knows what that host offers. Hosts say nothing about gateways:
 
 ```ts
 // src/Sandbox.cloudflare.ts
-import * as Anthropic from "alchemy/Anthropic";
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Anthropic from "@alchemy.run/anthropic";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as Effect from "effect/Effect";
 import { Sandbox } from "./Sandbox.ts";
@@ -234,8 +234,8 @@ export default Cloudflare.Containers.Sandbox(
 
 ```ts
 // src/Sandbox.microvm.ts
-import * as Anthropic from "alchemy/Anthropic";
-import * as AWS from "alchemy/AWS";
+import * as Anthropic from "@alchemy.run/anthropic";
+import * as AWS from "@alchemy.run/aws";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as Effect from "effect/Effect";
 import { Sandbox } from "./Sandbox.ts";
@@ -285,7 +285,7 @@ Effect.gen(function* () {
 
 ```ts
 // src/Agent.ts
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Effect from "effect/Effect";
 import { UserGateway, WorkGateway } from "./gateway.ts";
 import { Sandbox } from "./Sandbox.ts";
@@ -342,7 +342,7 @@ overlap (section 7). When they would overlap, `start` fails with a typed
 
 ```ts
 // src/worker.ts — hosts Agent
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
@@ -372,9 +372,9 @@ export default class Api extends Cloudflare.Worker<Api>()(
 ```ts
 // alchemy.run.ts
 import * as Alchemy from "alchemy";
-import * as AWS from "alchemy/AWS";
-import * as Cloudflare from "alchemy/Cloudflare";
-import * as GitHub from "alchemy/GitHub";
+import * as AWS from "@alchemy.run/aws";
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as GitHub from "@alchemy.run/github";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import UserGatewayLambda from "./src/gateway.lambda.ts";

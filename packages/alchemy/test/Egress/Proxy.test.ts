@@ -24,7 +24,7 @@ import * as SubscriptionRef from "effect/SubscriptionRef";
 import { makeLocalCa } from "@/Egress/LocalCa.ts";
 import { serveEgressControl, serveEgressProxy, writeTrustBundle } from "@/Egress/Proxy.ts";
 import type { Route } from "@/Egress/Route.ts";
-import { serveSandboxEgress } from "@/Runtime/Bootstrap/EgressProxy.ts";
+import { serveSandboxEgress } from "@/Runtime/EgressProxy.ts";
 import { httpServer, PlatformServices } from "@/Util/PlatformServices.ts";
 
 interface Seen {

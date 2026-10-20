@@ -17,8 +17,10 @@ import {
 } from "@/Auth/AuthProvider.ts";
 import {
   configFilePath,
+  credentialsDirPath,
   makeProviderProfileSchema,
   PROFILE_FORMAT,
+  profileCredentialsDirPath,
   profileDirPath,
   profileProviderFilePath,
   ProfileError,
@@ -248,6 +250,98 @@ it.live(
             entry.startsWith(".profiles-v0-"),
           ),
         ).toHaveLength(1);
+      }),
+    ),
+  { tags: ["unit", "local"], exclusive: true },
+);
+
+it.live(
+  "folds v0 credential sidecars into provider files",
+  () =>
+    withTempHome(
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const profile = yield* ProfileStore;
+        const sidecars = profileCredentialsDirPath("legacy");
+        yield* fs.makeDirectory(sidecars, { recursive: true });
+        const sidecar = (name: string, contents: unknown) =>
+          fs.writeFileString(
+            path.join(sidecars, `${name}.json`),
+            typeof contents === "string" ? contents : JSON.stringify(contents),
+          );
+        // The earliest GitHub sidecar name.
+        yield* sidecar("gh-stored", { type: "stored", token: "ghp" });
+        // Axiom's v0 `apiToken` is now `token`.
+        yield* sidecar("axiom-stored", { type: "stored", apiToken: "xaat", orgId: "org" });
+        yield* sidecar("cloudflare-stored", {
+          credentialType: "apiToken",
+          apiToken: "cf",
+          accountId: "acct",
+        });
+        // Providers with several methods pick the sidecar by `method`.
+        yield* sidecar("railway-oauth", { accessToken: "rw" });
+        yield* sidecar("hetzner-stored", "{not-json");
+        yield* fs.writeFileString(
+          configFilePath(),
+          JSON.stringify({
+            version: 0,
+            profiles: {
+              legacy: {
+                GitHub: { method: "stored", storageKey: "gh" },
+                Axiom: { method: "stored" },
+                Cloudflare: { method: "stored" },
+                Railway: { method: "oauth" },
+                Neon: { method: "stored" },
+                Hetzner: { method: "stored" },
+              },
+            },
+          }),
+        );
+
+        const providers = (yield* profile.readManifest).profiles.legacy!.providers;
+        expect(providers.GitHub).toEqual({ method: "stored", token: "ghp" });
+        expect(providers.Axiom).toEqual({ method: "stored", token: "xaat", orgId: "org" });
+        expect(providers.Cloudflare).toEqual({
+          method: "stored",
+          credentialType: "apiToken",
+          apiToken: "cf",
+          accountId: "acct",
+        });
+        expect(providers.Railway).toEqual({ method: "oauth", accessToken: "rw" });
+        // A missing or unreadable sidecar keeps the manifest values; the
+        // original stays in the v0 backup.
+        expect(providers.Neon).toEqual({ method: "stored" });
+        expect(providers.Hetzner).toEqual({ method: "stored" });
+        expect(yield* fs.exists(credentialsDirPath())).toBe(false);
+      }),
+    ),
+  { tags: ["unit", "local"], exclusive: true },
+);
+
+it.live(
+  "drops a v0 Cloudflare entry whose sidecar is incomplete",
+  () =>
+    withTempHome(
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const profile = yield* ProfileStore;
+        const sidecars = profileCredentialsDirPath("legacy");
+        yield* fs.makeDirectory(sidecars, { recursive: true });
+        // The earliest Cloudflare sidecar name, missing its account.
+        yield* fs.writeFileString(
+          path.join(sidecars, "cf-stored.json"),
+          JSON.stringify({ credentialType: "apiToken", apiToken: "cf" }),
+        );
+        yield* fs.writeFileString(
+          configFilePath(),
+          JSON.stringify({
+            version: 0,
+            profiles: { legacy: { Cloudflare: { method: "stored" } } },
+          }),
+        );
+
+        const providers = (yield* profile.readManifest).profiles.legacy!.providers;
+        expect(providers.Cloudflare).toEqual({});
       }),
     ),
   { tags: ["unit", "local"], exclusive: true },

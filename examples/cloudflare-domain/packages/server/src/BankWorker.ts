@@ -1,12 +1,12 @@
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as DomainCloudflare from "@alchemy.run/cloudflare/Domain";
+import * as Stripe from "@alchemy.run/stripe";
 import { Account } from "@bank/domain/Account/Account.aggregate";
 import { AccountSummary } from "@bank/domain/Account/AccountSummary.view";
 import { Bank, BankHandlers } from "@bank/domain/Bank.model";
 import { CustomerApi } from "@bank/domain/CustomerApi.api";
 import { LedgerStore } from "@bank/domain/Ledger/LedgerStore";
 import { SupportApi } from "@bank/domain/SupportApi.api";
-import * as Cloudflare from "alchemy/Cloudflare";
-import * as DomainCloudflare from "alchemy/Domain/Cloudflare";
-import * as Stripe from "alchemy/Stripe";
 import * as Telemetry from "alchemy/Telemetry";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";

@@ -1,5 +1,5 @@
-import { type Session, SessionError } from "alchemy/AI";
-import * as Cloudflare from "alchemy/Cloudflare";
+import { type Session, SessionError } from "@alchemy.run/ai";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Effect from "effect/Effect";
 import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";

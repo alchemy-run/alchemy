@@ -1,4 +1,4 @@
-import * as AWS from "alchemy/AWS";
+import * as AWS from "@alchemy.run/aws";
 import * as Duration from "effect/Duration";
 import { serveGateway } from "./Gateway.impl.ts";
 

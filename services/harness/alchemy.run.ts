@@ -1,8 +1,8 @@
+import * as AWS from "@alchemy.run/aws";
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as Doppler from "@alchemy.run/doppler";
+import * as GitHub from "@alchemy.run/github";
 import * as Alchemy from "alchemy";
-import * as AWS from "alchemy/AWS";
-import * as Cloudflare from "alchemy/Cloudflare";
-import * as Doppler from "alchemy/Doppler";
-import * as GitHub from "alchemy/GitHub";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { Path } from "effect/Path";

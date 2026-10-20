@@ -125,7 +125,7 @@ Yield `Cloudflare.Website.Vite("Website")` from your Stack:
 ```diff lang="typescript"
 // alchemy.run.ts
 import * as Alchemy from "alchemy";
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Effect from "effect/Effect";
 import Worker from "./src/worker.ts";
 
@@ -330,7 +330,7 @@ Or add an integration test alongside the existing ones:
 
 ```diff lang="typescript"
 // test/integ.test.ts
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Test from "alchemy/Test/Bun";
 import { expect } from "bun:test";
 import * as Effect from "effect/Effect";
@@ -432,7 +432,7 @@ Start with the simplest backend: an R2 bucket.
 
 ```typescript
 // src/backend.ts
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 
 export const Bucket = Cloudflare.R2.Bucket("Bucket");
 ```
@@ -523,7 +523,7 @@ concurrency), factor it into its own Worker:
 
 ```diff lang="typescript"
 // src/backend.ts
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 +import * as Effect from "effect/Effect";
 +import { HttpServerRequest } from "effect/http/HttpServerRequest";
 +import * as HttpServerResponse from "effect/http/HttpServerResponse";
@@ -625,7 +625,7 @@ API:
 ```diff lang="typescript"
 // src/routes/api.hello.ts
 import { createFileRoute } from "@tanstack/react-router";
-+import * as Cloudflare from "alchemy/Cloudflare/Bridge";
++import * as Cloudflare from "@alchemy.run/cloudflare/Bridge";
 +import type Backend from "../backend.ts";
 import { env } from "../env.ts";
 

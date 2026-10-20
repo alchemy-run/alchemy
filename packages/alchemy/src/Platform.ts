@@ -23,6 +23,7 @@ import { ALCHEMY_PHASE } from "./Phase.ts";
 import type { Provider, ProviderCollectionLike } from "./Provider.ts";
 import { Resource, type ResourceLike } from "./Resource.ts";
 import type { Rpc } from "./Rpc.ts";
+import { ServerHost, type ProcessContext } from "./Runtime/Process.ts";
 import {
   CurrentRuntimeContext,
   RuntimeContext,
@@ -30,7 +31,6 @@ import {
   type BaseRuntimeContext,
 } from "./RuntimeContext.ts";
 import { Self } from "./Self.ts";
-import { ServerHost, type ProcessContext } from "./Server/Process.ts";
 import type { Stack, StackServices } from "./Stack.ts";
 import type { Stage } from "./Stage.ts";
 import { effectClass } from "./Util/effect.ts";
@@ -280,6 +280,12 @@ export const Platform = <
      * wherever the props effect is, including inside deployed bundles.
      */
     transformProps?: (id: string, props: any) => Effect.Effect<any, any, any>;
+    /**
+     * Wrap the user's construction effect (`impl`) before it runs, at deploy
+     * and at run time: a platform provides services its constructors may
+     * use (e.g. how a Worker reaches an egress gateway).
+     */
+    provideImpl?: (impl: Effect.Effect<any, any, any>) => Effect.Effect<any, any, any>;
   },
   methods?: { [key: string]: any },
 ): any => {
@@ -476,7 +482,7 @@ export const Platform = <
                 runtimeContext,
               );
 
-              yield* impl.pipe(
+              yield* (hooks.provideImpl?.(impl) ?? impl).pipe(
                 Effect.flatMap((impl) => {
                   if (!impl) return Effect.void;
                   const shape = impl as Record<string, unknown>;
@@ -538,45 +544,51 @@ export const Platform = <
                     }),
                   ).pipe(
                     Layer.provideMerge(
-                      Layer.mergeAll(
-                        // Pin init's ambient `Scope` to this layer's build
-                        // scope. `Effect.provide` (`scopedWith`) would
-                        // otherwise shadow it with a transient scope that
-                        // closes the moment init returns; the build scope
-                        // lives for the instance under the runtime bridges,
-                        // so init-level finalizers run at instance shutdown
-                        // (Lambda's SIGTERM window) or never (workerd) —
-                        // request-coupled cleanup belongs in handlers, where
-                        // the bridge provides a per-event scope. It also
-                        // wins over any `Scope` captured in `outerServices`
-                        // below.
-                        Layer.succeed(Scope, buildScope),
-                        Layer.succeed(Platform.Platform, runtimeContext),
-                        Layer.succeed(PlatformContext, runtimeContext),
-                        Layer.succeed(RuntimeContext, runtimeContext),
-                        // Host contexts (EC2 instances, ECS tasks, processes)
-                        // carry a `run` for registering long-running loops.
-                        // Expose it as `ServerHost` so an inline program can
-                        // `yield* ServerHost` during plan/deploy without the
-                        // caller providing the layer itself.
-                        "run" in runtimeContext &&
-                          typeof (runtimeContext as { run?: unknown }).run === "function"
-                          ? Layer.succeed(ServerHost, {
-                              run: (runtimeContext as ProcessContext).run,
-                            })
-                          : Layer.empty,
-                        Layer.succeed(resource.Self, instance),
-                        Layer.succeed(Platform.Self, instance),
-                        Layer.succeed(Self, instance),
-                        runtimeContext.planServices
-                          ? Layer.unwrap(
-                              ALCHEMY_PHASE.pipe(
-                                Effect.map((phase) =>
-                                  phase === "plan" ? runtimeContext.planServices! : Layer.empty,
-                                ),
-                              ),
-                            )
-                          : Layer.empty,
+                      // Services the host provides its init (e.g. a Worker's `WebhookHost`),
+                      // built over the instance so they can `yield*` it.
+                      (runtimeContext.hostServices ?? Layer.empty).pipe(
+                        Layer.provideMerge(
+                          Layer.mergeAll(
+                            // Pin init's ambient `Scope` to this layer's build
+                            // scope. `Effect.provide` (`scopedWith`) would
+                            // otherwise shadow it with a transient scope that
+                            // closes the moment init returns; the build scope
+                            // lives for the instance under the runtime bridges,
+                            // so init-level finalizers run at instance shutdown
+                            // (Lambda's SIGTERM window) or never (workerd) —
+                            // request-coupled cleanup belongs in handlers, where
+                            // the bridge provides a per-event scope. It also
+                            // wins over any `Scope` captured in `outerServices`
+                            // below.
+                            Layer.succeed(Scope, buildScope),
+                            Layer.succeed(Platform.Platform, runtimeContext),
+                            Layer.succeed(PlatformContext, runtimeContext),
+                            Layer.succeed(RuntimeContext, runtimeContext),
+                            // Host contexts (EC2 instances, ECS tasks, processes)
+                            // carry a `run` for registering long-running loops.
+                            // Expose it as `ServerHost` so an inline program can
+                            // `yield* ServerHost` during plan/deploy without the
+                            // caller providing the layer itself.
+                            "run" in runtimeContext &&
+                              typeof (runtimeContext as { run?: unknown }).run === "function"
+                              ? Layer.succeed(ServerHost, {
+                                  run: (runtimeContext as ProcessContext).run,
+                                })
+                              : Layer.empty,
+                            Layer.succeed(resource.Self, instance),
+                            Layer.succeed(Platform.Self, instance),
+                            Layer.succeed(Self, instance),
+                            runtimeContext.planServices
+                              ? Layer.unwrap(
+                                  ALCHEMY_PHASE.pipe(
+                                    Effect.map((phase) =>
+                                      phase === "plan" ? runtimeContext.planServices! : Layer.empty,
+                                    ),
+                                  ),
+                                )
+                              : Layer.empty,
+                          ),
+                        ),
                       ),
                     ),
                     Layer.provideMerge(Layer.succeedContext(outerServices)),

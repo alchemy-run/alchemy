@@ -4,7 +4,7 @@
  * tool calls grouped under a summary, and a settled turn folded behind
  * "Worked for 1m 12s" so its answer reads first.
  */
-import type * as AI from "alchemy/AI/Client";
+import type * as AI from "@alchemy.run/ai/Client";
 import {
   BotIcon,
   BrainIcon,

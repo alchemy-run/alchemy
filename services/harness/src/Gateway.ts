@@ -1,6 +1,6 @@
-import * as Anthropic from "alchemy/Anthropic";
+import * as Anthropic from "@alchemy.run/anthropic";
+import * as GitHub from "@alchemy.run/github";
 import * as Egress from "alchemy/Egress";
-import * as GitHub from "alchemy/GitHub";
 
 /**
  * What a session's container may reach, and with whose credentials: the

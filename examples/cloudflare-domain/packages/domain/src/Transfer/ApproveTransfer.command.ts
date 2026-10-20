@@ -1,4 +1,4 @@
-import * as Domain from "alchemy/Domain";
+import * as Domain from "@alchemy.run/domain";
 import { AccountId } from "../Account/Account.id.ts";
 import { NotPermitted } from "../Account/ChangeOwner.command.ts";
 import { Actor } from "../Actor.ts";

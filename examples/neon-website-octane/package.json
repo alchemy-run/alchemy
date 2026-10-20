@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "@alchemy.run/frontend-frameworks": "workspace:*",
+    "@alchemy.run/neon": "workspace:*",
     "@octanejs/vite-plugin": "catalog:",
     "alchemy": "workspace:*",
     "effect": "catalog:",

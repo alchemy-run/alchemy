@@ -9,7 +9,7 @@ import * as Config from "effect/Config";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
-import type { ImageLayer } from "../Docker/ImageLayer.ts";
+import type { ImageLayer } from "../Image/Layer.ts";
 import * as Output from "../Output.ts";
 import type { RuntimeContext } from "../RuntimeContext.ts";
 import type { RouteSpec } from "./Grant.ts";

@@ -13,7 +13,7 @@ A scheduled command fires when nobody is waiting for its answer, so it never rej
 
 ```typescript
 // packages/domain/src/Transfer/ExpireTransfer.command.ts
-import * as Domain from "alchemy/Domain";
+import * as Domain from "@alchemy.run/domain";
 import { TransferFailed } from "./FailTransfer.command.ts";
 import { TransferId } from "./Transfer.id.ts";
 
@@ -34,7 +34,7 @@ A policy schedules the command when the waiting starts.
 
 ```typescript
 // packages/domain/src/Transfer/TransferApprovalDeadline.policy.ts
-import * as Domain from "alchemy/Domain";
+import * as Domain from "@alchemy.run/domain";
 import * as Effect from "effect/Effect";
 import { ExpireTransfer } from "./ExpireTransfer.command.ts";
 import { TransferRequested } from "./RequestTransfer.command.ts";

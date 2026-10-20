@@ -1,4 +1,4 @@
-import * as Anthropic from "alchemy/Anthropic";
+import * as Anthropic from "@alchemy.run/anthropic";
 import { WORKSPACE } from "./Sandbox.ts";
 
 /**

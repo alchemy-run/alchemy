@@ -1,7 +1,7 @@
 /**
  * The few message/part shapes AI Elements components are typed against —
  * defined locally so the components render our own transcript
- * (`alchemy/AI/Client`'s `reduceTranscript`) without the AI SDK.
+ * (`@alchemy.run/ai/Client`'s `reduceTranscript`) without the AI SDK.
  */
 
 export type ToolState =

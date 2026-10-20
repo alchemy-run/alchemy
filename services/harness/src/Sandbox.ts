@@ -1,6 +1,6 @@
-import * as AI from "alchemy/AI";
-import * as Anthropic from "alchemy/Anthropic";
-import * as GitHub from "alchemy/GitHub";
+import * as AI from "@alchemy.run/ai";
+import * as Anthropic from "@alchemy.run/anthropic";
+import * as GitHub from "@alchemy.run/github";
 
 /**
  * The machine Claude Code runs in. Declared bare (no host, no program) so

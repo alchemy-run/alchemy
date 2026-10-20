@@ -1,4 +1,4 @@
-import type * as AI from "alchemy/AI/Client";
+import type * as AI from "@alchemy.run/ai/Client";
 import {
   BotIcon,
   BrainIcon,

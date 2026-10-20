@@ -122,7 +122,7 @@ const DEFAULT_TIMEOUT = 120_000;
  *
  * ```ts
  * import * as Test from "@/Test/Alchemy";
- * import * as Cloudflare from "@/Cloudflare";
+ * import * as Cloudflare from "@alchemy.run/cloudflare";
  *
  * const { test, deploy, destroy, beforeAll, afterAll } = Test.make({
  *   providers: Cloudflare.providers(),

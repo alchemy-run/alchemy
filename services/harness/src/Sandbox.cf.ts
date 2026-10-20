@@ -1,4 +1,4 @@
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import { INSTANCE } from "./Machine.ts";
 import { ClaudeProgram, TOOLCHAIN } from "./Sandbox.impl.ts";
 import { Sandbox } from "./Sandbox.ts";

@@ -1,4 +1,4 @@
-import * as AI from "alchemy/AI/Client";
+import * as AI from "@alchemy.run/ai/Client";
 import * as Rpc from "effect/rpc/Rpc";
 import * as Schema from "effect/Schema";
 import { AgentRpcs } from "./AgentRpcs.ts";

@@ -32,6 +32,12 @@ export interface BaseRuntimeContext {
   /** additional services to provide to the plan  */
   planServices?: Layer.Layer<any>;
   /**
+   * Services the host provides its init in every phase, built over the
+   * instance (e.g. a Cloudflare Worker's `WebhookHost`), so user code
+   * doesn't provide them itself.
+   */
+  hostServices?: Layer.Layer<any, never, any>;
+  /**
    * Telemetry exporter Layer registered during init via
    * `Telemetry.layer(...)` / `Telemetry.layerOtlp(...)` (see Telemetry.ts).
    * The runtime bridges build it into every event's request scope,

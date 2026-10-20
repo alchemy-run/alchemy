@@ -6,8 +6,8 @@
  * mount it inside the host's program.
  */
 import * as Effect from "effect/Effect";
-import { contextTarget } from "../Docker/ImageContext.ts";
-import { bindIntoImageHost } from "../Docker/ImageHost.ts";
+import { contextTarget } from "../Image/Context.ts";
+import { bindIntoImageHost } from "../Image/Host.ts";
 
 /** A file with inline content, mountable with {@link MountFile}. */
 export interface File {

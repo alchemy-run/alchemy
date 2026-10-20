@@ -1,5 +1,5 @@
-import * as Anthropic from "alchemy/Anthropic";
-import * as GitHub from "alchemy/GitHub";
+import * as Anthropic from "@alchemy.run/anthropic";
+import * as GitHub from "@alchemy.run/github";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import { Gateway } from "./Gateway.ts";

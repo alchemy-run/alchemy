@@ -22,6 +22,7 @@
     "react-router": "catalog:"
   },
   "devDependencies": {
+    "@alchemy.run/aws": "workspace:*",
     "@alchemy.run/frontend-frameworks": "workspace:*",
     "@distilled.cloud/aws": "workspace:*",
     "@effect/platform-node": "catalog:",
