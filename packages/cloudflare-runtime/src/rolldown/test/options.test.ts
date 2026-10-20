@@ -216,7 +216,9 @@ describe("options plugin", () => {
   it("does not provide a builder in SPA mode", async () => {
     const plugin = optionsPlugin.vite({});
     const result = await callViteConfig(plugin, { root: HTML_ROOT });
-    expect(result.appType).toBe("spa");
+    // `custom`, as `@cloudflare/vite-plugin` sets it: HTML is served through
+    // the Worker's router, never Vite's SPA middleware.
+    expect(result.appType).toBe("custom");
     expect(result.builder).toBeUndefined();
   });
 
@@ -225,7 +227,7 @@ describe("options plugin", () => {
     // client build fails on the missing `index.html`.
     const plugin = optionsPlugin.vite({});
     const result = await callViteConfig(plugin, { root: NO_HTML_ROOT });
-    expect(result.appType).toBe("spa");
+    expect(result.appType).toBe("custom");
     const environments = { client: { name: "client", isBuilt: false } };
     const built: Array<string> = [];
     await result.builder?.buildApp?.({
