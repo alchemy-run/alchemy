@@ -754,6 +754,7 @@
         "default": "./lib/Zone/index.js"
       },
       "./Basin/internal/*": null,
+      "./*/internal": null,
       "./*": {
         "types": "./lib/*.d.ts",
         "bun": "./src/*.ts",

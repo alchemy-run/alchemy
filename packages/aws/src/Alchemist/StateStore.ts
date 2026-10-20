@@ -4,7 +4,7 @@ import * as Provisioning from "alchemy/State/Provisioning";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
-import { deleteAllObjects } from "../Bootstrap.ts";
+import { deleteAllObjects } from "../AssetsBucket.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import {
   createStateBucketName,

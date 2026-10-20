@@ -61,6 +61,7 @@
         "default": "./lib/Website/index.js"
       },
       "./internal/*": null,
+      "./*/internal": null,
       "./*": {
         "types": "./lib/*.d.ts",
         "bun": "./src/*.ts",

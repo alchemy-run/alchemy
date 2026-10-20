@@ -154,16 +154,34 @@ const generateExports = Effect.fn(function* (
   } as Record<string, string | null>;
 });
 
-/** `null` entries blocking every `internal/` directory from the published package. */
+/**
+ * `null` entries blocking everything named `internal` from the published
+ * package: each `internal/` directory, a root `internal.ts` (`./internal`),
+ * and `internal.ts` at any depth below it (one pattern key ending in
+ * `/internal`, which outranks `./*`).
+ */
 const internalBlocks = Effect.fn(function* (packageDirectory: string) {
+  const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
-  const directories = yield* sourceDirectories(path.join(packageDirectory, "src"));
-  return Object.fromEntries(
-    directories
-      .filter((directory) => directory.split("/").at(-1) === "internal")
-      .filter((directory) => !isInternal(directory.split("/").slice(0, -1).join("/")))
-      .map((directory) => [`./${directory}/*`, null]),
+  const sourceDirectory = path.join(packageDirectory, "src");
+  const directories = yield* sourceDirectories(sourceDirectory);
+  const files = (yield* fs.readDirectory(sourceDirectory, { recursive: true })).map((file) =>
+    file.split(path.sep).join("/"),
   );
+  return {
+    ...Object.fromEntries(
+      directories
+        .filter((directory) => directory.split("/").at(-1) === "internal")
+        .filter((directory) => !isInternal(directory.split("/").slice(0, -1).join("/")))
+        .map((directory) => [`./${directory}/*`, null]),
+    ),
+    ...(files.includes("internal.ts") ? { "./internal": null } : {}),
+    ...(files.some(
+      (file) => file.endsWith("/internal.ts") && !isInternal(file.slice(0, file.lastIndexOf("/"))),
+    )
+      ? { "./*/internal": null }
+      : {}),
+  };
 });
 
 const syncPublishExports = Effect.fn(function* (

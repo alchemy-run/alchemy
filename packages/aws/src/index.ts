@@ -1,6 +1,6 @@
 export * from "./Arn.ts";
 export * from "./Assets.ts";
-export * from "./Bootstrap.ts";
+export * from "./AssetsBucket.ts";
 export * from "./Environment.ts";
 export * as AWSBindings from "./AWSBindings.ts";
 export * from "./Providers.ts";

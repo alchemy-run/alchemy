@@ -6,11 +6,11 @@ import * as EffectConsole from "effect/Console";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
-import { getAccountId, silentConsole } from "../AuthProvider.ts";
 import {
   bootstrap as bootstrapAws,
   destroyBootstrap as destroyBootstrapAws,
-} from "../Bootstrap.ts";
+} from "../AssetsBucket.ts";
+import { getAccountId, silentConsole } from "../AuthProvider.ts";
 import * as AWSCredentials from "../Credentials.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import * as AWSRegion from "../Region.ts";
