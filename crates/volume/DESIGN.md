@@ -48,12 +48,18 @@ by the hash of their bytes. The journal is named by position.
 packs/{hash}                         compressed extents
 pages/{hash}                         1024 extent → (pack, offset, len) entries
 manifests/{hash}                     size, parent, page hashes: one snapshot
-sessions/{id}/journal/{epoch}/{seq}  dirty blocks since the last snapshot
+heads/{session}                      the head's record (below)
+journal/{session}/{epoch}/{seq}      dirty blocks since the last snapshot
+                                     (or in the Session Durable Object; see below)
 ```
 
 A head is the only mutable thing: session id → (manifest, epoch, journal
-position). Heads live in the Session Durable Object, which is strongly
-consistent. That's an advantage SlateDB and ZeroFS don't have: they build
+position, an unfolded earlier journal, a tombstone flag). On Cloudflare the
+Session Durable Object is its authority: it caches the record and writes
+every change through to `heads/{session}` with a conditional PUT, so R2 stays
+the store of record (garbage collection and history read it there) while
+every read `blockd` makes is answered from the object's memory. The object is
+strongly consistent. That's an advantage SlateDB and ZeroFS don't have: they build
 compare-and-swap out of object-store preconditions, and SlateDB needed
 two-phase writes and a transactional side store for S3 before it had
 preconditions (RFC 0001). We get a linearizable coordinator for free and use
@@ -123,13 +129,17 @@ The journal holds every block written since the session's last snapshot.
   so a small write to a large file costs a small journal entry. Snapshots keep
   extent granularity; the fold reads the base extent and applies the blocks.
 - **Each entry has a checksum.** A torn or truncated entry ends the prefix.
-- **A pluggable store.** SlateDB lets the WAL live on a different, faster
-  store than the data (RFC 0009), because WAL latency is what bounds
-  `fsync`. We do the same: R2 or S3 by default, and a low-latency option (the
-  Session Durable Object's own storage, S3 Express One Zone) for sessions that
-  `fsync` a lot. This is our answer to Archil's sub-millisecond `fsync`, which
-  comes from their replicated SSD tier: we don't run a server tier, but the
-  journal can sit on the fastest durable store the host has.
+- **A pluggable store** (`volume::store::JournalStore`). SlateDB lets the WAL
+  live on a different, faster store than the data (RFC 0009), because WAL
+  latency is what bounds `fsync`. Ours: entries as blobs, checked against the
+  head store after each write (the default), or kept by the coordinator that
+  holds the head, which appends and checks the lease in one atomic request
+  (`HttpJournalStore`, `blockd --journal`). On Cloudflare the Session Durable
+  Object keeps them in its SQLite storage, 256 blocks per entry (its values are
+  capped at 2 MiB), and deletes them when the head moves past them. This is our
+  answer to Archil's sub-millisecond `fsync`, which comes from their replicated
+  SSD tier: we don't run a server tier, but the journal sits on the fastest
+  durable store the host has.
 
 ## Snapshots
 
@@ -187,15 +197,23 @@ measure.
 
 ## Garbage collection
 
-Today it's mark and sweep from every head, sparing objects younger than a grace
-period. That grace period is a guess that a commit finishes in time, and
-SlateDB's GC-boundary RFC (0026) describes how such guesses fail: a writer that
-stalls past the window gets its objects deleted underneath it. We replace the
-guess with knowledge the Durable Object has.
+Mark and sweep from every head in `heads/`. Journal entries are kept or
+deleted by their head's record, with no age guess: an entry is needed only if
+it's at or past the record's position in the current epoch, or in the unfolded
+earlier journal. Snapshot objects (packs, pages, manifests) unreachable from
+any head are spared for a grace period (an hour) instead, because a commit
+uploads them a moment before it moves the head. On Cloudflare each machine
+runs a collection at most every six hours, after an `open` ends, off the
+caller's path.
+
+That grace period is a guess that a commit finishes in time, and SlateDB's
+GC-boundary RFC (0026) describes how such guesses fail: a writer that stalls
+past the window gets its objects deleted underneath it. What's left to build:
 
 - **The boundary is the oldest live lease.** Every object a lease writes is
-  newer than the lease. Collection spares anything written after the oldest
-  active lease began, with no wall-clock guess.
+  newer than the lease. Collection would spare anything written after the
+  oldest active lease began, with no wall-clock guess. Sessions' leases live in
+  their own Durable Objects, so this needs an index of them.
 - **A stale writer can't be resurrected.** Its epoch is fenced, so its objects
   are never pointed at, even if they're uploaded after collection.
 - **History has a retention policy.** Undo depth per session is a policy
@@ -235,7 +253,7 @@ the lost-response handling) makes it fail on its first seed.
 
 | Question | Why it matters |
 |---|---|
-| `fsync` latency on R2, and on the Durable Object journal | Decides the default journal store |
+| `fsync` latency on R2, and on the Durable Object journal | Decided: the Durable Object (below) |
 | Open-end fold latency | Decides whether the fold moves after the `open` returns |
 | Extent size: 256 KiB today, ZeroFS uses 32 KiB, Lambda 512 KiB | Read amplification against request count |
 | Pack fragmentation after a week of forks and undos | Decides whether repacking is worth building |
@@ -248,9 +266,51 @@ a laptop in California to R2, so every request pays a long round trip): an
 size, because it's one PUT plus one read of the head. A snapshot of four
 extents takes about 1.4 s, which is four round trips in sequence (pack, pages,
 manifest, head) plus deleting the folded journal. Both are bounded by request
-latency, not bytes. The numbers that decide the design are the same
-measurements from inside a Cloudflare container, and with the head in a
-Durable Object.
+latency, not bytes.
+
+**Inside a Cloudflare container** (`test/Sandbox/Workspace.test.ts`: a 4 KiB
+write and `fsync` through kernel ext4 on the loop device, 20 times):
+
+| Journal | p50 | p90 |
+|---|---|---|
+| R2 entries, head checked through the Session Durable Object | 387 ms | 607 ms |
+| The Session Durable Object (append and fence in one request) | 113 ms | 121 ms |
+
+One ext4 `fsync` is two or three device flushes in sequence (the data, then
+the journal commit with FUA), so 113 ms is about three trips from the
+container through its machine's Durable Object to the session's. Halving it
+means fewer trips per `fsync` (answering FUA writes and the flush after them
+with one append) or a shorter path (the machine's object holding the journal,
+with the session only fencing).
+
+## On Cloudflare
+
+`Cloudflare.Containers.Workspace(Workspace, { dockerfile, path, size, machine })`
+deploys:
+
+- **The volume**: an R2 bucket, a scoped token, and the base: `path` of the
+  image `dockerfile` builds, imported at deploy.
+- **A host Worker** of its own, with two Durable Object classes:
+  - **Session**, one per session: the head (above), the journal, and the
+    leases of the `open`s running on it. Overlapping opens with the same grant
+    share one mount; an open with a different grant waits for the session to
+    go idle. Leases expire unless the open renews them, so a caller that dies
+    can't hold a session forever (an alarm reclaims them).
+  - **Machine**, one per session, so its cache stays warm: a container built
+    from `dockerfile` plus `blockd`, running `blockd mount --heads … --journal …`
+    against `http://workspace.alchemy.internal`, a host the container's own
+    Durable Object answers (a container control), which forwards to the session.
+- **Bindings** in every Worker or Durable Object that yields the workspace, to
+  both classes in the host's script.
+
+An `open` acquires a lease (mounting if the session is idle), runs its effect
+with `exec`, `spawn` and `port` going straight to the machine, and releases
+the lease; the last release unmounts, which snapshots. Egress on an `open` is
+minted by the caller with its own gateway clients and handed to the machine,
+which answers the container's relay with those grants (renewed with the
+lease): the host Worker holds no gateway of its own. At the end of an `open`,
+`blockd` kills whatever still uses the mount, so a server a command left
+running can't hold the disk open.
 
 ## Sources
 

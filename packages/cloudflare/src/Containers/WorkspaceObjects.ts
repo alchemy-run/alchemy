@@ -65,7 +65,12 @@ export interface HostConfig {
   readonly path: string;
   readonly instanceType: ContainerInstanceType;
   readonly idleMs: number;
+  /** Snapshots kept per session by garbage collection; all when absent. */
+  readonly history?: number;
 }
+
+/** How often a machine collects the store's garbage, at most. */
+const GC_EVERY = Duration.hours(6);
 
 /**
  * The egress an `open` grants its commands: the refs, and the grants the
@@ -927,7 +932,23 @@ const machineImpl = (config: HostConfig, dockerfile?: string) =>
           }),
 
         unmount: (session: string) =>
-          detach(session).pipe(Effect.mapError((error) => asWorkspaceError(error))),
+          Effect.gen(function* () {
+            const snapshot = yield* detach(session);
+            // Collect garbage now and then, after an open, off the caller's path.
+            const last = (yield* state.storage.get<number>("workspace:gc-at")) ?? 0;
+            if (Date.now() - last > Duration.toMillis(GC_EVERY)) {
+              yield* state.storage.put("workspace:gc-at", Date.now());
+              yield* state.waitUntil(
+                disk.gc(config.history !== undefined ? { history: config.history } : {}).pipe(
+                  Effect.tap((report) => Effect.logInfo("workspace garbage collected", report)),
+                  Effect.catchCause((cause) =>
+                    Effect.logWarning("workspace garbage collection failed", cause),
+                  ),
+                ),
+              );
+            }
+            return snapshot;
+          }).pipe(Effect.mapError((error) => asWorkspaceError(error))),
       };
     });
   });

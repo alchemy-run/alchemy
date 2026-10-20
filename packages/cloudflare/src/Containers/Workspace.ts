@@ -33,6 +33,11 @@ export interface WorkspaceProps {
   readonly dockerfile: string;
   /** Where the session's disk is mounted, and which directory of the image is its base. */
   readonly path: string;
+  /**
+   * Snapshots kept per session (each one an `undo` step); older ones are
+   * garbage collected. @default all
+   */
+  readonly history?: number;
   readonly machine?: {
     /** @default "standard-1" */
     readonly instanceType?: ContainerInstanceType;
@@ -81,6 +86,7 @@ export const Workspace = <const D extends SandboxWorkspace.Decl.Any>(
     path: props.path,
     instanceType: props.machine?.instanceType ?? "standard-1",
     idleMs: Duration.toMillis(Duration.fromInputUnsafe(props.machine?.idle ?? "5 minutes")),
+    ...(props.history !== undefined ? { history: props.history } : {}),
   };
   const volume = R2Volume(volumeOf(id), {
     ...(props.size !== undefined ? { size: props.size } : {}),

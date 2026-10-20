@@ -130,6 +130,15 @@ export interface Disk extends VolumeHeads {
     head: string,
     options: DiskMountOptions,
   ): Effect.Effect<DiskMount, VolumeError | SandboxError, RuntimeContext>;
+  /**
+   * Garbage-collect the store from this sandbox: delete what no head can
+   * reach (keeping `history` snapshots per head, all by default), sparing
+   * anything younger than `graceSeconds`.
+   */
+  gc(options?: {
+    readonly history?: number;
+    readonly graceSeconds?: number;
+  }): Effect.Effect<Record<string, unknown>, VolumeError | SandboxError, RuntimeContext>;
 }
 
 /**
@@ -263,6 +272,27 @@ const makeDisk = (
     return yield* run(sandbox, `mkdir -p /var/cache/blockd && exec ${argv.map(quote).join(" ")}`, {
       ...options.env,
       ...env,
+    });
+  }),
+  gc: Effect.fn(function* (
+    options: { readonly history?: number; readonly graceSeconds?: number } = {},
+  ) {
+    const argv = [
+      "blockd",
+      "gc",
+      "--store",
+      descriptor.store,
+      "--grace-seconds",
+      String(options.graceSeconds ?? 3600),
+      ...(options.history !== undefined ? ["--history", String(options.history)] : []),
+    ];
+    const ran = yield* run(sandbox, argv.map(quote).join(" "), yield* storeEnv);
+    if (ran.exitCode !== 0) {
+      return yield* new VolumeError({ message: `garbage collection failed: ${ran.stderr}` });
+    }
+    return yield* Effect.try({
+      try: () => JSON.parse(ran.stdout.trim()) as Record<string, unknown>,
+      catch: (cause) => new VolumeError({ message: `blockd gc said ${ran.stdout}`, cause }),
     });
   }),
   mount: Effect.fn(function* (head: string, options: DiskMountOptions) {
