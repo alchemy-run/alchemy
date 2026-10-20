@@ -45,9 +45,10 @@ export interface EnvironmentProps {
    */
   name?: string;
   /**
-   * Whether to create an ephemeral (PR) environment. Defaults to `false`.
-   * Create-only; ignored on update. Does not enable Railway's automatic
-   * PR deployments.
+   * Whether to create an ephemeral (PR) environment, listed under
+   * PR Environments in Railway. Create-only; ignored on update. Does not
+   * enable Railway's automatic PR deployments.
+   * @default false
    */
   ephemeral?: boolean;
   /**
