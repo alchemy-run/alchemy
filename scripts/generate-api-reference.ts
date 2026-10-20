@@ -60,11 +60,6 @@ const config = {
       sourceDisplayPrefix: "packages/drizzle/src",
     },
     {
-      srcRoot: path.join(import.meta.dir, "../packages/sqlite/src"),
-      providerPrefix: "SQLite",
-      sourceDisplayPrefix: "packages/sqlite/src",
-    },
-    {
       srcRoot: path.join(import.meta.dir, "../packages/acme/src"),
       providerPrefix: "ACME",
       sourceDisplayPrefix: "packages/acme/src",

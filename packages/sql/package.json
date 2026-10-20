@@ -53,6 +53,7 @@
     "build:package": "node scripts/build.ts"
   },
   "devDependencies": {
+    "@effect/sql-libsql": "catalog:",
     "@effect/sql-mysql2": "catalog:",
     "@effect/sql-pg": "catalog:",
     "@types/bun": "catalog:",
@@ -65,6 +66,7 @@
     "typescript": "catalog:"
   },
   "peerDependencies": {
+    "@effect/sql-libsql": "catalog:",
     "@effect/sql-mysql2": "catalog:",
     "@effect/sql-pg": "catalog:",
     "alchemy": "workspace:*",
@@ -73,6 +75,9 @@
     "pg": "catalog:"
   },
   "peerDependenciesMeta": {
+    "@effect/sql-libsql": {
+      "optional": true
+    },
     "@effect/sql-mysql2": {
       "optional": true
     },

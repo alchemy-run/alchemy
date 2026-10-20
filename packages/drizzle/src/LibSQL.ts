@@ -1,4 +1,4 @@
-import type { LibSQLConfig, LibSQLSource } from "@alchemy.run/turso/LibSQL";
+import type { LibSQLConfig, LibSQLSource } from "@alchemy.run/sql/SQLite";
 // `@effect/sql-libsql` (and @libsql/client underneath) are optional peers —
 // value imports are deferred to first use so `@alchemy.run/drizzle` resolves
 // without them installed.
@@ -10,9 +10,6 @@ import type { EffectLibsqlDatabase } from "drizzle-orm/effect-libsql";
 import type { EffectDrizzleSQLiteConfig } from "drizzle-orm/sqlite-core/effect/utils";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-
-const resolve = <A, E, R>(value: A | Effect.Effect<A, E, R>) =>
-  Effect.isEffect(value) ? value : Effect.succeed(value);
 
 /**
  * Open a Drizzle database over a libSQL database (e.g. Turso) using the
@@ -56,17 +53,17 @@ export const LibSQL = <TRelations extends AnyRelations = EmptyRelations, E = nev
   Effect.map(
     makeExecutionMemo(
       Effect.gen(function* () {
-        const [LibsqlClient, LibsqlDrizzle] = yield* Effect.promise(() =>
+        const [LibsqlClient, LibsqlDrizzle, { resolveLibSQLConfig }] = yield* Effect.promise(() =>
           Promise.all([
             import("@effect/sql-libsql/LibsqlClient"),
             import("drizzle-orm/effect-libsql"),
+            import("@alchemy.run/sql/SQLite"),
           ]),
         );
-        const url = yield* resolve(source.url);
-        const authToken =
-          source.authToken === undefined ? undefined : yield* resolve(source.authToken);
         const { client, ...drizzleConfig } = config ?? {};
-        const ctx = yield* Layer.build(LibsqlClient.layer({ ...client, url, authToken }));
+        const ctx = yield* Layer.build(
+          LibsqlClient.layer(yield* resolveLibSQLConfig(source, client)),
+        );
         return yield* LibsqlDrizzle.makeWithDefaults(
           drizzleConfig as EffectDrizzleSQLiteConfig<TRelations>,
         ).pipe(Effect.provideContext(ctx));

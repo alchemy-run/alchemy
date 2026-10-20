@@ -59,21 +59,14 @@
     "@distilled.cloud/turso": "workspace:*"
   },
   "devDependencies": {
-    "@effect/sql-libsql": "catalog:",
     "@types/bun": "catalog:",
     "alchemy": "workspace:*",
     "effect": "catalog:",
     "typescript": "catalog:"
   },
   "peerDependencies": {
-    "@effect/sql-libsql": "catalog:",
     "alchemy": "workspace:*",
     "effect": "catalog:"
-  },
-  "peerDependenciesMeta": {
-    "@effect/sql-libsql": {
-      "optional": true
-    }
   },
   "alchemy": {
     "contributes": [

@@ -8483,9 +8483,6 @@ importers:
       '@alchemy.run/cloudflare':
         specifier: workspace:*
         version: link:../cloudflare
-      '@alchemy.run/turso':
-        specifier: workspace:*
-        version: link:../turso
       '@cloudflare/workers-types':
         specifier: 5.20261012.1
         version: 5.20261012.1
@@ -10091,6 +10088,9 @@ importers:
 
   packages/sql:
     devDependencies:
+      '@effect/sql-libsql':
+        specifier: 'catalog:'
+        version: 4.0.4(effect@4.0.4)
       '@effect/sql-mysql2':
         specifier: 'catalog:'
         version: 4.0.4(@types/node@26.6.5)(effect@4.0.4)
@@ -10118,24 +10118,6 @@ importers:
       pg:
         specifier: 'catalog:'
         version: 8.23.1
-      typescript:
-        specifier: 'catalog:'
-        version: 7.0.2
-
-  packages/sqlite:
-    devDependencies:
-      '@libsql/client':
-        specifier: 'catalog:'
-        version: 0.17.4
-      '@types/bun':
-        specifier: 'catalog:'
-        version: 1.4.3
-      alchemy:
-        specifier: workspace:*
-        version: link:../alchemy
-      effect:
-        specifier: 4.0.4
-        version: 4.0.4
       typescript:
         specifier: 'catalog:'
         version: 7.0.2
@@ -10174,9 +10156,6 @@ importers:
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/turso
     devDependencies:
-      '@effect/sql-libsql':
-        specifier: 'catalog:'
-        version: 4.0.4(effect@4.0.4)
       '@types/bun':
         specifier: 'catalog:'
         version: 1.4.3

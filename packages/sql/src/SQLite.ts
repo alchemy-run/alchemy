@@ -30,8 +30,22 @@ const resolve = <A, E, R>(value: A | Effect.Effect<A, E, R>) =>
   Effect.isEffect(value) ? value : Effect.succeed(value);
 
 /**
- * Open an `@effect/sql-libsql` client over a libSQL database — a Turso
- * database, or any other libSQL server.
+ * Resolve a {@link LibSQLSource} and {@link LibSQLConfig} into the
+ * `LibsqlClientConfig` handed to `@effect/sql-libsql`.
+ */
+export const resolveLibSQLConfig = Effect.fn(function* <E = never, R = never>(
+  source: LibSQLSource<E, R>,
+  config?: LibSQLConfig,
+) {
+  const url = yield* resolve(source.url);
+  const authToken = source.authToken === undefined ? undefined : yield* resolve(source.authToken);
+  return { ...config, url, authToken } satisfies LibsqlClient.LibsqlClientConfig;
+});
+
+/**
+ * Open an `@effect/sql-libsql` client over a SQLite database through
+ * libSQL — a Turso database, any other libSQL server, or a local
+ * `file:` database.
  *
  * Accepts the client returned by `Turso.Connect(db)` (or any
  * `{ url, authToken }`) and returns a `LibsqlClient` (which implements the
@@ -39,7 +53,7 @@ const resolve = <A, E, R>(value: A | Effect.Effect<A, E, R>) =>
  * resolved once at init and used from any handler:
  *
  * ```typescript
- * import * as SQL from "@alchemy.run/turso/LibSQL";
+ * import * as SQL from "@alchemy.run/sql/SQLite";
  *
  * const conn = yield* Turso.Connect(Db);
  * const sql = yield* SQL.LibSQL(conn);
@@ -62,10 +76,9 @@ export const LibSQL = <E = never, R = never>(source: LibSQLSource<E, R>, config?
   Effect.map(
     makeExecutionMemo(
       Effect.gen(function* () {
-        const url = yield* resolve(source.url);
-        const authToken =
-          source.authToken === undefined ? undefined : yield* resolve(source.authToken);
-        const ctx = yield* Layer.build(LibsqlClient.layer({ ...config, url, authToken }));
+        const ctx = yield* Layer.build(
+          LibsqlClient.layer(yield* resolveLibSQLConfig(source, config)),
+        );
         return Context.get(ctx, LibsqlClient.LibsqlClient);
       }),
     ),

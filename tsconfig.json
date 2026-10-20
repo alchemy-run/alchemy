@@ -91,9 +91,6 @@
       "path": "./packages/drizzle/tsconfig.json"
     },
     {
-      "path": "./packages/sqlite/tsconfig.json"
-    },
-    {
       "path": "./packages/acme/tsconfig.json"
     },
     {
