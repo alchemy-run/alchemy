@@ -65,7 +65,7 @@ describe.skipIf(skip).sequential("Sandbox.Workspace with Lambda MicroVM machines
   );
 
   test(
-    "fsync on a MicroVM, with the journal in R2 (timed)",
+    "fsync on a MicroVM, with the journal in the session's Durable Object (timed)",
     Effect.gen(function* () {
       const script = [
         "const fs = require('fs');",

@@ -149,7 +149,9 @@ const makeConnection = Effect.fn(function* (descriptor: WorkspaceHostDescriptor)
         const stub = sessions.getByName(session);
         const first = yield* mint;
         const lease = yield* Effect.acquireRelease(
-          stub.acquire(session, grantKey, first).pipe(Effect.mapError(toWorkspaceError)),
+          stub
+            .acquire(session, grantKey, first, descriptor.url)
+            .pipe(Effect.mapError(toWorkspaceError)),
           (held) => stub.release(session, held.lease).pipe(Effect.ignore),
         );
         // Keep the lease (and the grants) alive for as long as the open runs.

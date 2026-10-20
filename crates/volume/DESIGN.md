@@ -283,6 +283,13 @@ write and `fsync` through kernel ext4 on the loop device, 20 times):
 | R2 entries, head checked through the Session Durable Object | 387 ms | 607 ms |
 | The Session Durable Object (append and fence in one request) | 113 ms | 121 ms |
 
+On a Lambda MicroVM in us-west-2 (`test/Sandbox/WorkspaceLambda.test.ts`):
+
+| Journal | p50 | p90 |
+|---|---|---|
+| R2 entries and head, over S3 from AWS | 753 ms | 1091 ms |
+| The Session Durable Object, through the host Worker's URL | 133 ms | 153 ms |
+
 One ext4 `fsync` is two or three device flushes in sequence (the data, then
 the journal commit with FUA), so 113 ms is about three trips from the
 container through its machine's Durable Object to the session's. Halving it
@@ -313,9 +320,9 @@ deploys:
 With `machine.lambda`, machines are AWS Lambda MicroVMs instead (a
 `Sandbox.Sandbox` hosted by `AWS.Lambda.MicrovmSandbox`, with the OS
 capabilities to mount); sessions stay on Cloudflare. A MicroVM has no
-container control, so its `blockd` reads and writes its head and journal in the
-bucket over S3 (the default journal store), and its Durable Object stops it
-once it's been idle.
+container control, so its `blockd` reaches the session's head and journal
+through the host Worker's own URL, presenting a secret only the host Worker
+and its machines hold; its Durable Object stops it once it's been idle.
 
 An `open` acquires a lease (mounting if the session is idle), runs its effect
 with `exec`, `spawn` and `port` going straight to the machine, and releases

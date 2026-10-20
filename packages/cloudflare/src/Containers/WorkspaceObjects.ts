@@ -31,6 +31,7 @@ import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
 import * as Semaphore from "effect/Semaphore";
 import { DurableObject } from "../Workers/DurableObject.ts";
+import type { DurableObject as DurableObjectNamespace } from "../Workers/DurableObject.ts";
 import { DurableObjectState } from "../Workers/DurableObjectState.ts";
 import { volumeBucketBinding } from "../Workers/VolumeHeads.ts";
 import { Worker } from "../Workers/Worker.ts";
@@ -50,6 +51,12 @@ const HEADS_HOST = "workspace.alchemy.internal";
 /** The env var holding a host Worker's {@link HostConfig}. */
 export const HOST_CONFIG = "ALCHEMY_WORKSPACE_HOST";
 
+/**
+ * The env var holding the secret a machine off Cloudflare (a MicroVM)
+ * presents to the host Worker's `/heads` and `/journal` endpoints.
+ */
+export const HOST_TOKEN = "ALCHEMY_WORKSPACE_TOKEN";
+
 /** How long a lease lives without renewal: an `open` renews it while it runs. */
 const LEASE_TTL = Duration.minutes(2);
 
@@ -59,6 +66,8 @@ export interface WorkspaceHostDescriptor {
   /** The host Worker's script name. */
   readonly script: string;
   readonly id: string;
+  /** The host Worker's URL: machines off Cloudflare reach their session through it. */
+  readonly url?: string;
 }
 
 /** @internal What the host Worker is configured with, the same at deploy and at run time. */
@@ -127,6 +136,7 @@ interface SessionShape {
     session: string,
     grant: string,
     egress: DelegatedEgress | undefined,
+    hostUrl: string | undefined,
   ): Effect.Effect<Lease, WorkspaceError, RuntimeContext>;
   renew(
     session: string,
@@ -149,6 +159,7 @@ interface MachineShape {
     session: string,
     config: HostConfig,
     egress: DelegatedEgress | undefined,
+    hostUrl: string | undefined,
   ): Effect.Effect<{ readonly dir: string }, WorkspaceError, RuntimeContext>;
   /** Fresh grants for the running mount's egress. */
   refresh(egress: DelegatedEgress): Effect.Effect<void, never, RuntimeContext>;
@@ -590,7 +601,12 @@ const sessionImpl = (config: HostConfig) =>
               ),
             ),
 
-        acquire: (session: string, grant: string, egress: DelegatedEgress | undefined) =>
+        acquire: (
+          session: string,
+          grant: string,
+          egress: DelegatedEgress | undefined,
+          hostUrl: string | undefined,
+        ) =>
           whenReady(
             session,
             (opens) => idle(opens) || opens.grant === grant,
@@ -609,7 +625,9 @@ const sessionImpl = (config: HostConfig) =>
                 yield* viaVolume(volume.fork(session)).pipe(Effect.mapError(asWorkspaceError));
               }
               const machine = session;
-              const { dir } = yield* machines.getByName(machine).mount(session, config, egress);
+              const { dir } = yield* machines
+                .getByName(machine)
+                .mount(session, config, egress, hostUrl);
               yield* saveOpens({ leases: { [lease]: expires }, session, grant, machine, dir });
               return { lease, machine, dir };
             }),
@@ -794,6 +812,53 @@ const sandboxBackend = (config: HostConfig) =>
   });
 
 /**
+ * A blockd's head or journal request (`volume::store::HttpMetaStore`,
+ * `HttpJournalStore`), answered by the session's Durable Object: from a
+ * container through its control host, or from a MicroVM through the host
+ * Worker's own URL.
+ */
+const serveHeads = (
+  sessions: DurableObjectNamespace<SessionShape>,
+  request: Request,
+): Effect.Effect<Response, never, RuntimeContext> =>
+  Effect.gen(function* () {
+    const url = new URL(request.url);
+    if (url.pathname.startsWith("/journal/")) {
+      const [session, epoch, seq] = url.pathname
+        .slice("/journal/".length)
+        .split("/")
+        .map(decodeURIComponent) as [string, string, string | undefined];
+      const method =
+        request.method === "POST" ? "POST" : request.method === "DELETE" ? "DELETE" : "GET";
+      const reply = yield* sessions.getByName(session).journal(session, {
+        method,
+        epoch: Number(epoch),
+        seq: Number(seq ?? url.searchParams.get("from") ?? 0),
+        ...(method === "DELETE" ? { to: Number(url.searchParams.get("to") ?? 0) } : {}),
+        ...(method === "POST"
+          ? {
+              body: new Uint8Array(yield* Effect.promise(() => request.arrayBuffer())),
+            }
+          : {}),
+      });
+      return new Response((reply.body as BodyInit | undefined) ?? null, {
+        status: reply.status,
+      });
+    }
+    const session = decodeURIComponent(url.pathname.replace(/^\/heads\/?/, ""));
+    if (!session) return new Response("[]", { status: 200 });
+    const method = request.method === "POST" ? "POST" : "GET";
+    const body = method === "POST" ? yield* Effect.promise(() => request.text()) : "";
+    const reply = yield* sessions.getByName(session).heads(session, method, body);
+    return new Response(reply.body, {
+      status: reply.status,
+      headers: { "content-type": "application/json" },
+    });
+  }).pipe(
+    Effect.catchCause((cause) => Effect.succeed(new Response(String(cause), { status: 503 }))),
+  );
+
+/**
  * @internal A machine: one container or MicroVM with blockd, serving one
  * session's mount at a time. A container's blockd reads and moves its head
  * and appends its journal through the session's Durable Object.
@@ -805,6 +870,7 @@ const machineImpl = (config: HostConfig, dockerfile?: string) =>
       : containerBackend(config, dockerfile);
     const { disk, run } = backend;
     const sessions = yield* sessionObject(config.id).from(thisWorker);
+    const env = (yield* WorkerEnvironment) as Record<string, unknown> | undefined;
     return Effect.gen(function* () {
       const state = yield* DurableObjectState;
       let mounted: DiskMount | undefined;
@@ -813,49 +879,7 @@ const machineImpl = (config: HostConfig, dockerfile?: string) =>
         registerControl(state.raw, {
           key: "alchemy:workspace-heads",
           host: HEADS_HOST,
-          handle: (request) =>
-            Effect.gen(function* () {
-              const url = new URL(request.url);
-              if (url.pathname.startsWith("/journal/")) {
-                const [session, epoch, seq] = url.pathname
-                  .slice("/journal/".length)
-                  .split("/")
-                  .map(decodeURIComponent) as [string, string, string | undefined];
-                const method =
-                  request.method === "POST"
-                    ? "POST"
-                    : request.method === "DELETE"
-                      ? "DELETE"
-                      : "GET";
-                const reply = yield* sessions.getByName(session).journal(session, {
-                  method,
-                  epoch: Number(epoch),
-                  seq: Number(seq ?? url.searchParams.get("from") ?? 0),
-                  ...(method === "DELETE" ? { to: Number(url.searchParams.get("to") ?? 0) } : {}),
-                  ...(method === "POST"
-                    ? {
-                        body: new Uint8Array(yield* Effect.promise(() => request.arrayBuffer())),
-                      }
-                    : {}),
-                });
-                return new Response((reply.body as BodyInit | undefined) ?? null, {
-                  status: reply.status,
-                });
-              }
-              const session = decodeURIComponent(url.pathname.replace(/^\/heads\/?/, ""));
-              if (!session) return new Response("[]", { status: 200 });
-              const method = request.method === "POST" ? "POST" : "GET";
-              const body = method === "POST" ? yield* Effect.promise(() => request.text()) : "";
-              const reply = yield* sessions.getByName(session).heads(session, method, body);
-              return new Response(reply.body, {
-                status: reply.status,
-                headers: { "content-type": "application/json" },
-              });
-            }).pipe(
-              Effect.catchCause((cause) =>
-                Effect.succeed(new Response(String(cause), { status: 503 })),
-              ),
-            ),
+          handle: (request) => serveHeads(sessions, request),
         });
       }
 
@@ -911,7 +935,12 @@ const machineImpl = (config: HostConfig, dockerfile?: string) =>
       const IDLE_AT = "workspace:idle-at";
 
       return {
-        mount: (session: string, hostConfig: HostConfig, egress: DelegatedEgress | undefined) =>
+        mount: (
+          session: string,
+          hostConfig: HostConfig,
+          egress: DelegatedEgress | undefined,
+          hostUrl: string | undefined,
+        ) =>
           Effect.gen(function* () {
             // Sessions only ask for a mount when they hold none: anything
             // mounted here is stale.
@@ -919,14 +948,18 @@ const machineImpl = (config: HostConfig, dockerfile?: string) =>
             yield* state.storage.delete(IDLE_AT);
             // The open's grant replaces whatever the last one granted.
             yield* backend.start(hostConfig, egress ? delegate(egress) : [], egress?.ttlMs);
+            // A container reaches its session through a control host; a
+            // machine elsewhere through the host Worker's URL, with its secret.
+            const token = env?.[HOST_TOKEN];
+            const base = backend.controls
+              ? `http://${HEADS_HOST}`
+              : hostUrl && typeof token === "string"
+                ? hostUrl.replace(/\/$/, "")
+                : undefined;
             mounted = yield* disk.mount(session, {
               dir: hostConfig.path,
-              ...(backend.controls
-                ? {
-                    heads: `http://${HEADS_HOST}/heads`,
-                    journal: `http://${HEADS_HOST}/journal`,
-                  }
-                : {}),
+              ...(base ? { heads: `${base}/heads`, journal: `${base}/journal` } : {}),
+              ...(!backend.controls && base ? { env: { BLOCKD_HEADS_TOKEN: String(token) } } : {}),
             });
             return { dir: mounted.dir };
           }).pipe(Effect.mapError((error) => asWorkspaceError(error))),
@@ -1072,6 +1105,8 @@ export const hostWorker = (
   deploy?: {
     readonly main: string;
     readonly dockerfile: string;
+    /** The secret machines off Cloudflare present (an Output until deploy). */
+    readonly token: unknown;
     readonly provide: <A, E, R>(effect: Effect.Effect<A, E, R>) => Effect.Effect<A, E, any>;
   },
 ) => {
@@ -1083,14 +1118,39 @@ export const hostWorker = (
     {
       main: deploy?.main ?? "",
       compatibility: { flags: ["nodejs_compat"] },
-      env: { [HOST_CONFIG]: JSON.stringify(config) },
+      env: {
+        [HOST_CONFIG]: JSON.stringify(config),
+        ...(deploy ? { [HOST_TOKEN]: deploy.token } : {}),
+      },
     } as never,
     provide(
       Effect.gen(function* () {
         yield* Sessions;
         yield* Machines;
+        const sessions = yield* Sessions;
+        const env = (yield* WorkerEnvironment) as Record<string, unknown> | undefined;
         return {
-          fetch: Effect.succeed(new Response("workspace host\n") as never),
+          // Machines off Cloudflare reach their session's head and journal here.
+          fetch: Effect.gen(function* () {
+            const request = yield* HttpServerRequest;
+            const web = yield* HttpServerRequestModule.toWeb(request);
+            const path = new URL(web.url).pathname;
+            if (!path.startsWith("/heads") && !path.startsWith("/journal/")) {
+              return HttpServerResponse.text("workspace host\n");
+            }
+            const token = env?.[HOST_TOKEN];
+            if (
+              typeof token !== "string" ||
+              web.headers.get("authorization") !== `Bearer ${token}`
+            ) {
+              return HttpServerResponse.text("unauthorized\n", { status: 401 });
+            }
+            return HttpServerResponse.fromWeb(yield* serveHeads(sessions, web));
+          }).pipe(
+            Effect.catchCause((cause) =>
+              Effect.succeed(HttpServerResponse.text(String(cause), { status: 500 })),
+            ),
+          ),
         };
       }).pipe(
         Effect.provide(

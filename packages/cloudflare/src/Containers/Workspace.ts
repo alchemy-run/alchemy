@@ -10,6 +10,7 @@ import { workspaceHost } from "@alchemy.run/sandbox/Workspace";
 import type * as microvms from "@distilled.cloud/aws/lambda-microvms";
 import * as CoreBinding from "alchemy/Binding";
 import * as Output from "alchemy/Output";
+import { Random } from "alchemy/Random";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -135,9 +136,11 @@ export const Workspace = <const D extends SandboxWorkspace.Decl.Any>(
       const volumeService = yield* volumeHost(id);
       const machineId = machineSandbox(id).LogicalId;
       const machineService = lambda ? yield* sandboxHost(machineId) : undefined;
+      const token = yield* Random(`${id}WorkspaceToken`, { bytes: 32 });
       const host = yield* hostWorker(config, {
         main: new URL(`./WorkspaceHost${extensionOf(import.meta.url)}`, import.meta.url).href,
         dockerfile: props.dockerfile,
+        token: token.text,
         provide: (effect) => {
           const withVolume = Effect.provideService(effect, volumeHost(id), volumeService);
           return machineService
@@ -146,8 +149,13 @@ export const Workspace = <const D extends SandboxWorkspace.Decl.Any>(
         },
       }) as unknown as Effect.Effect<Worker, never, Providers>;
       return {
-        descriptor: host.workerName.pipe(
-          Output.map((script): WorkspaceHostDescriptor => ({ host: WORKSPACE_HOST, script, id })),
+        descriptor: Output.all(host.workerName, host.url).pipe(
+          Output.map(([script, url]): WorkspaceHostDescriptor => ({
+            host: WORKSPACE_HOST,
+            script,
+            id,
+            ...(url ? { url } : {}),
+          })),
         ),
         // The yielding Worker binds the host's Durable Objects.
         bind: Effect.gen(function* () {
