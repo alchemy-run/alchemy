@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
  * projects.
  *
  * The default export satisfies alchemy's `WorkerSourceModule` contract
- * (`packages/alchemy/src/Cloudflare/Workers/Source.ts`) **structurally**:
+ * (`packages/cloudflare/src/Workers/Source.ts`) **structurally**:
  * the `Source*` shapes below mirror alchemy's `SourceProvider` /
  * `SourceContext` / `SourceBuildOutput` interfaces rather than importing
  * them, so this package carries no dependency on alchemy. Version skew
@@ -48,7 +48,7 @@ const PROVIDER = "@alchemy.run/frontend-frameworks/nuxt/source";
 
 // ─────────────────────────────────────────────────────────────────────
 // Structural mirror of alchemy's Worker source contract
-// (packages/alchemy/src/Cloudflare/Workers/Source.ts). Do not import
+// (packages/cloudflare/src/Workers/Source.ts). Do not import
 // alchemy here — the contract is structural by design.
 // ─────────────────────────────────────────────────────────────────────
 

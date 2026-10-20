@@ -12,6 +12,7 @@
     "react-dom": "^19.3.0"
   },
   "devDependencies": {
+    "@alchemy.run/cloudflare": "workspace:*",
     "@tailwindcss/vite": "^4.1.18",
     "@vitejs/plugin-react": "^6.0.2",
     "alchemy": "2.0.0-beta.79",

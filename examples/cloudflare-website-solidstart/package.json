@@ -17,6 +17,7 @@
     "destroy": "alchemy destroy"
   },
   "dependencies": {
+    "@alchemy.run/cloudflare": "workspace:*",
     "@solidjs/meta": "catalog:",
     "@solidjs/router": "catalog:solid-v1",
     "@solidjs/start": "catalog:solid-v1",
