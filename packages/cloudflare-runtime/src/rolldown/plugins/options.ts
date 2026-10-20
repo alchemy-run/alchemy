@@ -159,7 +159,13 @@ export const optionsPlugin = createPlugin<"options", OptionsApi>("options", (plu
               : {}),
           };
         };
-        const appType = userConfig.appType ?? (Object.keys(input).length === 0 ? "spa" : "custom");
+        // No Worker entry: an assets-only site.
+        const assetsOnly = Object.keys(input).length === 0;
+        // `custom` as `@cloudflare/vite-plugin` sets it: Vite's own SPA/MPA
+        // HTML middleware never answers in dev, so every request it doesn't
+        // serve reaches the Worker's router, which applies the asset rules
+        // (`htmlHandling`, `notFoundHandling`, `runWorkerFirst`).
+        const appType = userConfig.appType ?? "custom";
         return {
           appType,
           builder:
@@ -170,7 +176,7 @@ export const optionsPlugin = createPlugin<"options", OptionsApi>("options", (plu
             // already define one.
             userConfig.builder?.buildApp !== undefined
               ? undefined
-              : appType === "spa"
+              : assetsOnly
                 ? // An assets-only site with no `index.html` or client input
                   // (only `public/`) has nothing to build: the build output
                   // plugin uploads `public/`, as `@cloudflare/vite-plugin`'s

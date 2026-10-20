@@ -48,7 +48,13 @@ const PUBLIC_DIR_PREFIX = "/__vite_public_dir__";
  * Mirrors the dev-mode asset wiring in
  * `upstream/workers-sdk/packages/vite-plugin-cloudflare/src/miniflare-options.ts`.
  */
-export const ViteAssetsLive = (viteDevServer: vite.ViteDevServer) =>
+export const ViteAssetsLive = (
+  viteDevServer: vite.ViteDevServer,
+  options: {
+    /** `false` for an assets-only site: requests no asset serves get a 404 instead of the Worker. */
+    readonly hasUserWorker: boolean;
+  },
+) =>
   Layer.effect(
     Assets.Assets,
     Effect.gen(function* () {
@@ -141,7 +147,10 @@ export const ViteAssetsLive = (viteDevServer: vite.ViteDevServer) =>
                     },
                     {
                       name: "CONFIG",
-                      json: JSON.stringify(routerConfig),
+                      json: JSON.stringify({
+                        ...routerConfig,
+                        has_user_worker: options.hasUserWorker,
+                      }),
                     },
                   ],
                   modules: routerWorker,
