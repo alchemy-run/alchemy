@@ -169,14 +169,65 @@ fn mount_ext4(device: &Path, dir: &Path) -> Result<()> {
     Ok(())
 }
 
-/// Syncs and unmounts `dir`: every write is in the device afterwards.
+/// Syncs and unmounts `dir`: every write is in the device afterwards. A
+/// process still using the mount when it ends (a server a command left
+/// running, a shell parked in it) is killed first: the mount's lifetime is
+/// the caller's, not theirs.
 fn umount(dir: &Path) -> Result<()> {
     sync(dir);
-    let status = crate::helper("umount").arg(dir).status()?;
-    if !status.success() {
-        bail!("umount {} failed: {status}", dir.display());
+    for attempt in 0..10 {
+        let killed = kill_users(dir);
+        if killed > 0 {
+            tracing::info!("killed {killed} processes still using {}", dir.display());
+            std::thread::sleep(std::time::Duration::from_millis(100));
+            sync(dir);
+        }
+        let status = crate::helper("umount").arg(dir).status()?;
+        if status.success() {
+            return Ok(());
+        }
+        tracing::warn!(
+            "umount {} failed ({status}), attempt {attempt}",
+            dir.display()
+        );
+        std::thread::sleep(std::time::Duration::from_millis(200));
     }
-    Ok(())
+    bail!("umount {} failed: still busy", dir.display())
+}
+
+/// Kills (SIGKILL) every process other than this one whose working
+/// directory or any open file is under `dir`. Returns how many.
+fn kill_users(dir: &Path) -> usize {
+    let Ok(dir) = std::fs::canonicalize(dir) else {
+        return 0;
+    };
+    let me = std::process::id();
+    let under = |link: std::io::Result<PathBuf>| link.is_ok_and(|target| target.starts_with(&dir));
+    let mut killed = 0;
+    let Ok(entries) = std::fs::read_dir("/proc") else {
+        return 0;
+    };
+    for entry in entries.flatten() {
+        let Some(pid) = entry
+            .file_name()
+            .to_str()
+            .and_then(|n| n.parse::<u32>().ok())
+        else {
+            continue;
+        };
+        if pid == me {
+            continue;
+        }
+        let proc = entry.path();
+        let mut uses = under(std::fs::read_link(proc.join("cwd")));
+        if !uses && let Ok(fds) = std::fs::read_dir(proc.join("fd")) {
+            uses = fds.flatten().any(|fd| under(std::fs::read_link(fd.path())));
+        }
+        if uses && unsafe { libc::kill(pid as i32, libc::SIGKILL) } == 0 {
+            killed += 1;
+        }
+    }
+    killed
 }
 
 /// Attaches `file` to a free loop device, bypassing the page cache where

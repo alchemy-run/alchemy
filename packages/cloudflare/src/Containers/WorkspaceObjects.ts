@@ -16,9 +16,16 @@ import { WorkspaceError } from "@alchemy.run/sandbox/Workspace";
  * NOT exported from `index.ts`.
  */
 import type * as cf from "@cloudflare/workers-types";
+import { canonicalJson } from "alchemy/Egress/Canonical";
+import { registerGatewayClient } from "alchemy/Egress/Clients";
+import type { GatewayClient } from "alchemy/Egress/Gateway";
+import type { EgressRef, MintedGrant } from "alchemy/Egress/Kind";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
+import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
 import * as Semaphore from "effect/Semaphore";
@@ -60,6 +67,17 @@ export interface HostConfig {
   readonly idleMs: number;
 }
 
+/**
+ * The egress an `open` grants its commands: the refs, and the grants the
+ * yielding Worker minted for them with its own gateway clients (this Worker
+ * has none). Renewed with the lease, before they expire.
+ */
+export interface DelegatedEgress {
+  readonly refs: ReadonlyArray<EgressRef>;
+  readonly minted: Readonly<Record<string, MintedGrant>>;
+  readonly ttlMs: number;
+}
+
 /** A lease on a session's mount: plain data, so it crosses requests. */
 interface Lease {
   readonly lease: string;
@@ -81,8 +99,16 @@ interface SessionShape {
     method: "GET" | "POST",
     body: string,
   ): Effect.Effect<{ readonly status: number; readonly body: string }, never, RuntimeContext>;
-  acquire(session: string, grant: string): Effect.Effect<Lease, WorkspaceError, RuntimeContext>;
-  renew(session: string, lease: string): Effect.Effect<void, WorkspaceError, RuntimeContext>;
+  acquire(
+    session: string,
+    grant: string,
+    egress: DelegatedEgress | undefined,
+  ): Effect.Effect<Lease, WorkspaceError, RuntimeContext>;
+  renew(
+    session: string,
+    lease: string,
+    egress: DelegatedEgress | undefined,
+  ): Effect.Effect<void, WorkspaceError, RuntimeContext>;
   release(session: string, lease: string): Effect.Effect<void, WorkspaceError, RuntimeContext>;
   fork(session: string, from: string): Effect.Effect<void, WorkspaceError, RuntimeContext>;
   undo(session: string, steps: number): Effect.Effect<void, WorkspaceError, RuntimeContext>;
@@ -98,7 +124,10 @@ interface MachineShape {
   mount(
     session: string,
     config: HostConfig,
+    egress: DelegatedEgress | undefined,
   ): Effect.Effect<{ readonly dir: string }, WorkspaceError, RuntimeContext>;
+  /** Fresh grants for the running mount's egress. */
+  refresh(egress: DelegatedEgress): Effect.Effect<void, never, RuntimeContext>;
   exec(
     command: string,
     options: {
@@ -108,6 +137,22 @@ interface MachineShape {
     },
   ): Effect.Effect<ExecOutput, WorkspaceError, RuntimeContext>;
   unmount(session: string): Effect.Effect<Snapshot | undefined, WorkspaceError, RuntimeContext>;
+  /** Start `command` in the background; its output goes to files `read` returns. */
+  spawn(
+    command: string,
+    options: { readonly cwd: string; readonly env?: Record<string, string> },
+  ): Effect.Effect<{ readonly id: string; readonly pid: number }, WorkspaceError, RuntimeContext>;
+  /** A spawned process's output from `offset` on, and its exit code once it has one. */
+  read(
+    id: string,
+    stream: "out" | "err",
+    offset: number,
+  ): Effect.Effect<
+    { readonly data: Uint8Array; readonly exitCode: number | undefined },
+    WorkspaceError,
+    RuntimeContext
+  >;
+  kill(id: string, signal: number): Effect.Effect<void, WorkspaceError, RuntimeContext>;
 }
 
 /** Durable Object class names are JavaScript identifiers. */
@@ -138,6 +183,61 @@ const machineContainer = (id: string, dockerfile?: string) =>
   });
 
 const fail = (message: string, cause?: unknown) => new WorkspaceError({ message, cause });
+
+//#region delegated egress
+
+/** Answered where a gateway client's `EgressGatewayError` would be. */
+class DelegatedGrantMissing extends Data.TaggedError("EgressGatewayError")<{
+  readonly message: string;
+  readonly gateway: string;
+}> {}
+
+/** Grants the workspace's callers minted, by gateway and refs, for this isolate's machines. */
+const delegated = new Map<string, MintedGrant>();
+const delegatedKey = (gateway: string, refs: ReadonlyArray<EgressRef>) =>
+  `${gateway}\n${canonicalJson(refs)}`;
+
+const byGateway = (refs: ReadonlyArray<EgressRef>) => {
+  const grouped = new Map<string, Array<EgressRef>>();
+  for (const ref of refs) grouped.set(ref.gateway, [...(grouped.get(ref.gateway) ?? []), ref]);
+  return grouped;
+};
+
+/**
+ * A gateway client that mints nothing: it answers with the grant the
+ * workspace's caller minted for the same refs. The relay asks for one the
+ * way it asks any gateway.
+ */
+const delegatedClient = (id: string, url: string): GatewayClient => ({
+  id,
+  kinds: {},
+  url: Effect.succeed(url),
+  transport: "web",
+  mint: (refs) => {
+    const minted = delegated.get(delegatedKey(id, refs));
+    return minted
+      ? Effect.succeed(minted)
+      : (Effect.fail(
+          new DelegatedGrantMissing({
+            message: `the workspace's caller granted nothing for ${canonicalJson(refs)}`,
+            gateway: id,
+          }),
+        ) as never);
+  },
+});
+
+/** Store `egress`'s grants, and the egress values `start` takes for them. */
+const delegate = (egress: DelegatedEgress) => {
+  for (const [gateway, refs] of byGateway(egress.refs)) {
+    const minted = egress.minted[gateway];
+    if (!minted) continue;
+    delegated.set(delegatedKey(gateway, refs), minted);
+    registerGatewayClient(delegatedClient(gateway, minted.gateway.url));
+  }
+  return egress.refs.map((ref) => ({ ref }) as never);
+};
+
+//#endregion
 
 /** The container as the `SandboxClient` a volume's `Disk` runs blockd through. */
 const asSandbox = (container: ContainerClient): SandboxClient =>
@@ -404,7 +504,7 @@ const sessionImpl = (config: HostConfig) =>
               ),
             ),
 
-        acquire: (session: string, grant: string) =>
+        acquire: (session: string, grant: string, egress: DelegatedEgress | undefined) =>
           whenReady(
             session,
             (opens) => idle(opens) || opens.grant === grant,
@@ -423,19 +523,20 @@ const sessionImpl = (config: HostConfig) =>
                 yield* viaVolume(volume.fork(session)).pipe(Effect.mapError(asWorkspaceError));
               }
               const machine = session;
-              const { dir } = yield* machines.getByName(machine).mount(session, config);
+              const { dir } = yield* machines.getByName(machine).mount(session, config, egress);
               yield* saveOpens({ leases: { [lease]: expires }, session, grant, machine, dir });
               return { lease, machine, dir };
             }),
           ),
 
-        renew: (session: string, lease: string) =>
+        renew: (session: string, lease: string, egress: DelegatedEgress | undefined) =>
           openLock.withPermits(1)(
             Effect.gen(function* () {
               const opens = yield* loadOpens;
               if (!(lease in opens.leases)) {
                 return yield* fail(`the lease on ${session} expired`);
               }
+              if (egress && opens.machine) yield* machines.getByName(opens.machine).refresh(egress);
               yield* saveOpens({
                 ...opens,
                 leases: { ...opens.leases, [lease]: Date.now() + Duration.toMillis(LEASE_TTL) },
@@ -521,6 +622,15 @@ const machineImpl = (config: HostConfig, dockerfile?: string) =>
     return Effect.gen(function* () {
       const state = yield* DurableObjectState;
       let mounted: DiskMount | undefined;
+      /** A command in the container, waited for. */
+      const run = (
+        cmd: Array<string>,
+        options: { readonly cwd?: string; readonly env?: Record<string, string> },
+      ) =>
+        container.exec(cmd, options as never).pipe(
+          Effect.flatMap((process) => process.output()),
+          Effect.scoped,
+        );
 
       registerControl(state.raw, {
         key: "alchemy:workspace-heads",
@@ -544,33 +654,68 @@ const machineImpl = (config: HostConfig, dockerfile?: string) =>
           ),
       });
 
-      const detach = Effect.fn(function* (session: string) {
-        if (mounted?.head === session) {
-          const snapshot = yield* mounted.detach;
-          mounted = undefined;
-          return snapshot;
-        }
-        // This object restarted while the container kept the mount.
-        const reply = yield* asSandbox(container)
-          .exec([
+      /** Kill a blockd that won't detach, and whatever it left attached. */
+      const forceDetach = (session: string) =>
+        run(
+          [
             "sh",
             "-c",
-            `[ -S /run/blockd/${session}.sock ] && blockd control --socket /run/blockd/${session}.sock --request '{"op":"detach"}' || true`,
-          ])
-          .pipe(
-            Effect.flatMap((process) => process.output()),
-            Effect.scoped,
-          );
-        const match = /"snapshot":"([0-9a-f]+)"/.exec(decode(reply.stdout));
-        return match?.[1];
+            [
+              `pkill -9 -f "blockd mount .*--head ${session} " || true`,
+              `umount -l ${config.path} 2>/dev/null || true`,
+              `umount -l /var/cache/blockd/${session}.disk 2>/dev/null || true`,
+              "losetup -D 2>/dev/null || true",
+              `rm -f /run/blockd/${session}.sock`,
+            ].join("; "),
+          ],
+          {},
+        ).pipe(Effect.ignore);
+
+      /**
+       * Unmount `session` and return its snapshot. A detach that fails (blockd
+       * died, say) is cleaned up by force: its journal is still durable, and
+       * the next mount's lease folds it.
+       */
+      const detach = Effect.fn(function* (session: string) {
+        const current = mounted?.head === session ? mounted : undefined;
+        mounted = undefined;
+        const detached = current
+          ? yield* Effect.exit(current.detach)
+          : // This object restarted while the container kept the mount.
+            yield* Effect.exit(
+              run(
+                [
+                  "sh",
+                  "-c",
+                  `[ -S /run/blockd/${session}.sock ] && blockd control --socket /run/blockd/${session}.sock --request '{"op":"detach"}' || true`,
+                ],
+                {},
+              ).pipe(
+                Effect.map((reply) => /"snapshot":"([0-9a-f]+)"/.exec(decode(reply.stdout))?.[1]),
+              ),
+            );
+        if (detached._tag === "Success") return detached.value;
+        yield* Effect.logWarning(
+          `detaching ${session} failed; cleaning up by force`,
+          detached.cause,
+        );
+        yield* forceDetach(session);
+        return undefined;
       });
 
       return {
-        mount: (session: string, hostConfig: HostConfig) =>
+        mount: (session: string, hostConfig: HostConfig, egress: DelegatedEgress | undefined) =>
           Effect.gen(function* () {
-            if (mounted?.head === session) return { dir: mounted.dir };
+            // Sessions only ask for a mount when they hold none: anything
+            // mounted here is stale.
             if (mounted) yield* detach(mounted.head);
-            yield* container.start({ instance: hostConfig.instanceType, enableInternet: true });
+            // The open's grant replaces whatever the last one granted.
+            yield* container.start({
+              instance: hostConfig.instanceType,
+              enableInternet: true,
+              egress: egress ? delegate(egress) : [],
+              ...(egress ? { ttl: egress.ttlMs } : {}),
+            });
             yield* container.setInactivityTimeout(hostConfig.idleMs);
             mounted = yield* disk.mount(session, {
               dir: hostConfig.path,
@@ -608,6 +753,75 @@ const machineImpl = (config: HostConfig, dockerfile?: string) =>
             Effect.scoped,
             Effect.mapError((error) => asWorkspaceError(error)),
           ),
+
+        spawn: (
+          command: string,
+          options: { readonly cwd: string; readonly env?: Record<string, string> },
+        ) =>
+          Effect.gen(function* () {
+            const id = crypto.randomUUID();
+            const dir = `/run/workspace/${id}`;
+            const script = [
+              `mkdir -p ${dir}`,
+              // Its own session, so killing it kills everything it started.
+              `setsid sh -c 'sh -c "$WORKSPACE_COMMAND"; echo $? > ${dir}/code' > ${dir}/out 2> ${dir}/err < /dev/null &`,
+              `echo $! > ${dir}/pid`,
+              `cat ${dir}/pid`,
+            ].join("\n");
+            const output = yield* run(["sh", "-c", script], {
+              cwd: options.cwd,
+              env: { ...options.env, WORKSPACE_COMMAND: command },
+            });
+            return { id, pid: Number(decode(output.stdout).trim()) };
+          }).pipe(Effect.mapError((error) => asWorkspaceError(error))),
+
+        read: (id: string, stream: "out" | "err", offset: number) =>
+          Effect.gen(function* () {
+            const dir = `/run/workspace/${id.replace(/[^0-9a-f-]/g, "")}`;
+            const code = yield* run(["sh", "-c", `cat ${dir}/code 2>/dev/null || true`], {});
+            const data = yield* run(
+              ["sh", "-c", `tail -c +${Math.max(0, Math.floor(offset)) + 1} ${dir}/${stream}`],
+              {},
+            );
+            const exitCode = decode(code.stdout).trim();
+            return {
+              data: new Uint8Array(data.stdout),
+              exitCode: exitCode === "" ? undefined : Number(exitCode),
+            };
+          }).pipe(Effect.mapError((error) => asWorkspaceError(error))),
+
+        kill: (id: string, signal: number) =>
+          run(
+            [
+              "sh",
+              "-c",
+              `kill -${Math.floor(signal)} -- -$(cat /run/workspace/${id.replace(/[^0-9a-f-]/g, "")}/pid) 2>/dev/null || true`,
+            ],
+            {},
+          ).pipe(
+            Effect.asVoid,
+            Effect.mapError((error) => asWorkspaceError(error)),
+          ),
+
+        /** A port in the container: `x-alchemy-port` names it. */
+        fetch: Effect.gen(function* () {
+          const request = yield* HttpServerRequest;
+          const port = Number(request.headers["x-alchemy-port"]);
+          if (!Number.isInteger(port) || port <= 0) {
+            return HttpServerResponse.text("x-alchemy-port is required\n", { status: 400 });
+          }
+          const tcp = yield* container.getTcpPort(port);
+          return yield* tcp.fetch(request);
+        }).pipe(
+          Effect.catchCause((cause) =>
+            Effect.succeed(HttpServerResponse.text(String(cause), { status: 502 })),
+          ),
+        ),
+
+        refresh: (egress: DelegatedEgress) =>
+          Effect.sync(() => {
+            delegate(egress);
+          }),
 
         unmount: (session: string) =>
           detach(session).pipe(Effect.mapError((error) => asWorkspaceError(error))),

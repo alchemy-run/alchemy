@@ -68,8 +68,13 @@ PY
   mount_head "$head" "$mode" "$dir" "$sock" "$cache"
   [ "$(cat "$dir/synced.txt")" = durable ] || fail "$mode: an fsynced file was lost"
   (cd "$dir" && sha256sum -c sums >/dev/null) || fail "$mode: older files damaged by the crash"
-  control "$sock" '{"op":"detach"}' >/dev/null; wait
+  # A server a command left running holds the mount: detach still unmounts.
+  (cd "$dir" && setsid sleep 600 < /dev/null > /dev/null 2>&1 &)
+  sleep 0.2
+  control "$sock" '{"op":"detach"}' | grep -q '"snapshot"' || fail "$mode: detach with a process in the mount"
+  wait
+  pgrep -f "sleep 600" >/dev/null && fail "$mode: the process in the mount outlived it"
   fsck "$head"
-  pass "$mode: an fsynced write survived a killed blockd, and the disk checks clean"
+  pass "$mode: an fsynced write survived a killed blockd, a busy mount detached, and the disk checks clean"
 done
 echo "ALL PASSED"

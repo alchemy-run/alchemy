@@ -3,6 +3,8 @@ import { DockerLive } from "@alchemy.run/docker/Docker";
 import * as Alchemy from "alchemy";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import EchoGatewayWorker from "./gateway-worker.ts";
+import { EchoGateway } from "./gateway.ts";
 import WorkspaceWorker from "./worker.ts";
 import TestWorkspaceLive from "./workspace.cloudflare.ts";
 
@@ -16,5 +18,5 @@ export default Alchemy.Stack(
   Effect.gen(function* () {
     const worker = yield* WorkspaceWorker;
     return { url: worker.url.as<string>() };
-  }).pipe(Effect.provide(TestWorkspaceLive)),
+  }).pipe(Effect.provide(Layer.mergeAll(TestWorkspaceLive, EchoGateway.host(EchoGatewayWorker)))),
 );

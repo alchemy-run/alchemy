@@ -1,8 +1,11 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as Schedule from "effect/Schedule";
+import { ECHO_HOST, EchoGateway } from "./gateway.ts";
 import { TestWorkspace } from "./workspace.ts";
 
 class Failed extends Data.TaggedError("Failed")<{ readonly stderr: string }> {}
@@ -13,6 +16,7 @@ export default class WorkspaceWorker extends Cloudflare.Worker<WorkspaceWorker>(
   { main: import.meta.url },
   Effect.gen(function* () {
     const workspace = yield* TestWorkspace;
+    const gateway = yield* EchoGateway;
     return {
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;
@@ -62,6 +66,47 @@ export default class WorkspaceWorker extends Cloudflare.Worker<WorkspaceWorker>(
                   ),
                 ),
                 { concurrency: "unbounded" },
+              );
+            // A process in the background, streamed until it exits.
+            case "spawn":
+              return workspace.open(
+                session,
+                {},
+                Effect.gen(function* () {
+                  const box = yield* TestWorkspace.Session;
+                  const process = yield* box.spawn(
+                    "for i in 1 2 3; do echo $i; sleep 0.3; done; exit 4",
+                  );
+                  const output = yield* process.output();
+                  return {
+                    exitCode: output.exitCode,
+                    stdout: new TextDecoder().decode(output.stdout),
+                  };
+                }).pipe(Effect.scoped),
+              );
+            // A server a spawned process runs, reached through its port.
+            case "port":
+              return workspace.open(
+                session,
+                {},
+                Effect.gen(function* () {
+                  const box = yield* TestWorkspace.Session;
+                  yield* box.spawn(
+                    `node -e "require('http').createServer((q, s) => s.end('port-ok')).listen(8080)"`,
+                  );
+                  const port = yield* box.port(8080);
+                  const response = yield* port
+                    .fetch(HttpClientRequest.get("http://container/"))
+                    .pipe(Effect.retry({ schedule: Schedule.spaced("500 millis"), times: 20 }));
+                  return yield* response.text;
+                }).pipe(Effect.scoped),
+              );
+            // Commands reach the gateway's host with its credential added.
+            case "egress":
+              return workspace.exec(
+                session,
+                `node -e "fetch('https://${ECHO_HOST}/anything/workspace').then((r) => r.text()).then(console.log)"`,
+                { egress: [gateway.echo] },
               );
             case "fork":
               return Effect.as(workspace.fork(body.from!, session), "forked");

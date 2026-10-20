@@ -84,6 +84,26 @@ describe.sequential("Sandbox.Workspace on Cloudflare Containers", () => {
   );
 
   test(
+    "a spawned process streams until it exits, and its server is reachable on its port",
+    Effect.gen(function* () {
+      const spawned = yield* call<{ exitCode: number; stdout: string }>("spawn", { session: "s1" });
+      expect(spawned).toEqual({ exitCode: 4, stdout: "1\n2\n3\n" });
+      expect(yield* call<string>("port", { session: "s1" })).toBe("port-ok");
+    }),
+    options,
+  );
+
+  test(
+    "an open's egress reaches the gateway's host with its credential",
+    Effect.gen(function* () {
+      const echoed = yield* call<Exec>("egress", { session: "s1" });
+      expect(echoed.exitCode, echoed.stderr).toBe(0);
+      expect(echoed.stdout).toContain("added-by-the-gateway");
+    }),
+    options,
+  );
+
+  test(
     "a fork is isolated, and undo goes back one open",
     Effect.gen(function* () {
       yield* call("delete", { session: "s2" }).pipe(Effect.ignore);
@@ -96,6 +116,28 @@ describe.sequential("Sandbox.Workspace on Cloudflare Containers", () => {
       yield* call("undo", { session: "s2" });
       const undone = yield* exec("s2", "cat only-in-fork.txt && ! ls undone.txt");
       expect(undone.exitCode, undone.stdout + undone.stderr).toBe(0);
+    }),
+    options,
+  );
+
+  test(
+    "fsync from inside the container is durable in the journal (timed)",
+    Effect.gen(function* () {
+      const script = [
+        "const fs = require('fs');",
+        "const times = [];",
+        "for (let i = 0; i < 20; i++) {",
+        "  const fd = fs.openSync('fsync.bin', 'w');",
+        "  fs.writeSync(fd, Buffer.alloc(4096, i));",
+        "  const t = process.hrtime.bigint(); fs.fsyncSync(fd); times.push(Number(process.hrtime.bigint() - t) / 1e6);",
+        "  fs.closeSync(fd);",
+        "}",
+        "times.sort((a, b) => a - b);",
+        "console.log(JSON.stringify({ p50: times[10], p90: times[18], max: times[19] }));",
+      ].join(" ");
+      const run = yield* exec("s1", `node -e ${JSON.stringify(script)}`);
+      expect(run.exitCode, run.stderr).toBe(0);
+      console.log(`fsync inside a Cloudflare container (ms): ${run.stdout.trim()}`);
     }),
     options,
   );
