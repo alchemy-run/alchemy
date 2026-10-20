@@ -206,11 +206,13 @@ export interface SourceProvider {
   readonly ownsAssets: boolean;
 
   /**
-   * Whether a server-mode `dev()` runs the Worker in workerd with the Vite
-   * plugin, whose assets service serves `publicDir` and the app's HTML. The
-   * host then adds the `ASSETS` binding to `ctx.worker.bindings`, as a
-   * deployed Worker with assets has it. Leave unset when the dev server
-   * runs the app outside workerd (behind `serviceBinding: "http"`).
+   * Whether a server-mode `dev()` hosts `ctx.worker.bindings` in a runtime
+   * whose assets service is configured: the Vite plugin (which serves
+   * `publicDir` and the app's HTML), or a platform proxy given the app's
+   * static directory. The host then adds the `ASSETS` binding to
+   * `ctx.worker.bindings`, as a deployed Worker with assets has it. Leave
+   * unset otherwise: the binding fails when the assets service is
+   * unconfigured.
    *
    * @default false
    */

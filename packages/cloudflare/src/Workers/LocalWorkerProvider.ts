@@ -482,8 +482,8 @@ export const LocalWorkerProvider = () =>
           script: props.script,
           // External source providers (`props.source`) opt in through
           // `devAssetsBinding` instead (see `ViteChildRunner`): injecting
-          // the hook for every source would fail in proxy-hosted dev modes
-          // with no assets directory (the hook errors when the Assets
+          // the hook for every source would fail in dev hosts with no
+          // assets service configured (the hook errors when the Assets
           // service is unconfigured).
           hasAssets: !!(props.assets || props.vite) && !props.source,
           /**
