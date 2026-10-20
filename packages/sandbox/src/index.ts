@@ -25,3 +25,12 @@ export {
   type Snapshot,
   type VolumeHeads,
 } from "./Volume.ts";
+export {
+  Workspace,
+  WorkspaceError,
+  type WorkspaceClient,
+  type WorkspaceExecOptions,
+  type WorkspaceExecOutput,
+  type WorkspaceOpenOptions,
+  type WorkspaceSession,
+} from "./Workspace.ts";
