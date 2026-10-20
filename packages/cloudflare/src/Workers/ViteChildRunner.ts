@@ -146,7 +146,7 @@ const program = Effect.scoped(
               compatibilityDate: compatibility.date,
               compatibilityFlags: compatibility.flags,
               viteEnvironments,
-              worker: { ...runtimeWorker, bindings },
+              worker: { ...runtimeWorker, bindings, publicUrl: config.publicUrl },
               context: runtimeContext,
               entrypoints: bindingDescriptors.flatMap((binding) =>
                 binding.type === "self_service" && binding.entrypoint ? [binding.entrypoint] : [],

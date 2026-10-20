@@ -4,7 +4,8 @@ import { EmailMessage } from "cloudflare:email";
 // `bindings`, `durable-objects`, `block-concurrency-while`, `workflows`,
 // `websockets`, `ctx-exports`, `same-worker-service-bindings`,
 // `importable-env`, `explicit-resource-management`, `cron-triggers`,
-// `email-worker`, `external-durable-objects` and `external-workflows`.
+// `email-worker`, `stream-binding`, `external-durable-objects` and
+// `external-workflows`.
 // Each route is the playground's handler for the spec it backs.
 import {
   DurableObject,
@@ -31,6 +32,7 @@ interface Env {
   NAMED_ENTRYPOINT: Service<NamedEntrypoint>;
   LEGACY_ENTRYPOINT: Fetcher;
   EMAIL: SendEmail;
+  STREAM: StreamBinding;
   "importable-env_VAR": string;
   "importable-env_SECRET": string;
 }
@@ -263,6 +265,15 @@ export default {
           };
         }
         return Response.json(disposed);
+      }
+      // `stream-binding`: the binding fetches the bytes from `/video-asset`.
+      case "/video-asset":
+        return new Response(new Uint8Array([0, 1, 2, 3, 4, 5, 6, 7]), {
+          headers: { "Content-Type": "application/octet-stream" },
+        });
+      case "/stream/upload": {
+        const video = await env.STREAM.upload(`${url.origin}/video-asset`);
+        return Response.json({ preview: video.preview, id: video.id });
       }
       // `cron-triggers` and `email-worker`: the handlers below record what
       // they received.

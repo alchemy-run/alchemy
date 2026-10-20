@@ -35,6 +35,7 @@ import {
   BINDING_IMAGES_LOOPBACK,
   BINDING_IMAGES_STORE,
   PATH_IMAGE_DELIVERY,
+  PATH_IMAGE_DELIVERY_LEGACY,
   PATH_IMAGES_PUBLIC_URL,
   SERVICE_IMAGES,
   SERVICE_IMAGES_STORAGE,
@@ -120,7 +121,10 @@ export const ImagesLive = Layer.effect(
             res
               .writeHead(200, { "content-type": "application/json" })
               .end(
-                JSON.stringify(publicPort === undefined ? null : `http://127.0.0.1:${publicPort}`),
+                JSON.stringify(
+                  worker.publicUrl ??
+                    (publicPort === undefined ? null : `http://127.0.0.1:${publicPort}`),
+                ),
               );
             return;
           }
@@ -200,7 +204,7 @@ export const ImagesLive = Layer.effect(
                 ],
               },
             };
-            // Serve hosted variant URLs (`/cdn-cgi/mf/imagedelivery/...`)
+            // Serve hosted variant URLs (`/__cf_local/imagedelivery/...`)
             // from the entry chain, mirroring Miniflare's core entry routing
             // (`SERVICE_IMAGES_DELIVERY`). Sits inside the `plugin:entry`
             // middleware (order 0) and before the user worker.
@@ -215,7 +219,10 @@ export const ImagesLive = Layer.effect(
                       export default {
                         fetch(request, env) {
                           const url = new URL(request.url);
-                          if (url.pathname.startsWith("${PATH_IMAGE_DELIVERY}/")) {
+                          if (
+                            url.pathname.startsWith("${PATH_IMAGE_DELIVERY}/") ||
+                            url.pathname.startsWith("${PATH_IMAGE_DELIVERY_LEGACY}/")
+                          ) {
                             return env.IMAGES.fetch(request);
                           }
                           return env.UPSTREAM.fetch(request);

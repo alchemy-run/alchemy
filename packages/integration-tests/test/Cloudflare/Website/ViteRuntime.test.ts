@@ -81,6 +81,7 @@ const deploySite = (stack: Test.ScratchStack, mode: Mode) =>
             }),
             NAMED_ENTRYPOINT: Cloudflare.WorkerEntrypoint("NamedEntrypoint"),
             LEGACY_ENTRYPOINT: Cloudflare.WorkerEntrypoint("legacy"),
+            STREAM: Cloudflare.Stream.Stream(),
             EMAIL: Cloudflare.Email.SendEmail("EMAIL", {
               allowedDestinationAddresses: ["recipient@example.com"],
             }),
@@ -347,6 +348,22 @@ describe.concurrent(
             email: "sender@example.com Hi there",
           });
           yield* expectText(`${url}/send`, "Email message sent successfully!");
+        }),
+      ["dev"],
+    );
+
+    // `stream-binding`: the preview URL is on the dev server's own origin
+    // (the port it actually bound) under `/__cf_local/stream`.
+    runtimeTests(
+      "Vite runtime: Stream uploads return a local preview URL",
+      (url) =>
+        Effect.gen(function* () {
+          const upload = yield* fetchText(`${url}/stream/upload`);
+          const { preview, id } = JSON.parse(upload.body) as { preview: string; id: string };
+          expect(id).toBeTruthy();
+          expect(preview).toBe(`${new URL(url).origin}/__cf_local/stream/${id}/watch`);
+          const video = yield* fetchText(preview);
+          expect(video.status).toBe(200);
         }),
       ["dev"],
     );

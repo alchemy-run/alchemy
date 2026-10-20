@@ -194,6 +194,7 @@ const serve = Effect.fn(function* <B extends BindingHooks = BindingHooks>(
   return yield* runtime.start({
     name,
     proxySharedSecret,
+    publicUrl: options.worker?.publicUrl,
     onRestart,
     modules: yield* Effect.promise(() => makeWorkerModules(exportTypes)),
     compatibilityDate: options.compatibilityDate ?? DEFAULT_COMPATIBILITY_DATE,
