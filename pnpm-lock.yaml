@@ -9799,6 +9799,9 @@ importers:
       uuid:
         specifier: 'catalog:'
         version: 14.0.3
+      vinext:
+        specifier: 'catalog:'
+        version: 1.1.0(c57f56abd8ca2a30c0368e8b512eae0a)
       vite:
         specifier: 'catalog:'
         version: 8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1)

@@ -380,6 +380,11 @@ describe.concurrent(
             timeout: "60 seconds",
             label: "static asset",
           });
+          // The same file read by a server route through the `ASSETS` binding.
+          yield* expectUrlContains(`${site1.url!}/api/asset`, "astro-static-asset", {
+            timeout: "60 seconds",
+            label: "ASSETS binding",
+          });
 
           // ── sessions: the SESSION KV namespace is auto-provisioned and
           // `Astro.session` round-trips through it ───────────────────────────
