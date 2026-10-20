@@ -2402,6 +2402,7 @@ dependencies = [
  "bytes",
  "futures",
  "object_store",
+ "reqwest",
  "ruzstd",
  "serde",
  "serde_json",

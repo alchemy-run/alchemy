@@ -2,11 +2,15 @@
 //! manifests and journal entries) and a [`MetaStore`] for the only mutable
 //! state, the heads.
 
+#[cfg(feature = "http")]
+mod http;
 mod local;
 mod memory;
 #[cfg(feature = "object")]
 mod object;
 
+#[cfg(feature = "http")]
+pub use http::HttpMetaStore;
 pub use local::{LocalBlobStore, LocalMetaStore};
 pub use memory::{MemoryBlobStore, MemoryMetaStore};
 #[cfg(feature = "object")]

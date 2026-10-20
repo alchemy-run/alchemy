@@ -11,6 +11,8 @@ publish.workspace = true
 default = []
 # S3, R2 and GCS (S3-compatible) through object_store.
 object = ["dep:object_store", "dep:futures"]
+# Heads served over HTTP (by a Durable Object, say): see store::HttpMetaStore.
+http = ["dep:reqwest"]
 
 [dependencies]
 async-trait.workspace = true
@@ -21,6 +23,9 @@ serde.workspace = true
 serde_json.workspace = true
 object_store = { workspace = true, optional = true }
 futures = { version = "0.3", optional = true }
+reqwest = { version = "0.12", default-features = false, features = [
+  "rustls-tls-native-roots",
+], optional = true }
 
 # zstd's C library natively; the pure-Rust ruzstd in WebAssembly (same format).
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]

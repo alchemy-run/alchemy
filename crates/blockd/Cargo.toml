@@ -10,7 +10,7 @@ publish.workspace = true
 [features]
 default = ["object", "fuse", "ublk"]
 # Volumes in S3, R2 or GCS.
-object = ["volume/object", "dep:object_store"]
+object = ["volume/object", "volume/http", "dep:object_store"]
 # Loop attach: the volume served as one file over FUSE, on a loop device.
 fuse = ["dep:fuser"]
 # Kernel attach over ublk (Linux 6.0+, io_uring).
