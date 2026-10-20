@@ -31,7 +31,7 @@ export type D1Config = Omit<D1Client.D1ClientConfig, "db">;
  * resolved once at Worker init and used from any handler:
  *
  * ```typescript
- * import * as SQL from "@alchemy.run/cloudflare/D1/Sql";
+ * import * as SQL from "@alchemy.run/cloudflare/D1/SQL";
  *
  * const d1 = yield* Cloudflare.D1.QueryDatabase(Db);
  * const sql = yield* SQL.D1(d1);

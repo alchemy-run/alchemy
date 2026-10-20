@@ -1,4 +1,4 @@
-import type { D1DatabaseSource } from "@alchemy.run/cloudflare/D1/Sql";
+import type { D1DatabaseSource } from "@alchemy.run/cloudflare/D1/SQL";
 import * as D1Client from "@effect/sql-d1/D1Client";
 import { makeExecutionMemo } from "alchemy/Runtime/ExecutionMemo";
 import { proxyChain } from "alchemy/Util/proxy-chain";

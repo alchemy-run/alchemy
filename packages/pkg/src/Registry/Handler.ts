@@ -1,5 +1,5 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
-import * as SQL from "@alchemy.run/cloudflare/D1/Sql";
+import * as SQL from "@alchemy.run/cloudflare/D1/SQL";
 import { sha256 } from "alchemy/Util/sha256";
 import * as Clock from "effect/Clock";
 import * as Duration from "effect/Duration";

@@ -117,14 +117,14 @@ escape hatch.
 ## SQL with `@effect/sql-d1`
 
 Prefer tagged-template SQL over hand-written prepared statements?
-`SQL.D1` (from `@alchemy.run/cloudflare/D1/Sql` — each low-level effect-sql client
+`SQL.D1` (from `@alchemy.run/cloudflare/D1/SQL` — each low-level effect-sql client
 lives on its own subpath) wraps the same binding in an
 `@effect/sql-d1` `D1Client` —
 interpolated values are parameterized, every query is an Effect, and
 failures surface as typed `SqlError`s:
 
 ```typescript
-import * as SQL from "@alchemy.run/cloudflare/D1/Sql";
+import * as SQL from "@alchemy.run/cloudflare/D1/SQL";
 
 Effect.gen(function* () {
   const d1 = yield* Cloudflare.D1.QueryDatabase(Database);
