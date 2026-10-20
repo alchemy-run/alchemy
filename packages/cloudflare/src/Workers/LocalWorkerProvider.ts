@@ -79,7 +79,7 @@ import { isSelfUrl, Worker } from "./Worker.ts";
 import { getCronBindings } from "./WorkerAsyncBindings.ts";
 import type { WorkerBinding } from "./WorkerBinding.ts";
 import { createWorkerName } from "./WorkerName.ts";
-import { resolveTailConsumers } from "./WorkerProvider.ts";
+import { resolveTailConsumers, resolveViteMain } from "./WorkerProvider.ts";
 
 /** Local dev-server options (the worker-mode arm of `WorkerProps["dev"]`). */
 type DevServerOptions = Extract<WorkerProps["dev"], { mode?: "worker" }> & {
@@ -530,7 +530,10 @@ export const LocalWorkerProvider = () =>
           // Relative `vite.main` resolves from the Vite root (see the
           // matching normalization in WorkerProvider's `viteBuild`).
           viteMain: props.vite?.main
-            ? path.resolve(props.vite.rootDir ?? process.cwd(), props.vite.main)
+            ? yield* resolveViteMain(
+                path.resolve(props.vite.rootDir ?? process.cwd()),
+                props.vite.main,
+              )
             : undefined,
           viteEnvironments: props.vite?.viteEnvironments,
           viteRootDir: props.vite?.rootDir,

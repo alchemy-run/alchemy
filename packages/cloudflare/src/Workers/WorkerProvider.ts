@@ -19,6 +19,7 @@ import { sha256Object } from "alchemy/Util/sha256";
 import * as Config from "effect/Config";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
 import { isHttpClientError } from "effect/http/HttpClientError";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
@@ -2266,7 +2267,10 @@ export const LiveWorkerProvider = () =>
             // deploy runs from a different directory (e.g. a monorepo infra
             // package) — absolutize before handing it over (#796).
             main: props.vite?.main
-              ? path.resolve(initialCwd, props.vite.rootDir ?? ".", props.vite.main)
+              ? yield* resolveViteMain(
+                  path.resolve(initialCwd, props.vite.rootDir ?? "."),
+                  props.vite.main,
+                )
               : undefined,
             compatibilityDate: compatibility.date,
             compatibilityFlags: compatibility.flags,
@@ -6093,3 +6097,18 @@ const validateWorkerTags = (
       }
     }
   });
+
+/**
+ * Resolves a Vite Worker's `main` against the Vite root when it is a path
+ * or names a file there. Any other specifier (a package export, a virtual
+ * module) is handed to Vite unchanged, as `@cloudflare/vite-plugin` does.
+ */
+export const resolveViteMain = Effect.fn(function* (root: string, main: string) {
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const resolved = path.resolve(root, main);
+  if (path.isAbsolute(main) || /^\.\.?[\\/]/.test(main)) {
+    return resolved;
+  }
+  return (yield* fs.exists(resolved).pipe(Effect.orElseSucceed(() => false))) ? resolved : main;
+});

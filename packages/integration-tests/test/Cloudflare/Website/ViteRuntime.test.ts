@@ -59,6 +59,7 @@ const moduleResolutionFixtureDir = pathe.resolve(
   import.meta.dirname,
   "vite-module-resolution-fixture",
 );
+const mainResolutionFixtureDir = pathe.resolve(import.meta.dirname, "vite-main-resolution-fixture");
 const hotChannelFixtureDir = pathe.resolve(import.meta.dirname, "vite-hot-channel-fixture");
 
 type Mode = "live" | "dev";
@@ -866,6 +867,70 @@ describe.concurrent(
               });
               yield* expectText(`${url}/@alias/test`, "OK!");
               yield* expectText(`${url}/optimize-deps/exclude`, "Export from virtual module");
+            }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.ignore)), logLevel),
+          {
+            tags: ["provider:cloudflare:worker", mode === "dev" ? "local" : "live"],
+            timeout: 300_000,
+          },
+        );
+      }
+    }
+
+    // `main-resolution`: `main` as a path (with a custom entry file
+    // extension), a package export, and a virtual module.
+    for (const mode of ["live", "dev"] as const) {
+      for (const variant of [
+        { config: "default", main: "./src/index.ts", flags: [] },
+        {
+          config: "package-export-main",
+          main: "@playground/main-resolution-package/entry",
+          flags: ["nodejs_compat"],
+        },
+        { config: "virtual-module-main", main: "virtual:entry", flags: [] },
+      ]) {
+        (mode === "live" ? test : devTest).provider(
+          `Vite runtime: main resolves as ${variant.config}${mode === "dev" ? " (dev)" : ""}`,
+          (stack) =>
+            Effect.gen(function* () {
+              yield* stack.destroy();
+              const rootDir = yield* cloneFixture(mainResolutionFixtureDir, {
+                prefix: "alchemy-vite-main-resolution-",
+                tempRoot,
+                entries: ["package.json", "configs", "src", "package"],
+              });
+              const fs = yield* FileSystem.FileSystem;
+              yield* fs.copyFile(
+                pathe.join(rootDir, `configs/${variant.config}.ts`),
+                pathe.join(rootDir, "vite.config.ts"),
+              );
+              // The playground's `file:` dependency, copied in as pnpm does.
+              yield* fs.copy(
+                pathe.join(rootDir, "package"),
+                pathe.join(rootDir, "node_modules/@playground/main-resolution-package"),
+              );
+              const site = yield* stack.deploy(
+                Cloudflare.Website.Vite(`ViteMainResolution${mode}${variant.config}`, {
+                  rootDir,
+                  main: variant.main,
+                  workersDev: true,
+                  compatibility: { date: "2024-12-30", flags: variant.flags },
+                  memo: { include: ["**/*"] },
+                  ...(mode === "dev" ? { dev: { port: 0 } } : {}),
+                }),
+              );
+              if (variant.config === "default") {
+                yield* expectJson(site.url!, {
+                  entry: "Root config",
+                  imported: "Root config import",
+                });
+              } else {
+                yield* expectText(
+                  site.url!,
+                  variant.config === "package-export-main"
+                    ? "Package export as Worker entry file"
+                    : "Virtual module as Worker entry file",
+                );
+              }
             }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.ignore)), logLevel),
           {
             tags: ["provider:cloudflare:worker", mode === "dev" ? "local" : "live"],

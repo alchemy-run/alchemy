@@ -1059,7 +1059,9 @@ export interface ViteOptions {
   /**
    * Overrides the module that becomes the deployed Worker entry, forwarded
    * to the Cloudflare Vite plugin's `main` option. Relative paths resolve
-   * from the Vite root (`rootDir`).
+   * from the Vite root (`rootDir`). A package export
+   * (`"my-package/worker"`) or a virtual module id (`"virtual:entry"`)
+   * resolves through Vite.
    *
    * By default the entry environment's own entry (the server bundle the
    * framework produces) is deployed. Point `main` at a custom module when
