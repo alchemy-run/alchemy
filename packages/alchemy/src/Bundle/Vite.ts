@@ -51,15 +51,13 @@ interface EnvironmentLike {
   };
 }
 
-/** `directory` when it exists and is not empty; `undefined` otherwise. */
-const nonEmptyDirectory = Effect.fn(function* (
+/** Whether `directory` exists and is not empty. */
+const isNonEmptyDirectory = Effect.fn(function* (
   fs: FileSystem.FileSystem,
   directory: string | undefined,
 ) {
-  if (directory === undefined) return undefined;
-  if (!(yield* fs.exists(directory))) return undefined;
-  const entries = yield* fs.readDirectory(directory);
-  return entries.length > 0 ? directory : undefined;
+  if (!directory || !(yield* fs.exists(directory))) return false;
+  return (yield* fs.readDirectory(directory)).length > 0;
 });
 
 /**
@@ -75,11 +73,14 @@ export const viteBuildOutputPlugin = Effect.fn(function* ({
   const path = yield* Path.Path;
   let clientDirectory: string | undefined;
   let base: string | undefined;
-  // Set when the entry environment builds and the client environment does
-  // not. Vite skips that client build when there is no `index.html`, and the
-  // worker build sets `copyPublicDir: false`, so `public/` would otherwise
-  // never be uploaded.
-  let publicDirectory: string | undefined;
+  // Where the client build writes, and the `public/` it would copy. Read from
+  // the resolved config because the client environment may never build.
+  let clientOutDir: string | undefined;
+  let publicDir: string | undefined;
+  // Assets the entry environment imports by URL (`import url from
+  // "./logo.png"`), keyed by output file name. They belong with the static
+  // assets, not in the Worker bundle.
+  const importedAssets = new Map<string, string>();
   let serverEntry: string | undefined;
   const serverChunks = new Map<string, Effect.Effect<BundleFile, BundleError>>();
   const maybeExternalWorkspaces = new Set<string>();
@@ -112,6 +113,11 @@ export const viteBuildOutputPlugin = Effect.fn(function* ({
   const plugin: vite.Plugin = {
     name: "alchemy:build-output",
     sharedDuringBuild: true,
+    configResolved(config) {
+      const outDir = config.environments?.client?.build.outDir;
+      clientOutDir = outDir === undefined ? undefined : path.resolve(config.root, outDir);
+      publicDir = config.publicDir || undefined;
+    },
     // Collect the client output directory and server chunks as each
     // environment writes its bundle. We deliberately do NOT resolve the build
     // result from a `buildApp` hook: on Vite 8, when a project declares no
@@ -140,14 +146,20 @@ export const viteBuildOutputPlugin = Effect.fn(function* ({
           throw new Error(`Entry chunk not found for environment "${this.environment.name}"`);
         }
         serverEntry = fileName(entryChunk.fileName, this.environment);
-        base ??= this.environment.config.base;
-        const configuredPublicDir = this.environment.config.publicDir;
-        if (typeof configuredPublicDir === "string" && configuredPublicDir.length > 0) {
-          publicDirectory = configuredPublicDir;
+      }
+      const outDir = path.resolve(root, this.environment.config.build.outDir);
+      const urlAssets = new Set<string>();
+      for (const file of files) {
+        if (file.type !== "chunk" || this.environment.name !== entryEnvironment) continue;
+        const metadata = (file as { viteMetadata?: { importedAssets?: Set<string> } }).viteMetadata;
+        for (const asset of metadata?.importedAssets ?? []) {
+          urlAssets.add(asset);
+          importedAssets.set(asset, path.join(outDir, asset));
         }
       }
       await Promise.all(
         files.map(async (file) => {
+          if (file.type === "asset" && urlAssets.has(file.fileName)) return;
           if (file.type === "chunk") {
             file.imports
               .filter((self): self is keyof typeof RSC_MANIFEST => self in RSC_MANIFEST)
@@ -234,6 +246,32 @@ export const viteBuildOutputPlugin = Effect.fn(function* ({
     );
   };
 
+  // Mirrors `@cloudflare/vite-plugin`: assets the Worker imports move to the
+  // client output. Without a client build (no `index.html`), Vite never copies
+  // `public/` (the Worker builds with `copyPublicDir: false`), so the client
+  // output is created from `public/` plus those assets, as the plugin's
+  // fallback client build does.
+  const collectAssets = Effect.fn(function* () {
+    let directory = clientDirectory;
+    if (directory === undefined) {
+      const hasPublic = yield* isNonEmptyDirectory(fs, publicDir);
+      if (clientOutDir === undefined || (!hasPublic && importedAssets.size === 0)) {
+        return undefined;
+      }
+      directory = clientOutDir;
+      yield* fs.remove(directory, { recursive: true, force: true });
+      yield* fs.makeDirectory(directory, { recursive: true });
+      if (hasPublic) yield* fs.copy(publicDir!, directory);
+    }
+    for (const [asset, source] of importedAssets) {
+      const destination = path.join(directory, asset);
+      if (yield* fs.exists(destination)) continue;
+      yield* fs.makeDirectory(path.dirname(destination), { recursive: true });
+      yield* fs.copyFile(source, destination);
+    }
+    return directory;
+  });
+
   const getChunk = (path: string) => {
     const chunk = serverChunks.get(path);
     if (!chunk) {
@@ -247,7 +285,7 @@ export const viteBuildOutputPlugin = Effect.fn(function* ({
     // Read lazily so callers observe the state collected during the build.
     // Only safe to await *after* `builder.buildApp()` has resolved.
     output: Effect.gen(function* () {
-      const assetsDirectory = clientDirectory ?? (yield* nonEmptyDirectory(fs, publicDirectory));
+      const assetsDirectory = yield* collectAssets();
       return {
         clientDirectory: assetsDirectory,
         base,

@@ -267,39 +267,179 @@ describe.concurrent(
       { tags: ["provider:cloudflare:worker", "live"], timeout: 360_000 },
     );
 
+    // Server-only Workers (no `index.html`) follow `@cloudflare/vite-plugin`:
+    // a non-empty `public/`, or an asset the Worker imports, is uploaded and
+    // bound as `ASSETS`; otherwise the Worker deploys without assets.
+    const deployServerOnly = (
+      stack: Test.ScratchStack,
+      id: string,
+      edit: (rootDir: string) => Effect.Effect<void, unknown, FileSystem.FileSystem | Path.Path>,
+    ) =>
+      Effect.gen(function* () {
+        const { accountId } = yield* yield* CloudflareEnvironment;
+        yield* stack.destroy();
+        const rootDir = yield* cloneFixture(serverOnlyFixtureDir, {
+          prefix: "alchemy-vite-server-only-",
+          tempRoot,
+          entries: ["package.json", "vite.config.ts", "src", "public"],
+        });
+        yield* edit(rootDir);
+        const site = yield* stack.deploy(
+          Cloudflare.Website.Vite(id, {
+            ...viteProps(rootDir, ["src/**", "public/**", "package.json", "vite.config.ts"]),
+            main: "./src/index.ts",
+          }),
+        );
+        expect(site.url).toBeDefined();
+        yield* expectWorkerExists(site.workerName, accountId);
+        return {
+          site,
+          destroy: stack
+            .destroy()
+            .pipe(Effect.andThen(waitForWorkerToBeDeleted(site.workerName, accountId))),
+        };
+      });
+
     test.provider(
-      "Vite: server-only Worker (no index.html) uploads public/ and binds ASSETS",
+      "Vite: server-only Worker uploads a non-empty public/ and binds ASSETS",
       (stack) =>
         Effect.gen(function* () {
-          const { accountId } = yield* yield* CloudflareEnvironment;
-
-          yield* stack.destroy();
-
-          const rootDir = yield* cloneFixture(serverOnlyFixtureDir, {
-            prefix: "alchemy-vite-server-only-",
-            tempRoot,
-            entries: ["package.json", "vite.config.ts", "src", "public"],
-          });
-
-          const site = yield* stack.deploy(
-            Effect.gen(function* () {
-              return yield* Cloudflare.Website.Vite("FixViteServerOnly", {
-                ...viteProps(rootDir, ["src/**", "public/**", "package.json", "vite.config.ts"]),
-                main: "./src/index.ts",
-              });
-            }),
+          const { site, destroy } = yield* deployServerOnly(
+            stack,
+            "FixViteServerOnly",
+            () => Effect.void,
           );
-
-          expect(site.url).toBeDefined();
-          yield* expectWorkerExists(site.workerName, accountId);
           // The Worker reads `public/robots.txt` through `env.ASSETS`.
           yield* expectUrlContains(`${site.url!}/robots.txt`, "User-agent", {
             timeout: "120 seconds",
             label: "server-only public asset",
           });
+          yield* destroy;
+        }).pipe(logLevel),
+      { tags: ["provider:cloudflare:worker", "live"], timeout: 360_000 },
+    );
 
-          yield* stack.destroy();
-          yield* waitForWorkerToBeDeleted(site.workerName, accountId);
+    test.provider(
+      "Vite: server-only Worker without public/ deploys without ASSETS",
+      (stack) =>
+        Effect.gen(function* () {
+          const { site, destroy } = yield* deployServerOnly(
+            stack,
+            "FixViteServerNoPublic",
+            (rootDir) =>
+              Effect.gen(function* () {
+                const fs = yield* FileSystem.FileSystem;
+                yield* fs.remove(pathe.join(rootDir, "public"), { recursive: true });
+              }),
+          );
+          yield* expectUrlContains(`${site.url!}/__assets`, `"assets":false`, {
+            timeout: "120 seconds",
+            label: "no ASSETS binding",
+          });
+          yield* destroy;
+        }).pipe(logLevel),
+      { tags: ["provider:cloudflare:worker", "live"], timeout: 360_000 },
+    );
+
+    test.provider(
+      "Vite: server-only Worker with publicDir: false deploys without ASSETS",
+      (stack) =>
+        Effect.gen(function* () {
+          const { site, destroy } = yield* deployServerOnly(
+            stack,
+            "FixViteServerPublicOff",
+            (rootDir) =>
+              Effect.gen(function* () {
+                const fs = yield* FileSystem.FileSystem;
+                yield* fs.writeFileString(
+                  pathe.join(rootDir, "vite.config.ts"),
+                  "export default { publicDir: false };\n",
+                );
+              }),
+          );
+          yield* expectUrlContains(`${site.url!}/__assets`, `"assets":false`, {
+            timeout: "120 seconds",
+            label: "no ASSETS binding",
+          });
+          yield* destroy;
+        }).pipe(logLevel),
+      { tags: ["provider:cloudflare:worker", "live"], timeout: 360_000 },
+    );
+
+    // Over Vite's 4 KiB `assetsInlineLimit`, so the import emits a file
+    // instead of inlining a `data:` URL.
+    const importedAsset = `vite-imported-asset-marker\n${"x".repeat(8192)}\n`;
+    const importAssetWorker = (rootDir: string) =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        yield* fs.writeFileString(pathe.join(rootDir, "src", "data.txt"), importedAsset);
+        yield* fs.writeFileString(
+          pathe.join(rootDir, "src", "index.ts"),
+          `import dataUrl from "./data.txt?url";
+
+export default {
+  fetch: (request: Request, env: { ASSETS?: Fetcher }) =>
+    new URL(request.url).pathname === "/imported"
+      ? env.ASSETS
+        ? env.ASSETS.fetch(new URL(dataUrl, request.url))
+        : new Response("no ASSETS binding", { status: 500 })
+      : (env.ASSETS?.fetch(request) ?? new Response("no ASSETS binding", { status: 500 })),
+};
+`,
+        );
+      });
+
+    test.provider(
+      "Vite: server-only Worker serves an asset it imports through ASSETS",
+      (stack) =>
+        Effect.gen(function* () {
+          const { site, destroy } = yield* deployServerOnly(
+            stack,
+            "FixViteServerImport",
+            (rootDir) =>
+              Effect.gen(function* () {
+                const fs = yield* FileSystem.FileSystem;
+                yield* fs.remove(pathe.join(rootDir, "public"), { recursive: true });
+                yield* importAssetWorker(rootDir);
+              }),
+          );
+          yield* expectUrlContains(`${site.url!}/imported`, "vite-imported-asset-marker", {
+            timeout: "120 seconds",
+            label: "worker-imported asset",
+          });
+          yield* destroy;
+        }).pipe(logLevel),
+      { tags: ["provider:cloudflare:worker", "live"], timeout: 360_000 },
+    );
+
+    test.provider(
+      "Vite: a Worker-imported asset is served alongside the client build",
+      (stack) =>
+        Effect.gen(function* () {
+          const { site, destroy } = yield* deployServerOnly(
+            stack,
+            "FixViteClientImport",
+            (rootDir) =>
+              Effect.gen(function* () {
+                const fs = yield* FileSystem.FileSystem;
+                yield* fs.writeFileString(
+                  pathe.join(rootDir, "index.html"),
+                  htmlPage("vite-shell"),
+                );
+                yield* fs.writeFileString(pathe.join(rootDir, "src", "main.ts"), "export {};\n");
+                yield* importAssetWorker(rootDir);
+              }),
+          );
+          yield* expectUrlContains(`${site.url!}/imported`, "vite-imported-asset-marker", {
+            timeout: "120 seconds",
+            label: "worker-imported asset with a client build",
+          });
+          // `public/` still reaches the client output.
+          yield* expectUrlContains(`${site.url!}/robots.txt`, "User-agent", {
+            timeout: "60 seconds",
+            label: "public asset with a client build",
+          });
+          yield* destroy;
         }).pipe(logLevel),
       { tags: ["provider:cloudflare:worker", "live"], timeout: 360_000 },
     );
