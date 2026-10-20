@@ -5126,8 +5126,9 @@ export const LiveWorkerProvider = () =>
             // with this Worker — see readWorkerRoutes. Empty-array props
             // (`domain: []`, `routes: []`, `crons: []`) still observe so we
             // can detect drift and converge deletions.
-            // This is the last gradual-rollout upload receipt, not the active
-            // traffic deployment. Preserve it only while that version exists.
+            // The version recorded by the last deploy (the live version of a
+            // full deploy, or a gradual rollout's upload receipt). Preserve it
+            // only while that version exists.
             const uploadedVersionId = output?.versionId
               ? yield* workers
                   .getScriptVersion({
