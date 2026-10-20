@@ -2,6 +2,7 @@ import type { ValidationException } from "@distilled.cloud/aws/Errors";
 import * as microvms from "@distilled.cloud/aws/lambda-microvms";
 import * as Artifacts from "alchemy/Artifacts";
 import { isResolved } from "alchemy/Diff";
+import { materializeImageContext } from "alchemy/Image/Context";
 import type { Input, InputProps } from "alchemy/Input";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
@@ -241,9 +242,16 @@ const artifactContent = (
         port,
         news.imageLayers ?? [],
       );
-      const identity = `${bundleHash}:${dockerfile}`;
+      // The layers' context sources (a volume's blockd, say) go into the
+      // build context beside the Dockerfile, where their COPYs expect them.
+      const layerFiles = yield* layerContextFiles(news.imageLayers ?? []);
+      const identity = `${bundleHash}:${dockerfile}:${layerFiles.digest}`;
       const contentHash = yield* sha256(identity);
-      const archive = yield* zipFiles([{ path: "Dockerfile", content: dockerfile }, ...files]);
+      const archive = yield* zipFiles([
+        { path: "Dockerfile", content: dockerfile },
+        ...files,
+        ...layerFiles.files,
+      ]);
       return { contentHash, identity, archive } satisfies ArtifactContent;
     }
 
@@ -696,3 +704,21 @@ const waitForDeleted = (imageArn: string, session: ScopedPlanStatusSession) =>
       ),
     }),
   );
+
+/**
+ * The files image layers' context sources contribute to a build context,
+ * materialized in a temporary directory, and their digest ("" without any).
+ */
+const layerContextFiles = (layers: ReadonlyArray<{ readonly context?: ReadonlyArray<unknown> }>) =>
+  Effect.gen(function* () {
+    const sources = layers.flatMap((layer) => layer.context ?? []) as Parameters<
+      typeof materializeImageContext
+    >[0]["sources"];
+    if (sources.length === 0) return { files: [], digest: "" };
+    const fs = yield* FileSystem.FileSystem;
+    const context = yield* fs.makeTempDirectory({ prefix: "alchemy-microvm-layers-" });
+    const materialized = yield* materializeImageContext({ context, sources });
+    const files = yield* readContextDirectory(context);
+    yield* fs.remove(context, { recursive: true });
+    return { files, digest: materialized.digest };
+  });

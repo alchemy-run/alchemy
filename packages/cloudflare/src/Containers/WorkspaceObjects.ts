@@ -1,5 +1,5 @@
 import type { SandboxClient, SandboxProcess } from "@alchemy.run/sandbox/Sandbox";
-import { Sandbox as SandboxDeclaration, SandboxError } from "@alchemy.run/sandbox/Sandbox";
+import { SandboxError } from "@alchemy.run/sandbox/Sandbox";
 import {
   Volume as VolumeDeclaration,
   type Disk,
@@ -39,6 +39,7 @@ import { Container } from "./Container.ts";
 import type { ContainerClient } from "./ContainerClient.ts";
 import { registerControl } from "./EgressRelay.ts";
 import type { ContainerInstanceType } from "./SandboxClient.ts";
+import { className, machineSandbox } from "./WorkspaceNames.ts";
 
 /** The `host` of a workspace's descriptor. */
 export const WORKSPACE_HOST = "Cloudflare.Containers.Workspace";
@@ -178,9 +179,6 @@ interface MachineShape {
   kill(id: string, signal: number): Effect.Effect<void, WorkspaceError, RuntimeContext>;
 }
 
-/** Durable Object class names are JavaScript identifiers. */
-const className = (id: string, kind: string) => `${id.replace(/[^A-Za-z0-9_$]/g, "_")}${kind}`;
-
 /** @internal The workspace's sessions, one Durable Object each. */
 export const sessionObject = (id: string) =>
   DurableObject<SessionShape, SessionShape>()(className(id, "Session"), {
@@ -204,10 +202,6 @@ const machineContainer = (id: string, dockerfile?: string) =>
       ? { dockerfile: { content: `${dockerfile}\nCMD ["sleep", "infinity"]\n` } }
       : {}),
   });
-
-/** @internal A machine on a sandbox host other than Cloudflare's (a Lambda MicroVM). */
-export const machineSandbox = (id: string) =>
-  SandboxDeclaration<any, { size: "machine" }>()(className(id, "Vm"));
 
 const fail = (message: string, cause?: unknown) => new WorkspaceError({ message, cause });
 

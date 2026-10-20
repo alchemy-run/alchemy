@@ -1,5 +1,7 @@
 import type { MicrovmSandboxMemory } from "@alchemy.run/aws/Lambda/MicrovmSandbox";
 import { MicrovmSandbox } from "@alchemy.run/aws/Lambda/MicrovmSandbox";
+import { sandboxHost } from "@alchemy.run/sandbox/Sandbox";
+import { volumeHost } from "@alchemy.run/sandbox/Volume";
 import type {
   Workspace as SandboxWorkspace,
   WorkspaceHostService,
@@ -15,11 +17,11 @@ import type { Providers } from "../Providers.ts";
 import { Volume as R2Volume } from "../R2/Volume.ts";
 import { isWorker, type Worker } from "../Workers/Worker.ts";
 import type { ContainerInstanceType } from "./SandboxClient.ts";
-import machineProgram from "./WorkspaceMachine.ts";
+import { machineHost } from "./WorkspaceMachineHost.ts";
+import { machineSandbox } from "./WorkspaceNames.ts";
 import {
   hostWorker,
   machineObject,
-  machineSandbox,
   sessionObject,
   volumeOf,
   WORKSPACE_HOST,
@@ -108,16 +110,16 @@ export const Workspace = <const D extends SandboxWorkspace.Decl.Any>(
   // A MicroVM machine is a sandbox: its host builds the image (the
   // workspace's Dockerfile, blockd, and the capabilities to mount).
   const machines = lambda
-    ? MicrovmSandbox(
-        machineSandbox(id),
+    ? machineHost(
         {
-          main: new URL(`./WorkspaceMachine${extensionOf(import.meta.url)}`, import.meta.url).href,
-          sizes: { machine: lambda.memory },
-          dockerfile: props.dockerfile,
-          additionalOsCapabilities: ["ALL"],
+          id,
+          memory: lambda.memory,
           ...(lambda.cpuConfigurations ? { cpuConfigurations: lambda.cpuConfigurations } : {}),
         },
-        machineProgram as never,
+        {
+          main: new URL(`./WorkspaceMachine${extensionOf(import.meta.url)}`, import.meta.url).href,
+          dockerfile: props.dockerfile,
+        },
       )
     : Layer.empty;
   const volume = R2Volume(volumeOf(id), {
@@ -127,13 +129,21 @@ export const Workspace = <const D extends SandboxWorkspace.Decl.Any>(
   return Layer.effect(
     workspaceHost(id),
     Effect.gen(function* () {
-      const context = yield* Effect.context<never>();
-      // The host Worker's own requirements (the volume's host, its machine's
-      // image) are satisfied here, by this Layer's context.
+      // The host Worker gets the volume's host and the machine's sandbox
+      // host, and nothing else: a platform's own services (a MicroVM image's
+      // binding host, say) must not leak into the Worker's.
+      const volumeService = yield* volumeHost(id);
+      const machineId = machineSandbox(id).LogicalId;
+      const machineService = lambda ? yield* sandboxHost(machineId) : undefined;
       const host = yield* hostWorker(config, {
         main: new URL(`./WorkspaceHost${extensionOf(import.meta.url)}`, import.meta.url).href,
         dockerfile: props.dockerfile,
-        provide: (effect) => Effect.provide(effect, context),
+        provide: (effect) => {
+          const withVolume = Effect.provideService(effect, volumeHost(id), volumeService);
+          return machineService
+            ? Effect.provideService(withVolume, sandboxHost(machineId), machineService)
+            : withVolume;
+        },
       }) as unknown as Effect.Effect<Worker, never, Providers>;
       return {
         descriptor: host.workerName.pipe(

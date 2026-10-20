@@ -1,14 +1,12 @@
 /**
- * The program a workspace machine on a Lambda MicroVM runs: nothing but a
- * health check. Commands arrive through the sandbox's `exec`, and the disk
- * through `blockd mount`. Deploy names this file as the MicroVM program's
- * `main`.
+ * The program module of a workspace's MicroVM machines: deploy names this
+ * file as the MicroVM program's `main`, and bakes the machine's config into
+ * the image's environment, where it's read back here.
  *
  * NOT exported from `index.ts`.
  */
-import * as Effect from "effect/Effect";
-import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { MACHINE_CONFIG, machineHost, type MachineConfig } from "./WorkspaceMachineHost.ts";
 
-export default Effect.succeed({
-  fetch: Effect.succeed(HttpServerResponse.text("workspace machine\n")),
-});
+const config = JSON.parse(String(process.env[MACHINE_CONFIG])) as MachineConfig;
+
+export default machineHost(config);
