@@ -1,4 +1,4 @@
-import * as Lambda from "alchemy/AWS/Lambda/Function";
+import * as Lambda from "@alchemy.run/aws/Lambda/Function";
 /**
  * The pack hasher as an AWS Lambda (DESIGN §22.11): an Effect-native
  * Function that answers {@link HashEvent}s — the same scan the Worker runs

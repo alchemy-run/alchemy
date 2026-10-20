@@ -1,8 +1,4 @@
 import { fileURLToPath } from "node:url";
-import { Credentials } from "@distilled.cloud/aws/Credentials";
-import * as microvms from "@distilled.cloud/aws/lambda-microvms";
-import type { RegionName } from "@distilled.cloud/aws/Region";
-import { expect } from "alchemy-test";
 /**
  * `AWS.Lambda.MicrovmImage` under `alchemy dev`: the dev provider builds the
  * image with a plain HOST-side `docker build` (BuildKit layer cache against
@@ -29,9 +25,13 @@ import { expect } from "alchemy-test";
  * Requires Docker (floci runs as a container, MicroVMs run as containers);
  * skipped when the daemon is unavailable.
  */
-import * as AWS from "alchemy/AWS";
-import * as Endpoint from "alchemy/AWS/Endpoint";
-import * as Region from "alchemy/AWS/Region";
+import * as AWS from "@alchemy.run/aws";
+import * as Endpoint from "@alchemy.run/aws/Endpoint";
+import * as Region from "@alchemy.run/aws/Region";
+import { Credentials } from "@distilled.cloud/aws/Credentials";
+import * as microvms from "@distilled.cloud/aws/lambda-microvms";
+import type { RegionName } from "@distilled.cloud/aws/Region";
+import { expect } from "alchemy-test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -44,9 +44,7 @@ import { dockerAvailable, FLOCI_ENDPOINT } from "../Local/fixtures/raw.ts";
 
 const { test } = Test.make({ providers: AWS.providers(), dev: true });
 
-const fixtureDir = fileURLToPath(
-  new URL("../../../../alchemy/test/AWS/Lambda/fixtures/microvm-dev", import.meta.url),
-);
+const fixtureDir = fileURLToPath(new URL("../Lambda/fixtures/microvm-dev", import.meta.url));
 
 /** Floci-scoped context for the raw distilled calls the test makes itself. */
 const flociContext = Layer.mergeAll(

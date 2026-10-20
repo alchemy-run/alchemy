@@ -67,9 +67,6 @@
       "path": "./packages/frontend-frameworks/tsconfig.json"
     },
     {
-      "path": "./packages/floci/tsconfig.json"
-    },
-    {
       "path": "./packages/cloudflare-test-tools/tsconfig.json"
     },
     {
@@ -92,9 +89,6 @@
     },
     {
       "path": "./packages/drizzle/tsconfig.json"
-    },
-    {
-      "path": "./packages/sqlite/tsconfig.json"
     },
     {
       "path": "./packages/acme/tsconfig.json"
@@ -137,6 +131,27 @@
     },
     {
       "path": "./packages/cloudflare/tsconfig.json"
+    },
+    {
+      "path": "./packages/gcp/tsconfig.json"
+    },
+    {
+      "path": "./packages/aws/tsconfig.json"
+    },
+    {
+      "path": "./packages/domain/tsconfig.json"
+    },
+    {
+      "path": "./packages/docker/tsconfig.json"
+    },
+    {
+      "path": "./packages/kubernetes/tsconfig.json"
+    },
+    {
+      "path": "./packages/redis/tsconfig.json"
+    },
+    {
+      "path": "./packages/sql/tsconfig.json"
     },
     {
       "path": "./packages/integration-tests/tsconfig.json"
@@ -255,9 +270,6 @@
     },
     {
       "path": "./examples/aws-website-vite/tsconfig.json"
-    },
-    {
-      "path": "./examples/cloudflare-agent/tsconfig.json"
     },
     {
       "path": "./examples/cloudflare-preview-benchmark/tsconfig.json"

@@ -25,9 +25,9 @@ import { preferLocalFlociImage } from "./floci-image.ts";
 import { resolveFlociDefaultNetwork } from "./floci-network.ts";
 
 const repoRoot = resolve(import.meta.dir, "..");
-const alchemyRoot = join(repoRoot, "packages/alchemy");
-const awsTestRoot = join(alchemyRoot, "test/AWS");
-const providersFile = join(alchemyRoot, "src/AWS/Providers.ts");
+const testPackageRoot = join(repoRoot, "packages/integration-tests");
+const awsTestRoot = join(testPackageRoot, "test/AWS");
+const providersFile = join(repoRoot, "packages/aws/src/Providers.ts");
 
 const extraDirs: Record<string, ReadonlyArray<string>> = {
   SecretsManager: ["Secret"],
@@ -177,23 +177,24 @@ if (allowedRoots.length === 0) {
   process.exit(1);
 }
 
-const requestedRoots = paths.length > 0 ? paths.map((p) => resolve(alchemyRoot, p)) : allowedRoots;
+const requestedRoots =
+  paths.length > 0 ? paths.map((p) => resolve(testPackageRoot, p)) : allowedRoots;
 
 const files: string[] = [];
 for (const root of requestedRoots) {
   if (!existsSync(root)) {
-    files.push(relative(alchemyRoot, root));
+    files.push(relative(testPackageRoot, root));
     continue;
   }
   if (statSync(root).isFile()) {
-    files.push(relative(alchemyRoot, root));
+    files.push(relative(testPackageRoot, root));
     continue;
   }
   const glob = new Glob("**/*.test.ts");
   for await (const file of glob.scan(root)) {
     if (file.endsWith(".local.test.ts")) continue;
     if (liveOnlySuites.has(relative(awsTestRoot, join(root, file)))) continue;
-    files.push(relative(alchemyRoot, join(root, file)));
+    files.push(relative(testPackageRoot, join(root, file)));
   }
 }
 
@@ -239,7 +240,7 @@ if (dryRun) {
   console.log(
     JSON.stringify({
       command,
-      cwd: alchemyRoot,
+      cwd: testPackageRoot,
       external,
       resetShared,
       endpoint: "http://localhost:4566",
@@ -335,7 +336,7 @@ for (const [name, value] of Object.entries(fixtures?.env ?? {})) {
 }
 
 const proc = Bun.spawn(command, {
-  cwd: alchemyRoot,
+  cwd: testPackageRoot,
   // Bun.spawn's default env is a snapshot taken at process start, so the
   // `process.env.ALCHEMY_TEST_DEV` mutations above never reach the child
   // unless the env is materialized explicitly. Without this the "floci"

@@ -1,4 +1,4 @@
-import { inlineSqlParams, MigrationError, type SqlExecutor } from "alchemy/SQL/Migrations/index";
+import { inlineSqlParams, MigrationError, type SqlExecutor } from "@alchemy.run/sql/Migrations";
 import * as Effect from "effect/Effect";
 
 /**

@@ -1,7 +1,7 @@
+import { DockerLive } from "@alchemy.run/docker/Docker";
 import { CredentialsStoreLive } from "alchemy/Auth/Credentials";
 import { ProfileStoreLive } from "alchemy/Auth/Profile";
 import * as Command from "alchemy/Command";
-import { DockerLive } from "alchemy/Docker/Docker";
 import { KeyPair, KeyPairProvider } from "alchemy/KeyPair";
 import * as Provider from "alchemy/Provider";
 import { Random, RandomProvider } from "alchemy/Random";

@@ -8,7 +8,7 @@ import {
 } from "alchemy/Bundle/InstalledPackages";
 import { findCwdForBundle, resolveMainPath } from "alchemy/Bundle/TempRoot";
 import type { ResourceBinding } from "alchemy/Resource";
-import { createHostRuntimeContext, type HostRuntimeContext } from "alchemy/Server/Process";
+import { createHostRuntimeContext, type HostRuntimeContext } from "alchemy/Runtime/Process";
 import {
   contextRootOf,
   extraFileDestination,

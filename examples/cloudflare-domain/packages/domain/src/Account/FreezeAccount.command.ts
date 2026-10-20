@@ -1,4 +1,4 @@
-import * as Domain from "alchemy/Domain";
+import * as Domain from "@alchemy.run/domain";
 import * as Schema from "effect/Schema";
 import { Actor } from "../Actor.ts";
 import { Session } from "../Session.middleware.ts";

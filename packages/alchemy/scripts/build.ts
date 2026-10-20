@@ -1,9 +1,9 @@
 import { build, exec } from "../../../scripts/package-build.ts";
 
 build(import.meta.dirname, {
-  // Bootstrap modules are source inputs to the deployment bundler.
+  // The shared bootstrap helpers every provider's `Bootstrap` imports stay source.
   exports: {
-    sourceOnly: ["./Runtime/Bootstrap/*", "./AWS/Bootstrap/*", "./GCP/Bootstrap/*"],
+    sourceOnly: ["./Runtime/Bootstrap", "./Runtime/ManagedHttpShutdown"],
   },
   thirdPartyLicenses: true,
   readme: true,

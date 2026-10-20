@@ -1,6 +1,6 @@
 import * as Drizzle from "@alchemy.run/drizzle";
+import * as GCP from "@alchemy.run/gcp";
 import * as Alchemy from "alchemy";
-import * as GCP from "alchemy/GCP";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import Api from "./src/Api.ts";

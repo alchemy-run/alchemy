@@ -7,9 +7,9 @@ import * as Effect from "effect/Effect";
 import type { App } from "./App.ts";
 import { PrismaClient, isConflict, isNotFound, type PrismaManagementClient } from "./Client.ts";
 import type { Compute } from "./Compute.ts";
-import { DEV_TIMESTAMP, attrOrString, devId, devProvider } from "./Internal/DevStub.ts";
+import { DEV_TIMESTAMP, attrOrString, devId, devProvider } from "./internal/DevStub.ts";
+import { concreteIdOf, concreteIdsChanged, isInputObject, isPrismaDevId } from "./internal/Refs.ts";
 import type { Providers } from "./Providers.ts";
-import { concreteIdOf, concreteIdsChanged, isInputObject, isPrismaDevId } from "./Refs.ts";
 import type { CustomDomain as ApiCustomDomain } from "./Types.ts";
 
 type AppReference = string | App | Compute;

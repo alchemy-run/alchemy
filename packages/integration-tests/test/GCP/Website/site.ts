@@ -21,7 +21,7 @@ export const logLevel = Effect.provideService(
 export const tempRoot = pathe.resolve(import.meta.dirname, "../../../.tmp");
 
 export const awsFixture = (name: string) =>
-  pathe.resolve(import.meta.dirname, "../../../../alchemy/test/AWS/Website/fixtures", name);
+  pathe.resolve(import.meta.dirname, "../../AWS/Website/fixtures", name);
 
 export const cloudflareFixture = (name: string) =>
   pathe.resolve(import.meta.dirname, "../../Cloudflare/Website", name);

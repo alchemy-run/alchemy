@@ -1,4 +1,4 @@
-import { Docker, DockerEnvironment } from "alchemy/Docker/Docker";
+import { Docker, DockerEnvironment } from "@alchemy.run/docker/Docker";
 import { Stage } from "alchemy/Stage";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";

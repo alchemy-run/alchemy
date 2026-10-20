@@ -8,7 +8,7 @@ import { Client } from "pg";
 import {
   closePrismaDevDatabase,
   ensurePrismaDevDatabase,
-} from "../../../prisma/src/PrismaDevDatabase.ts";
+} from "../../../prisma/src/internal/PrismaDevDatabase.ts";
 
 const toError = (message: string) => (cause: unknown) =>
   cause instanceof Error ? cause : new Error(`${message}: ${String(cause)}`);

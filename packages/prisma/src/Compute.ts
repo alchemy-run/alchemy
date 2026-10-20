@@ -29,8 +29,8 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import { Platform, type Main, type PlatformProps } from "alchemy/Platform";
 import * as Provider from "alchemy/Provider";
 import { Resource, type ResourceBinding } from "alchemy/Resource";
+import type { ProcessContext, ProcessServices } from "alchemy/Runtime/Process";
 import { RuntimeContext } from "alchemy/RuntimeContext";
-import type * as Server from "alchemy/Server";
 import { Stack } from "alchemy/Stack";
 import { sha256Object } from "alchemy/Util/sha256";
 import * as Duration from "effect/Duration";
@@ -64,32 +64,32 @@ import {
   waitForDeploymentStatus,
 } from "./ComputeLifecycle.ts";
 import { readUploadArtifact, uploadArtifact } from "./Deployment.ts";
-import { ensureAppImmutableIdentity } from "./Internal/AppIdentity.ts";
-import { promoteAppObserved, waitForAppDeploymentTarget } from "./Internal/AppPromotion.ts";
-import { normalizeBundleFilePath } from "./Internal/BundlePaths.ts";
-import { aggregateCleanupFailure } from "./Internal/CleanupFailure.ts";
+import { ensureAppImmutableIdentity } from "./internal/AppIdentity.ts";
+import { promoteAppObserved, waitForAppDeploymentTarget } from "./internal/AppPromotion.ts";
+import { normalizeBundleFilePath } from "./internal/BundlePaths.ts";
+import { aggregateCleanupFailure } from "./internal/CleanupFailure.ts";
 import {
   startDeploymentIdempotent,
   stopDeploymentIdempotent,
-} from "./Internal/DeploymentActions.ts";
-import { ensureDeploymentMembership } from "./Internal/DeploymentIdentity.ts";
-import { observeDeployment } from "./Internal/DeploymentObserve.ts";
+} from "./internal/DeploymentActions.ts";
+import { ensureDeploymentMembership } from "./internal/DeploymentIdentity.ts";
+import { observeDeployment } from "./internal/DeploymentObserve.ts";
 import type {
   ObservedApp,
   ObservedDeployment,
   ObservedEnvironmentVariable,
-} from "./Internal/Observed.ts";
-import { PrismaPaginationError } from "./Internal/Pagination.ts";
-import { tailDeploymentLogs } from "./PrismaLogs.ts";
-import type { Project } from "./Project.ts";
-import type { Providers } from "./Providers.ts";
+} from "./internal/Observed.ts";
+import { PrismaPaginationError } from "./internal/Pagination.ts";
 import {
   concreteIdsChanged,
   isInputObject,
   isPrismaDevId,
   resolveProjectId,
   unresolvedProjectIdOf,
-} from "./Refs.ts";
+} from "./internal/Refs.ts";
+import { tailDeploymentLogs } from "./PrismaLogs.ts";
+import type { Project } from "./Project.ts";
+import type { Providers } from "./Providers.ts";
 import type { PrismaRegionId } from "./Types.ts";
 
 const ComputeTypeId = "Prisma.Compute" as const;
@@ -586,11 +586,11 @@ export interface Compute extends Resource<
   Providers
 > {}
 
-export type ComputeRuntimeServices = Server.ProcessServices;
+export type ComputeRuntimeServices = ProcessServices;
 
 export type ComputeShape = Main<ComputeRuntimeServices>;
 
-export interface ComputeRuntimeContext extends Server.ProcessContext {
+export interface ComputeRuntimeContext extends ProcessContext {
   readonly Type: ComputeTypeId;
 }
 
@@ -789,7 +789,7 @@ export const Compute: Platform<
     const runners: Effect.Effect<void, never, unknown>[] = [];
     const env: Record<string, unknown> = {};
     let runtimeContext: ComputeRuntimeContext;
-    const run: Server.ProcessContext["run"] = (effect) =>
+    const run: ProcessContext["run"] = (effect) =>
       Effect.sync(() => {
         runners.push(effect);
       });

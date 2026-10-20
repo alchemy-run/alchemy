@@ -1,21 +1,21 @@
-import { AbortMultipartUpload } from "alchemy/AWS/S3";
-import { AbortMultipartUploadHttp } from "alchemy/AWS/S3";
-import { CompleteMultipartUpload } from "alchemy/AWS/S3";
-import { CompleteMultipartUploadHttp } from "alchemy/AWS/S3";
-import { CreateMultipartUpload } from "alchemy/AWS/S3";
-import { CreateMultipartUploadHttp } from "alchemy/AWS/S3";
-import { DeleteObjects } from "alchemy/AWS/S3";
-import { DeleteObjectsHttp } from "alchemy/AWS/S3";
-import { GetObject } from "alchemy/AWS/S3";
-import { GetObjectHttp } from "alchemy/AWS/S3";
-import { HeadObject } from "alchemy/AWS/S3";
-import { HeadObjectHttp } from "alchemy/AWS/S3";
-import { ListObjectsV2 } from "alchemy/AWS/S3";
-import { ListObjectsV2Http } from "alchemy/AWS/S3";
-import { PutObject } from "alchemy/AWS/S3";
-import { PutObjectHttp } from "alchemy/AWS/S3";
-import { UploadPart } from "alchemy/AWS/S3";
-import { UploadPartHttp } from "alchemy/AWS/S3";
+import { AbortMultipartUpload } from "@alchemy.run/aws/S3";
+import { AbortMultipartUploadHttp } from "@alchemy.run/aws/S3";
+import { CompleteMultipartUpload } from "@alchemy.run/aws/S3";
+import { CompleteMultipartUploadHttp } from "@alchemy.run/aws/S3";
+import { CreateMultipartUpload } from "@alchemy.run/aws/S3";
+import { CreateMultipartUploadHttp } from "@alchemy.run/aws/S3";
+import { DeleteObjects } from "@alchemy.run/aws/S3";
+import { DeleteObjectsHttp } from "@alchemy.run/aws/S3";
+import { GetObject } from "@alchemy.run/aws/S3";
+import { GetObjectHttp } from "@alchemy.run/aws/S3";
+import { HeadObject } from "@alchemy.run/aws/S3";
+import { HeadObjectHttp } from "@alchemy.run/aws/S3";
+import { ListObjectsV2 } from "@alchemy.run/aws/S3";
+import { ListObjectsV2Http } from "@alchemy.run/aws/S3";
+import { PutObject } from "@alchemy.run/aws/S3";
+import { PutObjectHttp } from "@alchemy.run/aws/S3";
+import { UploadPart } from "@alchemy.run/aws/S3";
+import { UploadPartHttp } from "@alchemy.run/aws/S3";
 /**
  * `Git.BlobStoreS3` — AWS S3 implementation of {@link BlobStore}.
  *

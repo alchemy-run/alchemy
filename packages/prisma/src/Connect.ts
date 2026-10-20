@@ -6,7 +6,7 @@ import { identity } from "effect/Function";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import type { Connection } from "./Connection.ts";
-import { envName } from "./Internal/EnvName.ts";
+import { envName } from "./internal/EnvName.ts";
 
 /**
  * The typed runtime client returned by {@link Connect}.

@@ -17,10 +17,7 @@ const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Deb
 
 const hasHetznerCreds = !!process.env.HCLOUD_TOKEN;
 
-const fixtureDir = pathe.resolve(
-  import.meta.dirname,
-  "../../../../alchemy/test/AWS/Website/fixtures/octane-app",
-);
+const fixtureDir = pathe.resolve(import.meta.dirname, "../../AWS/Website/fixtures/octane-app");
 const tempRoot = pathe.resolve(import.meta.dirname, "../../../.tmp");
 const fixtureEntries = [
   ".gitignore",

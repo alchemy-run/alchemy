@@ -11,8 +11,8 @@ import * as Redacted from "effect/Redacted";
 import * as Stream from "effect/Stream";
 import type WebSocket from "ws";
 import type { RawData } from "ws";
-import { Credentials } from "./Credentials.ts";
-import { getDeploymentLogsRequest } from "./Internal/LogsClient.ts";
+import { Credentials } from "./internal/Credentials.ts";
+import { getDeploymentLogsRequest } from "./internal/LogsClient.ts";
 import type { DeploymentLogsQuery } from "./Types.ts";
 
 export class PrismaLogStreamError extends Data.TaggedError("PrismaLogStreamError")<{

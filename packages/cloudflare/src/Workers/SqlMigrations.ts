@@ -1,6 +1,9 @@
+import { ALCHEMY_DEFAULT_TABLE } from "@alchemy.run/sql/Migrations/AlchemyFormat";
+import {
+  MigrationError,
+  type MigrationHistoryConflictError,
+} from "@alchemy.run/sql/Migrations/Format";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
-import { ALCHEMY_DEFAULT_TABLE } from "alchemy/SQL/Migrations/AlchemyFormat";
-import { MigrationError, type MigrationHistoryConflictError } from "alchemy/SQL/Migrations/Format";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import type { DurableObjectState } from "./DurableObjectState.ts";
@@ -107,7 +110,7 @@ export const SqlMigrations = Effect.fn("Cloudflare.SqlMigrations")(function* (
   const key = `alchemy:sql-migrations:${JSON.stringify([dir, table])}`;
   if (!globalThis.__ALCHEMY_RUNTIME__) {
     const { readMigrationRecords } = yield* Effect.promise(
-      () => import("alchemy/SQL/Migrations/Records"),
+      () => import("@alchemy.run/sql/Migrations/Records"),
     );
     const snapshot: SqlMigrationSnapshot = {
       _tag: "Cloudflare.SqlMigrations",

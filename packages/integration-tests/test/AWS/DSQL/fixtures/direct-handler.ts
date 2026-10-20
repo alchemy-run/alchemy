@@ -1,6 +1,6 @@
+import * as DSQL from "@alchemy.run/aws/DSQL";
+import * as Lambda from "@alchemy.run/aws/Lambda";
 import * as PgClient from "@effect/sql-pg/PgClient";
-import * as DSQL from "alchemy/AWS/DSQL";
-import * as Lambda from "alchemy/AWS/Lambda";
 import * as Context from "effect/Context";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";

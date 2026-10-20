@@ -5,7 +5,7 @@ import {
   unresolvedAppIdOf,
   unresolvedDatabaseIdOf,
   unresolvedProjectIdOf,
-} from "../../../prisma/src/Refs.ts";
+} from "../../../prisma/src/internal/Refs.ts";
 
 describe("Prisma Refs", { tags: ["unit", "provider:prisma", "local"] }, () => {
   it("treats missing unresolved references as unknown", () => {

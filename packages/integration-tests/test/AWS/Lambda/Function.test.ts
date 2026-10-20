@@ -1,9 +1,9 @@
 import { fileURLToPath } from "node:url";
+import * as AWS from "@alchemy.run/aws";
 import * as Logs from "@distilled.cloud/aws/cloudwatch-logs";
 import * as iam from "@distilled.cloud/aws/iam";
 import * as Lambda from "@distilled.cloud/aws/lambda";
 import { expect } from "alchemy-test";
-import * as AWS from "alchemy/AWS";
 import * as Provider from "alchemy/Provider";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Duration from "effect/Duration";

@@ -15,7 +15,7 @@ The server still decides, but the app keeps working without a connection. It rec
 
 ## A local copy of the server's aggregates
 
-Here the device runs its own copy of an account and records facts in it offline, and everything the user does next builds on them. When the server later rejects one, everything built on it is wrong. Making that safe takes a sync engine that keeps the server's state apart from pending changes and recomputes everything whenever the server's state moves. `alchemy/Domain` doesn't include one.
+Here the device runs its own copy of an account and records facts in it offline, and everything the user does next builds on them. When the server later rejects one, everything built on it is wrong. Making that safe takes a sync engine that keeps the server's state apart from pending changes and recomputes everything whenever the server's state moves. `@alchemy.run/domain` doesn't include one.
 
 ## The device decides, the server stores
 
@@ -32,7 +32,7 @@ import { StatementLine } from "@bank/domain/Account/Statement.view";
 import { CustomerId } from "@bank/domain/Customer/Customer.id";
 import { Username } from "@bank/domain/Customer/Username";
 import { CustomerApi } from "@bank/domain/CustomerApi.api";
-import type * as Domain from "alchemy/Domain";
+import type * as Domain from "@alchemy.run/domain";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
@@ -552,7 +552,7 @@ Every change to the intents saves them with `SaveIntents`. On the next page load
 // packages/web/src/entry.ts
 import { CustomerId } from "@bank/domain/Customer/Customer.id";
 import { CustomerApi } from "@bank/domain/CustomerApi.api";
-import * as Domain from "alchemy/Domain";
+import * as Domain from "@alchemy.run/domain";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as HttpClient from "effect/http/HttpClient";

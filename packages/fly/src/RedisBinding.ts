@@ -1,5 +1,5 @@
+import type { Url } from "@alchemy.run/redis";
 import * as Binding from "alchemy/Binding";
-import type { Url } from "alchemy/Redis";
 import type { Resource } from "alchemy/Resource";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
@@ -16,7 +16,7 @@ import { REDIS_URL_ENV, RedisUrlMissing, type Redis } from "./Redis.ts";
  * set/get). `REDIS_URL` written as an App secret is a fallback, not the
  * primary path.
  *
- * The RESP client lives in `alchemy/Redis`. This file only wires the
+ * The RESP client lives in `@alchemy.run/redis`. This file only wires the
  * Fly host binding.
  *
  * NOT exported from `index.ts`.

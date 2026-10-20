@@ -262,7 +262,10 @@ export const Redis: typeof RedisResource = Object.assign(
   RedisResource,
 );
 
-export { CommandError as RedisCommandError, UrlMissing as RedisUrlMissing } from "alchemy/Redis";
+export {
+  CommandError as RedisCommandError,
+  UrlMissing as RedisUrlMissing,
+} from "@alchemy.run/redis";
 
 export class RedisNotCreated extends Data.TaggedError("Railway.RedisNotCreated")<{
   name: string;
@@ -533,7 +536,7 @@ export {
   command as redisCommand,
   connectionUrl as redisConnectionUrl,
   run as runRedisCommand,
-} from "alchemy/Redis";
+} from "@alchemy.run/redis";
 
 export const RedisProvider = () =>
   Provider.succeed(Redis, {

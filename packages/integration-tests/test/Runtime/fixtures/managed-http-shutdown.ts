@@ -1,7 +1,7 @@
 import { bootstrap } from "@alchemy.run/fly/Bootstrap";
 import { HttpServer, NodeHttpServer } from "alchemy/Http";
-import { runProcess } from "alchemy/Runtime/Bootstrap/Process";
-import { createContainerRuntimeContext } from "alchemy/Server/Process";
+import { runProcess } from "alchemy/Runtime/Bootstrap";
+import { createContainerRuntimeContext } from "alchemy/Runtime/Process";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";

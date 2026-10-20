@@ -17,7 +17,7 @@ const hasHetznerCreds = !!process.env.HCLOUD_TOKEN;
 
 const fixtureDir = pathe.resolve(
   import.meta.dirname,
-  "../../../../alchemy/test/AWS/Website/fixtures/react-router-app",
+  "../../AWS/Website/fixtures/react-router-app",
 );
 const tempRoot = pathe.resolve(import.meta.dirname, "../../../.tmp");
 const fixtureEntries = [

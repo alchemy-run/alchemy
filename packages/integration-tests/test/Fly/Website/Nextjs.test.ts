@@ -14,10 +14,7 @@ const { test } = Test.make({ providers: Fly.providers() });
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const fixtureDir = pathe.resolve(
-  import.meta.dirname,
-  "../../../../alchemy/test/AWS/Website/fixtures/nextjs-app",
-);
+const fixtureDir = pathe.resolve(import.meta.dirname, "../../AWS/Website/fixtures/nextjs-app");
 const fixtureEntries = [
   ".gitignore",
   "package.json",

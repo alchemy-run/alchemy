@@ -1,7 +1,8 @@
+import * as AWS from "@alchemy.run/aws";
+import { flociServices } from "@alchemy.run/aws/Local/FlociServices";
 import * as cloudfront from "@distilled.cloud/aws/cloudfront";
 import * as s3 from "@distilled.cloud/aws/s3";
 import { assert, describe, expect } from "alchemy-test";
-import * as AWS from "alchemy/AWS";
 import * as Output from "alchemy/Output";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Data from "effect/Data";
@@ -12,7 +13,6 @@ import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as pathe from "pathe";
-import { flociServices } from "../../../../alchemy/src/AWS/Local/FlociServices.ts";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
 
 // `dev: true` runs local providers behind the RPC sidecar proxy by default,

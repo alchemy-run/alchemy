@@ -10,10 +10,10 @@ import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
-import { stopDeploymentIdempotent } from "./Internal/DeploymentActions.ts";
-import { observeDeployment } from "./Internal/DeploymentObserve.ts";
-import type { ObservedDeployment } from "./Internal/Observed.ts";
-import { PrismaPaginationError } from "./Internal/Pagination.ts";
+import { stopDeploymentIdempotent } from "./internal/DeploymentActions.ts";
+import { observeDeployment } from "./internal/DeploymentObserve.ts";
+import type { ObservedDeployment } from "./internal/Observed.ts";
+import { PrismaPaginationError } from "./internal/Pagination.ts";
 export { isConflict } from "./Client.ts";
 
 /**

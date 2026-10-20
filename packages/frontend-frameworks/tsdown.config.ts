@@ -111,6 +111,7 @@ export default defineConfig([
         /^(?:astro|cloudflare|virtual):/,
         /^nitropack(?:\/|$)/,
         /^alchemy(?:\/|$)/,
+        /^@alchemy\.run\/redis(?:\/|$)/,
         /^@distilled\.cloud\/aws(?:\/|$)/,
       ],
       makeAbsoluteExternalsRelative: true,

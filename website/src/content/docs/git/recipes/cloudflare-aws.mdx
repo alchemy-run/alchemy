@@ -14,7 +14,7 @@ hashed on its own Lambda:
 
 ```typescript
 // src/git.ts
-import * as AWS from "alchemy/AWS";
+import * as AWS from "@alchemy.run/aws";
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Git from "@alchemy.run/git";
 import * as GitHasher from "@alchemy.run/git/Hasher";
@@ -48,7 +48,7 @@ export default class GitHost extends Cloudflare.Worker<GitHost>()(
 ```typescript
 // alchemy.run.ts
 import * as Alchemy from "alchemy";
-import * as AWS from "alchemy/AWS";
+import * as AWS from "@alchemy.run/aws";
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";

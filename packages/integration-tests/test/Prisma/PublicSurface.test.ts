@@ -227,15 +227,9 @@ const publicPrismaDeepImports = [
   "WriteBucket",
 ] as const;
 
-const internalPrismaDeepImports = [
-  "Credentials",
-  "Internal/DeploymentActions",
-  "Internal/DeploymentObserve",
-  "PrismaDevDatabase",
-  "Refs",
-] as const;
-
-const internalPrismaRootFiles = ["Credentials", "PrismaDevDatabase", "Refs"] as const;
+// Internal modules live under src/internal/, which the published export map
+// blocks; they are not reachable as root deep imports.
+const internalPrismaDeepImports = ["Credentials", "PrismaDevDatabase", "Refs"] as const;
 
 const removedPrismaDeepImports = [
   "ComputeApp",
@@ -314,11 +308,7 @@ describe("Prisma public surface", { tags: ["unit", "provider:prisma", "local"] }
         .sort();
 
       expect(files).toEqual(
-        [
-          "index.ts",
-          ...publicPrismaDeepImports.map((moduleName) => `${moduleName}.ts`),
-          ...internalPrismaRootFiles.map((moduleName) => `${moduleName}.ts`),
-        ].sort(),
+        ["index.ts", ...publicPrismaDeepImports.map((moduleName) => `${moduleName}.ts`)].sort(),
       );
     }).pipe(Effect.provide(NodeServices.layer)),
   );
@@ -330,10 +320,7 @@ describe("Prisma public surface", { tags: ["unit", "provider:prisma", "local"] }
       const packageJsonPath = path.resolve(import.meta.dirname, "../../../prisma/package.json");
       const packageJson = JSON.parse(yield* fs.readFileString(packageJsonPath));
 
-      for (const moduleName of internalPrismaDeepImports) {
-        const exportPath = moduleName.startsWith("Internal/") ? "./Internal/*" : `./${moduleName}`;
-        expect(packageJson.exports[exportPath]).toBeNull();
-      }
+      expect(packageJson.publishConfig.exports["./internal/*"]).toBeNull();
     }).pipe(Effect.provide(NodeServices.layer)),
   );
 
@@ -348,9 +335,6 @@ describe("Prisma public surface", { tags: ["unit", "provider:prisma", "local"] }
       expect(packageJson.exports["./ORM"]).toBe("./src/ORM/index.ts");
       // Deep Prisma modules use the package-wide source export wildcard.
       expect(packageJson.exports["./*"]).toBe("./src/*.ts");
-      for (const moduleName of removedPrismaDeepImports) {
-        expect(packageJson.exports[`./${moduleName}`]).toBeNull();
-      }
     }).pipe(Effect.provide(NodeServices.layer)),
   );
 });

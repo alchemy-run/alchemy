@@ -723,10 +723,6 @@ export default defineConfig({
                 },
                 { label: "Effect AI", link: "/cloudflare/ai/effect-ai" },
                 { label: "Vectorize", link: "/cloudflare/ai/vectorize" },
-                {
-                  label: "Release agent",
-                  link: "/cloudflare/ai/release-agent",
-                },
               ],
             },
             {
