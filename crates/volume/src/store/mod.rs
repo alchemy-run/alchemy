@@ -4,6 +4,9 @@
 
 #[cfg(feature = "http")]
 mod http;
+#[cfg(feature = "http")]
+mod http_journal;
+mod journal;
 mod local;
 mod memory;
 #[cfg(feature = "object")]
@@ -11,6 +14,9 @@ mod object;
 
 #[cfg(feature = "http")]
 pub use http::HttpMetaStore;
+#[cfg(feature = "http")]
+pub use http_journal::HttpJournalStore;
+pub use journal::{Appended, BlobJournalStore, JournalStore};
 pub use local::{LocalBlobStore, LocalMetaStore};
 pub use memory::{MemoryBlobStore, MemoryMetaStore};
 #[cfg(feature = "object")]

@@ -99,6 +99,21 @@ interface SessionShape {
     method: "GET" | "POST",
     body: string,
   ): Effect.Effect<{ readonly status: number; readonly body: string }, never, RuntimeContext>;
+  /**
+   * blockd's journal requests, from its machine (see
+   * volume::store::HttpJournalStore): an append is written only if its
+   * position is free and its epoch still holds the head, in one step.
+   */
+  journal(
+    session: string,
+    request: {
+      readonly method: "GET" | "POST" | "DELETE";
+      readonly epoch: number;
+      readonly seq: number;
+      readonly to?: number;
+      readonly body?: Uint8Array;
+    },
+  ): Effect.Effect<{ readonly status: number; readonly body?: Uint8Array }, never, RuntimeContext>;
   acquire(
     session: string,
     grant: string,
@@ -264,6 +279,9 @@ const sandboxError = (cause: { readonly message: string }) =>
 
 const decode = (bytes: ArrayBuffer) => new TextDecoder().decode(bytes);
 
+const sameBytes = (a: Uint8Array, b: Uint8Array) =>
+  a.length === b.length && a.every((byte, i) => byte === b[i]);
+
 //#region heads
 
 /** A head record as `volume::store::Head` writes it, normalized for comparison. */
@@ -388,6 +406,27 @@ const sessionImpl = (config: HostConfig) =>
         return { ok: true as const };
       });
 
+      /** Journal entries this object keeps for blockd, by lease epoch and position. */
+      const ENTRY = "workspace:journal:";
+      const entryKey = (epoch: number, seq: number) =>
+        `${ENTRY}${String(epoch).padStart(16, "0")}:${String(seq).padStart(16, "0")}`;
+      /** Delete the entries the head no longer needs (volume's `journal_needed`). */
+      const prune = Effect.fn(function* (record: HeadRecord | null) {
+        const entries = yield* state.storage.list<Uint8Array>({ prefix: ENTRY });
+        for (const key of entries.keys()) {
+          const [epoch, seq] = key.slice(ENTRY.length).split(":").map(Number) as [number, number];
+          const needed =
+            record !== null &&
+            !record.deleted &&
+            (epoch > record.epoch ||
+              (epoch === record.epoch && seq >= record.seq) ||
+              (record.pending !== null &&
+                epoch === record.pending.epoch &&
+                seq >= record.pending.seq));
+          if (!needed) yield* state.storage.delete(key);
+        }
+      });
+
       /** Heads changed through the R2 client (fork, undo, delete): drop the cache. */
       const viaVolume = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
         headLock.withPermits(1)(
@@ -472,6 +511,46 @@ const sessionImpl = (config: HostConfig) =>
       //#endregion
 
       return {
+        journal: (
+          session: string,
+          request: {
+            readonly method: "GET" | "POST" | "DELETE";
+            readonly epoch: number;
+            readonly seq: number;
+            readonly to?: number;
+            readonly body?: Uint8Array;
+          },
+        ) =>
+          headLock
+            .withPermits(1)(
+              Effect.gen(function* () {
+                const key = entryKey(request.epoch, request.seq);
+                if (request.method === "GET") {
+                  const entry = yield* state.storage.get<Uint8Array>(key);
+                  return entry ? { status: 200, body: entry } : { status: 404 };
+                }
+                if (request.method === "DELETE") {
+                  for (let seq = request.seq; seq < (request.to ?? request.seq); seq++) {
+                    yield* state.storage.delete(entryKey(request.epoch, seq));
+                  }
+                  return { status: 200 };
+                }
+                const body = request.body ?? new Uint8Array();
+                const existing = yield* state.storage.get<Uint8Array>(key);
+                if (existing) {
+                  return { status: sameBytes(existing, body) ? 208 : 409 };
+                }
+                // The fence: only the lease that holds the head appends.
+                const { record } = yield* readHead(session);
+                if (!record || record.deleted || record.epoch !== request.epoch) {
+                  return { status: 409 };
+                }
+                yield* state.storage.put(key, body);
+                return { status: 200 };
+              }),
+            )
+            .pipe(Effect.catch(() => Effect.succeed({ status: 503 }))),
+
         heads: (session: string, method: "GET" | "POST", body: string) =>
           headLock
             .withPermits(1)(
@@ -488,6 +567,7 @@ const sessionImpl = (config: HostConfig) =>
                   normalize(request.expected),
                   normalize(request.new),
                 );
+                if (result.ok) yield* prune(normalize(request.new));
                 return result.ok
                   ? { status: 200, body: "{}" }
                   : {
@@ -638,6 +718,28 @@ const machineImpl = (config: HostConfig, dockerfile?: string) =>
         handle: (request) =>
           Effect.gen(function* () {
             const url = new URL(request.url);
+            if (url.pathname.startsWith("/journal/")) {
+              const [session, epoch, seq] = url.pathname
+                .slice("/journal/".length)
+                .split("/")
+                .map(decodeURIComponent) as [string, string, string | undefined];
+              const method =
+                request.method === "POST" ? "POST" : request.method === "DELETE" ? "DELETE" : "GET";
+              const reply = yield* sessions.getByName(session).journal(session, {
+                method,
+                epoch: Number(epoch),
+                seq: Number(seq ?? url.searchParams.get("from") ?? 0),
+                ...(method === "DELETE" ? { to: Number(url.searchParams.get("to") ?? 0) } : {}),
+                ...(method === "POST"
+                  ? {
+                      body: new Uint8Array(yield* Effect.promise(() => request.arrayBuffer())),
+                    }
+                  : {}),
+              });
+              return new Response((reply.body as BodyInit | undefined) ?? null, {
+                status: reply.status,
+              });
+            }
             const session = decodeURIComponent(url.pathname.replace(/^\/heads\/?/, ""));
             if (!session) return new Response("[]", { status: 200 });
             const method = request.method === "POST" ? "POST" : "GET";
@@ -720,6 +822,7 @@ const machineImpl = (config: HostConfig, dockerfile?: string) =>
             mounted = yield* disk.mount(session, {
               dir: hostConfig.path,
               heads: `http://${HEADS_HOST}/heads`,
+              journal: `http://${HEADS_HOST}/journal`,
             });
             return { dir: mounted.dir };
           }).pipe(Effect.mapError((error) => asWorkspaceError(error))),

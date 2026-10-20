@@ -11,8 +11,6 @@ use volume::{BLOCK_SIZE, Change, EXTENT_SIZE, Error as VolumeError, Hash, Lease,
 
 const BLOCKS_PER_EXTENT: u64 = EXTENT_SIZE / BLOCK_SIZE;
 const STATE_MAGIC: &[u8; 8] = b"BLKDCS01";
-/// Blocks per journal entry: 16 MiB.
-const JOURNAL_ENTRY_BLOCKS: usize = 4096;
 
 /// A volume head attached as a block device, under a lease on the head.
 ///
@@ -236,7 +234,8 @@ impl Device {
         };
         let mut sent = 0;
         let mut result = Ok(());
-        for entry in blocks.chunks(JOURNAL_ENTRY_BLOCKS) {
+        let per_entry = self.volume.journal().max_entry_blocks();
+        for entry in blocks.chunks(per_entry) {
             result = self
                 .runtime
                 .block_on(self.volume.append(&mut lease, entry.to_vec()));

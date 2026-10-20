@@ -22,7 +22,8 @@
 //! ```
 //!
 //! Stores: `local:<dir>` or `s3://<bucket>/<prefix>`. Every command also takes
-//! `--heads <url>`: heads from a coordinator over HTTP instead of the store.
+//! `--heads <url>` and `--journal <url>`: heads and journal entries from a
+//! coordinator over HTTP instead of the store.
 
 use anyhow::{Context, Result, bail};
 use std::collections::HashMap;
@@ -43,7 +44,13 @@ fn main() -> Result<()> {
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()?;
-    let store = || blockd::store::open(flags.required("store")?, flags.get("heads"));
+    let store = || {
+        blockd::store::open(
+            flags.required("store")?,
+            flags.get("heads"),
+            flags.get("journal"),
+        )
+    };
     match command.as_str() {
         "control" => {
             use std::io::{BufRead, Write};

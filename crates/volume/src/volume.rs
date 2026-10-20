@@ -1,6 +1,6 @@
 use crate::manifest::{Entry, Manifest, PAGE_ENTRIES, Page};
 use crate::pack::{Pack, PackBuilder, open_chunk};
-use crate::store::{BlobStore, Head, MetaStore};
+use crate::store::{BlobJournalStore, BlobStore, Head, JournalStore, MetaStore};
 use crate::{EXTENT_SIZE, Error, Hash, Result, is_zero};
 use std::collections::{BTreeMap, HashMap};
 use std::io::Read;
@@ -24,6 +24,7 @@ pub enum Change {
 pub struct Volume {
     blobs: Arc<dyn BlobStore>,
     meta: Arc<dyn MetaStore>,
+    journal: Arc<dyn JournalStore>,
     manifests: Mutex<HashMap<Hash, Arc<Manifest>>>,
     pages: Mutex<HashMap<Hash, Arc<Page>>>,
 }
@@ -31,6 +32,7 @@ pub struct Volume {
 impl Volume {
     pub fn new(blobs: Arc<dyn BlobStore>, meta: Arc<dyn MetaStore>) -> Self {
         Self {
+            journal: Arc::new(BlobJournalStore::new(blobs.clone(), meta.clone())),
             blobs,
             meta,
             manifests: Mutex::default(),
@@ -40,6 +42,16 @@ impl Volume {
 
     pub fn blobs(&self) -> &Arc<dyn BlobStore> {
         &self.blobs
+    }
+
+    /// Keep journal entries in `journal` instead of the blob store.
+    pub fn with_journal(mut self, journal: Arc<dyn JournalStore>) -> Self {
+        self.journal = journal;
+        self
+    }
+
+    pub fn journal(&self) -> &Arc<dyn JournalStore> {
+        &self.journal
     }
 
     // ── heads ──────────────────────────────────────────────────────────

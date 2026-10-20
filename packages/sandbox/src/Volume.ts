@@ -80,6 +80,12 @@ export interface DiskMountOptions {
    * --heads`). Omitted, the store's own heads.
    */
   readonly heads?: string;
+  /**
+   * Where blockd keeps journal entries: a coordinator's URL (`blockd
+   * --journal`) that appends and checks the lease in one request. Omitted,
+   * the store.
+   */
+  readonly journal?: string;
   /** Sync the journal every this many seconds even if nobody `fsync`s. @default 5 */
   readonly flushEvery?: number;
   readonly env?: Record<string, string>;
@@ -282,6 +288,7 @@ const makeDisk = (
       "--flush-every",
       String(options.flushEvery ?? 5),
       ...(options.heads ? ["--heads", options.heads] : []),
+      ...(options.journal ? ["--journal", options.journal] : []),
     ];
     // blockd outlives this command: it serves the mount until a detach.
     const script = [

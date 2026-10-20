@@ -18,7 +18,7 @@
 //! describes the same hazard for its manifests).
 
 use crate::journal;
-use crate::store::{Head, JournalPos};
+use crate::store::{Appended, Head, JournalPos};
 use crate::{BLOCK_SIZE, Change, EXTENT_SIZE, Error, Hash, Result, Volume};
 use std::collections::BTreeMap;
 
@@ -100,17 +100,14 @@ impl Volume {
             return Ok(());
         }
         let (epoch, seq) = (lease.record.epoch, lease.next);
-        let key = journal::key(&lease.head, epoch, seq);
         let bytes = journal::encode(&blocks, epoch, seq)?;
-        if !self.blobs().put_new(&key, bytes.clone()).await? {
-            // Ours from an attempt whose response was lost, or not ours at all.
-            if self.blobs().get(&key).await? != bytes {
-                return Err(Error::Fenced(lease.head.clone()));
-            }
-        }
-        let current = self.meta().get(&lease.head).await?;
-        if current.map(|record| (record.epoch, record.deleted)) != Some((epoch, false)) {
-            return Err(Error::Fenced(lease.head.clone()));
+        match self
+            .journal()
+            .append(&lease.head, epoch, seq, bytes)
+            .await?
+        {
+            Appended::Written | Appended::Already => {}
+            Appended::Fenced => return Err(Error::Fenced(lease.head.clone())),
         }
         lease.next += 1;
         Ok(())
@@ -179,10 +176,8 @@ impl Volume {
         let mut seq = from.seq;
         loop {
             let key = journal::key(head, from.epoch, seq);
-            let bytes = match self.blobs().get(&key).await {
-                Ok(bytes) => bytes,
-                Err(Error::Missing(_)) => return Ok((blocks, seq)),
-                Err(e) => return Err(e),
+            let Some(bytes) = self.journal().get(head, from.epoch, seq).await? else {
+                return Ok((blocks, seq));
             };
             blocks.extend(journal::decode(&key, &bytes, from.epoch, seq)?);
             seq += 1;
@@ -237,15 +232,8 @@ impl Volume {
 
     /// Best effort: garbage collection deletes whatever this misses.
     async fn delete_journal(&self, head: &str, epoch: u64, seqs: std::ops::Range<u64>) {
-        for seq in seqs {
-            if self
-                .blobs()
-                .delete(&journal::key(head, epoch, seq))
-                .await
-                .is_err()
-            {
-                return;
-            }
+        if !seqs.is_empty() {
+            let _ = self.journal().delete(head, epoch, seqs).await;
         }
     }
 }
