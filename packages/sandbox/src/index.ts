@@ -22,6 +22,8 @@ export {
   type Disk,
   type DiskExecOptions,
   type DiskExecOutput,
+  type DiskMount,
+  type DiskMountOptions,
   type Snapshot,
   type VolumeHeads,
 } from "./Volume.ts";

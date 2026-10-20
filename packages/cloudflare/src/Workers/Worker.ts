@@ -1,5 +1,6 @@
 import type { Sandbox as AISandbox } from "@alchemy.run/sandbox/Sandbox";
 import type { Volume as AIVolume } from "@alchemy.run/sandbox/Volume";
+import type { Workspace as AIWorkspace } from "@alchemy.run/sandbox/Workspace";
 import type * as cf from "@cloudflare/workers-types";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import { type MemoOptions } from "alchemy/Command/Memo";
@@ -56,6 +57,7 @@ import {
   type WorkerExport,
   type WorkerRuntimeContext,
 } from "./WorkerRuntimeContext.ts";
+import { provideWorkspaceRuntime } from "./WorkspaceRuntime.ts";
 
 export * from "./WorkerRuntime.ts";
 
@@ -126,6 +128,7 @@ export type HostedImplementation =
   | Container.Application<any>
   | AISandbox.Host<any>
   | AIVolume.Host<any>
+  | AIWorkspace.Host<any>
   | GatewayHost<any>;
 
 export type WorkerShape<Req = never> = Main<WorkerServices | Req> & MainRpc<WorkerServices | Req>;
@@ -2741,7 +2744,8 @@ export const Worker: ResourceClassLike<Worker> &
     createRuntimeContext: (id) => makeWorkerRuntimeContext(id),
     // `yield* Gateway` (an `Egress.Gateway` declaration) connects from here.
     // Called lazily: EgressGatewayConsumer.ts imports this module.
-    provideImpl: (impl) => provideVolumeRuntime(provideGatewayConsumer(impl)),
+    provideImpl: (impl) =>
+      provideWorkspaceRuntime(provideVolumeRuntime(provideGatewayConsumer(impl))),
     transformProps: (_id, props) =>
       Effect.sync(() =>
         globalThis.__ALCHEMY_RUNTIME__ || typeof props.main !== "string"

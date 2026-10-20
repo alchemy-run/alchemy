@@ -30,6 +30,7 @@ import {
   type HostedImplementation,
   type WorkerServices,
 } from "./Worker.ts";
+import { provideWorkspaceRuntime } from "./WorkspaceRuntime.ts";
 
 export interface DurableObjectExport {
   readonly kind: "durableObject";
@@ -1412,6 +1413,7 @@ export const DurableObject: DurableObjectClass = taggedFunction(
         Effect.provideService(SandboxRuntime, { connect: connectSandbox }),
         provideGatewayConsumer,
         provideVolumeRuntime,
+        provideWorkspaceRuntime,
       );
       if (phase === "plan") {
         // during plan time, we evaluate the constructor with a mock DurableObjectState

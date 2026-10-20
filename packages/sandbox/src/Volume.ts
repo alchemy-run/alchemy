@@ -69,6 +69,36 @@ export interface DiskExecOptions {
   readonly env?: Record<string, string>;
 }
 
+/** `mount` options. */
+export interface DiskMountOptions {
+  /** Where the volume is mounted in the sandbox. */
+  readonly dir: string;
+  /** How it's attached; `auto` picks the best the host allows. @default "auto" */
+  readonly mode?: DiskExecOptions["mode"];
+  /**
+   * Where blockd reads and moves the head: a coordinator's URL (`blockd
+   * --heads`). Omitted, the store's own heads.
+   */
+  readonly heads?: string;
+  /** Sync the journal every this many seconds even if nobody `fsync`s. @default 5 */
+  readonly flushEvery?: number;
+  readonly env?: Record<string, string>;
+}
+
+/** A head mounted in a sandbox until {@link detach}. */
+export interface DiskMount {
+  readonly head: string;
+  readonly dir: string;
+  /** The attach mode blockd picked. */
+  readonly mode: string;
+  /** The lease epoch this mount writes under. */
+  readonly epoch: number;
+  /** Make every write so far durable in the journal. */
+  readonly sync: Effect.Effect<void, VolumeError | SandboxError, RuntimeContext>;
+  /** Unmount, snapshot and stop blockd; returns the snapshot. */
+  readonly detach: Effect.Effect<Snapshot, VolumeError | SandboxError, RuntimeContext>;
+}
+
 /**
  * A volume on a sandbox: its heads, and `exec` to run a command in the
  * sandbox with a head mounted. The command's writes are committed as a new
@@ -85,6 +115,15 @@ export interface Disk extends VolumeHeads {
     command: string,
     options?: DiskExecOptions,
   ): Effect.Effect<DiskExecOutput, VolumeError | SandboxError, RuntimeContext>;
+  /**
+   * Mounts `head` at `dir` and leaves it mounted, for many commands (run
+   * them with the sandbox's `exec`), until the returned mount's `detach`
+   * snapshots it. Taking the head's lease supersedes any other mount of it.
+   */
+  mount(
+    head: string,
+    options: DiskMountOptions,
+  ): Effect.Effect<DiskMount, VolumeError | SandboxError, RuntimeContext>;
 }
 
 /**
@@ -215,21 +254,106 @@ const makeDisk = (
       "--command",
       command,
     ];
-    const process = yield* sandbox.exec(
-      ["sh", "-c", `mkdir -p /var/cache/blockd && exec ${argv.map(quote).join(" ")}`],
-      {
-        env: { ...options.env, ...env },
-      },
-    );
-    const output = yield* process.output();
-    const decode = (bytes: ArrayBuffer) => new TextDecoder().decode(bytes);
+    return yield* run(sandbox, `mkdir -p /var/cache/blockd && exec ${argv.map(quote).join(" ")}`, {
+      ...options.env,
+      ...env,
+    });
+  }),
+  mount: Effect.fn(function* (head: string, options: DiskMountOptions) {
+    const env = { ...options.env, ...(yield* storeEnv) };
+    const socket = `/run/blockd/${head}.sock`;
+    const out = `/run/blockd/${head}.out`;
+    const log = `/run/blockd/${head}.log`;
+    const argv = [
+      "blockd",
+      "mount",
+      "--store",
+      descriptor.store,
+      "--head",
+      head,
+      "--cache",
+      `/var/cache/blockd/${head}.cache`,
+      "--dir",
+      options.dir,
+      "--control",
+      socket,
+      "--mode",
+      options.mode ?? "auto",
+      "--flush-every",
+      String(options.flushEvery ?? 5),
+      ...(options.heads ? ["--heads", options.heads] : []),
+    ];
+    // blockd outlives this command: it serves the mount until a detach.
+    const script = [
+      "mkdir -p /run/blockd /var/cache/blockd",
+      `rm -f ${quote(socket)} ${quote(out)}`,
+      `nohup ${argv.map(quote).join(" ")} > ${quote(out)} 2> ${quote(log)} < /dev/null &`,
+      "pid=$!",
+      "for i in $(seq 1 1200); do",
+      `  if grep -q '"mounted"' ${quote(out)} 2>/dev/null; then cat ${quote(out)}; exit 0; fi`,
+      `  if ! kill -0 "$pid" 2>/dev/null; then cat ${quote(log)} >&2; exit 1; fi`,
+      "  sleep 0.05",
+      "done",
+      `cat ${quote(log)} >&2; exit 1`,
+    ].join("\n");
+    const started = yield* run(sandbox, script, env);
+    if (started.exitCode !== 0) {
+      return yield* new VolumeError({ message: `mounting ${head} failed: ${started.stderr}` });
+    }
+    const ready = yield* Effect.try({
+      try: () =>
+        JSON.parse(started.stdout.trim().split("\n").pop()!) as {
+          readonly mode: string;
+          readonly epoch: number;
+        },
+      catch: (cause) =>
+        new VolumeError({ message: `blockd mount said ${JSON.stringify(started.stdout)}`, cause }),
+    });
+    const control = Effect.fn(function* (request: string) {
+      const reply = yield* run(
+        sandbox,
+        `blockd control --socket ${quote(socket)} --request ${quote(request)}`,
+        {},
+      );
+      const parsed = yield* Effect.try({
+        try: () =>
+          JSON.parse(reply.stdout.trim()) as {
+            readonly ok: boolean;
+            readonly snapshot?: Snapshot;
+            readonly error?: string;
+          },
+        catch: () => new VolumeError({ message: `blockd control: ${reply.stdout}${reply.stderr}` }),
+      });
+      if (!parsed.ok) {
+        return yield* new VolumeError({ message: `blockd ${request}: ${parsed.error}` });
+      }
+      return parsed;
+    });
     return {
-      exitCode: output.exitCode,
-      stdout: decode(output.stdout),
-      stderr: decode(output.stderr),
-    };
-  }, Effect.scoped),
+      head,
+      dir: options.dir,
+      mode: ready.mode,
+      epoch: ready.epoch,
+      sync: Effect.asVoid(control(`{"op":"sync"}`)),
+      detach: Effect.map(control(`{"op":"detach"}`), (reply) => reply.snapshot!),
+    } satisfies DiskMount;
+  }),
 });
+
+/** Runs `script` with `sh -c` in the sandbox and waits for it. */
+const run = (sandbox: SandboxClient<any, any>, script: string, env: Record<string, string>) =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const process = yield* sandbox.exec(["sh", "-c", script], { env });
+      const output = yield* process.output();
+      const decode = (bytes: ArrayBuffer) => new TextDecoder().decode(bytes);
+      return {
+        exitCode: output.exitCode,
+        stdout: decode(output.stdout),
+        stderr: decode(output.stderr),
+      } satisfies DiskExecOutput;
+    }),
+  );
 
 /**
  * A volume declaration: a disk that lives in object storage, forked per

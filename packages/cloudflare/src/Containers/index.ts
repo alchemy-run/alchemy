@@ -34,4 +34,5 @@ export {
 export * from "./LocalContainerProvider.ts";
 export { Harness, type HarnessOptions } from "./Harness.ts";
 export { Sandbox, type SandboxProps } from "./Sandbox.ts";
+export { Workspace, type WorkspaceProps } from "./Workspace.ts";
 export { containerOf, type ContainerInstanceType } from "./SandboxClient.ts";
