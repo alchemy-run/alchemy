@@ -3,7 +3,9 @@ import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
 import { describe, expect } from "alchemy-test";
 import * as Test from "alchemy/Test/Alchemy";
+import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";
 import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
@@ -66,6 +68,16 @@ const deploySite = (stack: Test.ScratchStack, mode: Mode, options: { domain?: st
             }),
             COUNTERS: Cloudflare.DurableObject("Counter", { className: "Counter" }),
             LEGACY: Cloudflare.DurableObject("Legacy", { className: "Legacy" }),
+            // Cloudflare no longer creates key-value backed namespaces, so
+            // only the dev deploy declares one.
+            ...(mode === "dev"
+              ? {
+                  KV_BACKED: Cloudflare.DurableObject("KvBacked", {
+                    className: "KvBacked",
+                    storage: "legacy-kv",
+                  }),
+                }
+              : {}),
             INITIALIZED: Cloudflare.DurableObject("BlockConcurrency", {
               className: "BlockConcurrency",
             }),
@@ -268,9 +280,46 @@ describe.concurrent(
         yield* expectJson(`${url}/do/block-concurrency`, { isInitialized: true });
         if (mode === "dev") {
           yield* expectJson(`${url}/do/rpc-ordering?name=${unique()}`, { inOrder: true });
+          yield* expectJson(`${url}/do/kv-backed`, { hasSql: false });
         }
         yield* expectWebSocket(url);
       }),
+    );
+
+    // A class declared `storage: "legacy-kv"` deploys with that backend, so a
+    // new one reaches Cloudflare's own refusal (it no longer provisions
+    // key-value backed namespaces) rather than silently becoming SQLite.
+    test.provider(
+      "Vite runtime: a new legacy-kv Durable Object reports Cloudflare's refusal",
+      (stack) =>
+        Effect.gen(function* () {
+          yield* stack.destroy();
+          const rootDir = yield* cloneFixture(fixtureDir, {
+            prefix: "alchemy-vite-runtime-kv-",
+            tempRoot,
+            entries: ["package.json", "worker-b"],
+          });
+          const exit = yield* stack
+            .deploy(
+              Cloudflare.Worker("ViteRuntimeKvBacked", {
+                main: pathe.join(rootDir, "worker-b/index.ts"),
+                compatibility: { date: "2026-03-17" },
+                env: {
+                  COUNTER: Cloudflare.DurableObject("Counter", {
+                    className: "Counter",
+                    storage: "legacy-kv",
+                  }),
+                },
+              }),
+            )
+            .pipe(Effect.exit);
+          expect(Exit.isFailure(exit)).toBe(true);
+          expect(String(Cause.squash((exit as Exit.Failure<never, unknown>).cause))).toContain(
+            "new namespaces must use storage: 'sqlite'",
+          );
+          yield* stack.destroy();
+        }).pipe(logLevel),
+      { tags: ["provider:cloudflare:worker", "live"], timeout: 360_000 },
     );
 
     // `external-durable-objects`

@@ -24,6 +24,7 @@ interface Env {
   RATE_LIMITER: RateLimit;
   COUNTERS: DurableObjectNamespace<Counter>;
   LEGACY: DurableObjectNamespace;
+  KV_BACKED?: DurableObjectNamespace<KvBacked>;
   INITIALIZED: DurableObjectNamespace<BlockConcurrency>;
   WEBSOCKET_SERVER: DurableObjectNamespace<WebSocketServer>;
   MY_WORKFLOW: Workflow;
@@ -77,6 +78,19 @@ export class Legacy {
 }
 
 // `block-concurrency-while`
+// `durable-objects`: a class declared `storage: "legacy-kv"`, which has no
+// SQL storage.
+export class KvBacked extends DurableObject {
+  hasSql() {
+    try {
+      this.ctx.storage.sql.exec("SELECT 1");
+      return true;
+    } catch {
+      return false;
+    }
+  }
+}
+
 export class BlockConcurrency extends DurableObject {
   #isInitialized = false;
 
@@ -196,6 +210,10 @@ export default {
             : await stub.getCounterValue();
         return new Response(`Durable Object '${name}' count: ${count}`);
       }
+      case "/do/kv-backed":
+        return Response.json({
+          hasSql: await env.KV_BACKED!.get(env.KV_BACKED!.idFromName("kv")).hasSql(),
+        });
       case "/do/legacy":
         return env.LEGACY.get(env.LEGACY.idFromName("test")).fetch(request);
       case "/do/rpc-ordering": {

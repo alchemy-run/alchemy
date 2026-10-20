@@ -61,6 +61,8 @@ export interface DurableObjectLike<Shape = any> {
   scriptName?: Input<string>;
   /** @internal phantom */
   transferredFrom?: DurableObjectTransferSource | DurableObjectTransferSource[];
+  /** @internal phantom */
+  storage?: "sqlite" | "legacy-kv";
   /** @internal Durable Object-managed Containers attached to the class. */
   containers?: ReadonlyArray<Container.Decl.Any>;
   /** @internal phantom */
@@ -243,6 +245,16 @@ export interface DurableObjectProps {
    * indefinitely.
    */
   transferredFrom?: DurableObjectTransferSource | DurableObjectTransferSource[] | undefined;
+  /**
+   * Storage backend of the class, as Wrangler's `storage` declares it.
+   * `"legacy-kv"` describes a class created before SQLite-backed Durable
+   * Objects: deploys keep an existing namespace's backend, and Cloudflare
+   * no longer creates new key-value backed namespaces. In `alchemy dev` a
+   * `"legacy-kv"` class has no SQL storage, as on Cloudflare.
+   *
+   * @default "sqlite"
+   */
+  storage?: "sqlite" | "legacy-kv" | undefined;
   /**
    * Tagged-error classes this Durable Object's RPC methods can fail with.
    *
@@ -1432,6 +1444,7 @@ export const DurableObject: DurableObjectClass = taggedFunction(
         className: (args[1] as DurableObjectProps)?.className || namespace,
         scriptName: (args[1] as DurableObjectProps)?.scriptName,
         transferredFrom: (args[1] as DurableObjectProps)?.transferredFrom,
+        storage: (args[1] as DurableObjectProps)?.storage,
         containers: (args[1] as DurableObjectBindingProps)?.containers,
       };
     } else if (Effect.isEffect(propsOrImpl)) {

@@ -67,6 +67,8 @@ export type DurableObjectNamespaceWorkerBinding = Extract<
   { type: "durable_object_namespace" }
 > & {
   transferredFrom?: string | string[];
+  /** The class's declared storage backend; alchemy-only, never uploaded. */
+  storage?: "sqlite" | "legacy-kv";
 };
 
 /**

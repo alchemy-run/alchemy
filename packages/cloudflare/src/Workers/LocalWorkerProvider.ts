@@ -384,7 +384,8 @@ export const LocalWorkerProvider = () =>
               durableObjectNamespaces[binding.className] = {
                 className: binding.className,
                 uniqueKey: namespaceId,
-                sql: true,
+                // A key-value backed class has no SQL storage, as on Cloudflare.
+                sql: binding.storage !== "legacy-kv",
               };
               bindingDescriptors.push({ ...binding, namespaceId });
             } else {
