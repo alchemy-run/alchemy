@@ -10271,6 +10271,22 @@ importers:
 
   submodules/distilled/packages/aws:
     dependencies:
+      '@distilled.cloud/aws4signer':
+        specifier: workspace:*
+        version: link:../aws4signer
+      '@distilled.cloud/core':
+        specifier: workspace:*
+        version: link:../core
+      effect:
+        specifier: 4.0.4
+        version: 4.0.4
+    devDependencies:
+      '@types/node':
+        specifier: 'catalog:'
+        version: 26.6.5
+
+  submodules/distilled/packages/aws4signer:
+    dependencies:
       '@distilled.cloud/core':
         specifier: workspace:*
         version: link:../core
@@ -10416,6 +10432,9 @@ importers:
       effect:
         specifier: 4.0.4
         version: 4.0.4
+      rolldown:
+        specifier: 1.2.13
+        version: 1.2.13
       vitest:
         specifier: 'catalog:'
         version: 5.0.4(@types/node@26.6.5)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))

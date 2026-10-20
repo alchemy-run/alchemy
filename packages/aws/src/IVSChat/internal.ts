@@ -2,7 +2,6 @@ import * as ivschat from "@distilled.cloud/aws/ivschat";
 import { diffTags } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
-import * as Schema from "effect/Schema";
 
 /**
  * IVS Chat wire tags allow `undefined` values in the record type —
@@ -78,7 +77,7 @@ export const retryWhileHandlerPermissionPropagating = <A, E, R>(
 ): Effect.Effect<A, E, R> =>
   Effect.retry(self, {
     while: (e): boolean =>
-      Schema.is(ivschat.ValidationException)(e) && e.message.includes("invalid lambda permission"),
+      ivschat.ValidationException.is(e) && e.message.includes("invalid lambda permission"),
     schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(10)]),
   });
 
