@@ -1,5 +1,5 @@
-import * as Cloudflare from "alchemy/Cloudflare";
-import * as GitHub from "alchemy/GitHub";
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as GitHub from "@alchemy.run/github";
 import * as Effect from "effect/Effect";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 
@@ -13,6 +13,6 @@ export default Cloudflare.Worker(
     );
 
     return { fetch: Effect.succeed(HttpServerResponse.text("ok")) };
-  }).pipe(Effect.provide(Cloudflare.GitHubRepositoryEventSourceLive)),
+  }).pipe(Effect.provide(GitHub.RepositoryEventSourceLive)),
 );
 // #endregion show

@@ -40,5 +40,5 @@ export const confirmOrDecline = Effect.fn(function* (options: {
   if (approved) return;
   yield* CliKit.accessors.output.info(options.abortMessage ?? "Aborted.");
   yield* exitDeclined;
-  return yield* Effect.fail(new ConfirmationDeclined());
+  return yield* new ConfirmationDeclined();
 });

@@ -3,14 +3,13 @@
  * factory `virtual:vinext-cache-adapters` calls as
  * `({ env, options }) => CacheHandler`.
  *
- * Speaks RESP through `connect` from `alchemy/Redis` — the same client
+ * Speaks RESP through `connect` from `@alchemy.run/redis` — the same client
  * Fly/Railway `*RedisHttp` layers use. One process-lifetime connection
  * per URL. Prerender artifacts are seeded into Redis in the background.
  */
-import { connect, type Connection } from "alchemy/Redis";
-import type { Arg, Reply } from "alchemy/Redis";
+import { connect, type Connection } from "@alchemy.run/redis";
+import type { Arg, Reply } from "@alchemy.run/redis";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import * as Scope from "effect/Scope";
 import { makeDataCacheHandler, type DataCacheStore } from "./handler.ts";
 import { seedStoreFromPrerenderLogged } from "./seed.ts";
@@ -38,9 +37,7 @@ const open = (url: string): Promise<Connection> => {
   const existing = connections.get(url);
   if (existing) return existing;
   const scope = Scope.makeUnsafe();
-  const created = Effect.runPromise(
-    connect(url).pipe(Effect.provide(Layer.succeed(Scope.Scope, scope))),
-  );
+  const created = Effect.runPromise(connect(url).pipe(Effect.provideService(Scope.Scope, scope)));
   connections.set(url, created);
   created.catch(() => connections.delete(url));
   return created;

@@ -8,6 +8,7 @@ import Yantra from "../brand/Yantra.astro";
 import DevTuiTerminal from "../components/marketing-islands/DevTuiTerminal.tsx";
 import HeroHosts from "../components/marketing-islands/HeroHosts.tsx";
 import { HOSTS, hostSource } from "../components/marketing-islands/heroHosts";
+import { installSpec } from "../../plugins/preview-install.ts";
 import Sentiment from "../components/marketing/Sentiment.astro";
 import AlchemicalDivider from "../components/marketing/AlchemicalDivider.astro";
 import TestTerminal from "../components/marketing-islands/TestTerminal.tsx";
@@ -16,25 +17,9 @@ import PreviewComment from "../components/marketing-islands/PreviewComment.tsx";
 import TypePolicy from "../components/marketing-islands/TypePolicy.tsx";
 import ObservabilityDash from "../components/marketing-islands/ObservabilityDash.tsx";
 import CopyForAgent from "../components/marketing-islands/CopyForAgent.tsx";
+import PhotosLayers from "../components/marketing-islands/PhotosLayers.tsx";
 
-// Modules: one Layer creates the resource, binds it, and exposes the API.
-const PHOTOS_SRC = `export class Photos extends Context.Service<Photos, {
-  upload(name: string, body: string): Effect.Effect<void>;
-}>()("Photos") {}
-
-export const PhotosR2 = Layer.effect(
-  Photos,
-  Effect.gen(function* () {
-    // resource
-    const bucket = yield* Cloudflare.R2.Bucket("Photos");
-    // binding: read/write access for this Worker only
-    const photos = yield* Cloudflare.R2.ReadWriteBucket(bucket);
-    // API
-    return {
-      upload: (name, body) => photos.put(name, body),
-    };
-  }),
-);`;
+const alchemySpec = installSpec("alchemy");
 
 // The hero terminal covers the code card's empty bottom-right corner: it
 // starts below the last line that reaches TERM_COL, so no code is hidden.
@@ -387,7 +372,7 @@ const PROVIDERS = [
           <span class="v2-pyramid__program v2-pyramid__program--above" data-copy>runtime program</span>
           <span class="v2-pyramid__program v2-pyramid__program--below" data-copy>infrastructure program</span>
         </figure>
-        <CodeBlock filename="src/Photos.ts" code={PHOTOS_SRC} compact />
+        <PhotosLayers client:visible />
       </div>
     </div>
   </section>
@@ -492,7 +477,7 @@ const PROVIDERS = [
       <ol class="v2-steps">
         <li class="v2-steps__inline">
           <span class="v2-steps__label" data-copy>Install</span>
-          <code class="v2-steps__code">pnpm add alchemy@latest effect</code>
+          <code class="v2-steps__code">pnpm add {alchemySpec} effect</code>
         </li>
         <li id="agent-prompt">
           <span class="v2-steps__label" data-copy>Paste this into your coding agent</span>

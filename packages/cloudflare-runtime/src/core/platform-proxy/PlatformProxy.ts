@@ -54,7 +54,7 @@ import * as Text from "../bindings/Text.ts";
 import type { BindingHook } from "../PluginContext.ts";
 import * as Runtime from "../Runtime.ts";
 import { ConfigError, type RuntimeError, SystemError } from "../RuntimeError.shared.ts";
-import type { BindingHooks, DurableObjectNamespace, Module } from "../RuntimeWorker.ts";
+import type { Assets, BindingHooks, DurableObjectNamespace, Module } from "../RuntimeWorker.ts";
 import type { ConnectedPlatformProxy, ConnectInfo } from "./connect.ts";
 import { connect } from "./connect.ts";
 import { BINDING_PLATFORM_PROXY_TOKEN } from "./PlatformProxyProtocol.shared.ts";
@@ -97,6 +97,12 @@ export interface PlatformProxyOptions<B extends BindingHooks = BindingHooks> {
   readonly modules?: ReadonlyArray<Module>;
   /** Durable Object namespaces implemented by `modules`. */
   readonly durableObjectNamespaces?: ReadonlyArray<DurableObjectNamespace>;
+  /**
+   * Static assets an `Assets.local` binding serves, e.g. a framework's
+   * public directory: `{ directory: "static" }`. The proxy worker still
+   * answers every request made to the proxy itself.
+   */
+  readonly assets?: Assets;
 }
 
 export interface PlatformProxyInstance<
@@ -125,7 +131,7 @@ const makeModules = Effect.fnUntraced(function* (options: PlatformProxyOptions) 
   );
   const userEntry = userModules[0]?.name;
   if (classNames.length > 0 && userEntry === undefined) {
-    return yield* new ConfigError({
+    return yield* ConfigError.make({
       subtag: "PlatformProxyMissingModules",
       message: "Durable Object namespaces were configured without any modules.",
       hint: "Pass `modules` whose first module exports every configured Durable Object class.",
@@ -154,7 +160,7 @@ const connectToInstance = <Env>(info: ConnectInfo) =>
   Effect.tryPromise({
     try: () => connect<Env>(info),
     catch: (cause) =>
-      new SystemError({
+      SystemError.make({
         subtag: "PlatformProxyEnvDescriptor",
         message: "Failed to read the environment descriptor from the platform-proxy worker.",
         cause,
@@ -187,6 +193,7 @@ export const open = Effect.fn("PlatformProxy.open")(function* <
     ] as unknown as B,
     modules,
     durableObjectNamespaces: options.durableObjectNamespaces,
+    assets: options.assets && { ...options.assets, runWorkerFirst: true },
   });
   const connectInfo: ConnectInfo = { url: url.href, token };
   const connected = yield* connectToInstance<Env>(connectInfo);

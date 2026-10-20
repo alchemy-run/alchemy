@@ -112,9 +112,7 @@ const finish = (
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     if (context.entry === undefined) {
-      return yield* Effect.fail(
-        fail("The Octane build produced no on-disk server entry to finish"),
-      );
+      return yield* fail("The Octane build produced no on-disk server entry to finish");
     }
     const serverDir = path.dirname(context.entry);
 

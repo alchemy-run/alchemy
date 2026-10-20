@@ -170,7 +170,17 @@ export const make = Effect.fn(function* ({
     yield* Effect.addFinalizer(() => kill.pipe(Effect.ignore));
     const url = yield* getRpcAddress(handle.stdout, (line) => publish({ channel: "stdout", line }));
     const ws = yield* Effect.acquireRelease(
-      Effect.sync(() => new WebSocket(new URL("/parent", url))),
+      Effect.sync(() => {
+        const ws = new WebSocket(new URL("/parent", url));
+        // Keep the parent link active so no idle timer on either end can
+        // close it; the sidecar ignores messages on this link.
+        const heartbeat = setInterval(() => {
+          if (ws.readyState === WebSocket.OPEN) ws.send("heartbeat");
+        }, 30_000);
+        heartbeat.unref?.();
+        ws.addEventListener("close", () => clearInterval(heartbeat));
+        return ws;
+      }),
       (ws) => Effect.sync(() => ws.close()),
     );
     return {
@@ -200,7 +210,11 @@ export const make = Effect.fn(function* ({
         new Error(`Failed to spawn RPC server for "${serverEntryUrl}" after ${attempt} attempts.`),
       );
     }
-    yield* child.kill;
+    yield* Console.error(
+      `[alchemy] RPC sidecar for ${serverEntryUrl} is no longer running; respawning (attempt ${attempt + 1})`,
+    );
+    // The sidecar is usually already gone, and killing an exited process fails.
+    yield* child.kill.pipe(Effect.ignore);
     yield* Cache.invalidate(cache, serverEntryUrl);
     return yield* register(serverEntryUrl, attempt + 1);
   });
@@ -215,7 +229,10 @@ export const make = Effect.fn(function* ({
   const HEARTBEAT = encoder.encode(`${JSON.stringify(heartbeat)}\n`);
   const heartbeats = Stream.make(HEARTBEAT).pipe(
     Stream.concat(
-      Stream.fromSchedule(Schedule.spaced(Duration.seconds(5))).pipe(Stream.map(() => HEARTBEAT)),
+      Schedule.spaced(Duration.seconds(5)).pipe(
+        Stream.fromSchedule,
+        Stream.map(() => HEARTBEAT),
+      ),
     ),
   );
 

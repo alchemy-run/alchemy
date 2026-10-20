@@ -4,7 +4,7 @@ import { createRequire } from "node:module";
  * Alchemy Worker source provider for Astro projects.
  *
  * The default export implements alchemy's `WorkerSourceModule` contract
- * (`packages/alchemy/src/Cloudflare/Workers/Source.ts`) **structurally** —
+ * (`packages/cloudflare/src/Workers/Source.ts`) **structurally** —
  * this package deliberately does not depend on `alchemy`, so the types
  * below mirror the shapes of `SourceProvider` / `SourceContext` /
  * `DevContext` / `SourceBuildOutput` / `SourceHash` / `SourceDevHandle`
@@ -44,7 +44,7 @@ import cloudflareTarget from "./cloudflare.ts";
 
 // ─────────────────────────────────────────────────────────────────────
 // Structural mirrors of alchemy's source-provider contract
-// (packages/alchemy/src/Cloudflare/Workers/Source.ts). Keep in sync.
+// (packages/cloudflare/src/Workers/Source.ts). Keep in sync.
 // ─────────────────────────────────────────────────────────────────────
 
 /** Mirror of alchemy's `SourceHash`. */
@@ -139,6 +139,7 @@ type SourceServices = FileSystem.FileSystem | Path.Path;
 /** Mirror of alchemy's `SourceProvider` (with this module's closed error/requirement channels). */
 export interface SourceProvider {
   readonly ownsAssets: boolean;
+  readonly devAssetsBinding?: boolean;
   readonly build: (
     ctx: SourceContext,
   ) => Effect.Effect<SourceBuildOutput, SourceError, SourceServices>;
@@ -851,6 +852,8 @@ const makeAstroSourceProvider = (options: AstroSourceOptions): SourceProvider =>
 
   return {
     ownsAssets: true,
+    // Dev runs the Worker in workerd with the Vite plugin's assets service.
+    devAssetsBinding: true,
 
     build: (ctx) =>
       Effect.gen(function* () {

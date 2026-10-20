@@ -3,7 +3,7 @@
  * every local binding over HTTP against the floci emulator.
  *
  * This is a different code path from the `Test.make({ dev: true })` harness
- * suites under packages/alchemy/test/AWS — the harness mirrors the RPC
+ * suites under packages/integration-tests/test/AWS — the harness mirrors the RPC
  * sidecar topology, but only this test covers the CLI itself: arg parsing,
  * the `bin/exec` child under `--watch`, the `ALCHEMY_RPC_SPAWNER_URL`
  * handshake, and provider sidecars whose lifetime is tied to the CLI
