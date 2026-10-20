@@ -275,7 +275,9 @@ const getByName = (name: string) =>
     ? Effect.succeed(undefined)
     : integrations
         .getProjectsLocationsTemplates({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        // A missing template id answers 400 "not visible to the current
+        // project", not 404.
+        .pipe(Effect.catchTag(["NotFound", "TemplateNotVisible"], () => Effect.succeed(undefined)));
 
 export const TemplateProvider = () =>
   Provider.succeed(Template, {

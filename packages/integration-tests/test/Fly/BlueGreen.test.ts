@@ -7029,18 +7029,9 @@ describe.concurrent("BlueGreen", () => {
           { tags: ["provider:fly:machine"] },
         );
 
-        test(
-          "P3 pure autostop schema accepts strings and legacy booleans",
-          Effect.sync(() => {
-            const decode = Schema.decodeUnknownSync(machines.FlyMachineServiceAutostop);
-            for (const value of ["off", "stop", "suspend", false, true]) {
-              expect(decode(value)).toBe(value);
-            }
-            expect(() => decode({ mode: "stop" })).toThrow();
-            expect(() => decode(1)).toThrow();
-          }),
-          { tags: ["provider:fly:machine"] },
-        );
+        // The SDK no longer exports its schemas as values, so the pure
+        // autostop decode is covered by the live P3 cases below, which decode
+        // `autostop` from real Fly responses.
 
         for (const autostop of ["stop", "suspend"] as const) {
           test.provider(

@@ -76,7 +76,8 @@ export const reply = (request: HttpClientRequest.HttpClientRequest, body: unknow
 
 const Body = Schema.Struct({
   name: Schema.optional(Schema.String),
-  config: Schema.optional(Schema.toType(machines.FlyMachineConfig)),
+  // The SDK no longer exports its schemas as values; the mock only routes on these fields.
+  config: Schema.optional(Schema.Unknown),
   metadata: Schema.optional(Schema.Record(Schema.String, Schema.String)),
 });
 
@@ -108,7 +109,11 @@ export const protocolClient = (
             request.body._tag === "Uint8Array"
               ? JSON.parse(new TextDecoder().decode(request.body.body))
               : {},
-          );
+          ) as {
+            name?: string;
+            config?: machines.FlyMachineConfig;
+            metadata?: Record<string, string>;
+          };
           const event: ProtocolEvent = {
             method: request.method,
             path,
