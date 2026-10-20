@@ -300,12 +300,12 @@ export const remote = (binding: string) =>
 // options are ignored. Deltas from upstream:
 // - Output bytes are buffered (`toBuffer`) instead of streamed, so a Sharp
 //   failure surfaces as a loopback 500 rather than a broken stream.
-// - The `cf.image` outbound fetcher (`cfImageLocalFetcher`) is not ported:
-//   this runtime has no outbound `fetch(url, { cf: { image } })` rewriting.
+// - The `cf.image` outbound fetcher lives in `globals/CfImage.ts`, beside the
+//   outbound interceptor that calls it.
 // -----------------------------------------------------------------------------
 
 /** Read a Node.js request into a fetch `Request` (bodies are buffered). */
-async function readNodeRequest(req: NodeHttp.IncomingMessage, url: URL): Promise<Request> {
+export async function readNodeRequest(req: NodeHttp.IncomingMessage, url: URL): Promise<Request> {
   const headers = new Headers();
   for (const [key, value] of Object.entries(req.headers)) {
     if (value === undefined) continue;

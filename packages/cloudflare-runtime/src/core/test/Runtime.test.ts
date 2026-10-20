@@ -240,4 +240,70 @@ layer(localRuntimeLayer, { excludeTestServices: true })("Runtime", (it) => {
       }).pipe(Effect.scoped),
     { timeout: 30_000 },
   );
+
+  // Miniflare's `cf.image` mock: the interceptor fetches the origin image and
+  // transforms it with Sharp.
+  it.effect(
+    "transforms cf.image fetches locally with Sharp",
+    () =>
+      Effect.gen(function* () {
+        const { default: sharp } = yield* Effect.promise(() => import("sharp"));
+        const png = yield* Effect.promise(() =>
+          sharp({
+            create: {
+              width: 8,
+              height: 4,
+              channels: 4,
+              background: { r: 255, g: 0, b: 0, alpha: 1 },
+            },
+          })
+            .png()
+            .toBuffer(),
+        );
+        const via: Array<string | undefined> = [];
+        const origin = NodeHttp.createServer((req, res) => {
+          via.push(req.headers.via as string | undefined);
+          res.setHeader("content-type", "image/png");
+          res.end(png);
+        });
+        yield* Effect.acquireRelease(
+          Effect.promise(
+            () => new Promise<void>((resolve) => origin.listen(0, "127.0.0.1", resolve)),
+          ),
+          () => Effect.promise(() => new Promise<void>((resolve) => origin.close(() => resolve()))),
+        );
+        const target = `http://127.0.0.1:${(origin.address() as { port: number }).port}/image.png`;
+        const runtime = yield* Runtime.Runtime;
+        const url = yield* runtime.start({
+          name: "cf-image",
+          compatibilityDate: "2026-03-10",
+          compatibilityFlags: [],
+          bindings: [],
+          modules: [
+            {
+              name: "main.js",
+              type: "ESModule",
+              content: `export default {
+  fetch: () => fetch(${JSON.stringify(target)}, { cf: { image: { width: 4, format: "png" } } }),
+};`,
+            },
+          ],
+        });
+        const response = yield* Effect.promise(() => fetch(url));
+        const body = Buffer.from(yield* Effect.promise(() => response.arrayBuffer()));
+        const metadata = yield* Effect.promise(() => sharp(body).metadata());
+        expect({
+          status: response.status,
+          resized: response.headers.get("cf-resized"),
+          size: [metadata.width, metadata.height],
+          via,
+        }).toEqual({
+          status: 200,
+          resized: "internal=ok/m",
+          size: [4, 2],
+          via: ["image-resizing"],
+        });
+      }).pipe(Effect.scoped),
+    { timeout: 30_000 },
+  );
 });

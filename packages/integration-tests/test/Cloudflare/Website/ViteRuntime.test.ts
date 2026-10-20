@@ -4,6 +4,7 @@ import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnviron
 import { describe, expect } from "alchemy-test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
 import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
@@ -413,6 +414,44 @@ describe.concurrent(
             "__worker-request-event-data-received__",
           ]);
         }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.ignore)), logLevel),
+      { tags: ["provider:cloudflare:worker", "local"], timeout: 180_000 },
+    );
+
+    // Miniflare's outbound `cf.image` mock (dev only: deployed, `cf.image`
+    // needs a zone with Image Transformations, which workers.dev lacks).
+    devTest.provider(
+      "Vite runtime: cf.image fetches are resized locally (dev)",
+      (stack) =>
+        Effect.gen(function* () {
+          const fs = yield* FileSystem.FileSystem;
+          // An 8x4 PNG, generated once with Sharp.
+          const png = yield* fs.readFile(pathe.join(fixtureDir, "cf-image-source.png"));
+          const origin = NodeHttp.createServer((_req, res) => {
+            res.setHeader("content-type", "image/png");
+            res.end(png);
+          });
+          yield* Effect.acquireRelease(
+            Effect.promise(
+              () => new Promise<void>((resolve) => origin.listen(0, "127.0.0.1", resolve)),
+            ),
+            () =>
+              Effect.promise(() => new Promise<void>((resolve) => origin.close(() => resolve()))),
+          );
+          const imageUrl = `http://127.0.0.1:${(origin.address() as { port: number }).port}/a.png`;
+          yield* stack.destroy();
+          const site = yield* deploySite(stack, "dev");
+          const response = yield* Effect.promise(() =>
+            fetch(
+              `${site.url!.replace(/\/$/, "")}/cf-image?imageUrl=${encodeURIComponent(imageUrl)}`,
+            ),
+          );
+          const body = Buffer.from(yield* Effect.promise(() => response.arrayBuffer()));
+          // A PNG's IHDR chunk holds its width and height at bytes 16-23.
+          expect({
+            resized: response.headers.get("cf-resized"),
+            size: [body.readUInt32BE(16), body.readUInt32BE(20)],
+          }).toEqual({ resized: "internal=ok/m", size: [4, 2] });
+        }).pipe(Effect.scoped, Effect.ensuring(stack.destroy().pipe(Effect.ignore)), logLevel),
       { tags: ["provider:cloudflare:worker", "local"], timeout: 180_000 },
     );
 

@@ -26,6 +26,7 @@ import { PluginContext } from "../PluginContext.ts";
 import { ConfigError } from "../RuntimeError.shared.ts";
 import type * as WorkerdConfig from "../workerd/Config.ts";
 import * as Cf from "./Cf.ts";
+import { cfImageHandler } from "./CfImage.ts";
 import {
   BINDING_EMAIL_DIRECTORY,
   BINDING_EMAIL_DISK,
@@ -33,6 +34,7 @@ import {
 } from "./EmailOptions.shared.ts";
 import { BINDING_USER_WORKER_DIRECT } from "./EntryOptions.shared.ts";
 import * as Internet from "./Internet.ts";
+import * as Loopback from "./Loopback.ts";
 import { BINDING_PROXY_SHARED_SECRET } from "./ProxyHeaders.shared.ts";
 import { PATH_SCHEDULED } from "./ScheduledOptions.shared.ts";
 import * as Storage from "./Storage.ts";
@@ -140,6 +142,7 @@ export const GlobalsLive = Layer.effect(
                 }),
               );
         });
+        const context = yield* PluginContext;
         return {
           middlewares: [
             {
@@ -186,28 +189,44 @@ export const GlobalsLive = Layer.effect(
               upstreamBindingName: "USER_WORKER",
             },
           ],
-          services: [
-            internet,
-            storage,
-            ...(email === undefined ? [] : [email.service]),
-            {
-              name: SERVICE_OUTBOUND,
-              worker: {
-                compatibilityDate: DEFAULT_COMPATIBILITY_DATE,
-                // `connect()` sockets (Hyperdrive, `cloudflare:sockets`) go
-                // through `globalOutbound` too; pass them straight through,
-                // as Miniflare's interceptor does.
-                compatibilityFlags: ["connect_pass_through", "experimental"],
-                modules: outboundModules,
-                bindings: [
-                  { name: "CF_WORKER_ZONE", text: worker.zone ?? `${worker.name}.example.com` },
-                ],
-              },
-            },
-          ],
-          // Outbound `fetch()`es pass through the interceptor, as in
-          // Miniflare, which continues to the internet.
-          userWorker: { globalOutbound: { name: SERVICE_OUTBOUND } },
+          // Deferred until every plugin is built: the outbound interceptor
+          // reaches its Sharp transform through the Loopback plugin.
+          defer: Effect.gen(function* () {
+            const loopback = yield* context.get(Loopback.Loopback);
+            // Sharp transforms for `cf.image` fetches, served Node-side.
+            const cfImage = yield* loopback.api.route(
+              `globals:cf-image:${worker.name}`,
+              cfImageHandler,
+            );
+            return {
+              services: [
+                internet,
+                storage,
+                ...(email === undefined ? [] : [email.service]),
+                {
+                  name: SERVICE_OUTBOUND,
+                  worker: {
+                    compatibilityDate: DEFAULT_COMPATIBILITY_DATE,
+                    // `connect()` sockets (Hyperdrive, `cloudflare:sockets`)
+                    // go through `globalOutbound` too; pass them straight
+                    // through, as Miniflare's interceptor does.
+                    compatibilityFlags: ["connect_pass_through", "experimental"],
+                    modules: outboundModules,
+                    bindings: [
+                      {
+                        name: "CF_WORKER_ZONE",
+                        text: worker.zone ?? `${worker.name}.example.com`,
+                      },
+                      { name: "CF_IMAGE", service: cfImage },
+                    ],
+                  },
+                },
+              ],
+              // Outbound `fetch()`es pass through the interceptor, as in
+              // Miniflare, which continues to the internet.
+              userWorker: { globalOutbound: { name: SERVICE_OUTBOUND } },
+            };
+          }),
           start:
             crons.length === 0
               ? undefined

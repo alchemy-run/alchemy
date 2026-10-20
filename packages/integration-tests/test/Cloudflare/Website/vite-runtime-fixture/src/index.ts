@@ -270,6 +270,12 @@ export default {
       // echo server, which reports the `CF-Worker` header it received.
       case "/cf-worker-header":
         return fetch(url.searchParams.get("echoUrl")!);
+      // Miniflare's outbound `cf.image` mock: the origin image is resized
+      // locally.
+      case "/cf-image":
+        return fetch(url.searchParams.get("imageUrl")!, {
+          cf: { image: { width: 4, format: "png" } },
+        });
       // `stream-binding`: the binding fetches the bytes from `/video-asset`.
       case "/video-asset":
         return new Response(new Uint8Array([0, 1, 2, 3, 4, 5, 6, 7]), {
