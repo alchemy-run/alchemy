@@ -232,7 +232,7 @@ export const ImageProvider = () =>
         });
 
       // Content hash over everything that affects the built image: the
-      // Dockerfile, every file in the build context (relative path + bytes),
+      // Dockerfile, every file `.dockerignore` keeps (relative path + bytes),
       // the target platform, and the build args. Absolute paths deliberately
       // do NOT participate, so relocating an identical context (e.g. a temp
       // dir) produces the same tag.
@@ -244,7 +244,7 @@ export const ImageProvider = () =>
             platform: props.platform ?? "linux/amd64",
             buildArgs: props.buildArgs,
           },
-          "all",
+          "effective",
         );
 
       // Observe the pushed image in ECR. Missing repository or tag → undefined.
