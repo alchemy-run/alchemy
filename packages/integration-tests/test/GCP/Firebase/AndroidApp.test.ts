@@ -28,7 +28,10 @@ const waitUntilGone = (name: string) =>
     }),
   );
 
-test.provider(
+// Only a Firebase project answers a missing app id with the typed 403; a
+// non-Firebase project answers every app lookup with 400 INVALID_ARGUMENT,
+// which the ungated "without Firebase" probe below covers.
+test.provider.skipIf(!runLifecycle)(
   "getProjectsAndroidApps on a missing app fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {
