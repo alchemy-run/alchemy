@@ -1,10 +1,13 @@
 import * as fs from "node:fs/promises";
 import * as NodeHttp from "node:http";
+import type { AddressInfo, Socket } from "node:net";
 import * as path from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
+import { URL as NodeURL } from "node:url";
 import * as vite from "vite";
 import { expect, onTestFinished, test, vi } from "vitest";
 import cloudflareVitePlugin from "../plugin.ts";
+import { forwardWorkerRequest } from "../worker-request.ts";
 
 // Starts a dev server for a Worker whose module source is `source`.
 const devServer = async (source: string): Promise<string> => {
@@ -142,4 +145,46 @@ test("streams the Worker's response while the request body is still arriving", a
   const echo = await send(new URL("/echo", url), { agent: false, method: "POST", body });
   expect(echo.status).toBe(200);
   expect(echo.body.length).toBe(body.length);
+});
+
+test("forwards each request on a connection of its own", async () => {
+  // Stand-in for workerd having closed a connection the proxy still holds:
+  // a second request on any connection finds it gone.
+  const listen = async (server: NodeHttp.Server): Promise<NodeURL> => {
+    onTestFinished(() => {
+      server.closeAllConnections();
+      return new Promise<void>((resolve) => server.close(() => resolve()));
+    });
+    await new Promise<void>((resolve, reject) => {
+      server.once("error", reject);
+      server.listen(0, "127.0.0.1", resolve);
+    });
+    return new NodeURL(`http://127.0.0.1:${(server.address() as AddressInfo).port}`);
+  };
+  const served = new WeakSet<Socket>();
+  const runtime = await listen(
+    NodeHttp.createServer((request, response) => {
+      if (served.has(request.socket)) {
+        request.socket.destroy();
+        return;
+      }
+      served.add(request.socket);
+      response.end("worker");
+    }),
+  );
+  const logger = vite.createLogger("silent");
+  const proxy = await listen(
+    NodeHttp.createServer((request, response) => {
+      forwardWorkerRequest(request, response, runtime, "secret", logger);
+    }),
+  );
+
+  // `fetch` keeps the client's connection alive, so the proxy alone decides
+  // whether its upstream connection is reused.
+  const get = async () => {
+    const response = await fetch(proxy, { signal: AbortSignal.timeout(5_000) });
+    return { status: response.status, body: await response.text() };
+  };
+  expect(await get()).toEqual({ status: 200, body: "worker" });
+  expect(await get()).toEqual({ status: 200, body: "worker" });
 });
