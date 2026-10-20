@@ -131,6 +131,12 @@ export interface CopyEditorOptions {
   handlers?: Record<string, CopyEditHandler>;
   /** Named preview styles for markdown sections. */
   markdownStyles?: Record<string, MarkdownStyle>;
+  /**
+   * Which dev-server pages load the editor, by URL pathname. Pages it
+   * rejects render normally with nothing editable.
+   * @default every page
+   */
+  pages?: (pathname: string) => boolean;
 }
 
 /**
@@ -318,8 +324,9 @@ export const copyEditor = (options: CopyEditorOptions = {}): Plugin => {
       );
 
       const clientTag = `<script type="module" src="${config.base}@id/${CLIENT_ID}"></script>`;
-      server.middlewares.use((_req, res, next) => {
-        injectIntoHtml(res, clientTag);
+      server.middlewares.use((req, res, next) => {
+        const pathname = new URL(req.url ?? "/", "http://localhost").pathname;
+        if (!options.pages || options.pages(pathname)) injectIntoHtml(res, clientTag);
         next();
       });
 

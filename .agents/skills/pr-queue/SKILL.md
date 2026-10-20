@@ -1,6 +1,8 @@
 ---
 name: pr-queue
 description: Run a pull-request (or issue) queue for an area of alchemy — search GitHub for open PRs/issues matching a criteria (e.g. "cloudflare", "docker", "aws/rds", an author, a label), shortlist the top 10 ordered by ease of fixing, then work through them one at a time: check out, merge main, resolve conflicts, audit tests and JSDoc, run the suites, rewrite the PR description as DX snippets, and stop with a merge-or-close recommendation. Use for "start working on a pull request queue for cloudflare", "PR queue for docker", "triage open PRs for X", "work through the open fix(aws) PRs", "next PR" while a queue is running.
+metadata:
+  internal: true
 ---
 
 # Pull request queue

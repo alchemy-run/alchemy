@@ -96,7 +96,7 @@ const DEFAULT_HOOK_TIMEOUT: HookOptions = { timeout: 120_000 };
  *
  * ```ts
  * import * as Test from "alchemy/Test/Bun";
- * import * as Cloudflare from "alchemy/Cloudflare";
+ * import * as Cloudflare from "@alchemy.run/cloudflare";
  *
  * const { test, deploy, destroy, beforeAll, afterAll } = Test.make({
  *   providers: Cloudflare.providers(),

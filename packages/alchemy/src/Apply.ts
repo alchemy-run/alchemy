@@ -26,10 +26,6 @@ import {
   failCredentialsRequired,
   demandPlanCredentials,
 } from "./Auth/Demand.ts";
-// oxlint-disable-next-line alchemy/package-boundaries -- Worker retry identity must match the provider's account and generated names at the engine checkpoint boundary.
-import { CloudflareEnvironment } from "./Cloudflare/CloudflareEnvironmentService.ts";
-// oxlint-disable-next-line alchemy/package-boundaries -- Worker retry identity must match the provider's account and generated names at the engine checkpoint boundary.
-import { createWorkerName } from "./Cloudflare/Workers/WorkerName.ts";
 import { havePropsChanged, stripUnresolved } from "./Diff.ts";
 import type { Input } from "./Input.ts";
 import { generateInstanceId } from "./InstanceId.ts";
@@ -531,10 +527,10 @@ const executeNode = (
 
     // oxlint-disable-next-line alchemy/package-boundaries -- The engine must distinguish legacy Worker checkpoints before serialization, retry, and cleanup.
     const isLiveWorker = node.resource.Type === "Cloudflare.Worker" && node.mode !== "local";
-    const currentWorkerAccount = Effect.gen(function* () {
-      const environment = yield* Effect.serviceOption(CloudflareEnvironment);
-      return Option.isSome(environment) ? (yield* environment.value).accountId : undefined;
-    });
+    const currentWorkerAccount = node.provider.workerIdentity?.account ?? Effect.succeed(undefined);
+    const workerName = (id: string, name: string | undefined) =>
+      node.provider.workerIdentity?.name(id, name) ??
+      Effect.die("Worker provider requires physical identity operations");
     const resumingWorker =
       isLiveWorker &&
       (node.action === "create" ||
@@ -1183,12 +1179,8 @@ const executeNode = (
           previous.props?.preview?.of == null
         ) {
           if (recordedWorkerAccount(previous) !== undefined) {
-            const environment = yield* Effect.serviceOption(CloudflareEnvironment);
-            if (
-              Option.isNone(environment) ||
-              (yield* environment.value).accountId !== recordedWorkerAccount(previous)
-            )
-              return;
+            const account = yield* currentWorkerAccount;
+            if (account !== recordedWorkerAccount(previous)) return;
           }
           instanceId = previous.instanceId;
           replState = { ...replState, instanceId };
@@ -1206,7 +1198,7 @@ const executeNode = (
           news.preview?.of != null
         )
           return;
-        const targetName = yield* createWorkerName(logicalId, news.name).pipe(
+        const targetName = yield* workerName(logicalId, news.name).pipe(
           provideLifecycleScope({ logicalId, fqn, instanceId, type: node.resource.Type }),
         );
         let accountId = admittedAccountId;
@@ -1218,8 +1210,7 @@ const executeNode = (
           oldGenerations !== undefined &&
           hasKnownAccount(oldGenerations)
         ) {
-          const environment = yield* Effect.serviceOption(CloudflareEnvironment);
-          if (Option.isSome(environment)) accountId = (yield* environment.value).accountId;
+          accountId = yield* currentWorkerAccount;
         }
         const namespaceName = (props: Record<string, any> | undefined) =>
           typeof props?.namespace === "string" ? props.namespace : props?.namespace?.name;
@@ -1244,7 +1235,7 @@ const executeNode = (
             ) {
               const oldName =
                 old.attr?.workerName ??
-                (yield* createWorkerName(logicalId, old.props?.name).pipe(
+                (yield* workerName(logicalId, old.props?.name).pipe(
                   provideLifecycleScope({
                     logicalId,
                     fqn,
@@ -2340,18 +2331,11 @@ const collectGarbage = Effect.fn(function* (plan: Plan, session: PlanStatusSessi
                   output: undefined,
                 });
                 if (workerAccountId !== undefined) {
-                  const environmentService = yield* Effect.serviceOption(CloudflareEnvironment);
-                  if (Option.isNone(environmentService))
+                  if (provider.workerIdentity === undefined)
                     return yield* Effect.die(
                       "Recorded Worker account requires Cloudflare credentials for cleanup",
                     );
-                  const environment = yield* environmentService.value;
-                  recoveryRead = recoveryRead.pipe(
-                    Effect.provideService(
-                      CloudflareEnvironment,
-                      Effect.succeed({ ...environment, accountId: workerAccountId }),
-                    ),
-                  );
+                  recoveryRead = provider.workerIdentity.withAccount(workerAccountId, recoveryRead);
                 }
                 const recovered = yield* recoveryRead.pipe(
                   instrumentLifecycle("read", fqn, resourceType, logicalId, instanceId),

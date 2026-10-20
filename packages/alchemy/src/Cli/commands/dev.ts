@@ -1,12 +1,11 @@
 import { fileURLToPath } from "node:url";
-import * as Floci from "@alchemy.run/floci";
 import * as Command from "effect/cli/Command";
 import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as Schema from "effect/Schema";
 import { resolveStackEntrypoint } from "../../Alchemist/Entrypoint.ts";
+import * as Contributions from "../../Contributions.ts";
 import { SPAWNER_URL_ENV_KEY } from "../../Local/RpcProviderProxy.ts";
 import * as RpcSpawner from "../../Local/RpcSpawner.ts";
 import { nodeLoaderArgs } from "../../Util/Node.ts";
@@ -59,12 +58,17 @@ export const devCommand = Command.make(
       // A missing entry is this process's error to report, not a stack
       // trace out of the exec child.
       yield* resolveStackEntrypoint(options.main);
-      const fs = yield* FileSystem.FileSystem;
-      // Set on THIS process too, so the RPC spawner's sidecars (and the workerd
-      // they launch) inherit it — they are forked from here, not from the exec
+      // Providers' dev environment (e.g. a local emulator's CA bundle). Set on
+      // THIS process, so the RPC spawner's sidecars (and the workerd they
+      // launch) inherit it — they are forked from here, not from the exec
       // child below.
-      if (yield* fs.exists(Floci.FLOCI_CA_PATH)) {
-        process.env.NODE_EXTRA_CA_CERTS ??= Floci.FLOCI_CA_PATH;
+      const env = yield* Contributions.devEnv().pipe(
+        Effect.catchTag("ContributionError", (error) =>
+          Effect.logWarning(error.message).pipe(Effect.as({})),
+        ),
+      );
+      for (const [key, value] of Object.entries(env)) {
+        process.env[key] ??= value;
       }
       const spawner = yield* RpcSpawner.RpcSpawner;
       // Neither runtime uses its native `--watch`: those hard-restart the exec

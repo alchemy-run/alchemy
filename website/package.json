@@ -25,6 +25,15 @@
     "preview": "astro preview"
   },
   "dependencies": {
+    "@alchemy.run/aws": "workspace:*",
+    "@alchemy.run/cloudflare": "workspace:*",
+    "@alchemy.run/docker": "workspace:*",
+    "@alchemy.run/domain": "workspace:*",
+    "@alchemy.run/gcp": "workspace:*",
+    "@alchemy.run/github": "workspace:*",
+    "@alchemy.run/kubernetes": "workspace:*",
+    "@alchemy.run/redis": "workspace:*",
+    "@alchemy.run/sql": "workspace:*",
     "@astrojs/check": "catalog:",
     "@astrojs/mdx": "catalog:",
     "@astrojs/react": "catalog:",

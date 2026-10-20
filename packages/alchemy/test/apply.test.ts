@@ -1,4 +1,3 @@
-import { WorkerHasNoVersions } from "@distilled.cloud/cloudflare/workers";
 import { assert, describe, expect } from "alchemy-test";
 import { Data, Layer } from "effect";
 import * as Cause from "effect/Cause";
@@ -14,12 +13,11 @@ import { Action } from "@/Action";
 import { adopt, AdoptPolicy, OwnedBySomeoneElse, Unowned } from "@/AdoptPolicy";
 import { AlchemyContext } from "@/AlchemyContext";
 import { apply, DestroyError } from "@/Apply";
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironmentService";
-import { createWorkerName } from "@/Cloudflare/Workers/WorkerName";
 import { isResolved } from "@/Diff";
 import * as ProviderLayer from "@/Local/ProviderLayer";
 import * as Namespace from "@/Namespace.ts";
 import * as Output from "@/Output";
+import { createPhysicalName } from "@/PhysicalName";
 import * as Plan from "@/Plan";
 import * as Provider from "@/Provider";
 import { remote } from "@/ProviderMode.ts";
@@ -9574,6 +9572,18 @@ describe("Worker checkpoint identity", { tags: ["unit", "local"] }, () => {
     { name: string }
   > {}
   const CheckpointDependency = Resource<CheckpointDependency>("Test.CheckpointDependency");
+  class CheckpointEnvironment extends Context.Service<
+    CheckpointEnvironment,
+    Effect.Effect<{ accountId: string }>
+  >()("Test.WorkerEnvironment") {}
+  class WorkerHasNoVersions extends Data.TaggedError("WorkerHasNoVersions")<{
+    code: number;
+    message: string;
+  }> {}
+  const createWorkerName = (id: string, name: string | undefined) =>
+    name
+      ? Effect.succeed(name)
+      : createPhysicalName({ id, maxLength: 54 }).pipe(Effect.map((name) => name.toLowerCase()));
   class InterruptedPrecreate extends Data.TaggedError("InterruptedPrecreate")<{}> {}
   class InterruptedUpload extends Data.TaggedError("InterruptedUpload")<{}> {}
   class CheckpointProbe extends Context.Service<
@@ -9596,6 +9606,28 @@ describe("Worker checkpoint identity", { tags: ["unit", "local"] }, () => {
       delete: () => Effect.void,
     }),
     Provider.succeed(CheckpointWorker, {
+      workerIdentity: {
+        account: Effect.gen(function* () {
+          const environment = yield* Effect.serviceOption(CheckpointEnvironment);
+          return Option.isSome(environment) ? (yield* environment.value).accountId : undefined;
+        }),
+        name: createWorkerName,
+        withAccount: (accountId, effect) =>
+          Effect.gen(function* () {
+            const service = yield* Effect.serviceOption(CheckpointEnvironment);
+            if (Option.isNone(service))
+              return yield* Effect.die(
+                "Recorded Worker account requires Cloudflare credentials for cleanup",
+              );
+            const environment = yield* service.value;
+            return yield* effect.pipe(
+              Effect.provideService(
+                CheckpointEnvironment,
+                Effect.succeed({ ...environment, accountId }),
+              ),
+            );
+          }),
+      },
       diff: Effect.fn(function* () {
         return (yield* CheckpointProbe).replace ? { action: "replace" as const } : undefined;
       }),
@@ -9606,7 +9638,7 @@ describe("Worker checkpoint identity", { tags: ["unit", "local"] }, () => {
         if (probe.unreadable)
           return yield* new WorkerHasNoVersions({ code: 10007, message: "Worker has no versions" });
         if (probe.absent) return undefined;
-        const environment = yield* Effect.serviceOption(CloudflareEnvironment);
+        const environment = yield* Effect.serviceOption(CheckpointEnvironment);
         const accountId = Option.isSome(environment)
           ? (yield* environment.value).accountId
           : probe.accountId;
@@ -9694,12 +9726,9 @@ describe("Worker checkpoint identity", { tags: ["unit", "local"] }, () => {
 
   const inAccount = (accountId: string) =>
     Effect.provideService(
-      CloudflareEnvironment,
+      CheckpointEnvironment,
       Effect.succeed({
-        type: "apiToken" as const,
-        apiToken: Redacted.make("test-token"),
         accountId,
-        source: { type: "env" as const },
       }),
     );
 
@@ -9767,7 +9796,7 @@ describe("Worker checkpoint identity", { tags: ["unit", "local"] }, () => {
       const result = yield* stack
         .destroy()
         .pipe(
-          Effect.provideService(CloudflareEnvironment, Effect.die("Credentials unavailable")),
+          Effect.provideService(CheckpointEnvironment, Effect.die("Credentials unavailable")),
           Effect.exit,
         );
       expect(Exit.isFailure(result)).toBe(true);

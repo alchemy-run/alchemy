@@ -20,8 +20,6 @@ import {
   makeScopedArtifacts,
 } from "./Artifacts.ts";
 import { demandRemoteCredentials, failCredentialsRequired } from "./Auth/Demand.ts";
-// oxlint-disable-next-line alchemy/package-boundaries -- Worker retry identity must match the provider's account and generated names at the engine checkpoint boundary.
-import { CloudflareEnvironment } from "./Cloudflare/CloudflareEnvironmentService.ts";
 import {
   dedupeBindings,
   diffBindings,
@@ -1496,10 +1494,9 @@ const makePlan = <A>(
         oldState.workerWriteStarted !== false &&
         recordedWorkerAccount(oldState) !== undefined
       ) {
-        const environment = yield* Effect.serviceOption(CloudflareEnvironment);
-        if (Option.isSome(environment))
-          workerAccountChanged =
-            (yield* environment.value).accountId !== recordedWorkerAccount(oldState);
+        const account = yield* provider.workerIdentity?.account ?? Effect.succeed(undefined);
+        if (account !== undefined)
+          workerAccountChanged = account !== recordedWorkerAccount(oldState);
       }
       const Node = <T extends Apply>(
         node: Omit<T, "provider" | "resource" | "bindings" | "downstream" | "mode">,

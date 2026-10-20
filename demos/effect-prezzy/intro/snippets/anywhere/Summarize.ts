@@ -1,4 +1,4 @@
-import * as AWS from "alchemy/AWS";
+import * as AWS from "@alchemy.run/aws";
 import * as Effect from "effect/Effect";
 
 /** Turn a room's messages into a one-paragraph summary (stands in for an LLM call). */
