@@ -140,17 +140,21 @@ test("keeps connections usable after the Worker answers without reading the body
   const keptAlive = new NodeHttp.Agent({ keepAlive: true, maxSockets: 1 });
   onTestFinished(() => keptAlive.destroy());
 
-  const tooLarge = await send(new URL("/upload", url), {
-    agent: keptAlive,
-    method: "POST",
-    body: Buffer.alloc(1024 * 1024 + 1, "a"),
-  });
-  expect(tooLarge).toEqual({ status: 413, body: "too large" });
-  // A forwarded request doesn't get the connection workerd closed after the
-  // upload.
-  expect(await send(new URL("/", url), { agent: false })).toEqual({ status: 200, body: "ok" });
-  // The client's connection, which carried the upload, is still usable.
-  expect(await send(new URL("/", url), { agent: keptAlive })).toEqual({ status: 200, body: "ok" });
+  // Each round trip has a few-percent chance of passing without the fix, so
+  // the test makes several.
+  for (let i = 0; i < 3; i++) {
+    const tooLarge = await send(new URL("/upload", url), {
+      agent: keptAlive,
+      method: "POST",
+      body: Buffer.alloc(1024 * 1024 + 1, "a"),
+    });
+    expect(tooLarge).toEqual({ status: 413, body: "too large" });
+    // The client's connection, which carried the upload, is still usable.
+    expect(await send(new URL("/", url), { agent: keptAlive })).toEqual({
+      status: 200,
+      body: "ok",
+    });
+  }
 });
 
 test("streams the Worker's response while the request body is still arriving", async () => {
@@ -171,7 +175,9 @@ test("streams the Worker's response while the request body is still arriving", a
 });
 
 test("forwards each request on a connection of its own", async () => {
-  // Stand-in for workerd having closed a connection the proxy still holds:
+  // Pins the defensive connection per request (see worker-request.ts). The
+  // reuse failure it guards against hasn't been reproduced with workerd, so a
+  // stand-in plays workerd having closed a connection the proxy still holds:
   // a second request on any connection finds it gone.
   const served = new WeakSet<Socket>();
   const runtime = await listen(
@@ -194,28 +200,4 @@ test("forwards each request on a connection of its own", async () => {
   };
   expect(await get()).toEqual({ status: 200, body: "worker" });
   expect(await get()).toEqual({ status: 200, body: "worker" });
-});
-
-test("reads the rest of the body when the Worker answers without it", async () => {
-  // Stand-in for workerd answering an upload before reading it, then closing
-  // the connection.
-  const runtime = await listen(
-    NodeHttp.createServer((request, response) => {
-      if (request.method === "POST") {
-        response.end("too large");
-        setTimeout(() => request.socket.destroy(), 5);
-        return;
-      }
-      response.end("ok");
-    }),
-  );
-  const proxy = await proxyTo(runtime);
-  const keptAlive = new NodeHttp.Agent({ keepAlive: true, maxSockets: 1 });
-  onTestFinished(() => keptAlive.destroy());
-
-  expect(
-    await send(proxy, { agent: keptAlive, method: "POST", body: Buffer.alloc(1024 * 1024, "a") }),
-  ).toEqual({ status: 200, body: "too large" });
-  // The connection that carried the upload serves the next request.
-  expect(await send(proxy, { agent: keptAlive })).toEqual({ status: 200, body: "ok" });
 });
