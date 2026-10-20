@@ -6,7 +6,7 @@ import { isResolved } from "alchemy/Diff";
 import { Platform, type Main, type PlatformProps } from "alchemy/Platform";
 import * as Provider from "alchemy/Provider";
 import type { Resource, ResourceBinding } from "alchemy/Resource";
-import type { ServerHost } from "alchemy/Server/Process";
+import type { ServerHost } from "alchemy/Runtime/Process";
 import { Stack } from "alchemy/Stack";
 import { createInternalTags } from "alchemy/Tags";
 import * as Data from "effect/Data";

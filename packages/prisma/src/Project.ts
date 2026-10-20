@@ -25,12 +25,12 @@ import {
   hasCanonicalConnectionSecrets,
   mergeConnectionSecrets,
   recoverDatabaseConnectionSecrets,
-} from "./Internal/DatabaseSecrets.ts";
-import { DEV_TIMESTAMP, devId, devProvider } from "./Internal/DevStub.ts";
-import type { ObservedDatabase, ObservedProject } from "./Internal/Observed.ts";
-import { PrismaPaginationError } from "./Internal/Pagination.ts";
+} from "./internal/DatabaseSecrets.ts";
+import { DEV_TIMESTAMP, devId, devProvider } from "./internal/DevStub.ts";
+import type { ObservedDatabase, ObservedProject } from "./internal/Observed.ts";
+import { PrismaPaginationError } from "./internal/Pagination.ts";
+import { isInputObject, isPrismaDevId } from "./internal/Refs.ts";
 import type { Providers } from "./Providers.ts";
-import { isInputObject, isPrismaDevId } from "./Refs.ts";
 import type { PrismaSecretConnection, PrismaRegionId } from "./Types.ts";
 
 export interface ProjectProps {

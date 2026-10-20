@@ -1,13 +1,13 @@
-import * as Cloudflare from "@alchemy.run/cloudflare";
-import { GitApi } from "@alchemy.run/git/Api";
-import { expect } from "alchemy-test";
 /**
  * Bytes on S3, compute on Cloudflare: the Worker and the Repo DO reach the
  * bucket through the S3 bindings with an identity Alchemy minted. A push
  * that spills, compaction into an S3 pack, and a clone back under
  * `fsck --strict`. Every byte of the clone came back through S3.
  */
-import * as AWS from "alchemy/AWS";
+import * as AWS from "@alchemy.run/aws";
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import { GitApi } from "@alchemy.run/git/Api";
+import { expect } from "alchemy-test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";

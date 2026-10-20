@@ -53,7 +53,11 @@
     "build:package": "node scripts/build.ts",
     "test": "alchemy-test"
   },
+  "dependencies": {
+    "@alchemy.run/sql": "workspace:*"
+  },
   "devDependencies": {
+    "@alchemy.run/aws": "workspace:*",
     "@alchemy.run/cloudflare": "workspace:*",
     "@alchemy.run/neon": "workspace:*",
     "@alchemy.run/planetscale": "workspace:*",
@@ -77,6 +81,7 @@
     "typescript": "catalog:"
   },
   "peerDependencies": {
+    "@alchemy.run/aws": "workspace:*",
     "@alchemy.run/cloudflare": "workspace:*",
     "@better-auth/drizzle-adapter": "catalog:",
     "@cloudflare/workers-types": "catalog:",
@@ -91,6 +96,9 @@
     "pg": "catalog:"
   },
   "peerDependenciesMeta": {
+    "@alchemy.run/aws": {
+      "optional": true
+    },
     "@alchemy.run/cloudflare": {
       "optional": true
     },

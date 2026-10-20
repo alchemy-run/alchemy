@@ -1,5 +1,5 @@
 import * as Neon from "@alchemy.run/neon";
-import * as SQL from "alchemy/SQL/Postgres";
+import * as SQL from "@alchemy.run/sql/Postgres";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { resources } from "./resources.ts";

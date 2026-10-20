@@ -8,7 +8,7 @@ import * as Redacted from "effect/Redacted";
 import * as Stream from "effect/Stream";
 import { TestClock } from "effect/testing";
 import { WebSocketServer } from "ws";
-import { Credentials } from "../../../prisma/src/Credentials.ts";
+import { Credentials } from "../../../prisma/src/internal/Credentials.ts";
 
 describe("Prisma deployment logs", { tags: ["unit", "provider:prisma", "local"] }, () => {
   it.effect("decodes compute log records into Alchemy log lines", () =>

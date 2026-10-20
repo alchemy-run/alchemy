@@ -641,7 +641,7 @@ Connect to the Worker's `/counters/alice` route and create the browser's
 Effect RPC client in a Layer. This client talks only to the `"alice"` object:
 
 ```typescript
-import * as RpcWebSocketClient from "@alchemy.run/cloudflare/RpcWebSocketClient";
+import * as RpcWebSocketClient from "@alchemy.run/cloudflare/Workers/RpcWebSocketClient";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -668,7 +668,7 @@ const program = Effect.gen(function* () {
 }).pipe(Effect.provide(CounterClientLive));
 ```
 
-The dedicated `@alchemy.run/cloudflare/RpcWebSocketClient` entrypoint imports only
+The dedicated `@alchemy.run/cloudflare/Workers/RpcWebSocketClient` entrypoint imports only
 Effect modules and is safe to bundle for browsers. The wrapper is optional;
 it composes Effect's RPC client, socket protocol, WebSocket, and JSON serializer.
 Client middleware remains an explicit Layer dependency. Its `socket`, `protocol`,

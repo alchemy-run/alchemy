@@ -1,4 +1,4 @@
-import * as Lambda from "alchemy/AWS/Lambda";
+import * as Lambda from "@alchemy.run/aws/Lambda";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";

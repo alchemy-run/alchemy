@@ -1,9 +1,3 @@
-import * as turso from "@distilled.cloud/turso/turso";
-import { Unowned } from "alchemy/AdoptPolicy";
-import { deepEqual, isResolved } from "alchemy/Diff";
-import { createPhysicalName } from "alchemy/PhysicalName";
-import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
 import {
   diffMigrations,
   migrationsAttrs,
@@ -11,8 +5,14 @@ import {
   runMigrations,
   stampedOf,
   type MigrationsInput,
-} from "alchemy/SQL/Migrations/index";
-import { hashImports, readSqlFile, splitSqlStatements } from "alchemy/SQL/SqlFile";
+} from "@alchemy.run/sql/Migrations";
+import { hashImports, readSqlFile, splitSqlStatements } from "@alchemy.run/sql/SqlFile";
+import * as turso from "@distilled.cloud/turso/turso";
+import { Unowned } from "alchemy/AdoptPolicy";
+import { deepEqual, isResolved } from "alchemy/Diff";
+import { createPhysicalName } from "alchemy/PhysicalName";
+import * as Provider from "alchemy/Provider";
+import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as Redacted from "effect/Redacted";

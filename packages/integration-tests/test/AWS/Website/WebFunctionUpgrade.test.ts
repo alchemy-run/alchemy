@@ -1,6 +1,4 @@
 import { spawn } from "node:child_process";
-import * as cloudfront from "@distilled.cloud/aws/cloudfront";
-import { expect } from "alchemy-test";
 /**
  * Cross-version upgrade tests for moving AWS framework sites onto Lambda Web
  * Functions.
@@ -11,7 +9,9 @@ import { expect } from "alchemy-test";
  * must move onto Web Functions and keep its CloudFront distribution, and
  * the old functions must be deleted.
  */
-import * as AWS from "alchemy/AWS";
+import * as AWS from "@alchemy.run/aws";
+import * as cloudfront from "@distilled.cloud/aws/cloudfront";
+import { expect } from "alchemy-test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -213,7 +213,7 @@ for (const upgrade of cases) {
             stackProgram(
               upgrade.framework,
               pathe.join(repoRoot, "packages/alchemy/src/index.ts"),
-              pathe.join(repoRoot, "packages/alchemy/src/AWS/index.ts"),
+              pathe.join(repoRoot, "packages/aws/src/index.ts"),
             ),
           );
 

@@ -1,3 +1,11 @@
+import {
+  diffMigrations,
+  migrationsAttrs,
+  migrationsInputOf,
+  stampedOf,
+  type MigrationsInput,
+} from "@alchemy.run/sql/Migrations";
+import { hashImports } from "@alchemy.run/sql/SqlFile";
 import * as machines from "@distilled.cloud/fly-io/machines";
 import type {
   ClusterCredentials,
@@ -9,14 +17,6 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
-import {
-  diffMigrations,
-  migrationsAttrs,
-  migrationsInputOf,
-  stampedOf,
-  type MigrationsInput,
-} from "alchemy/SQL/Migrations/index";
-import { hashImports } from "alchemy/SQL/SqlFile";
 import { recordsEqual } from "alchemy/Util/equal";
 import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";

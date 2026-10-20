@@ -1,9 +1,9 @@
+import { resolvePoolConfig } from "@alchemy.run/sql/PostgresTls";
 // `@effect/sql-pg` (and pg underneath) are optional peers — value imports
 // are deferred to first use so `@alchemy.run/drizzle` resolves without them
 // installed.
 import type * as PgClient from "@effect/sql-pg/PgClient";
 import { makeExecutionMemo } from "alchemy/Runtime/ExecutionMemo";
-import { resolvePoolConfig } from "alchemy/SQL/PostgresTls";
 import { proxyChain } from "alchemy/Util/proxy-chain";
 import type { AnyRelations, EmptyRelations } from "drizzle-orm";
 import type { EffectPgDatabase } from "drizzle-orm/effect-postgres";

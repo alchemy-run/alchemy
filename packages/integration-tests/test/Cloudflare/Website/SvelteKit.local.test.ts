@@ -138,6 +138,11 @@ describe.concurrent(
             timeout: "60 seconds",
             label: "sveltekit dev static asset",
           });
+          // The same file read by a server route through the `ASSETS` binding.
+          yield* expectUrlContains(`${site.url!}/api/asset`, "User-agent", {
+            timeout: "60 seconds",
+            label: "sveltekit ASSETS binding",
+          });
 
           // ── local KV round-trip: the /api/kv routes write and read
           // `platform.env.SITE_KV`, backed by the local simulator ─────────────

@@ -22,7 +22,7 @@ Like the account, a customer has its own kind of id.
 
 ```typescript
 // src/RegisterCustomer.command.ts
-import * as Domain from "alchemy/Domain";
+import * as Domain from "@alchemy.run/domain";
 import * as Schema from "effect/Schema";
 import { CustomerId } from "./Customer.id.ts";
 
@@ -46,7 +46,7 @@ export class RegisterCustomer extends Domain.Command("RegisterCustomer", {
 
 ```typescript
 // src/Customer.aggregate.ts
-import * as Domain from "alchemy/Domain";
+import * as Domain from "@alchemy.run/domain";
 import * as Schema from "effect/Schema";
 import { CustomerId } from "./Customer.id.ts";
 import { AlreadyRegistered, CustomerRegistered, RegisterCustomer } from "./RegisterCustomer.command.ts";
@@ -72,7 +72,7 @@ A customer is an aggregate with the same shape as the account: an id, the comman
 
 ```typescript
 // src/MainAccountProvisioning.policy.ts
-import * as Domain from "alchemy/Domain";
+import * as Domain from "@alchemy.run/domain";
 import { Customer } from "./Customer.aggregate.ts";
 import { CustomerRegistered } from "./RegisterCustomer.command.ts";
 
@@ -88,7 +88,7 @@ A policy is "whenever this happens, do that". This one listens to customers, for
 
 ```diff lang="typescript"
 // src/MainAccountProvisioning.policy.ts
-import * as Domain from "alchemy/Domain";
+import * as Domain from "@alchemy.run/domain";
 +import * as Effect from "effect/Effect";
 +import { Account } from "./Account.aggregate.ts";
 +import { AccountId } from "./Account.id.ts";
@@ -148,7 +148,7 @@ The model lists the policy, and `BankHandlers` is its implementation. You provid
 
 ```diff lang="typescript"
 // test/Account.test.ts
-import { Story } from "alchemy/Domain/Story";
+import { Story } from "@alchemy.run/domain/Story";
 import { Account } from "../src/Account.aggregate.ts";
 -import { Bank } from "../src/Bank.model.ts";
 +import { Bank, BankHandlers } from "../src/Bank.model.ts";
@@ -193,7 +193,7 @@ A story runs the whole model, policies included, so every story now takes `BankH
 ```typescript
 // test/registration.test.ts
 import { it } from "@effect/vitest";
-import { Story } from "alchemy/Domain/Story";
+import { Story } from "@alchemy.run/domain/Story";
 import { Account } from "../src/Account.aggregate.ts";
 import { AccountSummary } from "../src/AccountSummary.view.ts";
 import { Bank, BankHandlers } from "../src/Bank.model.ts";

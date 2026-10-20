@@ -1,10 +1,3 @@
-import * as planetscale from "@distilled.cloud/planetscale";
-import { Credentials } from "@distilled.cloud/planetscale/Credentials";
-import { Unowned } from "alchemy/AdoptPolicy";
-import { havePropsChanged, isResolved } from "alchemy/Diff";
-import { createPhysicalName } from "alchemy/PhysicalName";
-import * as Provider from "alchemy/Provider";
-import type { ResourceClass, ResourceLike } from "alchemy/Resource";
 import {
   classifyMigrationHistory,
   describeRewrittenHistory,
@@ -16,8 +9,15 @@ import {
   type MigrationsInput,
   type NormalizedMigrationsInput,
   type StampedMigrationsState,
-} from "alchemy/SQL/Migrations/index";
-import { hashImports } from "alchemy/SQL/SqlFile";
+} from "@alchemy.run/sql/Migrations";
+import { hashImports } from "@alchemy.run/sql/SqlFile";
+import * as planetscale from "@distilled.cloud/planetscale";
+import { Credentials } from "@distilled.cloud/planetscale/Credentials";
+import { Unowned } from "alchemy/AdoptPolicy";
+import { havePropsChanged, isResolved } from "alchemy/Diff";
+import { createPhysicalName } from "alchemy/PhysicalName";
+import * as Provider from "alchemy/Provider";
+import type { ResourceClass, ResourceLike } from "alchemy/Resource";
 import { recordsEqual } from "alchemy/Util/equal";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";

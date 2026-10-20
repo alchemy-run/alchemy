@@ -13,7 +13,7 @@ import * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import * as TestClock from "effect/testing/TestClock";
-import { PrismaPaginationError } from "../../../prisma/src/Internal/Pagination.ts";
+import { PrismaPaginationError } from "../../../prisma/src/internal/Pagination.ts";
 import {
   type Captured,
   data,

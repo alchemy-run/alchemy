@@ -60,6 +60,7 @@
     "build:package": "node scripts/build.ts"
   },
   "devDependencies": {
+    "@alchemy.run/aws": "workspace:*",
     "@alchemy.run/cloudflare": "workspace:*",
     "@cloudflare/workers-types": "catalog:",
     "@types/bun": "catalog:",
@@ -68,8 +69,14 @@
     "typescript": "catalog:"
   },
   "peerDependencies": {
+    "@alchemy.run/aws": "workspace:*",
     "@alchemy.run/cloudflare": "workspace:*",
     "alchemy": "workspace:*",
     "effect": "catalog:"
+  },
+  "peerDependenciesMeta": {
+    "@alchemy.run/aws": {
+      "optional": true
+    }
   }
 }

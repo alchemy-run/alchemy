@@ -188,7 +188,7 @@ const BankLive = SessionLive.pipe(
 
 ```typescript
 // src/web/Bank.ts
-import type * as Domain from "alchemy/Domain";
+import type * as Domain from "@alchemy.run/domain";
 import * as Schema from "effect/Schema";
 import { defineMessageUnion } from "foldkit/message";
 import { AccountId } from "../Account.id.ts";
@@ -225,7 +225,7 @@ export type Message = typeof Message.Type;
 
 ```diff lang="typescript"
 // src/web/Bank.ts
-import type * as Domain from "alchemy/Domain";
+import type * as Domain from "@alchemy.run/domain";
 +import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 +import { Command } from "foldkit";
@@ -397,7 +397,7 @@ Before the account opens, the page offers to open it. After, it shows the balanc
 
 ```typescript
 // src/web/entry.ts
-import * as Domain from "alchemy/Domain";
+import * as Domain from "@alchemy.run/domain";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as HttpClient from "effect/http/HttpClient";

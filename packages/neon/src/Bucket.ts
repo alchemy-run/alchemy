@@ -86,7 +86,6 @@ export const Bucket: typeof BucketResource = Object.assign(
       id,
       Effect.gen(function* () {
         const news = Effect.isEffect(props) ? yield* props : props;
-        const createCredential = yield* Credential;
         const {
           name: _name,
           access: _access,
@@ -98,7 +97,7 @@ export const Bucket: typeof BucketResource = Object.assign(
         } = news;
         const credential =
           suppliedCredential ??
-          (yield* createCredential(`${id}StorageCredential`, {
+          (yield* Credential(`${id}StorageCredential`, {
             ...scope,
             scopes: ["storage:read", "storage:write"],
           }));

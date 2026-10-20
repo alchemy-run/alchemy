@@ -1,4 +1,4 @@
-import { hashDockerBuildInputs, selectDockerBuildContext } from "alchemy/Docker/BuildHash";
+import { hashDockerBuildInputs, selectDockerBuildContext } from "@alchemy.run/docker/BuildHash";
 import { initialCwd } from "alchemy/Util/Node";
 import { sha256Object } from "alchemy/Util/sha256";
 import { tarGzipDirectory } from "alchemy/Util/tarGzip";

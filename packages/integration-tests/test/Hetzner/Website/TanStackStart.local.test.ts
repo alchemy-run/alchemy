@@ -10,7 +10,7 @@ const { test } = Test.make({ providers: Hetzner.providers(), dev: true });
 
 const fixtureDir = pathe.resolve(
   import.meta.dirname,
-  "../../../../alchemy/test/AWS/Website/fixtures/tanstack-start-app",
+  "../../AWS/Website/fixtures/tanstack-start-app",
 );
 const tempRoot = pathe.resolve(import.meta.dirname, "../../../.tmp");
 const fixtureEntries = [".gitignore", "package.json", "vite.config.ts", "src", "public"];

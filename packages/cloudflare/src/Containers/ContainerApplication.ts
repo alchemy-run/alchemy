@@ -1,10 +1,10 @@
+import type { InlineDockerfile } from "@alchemy.run/docker/Dockerfile";
 import * as Containers from "@distilled.cloud/cloudflare/containers";
 import type * as Bundle from "alchemy/Bundle/Bundle";
-import type { InlineDockerfile } from "alchemy/Docker/Dockerfile";
 import * as ProviderLayer from "alchemy/Local/ProviderLayer";
 import { type Main, type PlatformProps, type PlatformServices } from "alchemy/Platform";
 import { Resource } from "alchemy/Resource";
-import type { ProcessServices } from "alchemy/Server/Process";
+import type { ProcessServices } from "alchemy/Runtime/Process";
 import type * as Duration from "effect/Duration";
 import * as Redacted from "effect/Redacted";
 import type { Providers } from "../Providers.ts";
@@ -600,7 +600,7 @@ export type ContainerShape = Main<ContainerServices>;
  *
  * **Example:** Inline environment Dockerfile (extra build steps)
  * ```typescript
- * import * as Dockerfile from "alchemy/Docker/Dockerfile";
+ * import * as Dockerfile from "@alchemy.run/docker/Dockerfile";
  *
  * export class Transcoder extends Cloudflare.Container<Transcoder>()(
  *   "Transcoder",

@@ -1,6 +1,9 @@
 import { retryContainerPublication } from "@alchemy.run/cloudflare/Containers/ContainerPublication";
+import {
+  DockerRegistryBlobUnknown,
+  DockerRegistryUnavailable,
+} from "@alchemy.run/docker/RegistryError";
 import { describe, expect, it } from "alchemy-test";
-import { DockerRegistryBlobUnknown, DockerRegistryUnavailable } from "alchemy/Docker/RegistryError";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import { PlatformError, SystemError } from "effect/PlatformError";

@@ -1,11 +1,11 @@
-import * as ps from "@distilled.cloud/planetscale";
 import {
   makeMySQLMigrationExecutor,
   runMigrations,
   type NormalizedMigrationsInput,
   type StampedMigrationsState,
-} from "alchemy/SQL/Migrations/index";
-import { readSqlFile, splitSqlStatements } from "alchemy/SQL/SqlFile";
+} from "@alchemy.run/sql/Migrations";
+import { readSqlFile, splitSqlStatements } from "@alchemy.run/sql/SqlFile";
+import * as ps from "@distilled.cloud/planetscale";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";

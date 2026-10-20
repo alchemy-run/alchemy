@@ -9,7 +9,7 @@ import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-import { type ObservedConnection, secretValue } from "./Internal/Observed.ts";
+import { type ObservedConnection, secretValue } from "./internal/Observed.ts";
 import { PrismaEnvironment } from "./PrismaEnvironment.ts";
 import type {
   App,

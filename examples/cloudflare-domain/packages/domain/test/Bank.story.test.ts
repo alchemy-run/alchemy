@@ -1,5 +1,5 @@
+import { Story } from "@alchemy.run/domain/Story";
 import { describe, expect, it } from "@effect/vitest";
-import { Story } from "alchemy/Domain/Story";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { Account } from "../src/Account/Account.aggregate.ts";

@@ -1,4 +1,5 @@
 import { randomBytes, createHash } from "node:crypto";
+import * as Docker from "@alchemy.run/docker";
 import * as Fly from "@alchemy.run/fly";
 import { AppDeletionAmbiguous } from "@alchemy.run/fly/App";
 import { readinessRoles, DeploymentRecoveryAmbiguous } from "@alchemy.run/fly/bluegreen";
@@ -32,7 +33,6 @@ import * as Retry from "@distilled.cloud/fly-io/Retry";
 import * as Alchemy from "alchemy";
 import { expect, assert, it, describe } from "alchemy-test";
 import { DestroyError } from "alchemy/Apply";
-import * as Docker from "alchemy/Docker";
 import { localState, makeLocalState } from "alchemy/State/LocalState";
 import * as Test from "alchemy/Test/Alchemy";
 import type { ScratchStack } from "alchemy/Test/Alchemy";

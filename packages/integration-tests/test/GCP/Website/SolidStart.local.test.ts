@@ -1,5 +1,5 @@
+import * as GCP from "@alchemy.run/gcp";
 import { describe, expect } from "alchemy-test";
-import * as GCP from "alchemy/GCP";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as pathe from "pathe";
@@ -17,10 +17,7 @@ const { test } = Test.make({ providers: GCP.providers(), dev: true });
  */
 const runDevSsr = process.env.ALCHEMY_TEST_SOLIDSTART_DEV_SSR === "1";
 
-const fixtureDir = pathe.resolve(
-  import.meta.dirname,
-  "../../../../alchemy/test/AWS/Website/fixtures/solidstart-app",
-);
+const fixtureDir = pathe.resolve(import.meta.dirname, "../../AWS/Website/fixtures/solidstart-app");
 const tempRoot = pathe.resolve(import.meta.dirname, "../../../.tmp");
 const fixtureEntries = [".gitignore", "package.json", "vite.config.ts", "src", "public"];
 

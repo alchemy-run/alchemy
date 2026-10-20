@@ -1,8 +1,8 @@
+import { Docker } from "@alchemy.run/docker/Docker";
+import { isInlineDockerfile } from "@alchemy.run/docker/Dockerfile";
 import { AlchemyContext } from "alchemy/AlchemyContext";
 import * as Bundle from "alchemy/Bundle/Bundle";
 import { findCwdForBundle, getStableContextDir, resolveMainPath } from "alchemy/Bundle/TempRoot";
-import { Docker } from "alchemy/Docker/Docker";
-import { isInlineDockerfile } from "alchemy/Docker/Dockerfile";
 import * as Output from "alchemy/Output";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import { Stack } from "alchemy/Stack";

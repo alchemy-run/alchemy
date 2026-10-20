@@ -1,5 +1,5 @@
+import * as AWS from "@alchemy.run/aws";
 import * as Cloudflare from "@alchemy.run/cloudflare";
-import * as AWS from "alchemy/AWS";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
