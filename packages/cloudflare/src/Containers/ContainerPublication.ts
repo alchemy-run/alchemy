@@ -1,4 +1,4 @@
-import type { DockerImagePublicationError } from "alchemy/Docker/RegistryError";
+import type { DockerImagePublicationError } from "@alchemy.run/docker/RegistryError";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 

@@ -1,15 +1,15 @@
+import * as AWS from "@alchemy.run/aws";
+import { Cluster, ClusterPolicy } from "@alchemy.run/aws/DSQL";
+// Internal to alchemy, so not exported.
+import { withDsqlClient } from "@alchemy.run/aws/DSQL/Migrations";
 import * as Drizzle from "@alchemy.run/drizzle";
 import * as dsql from "@distilled.cloud/aws/dsql";
 import { expect } from "alchemy-test";
-import * as AWS from "alchemy/AWS";
-import { Cluster, ClusterPolicy } from "alchemy/AWS/DSQL";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
-// Internal to alchemy, so not exported.
-import { withDsqlClient } from "../../../../alchemy/src/AWS/DSQL/Migrations.ts";
 
 const { test } = Test.make({
   providers: Layer.mergeAll(AWS.providers(), Drizzle.providers()),

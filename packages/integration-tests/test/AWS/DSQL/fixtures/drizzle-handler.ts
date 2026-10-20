@@ -1,6 +1,6 @@
+import * as DSQL from "@alchemy.run/aws/DSQL";
+import * as Lambda from "@alchemy.run/aws/Lambda";
 import * as Drizzle from "@alchemy.run/drizzle/Postgres";
-import * as DSQL from "alchemy/AWS/DSQL";
-import * as Lambda from "alchemy/AWS/Lambda";
 import { eq, sql } from "drizzle-orm";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";

@@ -60,11 +60,6 @@ const config = {
       sourceDisplayPrefix: "packages/drizzle/src",
     },
     {
-      srcRoot: path.join(import.meta.dir, "../packages/sqlite/src"),
-      providerPrefix: "SQLite",
-      sourceDisplayPrefix: "packages/sqlite/src",
-    },
-    {
       srcRoot: path.join(import.meta.dir, "../packages/acme/src"),
       providerPrefix: "ACME",
       sourceDisplayPrefix: "packages/acme/src",
@@ -133,6 +128,36 @@ const config = {
       srcRoot: path.join(import.meta.dir, "../packages/cloudflare/src"),
       providerPrefix: "Cloudflare",
       sourceDisplayPrefix: "packages/cloudflare/src",
+    },
+    {
+      srcRoot: path.join(import.meta.dir, "../packages/gcp/src"),
+      providerPrefix: "GCP",
+      sourceDisplayPrefix: "packages/gcp/src",
+    },
+    {
+      srcRoot: path.join(import.meta.dir, "../packages/aws/src"),
+      providerPrefix: "AWS",
+      sourceDisplayPrefix: "packages/aws/src",
+    },
+    {
+      srcRoot: path.join(import.meta.dir, "../packages/domain/src"),
+      providerPrefix: "Domain",
+      sourceDisplayPrefix: "packages/domain/src",
+    },
+    {
+      srcRoot: path.join(import.meta.dir, "../packages/kubernetes/src"),
+      providerPrefix: "Kubernetes",
+      sourceDisplayPrefix: "packages/kubernetes/src",
+    },
+    {
+      srcRoot: path.join(import.meta.dir, "../packages/docker/src"),
+      providerPrefix: "Docker",
+      sourceDisplayPrefix: "packages/docker/src",
+    },
+    {
+      srcRoot: path.join(import.meta.dir, "../packages/sql/src"),
+      providerPrefix: "SQL",
+      sourceDisplayPrefix: "packages/sql/src",
     },
   ] satisfies SourceRoot[],
 };
@@ -255,6 +280,8 @@ interface ParsedJSDoc {
   peers: string[];
   category: string;
   product: string;
+  /** `@title <Heading>` — overrides the section heading (the export name). */
+  title: string;
 }
 
 /** Where a declaration's JSDoc lives, for copy markers. */
@@ -297,6 +324,7 @@ function parseJSDoc(node: Node, markers?: MarkerContext): ParsedJSDoc {
       peers: [],
       category: "",
       product: "",
+      title: "",
     };
   }
 
@@ -312,6 +340,7 @@ function parseJSDoc(node: Node, markers?: MarkerContext): ParsedJSDoc {
   let hasPrimitiveTag = false;
   let category = "";
   let product = "";
+  let title = "";
   let sawTag = false;
   let currentSection: ExampleSection | undefined;
   let currentExample: ExampleBlock | undefined;
@@ -406,6 +435,9 @@ function parseJSDoc(node: Node, markers?: MarkerContext): ParsedJSDoc {
         case "label":
           if (value) product = value;
           break;
+        case "title":
+          if (value) title = value;
+          break;
         case "section":
           flushExample();
           flushSectionDesc();
@@ -448,6 +480,7 @@ function parseJSDoc(node: Node, markers?: MarkerContext): ParsedJSDoc {
     peers,
     category,
     product,
+    title,
   };
 }
 
@@ -574,17 +607,18 @@ export function findTaggedPrimary(
       continue;
     }
     // A primitive is its module's `make`; the page is named after the module.
-    const name = doc.hasPrimitiveTag
+    const exportName = doc.hasPrimitiveTag
       ? path.basename(sourceFile.fileName).replace(/\.tsx?$/, "")
       : declName(node);
-    if (!name) continue;
+    if (!exportName) continue;
+    const name = doc.title || exportName;
     const category = doc.category;
     const product = doc.product;
     if (hasContent(doc)) return { name, doc, category, product };
 
     // Tagged declaration has no prose — look for the related declaration that
     // carries the docs (same name, or re-exported under this name).
-    const localName = localNameForExport(sourceFile, name);
+    const localName = localNameForExport(sourceFile, exportName);
     const related: Node[] = [
       ...sourceFile.statements.filter(ts.isVariableStatement),
       ...sourceFile.statements.filter(ts.isClassDeclaration),
@@ -593,7 +627,7 @@ export function findTaggedPrimary(
     ].filter((d) => {
       if (d === node) return false;
       const dn = declName(d);
-      return dn === name || (localName !== undefined && dn === localName);
+      return dn === exportName || (localName !== undefined && dn === localName);
     });
 
     let best: ParsedJSDoc | undefined;

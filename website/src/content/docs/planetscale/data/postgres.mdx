@@ -165,7 +165,7 @@ an Interface VPC endpoint. With private DNS enabled, use
 `privateHost` for workloads in that VPC:
 
 ```typescript
-import * as AWS from "alchemy/AWS";
+import * as AWS from "@alchemy.run/aws";
 
 const endpoint = yield* AWS.EC2.VpcEndpoint("postgres-private-link", {
   vpcId: vpc.vpcId,

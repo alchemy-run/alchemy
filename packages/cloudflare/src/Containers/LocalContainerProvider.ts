@@ -1,7 +1,7 @@
+import { isInlineDockerfile } from "@alchemy.run/docker/Dockerfile";
 import * as Artifacts from "alchemy/Artifacts";
 import { hashDirectory } from "alchemy/Command/Memo";
 import { isResolved } from "alchemy/Diff";
-import { isInlineDockerfile } from "alchemy/Docker/Dockerfile";
 import * as RpcProvider from "alchemy/Local/RpcProvider";
 import type { ResourceBinding } from "alchemy/Resource";
 import { sha256Object } from "alchemy/Util/sha256";

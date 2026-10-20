@@ -1,5 +1,5 @@
-import type { Function as LambdaFunction } from "alchemy/AWS/Lambda/Function";
-import { InvokeFunction } from "alchemy/AWS/Lambda/InvokeFunction";
+import type { Function as LambdaFunction } from "@alchemy.run/aws/Lambda/Function";
+import { InvokeFunction } from "@alchemy.run/aws/Lambda/InvokeFunction";
 /**
  * `Hasher` over an AWS Lambda (DESIGN §22.11). Each chunk is one
  * `InvokeFunction` call — a JSON payload with the chunk in base64 — signed

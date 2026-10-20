@@ -11,7 +11,7 @@ A request context is a service that travels with the request into the domain. It
 
 ```typescript
 // packages/domain/src/CurrentActor.context.ts
-import * as Domain from "alchemy/Domain";
+import * as Domain from "@alchemy.run/domain";
 import { Actor } from "./Actor.ts";
 
 /**
@@ -95,7 +95,7 @@ List the middleware on each command and view that needs it. Middleware runs in o
 
 ```typescript
 // packages/domain/src/Account/SetNickname.command.ts
-import * as Domain from "alchemy/Domain";
+import * as Domain from "@alchemy.run/domain";
 import * as Schema from "effect/Schema";
 import { Session } from "../Session.middleware.ts";
 import { AccountId } from "./Account.id.ts";

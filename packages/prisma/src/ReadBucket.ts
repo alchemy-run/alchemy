@@ -23,7 +23,7 @@ import {
   rangeHeader,
   toBucketError,
   type BucketAccess,
-} from "./Internal/BucketClient.ts";
+} from "./internal/BucketClient.ts";
 
 export interface ReadBucket extends Binding.Service<
   ReadBucket,

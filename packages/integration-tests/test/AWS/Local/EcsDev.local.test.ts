@@ -1,5 +1,4 @@
 import { spawnSync } from "node:child_process";
-import { describe, expect } from "alchemy-test";
 /**
  * Mode-scoped local dev for ECS: `Test.make({ dev: true })` routes the
  * dualized `ECS.Cluster` / `ECS.Task` (and `ECS.TaskDefinition` /
@@ -25,7 +24,8 @@ import { describe, expect } from "alchemy-test";
  *
  * Requires Docker (floci runs as a container); skipped when unavailable.
  */
-import * as AWS from "alchemy/AWS";
+import * as AWS from "@alchemy.run/aws";
+import { describe, expect } from "alchemy-test";
 import * as Command from "alchemy/Command";
 import * as Output from "alchemy/Output";
 import { Stack } from "alchemy/Stack";

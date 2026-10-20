@@ -22,7 +22,7 @@ import type { Database } from "./Database.ts";
 import {
   deriveConnectionAttrs,
   hasCanonicalConnectionSecrets,
-} from "./Internal/DatabaseSecrets.ts";
+} from "./internal/DatabaseSecrets.ts";
 import {
   DEV_TIMESTAMP,
   attrOrNullableString,
@@ -30,19 +30,19 @@ import {
   attrOrString,
   devId,
   devProvider,
-} from "./Internal/DevStub.ts";
-import { physicalInstanceName } from "./Internal/EnvName.ts";
-import type { ObservedConnectionRecord } from "./Internal/Observed.ts";
-import { PrismaPaginationError } from "./Internal/Pagination.ts";
-import type { PostgresOrigin } from "./PostgresOrigin.ts";
-import type { Providers } from "./Providers.ts";
+} from "./internal/DevStub.ts";
+import { physicalInstanceName } from "./internal/EnvName.ts";
+import type { ObservedConnectionRecord } from "./internal/Observed.ts";
+import { PrismaPaginationError } from "./internal/Pagination.ts";
 import {
   concreteIdsChanged,
   isInputObject,
   isPrismaDevId,
   resolveDatabaseId,
   unresolvedDatabaseIdOf,
-} from "./Refs.ts";
+} from "./internal/Refs.ts";
+import type { PostgresOrigin } from "./PostgresOrigin.ts";
+import type { Providers } from "./Providers.ts";
 import type { PrismaSecretConnection } from "./Types.ts";
 
 export interface ConnectionProps {

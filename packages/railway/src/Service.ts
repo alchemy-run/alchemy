@@ -2,7 +2,7 @@ import type { Builder, RestartPolicyType } from "@distilled.cloud/railway";
 import type { HttpEffect } from "alchemy/Http";
 import { Platform, type Main, type MainRpc, type PlatformProps } from "alchemy/Platform";
 import type { Resource } from "alchemy/Resource";
-import type { ServerHost } from "alchemy/Server/Process";
+import type { ServerHost } from "alchemy/Runtime/Process";
 import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
 import {

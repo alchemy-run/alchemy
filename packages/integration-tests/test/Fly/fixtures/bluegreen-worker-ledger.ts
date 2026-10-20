@@ -1,6 +1,6 @@
 import * as Fly from "@alchemy.run/fly";
+import * as Redis from "@alchemy.run/redis";
 import type { Input } from "alchemy/Input";
-import * as Redis from "alchemy/Redis";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";

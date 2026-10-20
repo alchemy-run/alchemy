@@ -7,7 +7,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
-import { closeDirectoryHandle } from "../../../prisma/src/Internal/ArchivePlatform.ts";
+import { closeDirectoryHandle } from "../../../prisma/src/internal/ArchivePlatform.ts";
 
 interface TarEntry {
   name: string;

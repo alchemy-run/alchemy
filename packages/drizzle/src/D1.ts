@@ -1,6 +1,6 @@
+import type { D1DatabaseSource } from "@alchemy.run/cloudflare/D1/SQL";
 import * as D1Client from "@effect/sql-d1/D1Client";
 import { makeExecutionMemo } from "alchemy/Runtime/ExecutionMemo";
-import type { D1DatabaseSource } from "alchemy/SQL/D1";
 import { proxyChain } from "alchemy/Util/proxy-chain";
 import type { AnyRelations, EmptyRelations } from "drizzle-orm";
 import type { EffectSQLiteD1Database } from "drizzle-orm/effect-d1";

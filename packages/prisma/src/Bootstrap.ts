@@ -1,7 +1,7 @@
 /**
  * Process bootstrap for `Prisma.Compute` apps. The generated entry imports
  * this module and the user's `main`, nothing else — see
- * `alchemy/Runtime/Bootstrap/Process` for why.
+ * `alchemy/Runtime/Bootstrap` for why.
  */
 import { BunServices } from "@effect/platform-bun";
 import { BunHttpServer } from "alchemy/Http";
@@ -10,7 +10,7 @@ import {
   resolveProgram,
   runProcess,
   stackConstant,
-} from "alchemy/Runtime/Bootstrap/Process";
+} from "alchemy/Runtime/Bootstrap";
 import { Stage } from "alchemy/Stage";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";

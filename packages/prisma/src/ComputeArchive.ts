@@ -9,13 +9,13 @@ import {
   readDirectoryEntriesSecure,
   writeCompressedArchiveSecure,
   type ArchiveTarEntry,
-} from "./Internal/ArchivePlatform.ts";
+} from "./internal/ArchivePlatform.ts";
 import {
   inspectArtifactFile,
   inspectVerifiedFile,
   readArtifactFile,
   type ArtifactFile,
-} from "./Internal/ArtifactFile.ts";
+} from "./internal/ArtifactFile.ts";
 
 export const COMPUTE_MANIFEST_VERSION = "1";
 

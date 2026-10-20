@@ -26,29 +26,29 @@ import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import type { Scope } from "effect/Scope";
 import { extractConnectionSecrets } from "./Client.ts";
-import { desiredBranchId } from "./Internal/Branches.ts";
+import { desiredBranchId } from "./internal/Branches.ts";
 import {
   hasCanonicalConnectionSecrets,
   mergeConnectionSecrets,
   recoverDatabaseConnectionSecrets,
-} from "./Internal/DatabaseSecrets.ts";
-import { DEV_TIMESTAMP, attrOrString, devId } from "./Internal/DevStub.ts";
+} from "./internal/DatabaseSecrets.ts";
+import { DEV_TIMESTAMP, attrOrString, devId } from "./internal/DevStub.ts";
 import {
   type ObservedProjectDatabase,
   type ObservedSource,
   narrowDatabaseSource,
-} from "./Internal/Observed.ts";
-import { PrismaPaginationError } from "./Internal/Pagination.ts";
-import { closePrismaDevDatabase, ensurePrismaDevDatabase } from "./PrismaDevDatabase.ts";
-import type { Project } from "./Project.ts";
-import type { Providers } from "./Providers.ts";
+} from "./internal/Observed.ts";
+import { PrismaPaginationError } from "./internal/Pagination.ts";
+import { closePrismaDevDatabase, ensurePrismaDevDatabase } from "./internal/PrismaDevDatabase.ts";
 import {
   concreteIdsChanged,
   isInputObject,
   isPrismaDevId,
   resolveProjectId,
   unresolvedProjectIdOf,
-} from "./Refs.ts";
+} from "./internal/Refs.ts";
+import type { Project } from "./Project.ts";
+import type { Providers } from "./Providers.ts";
 import type {
   DatabaseSourceInput,
   PrismaDatabaseRegionId,

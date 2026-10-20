@@ -39,7 +39,7 @@ import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import * as Result from "effect/Result";
 import * as TestClock from "effect/testing/TestClock";
-import { recoverDatabaseConnectionSecrets } from "../../../prisma/src/Internal/DatabaseSecrets.ts";
+import { recoverDatabaseConnectionSecrets } from "../../../prisma/src/internal/DatabaseSecrets.ts";
 import { resourceContext } from "../Util/ResourceContext.ts";
 import {
   conflict,

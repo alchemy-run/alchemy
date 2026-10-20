@@ -1,9 +1,9 @@
+import type { MySQLConfig } from "@alchemy.run/sql/MySQL";
 // `@effect/sql-mysql2` (and mysql2 underneath) are optional peers — value
 // imports are deferred to first use so `@alchemy.run/drizzle` resolves without
 // them installed.
 import type * as MysqlClient from "@effect/sql-mysql2/MysqlClient";
 import { makeExecutionMemo } from "alchemy/Runtime/ExecutionMemo";
-import type { MySQLConfig } from "alchemy/SQL/MySQL";
 import { proxyChain } from "alchemy/Util/proxy-chain";
 import type { AnyRelations, EmptyRelations } from "drizzle-orm";
 import type { EffectMysql2Database } from "drizzle-orm/effect-mysql2";
@@ -57,7 +57,7 @@ export const MySQL = <TRelations extends AnyRelations = EmptyRelations, E = neve
           Promise.all([
             import("@effect/sql-mysql2/MysqlClient"),
             import("drizzle-orm/effect-mysql2"),
-            import("alchemy/SQL/MySQL"),
+            import("@alchemy.run/sql/MySQL"),
           ]),
         );
         const { client, ...drizzleConfig } = config ?? {};

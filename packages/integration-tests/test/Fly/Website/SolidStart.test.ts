@@ -13,10 +13,7 @@ const { test } = Test.make({ providers: Fly.providers() });
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const fixtureDir = pathe.resolve(
-  import.meta.dirname,
-  "../../../../alchemy/test/AWS/Website/fixtures/solidstart-app",
-);
+const fixtureDir = pathe.resolve(import.meta.dirname, "../../AWS/Website/fixtures/solidstart-app");
 const tempRoot = pathe.resolve(import.meta.dirname, "../../../.tmp");
 const fixtureEntries = [".gitignore", "package.json", "vite.config.ts", "src", "public"];
 

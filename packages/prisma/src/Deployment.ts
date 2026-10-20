@@ -19,29 +19,29 @@ import {
   PrismaDeploymentWaitTimeout,
   waitForDeploymentStatus,
 } from "./ComputeLifecycle.ts";
-import { promoteAppObserved } from "./Internal/AppPromotion.ts";
+import { promoteAppObserved } from "./internal/AppPromotion.ts";
 import {
   inspectArtifactFile,
   readArtifactFile,
   type ArtifactFile,
-} from "./Internal/ArtifactFile.ts";
-import { executeArtifactUpload } from "./Internal/ArtifactUpload.ts";
-import { aggregateCleanupFailure } from "./Internal/CleanupFailure.ts";
-import { startDeploymentIdempotent } from "./Internal/DeploymentActions.ts";
-import { ensureDeploymentMembership } from "./Internal/DeploymentIdentity.ts";
-import { observeDeployment } from "./Internal/DeploymentObserve.ts";
-import { DEV_TIMESTAMP, attrOrString, devId, devProvider } from "./Internal/DevStub.ts";
-import type { ObservedDeployment } from "./Internal/Observed.ts";
-import { PrismaPaginationError } from "./Internal/Pagination.ts";
-import { tailDeploymentLogs } from "./PrismaLogs.ts";
-import type { Providers } from "./Providers.ts";
+} from "./internal/ArtifactFile.ts";
+import { executeArtifactUpload } from "./internal/ArtifactUpload.ts";
+import { aggregateCleanupFailure } from "./internal/CleanupFailure.ts";
+import { startDeploymentIdempotent } from "./internal/DeploymentActions.ts";
+import { ensureDeploymentMembership } from "./internal/DeploymentIdentity.ts";
+import { observeDeployment } from "./internal/DeploymentObserve.ts";
+import { DEV_TIMESTAMP, attrOrString, devId, devProvider } from "./internal/DevStub.ts";
+import type { ObservedDeployment } from "./internal/Observed.ts";
+import { PrismaPaginationError } from "./internal/Pagination.ts";
 import {
   concreteIdsChanged,
   isInputObject,
   isPrismaDevId,
   resolveAppId,
   unresolvedAppIdOf,
-} from "./Refs.ts";
+} from "./internal/Refs.ts";
+import { tailDeploymentLogs } from "./PrismaLogs.ts";
+import type { Providers } from "./Providers.ts";
 
 export const MAX_DEPLOYMENT_ARTIFACT_BYTES = 768 * 1024 * 1024;
 

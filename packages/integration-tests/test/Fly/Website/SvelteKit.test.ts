@@ -68,10 +68,7 @@ for (const policy of [
         const fs = yield* FileSystem.FileSystem;
         const path = yield* Path.Path;
         const rootDir = yield* cloneFixture(
-          path.resolve(
-            import.meta.dirname,
-            "../../../../alchemy/test/AWS/Website/fixtures/sveltekit-app",
-          ),
+          path.resolve(import.meta.dirname, "../../AWS/Website/fixtures/sveltekit-app"),
           {
             prefix: "alchemy-sveltekit-fly-",
             tempRoot: path.resolve(import.meta.dirname, "../../../.tmp"),

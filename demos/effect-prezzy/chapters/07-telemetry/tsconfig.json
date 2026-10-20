@@ -9,6 +9,7 @@
   },
   "references": [
     { "path": "../../../../packages/alchemy/tsconfig.json" },
+    { "path": "../../../../packages/sql/tsconfig.json" },
     { "path": "../../../../packages/neon/tsconfig.json" }
   ]
 }

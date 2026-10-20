@@ -1,5 +1,5 @@
+import * as GCP from "@alchemy.run/gcp";
 import { describe, expect } from "alchemy-test";
-import * as GCP from "alchemy/GCP";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -10,10 +10,7 @@ import { expectUrlContains } from "../../Cloudflare/Utils/Http.ts";
 
 const { test } = Test.make({ providers: GCP.providers(), dev: true });
 
-const fixtureDir = pathe.resolve(
-  import.meta.dirname,
-  "../../../../alchemy/test/AWS/Website/fixtures/octane-app",
-);
+const fixtureDir = pathe.resolve(import.meta.dirname, "../../AWS/Website/fixtures/octane-app");
 const tempRoot = pathe.resolve(import.meta.dirname, "../../../.tmp");
 const fixtureEntries = [
   ".gitignore",

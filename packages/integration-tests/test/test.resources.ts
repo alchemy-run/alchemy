@@ -8,12 +8,12 @@ import { Platform, type Main, type PlatformProps } from "alchemy/Platform";
 import * as Provider from "alchemy/Provider";
 import { LOCAL_ID_PREFIX, type ProviderMode } from "alchemy/ProviderMode";
 import { Resource, type ResourceBinding } from "alchemy/Resource";
-import { unpackEnvValue } from "alchemy/RuntimeContext";
 import {
   createHostRuntimeContext,
   type HostRuntimeContext,
   type ServerHost,
-} from "alchemy/Server/Process";
+} from "alchemy/Runtime/Process";
+import { unpackEnvValue } from "alchemy/RuntimeContext";
 import { Stack } from "alchemy/Stack";
 import * as State from "alchemy/State";
 import { isUnknown } from "alchemy/Util/unknown";

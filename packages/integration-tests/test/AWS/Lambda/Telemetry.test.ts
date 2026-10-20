@@ -1,6 +1,6 @@
+import * as AWS from "@alchemy.run/aws";
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { describe, expect } from "alchemy-test";
-import * as AWS from "alchemy/AWS";
 import * as Test from "alchemy/Test/Alchemy";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";

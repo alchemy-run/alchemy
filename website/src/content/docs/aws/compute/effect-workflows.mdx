@@ -48,7 +48,7 @@ implements them:
 
 ```typescript
 // src/OrderWorkflows.ts
-import * as AWS from "alchemy/AWS";
+import * as AWS from "@alchemy.run/aws";
 import { PlaceOrder, PlaceOrderLive } from "./orders.ts";
 
 export class OrderWorkflows extends AWS.Lambda.WorkflowFunction<OrderWorkflows>()(
@@ -71,7 +71,7 @@ One function can run many workflows. List them all, and merge their Layers:
 
 ```typescript
 // src/OrderWorkflows.ts
-import * as AWS from "alchemy/AWS";
+import * as AWS from "@alchemy.run/aws";
 import * as Layer from "effect/Layer";
 import { PlaceOrder, PlaceOrderLive, RefundOrder, RefundOrderLive } from "./orders.ts";
 
@@ -98,7 +98,7 @@ them. Provide it to the calling function, and get a client with
 
 ```typescript
 // src/Api.ts
-import * as AWS from "alchemy/AWS";
+import * as AWS from "@alchemy.run/aws";
 import * as Workflows from "alchemy/Workflows";
 import * as Effect from "effect/Effect";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
