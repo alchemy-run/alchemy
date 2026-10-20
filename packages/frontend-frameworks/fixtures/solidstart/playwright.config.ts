@@ -4,6 +4,12 @@ export default defineConfig({
   tsconfig: "../tsconfig.playwright.json",
   testDir: "./test",
   timeout: 60_000,
+  build: {
+    // distilled is a prebuilt dependency linked from submodules/, outside
+    // node_modules: keep playwright's require hook (which rewrites specifiers
+    // to raw paths, breaking require(esm) on Windows) away from it.
+    external: ["**/submodules/distilled/**"],
+  },
   // The dev-mode smoke test is flaky on CI (it also fails intermittently on
   // main, e.g. runs 30733973174/30733916976): this fixture pins vite 7 (for
   // @solidjs/start) while the workspace catalog resolves the cloudflare
