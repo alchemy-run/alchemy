@@ -1,0 +1,39 @@
+[workspace]
+resolver = "3"
+members = ["crates/volume", "crates/blockd"]
+
+[workspace.package]
+edition = "2024"
+license = "Apache-2.0"
+repository = "https://github.com/alchemy-run/alchemy"
+publish = false
+
+[workspace.dependencies]
+volume = { path = "crates/volume" }
+blake3 = "1"
+bytes = "1"
+thiserror = "2"
+zstd = "0.13"
+tokio = { version = "1", features = [
+  "rt-multi-thread",
+  "macros",
+  "sync",
+  "time",
+  "net",
+  "io-util",
+  "signal",
+  "fs",
+] }
+object_store = { version = "0.12", features = ["aws"] }
+async-trait = "0.1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tempfile = "3"
+libc = "0.2"
+anyhow = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+[profile.release]
+lto = "thin"
+codegen-units = 1

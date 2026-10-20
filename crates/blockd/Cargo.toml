@@ -1,0 +1,27 @@
+[package]
+name = "blockd"
+version = "0.1.0"
+description = "Serves a volume as a block device: lazy reads, a write-back cache, and flushes to the store."
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[features]
+default = ["object"]
+# Volumes in S3, R2 or GCS.
+object = ["volume/object", "dep:object_store"]
+
+[dependencies]
+volume.workspace = true
+anyhow.workspace = true
+libc.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+object_store = { workspace = true, optional = true }
+
+[dev-dependencies]
+tempfile.workspace = true

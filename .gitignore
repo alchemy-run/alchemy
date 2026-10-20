@@ -102,3 +102,6 @@ examples/cloudflare-worker/src/scratch.ts
 
 # reference checkouts of external repos (e.g. t3code)
 .vendor/
+
+# Rust
+/target
