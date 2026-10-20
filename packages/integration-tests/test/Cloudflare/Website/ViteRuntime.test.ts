@@ -61,6 +61,10 @@ const moduleResolutionFixtureDir = pathe.resolve(
 );
 const mainResolutionFixtureDir = pathe.resolve(import.meta.dirname, "vite-main-resolution-fixture");
 const workerFixtureDir = pathe.resolve(import.meta.dirname, "vite-worker-♫-fixture");
+const childEnvironmentFixtureDir = pathe.resolve(
+  import.meta.dirname,
+  "vite-child-environment-fixture",
+);
 const hotChannelFixtureDir = pathe.resolve(import.meta.dirname, "vite-hot-channel-fixture");
 
 type Mode = "live" | "dev";
@@ -1057,6 +1061,44 @@ describe.concurrent(
           yield* expectText(`${url}/custom-mount/x-forwarded-host`, new URL(url).host);
         }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.ignore)), logLevel),
       { tags: ["provider:cloudflare:worker", "local"], timeout: 300_000 },
+    );
+
+    // `child-environment`: the Worker imports a module (with an additional
+    // module and an environment-aware virtual module) from a child Vite
+    // environment (dev only: the released plugin's build doesn't nest the
+    // child output either; React Router RSC in Vite.test.ts covers builds).
+    devTest.provider(
+      `Vite runtime: a Worker imports its child environment (dev)`,
+      (stack) =>
+        Effect.gen(function* () {
+          yield* stack.destroy();
+          const rootDir = yield* cloneFixture(childEnvironmentFixtureDir, {
+            prefix: "alchemy-vite-child-environment-",
+            tempRoot,
+            entries: ["package.json", "vite.config.ts", "src"],
+          });
+          const site = yield* stack.deploy(
+            Cloudflare.Website.Vite("ViteChildEnvironment", {
+              rootDir,
+              main: "./src/index.ts",
+              workersDev: true,
+              compatibility: { date: "2024-12-30" },
+              memo: { include: ["**/*"] },
+              viteEnvironments: { entry: "parent", children: ["child"] },
+              dev: { port: 0 },
+            }),
+          );
+          const url = site.url!.replace(/\/$/, "");
+          yield* expectText(url, "Hello from the child environment");
+          yield* expectText(
+            `${url}/additional-module`,
+            "Hello from a child environment additional module\n",
+          );
+        }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.ignore)), logLevel),
+      {
+        tags: ["provider:cloudflare:worker", "local"],
+        timeout: 300_000,
+      },
     );
 
     // Miniflare's outbound `cf.image` mock (dev only: deployed, `cf.image`
