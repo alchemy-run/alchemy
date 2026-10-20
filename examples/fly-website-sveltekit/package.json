@@ -18,6 +18,7 @@
     "test": "bun test"
   },
   "dependencies": {
+    "@alchemy.run/fly": "workspace:*",
     "alchemy": "workspace:*",
     "effect": "catalog:"
   },

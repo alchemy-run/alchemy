@@ -1,5 +1,5 @@
-import * as Drizzle from "alchemy/Drizzle/Postgres";
-import * as GCP from "alchemy/GCP";
+import * as Drizzle from "@alchemy.run/drizzle/Postgres";
+import * as GCP from "@alchemy.run/gcp";
 import { eq } from "drizzle-orm";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
