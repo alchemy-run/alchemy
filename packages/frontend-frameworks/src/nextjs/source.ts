@@ -5,7 +5,7 @@ import { createRequire } from "node:module";
  * (`@alchemy.run/frontend-frameworks/nextjs/source`).
  *
  * The default export implements alchemy's `WorkerSourceModule` contract
- * (`packages/alchemy/src/Cloudflare/Workers/Source.ts`) **structurally** —
+ * (`packages/cloudflare/src/Workers/Source.ts`) **structurally** —
  * this package deliberately does not import alchemy types. The shapes
  * mirrored here are:
  *

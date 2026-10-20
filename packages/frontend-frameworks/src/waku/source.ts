@@ -27,7 +27,7 @@ import { layer as wakuFrameworkLayer } from "./Waku.ts";
 // Structural mirror of alchemy's Worker source-provider contract.
 //
 // This module is loaded dynamically by alchemy's `loadSource` (see
-// `packages/alchemy/src/Cloudflare/Workers/Source.ts` — `WorkerSourceModule`,
+// `packages/cloudflare/src/Workers/Source.ts` — `WorkerSourceModule`,
 // `SourceProvider`, `SourceContext`, `DevContext`, `SourceBuildOutput`). The
 // contract is deliberately implemented STRUCTURALLY — no alchemy import — so
 // version skew degrades to a load-time `SourceProviderError` instead of a
