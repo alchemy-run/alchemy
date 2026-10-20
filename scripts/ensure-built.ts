@@ -12,6 +12,10 @@
 // that stamp is missing or older than any tracked or untracked-but-not-ignored
 // file of the package or its workspace dependencies, test files excepted.
 //
+// It also re-bundles distilled packages whose `lib/` the root `tsc -b`
+// emitted but distilled's `bundle-lib` has not yet bundled (see
+// `staleDistilledBundles`).
+//
 // Usage: pnpm -w ensure:built [package...]
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
 import * as NodeServices from "@effect/platform-node/NodeServices";
@@ -112,6 +116,67 @@ const isStale = Effect.fn(function* (root: string, name: PackageName) {
   return Math.max(...newest) > stamp.value;
 });
 
+/**
+ * distilled packages are emitted into their `lib/` by the root `tsc -b`, but
+ * bundlers (a Lambda or Worker build) resolve them through the
+ * `lib/services.full/` entry chunks that only distilled's own `bundle-lib`
+ * step writes. A package is stale when it has a `lib/` but no bundle, or when
+ * `tsc` re-emitted it (its `tsconfig.tsbuildinfo`) after the last bundle.
+ */
+const distilledBundleStamp = ".bundle-stamp";
+
+const staleDistilledBundles = Effect.fn(function* (root: string) {
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const packagesDir = path.join(root, "submodules", "distilled", "packages");
+  if (!(yield* fs.exists(packagesDir))) return [];
+  const mtime = (file: string) =>
+    fs.stat(file).pipe(
+      Effect.map((info) => Option.getOrElse(info.mtime, () => new Date(0)).getTime()),
+      Effect.option,
+    );
+  const names = yield* fs.readDirectory(packagesDir);
+  return yield* Effect.filter(
+    names.filter((name) => name !== "core"),
+    Effect.fn(function* (name) {
+      const dir = path.join(packagesDir, name);
+      if (!(yield* fs.exists(path.join(dir, "lib")))) return false;
+      if (!(yield* fs.exists(path.join(dir, "src", "services")))) return false;
+      const stamp = yield* mtime(path.join(dir, "lib", distilledBundleStamp));
+      if (Option.isNone(stamp)) return true;
+      const emitted = yield* mtime(path.join(dir, "tsconfig.tsbuildinfo"));
+      return Option.isSome(emitted) && emitted.value > stamp.value;
+    }),
+    { concurrency: "unbounded" },
+  );
+});
+
+const bundleDistilled = Effect.fn(function* (root: string) {
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const spawner = yield* ChildProcessSpawner;
+  const stale = yield* staleDistilledBundles(root);
+  if (stale.length === 0) return;
+  yield* Effect.logInfo(`Bundling distilled packages: ${stale.join(", ")}`);
+  const distilled = path.join(root, "submodules", "distilled");
+  const exitCode = yield* spawner.exitCode(
+    ChildProcess.make(
+      "node",
+      ["scripts/bundle-lib.ts", ...stale.map((name) => `packages/${name}`)],
+      { cwd: distilled, shell, stdin: "inherit", stdout: "inherit", stderr: "inherit" },
+    ),
+  );
+  if (exitCode !== 0) {
+    return yield* Effect.fail(new Error(`distilled bundle-lib failed with exit code ${exitCode}`));
+  }
+  yield* Effect.forEach(stale, (name) =>
+    fs.writeFileString(
+      path.join(distilled, "packages", name, "lib", distilledBundleStamp),
+      new Date().toISOString(),
+    ),
+  );
+});
+
 const command = Command.make(
   "ensure-built",
   {
@@ -128,7 +193,7 @@ const command = Command.make(
     const stale = yield* Effect.filter(candidates, (name) => isStale(root, name), {
       concurrency: "unbounded",
     });
-    if (stale.length === 0) return;
+    if (stale.length === 0) return yield* bundleDistilled(root);
 
     yield* Effect.logInfo(`Rebuilding stale packages: ${stale.join(", ")}`);
     const exitCode = yield* spawner.exitCode(
@@ -146,6 +211,7 @@ const command = Command.make(
     if (exitCode !== 0) {
       return yield* Effect.fail(new Error(`Build failed with exit code ${exitCode}`));
     }
+    yield* bundleDistilled(root);
   }),
 ).pipe(Command.withDescription("Rebuild packages whose build output is missing or stale"));
 
