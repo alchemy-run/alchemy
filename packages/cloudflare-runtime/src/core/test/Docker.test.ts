@@ -540,46 +540,27 @@ describe("allowsFusePrivileges", () => {
 });
 
 /**
- * `DockerLive` reading only `env` as config, on a spawner whose `docker info`
- * prints `info.stdout` and exits with `info.exitCode`.
+ * `DockerLive` reading only `env` as config, on the real spawner wrapped in a
+ * spy that records every `docker info` call.
  */
-const makeFuseLayer = (
-  env: Record<string, string>,
-  info: { stdout: string; exitCode?: number } = { stdout: "" },
-) => {
+const makeFuseLayer = (env: Record<string, string>) => {
   const spawned: Array<ReadonlyArray<string>> = [];
-  const spawner = Layer.succeed(
+  const spy = Layer.effect(
     ChildProcessSpawner.ChildProcessSpawner,
-    ChildProcessSpawner.make((command) => {
-      const args = command._tag === "StandardCommand" ? command.args : [];
-      if (command._tag === "StandardCommand") spawned.push([command.command, ...args]);
-      const isInfo = args.includes("info");
-      return Effect.succeed(
-        ChildProcessSpawner.makeHandle({
-          pid: ChildProcessSpawner.ProcessId(1),
-          exitCode: Effect.succeed(ChildProcessSpawner.ExitCode(isInfo ? (info.exitCode ?? 0) : 0)),
-          isRunning: Effect.succeed(false),
-          kill: () => Effect.void,
-          stdin: Sink.drain,
-          stdout:
-            isInfo && info.stdout
-              ? Stream.make(new TextEncoder().encode(info.stdout))
-              : Stream.empty,
-          stderr: Stream.empty,
-          all: Stream.empty,
-          getInputFd: () => Sink.drain,
-          getOutputFd: () => Stream.empty,
-          unref: Effect.succeed(Effect.void),
-        }),
-      );
+    Effect.gen(function* () {
+      const real = yield* ChildProcessSpawner.ChildProcessSpawner;
+      return ChildProcessSpawner.make((command) => {
+        if (command._tag === "StandardCommand") spawned.push([command.command, ...command.args]);
+        return real.spawn(command);
+      });
     }),
-  );
+  ).pipe(Layer.provide(NodeServices.layer));
   return {
     layer: Layer.provide(
       DockerLive,
       Layer.mergeAll(
         NodeServices.layer,
-        spawner,
+        spy,
         ConfigProvider.layer(ConfigProvider.fromEnv({ env })),
       ),
     ),
@@ -587,10 +568,27 @@ const makeFuseLayer = (
   };
 };
 
-describe("getContainerPrivileges", () => {
-  const LOCAL_HOST = "unix:///tmp/alchemy-fuse-test.sock";
-  const ROOTLESS = ["name=seccomp,profile=builtin", "name=rootless"];
+// What Miniflare's rule decides for the real Docker host at `dockerHost`.
+const detectedPrivileges = (dockerHost: string) => {
+  const securityOptions = JSON.parse(
+    execFileSync(
+      process.env.DOCKER_BIN ?? "docker",
+      ["--host", dockerHost, "info", "--format", "{{json .SecurityOptions}}"],
+      { encoding: "utf8" },
+    ),
+  ) as Array<string> | null;
+  return allowsFusePrivileges({
+    platform: process.platform,
+    release: NodeOs.release(),
+    dockerHost,
+    securityOptions: securityOptions ?? [],
+    devFuseExists: process.platform === "linux" && NodeFs.existsSync("/dev/fuse"),
+  })
+    ? FUSE_CONTAINER_PRIVILEGES
+    : undefined;
+};
 
+describe("getContainerPrivileges", () => {
   it.effect("CONTAINER_FUSE=1 grants FUSE privileges without inspecting the engine", () => {
     const fuse = makeFuseLayer({ CONTAINER_FUSE: "1", DOCKER_HOST: "tcp://127.0.0.1:2375" });
     return Effect.gen(function* () {
@@ -600,10 +598,7 @@ describe("getContainerPrivileges", () => {
   });
 
   it.effect("CONTAINER_FUSE=0 withholds them without inspecting the engine", () => {
-    const fuse = makeFuseLayer(
-      { CONTAINER_FUSE: "0", DOCKER_HOST: LOCAL_HOST },
-      { stdout: JSON.stringify(ROOTLESS) },
-    );
+    const fuse = makeFuseLayer({ CONTAINER_FUSE: "0" });
     return Effect.gen(function* () {
       expect(yield* (yield* Docker).getContainerPrivileges).toBeUndefined();
       expect(fuse.infoCalls()).toEqual([]);
@@ -622,66 +617,49 @@ describe("getContainerPrivileges", () => {
     ),
   );
 
-  it.effect.skipIf(process.platform === "win32")(
-    "inspects the real Docker host once, not the proxy workerd talks to",
-    () => {
-      const fuse = makeFuseLayer({ DOCKER_HOST: LOCAL_HOST }, { stdout: JSON.stringify(ROOTLESS) });
-      return Effect.gen(function* () {
-        const docker = yield* Docker;
-        const privileges = yield* docker.getContainerPrivileges;
-        expect(yield* docker.getContainerPrivileges).toBe(privileges);
-        expect(fuse.infoCalls()).toEqual([
-          ["docker", "--host", LOCAL_HOST, "info", "--format", "{{json .SecurityOptions}}"],
-        ]);
-        const allowed = allowsFusePrivileges({
-          platform: process.platform,
-          release: NodeOs.release(),
-          dockerHost: LOCAL_HOST,
-          securityOptions: ROOTLESS,
-          devFuseExists: NodeFs.existsSync("/dev/fuse"),
-        });
-        expect(privileges).toEqual(allowed ? FUSE_CONTAINER_PRIVILEGES : undefined);
-      }).pipe(Effect.provide(fuse.layer));
-    },
-  );
+  for (const [name, env] of [
+    ["unset", {}],
+    ["empty", { CONTAINER_FUSE: "" }],
+  ] as const) {
+    it.effect.skipIf(!isDockerAvailable())(
+      `inspects the real Docker host once when CONTAINER_FUSE is ${name}`,
+      () => {
+        const fuse = makeFuseLayer(env);
+        return Effect.gen(function* () {
+          const docker = yield* Docker;
+          const privileges = yield* docker.getContainerPrivileges;
+          expect(yield* docker.getContainerPrivileges).toBe(privileges);
+          const calls = fuse.infoCalls();
+          expect(calls).toHaveLength(1);
+          const [, flag, dockerHost, ...rest] = calls[0]!;
+          expect([flag, ...rest]).toEqual([
+            "--host",
+            "info",
+            "--format",
+            "{{json .SecurityOptions}}",
+          ]);
+          expect(isLocalDockerEndpoint(dockerHost!)).toBe(true);
+          expect(privileges).toEqual(detectedPrivileges(dockerHost!));
+        }).pipe(Effect.provide(fuse.layer));
+      },
+      30_000,
+    );
+  }
 
   it.effect.skipIf(process.platform === "win32")(
-    "treats an empty CONTAINER_FUSE like an unset one and detects",
+    "withholds them when the engine cannot be inspected",
     () => {
-      const fuse = makeFuseLayer(
-        { CONTAINER_FUSE: "", DOCKER_HOST: LOCAL_HOST },
-        { stdout: JSON.stringify(ROOTLESS) },
-      );
+      const fuse = makeFuseLayer({ DOCKER_HOST: "unix:///tmp/alchemy-fuse-missing-docker.sock" });
       return Effect.gen(function* () {
-        const privileges = yield* (yield* Docker).getContainerPrivileges;
-        expect(fuse.infoCalls()).toEqual([
-          ["docker", "--host", LOCAL_HOST, "info", "--format", "{{json .SecurityOptions}}"],
-        ]);
-        const allowed = allowsFusePrivileges({
-          platform: process.platform,
-          release: NodeOs.release(),
-          dockerHost: LOCAL_HOST,
-          securityOptions: ROOTLESS,
-          devFuseExists: NodeFs.existsSync("/dev/fuse"),
-        });
-        expect(privileges).toEqual(allowed ? FUSE_CONTAINER_PRIVILEGES : undefined);
+        expect(yield* (yield* Docker).getContainerPrivileges).toBeUndefined();
+        expect(fuse.infoCalls()).toHaveLength(1);
       }).pipe(Effect.provide(fuse.layer));
     },
+    30_000,
   );
-
-  it.effect("withholds them when the engine cannot be inspected", () => {
-    const fuse = makeFuseLayer({ DOCKER_HOST: LOCAL_HOST }, { stdout: "", exitCode: 1 });
-    return Effect.gen(function* () {
-      expect(yield* (yield* Docker).getContainerPrivileges).toBeUndefined();
-      expect(fuse.infoCalls()).toHaveLength(process.platform === "win32" ? 0 : 1);
-    }).pipe(Effect.provide(fuse.layer));
-  });
 
   it.effect("withholds them from a remote engine without inspecting it", () => {
-    const fuse = makeFuseLayer(
-      { DOCKER_HOST: "ssh://me@build-box" },
-      { stdout: JSON.stringify(ROOTLESS) },
-    );
+    const fuse = makeFuseLayer({ DOCKER_HOST: "ssh://me@build-box" });
     return Effect.gen(function* () {
       expect(yield* (yield* Docker).getContainerPrivileges).toBeUndefined();
       expect(fuse.infoCalls()).toEqual([]);

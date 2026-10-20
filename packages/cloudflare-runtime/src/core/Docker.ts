@@ -600,11 +600,14 @@ export const DockerLive = Layer.effect(
           return containerFuse.value === "1" ? FUSE_CONTAINER_PRIVILEGES : undefined;
         }
         const host = yield* Fiber.join(dockerHost);
-        const platform = process.platform;
+        const { platform, release } = yield* Effect.sync(() => ({
+          platform: process.platform,
+          release: NodeOs.release(),
+        }));
         if (!canGrantFuse(platform, host)) return undefined;
         const allowed = allowsFusePrivileges({
           platform,
-          release: NodeOs.release(),
+          release,
           dockerHost: host,
           securityOptions: yield* dockerSecurityOptions(host),
           devFuseExists:
