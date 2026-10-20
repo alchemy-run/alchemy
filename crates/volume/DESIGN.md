@@ -67,21 +67,33 @@ collection removes. It can never leave a pointer to an object that isn't there.
 ## Leases and fencing
 
 Only one machine writes a session at a time. When a machine mounts a session,
-the Session Durable Object grants a lease with a new **epoch**, one more than
-the last. The epoch is in every journal key, and the Durable Object refuses
-any head move or journal mark from an older epoch.
+it takes a lease: it bumps the head's **epoch** with a compare-and-swap. The
+epoch is in every journal key, and a head move only succeeds from the record
+the lease last wrote, so a superseded writer can't move the head.
 
-That's SlateDB's writer epoch (RFC 0001), with the fence enforced by the
-coordinator rather than by racing for the next WAL filename. Putting the epoch
-in the object key comes from ZeroFS, whose segment keys are
-`{shard}/{epoch}/{counter}`: two writers can never collide on a name, so a
-zombie can't overwrite anything; it can only write objects that nothing will
-ever point at.
+That's SlateDB's writer epoch (RFC 0001). Putting the epoch in the object key
+comes from ZeroFS, whose segment keys are `{shard}/{epoch}/{counter}`: two
+writers can never collide on a name.
 
-A machine that loses its lease (it stalled, or the Durable Object handed the
-session to another machine) must stop. Its next FLUSH fails with an I/O error,
-the kernel's ext4 goes read-only, and the commands in that `open` fail. It
-never acknowledges an `fsync` it can't make durable. ZeroFS calls this a
+**The fence is a check after each append, not an object.** Our first version
+fenced the way SlateDB does, by writing a marker into the old writer's next
+journal position. The simulation found the hole SlateDB's RFC 0026 describes:
+once recovery deletes the folded journal, marker included, the position is
+free again, and a stalled writer can write there and acknowledge an `fsync`
+nobody will ever read. So every append, after its entry lands, reads the head
+and checks the epoch is still its own. A new lease bumps the epoch *before* it
+reads the old journal, so an entry that landed before the bump gets folded,
+and one that landed after fails its check. The cost is one read of the head
+per `fsync`, which is cheap when heads live in a Durable Object.
+
+**Epochs never repeat for a name.** Deleting a head leaves a tombstone with its
+last epoch, and creating the name again continues from there. Without it, a
+re-created head would start at epoch 0 again, and both a leftover journal entry
+and a still-running old writer could pass for the new head's.
+
+A machine that loses its lease must stop. Its next FLUSH fails with an I/O
+error, the kernel's ext4 goes read-only, and the commands in that `open` fail.
+It never acknowledges an `fsync` it can't make durable. ZeroFS calls this a
 verified `fsync`: after a lineage break, `fsync` returns an error rather than a
 false success.
 
@@ -98,10 +110,15 @@ The journal holds every block written since the session's last snapshot.
   session is dirty, bounding what a machine crash can lose. ZeroFS flushes every
   30 seconds by default; ext4 itself commits every 5.
 - **Contiguous positions.** Journal entries are numbered `0, 1, 2, …` within
-  an epoch, and a write is acknowledged only after every earlier entry is
-  durable. Recovery replays the longest gap-free prefix, so it can't apply a
-  later write while missing an earlier one. That's ZeroFS's ordering rule: the
+  an epoch, written one at a time, and each is written only if its name is
+  free. Recovery reads up to the first missing entry, so it can't apply a later
+  write while missing an earlier one. That's ZeroFS's ordering rule: the
   recovered state is a prefix of acknowledged writes, never a subset.
+- **Lost responses.** A write can land with its reply lost. A retried append
+  that finds its own bytes at its position counts as done; a compare-and-swap
+  that reports a conflict is re-read, and counts as done if the head already
+  holds what it wrote. Clients like `object_store` retry internally, so both
+  happen in practice.
 - **Block granularity.** The journal stores 4 KiB blocks, not whole extents,
   so a small write to a large file costs a small journal entry. Snapshots keep
   extent granularity; the fold reads the base extent and applies the blocks.
@@ -192,13 +209,20 @@ guess with knowledge the Durable Object has.
 ## Testing
 
 ZeroFS's test suite is the part most worth copying, because it's where the
-guarantees come from.
+guarantees come from. Ours is in `tests/lease.rs` and `crates/blockd/tests`.
+The simulation found the fence hole above on its first run, and removing any
+one of the safeguards (the check after append, recovery, the pending journal,
+the lost-response handling) makes it fail on its first seed.
 
-1. **Deterministic simulation.** The engine runs over an in-memory object
-   store on virtual time, with seeded latency, lost responses (the write
-   landed but the reply didn't) and a crash at a seeded point. After each crash,
-   an oracle checks that the disk equals some prefix of the writes, no older
-   than the last acknowledged `fsync`.
+1. **Deterministic simulation.** The engine runs over an in-memory store with
+   seeded faults: a request fails before doing anything, lands with its reply
+   lost, or is done twice because the client retried. Writers crash at random,
+   on every failed request, and when another machine attaches while they still
+   run, after which they keep trying to write and must fail. After each
+   recovery, an oracle checks the disk is exactly what was acknowledged, or that
+   plus the one operation whose fate was unknown. Garbage collection runs
+   between steps. `VOLUME_SIM_SEEDS` sets how many seeds to run (200 by
+   default). Not yet: seeded latency and concurrent tasks.
 2. **Failpoints at every barrier.** A crash after each journal write, pack
    upload, page upload, manifest upload and head move, then recovery and a
    consistency check.
@@ -215,6 +239,7 @@ guarantees come from.
 | Open-end fold latency | Decides whether the fold moves after the `open` returns |
 | Extent size: 256 KiB today, ZeroFS uses 32 KiB, Lambda 512 KiB | Read amplification against request count |
 | Pack fragmentation after a week of forks and undos | Decides whether repacking is worth building |
+| Bytes written twice: once to the journal, again in the snapshot | ZeroFS avoids it by making its segments the data; we could let a snapshot point into the journal |
 | Prefetch hit rate on a real repo's `pnpm install` | Decides whether attach prefetch pays |
 
 ## Sources

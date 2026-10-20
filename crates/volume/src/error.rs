@@ -16,6 +16,10 @@ pub enum Error {
         expected: Option<Hash>,
         found: Option<Hash>,
     },
+    /// This writer's lease on `head` was superseded: another writer attached,
+    /// or the head was reset. Nothing it writes from now on becomes visible.
+    #[error("the lease on head {0} was superseded")]
+    Fenced(String),
     /// The head doesn't exist.
     #[error("head {0} does not exist")]
     NoHead(String),

@@ -1,15 +1,17 @@
 //! Garbage collection: mark every object reachable from the heads, sweep the
-//! rest.
+//! rest, and delete journal entries that are already folded.
 //!
 //! A commit uploads its pack, pages and manifest before it moves the head, so
 //! for a moment they're reachable from nothing. Objects younger than the grace
 //! period are never deleted, which keeps an in-flight commit safe as long as it
 //! finishes within it.
 
+use crate::journal;
 use crate::manifest::{Manifest, Page};
 use crate::pack::Pack;
+use crate::store::Head;
 use crate::{Error, Hash, Result, Volume};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::time::{Duration, SystemTime};
 
 /// How much to keep.
@@ -43,6 +45,8 @@ pub struct GcReport {
     pub deleted_bytes: u64,
     /// Unreachable but younger than the grace period.
     pub spared: usize,
+    /// Folded or abandoned journal entries deleted.
+    pub journal_deleted: usize,
 }
 
 impl Volume {
@@ -107,9 +111,43 @@ impl Volume {
                 report.deleted_bytes += object.size;
             }
         }
+        // Journal entries need no grace period: whether one is still needed is
+        // decided by its head's record, and a record only ever moves forward.
+        let records: HashMap<String, Head> = self.meta().list().await?.into_iter().collect();
+        for object in self.blobs().list("journal/").await? {
+            let Some((head, epoch, seq)) = journal::parse_key(&object.key) else {
+                continue;
+            };
+            let needed = match records.get(head) {
+                Some(record) => journal_needed(record, epoch, seq),
+                // A head created after the records were read, or deleted.
+                None => object.modified > cutoff,
+            };
+            if needed {
+                continue;
+            }
+            if !options.dry_run {
+                self.blobs().delete(&object.key).await?;
+            }
+            report.journal_deleted += 1;
+            report.deleted_bytes += object.size;
+        }
         if !options.dry_run {
             self.forget_cached();
         }
         Ok(report)
     }
+}
+
+/// Whether entry `seq` of lease `epoch` may still be folded into its head.
+fn journal_needed(record: &Head, epoch: u64, seq: u64) -> bool {
+    if record.deleted {
+        return false;
+    }
+    // A newer lease than the record we read: it's mid-acquire.
+    epoch > record.epoch
+        || (epoch == record.epoch && seq >= record.seq)
+        || record
+            .pending
+            .is_some_and(|pending| epoch == pending.epoch && seq >= pending.seq)
 }

@@ -1,6 +1,6 @@
 use crate::manifest::{Entry, Manifest, PAGE_ENTRIES, Page};
 use crate::pack::{Pack, PackBuilder, open_chunk};
-use crate::store::{BlobStore, MetaStore};
+use crate::store::{BlobStore, Head, MetaStore};
 use crate::{EXTENT_SIZE, Error, Hash, Result, is_zero};
 use std::collections::{BTreeMap, HashMap};
 use std::io::Read;
@@ -90,17 +90,30 @@ impl Volume {
 
     /// The snapshot `head` points at.
     pub async fn head(&self, head: &str) -> Result<Hash> {
-        self.meta
-            .get(head)
-            .await?
-            .ok_or_else(|| Error::NoHead(head.into()))
+        Ok(self.record(head).await?.snapshot)
+    }
+
+    /// `head`'s whole record: its snapshot, lease and journal position.
+    pub async fn record(&self, head: &str) -> Result<Head> {
+        match self.meta.get(head).await? {
+            Some(record) if !record.deleted => Ok(record),
+            _ => Err(Error::NoHead(head.into())),
+        }
     }
 
     pub async fn heads(&self) -> Result<Vec<(String, Hash)>> {
-        self.meta.list().await
+        Ok(self
+            .meta
+            .list()
+            .await?
+            .into_iter()
+            .filter(|(_, record)| !record.deleted)
+            .map(|(name, record)| (name, record.snapshot))
+            .collect())
     }
 
     /// A new head `to` on the snapshot `from` points at. Nothing is copied.
+    /// A journal `from` hasn't folded yet isn't part of the fork.
     pub async fn fork(&self, from: &str, to: &str) -> Result<Hash> {
         let id = self.head(from).await?;
         self.create_head(to, id).await?;
@@ -114,20 +127,44 @@ impl Volume {
     }
 
     /// Points `head` at snapshot `to`: a rewind, or adopting another fork.
+    /// It fences the head's writer and drops its unfolded journal.
     pub async fn reset(&self, head: &str, to: Hash) -> Result<()> {
         self.manifest(&to).await?;
-        let current = self.head(head).await?;
-        self.meta.cas(head, Some(current), Some(to)).await
+        let current = self.record(head).await?;
+        let next = Head {
+            epoch: current.epoch + 1,
+            ..Head::new(to)
+        };
+        self.meta.cas(head, Some(&current), Some(&next)).await
     }
 
-    /// Deletes `head`. Its snapshots stay until garbage collection.
+    /// Deletes `head`, fencing its writer. Its snapshots stay until garbage
+    /// collection; a tombstone keeps its epoch for a head of the same name.
     pub async fn drop_head(&self, head: &str) -> Result<()> {
-        let current = self.head(head).await?;
-        self.meta.cas(head, Some(current), None).await
+        let current = self.record(head).await?;
+        let tombstone = Head {
+            epoch: current.epoch + 1,
+            deleted: true,
+            ..Head::new(current.snapshot)
+        };
+        self.meta.cas(head, Some(&current), Some(&tombstone)).await
+    }
+
+    pub(crate) fn meta(&self) -> &Arc<dyn MetaStore> {
+        &self.meta
     }
 
     async fn create_head(&self, head: &str, id: Hash) -> Result<()> {
-        match self.meta.cas(head, None, Some(id)).await {
+        let current = self.meta.get(head).await?;
+        let next = match current {
+            None => Head::new(id),
+            Some(tombstone) if tombstone.deleted => Head {
+                epoch: tombstone.epoch + 1,
+                ..Head::new(id)
+            },
+            Some(_) => return Err(Error::HeadExists(head.into())),
+        };
+        match self.meta.cas(head, current.as_ref(), Some(&next)).await {
             Err(Error::Conflict { .. }) => Err(Error::HeadExists(head.into())),
             other => other,
         }
@@ -264,27 +301,32 @@ impl Volume {
     }
 
     /// Commits `changes` on top of `base` and moves `head` from `base` to the
-    /// new snapshot. With no changes, nothing is written and `base` is
-    /// returned. Fails with [`Error::Conflict`] if `head` moved.
+    /// new snapshot, without a lease: for tools and tests. A writer that
+    /// journals uses a [`crate::Lease`]. With no changes, nothing is written
+    /// and `base` is returned. Fails with [`Error::Conflict`] if `head` moved.
     pub async fn commit(
         &self,
         head: &str,
         base: &Hash,
         changes: Vec<(u64, Change)>,
     ) -> Result<Hash> {
+        let current = self.record(head).await?;
+        if current.snapshot != *base {
+            return Err(Error::Conflict {
+                head: head.into(),
+                expected: Some(*base),
+                found: Some(current.snapshot),
+            });
+        }
         if changes.is_empty() {
-            let current = self.head(head).await?;
-            if current != *base {
-                return Err(Error::Conflict {
-                    head: head.into(),
-                    expected: Some(*base),
-                    found: Some(current),
-                });
-            }
             return Ok(*base);
         }
         let id = self.snapshot(base, changes).await?;
-        self.meta.cas(head, Some(*base), Some(id)).await?;
+        let next = Head {
+            snapshot: id,
+            ..current
+        };
+        self.meta.cas(head, Some(&current), Some(&next)).await?;
         Ok(id)
     }
 

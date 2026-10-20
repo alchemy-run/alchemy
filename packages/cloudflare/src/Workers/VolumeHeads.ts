@@ -1,9 +1,11 @@
 /**
  * A volume's heads from a Worker or Durable Object, over the R2 binding
  * `Cloudflare.R2.Volume` binds: the same objects blockd reads and writes
- * through R2's S3 API (`<prefix>/heads/<name>` holds a snapshot id;
- * `<prefix>/manifests/<id>` names its parent). Provided to every Worker and
- * Durable Object as the `Sandbox.VolumeRuntime`.
+ * through R2's S3 API. `<prefix>/heads/<name>` holds the head's record: its
+ * snapshot, the epoch of its lease and its journal position (JSON; a bare
+ * snapshot id from before leases also reads). `<prefix>/manifests/<id>`
+ * names its parent. Provided to every Worker and Durable Object as the
+ * `Sandbox.VolumeRuntime`.
  *
  * NOT exported from `index.ts`.
  */
@@ -28,6 +30,40 @@ export const volumeBucketBinding = (id: string) => sanitizeKey(`ALCHEMY_VOLUME_$
 
 const HEAD = /^[A-Za-z0-9._-]{1,200}$/;
 
+/** A head's record, as `volume::store::Head` writes it. */
+interface HeadRecord {
+  readonly snapshot: Snapshot;
+  readonly epoch?: number;
+  readonly seq?: number;
+  readonly pending?: { readonly epoch: number; readonly seq: number } | null;
+  /** A deleted head: kept so a head of the same name never reuses an epoch. */
+  readonly deleted?: boolean;
+}
+
+const decodeHead = (text: string): HeadRecord | undefined => {
+  const trimmed = text.trim();
+  if (/^[0-9a-f]{64}$/.test(trimmed)) return { snapshot: trimmed as Snapshot };
+  try {
+    const record = JSON.parse(trimmed) as HeadRecord;
+    return typeof record.snapshot === "string" ? record : undefined;
+  } catch {
+    return undefined;
+  }
+};
+
+/**
+ * A new record on `snapshot`. Its epoch is past `previous`'s, which fences
+ * whoever held the head's lease and drops the journal it hadn't folded.
+ */
+const nextHead = (snapshot: Snapshot, previous: HeadRecord | undefined, deleted = false) =>
+  JSON.stringify({
+    snapshot,
+    epoch: previous ? (previous.epoch ?? 0) + 1 : 0,
+    seq: 0,
+    pending: null,
+    ...(deleted ? { deleted: true } : {}),
+  });
+
 interface R2Object {
   readonly etag: string;
   text(): Promise<string>;
@@ -41,7 +77,6 @@ interface R2Bucket {
     value: string,
     options?: { onlyIf?: { etagMatches?: string; etagDoesNotMatch?: string } },
   ): Promise<unknown | null>;
-  delete(key: string): Promise<void>;
 }
 
 const makeHeads = (
@@ -64,26 +99,44 @@ const makeHeads = (
     HEAD.test(head)
       ? Effect.void
       : Effect.fail(new VolumeError({ message: `invalid head name ${JSON.stringify(head)}` }));
-  const read = Effect.fn(function* (head: string) {
+  /** The head's object, tombstones included. */
+  const readObject = Effect.fn(function* (head: string) {
     yield* check(head);
     const object = yield* call("reading a head", (b) => b.get(`${prefix}/heads/${head}`));
     if (!object) return undefined;
-    const text = (yield* call("reading a head", () => object.text())).trim();
-    return { snapshot: text as Snapshot, etag: object.etag };
+    const text = yield* call("reading a head", () => object.text());
+    const record = decodeHead(text);
+    if (!record) return yield* new VolumeError({ message: `head ${head} is corrupt` });
+    return { record, etag: object.etag };
   });
+  const read = Effect.fn(function* (head: string) {
+    const found = yield* readObject(head);
+    return found && !found.record.deleted ? found : undefined;
+  });
+  /** Writes the head if its object still has `etag` (or doesn't exist, for `undefined`). */
+  const replace = (head: string, value: string, etag: string | undefined) =>
+    call("writing a head", (b) =>
+      b.put(`${prefix}/heads/${head}`, value, {
+        onlyIf: etag === undefined ? { etagDoesNotMatch: "*" } : { etagMatches: etag },
+      }),
+    );
   return {
-    head: (name) => Effect.map(read(name), (found) => found?.snapshot),
+    head: (name) => Effect.map(read(name), (found) => found?.record.snapshot),
     fork: Effect.fn(function* (to, options = {}) {
-      yield* check(to);
       const from = options.from ?? descriptor.base;
       const source = yield* read(from);
       if (!source) return yield* new VolumeError({ message: `head ${from} does not exist` });
-      const created = yield* call("creating a head", (b) =>
-        b.put(`${prefix}/heads/${to}`, source.snapshot, { onlyIf: { etagDoesNotMatch: "*" } }),
+      const existing = yield* readObject(to);
+      if (existing && !existing.record.deleted)
+        return yield* new VolumeConflict({ message: `head ${to} already exists`, head: to });
+      const created = yield* replace(
+        to,
+        nextHead(source.record.snapshot, existing?.record),
+        existing?.etag,
       );
       if (created === null)
         return yield* new VolumeConflict({ message: `head ${to} already exists`, head: to });
-      return source.snapshot;
+      return source.record.snapshot;
     }),
     reset: Effect.fn(function* (head, snapshot) {
       const current = yield* read(head);
@@ -93,20 +146,25 @@ const makeHeads = (
       );
       if (!exists)
         return yield* new VolumeError({ message: `snapshot ${snapshot} does not exist` });
-      const moved = yield* call("moving a head", (b) =>
-        b.put(`${prefix}/heads/${head}`, snapshot, { onlyIf: { etagMatches: current.etag } }),
-      );
+      const moved = yield* replace(head, nextHead(snapshot, current.record), current.etag);
       if (moved === null) return yield* new VolumeConflict({ message: `head ${head} moved`, head });
     }),
     drop: Effect.fn(function* (head) {
-      yield* check(head);
-      yield* call("deleting a head", (b) => b.delete(`${prefix}/heads/${head}`));
+      const current = yield* read(head);
+      if (!current) return;
+      const dropped = yield* replace(
+        head,
+        nextHead(current.record.snapshot, current.record, true),
+        current.etag,
+      );
+      if (dropped === null)
+        return yield* new VolumeConflict({ message: `head ${head} moved`, head });
     }),
     history: Effect.fn(function* (head, options = {}) {
       const limit = options.limit ?? 20;
       const start = yield* read(head);
       const out: Array<Snapshot> = [];
-      let next = start?.snapshot;
+      let next: Snapshot | undefined = start?.record.snapshot;
       while (next && out.length < limit) {
         const manifest = yield* call("reading a snapshot", (b) =>
           b.get(`${prefix}/manifests/${next}`),

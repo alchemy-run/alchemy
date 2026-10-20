@@ -212,7 +212,7 @@ fn serve(mut socket: UnixStream, device: &Device) -> Result<()> {
                 socket.read_exact(&mut data)?;
                 let written = device.write(offset, &data);
                 let durable = if flags & CMD_FLAG_FUA != 0 {
-                    device.flush().map(|_| ())
+                    device.sync()
                 } else {
                     Ok(())
                 };
@@ -221,14 +221,14 @@ fn serve(mut socket: UnixStream, device: &Device) -> Result<()> {
                     Err(e) => Some(fail("write", offset, len, e)),
                 }
             }
-            CMD_FLUSH => device.flush().err().map(|e| fail("flush", offset, len, e)),
+            CMD_FLUSH => device.sync().err().map(|e| fail("flush", offset, len, e)),
             CMD_TRIM => device
                 .zero(offset, len as u64)
                 .err()
                 .map(|e| fail("trim", offset, len, e)),
             CMD_DISC => {
-                // The kernel expects no reply; commit what's left.
-                device.flush()?;
+                // The kernel expects no reply; make what's left durable.
+                device.sync()?;
                 return Ok(());
             }
             other => {

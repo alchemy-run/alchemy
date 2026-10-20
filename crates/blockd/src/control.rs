@@ -2,13 +2,16 @@
 //!
 //! ```text
 //! {"op":"status"}
-//! {"op":"flush"}                                  → {"ok":true,"snapshot":"…"}
+//! {"op":"sync"}                                   → {"ok":true}
+//! {"op":"snapshot"}                               → {"ok":true,"snapshot":"…"}
 //! {"op":"fork","to":"try-1","freeze":"/workspace"} → {"ok":true,"snapshot":"…"}
 //! {"op":"detach"}
 //! ```
 //!
-//! `freeze` names the mounted filesystem: it's frozen (`fsfreeze`) around the
-//! flush, so the fork is a clean point even while programs are writing.
+//! `sync` makes every write so far durable in the journal; `snapshot` (`flush`
+//! is the old name) commits them as a snapshot. `freeze` names the mounted
+//! filesystem: it's frozen (`fsfreeze`) around the snapshot, so the fork is a
+//! clean point even while programs are writing.
 
 use crate::Device;
 use anyhow::{Result, bail};
@@ -23,8 +26,13 @@ use std::sync::Arc;
 #[serde(tag = "op", rename_all = "lowercase")]
 enum Request {
     Status,
-    Flush,
-    Fork { to: String, freeze: Option<String> },
+    Sync,
+    #[serde(alias = "flush")]
+    Snapshot,
+    Fork {
+        to: String,
+        freeze: Option<String>,
+    },
     Detach,
 }
 
@@ -58,11 +66,18 @@ fn handle(stream: UnixStream, device: &Device) -> Result<bool> {
                 false,
             ),
             Ok(Request::Status) => (json!({ "ok": true, "status": device.status() }), false),
-            Ok(Request::Flush) => (result(device.flush()), false),
+            Ok(Request::Sync) => (
+                match device.sync() {
+                    Ok(()) => json!({ "ok": true }),
+                    Err(e) => json!({ "ok": false, "error": format!("{e:#}") }),
+                },
+                false,
+            ),
+            Ok(Request::Snapshot) => (result(device.snapshot()), false),
             Ok(Request::Fork { to, freeze }) => {
                 (result(fork(device, &to, freeze.as_deref())), false)
             }
-            Ok(Request::Detach) => (result(device.flush()), true),
+            Ok(Request::Detach) => (result(device.snapshot()), true),
         };
         writer.write_all(format!("{reply}\n").as_bytes())?;
         if detach {

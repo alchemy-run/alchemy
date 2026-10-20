@@ -149,8 +149,8 @@ impl Filesystem for DiskFs {
     }
 
     fn fsync(&self, _: &Request, _: INodeNo, _: FileHandle, _: bool, reply: ReplyEmpty) {
-        match self.device.flush() {
-            Ok(_) => reply.ok(),
+        match self.device.sync() {
+            Ok(()) => reply.ok(),
             Err(e) => {
                 tracing::error!("fuse fsync: {e:#}");
                 reply.error(Errno::EIO);

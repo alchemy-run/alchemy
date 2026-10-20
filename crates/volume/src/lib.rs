@@ -10,11 +10,18 @@
 //! Everything addressed by hash is immutable, so a crash never corrupts a
 //! volume: objects are written before a head moves, and a head moves with a
 //! compare-and-set.
+//!
+//! A writer holds a [`Lease`] on its head. `fsync` appends the blocks it
+//! covers to the head's **journal**, one object per call, without making a
+//! snapshot; a snapshot folds the journal in. A writer that dies leaves its
+//! journal for the next lease to fold. See `DESIGN.md`.
 
 mod error;
 mod extent;
 mod gc;
 mod id;
+pub mod journal;
+mod lease;
 mod manifest;
 mod pack;
 pub mod store;
@@ -24,6 +31,7 @@ pub use error::{Error, Result};
 pub use extent::{BLOCK_SIZE, EXTENT_SIZE, is_zero};
 pub use gc::{GcOptions, GcReport};
 pub use id::Hash;
+pub use lease::Lease;
 pub use manifest::{Entry, Manifest, PAGE_ENTRIES, Page};
 pub use pack::{Pack, PackBuilder};
 pub use volume::{Change, Volume};

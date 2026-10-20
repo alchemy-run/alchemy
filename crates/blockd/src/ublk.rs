@@ -131,12 +131,12 @@ fn serve_queue(qid: u16, dev: &UblkDev, device: &Arc<Device>) {
                 .map(|bytes| slice.copy_from_slice(&bytes)),
             libublk::sys::UBLK_IO_OP_WRITE => device.write(offset, slice).and_then(|()| {
                 if iod.op_flags & libublk::sys::UBLK_IO_F_FUA != 0 {
-                    device.flush().map(|_| ())
+                    device.sync()
                 } else {
                     Ok(())
                 }
             }),
-            libublk::sys::UBLK_IO_OP_FLUSH => device.flush().map(|_| ()),
+            libublk::sys::UBLK_IO_OP_FLUSH => device.sync(),
             libublk::sys::UBLK_IO_OP_DISCARD | libublk::sys::UBLK_IO_OP_WRITE_ZEROES => {
                 device.zero(offset, len as u64)
             }

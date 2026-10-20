@@ -1,5 +1,5 @@
-use super::{BlobMeta, BlobStore, MetaStore, check_head_name};
-use crate::{Error, Hash, Result};
+use super::{BlobMeta, BlobStore, Head, MetaStore, check_head_name, conflict};
+use crate::{Error, Result};
 use async_trait::async_trait;
 use std::fs;
 use std::io::{Read, Seek, SeekFrom, Write};
@@ -89,6 +89,24 @@ impl BlobStore for LocalBlobStore {
         write_atomic(&path, &bytes)
     }
 
+    async fn put_new(&self, key: &str, bytes: Vec<u8>) -> Result<bool> {
+        let path = self.path(key)?;
+        if let Some(dir) = path.parent() {
+            fs::create_dir_all(dir)?;
+        }
+        // Write aside, then link into place: linking fails if the key exists,
+        // and a reader never sees half an object.
+        let (tmp, mut file) = tempfile_in(&path)?;
+        let written = file.write_all(&bytes).and_then(|()| file.sync_all());
+        let linked = written.and_then(|()| fs::hard_link(&tmp, &path));
+        let _ = fs::remove_file(&tmp);
+        match linked {
+            Ok(()) => Ok(true),
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => Ok(false),
+            Err(e) => Err(e.into()),
+        }
+    }
+
     async fn get(&self, key: &str) -> Result<Vec<u8>> {
         fs::read(self.path(key)?).map_err(not_found(key))
     }
@@ -171,9 +189,9 @@ impl LocalMetaStore {
         })
     }
 
-    fn read(&self, head: &str) -> Result<Option<Hash>> {
-        match fs::read_to_string(self.root.join(head)) {
-            Ok(text) => Hash::from_hex(text.trim())
+    fn read(&self, head: &str) -> Result<Option<Head>> {
+        match fs::read(self.root.join(head)) {
+            Ok(bytes) => Head::decode(&bytes)
                 .map(Some)
                 .ok_or_else(|| Error::Corrupt {
                     key: head.into(),
@@ -187,41 +205,37 @@ impl LocalMetaStore {
 
 #[async_trait]
 impl MetaStore for LocalMetaStore {
-    async fn get(&self, head: &str) -> Result<Option<Hash>> {
+    async fn get(&self, head: &str) -> Result<Option<Head>> {
         check_head_name(head)?;
         self.read(head)
     }
 
-    async fn cas(&self, head: &str, expected: Option<Hash>, new: Option<Hash>) -> Result<()> {
+    async fn cas(&self, head: &str, expected: Option<&Head>, new: Option<&Head>) -> Result<()> {
         check_head_name(head)?;
         let _guard = self.lock.lock().unwrap();
         let found = self.read(head)?;
-        if found != expected {
-            return Err(Error::Conflict {
-                head: head.into(),
-                expected,
-                found,
-            });
+        if found.as_ref() != expected {
+            return Err(conflict(head, expected, found.as_ref()));
         }
         let path = self.root.join(head);
         match new {
-            Some(id) => write_atomic(&path, id.to_hex().as_bytes()),
+            Some(record) => write_atomic(&path, &record.encode()),
             None => fs::remove_file(path).map_err(Into::into),
         }
     }
 
-    async fn list(&self) -> Result<Vec<(String, Hash)>> {
+    async fn list(&self) -> Result<Vec<(String, Head)>> {
         let mut heads = Vec::new();
         for entry in fs::read_dir(&self.root)? {
             let name = entry?.file_name().to_string_lossy().to_string();
             if name.starts_with('.') {
                 continue;
             }
-            if let Some(id) = self.read(&name)? {
-                heads.push((name, id));
+            if let Some(record) = self.read(&name)? {
+                heads.push((name, record));
             }
         }
-        heads.sort();
+        heads.sort_by(|a, b| a.0.cmp(&b.0));
         Ok(heads)
     }
 }

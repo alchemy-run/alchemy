@@ -7,18 +7,29 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, Weak};
 use std::time::Duration;
 use tokio::runtime::Handle;
-use volume::{BLOCK_SIZE, Change, EXTENT_SIZE, Hash, Volume};
+use volume::{BLOCK_SIZE, Change, EXTENT_SIZE, Error as VolumeError, Hash, Lease, Volume};
 
 const BLOCKS_PER_EXTENT: u64 = EXTENT_SIZE / BLOCK_SIZE;
 const STATE_MAGIC: &[u8; 8] = b"BLKDCS01";
+/// Blocks per journal entry: 16 MiB.
+const JOURNAL_ENTRY_BLOCKS: usize = 4096;
 
-/// A volume head attached as a block device.
+/// A volume head attached as a block device, under a lease on the head.
 ///
 /// The cache file holds every block read or written since attach. A block is
-/// *present* once its bytes are in the cache, and *dirty* once written and not
-/// yet committed. Reads of blocks that aren't present fetch their whole extent
-/// from the store. A flush commits every extent with a dirty block as one new
-/// snapshot and moves the head; it uploads without blocking reads and writes.
+/// *present* once its bytes are in the cache, *dirty* once written and not yet
+/// in a snapshot, and *unjournaled* once written and not yet durable. Reads of
+/// blocks that aren't present fetch their whole extent from the store.
+///
+/// Durability comes in two steps. [`Device::sync`] (FLUSH, FUA, `fsync`)
+/// appends the unjournaled blocks to the head's journal: one object, shared by
+/// every caller waiting at the time. [`Device::snapshot`] (the end of an
+/// `open`) commits every dirty extent as one snapshot and folds the journal.
+/// Both upload without blocking reads and writes. If the machine dies between
+/// them, the next attach folds the journal, so nothing synced is lost.
+///
+/// If another attach supersedes the lease, every later write and sync fails:
+/// the device never acknowledges what it can't make durable.
 ///
 /// A clean [`Device::close`] leaves the cache reusable: the next attach of any
 /// head keeps every cached extent that its snapshot shares with the cache's.
@@ -31,11 +42,19 @@ pub struct Device {
     cache: File,
     present: Bitmap,
     dirty: Bitmap,
+    unjournaled: Bitmap,
     /// Serializes block operations; holds the snapshot the cache is based on.
     base: Mutex<Hash>,
-    /// One flush at a time.
-    flushing: Mutex<()>,
+    /// One journal append or snapshot at a time; holds the lease.
+    lease: Mutex<Lease>,
+    /// Writes accepted, and how many of them are durable: a sync returns at
+    /// once if another caller's append already covered its writes.
+    written: AtomicU64,
+    journaled: AtomicU64,
+    /// The lease was superseded.
+    fenced: AtomicBool,
     fetches: AtomicU64,
+    syncs: AtomicU64,
     flushes: AtomicU64,
     reused_blocks: u64,
     /// The cache file started empty (sparse zeros) at attach.
@@ -52,20 +71,29 @@ pub struct Status {
     pub dirty_blocks: u64,
     /// Blocks reused from a previous attach's cache.
     pub reused_blocks: u64,
+    /// Written blocks not yet durable.
+    pub unjournaled_blocks: u64,
+    pub epoch: u64,
     pub fetches: u64,
+    /// Journal appends.
+    pub syncs: u64,
+    /// Snapshots.
     pub flushes: u64,
 }
 
 impl Device {
     /// Attaches `head` with its cache at `cache_path`, reusing what a previous
-    /// clean [`Device::close`] left there.
+    /// clean [`Device::close`] left there. Takes the head's lease, which
+    /// supersedes any device attached to it elsewhere, and folds the journal
+    /// that device left.
     pub fn open(
         volume: Arc<Volume>,
         head: &str,
         cache_path: &Path,
         runtime: Handle,
     ) -> Result<Self> {
-        let base = runtime.block_on(volume.head(head))?;
+        let lease = runtime.block_on(volume.acquire(head))?;
+        let base = lease.snapshot();
         let size = runtime.block_on(volume.manifest(&base))?.size;
         let blocks = size / BLOCK_SIZE;
         let state_path = state_path(cache_path);
@@ -114,9 +142,14 @@ impl Device {
             cache,
             present,
             dirty: Bitmap::new(blocks),
+            unjournaled: Bitmap::new(blocks),
             base: Mutex::new(base),
-            flushing: Mutex::new(()),
+            lease: Mutex::new(lease),
+            written: AtomicU64::new(0),
+            journaled: AtomicU64::new(0),
+            fenced: AtomicBool::new(false),
             fetches: AtomicU64::new(0),
+            syncs: AtomicU64::new(0),
             flushes: AtomicU64::new(0),
             reused_blocks,
             fresh,
@@ -144,6 +177,7 @@ impl Device {
 
     pub fn write(&self, offset: u64, data: &[u8]) -> Result<()> {
         self.check(offset, data.len() as u64)?;
+        self.check_lease()?;
         let base = self.base.lock().unwrap();
         let end = offset + data.len() as u64;
         // A write that covers part of a block keeps the rest of that block.
@@ -157,7 +191,9 @@ impl Device {
         for block in offset / BLOCK_SIZE..end.div_ceil(BLOCK_SIZE) {
             self.present.set(block);
             self.dirty.set(block);
+            self.unjournaled.set(block);
         }
+        self.written.fetch_add(1, Ordering::AcqRel);
         Ok(())
     }
 
@@ -175,15 +211,66 @@ impl Device {
         Ok(())
     }
 
-    /// Commits every extent dirty right now as one snapshot and moves the head
-    /// to it; returns the head's snapshot (unchanged when nothing was dirty).
+    /// Makes every write that finished before the call durable, by appending
+    /// the unjournaled blocks to the journal. Concurrent calls share appends:
+    /// a call that arrives while one is in flight waits for it, then the next
+    /// append carries every block written by then. A failed append leaves the
+    /// blocks unjournaled.
+    pub fn sync(&self) -> Result<()> {
+        let target = self.written.load(Ordering::Acquire);
+        let mut lease = self.lease.lock().unwrap();
+        if self.journaled.load(Ordering::Acquire) >= target {
+            return Ok(()); // an append that started after our writes covered them
+        }
+        self.check_lease()?;
+        let (blocks, mark) = {
+            let _base = self.base.lock().unwrap();
+            let mut blocks = Vec::new();
+            for block in self.set_blocks(&self.unjournaled) {
+                let mut bytes = vec![0; BLOCK_SIZE as usize];
+                self.cache.read_exact_at(&mut bytes, block * BLOCK_SIZE)?;
+                self.unjournaled.clear(block);
+                blocks.push((block, bytes));
+            }
+            (blocks, self.written.load(Ordering::Acquire))
+        };
+        let mut sent = 0;
+        let mut result = Ok(());
+        for entry in blocks.chunks(JOURNAL_ENTRY_BLOCKS) {
+            result = self
+                .runtime
+                .block_on(self.volume.append(&mut lease, entry.to_vec()));
+            if result.is_err() {
+                break;
+            }
+            sent += entry.len();
+            self.syncs.fetch_add(1, Ordering::Relaxed);
+        }
+        match result {
+            Ok(()) => {
+                self.journaled.fetch_max(mark, Ordering::AcqRel);
+                Ok(())
+            }
+            Err(e) => {
+                for (block, _) in &blocks[sent..] {
+                    self.unjournaled.set(*block);
+                }
+                Err(self.lease_error(e))
+            }
+        }
+    }
+
+    /// Commits every extent dirty right now as one snapshot, moves the head to
+    /// it and folds the journal; returns the head's snapshot (unchanged when
+    /// nothing was dirty).
     ///
     /// The dirty extents are copied out under the lock, so every write that
     /// finished before the call is in the snapshot; the upload then runs
     /// without blocking reads and writes. A failed upload leaves them dirty.
-    pub fn flush(&self) -> Result<Hash> {
-        let _one = self.flushing.lock().unwrap();
-        let (base, extents, changes) = {
+    pub fn snapshot(&self) -> Result<Hash> {
+        let mut lease = self.lease.lock().unwrap();
+        self.check_lease()?;
+        let (extents, changes, mark) = {
             let base = self.base.lock().unwrap();
             let extents = self.dirty_extents();
             if extents.is_empty() {
@@ -196,17 +283,19 @@ impl Device {
                 self.cache.read_exact_at(&mut bytes, extent * EXTENT_SIZE)?;
                 for block in extent * BLOCKS_PER_EXTENT..(extent + 1) * BLOCKS_PER_EXTENT {
                     self.dirty.clear(block);
+                    self.unjournaled.clear(block);
                 }
                 changes.push((extent, Change::Write(bytes)));
             }
-            (*base, extents, changes)
+            (extents, changes, self.written.load(Ordering::Acquire))
         };
         match self
             .runtime
-            .block_on(self.volume.commit(&self.head, &base, changes))
+            .block_on(self.volume.commit_leased(&mut lease, changes))
         {
             Ok(next) => {
                 *self.base.lock().unwrap() = next;
+                self.journaled.fetch_max(mark, Ordering::AcqRel);
                 self.flushes.fetch_add(1, Ordering::Relaxed);
                 Ok(next)
             }
@@ -214,25 +303,43 @@ impl Device {
                 for extent in extents {
                     for block in extent * BLOCKS_PER_EXTENT..(extent + 1) * BLOCKS_PER_EXTENT {
                         self.dirty.set(block);
+                        self.unjournaled.set(block);
                     }
                 }
-                Err(e.into())
+                Err(self.lease_error(e))
             }
         }
     }
 
-    /// Flushes, then creates head `to` on the flushed snapshot. The attached
-    /// head keeps going; `to` can be attached anywhere.
+    fn check_lease(&self) -> Result<()> {
+        if self.fenced.load(Ordering::Acquire) {
+            bail!(
+                "the lease on {} was superseded by another attach",
+                self.head
+            );
+        }
+        Ok(())
+    }
+
+    fn lease_error(&self, e: VolumeError) -> anyhow::Error {
+        if matches!(e, VolumeError::Fenced(_)) {
+            self.fenced.store(true, Ordering::Release);
+        }
+        e.into()
+    }
+
+    /// Snapshots, then creates head `to` on the snapshot. The attached head
+    /// keeps going; `to` can be attached anywhere.
     pub fn fork(&self, to: &str) -> Result<Hash> {
-        let id = self.flush()?;
+        let id = self.snapshot()?;
         self.runtime.block_on(self.volume.fork_at(id, to))?;
         Ok(id)
     }
 
-    /// Flushes and saves what the cache holds, so the next attach on this
+    /// Snapshots and saves what the cache holds, so the next attach on this
     /// cache file reuses it. Returns the head's final snapshot.
     pub fn close(&self) -> Result<Hash> {
-        let id = self.flush()?;
+        let id = self.snapshot()?;
         let _base = self.base.lock().unwrap(); // no operation in flight
         if self.dirty.count() > 0 {
             bail!("writes arrived while closing");
@@ -242,7 +349,8 @@ impl Device {
         Ok(id)
     }
 
-    /// Flushes every `every` until the device is dropped or the handle stops.
+    /// Syncs every `every` until the device is dropped or the handle stops,
+    /// bounding what a crash can lose of writes nobody synced.
     pub fn start_flusher(self: &Arc<Self>, every: Duration) -> Flusher {
         let stop = Arc::new(AtomicBool::new(false));
         let device: Weak<Self> = Arc::downgrade(self);
@@ -258,8 +366,8 @@ impl Device {
                     let Some(device) = device.upgrade() else {
                         break;
                     };
-                    if let Err(e) = device.flush() {
-                        tracing::warn!("background flush failed (will retry): {e:#}");
+                    if let Err(e) = device.sync() {
+                        tracing::warn!("background sync failed (will retry): {e:#}");
                     }
                 }
             })
@@ -369,9 +477,26 @@ impl Device {
             present_blocks: self.present.count(),
             dirty_blocks: self.dirty.count(),
             reused_blocks: self.reused_blocks,
+            unjournaled_blocks: self.unjournaled.count(),
+            epoch: self.lease.lock().unwrap().epoch(),
             fetches: self.fetches.load(Ordering::Relaxed),
+            syncs: self.syncs.load(Ordering::Relaxed),
             flushes: self.flushes.load(Ordering::Relaxed),
         }
+    }
+
+    /// The blocks set in `bitmap`, in order.
+    fn set_blocks(&self, bitmap: &Bitmap) -> Vec<u64> {
+        let blocks = self.size / BLOCK_SIZE;
+        let mut out = Vec::new();
+        for word in bitmap.nonzero_words() {
+            for block in word * 64..((word + 1) * 64).min(blocks) {
+                if bitmap.get(block) {
+                    out.push(block);
+                }
+            }
+        }
+        out
     }
 
     fn dirty_extents(&self) -> Vec<u64> {

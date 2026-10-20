@@ -79,7 +79,7 @@ pub fn exec(
             let code = run(command, dir);
             sync(dir);
             mounted.unmount()?;
-            device.flush()?;
+            device.snapshot()?;
             code
         }
         Mode::Nbd => {

@@ -7,8 +7,8 @@
 
 use object_store::aws::{AmazonS3Builder, S3ConditionalPut};
 use std::sync::Arc;
-use volume::store::{BlobStore, MetaStore, ObjectBlobStore, ObjectMetaStore};
-use volume::{Change, EXTENT_SIZE, Error, Hash, Volume};
+use volume::store::{BlobStore, Head, MetaStore, ObjectBlobStore, ObjectMetaStore};
+use volume::{BLOCK_SIZE, Change, EXTENT_SIZE, Error, Hash, Volume};
 
 fn bucket() -> Option<(Arc<dyn object_store::ObjectStore>, String)> {
     let url = std::env::var("VOLUME_TEST_S3_URL").ok()?;
@@ -69,21 +69,66 @@ async fn blobs_round_trip_with_ranges_and_idempotent_puts() {
 async fn heads_move_only_by_compare_and_set() {
     let (store, prefix) = require_bucket!();
     let meta = ObjectMetaStore::new(store, prefix);
-    let (one, two) = (Hash::of(b"one"), Hash::of(b"two"));
-    meta.cas("main", None, Some(one)).await.unwrap();
+    let one = Head::new(Hash::of(b"one"));
+    let two = Head {
+        epoch: 1,
+        ..Head::new(Hash::of(b"two"))
+    };
+    meta.cas("main", None, Some(&one)).await.unwrap();
     assert!(matches!(
-        meta.cas("main", None, Some(two)).await,
+        meta.cas("main", None, Some(&two)).await,
         Err(Error::Conflict { .. })
     ));
     assert!(matches!(
-        meta.cas("main", Some(two), Some(one)).await,
+        meta.cas("main", Some(&two), Some(&one)).await,
         Err(Error::Conflict { .. })
     ));
-    meta.cas("main", Some(one), Some(two)).await.unwrap();
+    meta.cas("main", Some(&one), Some(&two)).await.unwrap();
     assert_eq!(meta.get("main").await.unwrap(), Some(two));
     assert_eq!(meta.list().await.unwrap(), vec![("main".to_string(), two)]);
-    meta.cas("main", Some(two), None).await.unwrap();
+    meta.cas("main", Some(&two), None).await.unwrap();
     assert_eq!(meta.get("main").await.unwrap(), None);
+}
+
+#[tokio::test]
+async fn put_new_writes_a_key_once() {
+    let (store, prefix) = require_bucket!();
+    let blobs = ObjectBlobStore::new(store, prefix);
+    assert!(blobs.put_new("j/0", b"first".to_vec()).await.unwrap());
+    assert!(!blobs.put_new("j/0", b"second".to_vec()).await.unwrap());
+    assert_eq!(blobs.get("j/0").await.unwrap(), b"first");
+}
+
+#[tokio::test]
+async fn a_new_lease_fences_the_old_writer_in_the_bucket() {
+    let (store, prefix) = require_bucket!();
+    let volume = Volume::new(
+        Arc::new(ObjectBlobStore::new(store.clone(), prefix.clone())),
+        Arc::new(ObjectMetaStore::new(store, prefix)),
+    );
+    volume.create("main", 64 * 1024 * 1024).await.unwrap();
+    let block = |byte: u8| vec![byte; BLOCK_SIZE as usize];
+    let mut old = volume.acquire("main").await.unwrap();
+    volume.append(&mut old, vec![(3, block(3))]).await.unwrap();
+    let new = volume.acquire("main").await.unwrap();
+    assert!(matches!(
+        volume.append(&mut old, vec![(4, block(4))]).await,
+        Err(Error::Fenced(_))
+    ));
+    let extent = volume
+        .read_extent(&new.snapshot(), 0)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        &extent[3 * BLOCK_SIZE as usize..4 * BLOCK_SIZE as usize],
+        &block(3)[..]
+    );
+    assert!(
+        extent[4 * BLOCK_SIZE as usize..5 * BLOCK_SIZE as usize]
+            .iter()
+            .all(|&b| b == 0)
+    );
 }
 
 #[tokio::test]

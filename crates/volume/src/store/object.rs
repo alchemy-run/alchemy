@@ -4,8 +4,8 @@
 //! with conditional writes (`If-Match` on the ETag), so an S3 bucket alone is
 //! a complete volume store.
 
-use super::{BlobMeta, BlobStore, MetaStore, check_head_name};
-use crate::{Error, Hash, Result};
+use super::{BlobMeta, BlobStore, Head, MetaStore, check_head_name, conflict};
+use crate::{Error, Result};
 use async_trait::async_trait;
 use object_store::path::Path;
 use object_store::{ObjectStore, PutMode, PutOptions, PutPayload, UpdateVersion};
@@ -49,6 +49,25 @@ impl BlobStore for ObjectBlobStore {
             Ok(_) | Err(object_store::Error::AlreadyExists { .. }) => Ok(()),
             // Stores without conditional create report a precondition failure the same way.
             Err(object_store::Error::Precondition { .. }) => Ok(()),
+            Err(e) => Err(store_error(e)),
+        }
+    }
+
+    async fn put_new(&self, key: &str, bytes: Vec<u8>) -> Result<bool> {
+        let options = PutOptions {
+            mode: PutMode::Create,
+            ..Default::default()
+        };
+        match self
+            .store
+            .put_opts(&self.path(key), PutPayload::from(bytes), options)
+            .await
+        {
+            Ok(_) => Ok(true),
+            Err(
+                object_store::Error::AlreadyExists { .. }
+                | object_store::Error::Precondition { .. },
+            ) => Ok(false),
             Err(e) => Err(store_error(e)),
         }
     }
@@ -110,7 +129,7 @@ impl BlobStore for ObjectBlobStore {
     }
 }
 
-/// Heads as objects under `prefix/heads/`, moved with conditional writes.
+/// Heads as objects under `prefix/heads/`, replaced with conditional writes.
 /// The bucket must support them (S3, R2 and GCS do).
 pub struct ObjectMetaStore {
     store: Arc<dyn ObjectStore>,
@@ -132,19 +151,16 @@ impl ObjectMetaStore {
         ))
     }
 
-    async fn read(&self, head: &str) -> Result<Option<(Hash, Option<String>)>> {
+    async fn read(&self, head: &str) -> Result<Option<(Head, Option<String>)>> {
         match self.store.get(&self.path(head)).await {
             Ok(result) => {
                 let e_tag = result.meta.e_tag.clone();
-                let text = result.bytes().await.map_err(store_error)?;
-                let id = std::str::from_utf8(&text)
-                    .ok()
-                    .and_then(|t| Hash::from_hex(t.trim()))
-                    .ok_or_else(|| Error::Corrupt {
-                        key: head.into(),
-                        reason: "bad head".into(),
-                    })?;
-                Ok(Some((id, e_tag)))
+                let bytes = result.bytes().await.map_err(store_error)?;
+                let record = Head::decode(&bytes).ok_or_else(|| Error::Corrupt {
+                    key: head.into(),
+                    reason: "bad head".into(),
+                })?;
+                Ok(Some((record, e_tag)))
             }
             Err(object_store::Error::NotFound { .. }) => Ok(None),
             Err(e) => Err(store_error(e)),
@@ -154,22 +170,17 @@ impl ObjectMetaStore {
 
 #[async_trait]
 impl MetaStore for ObjectMetaStore {
-    async fn get(&self, head: &str) -> Result<Option<Hash>> {
+    async fn get(&self, head: &str) -> Result<Option<Head>> {
         check_head_name(head)?;
-        Ok(self.read(head).await?.map(|(id, _)| id))
+        Ok(self.read(head).await?.map(|(record, _)| record))
     }
 
-    async fn cas(&self, head: &str, expected: Option<Hash>, new: Option<Hash>) -> Result<()> {
+    async fn cas(&self, head: &str, expected: Option<&Head>, new: Option<&Head>) -> Result<()> {
         check_head_name(head)?;
         let current = self.read(head).await?;
-        let found = current.as_ref().map(|(id, _)| *id);
-        let conflict = |found| Error::Conflict {
-            head: head.into(),
-            expected,
-            found,
-        };
-        if found != expected {
-            return Err(conflict(found));
+        let found = current.as_ref().map(|(record, _)| *record);
+        if found.as_ref() != expected {
+            return Err(conflict(head, expected, found.as_ref()));
         }
         let path = self.path(head);
         let Some(new) = new else {
@@ -189,19 +200,22 @@ impl MetaStore for ObjectMetaStore {
         };
         match self
             .store
-            .put_opts(&path, PutPayload::from(new.to_hex().into_bytes()), options)
+            .put_opts(&path, PutPayload::from(new.encode()), options)
             .await
         {
             Ok(_) => Ok(()),
             Err(
                 object_store::Error::AlreadyExists { .. }
                 | object_store::Error::Precondition { .. },
-            ) => Err(conflict(self.read(head).await?.map(|(id, _)| id))),
+            ) => {
+                let found = self.read(head).await?.map(|(record, _)| record);
+                Err(conflict(head, expected, found.as_ref()))
+            }
             Err(e) => Err(store_error(e)),
         }
     }
 
-    async fn list(&self) -> Result<Vec<(String, Hash)>> {
+    async fn list(&self) -> Result<Vec<(String, Head)>> {
         use futures::StreamExt;
         let prefix = Path::from(format!("{}/heads", self.prefix.trim_end_matches('/')));
         let mut stream = self.store.list(Some(&prefix));
@@ -211,11 +225,11 @@ impl MetaStore for ObjectMetaStore {
             let Some(name) = meta.location.filename() else {
                 continue;
             };
-            if let Some(id) = self.get(name).await? {
-                heads.push((name.to_string(), id));
+            if let Some(record) = self.get(name).await? {
+                heads.push((name.to_string(), record));
             }
         }
-        heads.sort();
+        heads.sort_by(|a, b| a.0.cmp(&b.0));
         Ok(heads)
     }
 }

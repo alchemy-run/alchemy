@@ -1,5 +1,5 @@
-use super::{BlobMeta, BlobStore, MetaStore, check_head_name};
-use crate::{Error, Hash, Result};
+use super::{BlobMeta, BlobStore, Head, MetaStore, check_head_name, conflict};
+use crate::{Error, Result};
 use async_trait::async_trait;
 use std::collections::{BTreeMap, HashMap};
 use std::sync::Mutex;
@@ -42,6 +42,16 @@ impl BlobStore for MemoryBlobStore {
             .entry(key.to_string())
             .or_insert((bytes, std::time::SystemTime::now()));
         Ok(())
+    }
+
+    async fn put_new(&self, key: &str, bytes: Vec<u8>) -> Result<bool> {
+        self.puts.fetch_add(1, Ordering::Relaxed);
+        let mut objects = self.objects.lock().unwrap();
+        if objects.contains_key(key) {
+            return Ok(false);
+        }
+        objects.insert(key.to_string(), (bytes, std::time::SystemTime::now()));
+        Ok(true)
     }
 
     async fn get(&self, key: &str) -> Result<Vec<u8>> {
@@ -108,7 +118,7 @@ impl MemoryBlobStore {
 /// Heads in memory, for tests.
 #[derive(Default)]
 pub struct MemoryMetaStore {
-    heads: Mutex<BTreeMap<String, Hash>>,
+    heads: Mutex<BTreeMap<String, Head>>,
 }
 
 impl MemoryMetaStore {
@@ -119,29 +129,25 @@ impl MemoryMetaStore {
 
 #[async_trait]
 impl MetaStore for MemoryMetaStore {
-    async fn get(&self, head: &str) -> Result<Option<Hash>> {
+    async fn get(&self, head: &str) -> Result<Option<Head>> {
         Ok(self.heads.lock().unwrap().get(head).copied())
     }
 
-    async fn cas(&self, head: &str, expected: Option<Hash>, new: Option<Hash>) -> Result<()> {
+    async fn cas(&self, head: &str, expected: Option<&Head>, new: Option<&Head>) -> Result<()> {
         check_head_name(head)?;
         let mut heads = self.heads.lock().unwrap();
-        let found = heads.get(head).copied();
+        let found = heads.get(head);
         if found != expected {
-            return Err(Error::Conflict {
-                head: head.into(),
-                expected,
-                found,
-            });
+            return Err(conflict(head, expected, found));
         }
         match new {
-            Some(id) => heads.insert(head.to_string(), id),
+            Some(record) => heads.insert(head.to_string(), *record),
             None => heads.remove(head),
         };
         Ok(())
     }
 
-    async fn list(&self) -> Result<Vec<(String, Hash)>> {
+    async fn list(&self) -> Result<Vec<(String, Head)>> {
         Ok(self
             .heads
             .lock()

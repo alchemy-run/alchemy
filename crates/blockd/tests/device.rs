@@ -100,14 +100,14 @@ fn reads_fetch_lazily_and_only_once() {
 }
 
 #[test]
-fn a_flush_is_seen_by_the_next_machine() {
+fn a_snapshot_is_seen_by_the_next_machine() {
     let world = World::new();
     world.base("base");
     let first = world.attach("base");
     first
         .write(10 * MIB, &vec![0xAB; (3 * BLOCK_SIZE) as usize])
         .unwrap();
-    let snapshot = first.flush().unwrap();
+    let snapshot = first.snapshot().unwrap();
     assert_eq!(
         world.runtime.block_on(world.volume.head("base")).unwrap(),
         snapshot
@@ -136,7 +136,7 @@ fn a_write_into_an_unread_extent_keeps_the_rest_of_it() {
     device
         .write(3 * BLOCK_SIZE, &vec![0xEE; BLOCK_SIZE as usize])
         .unwrap();
-    device.flush().unwrap();
+    device.snapshot().unwrap();
 
     let fresh = world.attach("base");
     let extent = fresh.read(0, EXTENT_SIZE as u32).unwrap();
@@ -174,7 +174,7 @@ fn a_fork_is_frozen_while_the_original_keeps_writing() {
     device.write(0, &vec![1; BLOCK_SIZE as usize]).unwrap();
     let forked = device.fork("try-1").unwrap();
     device.write(0, &vec![2; BLOCK_SIZE as usize]).unwrap();
-    device.flush().unwrap();
+    device.snapshot().unwrap();
 
     assert_eq!(
         world.runtime.block_on(world.volume.head("try-1")).unwrap(),
@@ -197,13 +197,13 @@ fn a_fork_is_frozen_while_the_original_keeps_writing() {
 }
 
 #[test]
-fn a_flush_with_nothing_dirty_writes_nothing() {
+fn a_snapshot_with_nothing_dirty_writes_nothing() {
     let world = World::new();
     world.base("base");
     let device = world.attach("base");
     device.read(0, BLOCK_SIZE as u32).unwrap();
     let before = device.status().base;
-    assert_eq!(device.flush().unwrap(), before);
+    assert_eq!(device.snapshot().unwrap(), before);
     assert_eq!(device.status().flushes, 0);
 }
 
@@ -213,7 +213,7 @@ fn zeroing_a_range_reads_as_zeros_everywhere() {
     world.base("base");
     let device = world.attach("base");
     device.zero(0, EXTENT_SIZE).unwrap();
-    device.flush().unwrap();
+    device.snapshot().unwrap();
     let fresh = world.attach("base");
     assert!(
         fresh
@@ -234,14 +234,14 @@ fn zeroing_a_range_reads_as_zeros_everywhere() {
 }
 
 #[test]
-fn every_flush_is_a_snapshot_to_rewind_to() {
+fn every_snapshot_is_a_point_to_rewind_to() {
     let world = World::new();
     world.base("base");
     let device = world.attach("base");
     let mut snapshots = Vec::new();
     for step in 1..=3u8 {
         device.write(0, &vec![step; BLOCK_SIZE as usize]).unwrap();
-        snapshots.push(device.flush().unwrap());
+        snapshots.push(device.snapshot().unwrap());
     }
     drop(device);
     world
@@ -330,15 +330,15 @@ fn a_warm_cache_drops_only_what_another_machine_changed() {
 }
 
 #[test]
-fn a_crash_leaves_no_warm_cache_and_only_flushed_writes() {
+fn a_crash_leaves_no_warm_cache_and_only_durable_writes() {
     let world = World::new();
     world.base("base");
     let device = world.attach_at("base", "machine");
     device.write(0, &vec![1; BLOCK_SIZE as usize]).unwrap();
-    device.flush().unwrap();
+    device.snapshot().unwrap();
     device
         .write(BLOCK_SIZE, &vec![2; BLOCK_SIZE as usize])
-        .unwrap(); // never flushed
+        .unwrap(); // never synced
     drop(device); // crash: no close
 
     let again = world.attach_at("base", "machine");
@@ -357,7 +357,7 @@ fn a_crash_leaves_no_warm_cache_and_only_flushed_writes() {
 }
 
 #[test]
-fn the_background_flusher_commits_without_being_asked() {
+fn the_background_flusher_journals_without_being_asked() {
     let world = World::new();
     world.base("base");
     let device = Arc::new(world.attach("base"));
@@ -365,17 +365,126 @@ fn the_background_flusher_commits_without_being_asked() {
     let _flusher = device.start_flusher(std::time::Duration::from_millis(50));
     device.write(0, &vec![9; BLOCK_SIZE as usize]).unwrap();
     for _ in 0..100 {
-        if world.head("base") != before {
+        if device.status().unjournaled_blocks == 0 {
             break;
         }
         std::thread::sleep(std::time::Duration::from_millis(20));
     }
-    assert_ne!(world.head("base"), before);
-    assert_eq!(device.status().dirty_blocks, 0);
+    assert_eq!(device.status().unjournaled_blocks, 0);
+    assert_eq!(world.head("base"), before, "journaling doesn't snapshot");
+    assert_eq!(
+        device.status().dirty_blocks,
+        1,
+        "the snapshot is still to come"
+    );
 }
 
 #[test]
-fn writes_during_a_flush_are_kept_for_the_next_one() {
+fn a_synced_write_survives_a_crash_as_one_snapshot() {
+    let world = World::new();
+    world.base("base");
+    let before = world.head("base");
+    let device = world.attach("base");
+    device.write(0, &vec![1; BLOCK_SIZE as usize]).unwrap();
+    device.sync().unwrap();
+    device
+        .write(BLOCK_SIZE, &vec![2; BLOCK_SIZE as usize])
+        .unwrap();
+    device.sync().unwrap();
+    assert_eq!(world.head("base"), before, "syncs don't snapshot");
+    drop(device); // crash: no close, no snapshot
+
+    let again = world.attach("base");
+    let bytes = again.read(0, (2 * BLOCK_SIZE) as u32).unwrap();
+    assert!(bytes[..BLOCK_SIZE as usize].iter().all(|&b| b == 1));
+    assert!(bytes[BLOCK_SIZE as usize..].iter().all(|&b| b == 2));
+    let after = world.head("base");
+    assert_eq!(
+        world
+            .runtime
+            .block_on(world.volume.history(&after, 10))
+            .unwrap(),
+        vec![after, before],
+        "both syncs fold into one snapshot"
+    );
+}
+
+#[test]
+fn a_sync_with_nothing_new_writes_nothing() {
+    let world = World::new();
+    world.base("base");
+    let device = world.attach("base");
+    device.write(0, &vec![1; BLOCK_SIZE as usize]).unwrap();
+    device.sync().unwrap();
+    device.sync().unwrap();
+    assert_eq!(device.status().syncs, 1);
+}
+
+#[test]
+fn concurrent_syncs_lose_nothing() {
+    let world = World::new();
+    world.base("base");
+    let device = Arc::new(world.attach("base"));
+    let threads: Vec<_> = (0..8u64)
+        .map(|i| {
+            let device = device.clone();
+            std::thread::spawn(move || {
+                for round in 0..10u64 {
+                    let block = i * 10 + round;
+                    device
+                        .write(
+                            block * BLOCK_SIZE,
+                            &vec![(i + 1) as u8; BLOCK_SIZE as usize],
+                        )
+                        .unwrap();
+                    device.sync().unwrap();
+                }
+            })
+        })
+        .collect();
+    for thread in threads {
+        thread.join().unwrap();
+    }
+    assert!(device.status().syncs <= 80);
+    drop(device); // crash
+
+    let again = world.attach("base");
+    let bytes = again.read(0, (80 * BLOCK_SIZE) as u32).unwrap();
+    for (block, data) in bytes.chunks(BLOCK_SIZE as usize).enumerate() {
+        let expected = (block as u64 / 10 + 1) as u8;
+        assert!(data.iter().all(|&b| b == expected), "block {block}");
+    }
+}
+
+#[test]
+fn attaching_elsewhere_fences_this_device() {
+    let world = World::new();
+    world.base("base");
+    let old = world.attach("base");
+    old.write(0, &vec![1; BLOCK_SIZE as usize]).unwrap();
+    old.sync().unwrap();
+
+    let new = world.attach("base");
+    old.write(BLOCK_SIZE, &vec![2; BLOCK_SIZE as usize])
+        .unwrap(); // local only
+    assert!(old.sync().is_err(), "the old device can't make it durable");
+    assert!(
+        old.write(0, b"x").is_err(),
+        "and refuses writes from then on"
+    );
+    assert!(old.snapshot().is_err());
+
+    let bytes = new.read(0, (2 * BLOCK_SIZE) as u32).unwrap();
+    assert!(bytes[..BLOCK_SIZE as usize].iter().all(|&b| b == 1));
+    assert!(
+        bytes[BLOCK_SIZE as usize..]
+            .iter()
+            .all(|&b| b == pattern(1))
+    );
+}
+
+#[test]
+fn writes_during_a_snapshot_are_kept_for_the_next_one() {
     let world = World::new();
     world.base("base");
     let device = Arc::new(world.attach("base"));
@@ -391,10 +500,10 @@ fn writes_during_a_flush_are_kept_for_the_next_one() {
         })
     };
     for _ in 0..20 {
-        device.flush().unwrap();
+        device.snapshot().unwrap();
     }
     writer.join().unwrap();
-    device.flush().unwrap();
+    device.snapshot().unwrap();
     // the last of rounds 0..200 to write extent e is e + 192 (e < 8) or e + 128
     let expected: Vec<u8> = (0..64u64)
         .map(|e| {
