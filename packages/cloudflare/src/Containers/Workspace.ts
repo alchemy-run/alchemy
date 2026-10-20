@@ -90,6 +90,27 @@ export interface WorkspaceProps {
  * });
  * ```
  *
+ * ### Machines on Lambda MicroVMs
+ * Sessions stay on Cloudflare; each session's machine is an AWS Lambda
+ * MicroVM. The stack needs the AWS providers too.
+ *
+ * **Example:** MicroVM machines
+ * ```typescript
+ * // src/Workspace.cloudflare.ts
+ * import * as Cloudflare from "@alchemy.run/cloudflare";
+ * import { Workspace } from "./Workspace.ts";
+ *
+ * export default Cloudflare.Containers.Workspace(Workspace, {
+ *   dockerfile: `FROM node:24-bookworm
+ * RUN mkdir -p /workspace`,
+ *   path: "/workspace",
+ *   machine: {
+ *     idle: "5 minutes",
+ *     lambda: { memory: "4 GB", cpuConfigurations: [{ architecture: "ARM_64" }] },
+ *   },
+ * });
+ * ```
+ *
  * @binding
  * @product Containers
  * @category Containers
