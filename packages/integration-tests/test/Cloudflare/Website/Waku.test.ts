@@ -14,7 +14,12 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import * as pathe from "pathe";
 import { cloneFixture } from "../Utils/Fixture.ts";
-import { expectDirectStatus, expectUrlContains, expectUrlHeader } from "../Utils/Http.ts";
+import {
+  expectClientChunkContains,
+  expectDirectStatus,
+  expectUrlContains,
+  expectUrlHeader,
+} from "../Utils/Http.ts";
 import { expectWorkerExists, waitForWorkerToBeDeleted } from "../Utils/Worker.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
@@ -82,6 +87,7 @@ describe.concurrent(
                     // `/api/kv` route reads and writes through it at request
                     // time via `cloudflare:workers` env.
                     SITE_KV: siteKv,
+                    WAKU_PUBLIC_SITE_MARKER: "WAKU_PUBLIC_ENV_MARKER",
                   },
                 });
                 return { site, siteKv };
@@ -99,6 +105,18 @@ describe.concurrent(
             timeout: "120 seconds",
             label: "waku dynamic home page",
           });
+
+          // A declared public env value is inlined into the deployed client
+          // bundle at build time.
+          yield* expectClientChunkContains(
+            site1.url!,
+            pathe.join(rootDir, "dist", "public"),
+            "WAKU_PUBLIC_ENV_MARKER",
+            {
+              timeout: "60 seconds",
+              label: "waku public env",
+            },
+          );
 
           // The same page reads the `MESSAGE` binding from `cloudflare:workers`
           // env at request time — proves bindings reach the RSC server bundle.

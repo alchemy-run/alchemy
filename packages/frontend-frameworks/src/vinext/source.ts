@@ -32,7 +32,7 @@ import * as Path from "effect/Path";
 import type { PlatformError } from "effect/PlatformError";
 import * as Redacted from "effect/Redacted";
 import type * as Scope from "effect/Scope";
-import { runBuildChild } from "../core/BuildChild.ts";
+import { resolveBuildEnv, runBuildChild } from "../core/BuildChild.ts";
 import { toOutputFile, type BuildOutput } from "../core/BuildOutput.ts";
 import { resolveViteDevPort } from "../core/DevPort.ts";
 import { ModuleLoadError } from "../core/Loader.ts";
@@ -766,6 +766,7 @@ export const makeVinextSourceProvider = (options: VinextSourceOptions): SourcePr
         module: import.meta.url,
         rootDir,
         framework: "vinext",
+        env: resolveBuildEnv(ctx.env),
         config: {
           rootDir,
           main: options.main,
