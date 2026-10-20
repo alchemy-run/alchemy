@@ -14,7 +14,7 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import * as pathe from "pathe";
 import { cloneFixture } from "../Utils/Fixture.ts";
-import { expectUrlContains, expectUrlRedirect } from "../Utils/Http.ts";
+import { expectClientChunkContains, expectUrlContains, expectUrlRedirect } from "../Utils/Http.ts";
 import { expectWorkerExists, waitForWorkerToBeDeleted } from "../Utils/Worker.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
@@ -71,7 +71,11 @@ describe.concurrent(
                 const siteKv = yield* Cloudflare.KV.Namespace("SiteKV");
                 const site = yield* Cloudflare.Website.SvelteKit("SvelteKitSite", {
                   ...svelteKitProps(rootDir),
-                  env: { TEST_BINDING: bindingMarker, SITE_KV: siteKv },
+                  env: {
+                    TEST_BINDING: bindingMarker,
+                    SITE_KV: siteKv,
+                    VITE_SITE_MARKER: "SVELTEKIT_PUBLIC_ENV_MARKER",
+                  },
                 });
                 return { site, siteKv };
               }),
@@ -88,6 +92,18 @@ describe.concurrent(
             timeout: "120 seconds",
             label: "SSR home with platform.env binding",
           });
+
+          // A declared public env value is inlined into the deployed client
+          // bundle at build time.
+          yield* expectClientChunkContains(
+            site1.url!,
+            pathe.join(rootDir, ".svelte-kit", "cloudflare"),
+            "SVELTEKIT_PUBLIC_ENV_MARKER",
+            {
+              timeout: "60 seconds",
+              label: "sveltekit public env",
+            },
+          );
 
           // API endpoint: node:crypto under nodejs_compat + platform.env.
           const hello = yield* fetchJsonReady<{ uuid: string; binding: string }>(

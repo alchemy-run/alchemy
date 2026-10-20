@@ -347,7 +347,11 @@ describe.concurrent(
                   // auto-injects it, and this deploy proves that path.
                   compatibility: { date: "2026-03-10" },
                   memo,
-                  env: { TEST_MARKER: marker, SITE_KV: siteKv },
+                  env: {
+                    TEST_MARKER: marker,
+                    SITE_KV: siteKv,
+                    PUBLIC_SITE_MARKER: "ASTRO_PUBLIC_ENV_MARKER",
+                  },
                   assets: { htmlHandling: "auto-trailing-slash", notFoundHandling: "none" },
                 });
                 // Resource creation dedupes by logical id, so this returns the
@@ -368,6 +372,12 @@ describe.concurrent(
           yield* expectUrlContains(`${site1.url!}/`, marker, {
             timeout: "120 seconds",
             label: "SSR page renders env binding",
+          });
+          // A declared public env value is inlined into a page prerendered
+          // at build time.
+          yield* expectUrlContains(`${site1.url!}/public-env/`, "ASTRO_PUBLIC_ENV_MARKER", {
+            timeout: "60 seconds",
+            label: "astro public env",
           });
           // Prerendered page served from static assets. Keep the body — the
           // hashed-asset assertion below extracts the `/_astro/*.css` href.
