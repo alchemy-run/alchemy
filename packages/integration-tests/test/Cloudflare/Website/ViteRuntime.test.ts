@@ -27,6 +27,7 @@ const { test: devTest } = Test.make({ providers: Cloudflare.providers(), dev: tr
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 const tempRoot = pathe.resolve(import.meta.dirname, "../../../.tmp");
 const fixtureDir = pathe.resolve(import.meta.dirname, "vite-runtime-fixture");
+const containerFixtureDir = pathe.resolve(import.meta.dirname, "vite-container-runtime-fixture");
 const hotChannelFixtureDir = pathe.resolve(import.meta.dirname, "vite-hot-channel-fixture");
 
 type Mode = "live" | "dev";
@@ -464,6 +465,59 @@ describe.concurrent(
           ]);
         }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.ignore)), logLevel),
       { tags: ["provider:cloudflare:worker", "local"], timeout: 180_000 },
+    );
+
+    // `containers` (dev only, as the plugin's spec): Durable Objects drive
+    // containers built from a local Dockerfile through `ctx.container`, one
+    // as the class's own image and one as a named image.
+    devTest.provider(
+      "Vite runtime: containers built from a Dockerfile start and serve (dev)",
+      (stack) =>
+        Effect.gen(function* () {
+          yield* stack.destroy();
+          const rootDir = yield* cloneFixture(containerFixtureDir, {
+            prefix: "alchemy-vite-container-runtime-",
+            tempRoot,
+            entries: ["package.json", "Dockerfile", "container", "src"],
+          });
+          const site = yield* stack.deploy(
+            Cloudflare.Website.Vite("ViteContainerRuntime", {
+              rootDir,
+              main: "./src/index.ts",
+              workersDev: true,
+              compatibility: { date: "2026-03-17" },
+              memo: { include: ["**/*"] },
+              env: {
+                DOCKERFILE: Cloudflare.Container("DockerfileContainer", {
+                  className: "DockerfileContainer",
+                  context: rootDir,
+                  maxInstances: 2,
+                }),
+                NAMED_IMAGES: Cloudflare.DurableObject("NamedImagesContainer", {
+                  className: "NamedImagesContainer",
+                  containers: [
+                    Cloudflare.Container("app", {
+                      schedulingPolicy: "durable_object",
+                      context: rootDir,
+                    }),
+                  ],
+                }),
+              },
+              dev: { port: 0 },
+            }),
+          );
+          const url = site.url!.replace(/\/$/, "");
+          yield* expectJson(`${url}/named-images/images`, ["app"]);
+          for (const prefix of ["/dockerfile", "/named-images"]) {
+            yield* expectText(`${url}${prefix}/start`, "Container create request sent...");
+            yield* expectText(`${url}${prefix}/status`, "true");
+            yield* expectText(`${url}${prefix}/fetch`, "Hello World!");
+          }
+        }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.ignore)), logLevel),
+      {
+        tags: ["provider:cloudflare:container", "provider:cloudflare:worker", "local"],
+        timeout: 300_000,
+      },
     );
 
     // Miniflare's outbound `cf.image` mock (dev only: deployed, `cf.image`
