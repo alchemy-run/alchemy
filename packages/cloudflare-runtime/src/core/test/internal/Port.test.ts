@@ -1,9 +1,63 @@
 import * as NodeNet from "node:net";
+import * as NodeOs from "node:os";
 import { describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import { vi } from "vitest";
 import * as Port from "../../internal/Port.ts";
 import * as PortHelpers from "../helpers/port.ts";
+
+// First: `find` reserves ports process-wide, and the OS hands out ephemeral
+// ports in sequence, so a later `check` could see a reservation instead.
+describe("Port.check", () => {
+  // macOS lets a loopback bind coexist with a wildcard listener on the same
+  // port, so only an attempt to connect over loopback finds one.
+  it.effect("treats a port held by a wildcard listener as in use", () =>
+    Effect.gen(function* () {
+      for (const host of ["0.0.0.0", "::"]) {
+        const ports = yield* Port.make({ cache: false });
+        const { port, held } = yield* Effect.scoped(
+          Effect.gen(function* () {
+            const { port } = yield* PortHelpers.occupy(0, host);
+            return { port, held: yield* Effect.result(ports.check(port)) };
+          }),
+        );
+        expect({ host, held: held._tag }).toEqual({ host, held: "Failure" });
+        // Free again once the listener closes: the listener, not a
+        // reservation, made the port unavailable.
+        expect(yield* ports.check(port)).toBe(port);
+      }
+    }),
+  );
+
+  // A listener on another interface doesn't hold the loopback port.
+  const lanAddress = Object.values(NodeOs.networkInterfaces())
+    .flat()
+    .find((address) => address?.family === "IPv4" && !address.internal)?.address;
+  it.effect.skipIf(lanAddress === undefined)(
+    "treats a port held only on another interface as available",
+    () =>
+      Effect.gen(function* () {
+        const occupied = yield* PortHelpers.occupy(0, lanAddress);
+        const ports = yield* Port.make({ cache: false });
+        expect(yield* ports.check(occupied.port)).toBe(occupied.port);
+      }),
+  );
+
+  it.effect("probes only loopback addresses", () =>
+    Effect.gen(function* () {
+      const ports = yield* Port.make({ cache: false });
+      const listen = vi.spyOn(NodeNet.Server.prototype, "listen");
+      try {
+        yield* ports.check(Number(process.env.PORT ?? 0));
+        expect(
+          listen.mock.calls.map(([options]) => (options as NodeNet.ListenOptions).host),
+        ).toEqual(["localhost", "127.0.0.1", "::1", "0000:0000:0000:0000:0000:0000:0000:0001"]);
+      } finally {
+        listen.mockRestore();
+      }
+    }),
+  );
+});
 
 describe("Port.find", () => {
   it.effect("returns a free port when the requested port is 0", () =>
@@ -83,21 +137,4 @@ describe("Port.viteSupportsPortZero", () => {
     expect(Port.viteSupportsPortZero("")).toBe(false);
     expect(Port.viteSupportsPortZero("next")).toBe(false);
   });
-});
-
-describe("Port.check", () => {
-  it.effect("probes only loopback addresses", () =>
-    Effect.gen(function* () {
-      const ports = yield* Port.make({ cache: false });
-      const listen = vi.spyOn(NodeNet.Server.prototype, "listen");
-      try {
-        yield* ports.check(Number(process.env.PORT ?? 0));
-        expect(
-          listen.mock.calls.map(([options]) => (options as NodeNet.ListenOptions).host),
-        ).toEqual(["localhost", "127.0.0.1", "::1", "0000:0000:0000:0000:0000:0000:0000:0001"]);
-      } finally {
-        listen.mockRestore();
-      }
-    }),
-  );
 });
