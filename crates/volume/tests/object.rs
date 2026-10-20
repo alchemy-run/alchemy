@@ -213,3 +213,47 @@ async fn futures_join<T>(handles: impl Iterator<Item = tokio::task::JoinHandle<T
     }
     out
 }
+
+/// How long an `fsync` (one journal append) and a snapshot take against the
+/// bucket. Run with `--ignored --nocapture`.
+#[tokio::test]
+#[ignore]
+async fn measure_sync_and_snapshot_latency() {
+    let (store, prefix) = require_bucket!();
+    let volume = Volume::new(
+        Arc::new(ObjectBlobStore::new(store.clone(), prefix.clone())),
+        Arc::new(ObjectMetaStore::new(store, prefix)),
+    );
+    volume.create("main", 64 * 1024 * 1024).await.unwrap();
+    let mut lease = volume.acquire("main").await.unwrap();
+    let percentiles = |mut samples: Vec<std::time::Duration>| {
+        samples.sort();
+        let at = |p: usize| samples[(samples.len() - 1) * p / 100].as_millis();
+        format!("p50 {}ms, p90 {}ms, max {}ms", at(50), at(90), at(100))
+    };
+    for blocks in [1u64, 64, 1024] {
+        let mut samples = Vec::new();
+        for round in 0..20u64 {
+            let batch = (0..blocks)
+                .map(|b| (b, vec![(round + 1) as u8; BLOCK_SIZE as usize]))
+                .collect();
+            let started = std::time::Instant::now();
+            volume.append(&mut lease, batch).await.unwrap();
+            samples.push(started.elapsed());
+        }
+        eprintln!("sync of {blocks} blocks: {}", percentiles(samples));
+    }
+    let mut samples = Vec::new();
+    for round in 0..10u8 {
+        let changes = (0..4)
+            .map(|e| (e, Change::Write(vec![round + 1; EXTENT_SIZE as usize])))
+            .collect();
+        let started = std::time::Instant::now();
+        volume.commit_leased(&mut lease, changes).await.unwrap();
+        samples.push(started.elapsed());
+    }
+    eprintln!("snapshot of 4 extents: {}", percentiles(samples));
+    let started = std::time::Instant::now();
+    let _ = volume.acquire("main").await.unwrap();
+    eprintln!("acquire with nothing to fold: {}ms", started.elapsed().as_millis());
+}
