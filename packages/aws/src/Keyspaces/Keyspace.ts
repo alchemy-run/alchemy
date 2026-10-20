@@ -195,10 +195,11 @@ export const KeyspaceProvider = () =>
           yield* keyspaces.deleteKeyspace({ keyspaceName: name }).pipe(
             Effect.catchTag("ResourceNotFoundException", () => Effect.void),
             // A keyspace whose tables are still deleting rejects with
-            // ConflictException until they are gone (minutes for PITR tables).
+            // ConflictException until they are gone — minutes for PITR and
+            // restored tables, beyond the point GetTable already 404s.
             Effect.retry({
               while: (e) => e._tag === "ConflictException",
-              schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(36)]),
+              schedule: Schedule.max([Schedule.fixed("10 seconds"), Schedule.recurs(48)]),
             }),
           );
           // Deletion is asynchronous — wait (bounded) until the keyspace is
