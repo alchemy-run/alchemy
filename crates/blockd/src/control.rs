@@ -77,10 +77,18 @@ fn fork(device: &Device, to: &str, freeze: Option<&str>) -> Result<volume::Hash>
     let Some(mountpoint) = freeze else {
         return device.fork(to);
     };
-    fsfreeze("-f", mountpoint)?;
-    let forked = device.fork(to);
-    fsfreeze("-u", mountpoint)?;
-    forked
+    if fsfreeze("-f", mountpoint).is_ok() {
+        let forked = device.fork(to);
+        fsfreeze("-u", mountpoint)?;
+        return forked;
+    }
+    // FUSE filesystems can't be frozen: sync them, so everything written
+    // before the fork reaches the device.
+    let status = Command::new("sync").args(["-f", mountpoint]).status()?;
+    if !status.success() {
+        bail!("sync -f {mountpoint} failed: {status}");
+    }
+    device.fork(to)
 }
 
 fn fsfreeze(flag: &str, mountpoint: &str) -> Result<()> {

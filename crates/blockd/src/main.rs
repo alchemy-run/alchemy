@@ -4,9 +4,11 @@
 //! blockd fork    --store <spec> --from <head> --to <head>
 //! blockd reset   --store <spec> --head <name> --to <snapshot>
 //! blockd drop    --store <spec> --head <name>
+//! blockd export  --store <spec> --head <name> --image <file>   (write the head as a sparse image)
 //! blockd heads   --store <spec>
 //! blockd history --store <spec> --head <name> [--limit <n>]
-//! blockd attach  --store <spec> --head <name> --nbd /dev/nbd0 --cache <file> [--control <socket>] [--flush-every <seconds>]
+//! blockd attach  --store <spec> --head <name> --cache <file> (--nbd /dev/nbd0 | --fuse <mountpoint>)
+//!                [--control <socket>] [--flush-every <seconds>]
 //! blockd disconnect --nbd /dev/nbd0   (detach a device whose blockd died)
 //! blockd control --socket <socket> --request '{"op":"flush"}'
 //! ```
@@ -77,6 +79,21 @@ fn main() -> Result<()> {
             runtime.block_on(volume.reset(flags.required("head")?, to))?;
         }
         "drop" => runtime.block_on(store()?.drop_head(flags.required("head")?))?,
+        "export" => {
+            use std::os::unix::fs::FileExt;
+            let volume = store()?;
+            let head = runtime.block_on(volume.head(flags.required("head")?))?;
+            let manifest = runtime.block_on(volume.manifest(&head))?;
+            let image = std::fs::File::create(flags.required("image")?)?;
+            image.set_len(manifest.size)?;
+            for extent in 0..manifest.extents() {
+                if let Some(bytes) = runtime.block_on(volume.read_extent(&head, extent))? {
+                    image.write_all_at(&bytes, extent * volume::EXTENT_SIZE)?;
+                }
+            }
+            image.sync_all()?;
+            println!("{head}");
+        }
         "heads" => {
             for (head, id) in runtime.block_on(store()?.heads())? {
                 println!("{head} {id}");
@@ -100,7 +117,7 @@ fn main() -> Result<()> {
             blockd::nbd::force_disconnect(std::path::Path::new(flags.required("nbd")?))?
         }
         _ => bail!(
-            "usage: blockd <create|import|fork|reset|drop|heads|history|attach|control|disconnect> …"
+            "usage: blockd <create|import|fork|reset|drop|export|heads|history|attach|control|disconnect> …"
         ),
     }
     Ok(())
@@ -108,8 +125,9 @@ fn main() -> Result<()> {
 
 #[cfg(target_os = "linux")]
 fn attach(flags: &Flags, volume: volume::Volume, runtime: &tokio::runtime::Runtime) -> Result<()> {
+    use std::path::{Path, PathBuf};
     let head = flags.required("head")?;
-    let cache = std::path::Path::new(flags.required("cache")?);
+    let cache = Path::new(flags.required("cache")?);
     let device = Arc::new(blockd::Device::open(
         Arc::new(volume),
         head,
@@ -122,26 +140,44 @@ fn attach(flags: &Flags, volume: volume::Volume, runtime: &tokio::runtime::Runti
         .transpose()?
         .unwrap_or(5);
     let flusher = (every > 0).then(|| device.start_flusher(std::time::Duration::from_secs(every)));
-    let attachment =
-        blockd::nbd::attach(std::path::Path::new(flags.required("nbd")?), device.clone())?;
-    tracing::info!(
-        "attached {head} ({} bytes) at {}",
-        device.size(),
-        flags.required("nbd")?
-    );
-    if let Some(socket) = flags.get("control") {
-        let disconnector = attachment.disconnector()?;
-        let socket = std::path::PathBuf::from(socket);
-        let control_device = device.clone();
-        std::thread::spawn(move || {
-            if let Err(e) =
-                blockd::control::serve(&socket, control_device, || disconnector.disconnect())
-            {
-                tracing::error!("control socket: {e:#}");
-            }
-        });
+    let control = flags.get("control").map(PathBuf::from);
+    let serve_control = |on_detach: Box<dyn Fn() + Send>| {
+        if let Some(socket) = control.clone() {
+            let device = device.clone();
+            std::thread::spawn(move || {
+                if let Err(e) = blockd::control::serve(&socket, device, on_detach) {
+                    tracing::error!("control socket: {e:#}");
+                }
+            });
+        }
+    };
+
+    match (flags.get("nbd"), flags.get("fuse")) {
+        (Some(nbd), None) => {
+            let attachment = blockd::nbd::attach(Path::new(nbd), device.clone())?;
+            tracing::info!("attached {head} ({} bytes) at {nbd}", device.size());
+            let disconnector = attachment.disconnector()?;
+            serve_control(Box::new(move || disconnector.disconnect()));
+            attachment.wait()?;
+        }
+        #[cfg(feature = "fuse")]
+        (None, Some(mountpoint)) => {
+            let disk_dir = cache.with_extension("disk");
+            let mounted = blockd::fuse::mount(device.clone(), &disk_dir, Path::new(mountpoint))?;
+            tracing::info!(
+                "mounted {head} ({} bytes) at {mountpoint} over FUSE",
+                device.size()
+            );
+            let target = PathBuf::from(mountpoint);
+            serve_control(Box::new(move || {
+                if let Err(e) = blockd::fuse::unmount(&target) {
+                    tracing::error!("{e:#}");
+                }
+            }));
+            mounted.wait()?;
+        }
+        _ => bail!("attach needs exactly one of --nbd <device> or --fuse <mountpoint>"),
     }
-    attachment.wait()?;
     drop(flusher);
     let snapshot = device.close()?;
     tracing::info!("detached {head} at snapshot {snapshot}");

@@ -10,6 +10,8 @@
 mod bitmap;
 pub mod control;
 mod device;
+#[cfg(all(target_os = "linux", feature = "fuse"))]
+pub mod fuse;
 #[cfg(target_os = "linux")]
 pub mod nbd;
 pub mod store;

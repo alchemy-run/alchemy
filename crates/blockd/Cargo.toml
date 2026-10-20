@@ -8,9 +8,11 @@ repository.workspace = true
 publish.workspace = true
 
 [features]
-default = ["object"]
+default = ["object", "fuse"]
 # Volumes in S3, R2 or GCS.
 object = ["volume/object", "dep:object_store"]
+# FUSE attach: the volume as one file, mounted with fuse2fs.
+fuse = ["dep:fuser"]
 
 [dependencies]
 volume.workspace = true
@@ -22,6 +24,9 @@ tokio.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
 object_store = { workspace = true, optional = true }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+fuser = { version = "0.18", default-features = false, optional = true }
 
 [dev-dependencies]
 tempfile.workspace = true
