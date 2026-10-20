@@ -82,7 +82,12 @@ export default S3ControlMrapBindingsFunction.make(
           { error: "Not found", method: request.method, pathname },
           { status: 404 },
         );
-      }).pipe(Effect.orDie),
+      }).pipe(
+        // Surface the binding's failure to the test instead of a bare 500.
+        Effect.catch((error) =>
+          HttpServerResponse.json({ error: String(error) }, { status: 500 }).pipe(Effect.orDie),
+        ),
+      ),
     };
   }).pipe(
     Effect.provide(

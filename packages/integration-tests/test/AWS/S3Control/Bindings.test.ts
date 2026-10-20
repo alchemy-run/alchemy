@@ -59,7 +59,9 @@ const awaitReady = (readinessUrl: string) =>
     Effect.flatMap((response) =>
       response.status === 200
         ? Effect.succeed(response)
-        : Effect.fail(new Error(`Function not ready: ${response.status}`)),
+        : Effect.flatMap(response.text, (body) =>
+            Effect.fail(new Error(`Function not ready: ${response.status} ${body.slice(0, 300)}`)),
+          ),
     ),
     Effect.tapError((error) =>
       Effect.logWarning(`S3Control test setup: fixture not ready yet (${String(error)})`),
