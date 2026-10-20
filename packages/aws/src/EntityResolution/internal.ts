@@ -63,12 +63,14 @@ export const syncEntityResolutionTags = Effect.fn(function* (
  * helper so declaration emit stays clean (inlining `Effect.retry` erases
  * `E`/`R` to `unknown` for every consumer).
  */
-export const retryRolePropagation = <A, E, R>(
+export const retryRolePropagation = <A, E extends { readonly _tag: string }, R>(
   self: Effect.Effect<A, E, R>,
 ): Effect.Effect<A, E, R> =>
   Effect.retry(self, {
     while: (e) =>
-      e instanceof entityresolution.AccessDeniedException &&
+      e._tag ===
+        ("AccessDeniedException" satisfies entityresolution.AccessDeniedException["_tag"]) &&
+      "message" in e &&
       typeof e.message === "string" &&
       (e.message.includes("assuming the passed role") ||
         e.message.includes("does not have access")),

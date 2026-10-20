@@ -72,12 +72,15 @@ export const retryWhileConflict = <A, E extends { readonly _tag: string }, R>(
  * ("Request member: uri failed to satisfy the constraints: invalid lambda
  * permission"). Bounded (~30s).
  */
-export const retryWhileHandlerPermissionPropagating = <A, E, R>(
+export const retryWhileHandlerPermissionPropagating = <A, E extends { readonly _tag: string }, R>(
   self: Effect.Effect<A, E, R>,
 ): Effect.Effect<A, E, R> =>
   Effect.retry(self, {
     while: (e): boolean =>
-      e instanceof ivschat.ValidationException && e.message.includes("invalid lambda permission"),
+      e._tag === ("ValidationException" satisfies ivschat.ValidationException["_tag"]) &&
+      "message" in e &&
+      typeof e.message === "string" &&
+      e.message.includes("invalid lambda permission"),
     schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(10)]),
   });
 

@@ -22,20 +22,29 @@ import * as Schedule from "effect/Schedule";
 const TTL_SECONDS = 120;
 const EXPIRY_MARGIN_MS = 15_000;
 
-const retrySchedule = <E>(): Schedule.Schedule<Duration.Duration, E> =>
+/** Errors whose `retryAfter` (from the Retry-After header) paces a retry. */
+const retryAfterTags: ReadonlySet<string> = new Set<
+  (TooManyRequests | InternalServerError | BadGateway | ServiceUnavailable | GatewayTimeout)["_tag"]
+>(["TooManyRequests", "InternalServerError", "BadGateway", "ServiceUnavailable", "GatewayTimeout"]);
+
+const retryAfterOf = (error: { readonly _tag: string }): Duration.Duration | undefined =>
+  retryAfterTags.has(error._tag) && "retryAfter" in error && Duration.isDuration(error.retryAfter)
+    ? error.retryAfter
+    : undefined;
+
+const retrySchedule = <E extends { readonly _tag: string }>(): Schedule.Schedule<
+  Duration.Duration,
+  E
+> =>
   Schedule.exponential("500 millis").pipe(
-    Schedule.modifyDelay<Duration.Duration, E>(({ input, duration }) =>
-      Effect.succeed(
-        (input instanceof TooManyRequests ||
-          input instanceof InternalServerError ||
-          input instanceof BadGateway ||
-          input instanceof ServiceUnavailable ||
-          input instanceof GatewayTimeout) &&
-          input.retryAfter
-          ? Math.min(Duration.toMillis(input.retryAfter), 60_000)
+    Schedule.modifyDelay<Duration.Duration, E>(({ input, duration }) => {
+      const retryAfter = retryAfterOf(input);
+      return Effect.succeed(
+        retryAfter
+          ? Math.min(Duration.toMillis(retryAfter), 60_000)
           : Math.min(Duration.toMillis(duration), 5_000),
-      ),
-    ),
+      );
+    }),
     Schedule.addDelay<Duration.Duration, E>(() =>
       Effect.sync(() => Duration.millis(Math.random() * 50)),
     ),

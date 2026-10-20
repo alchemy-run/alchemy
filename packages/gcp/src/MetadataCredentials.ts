@@ -76,7 +76,7 @@ const metadataGet = (http: HttpClient.HttpClient, path: string) =>
           }),
       ),
       Effect.mapError((cause) =>
-        cause instanceof ConfigError
+        cause._tag === "ConfigError"
           ? cause
           : ConfigError.make({
               message: `GCE metadata ${path} is unreachable: ${String(cause)}`,
