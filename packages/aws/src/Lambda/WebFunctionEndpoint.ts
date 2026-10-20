@@ -2,10 +2,6 @@ import { deepEqual, isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
-import * as FetchHttpClient from "effect/http/FetchHttpClient";
-import * as HttpClient from "effect/http/HttpClient";
-import * as Schedule from "effect/Schedule";
-import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import { connectorOfRevision, releaseEgressConnector, sameConnector } from "./WebFunctionEgress.ts";
 import {
@@ -22,33 +18,6 @@ import {
   type WebFunctionEndpointType,
   type WebFunctionRevisionWeight,
 } from "./WebFunctionEndpointSync.ts";
-
-/**
- * Wait (bounded, best-effort) until a public endpoint's domain reaches the
- * function. A new endpoint reports `Active` while its domain still answers
- * with Lambda's URL-authorization 403 for a few seconds; a consumer that
- * moves traffic onto it at once (a CloudFront origin swap) would serve those.
- */
-const waitForServing = Effect.fn(function* (domainName: string) {
-  if (yield* AWSEnvironment.isLocalEmulator) return;
-  const client = yield* HttpClient.HttpClient;
-  yield* client.get(`https://${domainName}/`).pipe(
-    Effect.flatMap((response) =>
-      response.status === 403
-        ? Effect.map(response.text, (body) => body.includes("Function URL authorization"))
-        : Effect.succeed(false),
-    ),
-    Effect.orElseSucceed(() => true),
-    Effect.repeat({
-      schedule: Schedule.spaced("2 seconds"),
-      until: (notServing) => !notServing,
-      times: 45,
-    }),
-    Effect.timeout("100 seconds"),
-    Effect.provide(FetchHttpClient.layer),
-    Effect.catchCause(() => Effect.void),
-  );
-});
 
 export const WebFunctionEndpointTypeId = "AWS.Lambda.WebFunctionEndpoint" as const;
 export type WebFunctionEndpointTypeId = typeof WebFunctionEndpointTypeId;
@@ -371,9 +340,6 @@ export const WebFunctionEndpointProvider = () =>
                 session,
               });
             }
-          }
-          if (news.authType === "ApplicationManaged") {
-            yield* waitForServing(endpoint.domainName);
           }
           yield* session.note(`https://${endpoint.domainName}`);
           return toAttributes(functionName, endpoint, revisionId);
