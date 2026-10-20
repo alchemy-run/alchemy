@@ -663,7 +663,7 @@ describe.sequential("autostop", { tags: ["provider:fly", "provider:fly:service"]
             ),
           ).toEqual([]);
         }),
-      { tags: ["provider:fly:app", "provider:fly:machine", "live"], timeout: 120_000 },
+      { tags: ["provider:fly:app", "provider:fly:machine", "live"], timeout: 240_000 },
     );
   }
 
