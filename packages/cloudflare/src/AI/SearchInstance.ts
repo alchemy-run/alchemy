@@ -653,6 +653,14 @@ export const SearchInstanceProvider = () =>
             ...toMutableBody(news),
           })
           .pipe(
+            // An out-of-band delete reads as missing while Cloudflare is
+            // still tearing the instance down; the same id can't be
+            // created until it finishes.
+            Effect.retry({
+              while: (e) => e._tag === "InstanceDeletionInProgress",
+              schedule: Schedule.spaced("3 seconds"),
+              times: 20,
+            }),
             retryTokenPropagation,
             Effect.map((created) => ({
               created: true as const,
