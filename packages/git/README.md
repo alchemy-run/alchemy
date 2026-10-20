@@ -74,16 +74,12 @@ import * as Alchemy from "alchemy";
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import GitHost, { GitSecret } from "./src/git.ts";
 
 export default Alchemy.Stack(
   "GitService",
-  {
-    providers: Layer.merge(Cloudflare.providers(), Alchemy.RandomProvider()),
-    state: Cloudflare.state(),
-  },
+  { providers: Cloudflare.providers(), state: Cloudflare.state() },
   Effect.gen(function* () {
     const git = yield* GitHost;
     const secret = yield* GitSecret;
