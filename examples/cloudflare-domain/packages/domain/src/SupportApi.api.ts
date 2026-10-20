@@ -1,4 +1,4 @@
-import * as Domain from "alchemy/Domain";
+import * as Domain from "@alchemy.run/domain";
 import { AccountActivity } from "./Account/AccountActivity.view.ts";
 import { AccountSummary } from "./Account/AccountSummary.view.ts";
 import { ChangeOwner } from "./Account/ChangeOwner.command.ts";

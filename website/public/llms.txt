@@ -198,7 +198,6 @@ A linear five-part walkthrough from zero to a tested, locally-developed, CI-depl
 - [Add an AI Gateway](https://alchemy.run/cloudflare/ai/ai-gateway) — Wire an AI Gateway into your Worker, turn it into a typed Effect LanguageModel, and run generations and streams through Workers AI with caching, rate limiting, and logs.
 - [Add AI Search (AutoRAG)](https://alchemy.run/cloudflare/ai/ai-search) — Stand up a Cloudflare AI Search (AutoRAG) pipeline over an R2 bucket with one Search call, bind it into your Worker as a typed Effect client, and answer questions over your own documents.
 - [Vector search with Vectorize](https://alchemy.run/cloudflare/ai/vectorize) — Create a Vectorize index, bind it to a Worker with SearchIndex, and run filtered nearest-neighbor queries over vector embeddings.
-- [Build a release-automation agent](https://alchemy.run/cloudflare/ai/release-agent) — Case study of the cloudflare-agent example — GitHub push events routed through a Worker to a per-release Durable Object that drives an AI agent with container-backed tools.
 
 ## Cloudflare — Security & secrets
 

@@ -36,7 +36,7 @@ Yield `ConnectPostgres` in the Service's constructor. Provide
 SQL.
 
 ```typescript
-import * as Drizzle from "alchemy/Drizzle/Postgres";
+import * as Drizzle from "@alchemy.run/drizzle/Postgres";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 
 export default class Api extends Railway.Service<Api>()(
@@ -123,7 +123,7 @@ Resource-valued props accept the resource or an Effect producing it.
 
 ```typescript
 // src/db.ts
-import * as Railway from "alchemy/Railway";
+import * as Railway from "@alchemy.run/railway";
 
 export const Site = Railway.Project("Site");
 export const Db = Railway.Postgres("Db", { project: Site });

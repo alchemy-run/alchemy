@@ -7,7 +7,7 @@ sidebar:
 
 import PackageManagers from "../../../../components/PackageManagers.astro";
 
-export const pkgs = `alchemy@latest effect @effect/platform-node`;
+export const pkgs = `alchemy@latest @alchemy.run/prisma@latest effect @effect/platform-node`;
 
 Build a full-stack application on Prisma in four parts: a Project, an
 Effect-native Compute API, a Postgres database, and a Vite frontend.
@@ -74,7 +74,7 @@ Create `alchemy.run.ts`:
 
 ```typescript
 import * as Alchemy from "alchemy";
-import * as Prisma from "alchemy/Prisma";
+import * as Prisma from "@alchemy.run/prisma";
 import * as Effect from "effect/Effect";
 
 export default Alchemy.Stack(
@@ -93,7 +93,7 @@ records what this Stack owns. For shared deployments, use a
 Create `src/Database.ts`:
 
 ```typescript
-import * as Prisma from "alchemy/Prisma";
+import * as Prisma from "@alchemy.run/prisma";
 
 export const Project = Prisma.Project("Project", {
   createDatabase: false,

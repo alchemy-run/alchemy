@@ -1,7 +1,7 @@
 import { expect, test as bunTest } from "bun:test";
+import type { QueryAIGatewayClient, LanguageModelOptions } from "@alchemy.run/neon";
+import { FunctionRequest } from "@alchemy.run/neon";
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import type { QueryAIGatewayClient, LanguageModelOptions } from "alchemy/Neon";
-import { FunctionRequest } from "alchemy/Neon";
 import { RuntimeContext } from "alchemy/RuntimeContext";
 import { AiError, LanguageModel, Response } from "effect/ai";
 import * as Deferred from "effect/Deferred";
@@ -347,7 +347,7 @@ test.effect(
         new URL("../src/ai/EffectApi.ts", import.meta.url),
       );
       const gatewayPath = yield* path.fromFileUrl(
-        new URL("../../../packages/alchemy/src/Neon/AIGateway.ts", import.meta.url),
+        new URL("../../../packages/neon/src/AIGateway.ts", import.meta.url),
       );
       const source = yield* fs.readFileString(examplePath);
       expect(source).toContain("const model = ai.model(");

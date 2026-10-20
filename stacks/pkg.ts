@@ -1,6 +1,6 @@
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import { PkgRegistry } from "@alchemy.run/pkg/Registry";
 import * as Alchemy from "alchemy";
-import * as Cloudflare from "alchemy/Cloudflare";
 import * as ByteSize from "effect/ByteSize";
 import * as Config from "effect/Config";
 import * as Duration from "effect/Duration";

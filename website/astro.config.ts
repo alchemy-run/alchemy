@@ -355,6 +355,10 @@ export default defineConfig({
                   label: "Local Provider",
                   link: "/infrastructure-as-code/local-provider",
                 },
+                {
+                  label: "Provider Contributions",
+                  link: "/infrastructure-as-code/contributions",
+                },
               ],
             },
             {
@@ -719,10 +723,6 @@ export default defineConfig({
                 },
                 { label: "Effect AI", link: "/cloudflare/ai/effect-ai" },
                 { label: "Vectorize", link: "/cloudflare/ai/vectorize" },
-                {
-                  label: "Release agent",
-                  link: "/cloudflare/ai/release-agent",
-                },
               ],
             },
             {

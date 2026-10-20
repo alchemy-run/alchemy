@@ -12,7 +12,7 @@ Give `Story.make` your model, its policies' Layer, and the external systems its 
 ```typescript
 // packages/domain/test/withdrawals.test.ts
 import { it } from "@effect/vitest";
-import { Story } from "alchemy/Domain/Story";
+import { Story } from "@alchemy.run/domain/Story";
 import { Account } from "../src/Account/Account.aggregate.ts";
 import { AccountSummary } from "../src/Account/AccountSummary.view.ts";
 import { MoneyDeposited } from "../src/Account/DepositMoney.command.ts";
@@ -79,7 +79,7 @@ External system calls wait until you answer them, so you decide what the outside
 ```typescript
 // packages/domain/test/fraud.test.ts
 import { it } from "@effect/vitest";
-import { Story } from "alchemy/Domain/Story";
+import { Story } from "@alchemy.run/domain/Story";
 import { Account } from "../src/Account/Account.aggregate.ts";
 import { MoneyDeposited } from "../src/Account/DepositMoney.command.ts";
 import { AccountFrozen } from "../src/Account/FreezeAccount.command.ts";

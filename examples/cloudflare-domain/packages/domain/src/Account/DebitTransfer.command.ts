@@ -1,4 +1,4 @@
-import * as Domain from "alchemy/Domain";
+import * as Domain from "@alchemy.run/domain";
 import { Actor } from "../Actor.ts";
 import { Cents } from "../Money.ts";
 import { TransferId } from "../Transfer/Transfer.id.ts";

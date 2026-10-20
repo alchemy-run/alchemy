@@ -1,4 +1,4 @@
-import * as Domain from "alchemy/Domain";
+import * as Domain from "@alchemy.run/domain";
 import * as Schema from "effect/Schema";
 import { AccountId } from "../Account/Account.id.ts";
 import { Actor } from "../Actor.ts";

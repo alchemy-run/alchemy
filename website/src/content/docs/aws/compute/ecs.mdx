@@ -34,7 +34,7 @@ runtime in the container:
 
 ```typescript
 // alchemy.run.ts
-import * as AWS from "alchemy/AWS";
+import * as AWS from "@alchemy.run/aws";
 
 const migrate = yield* AWS.ECS.Task("DbMigrate", {
   image: "public.ecr.aws/docker/library/busybox:stable",
@@ -253,8 +253,8 @@ long-running loops with `host.run` — they execute alongside the
 HTTP handler for the life of the container:
 
 ```diff lang="typescript"
-import * as AWS from "alchemy/AWS";
-+import { ServerHost } from "alchemy/Server";
+import * as AWS from "@alchemy.run/aws";
++import { ServerHost } from "alchemy/Runtime/Process";
 import * as Effect from "effect/Effect";
 +import * as Schedule from "effect/Schedule";
 
