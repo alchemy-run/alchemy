@@ -242,6 +242,16 @@ the lost-response handling) makes it fail on its first seed.
 | Bytes written twice: once to the journal, again in the snapshot | ZeroFS avoids it by making its segments the data; we could let a snapshot point into the journal |
 | Prefetch hit rate on a real repo's `pnpm install` | Decides whether attach prefetch pays |
 
+**First numbers** (20 October 2026, `measure_sync_and_snapshot_latency` from
+a laptop in California to R2, so every request pays a long round trip): an
+`fsync` of 1, 64 or 1024 blocks takes about 440 ms at the median, flat in its
+size, because it's one PUT plus one read of the head. A snapshot of four
+extents takes about 1.4 s, which is four round trips in sequence (pack, pages,
+manifest, head) plus deleting the folded journal. Both are bounded by request
+latency, not bytes. The numbers that decide the design are the same
+measurements from inside a Cloudflare container, and with the head in a
+Durable Object.
+
 ## Sources
 
 - **SlateDB** ([repo](https://github.com/slatedb/slatedb), Apache-2.0): writer
