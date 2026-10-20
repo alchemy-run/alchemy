@@ -11,6 +11,12 @@ export default {
       return test();
     }
 
+    if (pathname === "/virtual-module") {
+      // @ts-expect-error virtual module
+      const virtualModule = await import("virtual:module");
+      return new Response(virtualModule.default);
+    }
+
     if (pathname === "/optimize-deps/exclude") {
       const { virtualExport } = await import(
         // @ts-expect-error virtual module

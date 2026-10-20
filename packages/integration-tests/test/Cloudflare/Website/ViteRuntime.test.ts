@@ -786,7 +786,8 @@ describe.concurrent(
     // `module-resolution`: CommonJS `require` with and without extensions
     // and of JSON, `cloudflare:*` imports from the Worker and from a package,
     // a user alias, and an optimizeDeps-excluded package importing a virtual
-    // module, with and without `nodejs_compat`.
+    // module, with and without `nodejs_compat`; `virtual-modules`: a
+    // plugin's virtual module imported by the Worker.
     for (const mode of ["live", "dev"] as const) {
       for (const nodejsCompat of [false, true]) {
         const label = `${nodejsCompat ? " with nodejs_compat" : ""}${mode === "dev" ? " (dev)" : ""}`;
@@ -867,6 +868,7 @@ describe.concurrent(
               });
               yield* expectText(`${url}/@alias/test`, "OK!");
               yield* expectText(`${url}/optimize-deps/exclude`, "Export from virtual module");
+              yield* expectText(`${url}/virtual-module`, "virtual module");
             }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.ignore)), logLevel),
           {
             tags: ["provider:cloudflare:worker", mode === "dev" ? "local" : "live"],
