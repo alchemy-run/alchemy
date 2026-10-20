@@ -4,7 +4,7 @@
 //! with conditional writes (`If-Match` on the ETag), so an S3 bucket alone is
 //! a complete volume store.
 
-use super::{BlobStore, MetaStore, check_head_name};
+use super::{BlobMeta, BlobStore, MetaStore, check_head_name};
 use crate::{Error, Hash, Result};
 use async_trait::async_trait;
 use object_store::path::Path;
@@ -73,6 +73,38 @@ impl BlobStore for ObjectBlobStore {
         match self.store.head(&self.path(key)).await {
             Ok(_) => Ok(true),
             Err(object_store::Error::NotFound { .. }) => Ok(false),
+            Err(e) => Err(store_error(e)),
+        }
+    }
+
+    async fn list(&self, prefix: &str) -> Result<Vec<BlobMeta>> {
+        use futures::StreamExt;
+        let root = format!("{}/", self.prefix.trim_end_matches('/'));
+        let mut stream = self.store.list(Some(&Path::from(format!(
+            "{root}{}",
+            prefix.trim_end_matches('/')
+        ))));
+        let mut found = Vec::new();
+        while let Some(meta) = stream.next().await {
+            let meta = meta.map_err(store_error)?;
+            let Some(key) = meta.location.as_ref().strip_prefix(&root) else {
+                continue;
+            };
+            if key.starts_with(prefix) && !key.starts_with("heads/") {
+                found.push(BlobMeta {
+                    key: key.to_string(),
+                    size: meta.size,
+                    modified: meta.last_modified.into(),
+                });
+            }
+        }
+        found.sort_by(|a, b| a.key.cmp(&b.key));
+        Ok(found)
+    }
+
+    async fn delete(&self, key: &str) -> Result<()> {
+        match self.store.delete(&self.path(key)).await {
+            Ok(()) | Err(object_store::Error::NotFound { .. }) => Ok(()),
             Err(e) => Err(store_error(e)),
         }
     }

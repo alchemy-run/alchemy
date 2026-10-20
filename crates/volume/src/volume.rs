@@ -159,6 +159,17 @@ impl Volume {
         Ok(page)
     }
 
+    /// The entries of a page (used by garbage collection).
+    pub(crate) async fn page_entries(&self, id: &Hash) -> Result<Vec<Option<Entry>>> {
+        Ok(self.page(id).await?.entries.clone())
+    }
+
+    /// Drops cached snapshots and pages (after garbage collection deleted some).
+    pub(crate) fn forget_cached(&self) {
+        self.manifests.lock().unwrap().clear();
+        self.pages.lock().unwrap().clear();
+    }
+
     /// Where extent `extent` of snapshot `id` is stored; `None` is zeros.
     pub async fn entry(&self, id: &Hash, extent: u64) -> Result<Option<Entry>> {
         let manifest = self.manifest(id).await?;
@@ -285,8 +296,15 @@ impl Volume {
             if out.len() >= limit {
                 break;
             }
-            out.push(current);
-            next = self.manifest(&current).await?.parent;
+            match self.manifest(&current).await {
+                Ok(manifest) => {
+                    out.push(current);
+                    next = manifest.parent;
+                }
+                // older history was garbage collected
+                Err(Error::Missing(_)) if !out.is_empty() => break,
+                Err(e) => return Err(e),
+            }
         }
         Ok(out)
     }

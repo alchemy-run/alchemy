@@ -1,4 +1,4 @@
-use super::{BlobStore, MetaStore, check_head_name};
+use super::{BlobMeta, BlobStore, MetaStore, check_head_name};
 use crate::{Error, Hash, Result};
 use async_trait::async_trait;
 use std::collections::{BTreeMap, HashMap};
@@ -9,7 +9,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 /// what a cache saved.
 #[derive(Default)]
 pub struct MemoryBlobStore {
-    objects: Mutex<HashMap<String, Vec<u8>>>,
+    objects: Mutex<HashMap<String, (Vec<u8>, std::time::SystemTime)>>,
     pub gets: AtomicU64,
     pub puts: AtomicU64,
 }
@@ -36,7 +36,11 @@ impl MemoryBlobStore {
 impl BlobStore for MemoryBlobStore {
     async fn put(&self, key: &str, bytes: Vec<u8>) -> Result<()> {
         self.puts.fetch_add(1, Ordering::Relaxed);
-        self.objects.lock().unwrap().insert(key.to_string(), bytes);
+        let mut objects = self.objects.lock().unwrap();
+        // content-addressed: rewriting keeps the original time
+        objects
+            .entry(key.to_string())
+            .or_insert((bytes, std::time::SystemTime::now()));
         Ok(())
     }
 
@@ -46,14 +50,14 @@ impl BlobStore for MemoryBlobStore {
             .lock()
             .unwrap()
             .get(key)
-            .cloned()
+            .map(|(bytes, _)| bytes.clone())
             .ok_or_else(|| Error::Missing(key.into()))
     }
 
     async fn get_range(&self, key: &str, start: u64, end: u64) -> Result<Vec<u8>> {
         self.gets.fetch_add(1, Ordering::Relaxed);
         let objects = self.objects.lock().unwrap();
-        let object = objects.get(key).ok_or_else(|| Error::Missing(key.into()))?;
+        let (object, _) = objects.get(key).ok_or_else(|| Error::Missing(key.into()))?;
         object
             .get(start as usize..end as usize)
             .map(<[u8]>::to_vec)
@@ -62,6 +66,42 @@ impl BlobStore for MemoryBlobStore {
 
     async fn exists(&self, key: &str) -> Result<bool> {
         Ok(self.objects.lock().unwrap().contains_key(key))
+    }
+
+    async fn list(&self, prefix: &str) -> Result<Vec<BlobMeta>> {
+        let objects = self.objects.lock().unwrap();
+        let mut found: Vec<BlobMeta> = objects
+            .iter()
+            .filter(|(key, _)| key.starts_with(prefix))
+            .map(|(key, (bytes, modified))| BlobMeta {
+                key: key.clone(),
+                size: bytes.len() as u64,
+                modified: *modified,
+            })
+            .collect();
+        found.sort_by(|a, b| a.key.cmp(&b.key));
+        Ok(found)
+    }
+
+    async fn delete(&self, key: &str) -> Result<()> {
+        self.objects.lock().unwrap().remove(key);
+        Ok(())
+    }
+}
+
+impl MemoryBlobStore {
+    /// Backdates an object (for tests of the garbage collector's grace period).
+    pub fn age(&self, key: &str, by: std::time::Duration) {
+        if let Some((_, modified)) = self.objects.lock().unwrap().get_mut(key) {
+            *modified -= by;
+        }
+    }
+
+    /// Backdates every object.
+    pub fn age_all(&self, by: std::time::Duration) {
+        for (_, modified) in self.objects.lock().unwrap().values_mut() {
+            *modified -= by;
+        }
     }
 }
 

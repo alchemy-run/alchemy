@@ -351,3 +351,164 @@ async fn writes_must_be_whole_extents_inside_the_volume() {
         Err(Error::Invalid(_))
     ));
 }
+
+mod gc {
+    use super::*;
+    use std::time::Duration;
+    use volume::GcOptions;
+
+    const OLD: Duration = Duration::from_secs(7200);
+
+    fn now() -> GcOptions {
+        GcOptions {
+            grace: Duration::from_secs(3600),
+            ..Default::default()
+        }
+    }
+
+    #[tokio::test]
+    async fn nothing_reachable_is_deleted() {
+        let (volume, blobs) = memory();
+        let base = volume.create("main", 64 * MIB).await.unwrap();
+        let one = volume
+            .commit("main", &base, vec![(0, Change::Write(extent(1)))])
+            .await
+            .unwrap();
+        volume.fork("main", "fork").await.unwrap();
+        volume
+            .commit("fork", &one, vec![(1, Change::Write(extent(2)))])
+            .await
+            .unwrap();
+        blobs.age_all(OLD);
+        let before = blobs.len();
+        let report = volume.gc(&now()).await.unwrap();
+        assert_eq!(report.deleted, 0);
+        assert_eq!(blobs.len(), before);
+        assert_eq!(report.heads, 2);
+        assert_eq!(report.snapshots, 3);
+    }
+
+    #[tokio::test]
+    async fn a_dropped_fork_is_collected_and_the_rest_still_reads() {
+        let (volume, blobs) = memory();
+        let base = volume.create("main", 64 * MIB).await.unwrap();
+        let one = volume
+            .commit("main", &base, vec![(0, Change::Write(extent(1)))])
+            .await
+            .unwrap();
+        volume.fork("main", "loser").await.unwrap();
+        volume
+            .commit("loser", &one, vec![(5, Change::Write(extent(5)))])
+            .await
+            .unwrap();
+        volume.drop_head("loser").await.unwrap();
+        blobs.age_all(OLD);
+
+        let report = volume.gc(&now()).await.unwrap();
+        // the loser's pack, page and manifest
+        assert_eq!(report.deleted, 3, "{report:?}");
+        assert_eq!(volume.read_extent(&one, 0).await.unwrap(), Some(extent(1)));
+    }
+
+    #[tokio::test]
+    async fn history_can_be_pruned() {
+        let (volume, blobs) = memory();
+        let mut id = volume.create("main", 64 * MIB).await.unwrap();
+        for step in 1..=5u8 {
+            id = volume
+                .commit("main", &id, vec![(0, Change::Write(extent(step)))])
+                .await
+                .unwrap();
+        }
+        blobs.age_all(OLD);
+        let report = volume
+            .gc(&GcOptions {
+                history: Some(2),
+                ..now()
+            })
+            .await
+            .unwrap();
+        assert_eq!(report.snapshots, 2);
+        assert!(report.deleted >= 4, "{report:?}");
+        assert_eq!(volume.read_extent(&id, 0).await.unwrap(), Some(extent(5)));
+        assert_eq!(
+            volume.history(&id, 10).await.unwrap().len(),
+            2,
+            "history ends where it was pruned"
+        );
+    }
+
+    #[tokio::test]
+    async fn young_unreachable_objects_are_spared() {
+        let (volume, _) = memory();
+        let base = volume.create("main", 64 * MIB).await.unwrap();
+        // an in-flight commit: uploaded, head not moved yet
+        let pending = volume
+            .snapshot(&base, vec![(0, Change::Write(extent(9)))])
+            .await
+            .unwrap();
+        let report = volume.gc(&now()).await.unwrap();
+        assert_eq!(report.deleted, 0);
+        assert!(report.spared >= 3);
+        volume
+            .commit("main", &base, vec![(0, Change::Write(extent(9)))])
+            .await
+            .unwrap();
+        assert_eq!(
+            volume.read_extent(&pending, 0).await.unwrap(),
+            Some(extent(9))
+        );
+    }
+
+    #[tokio::test]
+    async fn a_dry_run_deletes_nothing() {
+        let (volume, blobs) = memory();
+        let base = volume.create("main", 64 * MIB).await.unwrap();
+        volume.fork("main", "loser").await.unwrap();
+        volume
+            .commit("loser", &base, vec![(5, Change::Write(extent(5)))])
+            .await
+            .unwrap();
+        volume.drop_head("loser").await.unwrap();
+        blobs.age_all(OLD);
+        let before = blobs.len();
+        let report = volume
+            .gc(&GcOptions {
+                dry_run: true,
+                ..now()
+            })
+            .await
+            .unwrap();
+        assert_eq!(report.deleted, 3);
+        assert_eq!(blobs.len(), before);
+    }
+
+    #[tokio::test]
+    async fn the_local_store_lists_and_deletes() {
+        let dir = tempfile::tempdir().unwrap();
+        let blobs = Arc::new(LocalBlobStore::new(dir.path().join("blobs")).unwrap());
+        let volume = Volume::new(
+            blobs.clone(),
+            Arc::new(LocalMetaStore::new(dir.path().join("heads")).unwrap()),
+        );
+        let base = volume.create("main", 64 * MIB).await.unwrap();
+        volume.fork("main", "loser").await.unwrap();
+        volume
+            .commit("loser", &base, vec![(5, Change::Write(extent(5)))])
+            .await
+            .unwrap();
+        volume.drop_head("loser").await.unwrap();
+        use volume::store::BlobStore;
+        assert_eq!(blobs.list("packs/").await.unwrap().len(), 1);
+        let report = volume
+            .gc(&GcOptions {
+                grace: Duration::ZERO,
+                ..Default::default()
+            })
+            .await
+            .unwrap();
+        assert_eq!(report.deleted, 3);
+        assert!(blobs.list("packs/").await.unwrap().is_empty());
+        assert_eq!(volume.read_extent(&base, 0).await.unwrap(), None);
+    }
+}

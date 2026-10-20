@@ -411,3 +411,29 @@ fn writes_during_a_flush_are_kept_for_the_next_one() {
         assert!(block.iter().all(|b| b == byte), "extent {extent}");
     }
 }
+
+#[test]
+fn prefetch_warms_every_stored_extent_without_clobbering_writes() {
+    let world = World::new();
+    world.base("base");
+    let device = world.attach("base");
+    device.write(0, &vec![0xCC; BLOCK_SIZE as usize]).unwrap(); // newer than the store
+    let fetched = device.prefetch(4).unwrap();
+    assert_eq!(fetched, 16, "the 16 stored extents of the 4 MiB base");
+    let before = device.status().fetches;
+    let bytes = device.read(0, (4 * MIB) as u32).unwrap();
+    assert_eq!(
+        device.status().fetches,
+        before,
+        "everything was already cached"
+    );
+    assert!(
+        bytes[..BLOCK_SIZE as usize].iter().all(|&b| b == 0xCC),
+        "the write survived"
+    );
+    assert!(
+        bytes[BLOCK_SIZE as usize..2 * BLOCK_SIZE as usize]
+            .iter()
+            .all(|&b| b == pattern(1))
+    );
+}

@@ -1,4 +1,4 @@
-use super::{BlobStore, MetaStore, check_head_name};
+use super::{BlobMeta, BlobStore, MetaStore, check_head_name};
 use crate::{Error, Hash, Result};
 use async_trait::async_trait;
 use std::fs;
@@ -104,6 +104,54 @@ impl BlobStore for LocalBlobStore {
     async fn exists(&self, key: &str) -> Result<bool> {
         Ok(self.path(key)?.exists())
     }
+
+    async fn list(&self, prefix: &str) -> Result<Vec<BlobMeta>> {
+        let mut found = Vec::new();
+        walk(&self.root, &self.root, prefix, &mut found)?;
+        found.sort_by(|a, b| a.key.cmp(&b.key));
+        Ok(found)
+    }
+
+    async fn delete(&self, key: &str) -> Result<()> {
+        match fs::remove_file(self.path(key)?) {
+            Ok(()) => Ok(()),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            Err(e) => Err(e.into()),
+        }
+    }
+}
+
+fn walk(root: &Path, dir: &Path, prefix: &str, out: &mut Vec<BlobMeta>) -> Result<()> {
+    let entries = match fs::read_dir(dir) {
+        Ok(entries) => entries,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(e) => return Err(e.into()),
+    };
+    for entry in entries {
+        let entry = entry?;
+        let path = entry.path();
+        if entry.file_name().to_string_lossy().starts_with('.') {
+            continue; // temporary files
+        }
+        if entry.file_type()?.is_dir() {
+            walk(root, &path, prefix, out)?;
+            continue;
+        }
+        let key = path
+            .strip_prefix(root)
+            .unwrap()
+            .to_string_lossy()
+            .replace('\\', "/");
+        if key.starts_with(prefix) {
+            let meta = entry.metadata()?;
+            out.push(BlobMeta {
+                key,
+                size: meta.len(),
+                modified: meta.modified()?,
+            });
+        }
+    }
+    Ok(())
 }
 
 /// Heads as files under a directory. Compare-and-set is serialized within

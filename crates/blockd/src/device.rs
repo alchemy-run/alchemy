@@ -270,6 +270,62 @@ impl Device {
         }
     }
 
+    /// Fetches every stored extent that isn't cached yet, `concurrency` at a
+    /// time, in the background. Fetched bytes only fill blocks that are still
+    /// missing, so a prefetch racing with writes and flushes never overwrites
+    /// anything newer. Returns when done (run it on its own thread).
+    pub fn prefetch(&self, concurrency: usize) -> Result<u64> {
+        let base = *self.base.lock().unwrap();
+        let extents = self.size / EXTENT_SIZE;
+        let missing: Vec<u64> = (0..extents)
+            .filter(|&e| {
+                !self
+                    .present
+                    .all(e * BLOCKS_PER_EXTENT, (e + 1) * BLOCKS_PER_EXTENT)
+            })
+            .collect();
+        let mut fetched = 0;
+        for batch in missing.chunks(concurrency.max(1)) {
+            let reads = batch.iter().map(|&extent| {
+                let volume = self.volume.clone();
+                self.runtime
+                    .spawn(async move { (extent, volume.read_extent(&base, extent).await) })
+            });
+            let results = self.runtime.block_on(async {
+                let mut out = Vec::new();
+                for read in reads {
+                    out.push(read.await);
+                }
+                out
+            });
+            for joined in results {
+                let (extent, stored) = joined?;
+                if let Some(bytes) = stored? {
+                    self.install(extent, &bytes)?;
+                    fetched += 1;
+                }
+            }
+        }
+        Ok(fetched)
+    }
+
+    /// Fills the blocks of `extent` that are still missing with `bytes`.
+    fn install(&self, extent: u64, bytes: &[u8]) -> Result<()> {
+        let _base = self.base.lock().unwrap();
+        let first = extent * BLOCKS_PER_EXTENT;
+        for block in first..first + BLOCKS_PER_EXTENT {
+            if self.present.get(block) {
+                continue;
+            }
+            let at = ((block - first) * BLOCK_SIZE) as usize;
+            self.cache
+                .write_all_at(&bytes[at..at + BLOCK_SIZE as usize], block * BLOCK_SIZE)?;
+            self.present.set(block);
+        }
+        self.fetches.fetch_add(1, Ordering::Relaxed);
+        Ok(())
+    }
+
     /// Makes every block present, so the cache file is a complete image of
     /// the head (for tools that read an image file directly). Extents the
     /// snapshot doesn't store are zero-filled without touching the store.

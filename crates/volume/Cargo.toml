@@ -17,13 +17,20 @@ async-trait.workspace = true
 blake3.workspace = true
 bytes.workspace = true
 thiserror.workspace = true
-zstd.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 object_store = { workspace = true, optional = true }
 futures = { version = "0.3", optional = true }
 
+# zstd's C library natively; the pure-Rust ruzstd in WebAssembly (same format).
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+zstd.workspace = true
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+ruzstd = "0.9"
+
 [dev-dependencies]
+ruzstd = "0.9"
 tempfile.workspace = true
 tokio.workspace = true
 object_store.workspace = true

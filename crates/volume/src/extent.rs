@@ -15,17 +15,65 @@ pub fn is_zero(bytes: &[u8]) -> bool {
         && suffix.iter().all(|&b| b == 0)
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 pub(crate) fn compress(bytes: &[u8]) -> std::io::Result<Vec<u8>> {
     zstd::bulk::compress(bytes, ZSTD_LEVEL)
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 pub(crate) fn decompress(bytes: &[u8], size: usize) -> std::io::Result<Vec<u8>> {
     zstd::bulk::decompress(bytes, size)
+}
+
+// WebAssembly: the same zstd frames, from the pure-Rust ruzstd.
+#[cfg(target_arch = "wasm32")]
+pub(crate) fn compress(bytes: &[u8]) -> std::io::Result<Vec<u8>> {
+    let _ = ZSTD_LEVEL;
+    Ok(ruzstd::encoding::compress_to_vec(
+        bytes,
+        ruzstd::encoding::CompressionLevel::Fastest,
+    ))
+}
+
+#[cfg(target_arch = "wasm32")]
+pub(crate) fn decompress(bytes: &[u8], size: usize) -> std::io::Result<Vec<u8>> {
+    use std::io::Read;
+    let mut source = bytes;
+    let mut decoder = ruzstd::decoding::StreamingDecoder::new(&mut source)
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e.to_string()))?;
+    let mut out = Vec::with_capacity(size);
+    decoder.read_to_end(&mut out)?;
+    Ok(out)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Packs written natively must open in WebAssembly (ruzstd) and back.
+    #[test]
+    #[cfg(not(target_arch = "wasm32"))]
+    fn zstd_and_ruzstd_read_each_other() {
+        use std::io::Read;
+        let extent: Vec<u8> = (0..EXTENT_SIZE).map(|i| (i * 7 % 13) as u8).collect();
+        let native = compress(&extent).unwrap();
+        let mut source = native.as_slice();
+        let mut out = Vec::new();
+        ruzstd::decoding::StreamingDecoder::new(&mut source)
+            .unwrap()
+            .read_to_end(&mut out)
+            .unwrap();
+        assert_eq!(out, extent, "ruzstd reads zstd");
+        let pure = ruzstd::encoding::compress_to_vec(
+            extent.as_slice(),
+            ruzstd::encoding::CompressionLevel::Fastest,
+        );
+        assert_eq!(
+            decompress(&pure, EXTENT_SIZE as usize).unwrap(),
+            extent,
+            "zstd reads ruzstd"
+        );
+    }
 
     #[test]
     fn zero_detection() {

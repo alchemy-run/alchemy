@@ -14,6 +14,15 @@ pub use object::{ObjectBlobStore, ObjectMetaStore};
 
 use crate::{Hash, Result};
 use async_trait::async_trait;
+use std::time::SystemTime;
+
+/// An object found by [`BlobStore::list`].
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct BlobMeta {
+    pub key: String,
+    pub size: u64,
+    pub modified: SystemTime,
+}
 
 /// Immutable objects by key. Keys are content-addressed, so writing the same
 /// key twice writes the same bytes and is harmless.
@@ -24,6 +33,10 @@ pub trait BlobStore: Send + Sync {
     /// Bytes `start..end` of an object.
     async fn get_range(&self, key: &str, start: u64, end: u64) -> Result<Vec<u8>>;
     async fn exists(&self, key: &str) -> Result<bool>;
+    /// Every object whose key starts with `prefix` (for garbage collection).
+    async fn list(&self, prefix: &str) -> Result<Vec<BlobMeta>>;
+    /// Deletes an object; deleting a missing object is not an error.
+    async fn delete(&self, key: &str) -> Result<()>;
 }
 
 /// Named heads, each pointing at a manifest. The only writes are

@@ -3,7 +3,7 @@
 # devices and no FUSE, like a Lambda MicroVM.
 set -euo pipefail
 repo="$(cd "$(dirname "$0")/../../../.." && pwd)"
-image="rust:1.94-bookworm"
+image="$("$repo/crates/blockd/tests/image.sh")"
 docker run --rm \
   -v "$repo":/work -w /work \
   -v blockd-cargo-registry:/usr/local/cargo/registry \

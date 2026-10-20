@@ -5,10 +5,11 @@
 //! blockd reset   --store <spec> --head <name> --to <snapshot>
 //! blockd drop    --store <spec> --head <name>
 //! blockd export  --store <spec> --head <name> --image <file>   (write the head as a sparse image)
+//! blockd gc      --store <spec> [--history <n>] [--grace-seconds <s>] [--dry-run true]
 //! blockd heads   --store <spec>
 //! blockd history --store <spec> --head <name> [--limit <n>]
-//! blockd attach  --store <spec> --head <name> --cache <file> (--nbd /dev/nbd0 | --fuse <mountpoint>)
-//!                [--control <socket>] [--flush-every <seconds>]
+//! blockd attach  --store <spec> --head <name> --cache <file> (--nbd /dev/nbd0 | --ublk <id> | --fuse <mountpoint>)
+//!                [--control <socket>] [--flush-every <seconds>] [--prefetch true]
 //! blockd run     --store <spec> --head <name> --cache <file> --dir <dir> --command <sh> [--keep true]
 //!                (copy mode: extract, run, write back; for hosts that can't mount)
 //! blockd disconnect --nbd /dev/nbd0   (detach a device whose blockd died)
@@ -81,6 +82,21 @@ fn main() -> Result<()> {
             runtime.block_on(volume.reset(flags.required("head")?, to))?;
         }
         "drop" => runtime.block_on(store()?.drop_head(flags.required("head")?))?,
+        "gc" => {
+            let options = volume::GcOptions {
+                history: flags.get("history").map(str::parse).transpose()?,
+                grace: std::time::Duration::from_secs(
+                    flags
+                        .get("grace-seconds")
+                        .map(str::parse)
+                        .transpose()?
+                        .unwrap_or(3600),
+                ),
+                dry_run: flags.get("dry-run") == Some("true"),
+            };
+            let report = runtime.block_on(store()?.gc(&options))?;
+            println!("{}", serde_json::to_string(&report)?);
+        }
         "export" => {
             use std::os::unix::fs::FileExt;
             let volume = store()?;
@@ -137,7 +153,7 @@ fn main() -> Result<()> {
             blockd::nbd::force_disconnect(std::path::Path::new(flags.required("nbd")?))?
         }
         _ => bail!(
-            "usage: blockd <create|import|fork|reset|drop|export|heads|history|attach|run|control|disconnect> …"
+            "usage: blockd <create|import|fork|reset|drop|export|gc|heads|history|attach|run|control|disconnect> …"
         ),
     }
     Ok(())
@@ -160,6 +176,13 @@ fn attach(flags: &Flags, volume: volume::Volume, runtime: &tokio::runtime::Runti
         .transpose()?
         .unwrap_or(5);
     let flusher = (every > 0).then(|| device.start_flusher(std::time::Duration::from_secs(every)));
+    if flags.get("prefetch") == Some("true") {
+        let device = device.clone();
+        std::thread::spawn(move || match device.prefetch(16) {
+            Ok(n) => tracing::info!("prefetched {n} extents"),
+            Err(e) => tracing::warn!("prefetch stopped: {e:#}"),
+        });
+    }
     let control = flags.get("control").map(PathBuf::from);
     let serve_control = |on_detach: Box<dyn Fn() + Send>| {
         if let Some(socket) = control.clone() {
@@ -173,6 +196,19 @@ fn attach(flags: &Flags, volume: volume::Volume, runtime: &tokio::runtime::Runti
     };
 
     match (flags.get("nbd"), flags.get("fuse")) {
+        #[cfg(feature = "ublk")]
+        (None, None) if flags.get("ublk").is_some() => {
+            let id: i32 = flags.required("ublk")?.parse()?;
+            let ublk = blockd::ublk::Ublk::create(id, 1)?;
+            let killer = ublk.killer();
+            serve_control(Box::new(move || killer.kill()));
+            let size = device.size();
+            let head_name = head.to_string();
+            ublk.serve(device.clone(), move |path| {
+                tracing::info!("attached {head_name} ({size} bytes) at {path}");
+                println!("{path}");
+            })?;
+        }
         (Some(nbd), None) => {
             let attachment = blockd::nbd::attach(Path::new(nbd), device.clone())?;
             tracing::info!("attached {head} ({} bytes) at {nbd}", device.size());
@@ -196,7 +232,9 @@ fn attach(flags: &Flags, volume: volume::Volume, runtime: &tokio::runtime::Runti
             }));
             mounted.wait()?;
         }
-        _ => bail!("attach needs exactly one of --nbd <device> or --fuse <mountpoint>"),
+        _ => {
+            bail!("attach needs exactly one of --nbd <device>, --ublk <id> or --fuse <mountpoint>")
+        }
     }
     drop(flusher);
     let snapshot = device.close()?;

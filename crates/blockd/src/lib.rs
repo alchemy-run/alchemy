@@ -17,5 +17,7 @@ pub mod fuse;
 #[cfg(target_os = "linux")]
 pub mod nbd;
 pub mod store;
+#[cfg(all(target_os = "linux", feature = "ublk"))]
+pub mod ublk;
 
 pub use device::{Device, Flusher, Status};

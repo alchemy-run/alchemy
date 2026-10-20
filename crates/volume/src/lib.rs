@@ -13,6 +13,7 @@
 
 mod error;
 mod extent;
+mod gc;
 mod id;
 mod manifest;
 mod pack;
@@ -21,6 +22,7 @@ mod volume;
 
 pub use error::{Error, Result};
 pub use extent::{BLOCK_SIZE, EXTENT_SIZE, is_zero};
+pub use gc::{GcOptions, GcReport};
 pub use id::Hash;
 pub use manifest::{Entry, Manifest, PAGE_ENTRIES, Page};
 pub use pack::{Pack, PackBuilder};
