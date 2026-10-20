@@ -11,12 +11,6 @@ export default defineConfig({
   // Cold dev boots (vite + workerd + module-runner connect) and the
   // edit-poll-restore HMR specs need headroom over the usual 60s.
   timeout: 120_000,
-  build: {
-    // distilled is a prebuilt dependency linked from submodules/, outside
-    // node_modules: keep playwright's require hook (which rewrites specifiers
-    // to raw paths, breaking require(esm) on Windows) away from it.
-    external: ["**/submodules/distilled/**"],
-  },
   expect: {
     timeout: 10_000,
   },
