@@ -3,7 +3,9 @@
 //! sandbox can run `blockd exec` the same way on every host.
 
 use crate::Device;
-use anyhow::{Context, Result, bail};
+#[cfg(feature = "ublk")]
+use anyhow::Context;
+use anyhow::{Result, bail};
 use std::path::Path;
 use std::process::Command;
 use std::sync::Arc;
