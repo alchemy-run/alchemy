@@ -50,6 +50,7 @@ const SENSITIVE_FILES = [
   "client.jks",
   "custom-sensitive-file",
 ];
+const nodeEnvFixtureDir = pathe.resolve(import.meta.dirname, "vite-node-env-fixture");
 const hotChannelFixtureDir = pathe.resolve(import.meta.dirname, "vite-hot-channel-fixture");
 
 type Mode = "live" | "dev";
@@ -653,6 +654,66 @@ describe.concurrent(
           timeout: 300_000,
         },
       );
+    }
+
+    // `node-env`: Vite replaces `process.env.NODE_ENV` in the Worker, with
+    // and without `nodejs_compat`; the build drops React's development code.
+    for (const mode of ["live", "dev"] as const) {
+      for (const nodejsCompat of [false, true]) {
+        const label = `${nodejsCompat ? " with nodejs_compat" : ""}${mode === "dev" ? " (dev)" : ""}`;
+        (mode === "live" ? test : devTest).provider(
+          `Vite runtime: process.env.NODE_ENV is replaced${label}`,
+          (stack) =>
+            Effect.gen(function* () {
+              yield* stack.destroy();
+              const rootDir = yield* cloneFixture(nodeEnvFixtureDir, {
+                prefix: "alchemy-vite-node-env-",
+                tempRoot,
+                entries: ["package.json", "src"],
+              });
+              const site = yield* stack.deploy(
+                Cloudflare.Website.Vite(`ViteNodeEnv${mode}${nodejsCompat ? "Compat" : ""}`, {
+                  rootDir,
+                  main: "./src/index.ts",
+                  workersDev: true,
+                  compatibility: {
+                    date: "2024-12-30",
+                    ...(nodejsCompat ? { flags: ["nodejs_compat"] } : {}),
+                  },
+                  memo: { include: ["**/*"] },
+                  ...(mode === "dev" ? { dev: { port: 0 } } : {}),
+                }),
+              );
+              const nodeEnv = mode === "dev" ? "development" : "production";
+              yield* expectResponse(site.url!, (res) =>
+                res.body.includes("<h1>Server Side React</h1>") &&
+                res.body.includes(`The value of process.env.NODE_ENV is &quot;${nodeEnv}&quot;`)
+                  ? undefined
+                  : `body ${res.body.slice(0, 200)}`,
+              );
+              if (mode === "live") {
+                const fs = yield* FileSystem.FileSystem;
+                const files = yield* fs.readDirectory(rootDir, { recursive: true });
+                const bundles = files.filter(
+                  (file) =>
+                    /\.m?js$/.test(file) &&
+                    !file.startsWith("src") &&
+                    !file.includes("node_modules"),
+                );
+                expect(bundles.length).toBeGreaterThan(0);
+                for (const file of bundles) {
+                  const code = yield* fs.readFileString(pathe.join(rootDir, file));
+                  expect(code).not.toContain("react-dom.development.js");
+                  expect(code).not.toContain("https://github.com/facebook/react");
+                }
+              }
+            }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.ignore)), logLevel),
+          {
+            tags: ["provider:cloudflare:worker", mode === "dev" ? "local" : "live"],
+            timeout: 300_000,
+          },
+        );
+      }
     }
 
     // Miniflare's outbound `cf.image` mock (dev only: deployed, `cf.image`
