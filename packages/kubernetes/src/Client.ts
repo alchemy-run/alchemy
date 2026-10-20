@@ -20,9 +20,9 @@ import {
   ClusterNotFoundError,
   findClusterAdapter,
   type ClusterTransport,
-} from "../ClusterAdapter.ts";
-import type { Connection } from "../Connection.ts";
-import { driftMask, hashDriftSelection } from "./declared.ts";
+} from "./ClusterAdapter.ts";
+import type { Connection } from "./Connection.ts";
+import { driftMask, hashDriftSelection } from "./internal/declared.ts";
 import {
   buildKubernetesObjectPathWithSpec,
   chunkByApplyRank,
@@ -34,7 +34,7 @@ import {
   type KubernetesObjectDefinition,
   type KubernetesObjectKindSpec,
   type KubernetesObjectRef,
-} from "./objects.ts";
+} from "./Objects.ts";
 
 export class KubernetesApiError extends Data.TaggedError("KubernetesApiError")<{
   method: string;

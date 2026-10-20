@@ -5,7 +5,7 @@ import { ProfileStore } from "alchemy/Auth/Profile";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { PrismaEnvironment, fromProfile } from "./PrismaEnvironment.ts";
+import { PrismaEnvironment, fromProfile } from "../PrismaEnvironment.ts";
 
 export { Credentials } from "@distilled.cloud/prisma";
 

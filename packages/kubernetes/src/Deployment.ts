@@ -15,6 +15,13 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import {
+  connectCluster,
+  deleteObjects,
+  ifClusterExists,
+  readObject,
+  reconcileObjects,
+} from "./Client.ts";
+import {
   findClusterAdapter,
   type ClusterTransport,
   type IdentityState,
@@ -25,18 +32,6 @@ import {
   type WorkloadServices,
 } from "./ClusterAdapter.ts";
 import { toConnection, type ClusterLike, type Connection } from "./Connection.ts";
-import {
-  connectCluster,
-  deleteObjects,
-  ifClusterExists,
-  readObject,
-  reconcileObjects,
-} from "./internal/client.ts";
-import {
-  toKubernetesObjectRef,
-  type KubernetesObjectDefinition,
-  type KubernetesObjectRef,
-} from "./internal/objects.ts";
 import { makeConnectionRegistry } from "./internal/registry.ts";
 import {
   collectBindingEnv,
@@ -50,6 +45,11 @@ import {
   tryConnectionOf,
   workloadImageHash,
 } from "./internal/workload.ts";
+import {
+  toKubernetesObjectRef,
+  type KubernetesObjectDefinition,
+  type KubernetesObjectRef,
+} from "./Objects.ts";
 import type { Providers } from "./Providers.ts";
 
 export const isDeployment = (value: any): value is Deployment =>

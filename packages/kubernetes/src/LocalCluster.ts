@@ -12,8 +12,8 @@ import * as Path from "effect/Path";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Stream from "effect/Stream";
+import { applyObject, connectCluster } from "./Client.ts";
 import type { Connection, ContainerRegistry } from "./Connection.ts";
-import { applyObject, connectCluster } from "./internal/client.ts";
 import { kindClusterConfig, kindConfigOf } from "./internal/kind.ts";
 import type { Providers } from "./Providers.ts";
 

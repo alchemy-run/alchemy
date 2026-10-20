@@ -18,7 +18,7 @@ import {
   objectFrom,
   toBucketError,
   type BucketAccess,
-} from "./Internal/BucketClient.ts";
+} from "./internal/BucketClient.ts";
 
 export interface WriteBucket extends Binding.Service<
   WriteBucket,

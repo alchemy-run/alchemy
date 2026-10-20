@@ -1,5 +1,5 @@
 import * as Kubernetes from "@alchemy.run/kubernetes";
-import { connectCluster, readObject } from "@alchemy.run/kubernetes/internal/client";
+import { connectCluster, readObject } from "@alchemy.run/kubernetes/Client";
 import {
   kindClusterConfig,
   kindConfigOf,

@@ -13,6 +13,13 @@ import { sha256Object } from "alchemy/Util/sha256";
 import * as Effect from "effect/Effect";
 import type { Scope } from "effect/Scope";
 import {
+  connectCluster,
+  deleteObjects,
+  ifClusterExists,
+  readObject,
+  reconcileObjects,
+} from "./Client.ts";
+import {
   findClusterAdapter,
   type IdentityState,
   type RegistryState,
@@ -22,14 +29,6 @@ import {
   type WorkloadServices,
 } from "./ClusterAdapter.ts";
 import { toConnection, type ClusterLike, type Connection } from "./Connection.ts";
-import {
-  connectCluster,
-  deleteObjects,
-  ifClusterExists,
-  readObject,
-  reconcileObjects,
-} from "./internal/client.ts";
-import type { KubernetesObjectDefinition, KubernetesObjectRef } from "./internal/objects.ts";
 import { makeConnectionRegistry } from "./internal/registry.ts";
 import {
   collectBindingEnv,
@@ -43,6 +42,7 @@ import {
   tryConnectionOf,
   workloadImageHash,
 } from "./internal/workload.ts";
+import type { KubernetesObjectDefinition, KubernetesObjectRef } from "./Objects.ts";
 import type { Providers } from "./Providers.ts";
 
 export const isJob = (value: any): value is Job =>

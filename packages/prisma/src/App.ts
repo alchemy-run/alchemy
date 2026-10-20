@@ -14,20 +14,20 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { destroyApp } from "./ComputeLifecycle.ts";
-import { ensureAppImmutableIdentity } from "./Internal/AppIdentity.ts";
-import { desiredBranchId } from "./Internal/Branches.ts";
-import { DEV_TIMESTAMP, attrOrString, devId, devProvider } from "./Internal/DevStub.ts";
-import type { ObservedApp } from "./Internal/Observed.ts";
-import { PrismaPaginationError } from "./Internal/Pagination.ts";
-import type { Project } from "./Project.ts";
-import type { Providers } from "./Providers.ts";
+import { ensureAppImmutableIdentity } from "./internal/AppIdentity.ts";
+import { desiredBranchId } from "./internal/Branches.ts";
+import { DEV_TIMESTAMP, attrOrString, devId, devProvider } from "./internal/DevStub.ts";
+import type { ObservedApp } from "./internal/Observed.ts";
+import { PrismaPaginationError } from "./internal/Pagination.ts";
 import {
   concreteIdsChanged,
   isInputObject,
   isPrismaDevId,
   resolveProjectId,
   unresolvedProjectIdOf,
-} from "./Refs.ts";
+} from "./internal/Refs.ts";
+import type { Project } from "./Project.ts";
+import type { Providers } from "./Providers.ts";
 import type { PrismaRegionId } from "./Types.ts";
 
 export interface AppProps {

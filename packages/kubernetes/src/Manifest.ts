@@ -3,17 +3,17 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { isPlainObject } from "alchemy/Util/data";
 import * as Effect from "effect/Effect";
-import { toConnection, type ClusterLike, type Connection } from "./Connection.ts";
 import {
   applyObject,
   connectCluster,
   deleteObject,
   ifClusterExists,
   readObject,
-} from "./internal/client.ts";
+} from "./Client.ts";
+import { toConnection, type ClusterLike, type Connection } from "./Connection.ts";
 import { driftMask, hashDriftSelection } from "./internal/declared.ts";
-import type { KubernetesObjectDefinition, KubernetesObjectRef } from "./internal/objects.ts";
 import { connectionIdentity, connectionOfOutput, tryConnectionOf } from "./internal/workload.ts";
+import type { KubernetesObjectDefinition, KubernetesObjectRef } from "./Objects.ts";
 import type { Providers } from "./Providers.ts";
 
 /**

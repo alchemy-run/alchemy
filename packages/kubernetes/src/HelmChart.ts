@@ -7,8 +7,6 @@ import { collectRedactedSecrets } from "alchemy/Util/Redaction";
 import { sha256Object } from "alchemy/Util/sha256";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
-import type { ClusterTransport } from "./ClusterAdapter.ts";
-import { toConnection, type ClusterLike, type Connection } from "./Connection.ts";
 import {
   connectCluster,
   deleteObjects,
@@ -16,15 +14,17 @@ import {
   readObject,
   reconcileObjects,
   resolveKindSpec,
-} from "./internal/client.ts";
+} from "./Client.ts";
+import type { ClusterTransport } from "./ClusterAdapter.ts";
+import { toConnection, type ClusterLike, type Connection } from "./Connection.ts";
 import { hashDriftSelection } from "./internal/declared.ts";
 import { renderHelmChart } from "./internal/helm.ts";
+import { connectionIdentity, connectionOfOutput, tryConnectionOf } from "./internal/workload.ts";
 import {
   kubernetesObjectKey,
   type KubernetesObjectDefinition,
   type KubernetesObjectRef,
-} from "./internal/objects.ts";
-import { connectionIdentity, connectionOfOutput, tryConnectionOf } from "./internal/workload.ts";
+} from "./Objects.ts";
 import type { Providers } from "./Providers.ts";
 
 export interface HelmChartProps {

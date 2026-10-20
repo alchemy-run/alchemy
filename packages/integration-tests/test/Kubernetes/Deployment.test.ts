@@ -3,7 +3,7 @@ import { Network } from "@alchemy.run/aws/EC2/Network";
 import { Cluster } from "@alchemy.run/aws/EKS/Cluster";
 import { makeEksTransport } from "@alchemy.run/aws/EKS/KubernetesAdapter";
 import * as Kubernetes from "@alchemy.run/kubernetes";
-import { readObject } from "@alchemy.run/kubernetes/internal/client";
+import { readObject } from "@alchemy.run/kubernetes/Client";
 import * as dynamodb from "@distilled.cloud/aws/dynamodb";
 import { describe, expect } from "alchemy-test";
 import * as Provider from "alchemy/Provider";

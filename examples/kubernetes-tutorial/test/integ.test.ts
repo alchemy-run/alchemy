@@ -1,6 +1,6 @@
 import { expect } from "bun:test";
 import * as Kubernetes from "@alchemy.run/kubernetes";
-import { connectCluster, readObject } from "@alchemy.run/kubernetes/internal/client";
+import { connectCluster, readObject } from "@alchemy.run/kubernetes/Client";
 import * as Alchemy from "alchemy";
 import * as Test from "alchemy/Test/Bun";
 import * as Console from "effect/Console";

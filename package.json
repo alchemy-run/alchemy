@@ -34,6 +34,8 @@
     "dev:website": "cd ./website && bun astro dev",
     "docs:build": "pnpm --dir website docs:build",
     "docs:check-jsdoc": "bun ./scripts/fix-api-jsdocs.ts --check",
+    "exports:check": "node scripts/sync-exports.ts --check",
+    "exports:sync": "node scripts/sync-exports.ts",
     "docs:check": "pnpm --dir website docs:check",
     "docs:fix-jsdoc": "bun ./scripts/fix-api-jsdocs.ts",
     "docs:gen": "bun ./scripts/generate-api-reference.ts",

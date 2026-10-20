@@ -1,10 +1,10 @@
 import type { Input } from "alchemy/Input";
 import * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";
-import type { App } from "./App.ts";
-import type { Bucket } from "./Bucket.ts";
-import type { Database } from "./Database.ts";
-import type { Project } from "./Project.ts";
+import type { App } from "../App.ts";
+import type { Bucket } from "../Bucket.ts";
+import type { Database } from "../Database.ts";
+import type { Project } from "../Project.ts";
 
 export type InputObject<T extends object> = {
   [Key in keyof T]: Input<T[Key]>;

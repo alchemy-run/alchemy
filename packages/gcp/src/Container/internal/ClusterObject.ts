@@ -3,7 +3,7 @@ import {
   toKubernetesObjectRef,
   type KubernetesObjectDefinition,
   type KubernetesObjectMetadata,
-} from "@alchemy.run/kubernetes/internal/objects";
+} from "@alchemy.run/kubernetes/Objects";
 /**
  * Internal helpers for binding Kubernetes objects onto a
  * `GCP.Container.Cluster` through its `KubernetesObjectBinding` contract.

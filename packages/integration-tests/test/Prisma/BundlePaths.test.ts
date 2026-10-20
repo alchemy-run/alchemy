@@ -1,6 +1,6 @@
 import { describe, expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
-import { normalizeBundleFilePath } from "../../../prisma/src/Internal/BundlePaths.ts";
+import { normalizeBundleFilePath } from "../../../prisma/src/internal/BundlePaths.ts";
 
 describe("Prisma Compute bundle paths", { tags: ["unit", "provider:prisma", "local"] }, () => {
   it.effect("accepts normalized relative bundle paths", () =>

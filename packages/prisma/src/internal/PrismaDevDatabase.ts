@@ -8,7 +8,7 @@ import * as Redacted from "effect/Redacted";
 import * as Result from "effect/Result";
 import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
-import type { DatabaseDev } from "./Database.ts";
+import type { DatabaseDev } from "../Database.ts";
 
 export interface PrismaDevDatabaseAttrs {
   directConnectionString: Redacted.Redacted<string>;

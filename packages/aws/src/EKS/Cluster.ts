@@ -1,10 +1,10 @@
+import { deleteObjects, reconcileObjects } from "@alchemy.run/kubernetes/Client";
 import type { Connection } from "@alchemy.run/kubernetes/Connection";
-import { deleteObjects, reconcileObjects } from "@alchemy.run/kubernetes/internal/client";
 import {
   type KubernetesObjectBinding,
   type KubernetesObjectDefinition,
   type KubernetesObjectRef,
-} from "@alchemy.run/kubernetes/internal/objects";
+} from "@alchemy.run/kubernetes/Objects";
 import * as eks from "@distilled.cloud/aws/eks";
 import * as iam from "@distilled.cloud/aws/iam";
 import { Unowned } from "alchemy/AdoptPolicy";

@@ -3,8 +3,8 @@ import {
   getProjectBranches,
 } from "@distilled.cloud/prisma/management";
 import * as Effect from "effect/Effect";
-import { isPrismaDevId } from "../Refs.ts";
 import { PrismaPaginationError } from "./Pagination.ts";
+import { isPrismaDevId } from "./Refs.ts";
 
 // Distilled emits the cursor-paginated list operations as plain ops, so
 // callers walk `pagination` themselves (see `src/Neon/Project.ts`).

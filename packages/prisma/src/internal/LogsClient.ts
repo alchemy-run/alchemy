@@ -2,13 +2,13 @@ import type { ConfigError } from "@distilled.cloud/core/errors";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { PrismaApiError } from "../Client.ts";
-import { Credentials } from "../Credentials.ts";
 import type {
   BuildLogsQuery,
   BuildLogsRequest,
   DeploymentLogsQuery,
   DeploymentLogsRequest,
 } from "../Types.ts";
+import { Credentials } from "./Credentials.ts";
 
 /**
  * Hand-written request builders for the Management API's log streams. The

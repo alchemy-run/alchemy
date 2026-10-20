@@ -20,7 +20,7 @@ import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Stream from "effect/Stream";
 import * as YAML from "yaml";
-import type { KubernetesObjectDefinition } from "./objects.ts";
+import type { KubernetesObjectDefinition } from "../Objects.ts";
 
 /** A Helm invocation or render failure (bad chart ref, template error, …). */
 export class HelmError extends Data.TaggedError("HelmError")<{

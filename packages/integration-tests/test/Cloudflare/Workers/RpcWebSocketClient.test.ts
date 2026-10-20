@@ -5,7 +5,6 @@ import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 
-const subpath = "./RpcWebSocketClient";
 const sourceEntry = "src/Workers/RpcWebSocketClient.ts";
 const compiledEntry = "lib/Workers/RpcWebSocketClient.js";
 const declarationEntry = "lib/Workers/RpcWebSocketClient.d.ts";
@@ -138,14 +137,17 @@ const stagePublishedPackage = Effect.gen(function* () {
   return { root, directory, entry: path.join(directory, "browser.ts") };
 });
 
-layer(NodeServices.layer)("@alchemy.run/cloudflare/RpcWebSocketClient", (it) => {
+layer(NodeServices.layer)("@alchemy.run/cloudflare/Workers/RpcWebSocketClient", (it) => {
   it.effect(
     "maps the public source and published browser entry points",
     () =>
       Effect.gen(function* () {
         const { manifest } = yield* packageInfo;
-        expect(manifest.exports[subpath]).toBe(`./${sourceEntry}`);
-        expect(manifest.publishConfig.exports[subpath]).toEqual({
+        // `./Workers/RpcWebSocketClient` resolves through the `./*` file pattern.
+        const at = (pattern: string) => pattern.replaceAll("*", "Workers/RpcWebSocketClient");
+        expect(at(manifest.exports["./*"] as string)).toBe(`./${sourceEntry}`);
+        const published = manifest.publishConfig.exports["./*"] as Record<string, string>;
+        expect(Object.fromEntries(Object.entries(published).map(([k, v]) => [k, at(v)]))).toEqual({
           types: `./${declarationEntry}`,
           bun: `./${sourceEntry}`,
           worker: `./${sourceEntry}`,
