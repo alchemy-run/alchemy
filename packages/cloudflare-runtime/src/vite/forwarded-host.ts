@@ -45,6 +45,9 @@ export function proxyRequestHeaders(
   original.port = "";
   original.host = resolveForwardedHost(request.headers, target.host);
   return {
+    // The Worker sees the dev server's host in `X-Forwarded-Host` when the
+    // client sent none, as under `@cloudflare/vite-plugin`.
+    "x-forwarded-host": firstHeaderValue(request.headers.host) ?? target.host,
     ...request.headers,
     host: original.host,
     [HEADER_ORIGINAL_URL.toLowerCase()]: original.href,

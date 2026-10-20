@@ -944,6 +944,8 @@ export const LocalWorkerProvider = () =>
                       compatibilityDate: worker.compatibility.date,
                       compatibilityFlags: worker.compatibility.flags,
                       zone: worker.zone,
+                      // `dev.access` populates the Worker's native `ctx.access`.
+                      access: worker.dev.access,
                       // Stream preview and Images variant URLs use the stable URL
                       // clients reach the Worker at, as Miniflare uses its public URL.
                       publicUrl: proxy.url.toString().replace(/\/$/, ""),

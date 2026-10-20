@@ -146,7 +146,13 @@ const program = Effect.scoped(
               compatibilityDate: compatibility.date,
               compatibilityFlags: compatibility.flags,
               viteEnvironments,
-              worker: { ...runtimeWorker, bindings, publicUrl: config.publicUrl },
+              // `dev.access` populates the Worker's native `ctx.access`.
+              worker: {
+                ...runtimeWorker,
+                bindings,
+                publicUrl: config.publicUrl,
+                access: devAccess,
+              },
               context: runtimeContext,
               entrypoints: bindingDescriptors.flatMap((binding) =>
                 binding.type === "self_service" && binding.entrypoint ? [binding.entrypoint] : [],

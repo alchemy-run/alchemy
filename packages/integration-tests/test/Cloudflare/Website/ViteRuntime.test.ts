@@ -60,6 +60,7 @@ const moduleResolutionFixtureDir = pathe.resolve(
   "vite-module-resolution-fixture",
 );
 const mainResolutionFixtureDir = pathe.resolve(import.meta.dirname, "vite-main-resolution-fixture");
+const workerFixtureDir = pathe.resolve(import.meta.dirname, "vite-worker-♫-fixture");
 const hotChannelFixtureDir = pathe.resolve(import.meta.dirname, "vite-hot-channel-fixture");
 
 type Mode = "live" | "dev";
@@ -941,6 +942,122 @@ describe.concurrent(
         );
       }
     }
+
+    // `worker-♫`: a project path with a non-ASCII character, Access
+    // identity, forwarded host and protocol headers, logging, and a `base`
+    // mount path.
+    const deployWorkerSite = (stack: Test.ScratchStack, mode: Mode, config: "default" | "base") =>
+      Effect.gen(function* () {
+        const rootDir = yield* cloneFixture(workerFixtureDir, {
+          prefix: "alchemy-vite-♫-",
+          tempRoot,
+          entries: ["package.json", "configs", "src"],
+        });
+        expect(rootDir).toContain("♫");
+        const fs = yield* FileSystem.FileSystem;
+        yield* fs.copyFile(
+          pathe.join(rootDir, `configs/${config}.ts`),
+          pathe.join(rootDir, "vite.config.ts"),
+        );
+        const site = yield* stack.deploy(
+          Cloudflare.Website.Vite(`ViteWorker${mode}${config}`, {
+            rootDir,
+            main: "./src/index.ts",
+            workersDev: true,
+            compatibility: { date: "2024-12-30" },
+            memo: { include: ["**/*"] },
+            ...(mode === "dev"
+              ? {
+                  dev: {
+                    port: 0,
+                    access: {
+                      aud: "vite-plugin-test-audience",
+                      identity: {
+                        email: "vite-plugin@example.com",
+                        name: "Vite Plugin Test User",
+                      },
+                    },
+                  },
+                }
+              : {}),
+          }),
+        );
+        return site.url!.replace(/\/$/, "");
+      });
+
+    test.provider(
+      "Vite runtime: a Worker in a non-ASCII project path deploys",
+      (stack) =>
+        Effect.gen(function* () {
+          yield* stack.destroy();
+          const url = yield* deployWorkerSite(stack, "live", "default");
+          yield* expectText(url, "Hello World!");
+        }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.ignore)), logLevel),
+      { tags: ["provider:cloudflare:worker", "live"], timeout: 300_000 },
+    );
+
+    devTest.provider(
+      "Vite runtime: Worker request headers, Access and logs like the plugin (dev)",
+      (stack) =>
+        Effect.gen(function* () {
+          yield* stack.destroy();
+          const url = yield* deployWorkerSite(stack, "dev", "default");
+          const host = new URL(url).host;
+          yield* expectText(url, "Hello World!");
+          yield* expectJson(`${url}/access`, {
+            aud: "vite-plugin-test-audience",
+            identity: { email: "vite-plugin@example.com", name: "Vite Plugin Test User" },
+          });
+          yield* expectText(`${url}/x-forwarded-host`, "example.com:8080", {
+            headers: { "x-forwarded-host": "example.com:8080" },
+          });
+          yield* expectText(`${url}/x-forwarded-host`, host);
+          yield* expectText(`${url}/host-header`, host);
+          yield* expectResponse(
+            `${url}/request-url`,
+            (res) => (res.body.startsWith("https:") ? undefined : `url ${res.body}`),
+            { headers: { "x-forwarded-proto": "https" } },
+          );
+          yield* expectResponse(`${url}/request-url`, (res) =>
+            res.body.startsWith("http:") ? undefined : `url ${res.body}`,
+          );
+          // The Worker's console output reaches its dev log, including the
+          // shared chunk's log that proves entry signatures are preserved,
+          // and no unhandled rejection.
+          const fs = yield* FileSystem.FileSystem;
+          const logRoot = pathe.resolve(".alchemy/log");
+          yield* Effect.gen(function* () {
+            const logs = (yield* fs.readDirectory(logRoot, { recursive: true }))
+              .filter((file) => file.includes("/ViteWorkerdevdefault/"))
+              .sort();
+            const log = yield* fs.readFileString(pathe.join(logRoot, logs.at(-1)!));
+            for (const line of [
+              "__preserves-entry-signatures__",
+              "__console log__",
+              "__console debug__",
+              "__console warn__",
+              "__console error__",
+            ]) {
+              expect(log).toContain(line);
+            }
+            expect(log).not.toContain("__unhandled rejection__");
+          }).pipe(Effect.retry({ times: 10, schedule: Schedule.spaced("1 second") }));
+        }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.ignore)), logLevel),
+      { tags: ["provider:cloudflare:worker", "local"], timeout: 300_000 },
+    );
+
+    devTest.provider(
+      "Vite runtime: a Worker serves under Vite's base path (dev)",
+      (stack) =>
+        Effect.gen(function* () {
+          yield* stack.destroy();
+          const url = yield* deployWorkerSite(stack, "dev", "base");
+          yield* expectText(`${url}/custom-mount`, "Hello World!");
+          yield* expectText(`${url}/custom-mount/a/b/c?path`, "/custom-mount/a/b/c");
+          yield* expectText(`${url}/custom-mount/x-forwarded-host`, new URL(url).host);
+        }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.ignore)), logLevel),
+      { tags: ["provider:cloudflare:worker", "local"], timeout: 300_000 },
+    );
 
     // Miniflare's outbound `cf.image` mock (dev only: deployed, `cf.image`
     // needs a zone with Image Transformations, which workers.dev lacks).

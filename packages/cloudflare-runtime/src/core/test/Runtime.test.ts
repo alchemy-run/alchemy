@@ -241,6 +241,51 @@ layer(localRuntimeLayer, { excludeTestServices: true })("Runtime", (it) => {
     { timeout: 30_000 },
   );
 
+  // Wrangler's `access.dev`: `ctx.access` carries the simulated audience and
+  // `getIdentity()` the identity; a client can't forge the access blob.
+  it.effect(
+    "simulates Cloudflare Access on ctx.access",
+    () =>
+      Effect.gen(function* () {
+        const runtime = yield* Runtime.Runtime;
+        const start = (
+          name: string,
+          access?: { aud?: string; identity?: Record<string, unknown> },
+        ) =>
+          runtime.start({
+            name,
+            access,
+            compatibilityDate: "2026-03-10",
+            compatibilityFlags: [],
+            bindings: [],
+            modules: [
+              {
+                name: "main.js",
+                type: "ESModule",
+                content: `export default {
+  async fetch(request, env, ctx) {
+    return Response.json({ aud: ctx.access?.aud ?? null, identity: (await ctx.access?.getIdentity()) ?? null });
+  },
+};`,
+              },
+            ],
+          });
+        const forged = { "MF-Access-Blob": JSON.stringify({ app_aud: "forged" }) };
+        const authed = yield* start("access-authed", {
+          aud: "test-aud",
+          identity: { email: "dev@example.com" },
+        });
+        expect(
+          yield* Effect.promise(() => fetch(authed, { headers: forged }).then((r) => r.json())),
+        ).toEqual({ aud: "test-aud", identity: { email: "dev@example.com" } });
+        const anonymous = yield* start("access-anonymous");
+        expect(
+          yield* Effect.promise(() => fetch(anonymous, { headers: forged }).then((r) => r.json())),
+        ).toEqual({ aud: null, identity: null });
+      }).pipe(Effect.scoped),
+    { timeout: 30_000 },
+  );
+
   // Miniflare's `cf.image` mock: the interceptor fetches the origin image and
   // transforms it with Sharp.
   it.effect(

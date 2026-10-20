@@ -10,6 +10,12 @@ import { loadInternalWorker } from "../internal/internal-worker.ts";
 const EntryWorker = {
   worker: () => loadInternalWorker("#cloudflare-runtime-core-worker/globals/entry.worker"),
 };
+const AccessIdentityWorker = {
+  worker: () =>
+    loadInternalWorker("#cloudflare-runtime-core-worker/globals/access-identity.worker"),
+};
+/** Resolves `ctx.access.getIdentity()` for a Worker simulating Access. */
+const SERVICE_ACCESS_IDENTITY = "globals:access-identity";
 const OutboundWorker = {
   worker: () => loadInternalWorker("#cloudflare-runtime-core-worker/globals/outbound.worker"),
 };
@@ -32,7 +38,11 @@ import {
   BINDING_EMAIL_DISK,
   SERVICE_EMAIL_STORAGE,
 } from "./EmailOptions.shared.ts";
-import { BINDING_USER_WORKER_DIRECT } from "./EntryOptions.shared.ts";
+import {
+  BINDING_ACCESS_BLOB,
+  BINDING_USER_WORKER_DIRECT,
+  HEADER_ACCESS_BLOB,
+} from "./EntryOptions.shared.ts";
 import * as Internet from "./Internet.ts";
 import * as Loopback from "./Loopback.ts";
 import { BINDING_PROXY_SHARED_SECRET } from "./ProxyHeaders.shared.ts";
@@ -85,6 +95,9 @@ export const GlobalsLive = Layer.effect(
     const modules = formatInternalWorkerModules(yield* Effect.promise(EntryWorker.worker));
     const outboundModules = formatInternalWorkerModules(
       yield* Effect.promise(OutboundWorker.worker),
+    );
+    const accessIdentityModules = formatInternalWorkerModules(
+      yield* Effect.promise(AccessIdentityWorker.worker),
     );
 
     // Inbound email replies (`message.reply(...)` from the user worker's
@@ -172,6 +185,19 @@ export const GlobalsLive = Layer.effect(
                     name: BINDING_USER_WORKER_DIRECT,
                     service: { name: SERVICE_USER_WORKER },
                   },
+                  ...(worker.access === undefined
+                    ? []
+                    : [
+                        {
+                          name: BINDING_ACCESS_BLOB,
+                          json: JSON.stringify({
+                            app_aud: worker.access.aud ?? "dev",
+                            ...(worker.access.identity === undefined
+                              ? {}
+                              : { jwt_claims: worker.access.identity }),
+                          }),
+                        },
+                      ]),
                   ...(email === undefined
                     ? []
                     : [
@@ -203,6 +229,18 @@ export const GlobalsLive = Layer.effect(
                 internet,
                 storage,
                 ...(email === undefined ? [] : [email.service]),
+                ...(worker.access === undefined
+                  ? []
+                  : [
+                      {
+                        name: SERVICE_ACCESS_IDENTITY,
+                        worker: {
+                          compatibilityDate: DEFAULT_COMPATIBILITY_DATE,
+                          compatibilityFlags: ["experimental", "service_binding_extra_handlers"],
+                          modules: accessIdentityModules,
+                        },
+                      },
+                    ]),
                 {
                   name: SERVICE_OUTBOUND,
                   worker: {
@@ -224,7 +262,17 @@ export const GlobalsLive = Layer.effect(
               ],
               // Outbound `fetch()`es pass through the interceptor, as in
               // Miniflare, which continues to the internet.
-              userWorker: { globalOutbound: { name: SERVICE_OUTBOUND } },
+              // A Worker simulating Access gets `ctx.access` from the entry's
+              // blob header, and its identity from the identity service.
+              userWorker: {
+                globalOutbound: { name: SERVICE_OUTBOUND },
+                ...(worker.access === undefined
+                  ? {}
+                  : {
+                      accessBlobHeader: HEADER_ACCESS_BLOB,
+                      accessBindingService: { name: SERVICE_ACCESS_IDENTITY },
+                    }),
+              },
             };
           }),
           start:

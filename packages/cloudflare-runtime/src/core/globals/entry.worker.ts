@@ -17,7 +17,12 @@ import {
   PATH_EMAIL_HANDLER,
   PATH_HANDLER_PREFIX,
 } from "./EmailOptions.shared.ts";
-import { BINDING_USER_WORKER_DIRECT, PATH_MODULE_RUNNER_INIT } from "./EntryOptions.shared.ts";
+import {
+  BINDING_ACCESS_BLOB,
+  BINDING_USER_WORKER_DIRECT,
+  HEADER_ACCESS_BLOB,
+  PATH_MODULE_RUNNER_INIT,
+} from "./EntryOptions.shared.ts";
 import {
   BINDING_PROXY_SHARED_SECRET,
   HEADER_ORIGINAL_URL,
@@ -44,6 +49,8 @@ interface Env {
    */
   [BINDING_USER_WORKER_DIRECT]: Fetcher;
   CF_BLOB: Record<string, unknown>;
+  /** Simulated Cloudflare Access state (`{ app_aud, jwt_claims }`). */
+  [BINDING_ACCESS_BLOB]?: Record<string, unknown>;
   // Omitted when the runtime storage isn't disk-backed (never the case with
   // the built-in storage layers) — replies then fail with a clear error.
   [BINDING_EMAIL_DISK]?: Fetcher;
@@ -504,6 +511,12 @@ export default <ExportedHandler<Env>>{
     headers.delete(HEADER_CF_BLOB);
     headers.delete(HEADER_ORIGINAL_URL);
     headers.delete(HEADER_PROXY_SHARED_SECRET);
+    // workerd populates `ctx.access` from this header, so only the
+    // configured blob may set it (as Miniflare's entry worker does).
+    headers.delete(HEADER_ACCESS_BLOB);
+    if (env[BINDING_ACCESS_BLOB] !== undefined) {
+      headers.set(HEADER_ACCESS_BLOB, JSON.stringify(env[BINDING_ACCESS_BLOB]));
+    }
     if (secret !== null) headers.set("Host", url.host);
     if (clientIp && !headers.get("CF-Connecting-IP")) {
       // `clientIp` includes the port, e.g. `127.0.0.1:52621` or `[::1]:52621`

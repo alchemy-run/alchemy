@@ -91,6 +91,15 @@ export interface RuntimeWorker<B extends BindingHooks = BindingHooks> {
    */
   readonly zone?: string;
   /**
+   * Simulates a request that passed Cloudflare Access: every request's
+   * `ctx.access` carries `aud`, and `ctx.access.getIdentity()` resolves
+   * `identity`. Mirrors Wrangler's `access.dev` config.
+   */
+  readonly access?: {
+    readonly aud?: string;
+    readonly identity?: Record<string, unknown>;
+  };
+  /**
    * Controls how output from the underlying `workerd` process is surfaced.
    *
    * By default, workerd does not log uncaught exceptions thrown by the
