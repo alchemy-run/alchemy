@@ -1,4 +1,5 @@
 import * as AWS from "@alchemy.run/aws";
+import { Stage } from "alchemy/Stage";
 import * as Context from "effect/Context";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -6,7 +7,7 @@ import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Layer from "effect/Layer";
 
-// Gated (skipped under `--fast`) fixture: a single-region Multi-Region Access Point
+// Gated (skipped under `--fast`) fixture: a two-Region Multi-Region Access Point
 // plus a Lambda that exercises the two MRAP failover bindings —
 // GetMultiRegionAccessPointRoutes and SubmitMultiRegionAccessPointRoutes.
 // MRAP provisioning is asynchronous and takes 10-20 minutes, hence the gate.
@@ -19,12 +20,31 @@ export class BoundMrap extends Context.Service<
   { mrap: AWS.S3Control.MultiRegionAccessPoint }
 >()("BoundMrap") {}
 
+/** The testing account (bucket names are global). */
+export const MRAP_ACCOUNT_ID = "391965393224";
+
+/** Region of the MRAP's second member bucket. */
+export const SECOND_REGION = "us-east-1";
+
+/**
+ * The second member bucket, created out-of-band by the test: stack resources
+ * deploy to one Region, and failover controls answer 405 Method Not Allowed
+ * on a Multi-Region Access Point with a single Region.
+ */
+export const secondRegionBucketName = (stage: string) =>
+  `alchemy-mrap-use1-${stage
+    .toLowerCase()
+    .replace(/[^a-z0-9-]/g, "-")
+    .slice(0, 24)}-${MRAP_ACCOUNT_ID}`;
+
 export const BoundMrapLive = Layer.effect(
   BoundMrap,
   Effect.gen(function* () {
     const bucket = yield* AWS.S3.Bucket("S3ControlMrapBucket", {});
+    // Props are ignored at runtime, where the stage isn't provided.
+    const secondBucket = globalThis.__ALCHEMY_RUNTIME__ ? "" : secondRegionBucketName(yield* Stage);
     const mrap = yield* AWS.S3Control.MultiRegionAccessPoint("S3ControlMrapBindingsMrap", {
-      regions: [{ bucket: bucket.bucketName }],
+      regions: [{ bucket: bucket.bucketName }, { bucket: secondBucket }],
     });
     return { mrap };
   }),

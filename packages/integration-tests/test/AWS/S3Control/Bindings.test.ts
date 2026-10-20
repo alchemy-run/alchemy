@@ -1,5 +1,6 @@
 import * as AWS from "@alchemy.run/aws";
 import { Region } from "@distilled.cloud/aws/Region";
+import * as s3 from "@distilled.cloud/aws/s3";
 import * as s3control from "@distilled.cloud/aws/s3-control";
 import { describe, expect } from "alchemy-test";
 import * as Test from "alchemy/Test/Alchemy";
@@ -14,6 +15,8 @@ import S3ControlBindingsFunctionLive, {
 } from "./fixtures/bindings-handler.ts";
 import S3ControlMrapBindingsFunctionLive, {
   S3ControlMrapBindingsFunction,
+  SECOND_REGION,
+  secondRegionBucketName,
 } from "./fixtures/mrap-bindings-handler.ts";
 
 const testOptions = { providers: AWS.providers() };
@@ -216,9 +219,22 @@ describe.skipIf(!!process.env.FAST).sequential(
   () => {
     let mrapBaseUrl: string;
 
+    const secondBucket = secondRegionBucketName(mrapStack.stage);
+    const inSecondRegion = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+      Core.withProviders(
+        effect.pipe(Effect.provideService(Region, Effect.succeed(SECOND_REGION))),
+        testOptions,
+        "S3ControlMrapBindings",
+      );
+
     beforeAll(
       Effect.gen(function* () {
         yield* mrapStack.destroy();
+        yield* inSecondRegion(
+          s3
+            .createBucket({ Bucket: secondBucket })
+            .pipe(Effect.catchTag("BucketAlreadyOwnedByYou", () => Effect.void)),
+        );
         const attrs = yield* mrapStack.deploy(
           Effect.gen(function* () {
             return yield* S3ControlMrapBindingsFunction;
@@ -231,7 +247,20 @@ describe.skipIf(!!process.env.FAST).sequential(
       { timeout: 1_200_000 },
     );
 
-    afterAll(mrapStack.destroy(), { timeout: 1_200_000 });
+    afterAll(
+      mrapStack
+        .destroy()
+        .pipe(
+          Effect.andThen(
+            inSecondRegion(
+              s3
+                .deleteBucket({ Bucket: secondBucket })
+                .pipe(Effect.catchTag("NoSuchBucket", () => Effect.void)),
+            ),
+          ),
+        ),
+      { timeout: 1_200_000 },
+    );
 
     describe("GetMultiRegionAccessPointRoutes + SubmitMultiRegionAccessPointRoutes", () => {
       test.provider(
