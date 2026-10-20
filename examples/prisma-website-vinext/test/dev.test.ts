@@ -1,5 +1,5 @@
 import { expect } from "bun:test";
-import * as Cloud from "alchemy/Prisma";
+import * as Cloud from "@alchemy.run/prisma";
 import * as Test from "alchemy/Test/Bun";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";

@@ -1,8 +1,8 @@
 import { expect } from "bun:test";
+import * as Neon from "@alchemy.run/neon";
+import * as SQL from "@alchemy.run/sql/Postgres";
 import * as SDK from "@distilled.cloud/neon";
 import * as Alchemy from "alchemy";
-import * as Neon from "alchemy/Neon";
-import * as SQL from "alchemy/SQL/Postgres";
 import * as Test from "alchemy/Test/Bun";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
