@@ -1,3 +1,4 @@
+/// <reference types="vite/client" />
 import vitePackageJson from "vite/package.json?raw";
 import vitePackageJsonUrl from "vite/package.json?url";
 // Mirrors `@cloudflare/vite-plugin`'s `playground/assets/src/index.ts`, plus
