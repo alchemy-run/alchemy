@@ -345,7 +345,9 @@ describe.concurrent("BlueGreen", () => {
             return output;
           });
 
-        describe.sequential("live idle topology and automatic cadence", () => {
+        // Each case deploys its own stack; these are the file's longest cases
+        // (3-8 min of real idle waits), so run them side by side.
+        describe.concurrent("live idle topology and automatic cadence", () => {
           for (const mode of ["stop", "suspend"] as const) {
             test.provider(
               `S05 S11 F13 ${mode} real all-idle 1 to 3 to 1 scaling preserves representative-only readiness`,
