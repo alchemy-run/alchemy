@@ -206,6 +206,17 @@ export interface SourceProvider {
   readonly ownsAssets: boolean;
 
   /**
+   * Whether a server-mode `dev()` runs the Worker in workerd with the Vite
+   * plugin, whose assets service serves `publicDir` and the app's HTML. The
+   * host then adds the `ASSETS` binding to `ctx.worker.bindings`, as a
+   * deployed Worker with assets has it. Leave unset when the dev server
+   * runs the app outside workerd (behind `serviceBinding: "http"`).
+   *
+   * @default false
+   */
+  readonly devAssetsBinding?: boolean;
+
+  /**
    * Full build. Called from reconcile (`putWorker`). If the build is
    * expensive it MUST be memoized per run via `Artifacts.cached` under
    * the same key `hash()` uses, so a diff that had to build doesn't
