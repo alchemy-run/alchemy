@@ -1,10 +1,4 @@
 import { fileURLToPath } from "node:url";
-import * as Logs from "@distilled.cloud/aws/cloudwatch-logs";
-import { Credentials } from "@distilled.cloud/aws/Credentials";
-import * as Lambda from "@distilled.cloud/aws/lambda";
-import type { RegionName } from "@distilled.cloud/aws/Region";
-import * as SQS from "@distilled.cloud/aws/sqs";
-import { expect } from "alchemy-test";
 /**
  * `AWS.Lambda.Function` under `alchemy dev`: the dualized provider deploys
  * the function INTO the floci emulator (RPC-sidecar-hosted
@@ -33,9 +27,15 @@ import { expect } from "alchemy-test";
  * Requires Docker (floci + the Lambda runtime container); skipped when the
  * daemon is unavailable.
  */
-import * as AWS from "alchemy/AWS";
-import * as Endpoint from "alchemy/AWS/Endpoint";
-import * as Region from "alchemy/AWS/Region";
+import * as AWS from "@alchemy.run/aws";
+import * as Endpoint from "@alchemy.run/aws/Endpoint";
+import * as Region from "@alchemy.run/aws/Region";
+import * as Logs from "@distilled.cloud/aws/cloudwatch-logs";
+import { Credentials } from "@distilled.cloud/aws/Credentials";
+import * as Lambda from "@distilled.cloud/aws/lambda";
+import type { RegionName } from "@distilled.cloud/aws/Region";
+import * as SQS from "@distilled.cloud/aws/sqs";
+import { expect } from "alchemy-test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -49,11 +49,9 @@ import { dockerAvailable, FLOCI_ENDPOINT, rawS3GetObject } from "../Local/fixtur
 
 const { test } = Test.make({ providers: AWS.providers(), dev: true });
 
-const devFixtureDir = fileURLToPath(
-  new URL("../../../../alchemy/test/AWS/Lambda/fixtures/floci-dev", import.meta.url),
-);
+const devFixtureDir = fileURLToPath(new URL("../Lambda/fixtures/floci-dev", import.meta.url));
 const esmHandlerPath = fileURLToPath(
-  new URL("../../../../alchemy/test/AWS/Lambda/fixtures/floci-esm/handler.mjs", import.meta.url),
+  new URL("../Lambda/fixtures/floci-esm/handler.mjs", import.meta.url),
 );
 
 /** Floci-scoped context for the raw distilled calls the test makes itself. */

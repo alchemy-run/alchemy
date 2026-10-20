@@ -8,7 +8,7 @@
   "plugins": [
     {
       "name": "alchemy",
-      "source": "./packages/alchemy/skills",
+      "source": "./packages/domain/skills",
       "skills": ["./"],
       "description": "Skills for building with Alchemy: alchemy-domain models backends with alchemy/Domain, lays them out in a monorepo, hosts them on Cloudflare, and drives them from foldkit.",
       "homepage": "https://alchemy.run/domain",

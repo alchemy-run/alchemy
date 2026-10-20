@@ -1,6 +1,6 @@
 import { Connect, ConnectHttp, connectEnvKeys } from "@alchemy.run/neon/Connect";
+import { Postgres } from "@alchemy.run/sql/Postgres";
 import { CurrentRuntimeContext } from "alchemy/RuntimeContext";
-import { Postgres } from "alchemy/SQL/Postgres";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";

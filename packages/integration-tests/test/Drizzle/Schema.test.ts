@@ -329,7 +329,7 @@ test.provider(
       yield* stack.destroy();
       const { prepareDsqlStatements } = yield* Effect.promise(
         // Internal to alchemy, so not exported.
-        () => import("../../../alchemy/src/AWS/DSQL/MigrationSql.ts"),
+        () => import("@alchemy.run/aws/DSQL/MigrationSql"),
       );
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;

@@ -1,6 +1,6 @@
+import * as AWS from "@alchemy.run/aws";
 import * as Neon from "@alchemy.run/neon";
 import { expect } from "alchemy-test";
-import * as AWS from "alchemy/AWS";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Core from "alchemy/Test/Core";
 import * as Effect from "effect/Effect";

@@ -1,5 +1,5 @@
+import * as AWS from "@alchemy.run/aws";
 import * as Prisma from "@alchemy.run/prisma";
-import * as AWS from "alchemy/AWS";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Effect from "effect/Effect";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";

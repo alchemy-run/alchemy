@@ -19,6 +19,7 @@
   "dependencies": {
     "@alchemy.run/frontend-frameworks": "workspace:*",
     "@alchemy.run/neon": "workspace:*",
+    "@alchemy.run/sql": "workspace:*",
     "@aws-sdk/client-s3": "3.984.0",
     "@aws-sdk/s3-request-presigner": "3.984.0",
     "@effect/platform-node": "catalog:",

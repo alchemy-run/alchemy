@@ -24,7 +24,7 @@ export interface LayerOptions {
 /**
  * Provide a typed RPC client and its WebSocket connection for the Layer's lifetime.
  *
- * Import from `@alchemy.run/cloudflare/RpcWebSocketClient` in browsers to avoid
+ * Import from `@alchemy.run/cloudflare/Workers/RpcWebSocketClient` in browsers to avoid
  * Cloudflare server modules. Provide `Socket.layerWebSocketConstructorGlobal`
  * in a browser, or the corresponding constructor Layer for another platform.
  * RPC client middleware remains an explicit dependency.
@@ -38,7 +38,7 @@ export interface LayerOptions {
  * ### Browser Client
  * **Example:** Provide a client for the application's program
  * ```typescript
- * import * as RpcWebSocketClient from "@alchemy.run/cloudflare/RpcWebSocketClient";
+ * import * as RpcWebSocketClient from "@alchemy.run/cloudflare/Workers/RpcWebSocketClient";
  * import { Context, Effect, Layer } from "effect";
  * import type * as RpcClient from "effect/rpc/RpcClient";
  * import type { RpcClientError } from "effect/rpc/RpcClientError";

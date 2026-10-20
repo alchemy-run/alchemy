@@ -1,11 +1,11 @@
-import type { RuntimeContext } from "alchemy/RuntimeContext";
-import { applyPendingAlchemyFormat } from "alchemy/SQL/Migrations/AlchemyFormat";
+import { applyPendingAlchemyFormat } from "@alchemy.run/sql/Migrations/AlchemyFormat";
 import {
   MigrationError,
   type MigrationHistoryConflictError,
   type SqlExecutor,
-} from "alchemy/SQL/Migrations/Format";
-import { inlineSqlParams } from "alchemy/SQL/Migrations/Utils";
+} from "@alchemy.run/sql/Migrations/Format";
+import { inlineSqlParams } from "@alchemy.run/sql/Migrations/Utils";
+import type { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Effect from "effect/Effect";
 import { DurableObjectState } from "./DurableObjectState.ts";
 import type { SqlMigrationSnapshot } from "./SqlMigrationsRuntime.ts";

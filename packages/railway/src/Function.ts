@@ -15,7 +15,7 @@ import type { InputProps } from "alchemy/Input";
 import { Platform, type Main, type MainRpc, type PlatformProps } from "alchemy/Platform";
 import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
-import type { ServerHost } from "alchemy/Server/Process";
+import type { ServerHost } from "alchemy/Runtime/Process";
 import { Stack } from "alchemy/Stack";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";

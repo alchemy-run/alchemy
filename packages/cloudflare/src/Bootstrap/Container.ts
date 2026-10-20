@@ -4,14 +4,14 @@ import {
   resolveProgram,
   runProcess,
   stackConstant,
-} from "alchemy/Runtime/Bootstrap/Process";
+} from "alchemy/Runtime/Bootstrap";
 /**
  * Process bootstrap core for `Cloudflare.Container` images. The runtime
  * (`bun` | `node`) is chosen at deploy time, and each is an optional peer,
  * so the platform-specific layers are supplied by the thin entry modules
  * {@link ./ContainerBun.ts} / {@link ./ContainerNode.ts}
  * rather than imported here. The generated entry imports one of those and
- * the user's `main`, nothing else — see `alchemy/Runtime/Bootstrap/Process` for why.
+ * the user's `main`, nothing else — see `alchemy/Runtime/Bootstrap` for why.
  */
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";

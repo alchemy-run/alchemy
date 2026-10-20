@@ -1,5 +1,5 @@
+import * as GCP from "@alchemy.run/gcp";
 import { describe, expect } from "alchemy-test";
-import * as GCP from "alchemy/GCP";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as pathe from "pathe";
@@ -9,10 +9,7 @@ import { prepareNextjsFixture } from "../../Cloudflare/Website/TypeScriptCompat.
 
 const { test } = Test.make({ providers: GCP.providers(), dev: true });
 
-const fixtureDir = pathe.resolve(
-  import.meta.dirname,
-  "../../../../alchemy/test/AWS/Website/fixtures/nextjs-app",
-);
+const fixtureDir = pathe.resolve(import.meta.dirname, "../../AWS/Website/fixtures/nextjs-app");
 const fixtureEntries = [
   ".gitignore",
   "package.json",

@@ -15,6 +15,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@alchemy.run/domain": "workspace:*",
     "@bank/domain": "workspace:*",
     "@effect/platform-browser": "catalog:",
     "alchemy": "workspace:*",

@@ -13,18 +13,18 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import type { Bucket } from "./Bucket.ts";
-import { attrOrRedactedString, attrOrString, devId, devProvider } from "./Internal/DevStub.ts";
-import { physicalInstanceName } from "./Internal/EnvName.ts";
-import { type ObservedBucketKey, requiredSecretValue } from "./Internal/Observed.ts";
-import { PrismaPaginationError } from "./Internal/Pagination.ts";
-import type { Providers } from "./Providers.ts";
+import { attrOrRedactedString, attrOrString, devId, devProvider } from "./internal/DevStub.ts";
+import { physicalInstanceName } from "./internal/EnvName.ts";
+import { type ObservedBucketKey, requiredSecretValue } from "./internal/Observed.ts";
+import { PrismaPaginationError } from "./internal/Pagination.ts";
 import {
   concreteIdsChanged,
   isInputObject,
   isPrismaDevId,
   resolveBucketId,
   unresolvedBucketIdOf,
-} from "./Refs.ts";
+} from "./internal/Refs.ts";
+import type { Providers } from "./Providers.ts";
 import type { BucketKeyRole } from "./Types.ts";
 
 export interface BucketAccessKeyProps {

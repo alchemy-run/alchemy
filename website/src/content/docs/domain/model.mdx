@@ -153,7 +153,7 @@ A model lists what runs together. It can start as a single aggregate.
 
 ```typescript
 // src/Bank.model.ts
-import * as Domain from "alchemy/Domain";
+import * as Domain from "@alchemy.run/domain";
 import { Account } from "./Account.aggregate.ts";
 
 export class Bank extends Domain.Model("Bank", {
@@ -165,7 +165,7 @@ Adding a view to `views` is enough for the model to deliver the events it reads.
 
 ```typescript
 // src/Bank.model.ts
-import * as Domain from "alchemy/Domain";
+import * as Domain from "@alchemy.run/domain";
 import { Account } from "./Account.aggregate.ts";
 import { AccountSummary } from "./AccountSummary.view.ts";
 
@@ -179,7 +179,7 @@ A policy is declared in one place and implemented in another, because its implem
 
 ```typescript
 // src/Bank.model.ts
-import * as Domain from "alchemy/Domain";
+import * as Domain from "@alchemy.run/domain";
 import { Account } from "./Account.aggregate.ts";
 import { AccountSummary } from "./AccountSummary.view.ts";
 import { Customer } from "./Customer.aggregate.ts";
@@ -203,7 +203,7 @@ A declaration doesn't run anything. `Bank.layer(BankHandlers)` turns it into a L
 
 ```typescript
 // src/BankInMemory.ts
-import * as Domain from "alchemy/Domain";
+import * as Domain from "@alchemy.run/domain";
 import * as Layer from "effect/Layer";
 import { Bank, BankHandlers } from "./Bank.model.ts";
 

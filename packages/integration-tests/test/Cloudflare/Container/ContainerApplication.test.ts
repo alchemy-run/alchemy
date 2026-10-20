@@ -1,11 +1,11 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
 import { ContainerPlatform } from "@alchemy.run/cloudflare/Containers/ContainerPlatform";
+import { Docker, DockerLive } from "@alchemy.run/docker/Docker";
 import * as Containers from "@distilled.cloud/cloudflare/containers";
 import { assert, describe, expect } from "alchemy-test";
 import * as Deploy from "alchemy/Deploy";
 import * as Destroy from "alchemy/Destroy";
-import { Docker, DockerLive } from "alchemy/Docker/Docker";
 import * as Drift from "alchemy/Drift";
 import * as Provider from "alchemy/Provider";
 import { Stack } from "alchemy/Stack";

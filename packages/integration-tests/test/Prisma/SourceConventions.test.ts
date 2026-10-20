@@ -53,8 +53,8 @@ const resourceConfigInterfaces = {
 // These are interop boundaries, not lifecycle implementation shortcuts. Keep
 // exceptions scoped to both a file and a rule so other conventions still apply.
 const boundaryPatterns: Record<string, ReadonlyArray<string>> = {
-  "Internal/ArchivePlatform.ts": ["raw filesystem/path/os imports", "async/await"],
-  "Internal/ArtifactFile.ts": ["raw filesystem/path/os imports", "async/await"],
+  "internal/ArchivePlatform.ts": ["raw filesystem/path/os imports", "async/await"],
+  "internal/ArtifactFile.ts": ["raw filesystem/path/os imports", "async/await"],
   // Resolve user paths against the cwd at invocation time, not module import.
   "ComputeArchive.ts": ["bare process.cwd()"],
   "ORM/Contract.ts": ["bare process.cwd()"],

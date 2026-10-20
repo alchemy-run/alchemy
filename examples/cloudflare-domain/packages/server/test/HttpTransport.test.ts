@@ -1,3 +1,4 @@
+import * as Domain from "@alchemy.run/domain";
 import { Bank, BankHandlers } from "@bank/domain/Bank.model";
 import { CustomerId } from "@bank/domain/Customer/Customer.id";
 import { CustomerDashboard } from "@bank/domain/Customer/CustomerDashboard.view";
@@ -6,7 +7,6 @@ import { MemoryLedgerStore } from "@bank/domain/Ledger/LedgerStore";
 import { sessionClient } from "@bank/domain/Session.middleware";
 import * as NodeHttpServer from "@effect/platform-node/NodeHttpServer";
 import { expect, it } from "@effect/vitest";
-import * as Domain from "alchemy/Domain";
 import * as Effect from "effect/Effect";
 import * as HttpServer from "effect/http/HttpServer";
 import * as Layer from "effect/Layer";

@@ -2,7 +2,7 @@ import {
   resolveConnectionSource,
   staticConnectionSource,
   type ConnectionSource,
-} from "alchemy/SQL/ConnectionSource";
+} from "@alchemy.run/sql/ConnectionSource";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";

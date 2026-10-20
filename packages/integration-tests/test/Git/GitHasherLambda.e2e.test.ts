@@ -1,13 +1,13 @@
-import * as Cloudflare from "@alchemy.run/cloudflare";
-import { GitApi } from "@alchemy.run/git/Api";
-import { expect } from "alchemy-test";
 /**
  * The pack hasher on AWS Lambda, end to end (DESIGN §22.11): the Git host
  * Worker binds `InvokeFunction` cross-cloud, pushes stream through Lambda
  * chunks, and the result clones back byte-identical under `fsck --strict`.
  * Needs BOTH provider sets (`--profile testing`; AWS via SSO).
  */
-import * as AWS from "alchemy/AWS";
+import * as AWS from "@alchemy.run/aws";
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import { GitApi } from "@alchemy.run/git/Api";
+import { expect } from "alchemy-test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";

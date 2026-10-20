@@ -1,6 +1,6 @@
+import type { MigrationRecord } from "@alchemy.run/sql/Migrations/Format";
 import { makeEntrypointLayer } from "alchemy/Runtime";
 import { Self } from "alchemy/Self";
-import type { MigrationRecord } from "alchemy/SQL/Migrations/Format";
 import * as Context from "effect/Context";
 import * as Layer from "effect/Layer";
 

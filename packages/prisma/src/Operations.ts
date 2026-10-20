@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
 import { PrismaClient, type PrismaManagementClient } from "./Client.ts";
-import * as LogsClient from "./Internal/LogsClient.ts";
+import * as LogsClient from "./internal/LogsClient.ts";
 import type {
   AppCreateInput,
   AppDeploymentTarget,

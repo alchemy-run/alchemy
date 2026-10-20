@@ -1,11 +1,4 @@
 import type { RuntimeServices } from "@alchemy.run/cloudflare-runtime/core";
-import * as d1 from "@distilled.cloud/cloudflare/d1";
-import { isResolved } from "alchemy/Diff";
-import * as ProviderLayer from "alchemy/Local/ProviderLayer";
-import * as RpcProvider from "alchemy/Local/RpcProvider";
-import { createPhysicalName } from "alchemy/PhysicalName";
-import * as Provider from "alchemy/Provider";
-import { isResourceOfType, Resource } from "alchemy/Resource";
 import {
   diffMigrations,
   migrationsAttrs,
@@ -13,8 +6,15 @@ import {
   runMigrations,
   stampedOf,
   type MigrationsInput,
-} from "alchemy/SQL/Migrations/index";
-import { hashImports, readSqlFile } from "alchemy/SQL/SqlFile";
+} from "@alchemy.run/sql/Migrations";
+import { hashImports, readSqlFile } from "@alchemy.run/sql/SqlFile";
+import * as d1 from "@distilled.cloud/cloudflare/d1";
+import { isResolved } from "alchemy/Diff";
+import * as ProviderLayer from "alchemy/Local/ProviderLayer";
+import * as RpcProvider from "alchemy/Local/RpcProvider";
+import { createPhysicalName } from "alchemy/PhysicalName";
+import * as Provider from "alchemy/Provider";
+import { isResourceOfType, Resource } from "alchemy/Resource";
 import { recordsEqual } from "alchemy/Util/equal";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";

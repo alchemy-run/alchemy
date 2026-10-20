@@ -1,6 +1,6 @@
 import { fileURLToPath } from "node:url";
+import * as AWS from "@alchemy.run/aws";
 import * as Alchemy from "alchemy";
-import * as AWS from "alchemy/AWS";
 import * as Effect from "effect/Effect";
 
 /**
@@ -18,10 +18,7 @@ export default Alchemy.Stack(
     const buildRole = yield* AWS.IAM.Role("ExternalMicrovmBuildRole", {});
     const image = yield* AWS.Lambda.MicrovmImage("ExternalSandbox", {
       context: fileURLToPath(
-        new URL(
-          "../../../../../../../alchemy/test/AWS/Lambda/fixtures/microvm/external",
-          import.meta.url,
-        ),
+        new URL("../../../../Lambda/fixtures/microvm/external", import.meta.url),
       ),
       buildRole,
     });

@@ -31,12 +31,7 @@
     ".": "./src/index.ts",
     "./MySQL": "./src/MySQL/index.ts",
     "./Postgres": "./src/Postgres/index.ts",
-    "./*": "./src/*/index.ts",
-    "./Contributions": "./src/Contributions.ts",
-    "./Credentials": "./src/Credentials.ts",
-    "./OAuthClient": "./src/OAuthClient.ts",
-    "./Postgres/PostgresDatabase": "./src/Postgres/PostgresDatabase.ts",
-    "./Postgres/PostgresRole": "./src/Postgres/PostgresRole.ts",
+    "./*": "./src/*.ts",
     "./package.json": "./package.json"
   },
   "publishConfig": {
@@ -60,40 +55,10 @@
         "default": "./lib/Postgres/index.js"
       },
       "./*": {
-        "types": "./lib/*/index.d.ts",
-        "bun": "./src/*/index.ts",
-        "worker": "./src/*/index.ts",
-        "default": "./lib/*/index.js"
-      },
-      "./Contributions": {
-        "types": "./lib/Contributions.d.ts",
-        "bun": "./src/Contributions.ts",
-        "worker": "./src/Contributions.ts",
-        "default": "./lib/Contributions.js"
-      },
-      "./Credentials": {
-        "types": "./lib/Credentials.d.ts",
-        "bun": "./src/Credentials.ts",
-        "worker": "./src/Credentials.ts",
-        "default": "./lib/Credentials.js"
-      },
-      "./OAuthClient": {
-        "types": "./lib/OAuthClient.d.ts",
-        "bun": "./src/OAuthClient.ts",
-        "worker": "./src/OAuthClient.ts",
-        "default": "./lib/OAuthClient.js"
-      },
-      "./Postgres/PostgresDatabase": {
-        "types": "./lib/Postgres/PostgresDatabase.d.ts",
-        "bun": "./src/Postgres/PostgresDatabase.ts",
-        "worker": "./src/Postgres/PostgresDatabase.ts",
-        "default": "./lib/Postgres/PostgresDatabase.js"
-      },
-      "./Postgres/PostgresRole": {
-        "types": "./lib/Postgres/PostgresRole.d.ts",
-        "bun": "./src/Postgres/PostgresRole.ts",
-        "worker": "./src/Postgres/PostgresRole.ts",
-        "default": "./lib/Postgres/PostgresRole.js"
+        "types": "./lib/*.d.ts",
+        "bun": "./src/*.ts",
+        "worker": "./src/*.ts",
+        "default": "./lib/*.js"
       },
       "./package.json": "./package.json"
     },
@@ -104,6 +69,7 @@
     "build:package": "node scripts/build.ts"
   },
   "dependencies": {
+    "@alchemy.run/sql": "workspace:*",
     "@distilled.cloud/core": "workspace:*",
     "@distilled.cloud/planetscale": "workspace:*"
   },
