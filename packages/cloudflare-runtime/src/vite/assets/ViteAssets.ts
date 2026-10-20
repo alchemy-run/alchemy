@@ -17,6 +17,16 @@ const AssetsWorker = {
 const RouterWorker = {
   worker: () => loadInternalWorker("#cloudflare-runtime-vite-worker/assets/router.worker"),
 };
+const ViteProxyWorker = {
+  worker: () => loadInternalWorker("#cloudflare-runtime-vite-worker/assets/vite-proxy.worker"),
+};
+/** Must match `VITE_MISS_HEADER` in `vite-proxy.worker.ts`. */
+const VITE_MISS_HEADER = "x-alchemy-vite-asset-miss";
+/**
+ * Marks a request the dev `ASSETS` binding sent through Vite's middleware, so
+ * the proxy middleware passes it on instead of sending it back to the Worker.
+ */
+export const VITE_ASSET_REQUEST = Symbol.for("alchemy.cloudflare-runtime.vite-asset-request");
 /**
  * Marker prefix used by the vite-aware asset worker to indicate that a
  * path lives inside Vite's `publicDir` (and so should be served verbatim,
@@ -62,8 +72,12 @@ export const ViteAssetsLive = (viteDevServer: vite.ViteDevServer) =>
             `${prefix}:fetch-html`,
             viteFetchHtmlHandler(viteDevServer),
           );
-          const [assetsWorker, routerWorker] = yield* Effect.forEach(
-            [AssetsWorker, RouterWorker],
+          const viteMiddlewareService = yield* loopback.api.route(
+            `${prefix}:vite-middleware`,
+            viteMiddlewareHandler(viteDevServer),
+          );
+          const [assetsWorker, routerWorker, viteProxyWorker] = yield* Effect.forEach(
+            [AssetsWorker, RouterWorker, ViteProxyWorker],
             (worker) =>
               Effect.map(Effect.promise(worker.worker), ({ modules }) => modulesToWorkerd(modules)),
             { concurrency: "unbounded" },
@@ -72,7 +86,20 @@ export const ViteAssetsLive = (viteDevServer: vite.ViteDevServer) =>
           return {
             services: [
               {
+                // What a Worker's `ASSETS` binding calls (see
+                // `vite-proxy.worker.ts`).
                 name: "assets:worker",
+                worker: {
+                  compatibilityDate: DEFAULT_COMPATIBILITY_DATE,
+                  bindings: [
+                    { name: "__VITE_MIDDLEWARE__", service: viteMiddlewareService },
+                    { name: "ASSET_WORKER", service: { name: "assets:vite" } },
+                  ],
+                  modules: viteProxyWorker,
+                },
+              },
+              {
+                name: "assets:vite",
                 worker: {
                   compatibilityDate: DEFAULT_COMPATIBILITY_DATE,
                   // Node.js compatibility is supplied by the 2026-08-31
@@ -110,7 +137,7 @@ export const ViteAssetsLive = (viteDevServer: vite.ViteDevServer) =>
                   bindings: [
                     {
                       name: "ASSET_WORKER",
-                      service: { name: "assets:worker" },
+                      service: { name: "assets:vite" },
                     },
                     {
                       name: "CONFIG",
@@ -209,6 +236,21 @@ const viteFetchHtmlHandler =
       res.writeHead(500, { "content-type": "text/plain" });
       res.end(`Unexpected error. Failed to load "${pathname}".`);
     }
+  };
+
+/**
+ * Runs a dev `ASSETS` request through Vite's middleware, as
+ * `@cloudflare/vite-plugin` binds `ASSETS` in dev. A request no middleware
+ * serves answers with {@link VITE_MISS_HEADER} so the proxy worker falls back
+ * to the asset worker.
+ */
+const viteMiddlewareHandler =
+  (viteDevServer: vite.ViteDevServer) => (req: IncomingMessage, res: ServerResponse) => {
+    (req as IncomingMessage & { [VITE_ASSET_REQUEST]?: true })[VITE_ASSET_REQUEST] = true;
+    viteDevServer.middlewares(req, res, () => {
+      res.writeHead(404, { [VITE_MISS_HEADER]: "1" });
+      res.end();
+    });
   };
 
 const withTrailingSlash = (s: string) => (s.endsWith("/") ? s : `${s}/`);

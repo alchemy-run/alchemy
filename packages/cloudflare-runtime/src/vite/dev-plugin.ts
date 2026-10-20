@@ -12,6 +12,7 @@ import { parseViteEnvironments } from "../rolldown/options.ts";
 import type { OptionsApi } from "../rolldown/plugins/index.ts";
 import { workerEntryId } from "../rolldown/plugins/index.ts";
 import { resolvePluginApi } from "../rolldown/utils.ts";
+import { VITE_ASSET_REQUEST } from "./assets/ViteAssets.ts";
 import { DistilledDevEnvironment } from "./dev-environment.ts";
 import type { ServerHandle } from "./dev-server.ts";
 import { configuredExportTypes, mergeExportTypes } from "./export-types.ts";
@@ -258,7 +259,10 @@ export function dev(options: CloudflareVitePluginOptions): Array<vite.Plugin> {
       }
       bindWebSocket();
       return () => {
-        server.middlewares.use(function distilledCloudflareProxyMiddleware(req, res) {
+        server.middlewares.use(function distilledCloudflareProxyMiddleware(req, res, next) {
+          // The Worker's own `ASSETS` calls run through Vite's middleware;
+          // one Vite didn't serve must not come back to the Worker.
+          if (VITE_ASSET_REQUEST in req) return next();
           const url = new NodeURL(req.originalUrl ?? req.url ?? "/", address.toString());
           forwardWorkerRequest(req, res, url, proxySharedSecret, server.config.logger);
         });

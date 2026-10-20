@@ -270,7 +270,8 @@ describe.concurrent(
     // `vite-assets-fixture` mirrors `@cloudflare/vite-plugin`'s
     // `playground/assets` (plus the asset cases of `build-output`,
     // `deps-assets-importing` and `spa-with-api`), and each variant below
-    // mirrors one of its Vite configs.
+    // mirrors one of its Vite configs. Like the plugin's specs, the variants
+    // that serve assets run deployed and under `alchemy dev`.
     const prepareAssetsFixture = (options: {
       readonly config?: string;
       readonly removePublic?: boolean;
@@ -296,10 +297,11 @@ describe.concurrent(
         return rootDir;
       });
 
-    const assetsSite = (id: string, rootDir: string, main: string | undefined) =>
+    const assetsSite = (id: string, rootDir: string, main: string | undefined, dev = false) =>
       Cloudflare.Website.Vite(id, {
         ...viteProps(rootDir, ["src/**", "public/**", "package.json", "vite.config.ts", "*.html"]),
         main,
+        ...(dev ? { dev: { port: 0 } } : {}),
       });
 
     const expectNoHeader = (url: string, header: string) =>
@@ -333,29 +335,36 @@ describe.concurrent(
           // `playground/build-output`: a `.txt` import stays a Worker module.
           expectUrlContains(`${url}/additional-module`, "hello from additional module"),
           // `playground/deps-assets-importing`.
-          expectUrlContains(`${url}/dependency-asset-raw`, "dependency:vite url:/assets/"),
+          // The URL is `/@fs/...` in dev and `/assets/...` once built.
+          expectUrlContains(`${url}/dependency-asset-raw`, "dependency:vite url:/"),
           expectUrlContains(`${url}/dependency-asset`, '"name": "vite"'),
         ],
         { concurrency: 4 },
       );
 
-    // Public files serve directly, ahead of the Worker, with `public/`'s
-    // `_headers`, nested directories and `.assetsignore` applied.
-    const expectPublicAssets = (url: string) =>
+    // Public files serve directly, ahead of the Worker, nested directories
+    // included. `public/_headers` applies once deployed (the plugin checks it
+    // in build mode only).
+    const expectPublicAssets = (url: string, mode: Mode) =>
       Effect.all(
         [
           expectUrlHeader(`${url}/public-image.svg`, "content-type", "image/svg+xml"),
-          expectUrlHeader(`${url}/public-image.svg`, "x-header", "splat-header"),
           expectUrlContains(`${url}/nested/file.txt`, "vite-nested-public-marker"),
+          ...(mode === "live"
+            ? [expectUrlHeader(`${url}/public-image.svg`, "x-header", "splat-header")]
+            : []),
         ],
         { concurrency: 3 },
       );
+
+    type Mode = "live" | "dev";
+    type Check = (url: string, mode: Mode) => Effect.Effect<void, unknown, HttpClient.HttpClient>;
 
     const liveAssetsTest = (
       name: string,
       id: string,
       options: Parameters<typeof prepareAssetsFixture>[0] & { readonly main?: string | null },
-      check: (url: string) => Effect.Effect<void, unknown, HttpClient.HttpClient>,
+      check: Check,
     ) =>
       test.provider(
         name,
@@ -367,22 +376,43 @@ describe.concurrent(
             const main = options.main === null ? undefined : (options.main ?? "./src/index.ts");
             const site = yield* stack.deploy(assetsSite(id, rootDir, main));
             yield* expectWorkerExists(site.workerName, accountId);
-            yield* check(site.url!);
+            yield* check(site.url!, "live");
             yield* stack.destroy();
             yield* waitForWorkerToBeDeleted(site.workerName, accountId);
           }).pipe(logLevel),
         { tags: ["provider:cloudflare:worker", "live"], timeout: 360_000 },
       );
 
+    const devAssetsTest = (
+      name: string,
+      id: string,
+      options: Parameters<typeof prepareAssetsFixture>[0] & { readonly main?: string | null },
+      check: Check,
+    ) =>
+      devTest.provider(
+        name,
+        (stack) =>
+          Effect.gen(function* () {
+            yield* stack.destroy();
+            const rootDir = yield* prepareAssetsFixture(options);
+            const main = options.main === null ? undefined : (options.main ?? "./src/index.ts");
+            const site = yield* stack.deploy(assetsSite(id, rootDir, main, true));
+            yield* check(site.url!.replace(/\/$/, ""), "dev");
+          }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.ignore)), logLevel),
+        { tags: ["provider:cloudflare:worker", "local"], timeout: 120_000 },
+      );
+
     // `playground/assets/__tests__/no-client-entry`.
-    const noClientEntry = (url: string) =>
+    const noClientEntry: Check = (url, mode) =>
       Effect.gen(function* () {
         yield* expectWorkerAssets(url);
-        yield* expectPublicAssets(url);
+        yield* expectPublicAssets(url, mode);
         yield* expectNoHeader(`${url}/public-image.svg`, "additional-header");
-        // `.assetsignore` keeps `*.bak` out of the uploaded assets, so the
-        // Worker answers instead.
-        yield* expectUrlContains(`${url}/ignored.bak`, "vite-assets-worker");
+        if (mode === "live") {
+          // `.assetsignore` keeps `*.bak` out of the uploaded assets, so the
+          // Worker answers instead.
+          yield* expectUrlContains(`${url}/ignored.bak`, "vite-assets-worker");
+        }
       });
     liveAssetsTest(
       "Vite assets: no client entry uploads public/ and Worker-imported assets",
@@ -390,12 +420,18 @@ describe.concurrent(
       {},
       noClientEntry,
     );
+    devAssetsTest(
+      "Vite assets dev: no client entry serves public/ and Worker-imported assets",
+      "FixViteNoClientEntryDev",
+      {},
+      noClientEntry,
+    );
 
     // `playground/assets/__tests__/assets.spec.ts`.
-    const clientEntry = (url: string) =>
+    const clientEntry: Check = (url, mode) =>
       Effect.gen(function* () {
         yield* expectWorkerAssets(url);
-        yield* expectPublicAssets(url);
+        yield* expectPublicAssets(url, mode);
         yield* expectUrlContains(`${url}/transformed-html-asset`, "Modified content");
         yield* expectNoHeader(`${url}/public-image.svg`, "additional-header");
         yield* expectUrlContains(`${url}/html-page`, "Original content");
@@ -406,12 +442,24 @@ describe.concurrent(
       { config: "client-entry" },
       clientEntry,
     );
+    devAssetsTest(
+      "Vite assets dev: a client entry that isn't index.html keeps Worker-imported assets",
+      "FixViteClientEntryDev",
+      { config: "client-entry" },
+      clientEntry,
+    );
 
     // `playground/assets/__tests__/public-dir-only`.
-    const publicDirOnly = (url: string) => expectPublicAssets(url);
+    const publicDirOnly: Check = (url, mode) => expectPublicAssets(url, mode);
     liveAssetsTest(
       "Vite assets: public/ only, no Worker entry, deploys assets-only",
       "FixVitePublicDirOnly",
+      { removeSrc: true, main: null },
+      publicDirOnly,
+    );
+    devAssetsTest(
+      "Vite assets dev: public/ only, no Worker entry, serves assets-only",
+      "FixVitePublicDirOnlyDev",
       { removeSrc: true, main: null },
       publicDirOnly,
     );
@@ -421,12 +469,12 @@ describe.concurrent(
       "Vite assets: custom output directories keep public/ and Worker-imported assets",
       "FixViteCustomOutputDirs",
       { config: "custom-output-directories" },
-      (url) => Effect.all([expectWorkerAssets(url), expectPublicAssets(url)]),
+      (url, mode) => Effect.all([expectWorkerAssets(url), expectPublicAssets(url, mode)]),
     );
 
     // The plugin's `buildApp` skips the client build when nothing would land
     // in it: the Worker deploys without `ASSETS`.
-    const noAssets = (url: string) => expectUrlContains(url, `"assets":false`);
+    const noAssets: Check = (url) => expectUrlContains(url, `"assets":false`);
     liveAssetsTest(
       "Vite assets: no public/ and no imported assets deploys without ASSETS",
       "FixViteNoAssets",
