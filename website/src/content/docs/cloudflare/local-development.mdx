@@ -103,25 +103,10 @@ pre-built remote image).
 ### FUSE mounts
 
 A container can mount a FUSE filesystem locally, such as an R2
-bucket through `s3fs` or `tigrisfs`. Like
-[`wrangler dev`](https://developers.cloudflare.com/changelog/post/2026-08-20-fuse-local-development/),
-the local runtime gives every container the Docker privileges FUSE
-needs: `CAP_SYS_ADMIN`, the `/dev/fuse` device, and an unconfined
-AppArmor profile. It grants them when your Docker daemon is local
-and isolates them:
-
-- Docker on macOS or WSL. Containers run in a VM.
-- Rootless Docker on Linux, when `/dev/fuse` exists.
-
-Rootful Docker on Linux runs containers on your own kernel, where
-`CAP_SYS_ADMIN` is close to host root. Alchemy does not grant the
-privileges there, or when it cannot inspect the daemon. Set
-`CONTAINER_FUSE` to decide yourself:
-
-```sh
-CONTAINER_FUSE=1 alchemy dev   # grant, e.g. on a disposable CI runner
-CONTAINER_FUSE=0 alchemy dev   # never grant, e.g. a Docker VM without /dev/fuse
-```
+bucket through `s3fs` or `tigrisfs`, just as it can once deployed.
+Every local container gets the Docker privileges FUSE needs:
+`CAP_SYS_ADMIN`, the `/dev/fuse` device, and an unconfined AppArmor
+profile.
 
 ## What's emulated
 

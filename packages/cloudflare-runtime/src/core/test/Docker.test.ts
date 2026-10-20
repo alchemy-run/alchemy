@@ -1,22 +1,17 @@
 import { execFileSync } from "node:child_process";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { describe, expect, it, layer } from "@effect/vitest";
-import * as Cause from "effect/Cause";
-import * as ConfigProvider from "effect/ConfigProvider";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
-import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
 import {
-  allowsFusePrivileges,
   buildFailureHint,
   CONTAINER_LOOPBACK_ALIAS,
   Docker,
   DockerLive,
-  isLocalDockerEndpoint,
   mergeContainerCreateEnv,
   rewriteLoopbackHosts,
   toPullRef,
@@ -469,94 +464,6 @@ layer(
       expect(error.subtag).toBe("DockerTagFailed");
       expect(error.detail?.stderr).toContain("no such image");
     }),
-  );
-});
-
-describe("allowsFusePrivileges", () => {
-  const LOCAL = "unix:///var/run/docker.sock";
-  // Rootful Docker on a bare-metal Linux host unless a test says otherwise.
-  const allows = (host: Partial<Parameters<typeof allowsFusePrivileges>[0]>) =>
-    allowsFusePrivileges({
-      platform: "linux",
-      release: "6.8.0-45-generic",
-      dockerHost: LOCAL,
-      securityOptions: ["name=seccomp,profile=builtin", "name=cgroupns"],
-      devFuseExists: true,
-      ...host,
-    });
-
-  it("grants a local daemon on macOS, whose containers run in a VM", () => {
-    expect(
-      allows({
-        platform: "darwin",
-        release: "25.0.0",
-        dockerHost: "unix:///Users/me/.orbstack/run/docker.sock",
-        devFuseExists: false,
-      }),
-    ).toBe(true);
-  });
-
-  it("withholds rootful Docker on Linux", () => {
-    expect(allows({})).toBe(false);
-  });
-
-  it("grants rootless Docker on Linux only when /dev/fuse exists", () => {
-    expect(allows({ securityOptions: ["name=seccomp,profile=builtin", "name=rootless"] })).toBe(
-      true,
-    );
-    expect(allows({ securityOptions: ["rootless"] })).toBe(true);
-    expect(allows({ securityOptions: ["name=rootless"], devFuseExists: false })).toBe(false);
-  });
-
-  it("grants WSL, whose engine runs in a VM", () => {
-    expect(allows({ release: "5.15.153.1-microsoft-standard-WSL2", devFuseExists: false })).toBe(
-      true,
-    );
-  });
-
-  it("withholds a remote daemon", () => {
-    for (const dockerHost of ["tcp://127.0.0.1:2375", "ssh://me@build-box", "unix://box/d.sock"]) {
-      expect(allows({ platform: "darwin", dockerHost })).toBe(false);
-    }
-  });
-
-  it("withholds a daemon that could not be inspected", () => {
-    expect(allows({ platform: "darwin", securityOptions: undefined })).toBe(false);
-  });
-
-  it("withholds Windows", () => {
-    expect(allows({ platform: "win32", dockerHost: "npipe:////./pipe/docker_engine" })).toBe(false);
-  });
-
-  it("treats only absolute unix sockets as local", () => {
-    expect(isLocalDockerEndpoint("unix:///var/run/docker.sock")).toBe(true);
-    expect(isLocalDockerEndpoint("unix://box/var/run/docker.sock")).toBe(false);
-    expect(isLocalDockerEndpoint("tcp://127.0.0.1:2375")).toBe(false);
-    expect(isLocalDockerEndpoint("/var/run/docker.sock")).toBe(false);
-  });
-});
-
-describe("CONTAINER_FUSE", () => {
-  it.effect("rejects any value other than 1 or 0", () =>
-    Effect.forEach(["true", " ", "2"], (value) =>
-      Effect.gen(function* () {
-        const exit = yield* Effect.exit(
-          Effect.scoped(
-            Layer.build(
-              Layer.provide(
-                DockerLive,
-                Layer.merge(
-                  NodeServices.layer,
-                  ConfigProvider.layer(ConfigProvider.fromEnv({ env: { CONTAINER_FUSE: value } })),
-                ),
-              ),
-            ),
-          ),
-        );
-        expect(Exit.isFailure(exit), JSON.stringify(value)).toBe(true);
-        if (Exit.isFailure(exit)) expect(Cause.pretty(exit.cause)).toContain("CONTAINER_FUSE");
-      }),
-    ),
   );
 });
 

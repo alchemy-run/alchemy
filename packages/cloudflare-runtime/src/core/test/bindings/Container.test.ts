@@ -7,7 +7,7 @@ import * as DurableObjectNamespace from "../../bindings/DurableObjectNamespace.t
 import type { ContainerImage } from "../../Docker.ts";
 import { isDockerAvailable } from "../helpers/docker.ts";
 import { getFixture } from "../helpers/fixture.ts";
-import { localRuntimeLayer, makeLocalRuntimeLayer, startTestWorker } from "../helpers/runtime.ts";
+import { localRuntimeLayer, startTestWorker } from "../helpers/runtime.ts";
 
 const FIXTURE_DIR = getFixture("container");
 const DOCKER_BIN = process.env.DOCKER_BIN ?? "docker";
@@ -188,70 +188,56 @@ export default {
 };
 `;
 
-// A host without /dev/fuse (outside a Docker VM) cannot pass the device through.
-const canPassFuseDevice = process.platform === "darwin" || existsSync("/dev/fuse");
+// A Linux host without /dev/fuse has no device to pass through.
+const canPassFuseDevice = process.platform !== "linux" || existsSync("/dev/fuse");
 
-// Each case runs its own runtime, so its containers get its own privileges.
-for (const { name, env, granted, skip } of [
-  { name: "CONTAINER_FUSE=1", env: { CONTAINER_FUSE: "1" }, granted: true, skip: false },
-  // Docker on macOS runs containers in a VM, so detection grants them.
-  { name: "detected on macOS", env: {}, granted: true, skip: process.platform !== "darwin" },
-  { name: "CONTAINER_FUSE=0", env: { CONTAINER_FUSE: "0" }, granted: false, skip: false },
-]) {
-  layer(makeLocalRuntimeLayer(env), { excludeTestServices: true, timeout: 30_000 })(
-    `Container FUSE privileges (${name})`,
-    (it) => {
-      it.effect.skipIf(!isDockerAvailable() || !canPassFuseDevice || skip)(
-        granted
-          ? "gives both image shapes CAP_SYS_ADMIN and /dev/fuse"
-          : "gives neither image shape CAP_SYS_ADMIN or /dev/fuse",
-        () => {
-          const image = { dockerfile: "Dockerfile", context: getFixture("container-fuse") };
-          return Effect.gen(function* () {
-            const worker = yield* startTestWorker({
-              name: "container-fuse",
-              compatibilityDate: "2026-03-17",
-              compatibilityFlags: [],
-              bindings: [
-                DurableObjectNamespace.local({ binding: "IMAGE_NAME", className: "FuseImageName" }),
-                DurableObjectNamespace.local({
-                  binding: "NAMED_IMAGES",
-                  className: "FuseNamedImages",
-                }),
-              ],
-              modules: [{ name: "main.js", type: "ESModule", content: FUSE_SCRIPT }],
-              durableObjectNamespaces: [
-                { className: "FuseImageName", sql: true, container: image },
-                {
-                  className: "FuseNamedImages",
-                  sql: true,
-                  container: { images: { fuse: image } },
-                },
-              ],
-            });
-            for (const path of ["/image-name", "/images"]) {
-              const text = yield* worker.fetchText(path);
-              const capEff = /CapEff:\s*([0-9a-f]+)/.exec(text)?.[1];
-              expect(capEff, text).toBeDefined();
-              // CAP_SYS_ADMIN is capability 21.
-              expect((BigInt(`0x${capEff}`) >> 21n) & 1n, text).toBe(granted ? 1n : 0n);
-              expect(text.includes("fuse-device"), text).toBe(granted);
-            }
-          }).pipe(
-            Effect.scoped,
-            Effect.ensuring(
-              Effect.sync(() => {
-                removeImage("alchemy-dev/fuseimagename");
-                removeImage("alchemy-dev/fusenamedimages");
+layer(localRuntimeLayer, { excludeTestServices: true, timeout: 30_000 })(
+  "Container FUSE privileges",
+  (it) => {
+    it.effect.skipIf(!isDockerAvailable() || !canPassFuseDevice)(
+      "gives both image shapes CAP_SYS_ADMIN and /dev/fuse",
+      () => {
+        const image = { dockerfile: "Dockerfile", context: getFixture("container-fuse") };
+        return Effect.gen(function* () {
+          const worker = yield* startTestWorker({
+            name: "container-fuse",
+            compatibilityDate: "2026-03-17",
+            compatibilityFlags: [],
+            bindings: [
+              DurableObjectNamespace.local({ binding: "IMAGE_NAME", className: "FuseImageName" }),
+              DurableObjectNamespace.local({
+                binding: "NAMED_IMAGES",
+                className: "FuseNamedImages",
               }),
-            ),
-          );
-        },
-        60_000,
-      );
-    },
-  );
-}
+            ],
+            modules: [{ name: "main.js", type: "ESModule", content: FUSE_SCRIPT }],
+            durableObjectNamespaces: [
+              { className: "FuseImageName", sql: true, container: image },
+              { className: "FuseNamedImages", sql: true, container: { images: { fuse: image } } },
+            ],
+          });
+          for (const path of ["/image-name", "/images"]) {
+            const text = yield* worker.fetchText(path);
+            const capEff = /CapEff:\s*([0-9a-f]+)/.exec(text)?.[1];
+            expect(capEff, text).toBeDefined();
+            // CAP_SYS_ADMIN is capability 21.
+            expect((BigInt(`0x${capEff}`) >> 21n) & 1n, text).toBe(1n);
+            expect(text).toContain("fuse-device");
+          }
+        }).pipe(
+          Effect.scoped,
+          Effect.ensuring(
+            Effect.sync(() => {
+              removeImage("alchemy-dev/fuseimagename");
+              removeImage("alchemy-dev/fusenamedimages");
+            }),
+          ),
+        );
+      },
+      60_000,
+    );
+  },
+);
 
 const testContainer = Effect.fn(
   function* (options: {

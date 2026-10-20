@@ -167,7 +167,7 @@ export const RuntimeLive = Layer.effect(
           { concurrency: "unbounded" },
         );
 
-      // Privileges (FUSE, like Miniflare) are decided once per runtime and
+      // FUSE privileges are decided once per runtime and
       // resolve alongside the first image build or pull.
       const [, containerEngine] = yield* Effect.forEach(
         containers,

@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { describe, expect } from "alchemy-test";
 import * as Test from "alchemy/Test/Alchemy";
@@ -79,11 +80,10 @@ describe(
 
 /**
  * A container that mounts a FUSE filesystem (as `s3fs` or `tigrisfs` mount R2)
- * under `alchemy dev`. Like `wrangler dev`, the local runtime grants the
- * Docker privileges FUSE needs when the engine isolates them — always on
- * macOS, where Docker runs containers in a VM — or when `CONTAINER_FUSE=1`.
+ * under `alchemy dev`, as deployed Containers can. A Linux host without
+ * /dev/fuse has no device to give the container.
  */
-describe.skipIf(process.platform !== "darwin" && process.env.CONTAINER_FUSE !== "1")(
+describe.skipIf(process.platform === "linux" && !existsSync("/dev/fuse"))(
   "local container FUSE mount",
   {
     tags: ["provider:cloudflare", "provider:cloudflare:container", "provider:cloudflare:worker"],
