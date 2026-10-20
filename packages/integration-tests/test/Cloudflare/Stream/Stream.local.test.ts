@@ -121,9 +121,10 @@ test.provider(
       expect(video.size).toBe(TEST_VIDEO_BYTES.byteLength);
       expect(video.creator).toBe("alchemy");
       expect(video.meta).toEqual({ title: "alchemy-local-test" });
-      // The preview URL is the local watch route on the runtime entry.
-      expect(video.preview).toMatch(
-        new RegExp(`^http://127\\.0\\.0\\.1:\\d+/__cf_local/stream/${video.id}/watch$`),
+      // The preview URL is the local watch route on the Worker's own URL, as
+      // Miniflare builds it from its public URL.
+      expect(video.preview).toBe(
+        `${String(deployed.url).replace(/\/$/, "")}/__cf_local/stream/${video.id}/watch`,
       );
 
       // Read it back through the binding.
