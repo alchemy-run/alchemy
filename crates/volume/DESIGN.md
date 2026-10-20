@@ -242,13 +242,18 @@ the lost-response handling) makes it fail on its first seed.
    recovery, an oracle checks the disk is exactly what was acknowledged, or that
    plus the one operation whose fate was unknown. Garbage collection runs
    between steps. `VOLUME_SIM_SEEDS` sets how many seeds to run (200 by
-   default). Not yet: seeded latency and concurrent tasks.
-2. **Failpoints at every barrier.** A crash after each journal write, pack
+   default).
+2. **Concurrent takeover.** The old writer keeps appending while a new lease
+   acquires, on a single-threaded runtime whose store yields a seeded number of
+   times per request, so every seed is a different (and reproducible)
+   interleaving. Every append the old writer saw succeed must be in the new
+   lease's disk. Removing the check after an append fails it on seed 1.
+3. **Failpoints at every barrier.** A crash after each journal write, pack
    upload, page upload, manifest upload and head move, then recovery and a
    consistency check.
-3. **Real ext4.** Mount, write, kill `blockd` with `kill -9`, remount on another
+4. **Real ext4.** Mount, write, kill `blockd` with `kill -9`, remount on another
    machine, run `fsck`, and check that files that were `fsync`ed survive.
-4. **Fencing.** Two machines attach one session. The older one's next FLUSH
+5. **Fencing.** Two machines attach one session. The older one's next FLUSH
    must fail, and nothing it writes afterward may become visible.
 
 ## What we measure before going further
@@ -304,6 +309,13 @@ deploys:
     Durable Object answers (a container control), which forwards to the session.
 - **Bindings** in every Worker or Durable Object that yields the workspace, to
   both classes in the host's script.
+
+With `machine.lambda`, machines are AWS Lambda MicroVMs instead (a
+`Sandbox.Sandbox` hosted by `AWS.Lambda.MicrovmSandbox`, with the OS
+capabilities to mount); sessions stay on Cloudflare. A MicroVM has no
+container control, so its `blockd` reads and writes its head and journal in the
+bucket over S3 (the default journal store), and its Durable Object stops it
+once it's been idle.
 
 An `open` acquires a lease (mounting if the session is idle), runs its effect
 with `exec`, `spawn` and `port` going straight to the machine, and releases

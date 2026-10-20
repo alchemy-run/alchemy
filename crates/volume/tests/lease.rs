@@ -658,3 +658,133 @@ fn the_simulation_is_deterministic() {
     };
     assert_eq!(run(7), run(7));
 }
+
+// ── concurrency ────────────────────────────────────────────────────────
+
+/// A store that yields to other tasks a seeded number of times before each
+/// request, so a single-threaded runtime interleaves concurrent writers
+/// differently for every seed (and the same way for the same seed).
+struct Interleaving {
+    blobs: Arc<MemoryBlobStore>,
+    meta: Arc<MemoryMetaStore>,
+    rng: Mutex<Rng>,
+}
+
+impl Interleaving {
+    async fn pause(&self) {
+        let yields = self.rng.lock().unwrap().below(4);
+        for _ in 0..yields {
+            tokio::task::yield_now().await;
+        }
+    }
+}
+
+#[async_trait]
+impl BlobStore for Interleaving {
+    async fn put(&self, key: &str, bytes: Vec<u8>) -> Result<()> {
+        self.pause().await;
+        self.blobs.put(key, bytes).await
+    }
+    async fn put_new(&self, key: &str, bytes: Vec<u8>) -> Result<bool> {
+        self.pause().await;
+        self.blobs.put_new(key, bytes).await
+    }
+    async fn get(&self, key: &str) -> Result<Vec<u8>> {
+        self.pause().await;
+        self.blobs.get(key).await
+    }
+    async fn get_range(&self, key: &str, start: u64, end: u64) -> Result<Vec<u8>> {
+        self.pause().await;
+        self.blobs.get_range(key, start, end).await
+    }
+    async fn exists(&self, key: &str) -> Result<bool> {
+        self.blobs.exists(key).await
+    }
+    async fn list(&self, prefix: &str) -> Result<Vec<BlobMeta>> {
+        self.pause().await;
+        self.blobs.list(prefix).await
+    }
+    async fn delete(&self, key: &str) -> Result<()> {
+        self.pause().await;
+        self.blobs.delete(key).await
+    }
+}
+
+#[async_trait]
+impl MetaStore for Interleaving {
+    async fn get(&self, head: &str) -> Result<Option<Head>> {
+        self.pause().await;
+        self.meta.get(head).await
+    }
+    async fn cas(&self, head: &str, expected: Option<&Head>, new: Option<&Head>) -> Result<()> {
+        self.pause().await;
+        self.meta.cas(head, expected, new).await
+    }
+    async fn list(&self) -> Result<Vec<(String, Head)>> {
+        self.pause().await;
+        self.meta.list().await
+    }
+}
+
+/// The old writer keeps appending while a new lease takes over. Every append
+/// it saw succeed must be in the new lease's disk, and once the new lease
+/// holds the head, the old writer must get nowhere.
+async fn race(seed: u64) {
+    let store = Arc::new(Interleaving {
+        blobs: Arc::new(MemoryBlobStore::new()),
+        meta: Arc::new(MemoryMetaStore::new()),
+        rng: Mutex::new(Rng(seed | 1)),
+    });
+    let volume = Arc::new(Volume::new(store.clone(), store.clone()));
+    volume.create("main", SIZE).await.unwrap();
+    let mut old = volume.acquire("main").await.unwrap();
+
+    let zombie = {
+        let volume = volume.clone();
+        tokio::task::spawn_local(async move {
+            let mut acked = Vec::new();
+            for b in 0..BLOCKS {
+                match volume.append(&mut old, vec![(b, block(b as u8 + 1))]).await {
+                    Ok(()) => acked.push(b),
+                    Err(Error::Fenced(_)) => break,
+                    Err(e) => panic!("seed {seed}: the old writer failed: {e}"),
+                }
+            }
+            (acked, old)
+        })
+    };
+    let takeover = {
+        let volume = volume.clone();
+        tokio::task::spawn_local(async move { volume.acquire("main").await.unwrap() })
+    };
+    let (acked, mut old) = zombie.await.unwrap();
+    let new = takeover.await.unwrap();
+
+    let disk = read_disk(&volume, &new.snapshot()).await;
+    for &b in &acked {
+        assert_eq!(
+            disk[b as usize],
+            b as u8 + 1,
+            "seed {seed}: acknowledged block {b} was lost"
+        );
+    }
+    assert!(matches!(
+        volume.append(&mut old, vec![(0, block(0xEE))]).await,
+        Err(Error::Fenced(_))
+    ));
+}
+
+#[test]
+fn a_takeover_racing_the_old_writer_never_loses_an_acknowledged_write() {
+    let seeds: u64 = std::env::var("VOLUME_SIM_SEEDS")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(200);
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .build()
+        .unwrap();
+    for seed in 1..=seeds {
+        let local = tokio::task::LocalSet::new();
+        local.block_on(&runtime, race(seed));
+    }
+}
