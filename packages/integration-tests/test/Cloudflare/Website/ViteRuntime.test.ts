@@ -24,6 +24,7 @@ const { test: devTest } = Test.make({ providers: Cloudflare.providers(), dev: tr
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 const tempRoot = pathe.resolve(import.meta.dirname, "../../../.tmp");
 const fixtureDir = pathe.resolve(import.meta.dirname, "vite-runtime-fixture");
+const hotChannelFixtureDir = pathe.resolve(import.meta.dirname, "vite-hot-channel-fixture");
 
 type Mode = "live" | "dev";
 
@@ -381,6 +382,37 @@ describe.concurrent(
             cfWorker: "vite-runtime.example.com",
           });
         }).pipe(Effect.scoped, Effect.ensuring(stack.destroy().pipe(Effect.ignore)), logLevel),
+      { tags: ["provider:cloudflare:worker", "local"], timeout: 180_000 },
+    );
+
+    // `hot-channel` (dev only): custom events between the dev server and
+    // the Worker, from its module scope and its request scope.
+    devTest.provider(
+      "Vite runtime: custom events cross the Worker's hot channel (dev)",
+      (stack) =>
+        Effect.gen(function* () {
+          yield* stack.destroy();
+          const rootDir = yield* cloneFixture(hotChannelFixtureDir, {
+            prefix: "alchemy-vite-hot-channel-",
+            tempRoot,
+            entries: ["package.json", "vite.config.ts", "src"],
+          });
+          const site = yield* stack.deploy(
+            Cloudflare.Website.Vite("ViteHotChannel", {
+              rootDir,
+              main: "./src/index.ts",
+              workersDev: true,
+              compatibility: { date: "2026-03-17" },
+              memo: { include: ["**/*"] },
+              dev: { port: 0 },
+            }),
+          );
+          yield* expectJson(site.url!, [
+            "__server-event-data-received__",
+            "__worker-module-event-data-received__",
+            "__worker-request-event-data-received__",
+          ]);
+        }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.ignore)), logLevel),
       { tags: ["provider:cloudflare:worker", "local"], timeout: 180_000 },
     );
 
