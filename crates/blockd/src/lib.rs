@@ -14,4 +14,4 @@ mod device;
 pub mod nbd;
 pub mod store;
 
-pub use device::{Device, Status};
+pub use device::{Device, Flusher, Status};

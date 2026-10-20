@@ -46,7 +46,12 @@ impl World {
     fn attach(&self, head: &str) -> Device {
         let n = self.caches.get() + 1;
         self.caches.set(n);
-        let cache = self.dir.path().join(format!("cache-{n}"));
+        self.attach_at(head, &format!("cache-{n}"))
+    }
+
+    /// Attaches `head` with the named cache: the same machine again.
+    fn attach_at(&self, head: &str, cache: &str) -> Device {
+        let cache = self.dir.path().join(cache);
         Device::open(
             self.volume.clone(),
             head,
@@ -54,6 +59,10 @@ impl World {
             self.runtime.handle().clone(),
         )
         .unwrap()
+    }
+
+    fn head(&self, head: &str) -> volume::Hash {
+        self.runtime.block_on(self.volume.head(head)).unwrap()
     }
 }
 
@@ -260,4 +269,145 @@ fn out_of_range_requests_fail() {
             .is_err()
     );
     assert!(device.write(64 * MIB, b"x").is_err());
+}
+
+#[test]
+fn a_clean_close_leaves_a_warm_cache() {
+    let world = World::new();
+    world.base("base");
+    let device = world.attach_at("base", "machine");
+    device.read(0, (4 * MIB) as u32).unwrap();
+    let fetched = device.status().fetches;
+    assert_eq!(fetched, 16);
+    device.close().unwrap();
+    drop(device);
+
+    let again = world.attach_at("base", "machine");
+    assert_eq!(again.status().reused_blocks, 4 * MIB / BLOCK_SIZE);
+    let bytes = again.read(0, (4 * MIB) as u32).unwrap();
+    assert_eq!(
+        again.status().fetches,
+        0,
+        "everything came from the warm cache"
+    );
+    assert!(
+        bytes[..BLOCK_SIZE as usize]
+            .iter()
+            .all(|&b| b == pattern(0))
+    );
+}
+
+#[test]
+fn a_warm_cache_drops_only_what_another_machine_changed() {
+    let world = World::new();
+    world.base("base");
+    let mine = world.attach_at("base", "mine");
+    mine.read(0, (4 * MIB) as u32).unwrap();
+    mine.close().unwrap();
+    drop(mine);
+
+    // another machine changes one extent and moves the head
+    let theirs = world.attach_at("base", "theirs");
+    theirs
+        .write(EXTENT_SIZE * 5, &vec![0x55; BLOCK_SIZE as usize])
+        .unwrap();
+    theirs.close().unwrap();
+    drop(theirs);
+
+    let mine = world.attach_at("base", "mine");
+    let bytes = mine.read(0, (4 * MIB) as u32).unwrap();
+    assert_eq!(
+        mine.status().fetches,
+        1,
+        "only the changed extent is fetched again"
+    );
+    let at = (EXTENT_SIZE * 5) as usize;
+    assert!(
+        bytes[at..at + BLOCK_SIZE as usize]
+            .iter()
+            .all(|&b| b == 0x55)
+    );
+}
+
+#[test]
+fn a_crash_leaves_no_warm_cache_and_only_flushed_writes() {
+    let world = World::new();
+    world.base("base");
+    let device = world.attach_at("base", "machine");
+    device.write(0, &vec![1; BLOCK_SIZE as usize]).unwrap();
+    device.flush().unwrap();
+    device
+        .write(BLOCK_SIZE, &vec![2; BLOCK_SIZE as usize])
+        .unwrap(); // never flushed
+    drop(device); // crash: no close
+
+    let again = world.attach_at("base", "machine");
+    assert_eq!(
+        again.status().reused_blocks,
+        0,
+        "a crashed cache isn't trusted"
+    );
+    let bytes = again.read(0, (2 * BLOCK_SIZE) as u32).unwrap();
+    assert!(bytes[..BLOCK_SIZE as usize].iter().all(|&b| b == 1));
+    assert!(
+        bytes[BLOCK_SIZE as usize..]
+            .iter()
+            .all(|&b| b == pattern(1))
+    );
+}
+
+#[test]
+fn the_background_flusher_commits_without_being_asked() {
+    let world = World::new();
+    world.base("base");
+    let device = Arc::new(world.attach("base"));
+    let before = world.head("base");
+    let _flusher = device.start_flusher(std::time::Duration::from_millis(50));
+    device.write(0, &vec![9; BLOCK_SIZE as usize]).unwrap();
+    for _ in 0..100 {
+        if world.head("base") != before {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+    assert_ne!(world.head("base"), before);
+    assert_eq!(device.status().dirty_blocks, 0);
+}
+
+#[test]
+fn writes_during_a_flush_are_kept_for_the_next_one() {
+    let world = World::new();
+    world.base("base");
+    let device = Arc::new(world.attach("base"));
+    let writer = {
+        let device = device.clone();
+        std::thread::spawn(move || {
+            for round in 0..200u64 {
+                let byte = (round % 250) as u8 + 1;
+                device
+                    .write((round % 64) * EXTENT_SIZE, &vec![byte; BLOCK_SIZE as usize])
+                    .unwrap();
+            }
+        })
+    };
+    for _ in 0..20 {
+        device.flush().unwrap();
+    }
+    writer.join().unwrap();
+    device.flush().unwrap();
+    // the last of rounds 0..200 to write extent e is e + 192 (e < 8) or e + 128
+    let expected: Vec<u8> = (0..64u64)
+        .map(|e| {
+            let last = if e < 8 { e + 192 } else { e + 128 };
+            (last % 250) as u8 + 1
+        })
+        .collect();
+    drop(device);
+    let fresh = world.attach("base");
+    for (extent, byte) in expected.iter().enumerate() {
+        let block = fresh
+            .read(extent as u64 * EXTENT_SIZE, BLOCK_SIZE as u32)
+            .unwrap();
+        assert!(block.iter().all(|b| b == byte), "extent {extent}");
+    }
 }

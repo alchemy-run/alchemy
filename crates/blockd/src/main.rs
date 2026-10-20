@@ -6,7 +6,8 @@
 //! blockd drop    --store <spec> --head <name>
 //! blockd heads   --store <spec>
 //! blockd history --store <spec> --head <name> [--limit <n>]
-//! blockd attach  --store <spec> --head <name> --nbd /dev/nbd0 --cache <file> [--control <socket>]
+//! blockd attach  --store <spec> --head <name> --nbd /dev/nbd0 --cache <file> [--control <socket>] [--flush-every <seconds>]
+//! blockd disconnect --nbd /dev/nbd0   (detach a device whose blockd died)
 //! blockd control --socket <socket> --request '{"op":"flush"}'
 //! ```
 //!
@@ -94,7 +95,13 @@ fn main() -> Result<()> {
             }
         }
         "attach" => attach(&flags, store()?, &runtime)?,
-        _ => bail!("usage: blockd <create|import|fork|reset|drop|heads|history|attach|control> …"),
+        #[cfg(target_os = "linux")]
+        "disconnect" => {
+            blockd::nbd::force_disconnect(std::path::Path::new(flags.required("nbd")?))?
+        }
+        _ => bail!(
+            "usage: blockd <create|import|fork|reset|drop|heads|history|attach|control|disconnect> …"
+        ),
     }
     Ok(())
 }
@@ -109,6 +116,12 @@ fn attach(flags: &Flags, volume: volume::Volume, runtime: &tokio::runtime::Runti
         cache,
         runtime.handle().clone(),
     )?);
+    let every: u64 = flags
+        .get("flush-every")
+        .map(str::parse)
+        .transpose()?
+        .unwrap_or(5);
+    let flusher = (every > 0).then(|| device.start_flusher(std::time::Duration::from_secs(every)));
     let attachment =
         blockd::nbd::attach(std::path::Path::new(flags.required("nbd")?), device.clone())?;
     tracing::info!(
@@ -129,7 +142,8 @@ fn attach(flags: &Flags, volume: volume::Volume, runtime: &tokio::runtime::Runti
         });
     }
     attachment.wait()?;
-    let snapshot = device.flush()?;
+    drop(flusher);
+    let snapshot = device.close()?;
     tracing::info!("detached {head} at snapshot {snapshot}");
     println!("{snapshot}");
     Ok(())

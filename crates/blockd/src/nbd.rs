@@ -101,6 +101,17 @@ impl Disconnector {
     }
 }
 
+/// Detaches the NBD device at `path` whose server is gone (after a crash).
+pub fn force_disconnect(path: &Path) -> Result<()> {
+    let nbd = OpenOptions::new().read(true).write(true).open(path)?;
+    unsafe {
+        libc::ioctl(nbd.as_raw_fd(), NBD_DISCONNECT as _);
+        libc::ioctl(nbd.as_raw_fd(), NBD_CLEAR_QUE as _);
+        libc::ioctl(nbd.as_raw_fd(), NBD_CLEAR_SOCK as _);
+    }
+    Ok(())
+}
+
 /// Attaches `device` to the NBD device at `path` (e.g. `/dev/nbd0`).
 pub fn attach(path: &Path, device: Arc<Device>) -> Result<Attachment> {
     let nbd = OpenOptions::new()

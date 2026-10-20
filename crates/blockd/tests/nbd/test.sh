@@ -12,10 +12,12 @@ fail() { echo "FAIL: $*"; exit 1; }
 control() { "$blockd" control --socket "$1" --request "$2"; }
 wait_for() { for _ in $(seq 1 100); do [ -S "$1" ] && return 0; sleep 0.1; done; fail "no socket $1"; }
 
-attach() { # head nbd cache socket
-  "$blockd" attach --store "$store" --head "$1" --nbd "$2" --cache "$3" --control "$4" &
+attach() { # head nbd cache socket [extra flags]
+  "$blockd" attach --store "$store" --head "$1" --nbd "$2" --cache "$3" --control "$4" ${5:-} &
+  attached_pid=$!
   wait_for "$4"
 }
+field() { sed -E "s/.*\"$1\":([0-9]+).*/\1/"; }
 detach() { control "$1" '{"op":"detach"}' >/dev/null; wait; }
 
 # 1. a base image: ext4 with a small tree, imported into the store
@@ -61,6 +63,7 @@ mount /dev/nbd1 /mnt/s
 [ "$(sha256sum /mnt/s/work/big.bin | cut -d' ' -f1)" = "$sha" ] || fail "big file persisted"
 [ ! -e /mnt/s/app/m1.js ] && [ -e /mnt/s/app/renamed.js ] || fail "delete and rename persisted"
 [ "$(cat /mnt/s/work/later.txt)" = "after the fork" ] || fail "post-fork write persisted"
+cat /mnt/s/work/*.txt > /dev/null # step 8 reads these again
 umount /mnt/s && detach /tmp/ctl1
 pass "a fresh cache sees every write, and e2fsck is clean"
 
@@ -79,6 +82,35 @@ mount -o ro /dev/nbd3 /mnt/s
 [ ! -e /mnt/s/work ] && [ -e /mnt/s/app/m1.js ] || fail "base untouched"
 umount /mnt/s && detach /tmp/ctl3
 pass "the base is untouched"
+
+# 8. the same machine again: the cache from step 5 is warm
+attach session /dev/nbd4 "$work/cache1" /tmp/ctl4
+reused=$(control /tmp/ctl4 '{"op":"status"}' | field reused_blocks)
+[ "$reused" -gt 0 ] || fail "nothing reused from a clean detach"
+mount -o ro /dev/nbd4 /mnt/s
+cat /mnt/s/work/*.txt > /dev/null && sha256sum /mnt/s/work/big.bin > /dev/null
+fetches=$(control /tmp/ctl4 '{"op":"status"}' | field fetches)
+umount /mnt/s && detach /tmp/ctl4
+[ "$fetches" -lt 4 ] || fail "a warm re-attach fetched $fetches extents"
+pass "a warm re-attach reused $reused blocks and fetched $fetches extents"
+
+# 9. a crash: what was synced survives, the filesystem recovers
+attach session /dev/nbd5 "$work/cache5" /tmp/ctl5 "--flush-every 1"
+mount /dev/nbd5 /mnt/s
+echo "synced before the crash" > /mnt/s/work/synced.txt && sync
+dd if=/dev/urandom of=/mnt/s/work/unsynced.bin bs=1M count=8 status=none
+kill -9 "$attached_pid"; wait "$attached_pid" 2>/dev/null || true
+umount -l /mnt/s || true
+"$blockd" disconnect --nbd /dev/nbd5
+rm -f /tmp/ctl5
+attach session /dev/nbd6 "$work/cache6" /tmp/ctl6
+reused=$(control /tmp/ctl6 '{"op":"status"}' | field reused_blocks)
+mount /dev/nbd6 /mnt/s   # replays the ext4 journal
+[ "$(cat /mnt/s/work/synced.txt)" = "synced before the crash" ] || fail "a synced write was lost"
+umount /mnt/s
+e2fsck -fn /dev/nbd6 >/dev/null 2>&1 || fail "e2fsck after the crash"
+detach /tmp/ctl6
+pass "after kill -9: the synced file survived and e2fsck is clean"
 
 echo "heads:"; "$blockd" heads --store "$store"
 echo "session history: $("$blockd" history --store "$store" --head session | wc -l) snapshots"

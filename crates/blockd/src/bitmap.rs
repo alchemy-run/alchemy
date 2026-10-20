@@ -29,6 +29,38 @@ impl Bitmap {
         (start..end).all(|bit| self.get(bit))
     }
 
+    /// How many bits are set.
+    pub fn count(&self) -> u64 {
+        self.words
+            .iter()
+            .map(|w| w.load(Ordering::Acquire).count_ones() as u64)
+            .sum()
+    }
+
+    pub fn byte_len(&self) -> usize {
+        self.words.len() * 8
+    }
+
+    pub fn write_to(&self, out: &mut Vec<u8>) {
+        for word in &self.words {
+            out.extend_from_slice(&word.load(Ordering::Acquire).to_le_bytes());
+        }
+    }
+
+    /// A bitmap of `bits` bits saved by [`Bitmap::write_to`].
+    pub fn read_from(bytes: &[u8], bits: u64) -> Option<Self> {
+        let words = bits.div_ceil(64) as usize;
+        if bytes.len() != words * 8 {
+            return None;
+        }
+        Some(Self {
+            words: bytes
+                .chunks_exact(8)
+                .map(|w| AtomicU64::new(u64::from_le_bytes(w.try_into().unwrap())))
+                .collect(),
+        })
+    }
+
     /// Indices of 64-bit words with any bit set: a fast scan for dirty blocks.
     pub fn nonzero_words(&self) -> impl Iterator<Item = u64> + '_ {
         self.words
@@ -54,6 +86,12 @@ mod tests {
         (0..10).for_each(|b| bitmap.set(b));
         assert!(bitmap.all(0, 10));
         assert_eq!(bitmap.nonzero_words().collect::<Vec<_>>(), vec![0, 2]);
+        assert_eq!(bitmap.count(), 11);
+        let mut saved = Vec::new();
+        bitmap.write_to(&mut saved);
+        let restored = Bitmap::read_from(&saved, 200).unwrap();
+        assert!(restored.get(130) && restored.get(9) && !restored.get(10));
+        assert!(Bitmap::read_from(&saved[1..], 200).is_none());
         bitmap.clear(130);
         assert_eq!(bitmap.nonzero_words().collect::<Vec<_>>(), vec![0]);
     }
