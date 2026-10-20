@@ -1,4 +1,8 @@
-import { hashDockerBuildInputs, resolveDockerBuildPaths } from "@alchemy.run/docker/BuildHash";
+import {
+  type DockerBuildHashMode,
+  hashDockerBuildInputs,
+  resolveDockerBuildPaths,
+} from "@alchemy.run/docker/BuildHash";
 import { Docker } from "@alchemy.run/docker/Docker";
 import * as ecr from "@distilled.cloud/aws/ecr";
 import { isResolved } from "alchemy/Diff";
@@ -103,10 +107,11 @@ export interface ImageProps {
    */
   repositoryUri?: string;
   /**
-   * Docker build context directory. Every file under the context (plus the
-   * Dockerfile, platform, and build args) participates in the content hash
-   * that identifies the image. An existing image with the same hash is reused;
-   * missing images are rebuilt and pushed to the desired repository.
+   * Docker build context directory. The context files selected by
+   * `hashMode` (plus the Dockerfile, platform, and build args) participate in
+   * the content hash that identifies the image. An existing image with the
+   * same hash is reused; missing images are rebuilt and pushed to the desired
+   * repository.
    */
   context: string;
   /**
@@ -125,6 +130,14 @@ export interface ImageProps {
    * Docker build arguments (`--build-arg`).
    */
   buildArgs?: Record<string, string>;
+  /**
+   * Which context files the content hash reads. `"effective"` hashes only the
+   * files Docker sends to the builder, after the Dockerfile's `.dockerignore`,
+   * so ignored trees such as `node_modules` are never read and cannot change
+   * the tag. `"all"` hashes every file under `context`.
+   * @default "effective"
+   */
+  hashMode?: DockerBuildHashMode;
 }
 
 export interface Image extends Resource<
@@ -232,7 +245,7 @@ export const ImageProvider = () =>
         });
 
       // Content hash over everything that affects the built image: the
-      // Dockerfile, every file `.dockerignore` keeps (relative path + bytes),
+      // Dockerfile, the context files `hashMode` selects (relative path + bytes),
       // the target platform, and the build args. Absolute paths deliberately
       // do NOT participate, so relocating an identical context (e.g. a temp
       // dir) produces the same tag.
@@ -244,7 +257,7 @@ export const ImageProvider = () =>
             platform: props.platform ?? "linux/amd64",
             buildArgs: props.buildArgs,
           },
-          "effective",
+          props.hashMode ?? "effective",
         );
 
       // Observe the pushed image in ECR. Missing repository or tag → undefined.
