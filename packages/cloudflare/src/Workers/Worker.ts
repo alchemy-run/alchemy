@@ -1253,10 +1253,11 @@ export type Worker<Bindings = any> = Resource<
      */
     previewDoClasses?: string[] | undefined;
     /**
-     * The id of the version uploaded by the most recent deploy. Only set
-     * when versioning is in play: always for a version worker
-     * (`version.parent`), and for a self-owned Worker when a gradual
-     * rollout (`version.traffic` < 100) deployed via the versions API.
+     * The id of the version uploaded by the most recent deploy. Set for
+     * every Worker outside a dispatch namespace: a full deploy records the
+     * version serving 100% of traffic, a gradual rollout
+     * (`version.traffic` < 100) and a version worker (`version.parent`)
+     * record the version they uploaded.
      */
     versionId?: string | undefined;
     /**
@@ -1268,10 +1269,11 @@ export type Worker<Bindings = any> = Resource<
      */
     versionAlias?: string | undefined;
     /**
-     * The id of the deployment created by the most recent deploy, when the
-     * deploy created one through the deployments API (a version with
-     * `traffic > 0`). Preview-only versions (`traffic: 0`) have no
-     * deployment.
+     * The id of the deployment created by the most recent deploy. A full
+     * deploy records the active deployment; a version with `traffic > 0`
+     * records the deployment it created through the deployments API.
+     * Preview-only versions (`traffic: 0`) and Workers in a dispatch
+     * namespace have no deployment.
      */
     deploymentId?: string | undefined;
     /**
