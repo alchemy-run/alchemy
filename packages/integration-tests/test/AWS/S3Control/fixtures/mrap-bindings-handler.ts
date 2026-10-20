@@ -61,6 +61,8 @@ export default S3ControlMrapBindingsFunction.make(
 
     const getRoutes = yield* AWS.S3Control.GetMultiRegionAccessPointRoutes(mrap);
     const submitRoutes = yield* AWS.S3Control.SubmitMultiRegionAccessPointRoutes(mrap);
+    // Resolved at request time, like the bindings resolve it.
+    const mrapArn = yield* mrap.multiRegionAccessPointArn;
 
     return {
       fetch: Effect.gen(function* () {
@@ -71,7 +73,7 @@ export default S3ControlMrapBindingsFunction.make(
         if (request.method === "GET" && pathname === "/routes") {
           const { Routes } = yield* getRoutes();
           return yield* HttpServerResponse.json({
-            mrapName: mrap.multiRegionAccessPointName,
+            mrapArn: yield* mrapArn,
             routes: (Routes ?? []).map((r) => ({
               region: r.Region,
               trafficDialPercentage: r.TrafficDialPercentage,

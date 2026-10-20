@@ -268,7 +268,7 @@ describe.skipIf(!!process.env.FAST).sequential(
         (_stack) =>
           Effect.gen(function* () {
             const before = (yield* getJson(mrapBaseUrl, "/routes")) as {
-              mrapName: string;
+              mrapArn: string;
               routes: { region: string; trafficDialPercentage: number }[];
             };
             expect(before.routes.length).toBeGreaterThan(0);
@@ -284,7 +284,7 @@ describe.skipIf(!!process.env.FAST).sequential(
             // Verify the binding's mutation independently of the Lambda
             // response, through the distilled S3Control client.
             const live = yield* s3control
-              .getMultiRegionAccessPointRoutes({ AccountId: ACCOUNT_ID, Mrap: before.mrapName })
+              .getMultiRegionAccessPointRoutes({ AccountId: ACCOUNT_ID, Mrap: before.mrapArn })
               .pipe(Effect.provideService(Region, Effect.succeed("us-west-2")));
             expect(live.Routes?.length).toBe(before.routes.length);
             for (const route of live.Routes ?? []) {
