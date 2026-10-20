@@ -10,6 +10,11 @@ import { loadInternalWorker } from "../internal/internal-worker.ts";
 const EntryWorker = {
   worker: () => loadInternalWorker("#cloudflare-runtime-core-worker/globals/entry.worker"),
 };
+const OutboundWorker = {
+  worker: () => loadInternalWorker("#cloudflare-runtime-core-worker/globals/outbound.worker"),
+};
+/** The outbound interceptor at the top of the user Worker's `globalOutbound`. */
+const SERVICE_OUTBOUND = "globals:outbound";
 import {
   DEFAULT_COMPATIBILITY_DATE,
   SERVICE_USER_WORKER,
@@ -76,6 +81,9 @@ export const GlobalsLive = Layer.effect(
     const storage = yield* Storage.Storage;
     const cf = yield* Cf.Cf;
     const modules = formatInternalWorkerModules(yield* Effect.promise(EntryWorker.worker));
+    const outboundModules = formatInternalWorkerModules(
+      yield* Effect.promise(OutboundWorker.worker),
+    );
 
     // Inbound email replies (`message.reply(...)` from the user worker's
     // `email()` handler) are persisted under `{storage}/email` — the same
@@ -178,7 +186,24 @@ export const GlobalsLive = Layer.effect(
               upstreamBindingName: "USER_WORKER",
             },
           ],
-          services: [internet, storage, ...(email === undefined ? [] : [email.service])],
+          services: [
+            internet,
+            storage,
+            ...(email === undefined ? [] : [email.service]),
+            {
+              name: SERVICE_OUTBOUND,
+              worker: {
+                compatibilityDate: DEFAULT_COMPATIBILITY_DATE,
+                modules: outboundModules,
+                bindings: [
+                  { name: "CF_WORKER_ZONE", text: worker.zone ?? `${worker.name}.example.com` },
+                ],
+              },
+            },
+          ],
+          // Outbound `fetch()`es pass through the interceptor, as in
+          // Miniflare, which continues to the internet.
+          userWorker: { globalOutbound: { name: SERVICE_OUTBOUND } },
           start:
             crons.length === 0
               ? undefined

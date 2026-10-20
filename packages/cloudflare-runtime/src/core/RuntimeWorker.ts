@@ -85,6 +85,12 @@ export interface RuntimeWorker<B extends BindingHooks = BindingHooks> {
    */
   readonly cf?: Record<string, unknown>;
   /**
+   * The zone outbound `fetch()`es report in their `CF-Worker` header, as on
+   * Cloudflare's edge: the host of the Worker's first route or custom
+   * domain. Defaults to Miniflare's `<name>.example.com`.
+   */
+  readonly zone?: string;
+  /**
    * Controls how output from the underlying `workerd` process is surfaced.
    *
    * By default, workerd does not log uncaught exceptions thrown by the

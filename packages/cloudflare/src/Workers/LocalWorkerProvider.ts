@@ -571,6 +571,14 @@ export const LocalWorkerProvider = () =>
            */
           edgeDomain:
             typeof props.domain === "string" ? props.domain : (props.domain?.name ?? undefined),
+          /**
+           * The zone outbound `fetch()`es report in `CF-Worker`: the custom
+           * domain, else the first route's zone, as Wrangler derives it.
+           */
+          zone:
+            (typeof props.domain === "string" ? props.domain : props.domain?.name) ??
+            props.routes?.[0]?.zoneName ??
+            (props.routes?.[0] ? routePatternHost(props.routes[0].pattern.trim()) : undefined),
         };
       });
 
@@ -924,6 +932,7 @@ export const LocalWorkerProvider = () =>
                       },
                       compatibilityDate: worker.compatibility.date,
                       compatibilityFlags: worker.compatibility.flags,
+                      zone: worker.zone,
                       bindings: worker.workerBindings as never,
                       hyperdrives: worker.hyperdrives,
                       durableObjectNamespaces: worker.durableObjectNamespaces,
@@ -1317,6 +1326,7 @@ export const LocalWorkerProvider = () =>
                         hyperdrives: worker.hyperdrives,
                         queueConsumers,
                         crons: worker.crons,
+                        zone: worker.zone,
                         assets: yield* toRuntimeAssets(worker.assets),
                       },
                     },

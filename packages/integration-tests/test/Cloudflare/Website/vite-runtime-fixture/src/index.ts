@@ -266,6 +266,10 @@ export default {
         }
         return Response.json(disposed);
       }
+      // `cron-triggers` (cf-worker-header): an outbound fetch to the test's
+      // echo server, which reports the `CF-Worker` header it received.
+      case "/cf-worker-header":
+        return fetch(url.searchParams.get("echoUrl")!);
       // `stream-binding`: the binding fetches the bytes from `/video-asset`.
       case "/video-asset":
         return new Response(new Uint8Array([0, 1, 2, 3, 4, 5, 6, 7]), {

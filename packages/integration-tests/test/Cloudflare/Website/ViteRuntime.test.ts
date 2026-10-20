@@ -1,3 +1,4 @@
+import * as NodeHttp from "node:http";
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
 import { describe, expect } from "alchemy-test";
@@ -26,7 +27,7 @@ const fixtureDir = pathe.resolve(import.meta.dirname, "vite-runtime-fixture");
 
 type Mode = "live" | "dev";
 
-const deploySite = (stack: Test.ScratchStack, mode: Mode) =>
+const deploySite = (stack: Test.ScratchStack, mode: Mode, options: { domain?: string } = {}) =>
   Effect.gen(function* () {
     const rootDir = yield* cloneFixture(fixtureDir, {
       prefix: "alchemy-vite-runtime-",
@@ -52,6 +53,7 @@ const deploySite = (stack: Test.ScratchStack, mode: Mode) =>
           compatibility: { date: "2026-03-17", flags: ["nodejs_compat"] },
           memo: { include: ["**/*"] },
           crons: ["* * * * *"],
+          ...(options.domain ? { domain: options.domain } : {}),
           env: {
             KV: Cloudflare.KV.Namespace(`ViteRuntimeKv${mode}`),
             IMAGES: Cloudflare.Images.Images(),
@@ -350,6 +352,36 @@ describe.concurrent(
           yield* expectText(`${url}/send`, "Email message sent successfully!");
         }),
       ["dev"],
+    );
+
+    // `cron-triggers/__tests__/cf-worker-header.spec.ts`: outbound fetches
+    // carry `CF-Worker` with the Worker's first custom domain. Attaching a
+    // domain deploys only to a zone the account owns, so this runs in dev.
+    devTest.provider(
+      "Vite runtime: outbound fetches carry the custom domain as CF-Worker (dev)",
+      (stack) =>
+        Effect.gen(function* () {
+          const seen: Array<string | undefined> = [];
+          const echo = NodeHttp.createServer((req, res) => {
+            seen.push(req.headers["cf-worker"] as string | undefined);
+            res.setHeader("content-type", "application/json");
+            res.end(JSON.stringify({ cfWorker: req.headers["cf-worker"] ?? null }));
+          });
+          yield* Effect.acquireRelease(
+            Effect.promise(
+              () => new Promise<void>((resolve) => echo.listen(0, "127.0.0.1", resolve)),
+            ),
+            () => Effect.promise(() => new Promise<void>((resolve) => echo.close(() => resolve()))),
+          );
+          const echoUrl = `http://127.0.0.1:${(echo.address() as { port: number }).port}/`;
+          yield* stack.destroy();
+          const site = yield* deploySite(stack, "dev", { domain: "vite-runtime.example.com" });
+          const url = site.url!.replace(/\/$/, "");
+          yield* expectJson(`${url}/cf-worker-header?echoUrl=${encodeURIComponent(echoUrl)}`, {
+            cfWorker: "vite-runtime.example.com",
+          });
+        }).pipe(Effect.scoped, Effect.ensuring(stack.destroy().pipe(Effect.ignore)), logLevel),
+      { tags: ["provider:cloudflare:worker", "local"], timeout: 180_000 },
     );
 
     // `stream-binding`: the preview URL is on the dev server's own origin

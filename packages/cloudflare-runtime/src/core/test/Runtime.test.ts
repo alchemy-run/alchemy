@@ -189,4 +189,55 @@ layer(localRuntimeLayer, { excludeTestServices: true })("Runtime", (it) => {
       }),
     { timeout: 30_000 },
   );
+
+  // Miniflare's outbound interceptor: outbound fetches carry `CF-Worker`
+  // with the Worker's zone and drop `CF-Connecting-IP`.
+  it.effect(
+    "outbound fetches carry CF-Worker and drop CF-Connecting-IP",
+    () =>
+      Effect.gen(function* () {
+        const seen: Array<{ cfWorker?: string; connectingIp?: string }> = [];
+        const echo = NodeHttp.createServer((req, res) => {
+          seen.push({
+            cfWorker: req.headers["cf-worker"] as string | undefined,
+            connectingIp: req.headers["cf-connecting-ip"] as string | undefined,
+          });
+          res.end("ok");
+        });
+        yield* Effect.acquireRelease(
+          Effect.promise(
+            () => new Promise<void>((resolve) => echo.listen(0, "127.0.0.1", resolve)),
+          ),
+          () => Effect.promise(() => new Promise<void>((resolve) => echo.close(() => resolve()))),
+        );
+        const target = `http://127.0.0.1:${(echo.address() as { port: number }).port}/`;
+        const runtime = yield* Runtime.Runtime;
+        const start = (name: string, zone?: string) =>
+          runtime.start({
+            name,
+            zone,
+            compatibilityDate: "2026-03-10",
+            compatibilityFlags: [],
+            bindings: [],
+            modules: [
+              {
+                name: "main.js",
+                type: "ESModule",
+                content: `export default {
+  fetch: () => fetch(${JSON.stringify(target)}, { headers: { "CF-Connecting-IP": "1.2.3.4" } }),
+};`,
+              },
+            ],
+          });
+        const defaultZone = yield* start("outbound-default");
+        yield* Effect.promise(() => fetch(defaultZone).then((r) => r.text()));
+        const customZone = yield* start("outbound-zone", "example.com");
+        yield* Effect.promise(() => fetch(customZone).then((r) => r.text()));
+        expect(seen).toEqual([
+          { cfWorker: "outbound-default.example.com", connectingIp: undefined },
+          { cfWorker: "example.com", connectingIp: undefined },
+        ]);
+      }).pipe(Effect.scoped),
+    { timeout: 30_000 },
+  );
 });
