@@ -142,9 +142,33 @@ const alchemyCloudflareVitePlugin = (): vite.Plugin => ({
     order: "pre",
     handler(config) {
       disableOfficialCloudflareVitePlugins(config.plugins);
+      // Vite concatenates this with a user's own `server.fs.deny`, which
+      // would otherwise replace Vite's defaults and expose `.env`.
+      return { server: { fs: { deny: [...DENIED_FILES] } } };
     },
   },
 });
+
+/**
+ * Files the dev server never serves: `@cloudflare/vite-plugin`'s list
+ * (Vite's defaults, package-manager credentials, key stores, Wrangler's
+ * secrets and state) plus the stack file and Alchemy's state.
+ */
+const DENIED_FILES = [
+  ".env",
+  ".env.*",
+  ".npmrc",
+  ".yarnrc",
+  ".yarnrc.yml",
+  "*.{crt,pem,key,pfx,p12,p8,jks}",
+  "**/.git/**",
+  ".dev.vars",
+  ".dev.vars.*",
+  "**/.cloudflare/**",
+  "**/.wrangler/**",
+  "**/.alchemy/**",
+  "alchemy.run.*",
+];
 
 export default function cloudflareVitePlugin(
   options: CloudflareVitePluginOptions = {},

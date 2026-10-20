@@ -29,6 +29,27 @@ const tempRoot = pathe.resolve(import.meta.dirname, "../../../.tmp");
 const fixtureDir = pathe.resolve(import.meta.dirname, "vite-runtime-fixture");
 const containerFixtureDir = pathe.resolve(import.meta.dirname, "vite-container-runtime-fixture");
 const partyserverFixtureDir = pathe.resolve(import.meta.dirname, "vite-partyserver-fixture");
+const sensitiveFilesFixtureDir = pathe.resolve(import.meta.dirname, "vite-sensitive-files-fixture");
+const SENSITIVE_FILES = [
+  ".env",
+  ".env.staging",
+  ".dev.vars",
+  ".dev.vars.staging",
+  "worker-b/.env",
+  "worker-b/.env.staging",
+  "worker-b/.dev.vars",
+  "worker-b/.dev.vars.staging",
+  "alchemy.run.ts",
+  ".npmrc",
+  ".yarnrc",
+  ".yarnrc.yml",
+  "client.key",
+  "client.pfx",
+  "client.p12",
+  "client.p8",
+  "client.jks",
+  "custom-sensitive-file",
+];
 const hotChannelFixtureDir = pathe.resolve(import.meta.dirname, "vite-hot-channel-fixture");
 
 type Mode = "live" | "dev";
@@ -572,6 +593,60 @@ describe.concurrent(
                 }),
             ).pipe(Effect.retry({ times: 5, schedule: Schedule.spaced("3 seconds") }));
             expect(reply).toBe("Message from the server: received 'Hello from the client!'");
+          }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.ignore)), logLevel),
+        {
+          tags: ["provider:cloudflare:worker", mode === "dev" ? "local" : "live"],
+          timeout: 300_000,
+        },
+      );
+    }
+
+    // `sensitive-files`: the dev server refuses secrets, credentials and
+    // the stack file (403), on top of a user's own `server.fs.deny`;
+    // deployed, they were never assets, so the Worker answers.
+    for (const mode of ["live", "dev"] as const) {
+      (mode === "live" ? test : devTest).provider(
+        `Vite runtime: sensitive files are never served${mode === "dev" ? " (dev)" : ""}`,
+        (stack) =>
+          Effect.gen(function* () {
+            yield* stack.destroy();
+            const rootDir = yield* cloneFixture(sensitiveFilesFixtureDir, {
+              prefix: "alchemy-vite-sensitive-files-",
+              tempRoot,
+              entries: [
+                "package.json",
+                "vite.config.ts",
+                "src",
+                "worker-b",
+                ...SENSITIVE_FILES.filter((file) => !file.startsWith("worker-b/")),
+              ],
+            });
+            const site = yield* stack.deploy(
+              Cloudflare.Website.Vite(`ViteSensitiveFiles${mode}`, {
+                rootDir,
+                main: "./src/index.ts",
+                workersDev: true,
+                compatibility: { date: "2024-12-30" },
+                memo: { include: ["**/*"] },
+                ...(mode === "dev" ? { dev: { port: 0 } } : {}),
+              }),
+            );
+            const url = site.url!.replace(/\/$/, "");
+            yield* expectText(`${url}/`, "Worker A response");
+            for (const file of SENSITIVE_FILES) {
+              yield* expectResponse(
+                `${url}/${file}`,
+                (res) =>
+                  mode === "dev"
+                    ? res.status === 403
+                      ? undefined
+                      : `status ${res.status}: ${res.body.slice(0, 80)}`
+                    : res.body === "Worker A response"
+                      ? undefined
+                      : `body ${res.body.slice(0, 80)}`,
+                { label: `/${file}` },
+              );
+            }
           }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.ignore)), logLevel),
         {
           tags: ["provider:cloudflare:worker", mode === "dev" ? "local" : "live"],
