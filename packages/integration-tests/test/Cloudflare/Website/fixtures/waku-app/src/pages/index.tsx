@@ -1,6 +1,7 @@
 /** @jsxImportSource react */
 import { getEnv } from "waku";
 import { Counter } from "../components/Counter.tsx";
+import { PublicEnv } from "../components/PublicEnv.tsx";
 
 export default async function HomePage() {
   // `getEnv` reads the Worker env the Cloudflare adapter registers at
@@ -18,6 +19,7 @@ export default async function HomePage() {
           body-substring assertions. */}
       <div data-testid="env-message">{`MESSAGE=${message}`}</div>
       <Counter />
+      <PublicEnv />
     </div>
   );
 }

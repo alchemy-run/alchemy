@@ -4268,6 +4268,15 @@ export const LiveWorkerProvider = () =>
           desiredCrons.length > 0 || previousCrons.length > 0
             ? yield* reconcileCrons(name, desiredCrons, previousCrons, session)
             : [];
+        if (!dispatchNamespace && versionId === undefined) {
+          const { deployments } = yield* workers.listScriptDeployments({
+            accountId,
+            scriptName: name,
+          });
+          const active = deployments[0];
+          deploymentId = active?.id;
+          versionId = active?.versions.find((version) => version.percentage === 100)?.versionId;
+        }
         return {
           // The immutable script ID. The gradual-rollout branch deploys via
           // the versions API (no script PUT response), and rows persisted by
@@ -5117,8 +5126,9 @@ export const LiveWorkerProvider = () =>
             // with this Worker — see readWorkerRoutes. Empty-array props
             // (`domain: []`, `routes: []`, `crons: []`) still observe so we
             // can detect drift and converge deletions.
-            // This is the last gradual-rollout upload receipt, not the active
-            // traffic deployment. Preserve it only while that version exists.
+            // The version recorded by the last deploy (the live version of a
+            // full deploy, or a gradual rollout's upload receipt). Preserve it
+            // only while that version exists.
             const uploadedVersionId = output?.versionId
               ? yield* workers
                   .getScriptVersion({

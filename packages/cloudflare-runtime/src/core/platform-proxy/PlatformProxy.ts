@@ -54,7 +54,7 @@ import * as Text from "../bindings/Text.ts";
 import type { BindingHook } from "../PluginContext.ts";
 import * as Runtime from "../Runtime.ts";
 import { ConfigError, type RuntimeError, SystemError } from "../RuntimeError.shared.ts";
-import type { BindingHooks, DurableObjectNamespace, Module } from "../RuntimeWorker.ts";
+import type { Assets, BindingHooks, DurableObjectNamespace, Module } from "../RuntimeWorker.ts";
 import type { ConnectedPlatformProxy, ConnectInfo } from "./connect.ts";
 import { connect } from "./connect.ts";
 import { BINDING_PLATFORM_PROXY_TOKEN } from "./PlatformProxyProtocol.shared.ts";
@@ -97,6 +97,12 @@ export interface PlatformProxyOptions<B extends BindingHooks = BindingHooks> {
   readonly modules?: ReadonlyArray<Module>;
   /** Durable Object namespaces implemented by `modules`. */
   readonly durableObjectNamespaces?: ReadonlyArray<DurableObjectNamespace>;
+  /**
+   * Static assets an `Assets.local` binding serves, e.g. a framework's
+   * public directory: `{ directory: "static" }`. The proxy worker still
+   * answers every request made to the proxy itself.
+   */
+  readonly assets?: Assets;
 }
 
 export interface PlatformProxyInstance<
@@ -187,6 +193,7 @@ export const open = Effect.fn("PlatformProxy.open")(function* <
     ] as unknown as B,
     modules,
     durableObjectNamespaces: options.durableObjectNamespaces,
+    assets: options.assets && { ...options.assets, runWorkerFirst: true },
   });
   const connectInfo: ConnectInfo = { url: url.href, token };
   const connected = yield* connectToInstance<Env>(connectInfo);

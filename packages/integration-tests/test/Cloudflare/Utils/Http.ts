@@ -1,6 +1,8 @@
 import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
 import * as Schedule from "effect/Schedule";
 
 /**
@@ -446,3 +448,37 @@ export const expectUrlAbsent = (
     Effect.tapError((error) => Effect.logError(`expectUrlAbsent(${label}) failed`, error)),
   );
 };
+
+/**
+ * Assert a build-time public env value was inlined into the client
+ * bundle a site deployed: find the client chunk under `clientDir` (the
+ * build's assets directory) that contains `marker`, then fetch that chunk
+ * from the deployed site.
+ */
+export const expectClientChunkContains = (
+  url: string,
+  clientDir: string,
+  marker: string,
+  options: ExpectUrlContainsOptions = {},
+) =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const chunks = (yield* fs.readDirectory(clientDir, { recursive: true })).filter((file) =>
+      /\.m?js$/.test(file),
+    );
+    const inlined = yield* Effect.filter(chunks, (file) =>
+      fs
+        .readFileString(path.join(clientDir, file))
+        .pipe(Effect.map((code) => code.includes(marker))),
+    );
+    if (inlined.length === 0) {
+      return yield* new HttpAssertionFailed({
+        url,
+        marker,
+        status: 0,
+        bodyExcerpt: `[no client chunk under ${clientDir} contains "${marker}"]`,
+      });
+    }
+    yield* expectUrlContains(`${url}/${inlined[0]!.replaceAll("\\", "/")}`, marker, options);
+  });
