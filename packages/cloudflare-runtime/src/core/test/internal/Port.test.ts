@@ -43,6 +43,18 @@ describe("Port.check", () => {
       }),
   );
 
+  // Windows retries a refused connection before reporting it, so a connect
+  // probe of a free port waits for its timeout there.
+  it.effect("checks a free port quickly", () =>
+    Effect.gen(function* () {
+      const port = yield* (yield* Port.make({ cache: false })).find(0);
+      const ports = yield* Port.make({ cache: false });
+      const start = performance.now();
+      yield* ports.check(port);
+      expect(performance.now() - start).toBeLessThan(300);
+    }),
+  );
+
   it.effect("probes only loopback addresses", () =>
     Effect.gen(function* () {
       const ports = yield* Port.make({ cache: false });
