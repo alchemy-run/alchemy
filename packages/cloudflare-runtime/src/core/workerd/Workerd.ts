@@ -23,7 +23,8 @@ export type OutputSink = (chunk: string, stream: "stdout" | "stderr") => void;
 /** How a workerd process ended after it had finished starting. */
 export interface WorkerdExit {
   readonly exitCode: number | null;
-  readonly signal: NodeJS.Signals | null;
+  /** A signal name, or a number when Bun reports one it can't name. */
+  readonly signal: NodeJS.Signals | number | null;
   /** The last output workerd wrote to stderr before it exited. */
   readonly stderr: string;
 }
@@ -548,7 +549,7 @@ const ADDRESS_IN_USE_SUBTAG = "AddressInUse" as const;
 const classifyWorkerdError = (
   stderr: string | undefined,
   exitCode: number | null,
-  signal: NodeJS.Signals | null,
+  signal: NodeJS.Signals | number | null,
   configuredAddresses: Array<string>,
 ): ConfigError | SystemError => {
   const text = (stderr ?? "").trim();

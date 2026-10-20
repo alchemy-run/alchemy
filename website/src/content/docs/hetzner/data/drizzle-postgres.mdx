@@ -8,7 +8,7 @@ Alchemy's Hetzner provider has no managed Postgres resource; this guide runs the
 ## Install the database dependencies
 
 ```sh
-pnpm add drizzle-orm@1.0.0-rc.5-ab785fc @effect/sql-pg pg
+pnpm add @alchemy.run/drizzle drizzle-orm@1.0.0-rc.5-ab785fc @effect/sql-pg pg
 pnpm add -D drizzle-kit@1.0.0-rc.5-ab785fc
 ```
 
@@ -55,7 +55,7 @@ Commit the schema, SQL, and snapshots together; do not generate migration histor
 
 ```typescript
 // src/db.ts
-import * as Neon from "alchemy/Neon";
+import * as Neon from "@alchemy.run/neon";
 
 export const Db = Neon.Project("Db", {
   region: "aws-eu-central-1",
@@ -68,7 +68,7 @@ The project's default branch hosts the database; see [Neon connections](/neon/da
 
 ```diff lang="typescript"
  // alchemy.run.ts
-+import * as Neon from "alchemy/Neon";
++import * as Neon from "@alchemy.run/neon";
 +import * as Layer from "effect/Layer";
 
 -  providers: Hetzner.providers(),
@@ -130,7 +130,7 @@ Supply the Neon project's `connectionUri` as secret `DATABASE_URL` in the migrat
 
 ```diff lang="typescript"
  // src/api.ts
-+import * as Drizzle from "alchemy/Drizzle/Postgres";
++import * as Drizzle from "@alchemy.run/drizzle/Postgres";
 +import * as Config from "effect/Config";
 
  Effect.gen(function* () {
