@@ -197,9 +197,9 @@ describe.sequential(
   },
 );
 
-// Multi-Region Access Point provisioning is asynchronous and can consume the
-// entire 240s suite ceiling. Keep this explicitly gated; a hard-killed run
-// must be audited by deterministic physical name before it is retried.
+// Multi-Region Access Point provisioning is asynchronous and routinely takes
+// 5-15 minutes, so the hooks get a matching budget. Keep this explicitly
+// gated; a hard-killed run must be audited by deterministic physical name before it is retried.
 describe.skipIf(!!process.env.FAST).sequential(
   "AWS.S3Control MRAP route bindings (slow)",
   {
@@ -226,10 +226,10 @@ describe.skipIf(!!process.env.FAST).sequential(
         mrapBaseUrl = attrs.functionUrl!.replace(/\/+$/, "");
         yield* awaitReady(`${mrapBaseUrl}/routes`);
       }),
-      { timeout: 240_000 },
+      { timeout: 1_200_000 },
     );
 
-    afterAll(mrapStack.destroy(), { timeout: 240_000 });
+    afterAll(mrapStack.destroy(), { timeout: 1_200_000 });
 
     describe("GetMultiRegionAccessPointRoutes + SubmitMultiRegionAccessPointRoutes", () => {
       test.provider(
