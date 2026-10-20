@@ -26,7 +26,9 @@ import * as RuntimeServices from "../../RuntimeServices.ts";
 import type { BindingHooks, RuntimeWorker } from "../../RuntimeWorker.ts";
 import * as Workerd from "../../workerd/Workerd.ts";
 
-export const configProvider = (input: { fileSystemSupportsWatcher?: boolean } = {}) =>
+export const configProvider = (
+  input: { fileSystemSupportsWatcher?: boolean; env?: Record<string, string> } = {},
+) =>
   ConfigProvider.layer(
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
@@ -35,12 +37,14 @@ export const configProvider = (input: { fileSystemSupportsWatcher?: boolean } = 
           prefix: "cloudflare-runtime-test",
         }),
         CLOUDFLARE_RUNTIME_FILE_SYSTEM_SUPPORTS_WATCHER: input.fileSystemSupportsWatcher,
+        ...input.env,
       });
     }),
   );
 
 /**
- * A `Runtime` layer suitable for local-only tests.
+ * A `Runtime` layer suitable for local-only tests, reading `env` as extra
+ * config (e.g. `{ CONTAINER_FUSE: "1" }`).
  *
  * Excludes `RemoteBindings` so the tests don't require Cloudflare API
  * credentials. Workers configured here may use any local binding (Json,
@@ -48,26 +52,29 @@ export const configProvider = (input: { fileSystemSupportsWatcher?: boolean } = 
  * but **must not** register a remote binding — that would attempt to
  * deploy a preview script and fail without credentials.
  */
-export const localRuntimeLayer = Runtime.RuntimeLive.pipe(
-  Layer.provideMerge(RuntimeServices.layerLocalBindings()),
-  Layer.provideMerge(RuntimeServices.layerProxy()),
-  Layer.provide(Globals.GlobalsLive),
-  Layer.provideMerge(RuntimeServices.layerLoopback()),
-  Layer.provide(
-    Layer.effect(
-      Storage.Storage,
-      Effect.suspend(() => makeTempDirectory()).pipe(Effect.map(Storage.make)),
+export const makeLocalRuntimeLayer = (env?: Record<string, string>) =>
+  Runtime.RuntimeLive.pipe(
+    Layer.provideMerge(RuntimeServices.layerLocalBindings()),
+    Layer.provideMerge(RuntimeServices.layerProxy()),
+    Layer.provide(Globals.GlobalsLive),
+    Layer.provideMerge(RuntimeServices.layerLoopback()),
+    Layer.provide(
+      Layer.effect(
+        Storage.Storage,
+        Effect.suspend(() => makeTempDirectory()).pipe(Effect.map(Storage.make)),
+      ),
     ),
-  ),
-  Layer.provide(Internet.InternetLive),
-  Layer.provideMerge(RegistryProxy.RegistryProxyLive),
-  Layer.provideMerge(Registry.RegistryLive),
-  Layer.provideMerge(Paths.PathsLive),
-  Layer.provideMerge(Docker.DockerLive),
-  Layer.provideMerge(Workerd.WorkerdLive),
-  Layer.provide(configProvider()),
-  Layer.provideMerge(Layer.mergeAll(NodeServices.layer, FetchHttpClient.layer)),
-);
+    Layer.provide(Internet.InternetLive),
+    Layer.provideMerge(RegistryProxy.RegistryProxyLive),
+    Layer.provideMerge(Registry.RegistryLive),
+    Layer.provideMerge(Paths.PathsLive),
+    Layer.provideMerge(Docker.DockerLive),
+    Layer.provideMerge(Workerd.WorkerdLive),
+    Layer.provide(configProvider({ env })),
+    Layer.provideMerge(Layer.mergeAll(NodeServices.layer, FetchHttpClient.layer)),
+  );
+
+export const localRuntimeLayer = makeLocalRuntimeLayer();
 
 export interface TestWorker {
   baseUrl: URL;

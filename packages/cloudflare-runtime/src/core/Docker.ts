@@ -1,4 +1,5 @@
 import * as NodeHttp from "node:http";
+import * as NodeOs from "node:os";
 import type * as NodeStream from "node:stream";
 import * as Cache from "effect/Cache";
 import * as Cause from "effect/Cause";
@@ -10,6 +11,7 @@ import * as Fiber from "effect/Fiber";
 import * as FiberSet from "effect/FiberSet";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
@@ -37,6 +39,14 @@ export class Docker extends Context.Service<
     readonly getWorkerdDockerConfiguration: Effect.Effect<
       WorkerdConfig.Worker_ContainerEngine,
       SystemError
+    >;
+    /**
+     * Docker privileges for every local container, or `undefined` for none.
+     * Decided once per runtime from `CONTAINER_FUSE` or, when it is unset,
+     * from the Docker engine (see {@link allowsFusePrivileges}).
+     */
+    readonly getContainerPrivileges: Effect.Effect<
+      WorkerdConfig.Worker_DurableObjectNamespace_ContainerOptions_ContainerPrivileges | undefined
     >;
     readonly generateImageTag: (className: string, suffix?: string) => string;
     readonly registerImageEnv: (
@@ -84,6 +94,73 @@ const ContainerEgressInterceptorImage = Config.String("CONTAINER_EGRESS_INTERCEP
     ),
   ),
 );
+/**
+ * `1` grants {@link FUSE_CONTAINER_PRIVILEGES} regardless of the engine (e.g.
+ * on a disposable rootful CI runner), `0` withholds them; unset or empty
+ * detects them like Miniflare (Effect's config providers read an empty value
+ * as missing, so `Config.option` yields `None`). Any other value fails the
+ * runtime with a ConfigError naming `CONTAINER_FUSE`.
+ */
+const ContainerFuse = Config.Literals(["1", "0"], "CONTAINER_FUSE").pipe(Config.option);
+
+/**
+ * What FUSE filesystems (s3fs, tigrisfs, …) need to mount inside a
+ * container — the privileges Miniflare grants local Containers.
+ *
+ * `CAP_SYS_ADMIN` with AppArmor unconfined is close to root on the kernel
+ * the container runs on. On a VM-based engine (Docker Desktop, OrbStack,
+ * Colima, WSL) that kernel is the VM's, and rootless Docker maps container
+ * root to an unprivileged host user, so the grant stays behind that boundary.
+ * Rootful Docker on Linux shares the developer's kernel as real root, so
+ * {@link allowsFusePrivileges} never grants it there; `CONTAINER_FUSE=1`
+ * opts in explicitly.
+ */
+export const FUSE_CONTAINER_PRIVILEGES: WorkerdConfig.Worker_DurableObjectNamespace_ContainerOptions_ContainerPrivileges =
+  {
+    capabilities: ["SYS_ADMIN"],
+    devices: [{ pathOnHost: "/dev/fuse", pathInContainer: "/dev/fuse", cgroupPermissions: "rwm" }],
+    securityOpt: ["apparmor:unconfined"],
+  };
+
+/** True for a `unix:///absolute/path` Docker host: a daemon on this machine. */
+export const isLocalDockerEndpoint = (dockerHost: string) => {
+  try {
+    const url = new URL(dockerHost);
+    return url.protocol === "unix:" && url.hostname === "" && url.pathname.startsWith("/");
+  } catch {
+    return false;
+  }
+};
+
+/** Platforms where a local Docker daemon can isolate {@link FUSE_CONTAINER_PRIVILEGES}. */
+const canGrantFuse = (platform: NodeJS.Platform, dockerHost: string) =>
+  (platform === "darwin" || platform === "linux") && isLocalDockerEndpoint(dockerHost);
+
+/**
+ * Miniflare's rule for granting {@link FUSE_CONTAINER_PRIVILEGES}: a local
+ * daemon on macOS or WSL (VM-based), or rootless Docker on Linux with
+ * `/dev/fuse`. Never rootful Linux, a remote daemon, or a daemon that could
+ * not be inspected.
+ */
+export const allowsFusePrivileges = (host: {
+  readonly platform: NodeJS.Platform;
+  /** `os.release()`; WSL kernels contain `microsoft`. */
+  readonly release: string;
+  /** The real Docker daemon, not the proxy workerd talks to. */
+  readonly dockerHost: string;
+  /** `docker info` `SecurityOptions`, or `undefined` when inspection failed. */
+  readonly securityOptions: ReadonlyArray<string> | undefined;
+  readonly devFuseExists: boolean;
+}) => {
+  if (host.securityOptions === undefined || !canGrantFuse(host.platform, host.dockerHost)) {
+    return false;
+  }
+  if (host.platform === "darwin" || host.release.toLowerCase().includes("microsoft")) return true;
+  return (
+    host.devFuseExists &&
+    host.securityOptions.some((option) => option === "name=rootless" || option === "rootless")
+  );
+};
 
 /**
  * Docker's containerd image store rejects combined `repo:tag@digest` pull
@@ -185,6 +262,7 @@ export const DockerLive = Layer.effect(
 
     const bin = yield* DockerBin;
     const containerEgressInterceptorImage = yield* ContainerEgressInterceptorImage;
+    const containerFuse = yield* ContainerFuse;
     const registeredImages = new Map<string, { tag: string; env: Record<string, string> }>();
     // Every container created through the proxy carries this runtime's label.
     // Native containers can start from images nobody prepared (snapshots,
@@ -495,10 +573,53 @@ export const DockerLive = Layer.effect(
       ),
     );
 
+    // The daemon Alchemy talks to; workerd only sees the local proxy in front of it.
+    const dockerHost = yield* DockerHost.pipe(
+      Effect.catchTag("ConfigError", getSocketPathFromContext),
+      Effect.orElseSucceed(() => DEFAULT_DOCKER_HOST),
+      Effect.forkScoped({ startImmediately: false }),
+    );
+
+    // `null` (no options) is a successful inspection; any failure is `undefined`.
+    const dockerSecurityOptions = (host: string) =>
+      run(["--host", host, "info", "--format", "{{json .SecurityOptions}}"]).pipe(
+        Effect.timeout("5 seconds"),
+        Effect.tap((result) => ensureExitZero(result, ({ exitCode }) => exitCode)),
+        Effect.flatMap(({ stdout }) => Effect.try(() => JSON.parse(stdout) as unknown)),
+        Effect.map((options) =>
+          Array.isArray(options)
+            ? options.filter((option): option is string => typeof option === "string")
+            : [],
+        ),
+        Effect.orElseSucceed(() => undefined),
+      );
+
+    const getContainerPrivileges = yield* Effect.cached(
+      Effect.gen(function* () {
+        if (Option.isSome(containerFuse)) {
+          return containerFuse.value === "1" ? FUSE_CONTAINER_PRIVILEGES : undefined;
+        }
+        const host = yield* Fiber.join(dockerHost);
+        const platform = process.platform;
+        if (!canGrantFuse(platform, host)) return undefined;
+        const allowed = allowsFusePrivileges({
+          platform,
+          release: NodeOs.release(),
+          dockerHost: host,
+          securityOptions: yield* dockerSecurityOptions(host),
+          devFuseExists:
+            platform === "linux" &&
+            (yield* fs.exists("/dev/fuse").pipe(Effect.orElseSucceed(() => false))),
+        });
+        yield* Effect.logDebug(
+          `docker: ${allowed ? "granting" : "withholding"} FUSE privileges for local containers on ${host}`,
+        );
+        return allowed ? FUSE_CONTAINER_PRIVILEGES : undefined;
+      }),
+    );
+
     const docker = yield* Effect.zipWith(
-      DockerHost.pipe(
-        Effect.catchTag("ConfigError", getSocketPathFromContext),
-        Effect.orElseSucceed(() => DEFAULT_DOCKER_HOST),
+      Fiber.join(dockerHost).pipe(
         Effect.flatMap(
           Effect.fnUntraced(function* (socketPath) {
             const forwarders = yield* makeDockerLoopbackForwarders({ bin, socketPath });
@@ -537,6 +658,7 @@ export const DockerLive = Layer.effect(
 
     return Docker.of({
       getWorkerdDockerConfiguration: Fiber.join(docker),
+      getContainerPrivileges,
       registerImageEnv: (className, tag, env) => {
         const alias = generateImageTag(className);
         return Effect.acquireRelease(

@@ -1,17 +1,25 @@
 import { execFileSync } from "node:child_process";
+import * as NodeFs from "node:fs";
+import * as NodeOs from "node:os";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { describe, expect, it, layer } from "@effect/vitest";
+import * as Cause from "effect/Cause";
+import * as ConfigProvider from "effect/ConfigProvider";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
 import {
+  allowsFusePrivileges,
   buildFailureHint,
   CONTAINER_LOOPBACK_ALIAS,
   Docker,
   DockerLive,
+  FUSE_CONTAINER_PRIVILEGES,
+  isLocalDockerEndpoint,
   mergeContainerCreateEnv,
   rewriteLoopbackHosts,
   toPullRef,
@@ -465,6 +473,220 @@ layer(
       expect(error.detail?.stderr).toContain("no such image");
     }),
   );
+});
+
+describe("allowsFusePrivileges", () => {
+  const LOCAL = "unix:///var/run/docker.sock";
+  // Rootful Docker on a bare-metal Linux host unless a test says otherwise.
+  const allows = (host: Partial<Parameters<typeof allowsFusePrivileges>[0]>) =>
+    allowsFusePrivileges({
+      platform: "linux",
+      release: "6.8.0-45-generic",
+      dockerHost: LOCAL,
+      securityOptions: ["name=seccomp,profile=builtin", "name=cgroupns"],
+      devFuseExists: true,
+      ...host,
+    });
+
+  it("grants a local daemon on macOS, whose containers run in a VM", () => {
+    expect(
+      allows({
+        platform: "darwin",
+        release: "25.0.0",
+        dockerHost: "unix:///Users/me/.orbstack/run/docker.sock",
+        devFuseExists: false,
+      }),
+    ).toBe(true);
+  });
+
+  it("withholds rootful Docker on Linux", () => {
+    expect(allows({})).toBe(false);
+  });
+
+  it("grants rootless Docker on Linux only when /dev/fuse exists", () => {
+    expect(allows({ securityOptions: ["name=seccomp,profile=builtin", "name=rootless"] })).toBe(
+      true,
+    );
+    expect(allows({ securityOptions: ["rootless"] })).toBe(true);
+    expect(allows({ securityOptions: ["name=rootless"], devFuseExists: false })).toBe(false);
+  });
+
+  it("grants WSL, whose engine runs in a VM", () => {
+    expect(allows({ release: "5.15.153.1-microsoft-standard-WSL2", devFuseExists: false })).toBe(
+      true,
+    );
+  });
+
+  it("withholds a remote daemon", () => {
+    for (const dockerHost of ["tcp://127.0.0.1:2375", "ssh://me@build-box", "unix://box/d.sock"]) {
+      expect(allows({ platform: "darwin", dockerHost })).toBe(false);
+    }
+  });
+
+  it("withholds a daemon that could not be inspected", () => {
+    expect(allows({ platform: "darwin", securityOptions: undefined })).toBe(false);
+  });
+
+  it("withholds Windows", () => {
+    expect(allows({ platform: "win32", dockerHost: "npipe:////./pipe/docker_engine" })).toBe(false);
+  });
+
+  it("treats only absolute unix sockets as local", () => {
+    expect(isLocalDockerEndpoint("unix:///var/run/docker.sock")).toBe(true);
+    expect(isLocalDockerEndpoint("unix://box/var/run/docker.sock")).toBe(false);
+    expect(isLocalDockerEndpoint("tcp://127.0.0.1:2375")).toBe(false);
+    expect(isLocalDockerEndpoint("/var/run/docker.sock")).toBe(false);
+  });
+});
+
+/**
+ * `DockerLive` reading only `env` as config, on a spawner whose `docker info`
+ * prints `info.stdout` and exits with `info.exitCode`.
+ */
+const makeFuseLayer = (
+  env: Record<string, string>,
+  info: { stdout: string; exitCode?: number } = { stdout: "" },
+) => {
+  const spawned: Array<ReadonlyArray<string>> = [];
+  const spawner = Layer.succeed(
+    ChildProcessSpawner.ChildProcessSpawner,
+    ChildProcessSpawner.make((command) => {
+      const args = command._tag === "StandardCommand" ? command.args : [];
+      if (command._tag === "StandardCommand") spawned.push([command.command, ...args]);
+      const isInfo = args.includes("info");
+      return Effect.succeed(
+        ChildProcessSpawner.makeHandle({
+          pid: ChildProcessSpawner.ProcessId(1),
+          exitCode: Effect.succeed(ChildProcessSpawner.ExitCode(isInfo ? (info.exitCode ?? 0) : 0)),
+          isRunning: Effect.succeed(false),
+          kill: () => Effect.void,
+          stdin: Sink.drain,
+          stdout:
+            isInfo && info.stdout
+              ? Stream.make(new TextEncoder().encode(info.stdout))
+              : Stream.empty,
+          stderr: Stream.empty,
+          all: Stream.empty,
+          getInputFd: () => Sink.drain,
+          getOutputFd: () => Stream.empty,
+          unref: Effect.succeed(Effect.void),
+        }),
+      );
+    }),
+  );
+  return {
+    layer: Layer.provide(
+      DockerLive,
+      Layer.mergeAll(
+        NodeServices.layer,
+        spawner,
+        ConfigProvider.layer(ConfigProvider.fromEnv({ env })),
+      ),
+    ),
+    infoCalls: () => spawned.filter((argv) => argv.includes("info")),
+  };
+};
+
+describe("getContainerPrivileges", () => {
+  const LOCAL_HOST = "unix:///tmp/alchemy-fuse-test.sock";
+  const ROOTLESS = ["name=seccomp,profile=builtin", "name=rootless"];
+
+  it.effect("CONTAINER_FUSE=1 grants FUSE privileges without inspecting the engine", () => {
+    const fuse = makeFuseLayer({ CONTAINER_FUSE: "1", DOCKER_HOST: "tcp://127.0.0.1:2375" });
+    return Effect.gen(function* () {
+      expect(yield* (yield* Docker).getContainerPrivileges).toEqual(FUSE_CONTAINER_PRIVILEGES);
+      expect(fuse.infoCalls()).toEqual([]);
+    }).pipe(Effect.provide(fuse.layer));
+  });
+
+  it.effect("CONTAINER_FUSE=0 withholds them without inspecting the engine", () => {
+    const fuse = makeFuseLayer(
+      { CONTAINER_FUSE: "0", DOCKER_HOST: LOCAL_HOST },
+      { stdout: JSON.stringify(ROOTLESS) },
+    );
+    return Effect.gen(function* () {
+      expect(yield* (yield* Docker).getContainerPrivileges).toBeUndefined();
+      expect(fuse.infoCalls()).toEqual([]);
+    }).pipe(Effect.provide(fuse.layer));
+  });
+
+  it.effect("rejects any other CONTAINER_FUSE value", () =>
+    Effect.forEach(["true", " ", "2"], (value) =>
+      Effect.gen(function* () {
+        const exit = yield* Effect.exit(
+          Effect.scoped(Layer.build(makeFuseLayer({ CONTAINER_FUSE: value }).layer)),
+        );
+        expect(Exit.isFailure(exit), JSON.stringify(value)).toBe(true);
+        if (Exit.isFailure(exit)) expect(Cause.pretty(exit.cause)).toContain("CONTAINER_FUSE");
+      }),
+    ),
+  );
+
+  it.effect.skipIf(process.platform === "win32")(
+    "inspects the real Docker host once, not the proxy workerd talks to",
+    () => {
+      const fuse = makeFuseLayer({ DOCKER_HOST: LOCAL_HOST }, { stdout: JSON.stringify(ROOTLESS) });
+      return Effect.gen(function* () {
+        const docker = yield* Docker;
+        const privileges = yield* docker.getContainerPrivileges;
+        expect(yield* docker.getContainerPrivileges).toBe(privileges);
+        expect(fuse.infoCalls()).toEqual([
+          ["docker", "--host", LOCAL_HOST, "info", "--format", "{{json .SecurityOptions}}"],
+        ]);
+        const allowed = allowsFusePrivileges({
+          platform: process.platform,
+          release: NodeOs.release(),
+          dockerHost: LOCAL_HOST,
+          securityOptions: ROOTLESS,
+          devFuseExists: NodeFs.existsSync("/dev/fuse"),
+        });
+        expect(privileges).toEqual(allowed ? FUSE_CONTAINER_PRIVILEGES : undefined);
+      }).pipe(Effect.provide(fuse.layer));
+    },
+  );
+
+  it.effect.skipIf(process.platform === "win32")(
+    "treats an empty CONTAINER_FUSE like an unset one and detects",
+    () => {
+      const fuse = makeFuseLayer(
+        { CONTAINER_FUSE: "", DOCKER_HOST: LOCAL_HOST },
+        { stdout: JSON.stringify(ROOTLESS) },
+      );
+      return Effect.gen(function* () {
+        const privileges = yield* (yield* Docker).getContainerPrivileges;
+        expect(fuse.infoCalls()).toEqual([
+          ["docker", "--host", LOCAL_HOST, "info", "--format", "{{json .SecurityOptions}}"],
+        ]);
+        const allowed = allowsFusePrivileges({
+          platform: process.platform,
+          release: NodeOs.release(),
+          dockerHost: LOCAL_HOST,
+          securityOptions: ROOTLESS,
+          devFuseExists: NodeFs.existsSync("/dev/fuse"),
+        });
+        expect(privileges).toEqual(allowed ? FUSE_CONTAINER_PRIVILEGES : undefined);
+      }).pipe(Effect.provide(fuse.layer));
+    },
+  );
+
+  it.effect("withholds them when the engine cannot be inspected", () => {
+    const fuse = makeFuseLayer({ DOCKER_HOST: LOCAL_HOST }, { stdout: "", exitCode: 1 });
+    return Effect.gen(function* () {
+      expect(yield* (yield* Docker).getContainerPrivileges).toBeUndefined();
+      expect(fuse.infoCalls()).toHaveLength(process.platform === "win32" ? 0 : 1);
+    }).pipe(Effect.provide(fuse.layer));
+  });
+
+  it.effect("withholds them from a remote engine without inspecting it", () => {
+    const fuse = makeFuseLayer(
+      { DOCKER_HOST: "ssh://me@build-box" },
+      { stdout: JSON.stringify(ROOTLESS) },
+    );
+    return Effect.gen(function* () {
+      expect(yield* (yield* Docker).getContainerPrivileges).toBeUndefined();
+      expect(fuse.infoCalls()).toEqual([]);
+    }).pipe(Effect.provide(fuse.layer));
+  });
 });
 
 const docker = (...args: string[]) =>
