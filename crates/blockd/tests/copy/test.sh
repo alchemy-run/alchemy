@@ -23,7 +23,7 @@ pass "no mount rights, no FUSE"
 mkdir -p "$work/rootfs/etc" "$work/rootfs/app"
 echo "hello from the base image" > "$work/rootfs/etc/motd"
 for i in $(seq 1 100); do echo "module $i" > "$work/rootfs/app/m$i.js"; done
-mkfs.ext4 -q -F -d "$work/rootfs" "$work/base.img" 256M
+mkfs.ext4 -q -F -b 4096 -d "$work/rootfs" "$work/base.img" 256M
 "$blockd" import --store "$store" --head base --image "$work/base.img" >/dev/null
 "$blockd" fork --store "$store" --from base --to session >/dev/null
 

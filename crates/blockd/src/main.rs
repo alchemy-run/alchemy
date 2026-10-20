@@ -12,6 +12,8 @@
 //!                [--control <socket>] [--flush-every <seconds>] [--prefetch true]
 //! blockd run     --store <spec> --head <name> --cache <file> --dir <dir> --command <sh> [--keep true]
 //!                (copy mode: extract, run, write back; for hosts that can't mount)
+//! blockd exec    --store <spec> --head <name> --cache <file> --dir <dir> --command <sh> [--mode auto|ublk|nbd|fuse|copy]
+//!                (attach in the best mode the host allows, run, detach; exits with the command's code)
 //! blockd disconnect --nbd /dev/nbd0   (detach a device whose blockd died)
 //! blockd control --socket <socket> --request '{"op":"flush"}'
 //! ```
@@ -62,6 +64,7 @@ fn main() -> Result<()> {
             let volume = store()?;
             let path = flags.required("image")?;
             let file = std::fs::File::open(path).with_context(|| format!("opening {path}"))?;
+            check_ext4_block_size(&file, path)?;
             let size = file.metadata()?.len();
             let reader = std::io::BufReader::with_capacity(4 << 20, file);
             println!(
@@ -131,6 +134,34 @@ fn main() -> Result<()> {
         }
         "attach" => attach(&flags, store()?, &runtime)?,
         #[cfg(target_os = "linux")]
+        "exec" => {
+            let cache = std::path::Path::new(flags.required("cache")?);
+            let device = std::sync::Arc::new(blockd::Device::open(
+                std::sync::Arc::new(store()?),
+                flags.required("head")?,
+                cache,
+                runtime.handle().clone(),
+            )?);
+            let mode = match flags.get("mode").unwrap_or("auto") {
+                "auto" => blockd::exec::Mode::detect(),
+                other => other.parse()?,
+            };
+            tracing::info!("exec in {mode:?} mode");
+            let code = blockd::exec::exec(
+                &device,
+                mode,
+                cache,
+                std::path::Path::new(flags.required("dir")?),
+                flags.required("command")?,
+            )?;
+            let snapshot = device.close()?;
+            eprintln!(
+                "{}",
+                serde_json::json!({ "mode": mode, "exitCode": code, "snapshot": snapshot })
+            );
+            std::process::exit(code);
+        }
+        #[cfg(target_os = "linux")]
         "run" => {
             let device = blockd::Device::open(
                 std::sync::Arc::new(store()?),
@@ -153,7 +184,7 @@ fn main() -> Result<()> {
             blockd::nbd::force_disconnect(std::path::Path::new(flags.required("nbd")?))?
         }
         _ => bail!(
-            "usage: blockd <create|import|fork|reset|drop|export|gc|heads|history|attach|run|control|disconnect> …"
+            "usage: blockd <create|import|fork|reset|drop|export|gc|heads|history|attach|exec|run|control|disconnect> …"
         ),
     }
     Ok(())
@@ -246,6 +277,26 @@ fn attach(flags: &Flags, volume: volume::Volume, runtime: &tokio::runtime::Runti
 #[cfg(not(target_os = "linux"))]
 fn attach(_: &Flags, _: volume::Volume, _: &tokio::runtime::Runtime) -> Result<()> {
     bail!("attach needs Linux (NBD)")
+}
+
+/// Volumes are served with 4 KiB sectors, so an ext4 image must use 4 KiB
+/// blocks (`mkfs.ext4 -b 4096`; small filesystems default to 1 KiB).
+fn check_ext4_block_size(file: &std::fs::File, path: &str) -> Result<()> {
+    use std::os::unix::fs::FileExt;
+    let mut superblock = [0u8; 64];
+    if file.read_exact_at(&mut superblock, 1024).is_err() {
+        return Ok(()); // too small to be ext4: not ours to judge
+    }
+    let magic = u16::from_le_bytes([superblock[56], superblock[57]]);
+    if magic != 0xEF53 {
+        return Ok(());
+    }
+    let log = u32::from_le_bytes(superblock[24..28].try_into().unwrap());
+    let block = 1024u64 << log;
+    if block != volume::BLOCK_SIZE {
+        bail!("{path} is ext4 with {block}-byte blocks; volumes need 4096 (mkfs.ext4 -b 4096)");
+    }
+    Ok(())
 }
 
 struct Flags(HashMap<String, String>);

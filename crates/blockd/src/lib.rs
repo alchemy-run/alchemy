@@ -12,6 +12,8 @@ pub mod control;
 #[cfg(target_os = "linux")]
 pub mod copy;
 mod device;
+#[cfg(target_os = "linux")]
+pub mod exec;
 #[cfg(all(target_os = "linux", feature = "fuse"))]
 pub mod fuse;
 #[cfg(target_os = "linux")]
