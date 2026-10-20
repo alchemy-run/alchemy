@@ -24,6 +24,9 @@
     "test/Prisma/ORM/fixtures/psl/migrations",
     "test/Prisma/ORM/fixtures/variants/prisma.config.ts",
     "test/Prisma/ORM/fixtures/variants/migrations",
+    // Resolves its `@playground/*` packages only once the test installs
+    // them into the cloned fixture's `node_modules`.
+    "test/Cloudflare/Website/vite-module-resolution-fixture",
     // Nuxt fixtures: server routes use nitro's auto-imported globals, which
     // only type-check against the `.nuxt/` types a nuxt build generates.
     "test/Cloudflare/Website/fixtures/nuxt-app",

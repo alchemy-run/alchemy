@@ -55,6 +55,10 @@ const additionalModulesFixtureDir = pathe.resolve(
   import.meta.dirname,
   "vite-additional-modules-fixture",
 );
+const moduleResolutionFixtureDir = pathe.resolve(
+  import.meta.dirname,
+  "vite-module-resolution-fixture",
+);
 const hotChannelFixtureDir = pathe.resolve(import.meta.dirname, "vite-hot-channel-fixture");
 
 type Mode = "live" | "dev";
@@ -776,6 +780,99 @@ describe.concurrent(
           timeout: 300_000,
         },
       );
+    }
+
+    // `module-resolution`: CommonJS `require` with and without extensions
+    // and of JSON, `cloudflare:*` imports from the Worker and from a package,
+    // a user alias, and an optimizeDeps-excluded package importing a virtual
+    // module, with and without `nodejs_compat`.
+    for (const mode of ["live", "dev"] as const) {
+      for (const nodejsCompat of [false, true]) {
+        const label = `${nodejsCompat ? " with nodejs_compat" : ""}${mode === "dev" ? " (dev)" : ""}`;
+        (mode === "live" ? test : devTest).provider(
+          `Vite runtime: modules resolve like the plugin${label}`,
+          (stack) =>
+            Effect.gen(function* () {
+              yield* stack.destroy();
+              const rootDir = yield* cloneFixture(moduleResolutionFixtureDir, {
+                prefix: "alchemy-vite-module-resolution-",
+                tempRoot,
+                entries: ["package.json", "vite.config.ts", "src", "packages"],
+              });
+              // The playground's `file:` dependencies, installed as pnpm
+              // installs them: copied into `node_modules`.
+              const fs = yield* FileSystem.FileSystem;
+              for (const name of ["excludes", "imports", "requires"]) {
+                yield* fs.copy(
+                  pathe.join(rootDir, "packages", name),
+                  pathe.join(rootDir, `node_modules/@playground/module-resolution-${name}`),
+                );
+              }
+              const site = yield* stack.deploy(
+                Cloudflare.Website.Vite(
+                  `ViteModuleResolution${mode}${nodejsCompat ? "Compat" : ""}`,
+                  {
+                    rootDir,
+                    main: "./src/index.ts",
+                    workersDev: true,
+                    compatibility: {
+                      date: "2024-12-30",
+                      ...(nodejsCompat ? { flags: ["nodejs_compat"] } : {}),
+                    },
+                    memo: { include: ["**/*"] },
+                    ...(mode === "dev" ? { dev: { port: 0 } } : {}),
+                  },
+                ),
+              );
+              const url = site.url!.replace(/\/$/, "");
+              yield* expectJson(`${url}/require-ext`, {
+                "(requires/ext) hello.cjs (wrong-extension)": null,
+                "(requires/ext) helloWorld": "hello (.js) world (.cjs)",
+                "(requires/ext) world.js (wrong-extension)": null,
+              });
+              yield* expectJson(`${url}/require-no-ext`, {
+                "(requires/no-ext) helloWorld": "hello (.js) world (.cjs)",
+              });
+              yield* expectJson(`${url}/require-json`, {
+                "(requires/json) package name": "@playground/module-resolution-requires",
+                "(requires/json) package version": "1.0.0",
+              });
+              // workerd names the built class `DurableObjectBase` (a workerd
+              // quirk the playground notes for builds).
+              const durableObjectName = (res: { status: number; body: string }) => {
+                if (res.status !== 200) return `status ${res.status}`;
+                const body = JSON.parse(res.body) as Record<string, string>;
+                return Object.entries(body).every(([key, value]) =>
+                  key.includes("DurableObject.name") ? /^DurableObject(Base)?$/.test(value) : true,
+                )
+                  ? undefined
+                  : `body ${res.body}`;
+              };
+              yield* expectResponse(`${url}/cloudflare-imports`, (res) => {
+                const mismatch = durableObjectName(res);
+                if (mismatch) return mismatch;
+                const body = JSON.parse(res.body) as Record<string, string>;
+                return body["(cloudflare:workers) WorkerEntrypoint.name"] === "WorkerEntrypoint" &&
+                  body["(cloudflare:sockets) typeof connect"] === "function"
+                  ? undefined
+                  : `body ${res.body}`;
+              });
+              yield* expectResponse(`${url}/external-cloudflare-imports`, (res) => {
+                const mismatch = durableObjectName(res);
+                if (mismatch) return mismatch;
+                return "(EXTERNAL) (cloudflare:workers) DurableObject.name" in JSON.parse(res.body)
+                  ? undefined
+                  : `body ${res.body}`;
+              });
+              yield* expectText(`${url}/@alias/test`, "OK!");
+              yield* expectText(`${url}/optimize-deps/exclude`, "Export from virtual module");
+            }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.ignore)), logLevel),
+          {
+            tags: ["provider:cloudflare:worker", mode === "dev" ? "local" : "live"],
+            timeout: 300_000,
+          },
+        );
+      }
     }
 
     // Miniflare's outbound `cf.image` mock (dev only: deployed, `cf.image`
