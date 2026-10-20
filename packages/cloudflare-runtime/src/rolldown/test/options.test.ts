@@ -215,9 +215,27 @@ describe("options plugin", () => {
 
   it("does not provide a builder in SPA mode", async () => {
     const plugin = optionsPlugin.vite({});
-    const result = await callViteConfig(plugin, {});
+    const result = await callViteConfig(plugin, { root: HTML_ROOT });
     expect(result.appType).toBe("spa");
     expect(result.builder).toBeUndefined();
+  });
+
+  it("builds nothing for an assets-only site without index.html", async () => {
+    // Only `public/`: Vite would otherwise build every environment, and the
+    // client build fails on the missing `index.html`.
+    const plugin = optionsPlugin.vite({});
+    const result = await callViteConfig(plugin, { root: NO_HTML_ROOT });
+    expect(result.appType).toBe("spa");
+    const environments = { client: { name: "client", isBuilt: false } };
+    const built: Array<string> = [];
+    await result.builder?.buildApp?.({
+      environments,
+      build: async (environment: { name: string }) => {
+        built.push(environment.name);
+      },
+    } as never);
+    expect(built).toEqual([]);
+    expect(environments.client.isBuilt).toBe(true);
   });
 
   it("skips skipEnvironments in the default buildApp", async () => {
