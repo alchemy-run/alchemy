@@ -194,6 +194,10 @@ export const GlobalsLive = Layer.effect(
               name: SERVICE_OUTBOUND,
               worker: {
                 compatibilityDate: DEFAULT_COMPATIBILITY_DATE,
+                // `connect()` sockets (Hyperdrive, `cloudflare:sockets`) go
+                // through `globalOutbound` too; pass them straight through,
+                // as Miniflare's interceptor does.
+                compatibilityFlags: ["connect_pass_through", "experimental"],
                 modules: outboundModules,
                 bindings: [
                   { name: "CF_WORKER_ZONE", text: worker.zone ?? `${worker.name}.example.com` },
