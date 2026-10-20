@@ -1,0 +1,27 @@
+export {
+  isSandbox,
+  Sandbox,
+  SandboxError,
+  type SandboxClient,
+  type SandboxDeclarationArgs,
+  type SandboxEgress,
+  type SandboxEgressOptions,
+  type SandboxExecOptions,
+  type SandboxExecOutput,
+  type SandboxKinds,
+  type SandboxPort,
+  type SandboxProcess,
+  type SandboxSize,
+  type SandboxSpec,
+  type SandboxStartOptions,
+} from "./Sandbox.ts";
+export {
+  Volume,
+  VolumeConflict,
+  VolumeError,
+  type Disk,
+  type DiskExecOptions,
+  type DiskExecOutput,
+  type Snapshot,
+  type VolumeHeads,
+} from "./Volume.ts";

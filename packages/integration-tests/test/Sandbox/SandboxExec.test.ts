@@ -1,5 +1,5 @@
-import type { SandboxExecOptions } from "@alchemy.run/ai/Sandbox";
-import { execOverSocket } from "@alchemy.run/ai/SandboxExec";
+import type { SandboxExecOptions } from "@alchemy.run/sandbox/Sandbox";
+import { execOverSocket } from "@alchemy.run/sandbox/SandboxExec";
 import { describe, expect, layer } from "alchemy-test";
 import { serveEgressControl } from "alchemy/Egress/Proxy";
 import type { Route } from "alchemy/Egress/Route";
@@ -46,7 +46,7 @@ const connect = (port: number, secret = SECRET) =>
 const exec = (port: number, cmd: ReadonlyArray<string>, options?: SandboxExecOptions) =>
   Effect.flatMap(connect(port), (socket) => execOverSocket(socket, cmd, options));
 
-layer(PlatformServices, { excludeTestServices: true })("AI.SandboxExec", (it) => {
+layer(PlatformServices, { excludeTestServices: true })("Sandbox.SandboxExec", (it) => {
   describe("exec over a socket to the bootstrap", { tags: ["local"] }, () => {
     it.effect(
       "runs a command: stdout, stderr and the exit code",

@@ -5,7 +5,7 @@
  * decide whether to load the client at all.
  */
 
-/** The `AI.SandboxHostDescriptor.host` of an AWS Lambda MicroVM sandbox host. */
+/** The `Sandbox.SandboxHostDescriptor.host` of an AWS Lambda MicroVM sandbox host. */
 export const MICROVM_SANDBOX_HOST = "AWS.Lambda.MicrovmSandbox";
 
 /** The port the sandbox's program listens on unless `port` says otherwise. */

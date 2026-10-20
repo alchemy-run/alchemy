@@ -3,7 +3,7 @@ import {
   type Sandbox as AISandbox,
   type SandboxHostService,
   type SandboxSize,
-} from "@alchemy.run/ai/Sandbox";
+} from "@alchemy.run/sandbox/Sandbox";
 import type * as microvms from "@distilled.cloud/aws/lambda-microvms";
 import type * as Bundle from "alchemy/Bundle/Bundle";
 import type { ImageLayer } from "alchemy/Image/Layer";
@@ -97,7 +97,7 @@ export type MicrovmSandboxProgram<InitReq> = Effect.Effect<
 const memoryInMiB = (memory: MicrovmSandboxMemory) => Math.round(Number.parseFloat(memory) * 1024);
 
 /**
- * Host an `AI.Sandbox` declaration on AWS Lambda MicroVMs, run by the
+ * Host a `Sandbox.Sandbox` declaration on AWS Lambda MicroVMs, run by the
  * Cloudflare Durable Object that owns it. The program is bundled into one
  * MicroVM image per declared size (a MicroVM's memory is fixed on its image),
  * with Alchemy's egress proxy and the tools of the egress kinds the

@@ -1,4 +1,4 @@
-import { SandboxRuntime } from "@alchemy.run/ai/Sandbox";
+import { SandboxRuntime } from "@alchemy.run/sandbox/Sandbox";
 import type * as cf from "@cloudflare/workers-types";
 import type { Dependencies } from "alchemy/Dependencies";
 import type { HttpEffect } from "alchemy/Http";
@@ -21,6 +21,7 @@ import { connectSandbox } from "../Containers/SandboxClient.ts";
 import { DurableObjectState, fromDurableObjectState } from "./DurableObjectState.ts";
 import { provideGatewayConsumer } from "./EgressGatewayConsumer.ts";
 import { makeRpcStub, type RpcErrorClass } from "./Rpc.ts";
+import { provideVolumeRuntime } from "./VolumeHeads.ts";
 import { type WebSocket } from "./WebSocket.ts";
 import {
   isWorker,
@@ -1406,10 +1407,11 @@ export const DurableObject: DurableObjectClass = taggedFunction(
       const phase = yield* ALCHEMY_PHASE;
       const constructor = impl.pipe(
         Effect.provideService(DurableObjectScope, self as any),
-        // `yield* Sandbox` (an `AI.Sandbox` declaration) connects to its
+        // `yield* Sandbox` (a `Sandbox.Sandbox` declaration) connects to its
         // host from here, and `yield* Gateway` (an `Egress.Gateway`) to its.
         Effect.provideService(SandboxRuntime, { connect: connectSandbox }),
         provideGatewayConsumer,
+        provideVolumeRuntime,
       );
       if (phase === "plan") {
         // during plan time, we evaluate the constructor with a mock DurableObjectState

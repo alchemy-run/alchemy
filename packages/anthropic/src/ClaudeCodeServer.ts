@@ -73,7 +73,7 @@ export interface ClaudeCodeServerProps {
  * ```typescript
  * import * as Anthropic from "@alchemy.run/anthropic";
  * import * as Cloudflare from "@alchemy.run/cloudflare";
- * import { Sandbox } from "./Sandbox.ts"; // an AI.Sandbox declaration
+ * import { Sandbox } from "./Sandbox.ts"; // a Sandbox.Sandbox declaration
  *
  * export default Cloudflare.Containers.Sandbox(
  *   Sandbox,

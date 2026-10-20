@@ -4,13 +4,13 @@ import {
   type SandboxHostDescriptor,
   type SandboxProcess,
   type SandboxStartOptions,
-} from "@alchemy.run/ai/Sandbox";
+} from "@alchemy.run/sandbox/Sandbox";
 import type { EgressError } from "alchemy/Egress/Gateway";
 /**
  * The Durable Object side of `Cloudflare.Containers.Sandbox`: an
- * `AI.Sandbox` declaration's client over the container bound to the
+ * `Sandbox.Sandbox` declaration's client over the container bound to the
  * Durable Object. Provided to every Cloudflare Durable Object as the
- * `AI.SandboxRuntime`.
+ * `Sandbox.SandboxRuntime`.
  */
 import * as Effect from "effect/Effect";
 import * as Sink from "effect/Sink";
@@ -26,7 +26,7 @@ import {
 } from "./ContainerClient.ts";
 import { ContainerPlatform } from "./ContainerPlatform.ts";
 
-/** The `AI.SandboxHostDescriptor.host` of a Cloudflare Container host. */
+/** The `Sandbox.SandboxHostDescriptor.host` of a Cloudflare Container host. */
 export const CLOUDFLARE_CONTAINER_HOST = "Cloudflare.Container";
 
 /** A Cloudflare Container instance type a sandbox size maps to. */

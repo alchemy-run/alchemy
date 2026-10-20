@@ -23,3 +23,14 @@ pub mod store;
 pub mod ublk;
 
 pub use device::{Device, Flusher, Status};
+
+/// A helper program (`mount`, `fuse2fs`, `sync`, …) whose stdout goes to
+/// blockd's stderr: `blockd exec`'s stdout is the command's alone.
+pub(crate) fn helper(program: &str) -> std::process::Command {
+    use std::os::fd::AsFd;
+    let mut command = std::process::Command::new(program);
+    if let Ok(stderr) = std::io::stderr().as_fd().try_clone_to_owned() {
+        command.stdout(std::process::Stdio::from(stderr));
+    }
+    command
+}

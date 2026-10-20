@@ -1,4 +1,5 @@
-import type { Sandbox as AISandbox } from "@alchemy.run/ai/Sandbox";
+import type { Sandbox as AISandbox } from "@alchemy.run/sandbox/Sandbox";
+import type { Volume as AIVolume } from "@alchemy.run/sandbox/Volume";
 import type * as cf from "@cloudflare/workers-types";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import { type MemoOptions } from "alchemy/Command/Memo";
@@ -45,6 +46,7 @@ import { provideGatewayConsumer } from "./EgressGatewayConsumer.ts";
 import { Request } from "./Request.ts";
 import type { ModuleRule } from "./Sources/Prebuilt.ts";
 import type { WorkerBuildOptions } from "./Sources/Rolldown.ts";
+import { provideVolumeRuntime } from "./VolumeHeads.ts";
 import type { WorkerAccessConfig, WorkerAccessIdentity } from "./WorkerAccess.ts";
 import { bindWorkerAsyncBindings } from "./WorkerAsyncBindings.ts";
 import type { WorkerBinding, WorkerBindingResource, WorkerBindings } from "./WorkerBinding.ts";
@@ -123,6 +125,7 @@ export type WorkerServices =
 export type HostedImplementation =
   | Container.Application<any>
   | AISandbox.Host<any>
+  | AIVolume.Host<any>
   | GatewayHost<any>;
 
 export type WorkerShape<Req = never> = Main<WorkerServices | Req> & MainRpc<WorkerServices | Req>;
@@ -2738,7 +2741,7 @@ export const Worker: ResourceClassLike<Worker> &
     createRuntimeContext: (id) => makeWorkerRuntimeContext(id),
     // `yield* Gateway` (an `Egress.Gateway` declaration) connects from here.
     // Called lazily: EgressGatewayConsumer.ts imports this module.
-    provideImpl: (impl) => provideGatewayConsumer(impl),
+    provideImpl: (impl) => provideVolumeRuntime(provideGatewayConsumer(impl)),
     transformProps: (_id, props) =>
       Effect.sync(() =>
         globalThis.__ALCHEMY_RUNTIME__ || typeof props.main !== "string"

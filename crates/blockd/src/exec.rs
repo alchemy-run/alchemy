@@ -123,7 +123,7 @@ fn run(command: &str, dir: &Path) -> Result<i32> {
 fn with_mount(device: &Path, dir: &Path, body: impl FnOnce() -> Result<i32>) -> Result<i32> {
     std::fs::create_dir_all(dir)?;
     wait_until_sized(device)?;
-    let status = Command::new("mount")
+    let status = crate::helper("mount")
         .args(["-t", "ext4"])
         .arg(device)
         .arg(dir)
@@ -137,7 +137,7 @@ fn with_mount(device: &Path, dir: &Path, body: impl FnOnce() -> Result<i32>) -> 
     }
     let result = body();
     sync(dir);
-    let status = Command::new("umount").arg(dir).status()?;
+    let status = crate::helper("umount").arg(dir).status()?;
     if !status.success() {
         bail!("umount {} failed: {status}", dir.display());
     }
@@ -162,7 +162,7 @@ fn wait_until_sized(device: &Path) -> Result<()> {
 }
 
 fn sync(dir: &Path) {
-    let _ = Command::new("sync").arg("-f").arg(dir).status();
+    let _ = crate::helper("sync").arg("-f").arg(dir).status();
 }
 
 /// An NBD device nobody is using (its size is 0).
@@ -195,14 +195,14 @@ fn mount_allowed() -> bool {
     if std::fs::create_dir_all(&dir).is_err() {
         return false;
     }
-    let ok = Command::new("mount")
+    let ok = crate::helper("mount")
         .args(["-t", "tmpfs", "none"])
         .arg(&dir)
         .stderr(std::process::Stdio::null())
         .status()
         .is_ok_and(|s| s.success());
     if ok {
-        let _ = Command::new("umount").arg(&dir).status();
+        let _ = crate::helper("umount").arg(&dir).status();
     }
     let _ = std::fs::remove_dir(&dir);
     ok

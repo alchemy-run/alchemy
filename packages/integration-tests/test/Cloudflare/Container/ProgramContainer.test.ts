@@ -9,7 +9,7 @@ import ProgramBoxStack, { state } from "./fixtures/program-do/stack.ts";
 const HOOK_TIMEOUT = 600_000;
 
 /**
- * A bundled program hosted as an `AI.Sandbox` on a Cloudflare Container
+ * A bundled program hosted as an `Sandbox.Sandbox` on a Cloudflare Container
  * (`Cloudflare.Containers.Sandbox`, scheduled by its Durable Object): the
  * program is the Container's one image, started by `start({ size })`, and
  * snapshotted and restored by its Durable Object.

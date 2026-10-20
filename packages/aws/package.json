@@ -1320,9 +1320,9 @@
     "build:package": "node scripts/build.ts"
   },
   "dependencies": {
-    "@alchemy.run/ai": "workspace:*",
     "@alchemy.run/docker": "workspace:*",
     "@alchemy.run/kubernetes": "workspace:*",
+    "@alchemy.run/sandbox": "workspace:*",
     "@alchemy.run/sql": "workspace:*",
     "@distilled.cloud/aws": "workspace:*",
     "@types/aws-lambda": "catalog:",

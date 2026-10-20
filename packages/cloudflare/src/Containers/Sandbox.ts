@@ -3,7 +3,7 @@ import {
   type Sandbox as AISandbox,
   type SandboxHostService,
   type SandboxSize,
-} from "@alchemy.run/ai/Sandbox";
+} from "@alchemy.run/sandbox/Sandbox";
 import type { EgressKind } from "alchemy/Egress/Kind";
 import type { InputProps } from "alchemy/Input";
 import { EGRESS_CA_SWITCH } from "alchemy/Runtime/EgressCa";
@@ -36,7 +36,7 @@ export type SandboxProps<Size extends string = string> = InputProps<
 };
 
 /**
- * Host an `AI.Sandbox` declaration on a Cloudflare Container scheduled by
+ * Host a `Sandbox.Sandbox` declaration on a Cloudflare Container scheduled by
  * the Durable Object that owns it. The program is bundled into the
  * Container's one image; each declared size is an instance type, chosen at
  * `start({ size })`. Returns the Layer that satisfies `yield* Sandbox`:

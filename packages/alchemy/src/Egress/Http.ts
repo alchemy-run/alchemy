@@ -206,5 +206,5 @@ export const Http: HttpKind = Object.assign(makeHttp, {
   [EgressKindTypeId]: "Http" as const,
 });
 
-/** The `Egress.Http` kind, as a type (`AI.Sandbox<…, { egress: Egress.Http }>`). */
+/** The `Egress.Http` kind, as a type (`Sandbox.Sandbox<…, { egress: Egress.Http }>`). */
 export type Http = HttpKind;

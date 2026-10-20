@@ -32,6 +32,7 @@
     "@alchemy.run/prisma": "workspace:*",
     "@alchemy.run/railway": "workspace:*",
     "@alchemy.run/redis": "workspace:*",
+    "@alchemy.run/sandbox": "workspace:*",
     "@alchemy.run/sql": "workspace:*",
     "@alchemy.run/stripe": "workspace:*",
     "@alchemy.run/turso": "workspace:*",

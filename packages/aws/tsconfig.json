@@ -29,7 +29,7 @@
       "path": "../../submodules/distilled/packages/aws/tsconfig.json"
     },
     {
-      "path": "../ai/tsconfig.json"
+      "path": "../sandbox/tsconfig.json"
     }
   ]
 }

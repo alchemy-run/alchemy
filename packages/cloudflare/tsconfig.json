@@ -41,6 +41,9 @@
       "path": "../ai/tsconfig.json"
     },
     {
+      "path": "../sandbox/tsconfig.json"
+    },
+    {
       "path": "../aws/tsconfig.json"
     }
   ]

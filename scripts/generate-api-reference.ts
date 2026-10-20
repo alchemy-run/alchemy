@@ -130,6 +130,11 @@ const config = {
       sourceDisplayPrefix: "packages/ai/src",
     },
     {
+      srcRoot: path.join(import.meta.dir, "../packages/sandbox/src"),
+      providerPrefix: "Sandbox",
+      sourceDisplayPrefix: "packages/sandbox/src",
+    },
+    {
       srcRoot: path.join(import.meta.dir, "../packages/anthropic/src"),
       providerPrefix: "Anthropic",
       sourceDisplayPrefix: "packages/anthropic/src",

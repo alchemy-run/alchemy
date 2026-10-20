@@ -7,23 +7,6 @@ export {
   type HarnessServer,
   type HarnessServerOptions,
 } from "./HarnessServer.ts";
-export {
-  isSandbox,
-  Sandbox,
-  SandboxError,
-  type SandboxClient,
-  type SandboxDeclarationArgs,
-  type SandboxEgress,
-  type SandboxEgressOptions,
-  type SandboxExecOptions,
-  type SandboxExecOutput,
-  type SandboxKinds,
-  type SandboxPort,
-  type SandboxProcess,
-  type SandboxSize,
-  type SandboxSpec,
-  type SandboxStartOptions,
-} from "./Sandbox.ts";
 export * from "./Session.ts";
 export * from "./HarnessRpcs.ts";
 export * from "./SessionStore.ts";

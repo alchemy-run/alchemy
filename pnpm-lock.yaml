@@ -8101,15 +8101,15 @@ importers:
 
   packages/aws:
     dependencies:
-      '@alchemy.run/ai':
-        specifier: workspace:*
-        version: link:../ai
       '@alchemy.run/docker':
         specifier: workspace:*
         version: link:../docker
       '@alchemy.run/kubernetes':
         specifier: workspace:*
         version: link:../kubernetes
+      '@alchemy.run/sandbox':
+        specifier: workspace:*
+        version: link:../sandbox
       '@alchemy.run/sql':
         specifier: workspace:*
         version: link:../sql
@@ -8266,6 +8266,9 @@ importers:
       '@alchemy.run/docker':
         specifier: workspace:*
         version: link:../docker
+      '@alchemy.run/sandbox':
+        specifier: workspace:*
+        version: link:../sandbox
       '@alchemy.run/sql':
         specifier: workspace:*
         version: link:../sql
@@ -9636,6 +9639,9 @@ importers:
       '@alchemy.run/redis':
         specifier: workspace:*
         version: link:../redis
+      '@alchemy.run/sandbox':
+        specifier: workspace:*
+        version: link:../sandbox
       '@alchemy.run/sql':
         specifier: workspace:*
         version: link:../sql
@@ -10215,6 +10221,21 @@ importers:
       '@types/node':
         specifier: 'catalog:'
         version: 26.6.5
+      alchemy:
+        specifier: workspace:*
+        version: link:../alchemy
+      effect:
+        specifier: 4.0.4
+        version: 4.0.4
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+
+  packages/sandbox:
+    devDependencies:
+      '@types/bun':
+        specifier: 'catalog:'
+        version: 1.4.3
       alchemy:
         specifier: workspace:*
         version: link:../alchemy

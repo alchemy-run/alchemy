@@ -121,6 +121,9 @@
       "path": "./packages/ai/tsconfig.json"
     },
     {
+      "path": "./packages/sandbox/tsconfig.json"
+    },
+    {
       "path": "./packages/anthropic/tsconfig.json"
     },
     {

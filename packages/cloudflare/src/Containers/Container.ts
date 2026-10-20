@@ -380,20 +380,20 @@ type ContainerShape<Shape> = {
  *
  * ### Programs Scheduled by a Durable Object
  * A program the Durable Object starts and stops (an agent's machine, a
- * harness server) is an `AI.Sandbox`: declare its sizes, then host it with
+ * harness server) is a `Sandbox.Sandbox`: declare its sizes, then host it with
  * `Cloudflare.Containers.Sandbox`. The program is the Container's one image;
  * each size is an instance type chosen at `start({ size })`.
  *
  * **Example:** A sandbox running Claude Code
  * ```typescript
- * // src/Sandbox.ts
- * export class Sandbox extends AI.Sandbox<Sandbox, { size: "small" | "large" }>()(
- *   "Sandbox",
+ * // src/Machine.ts
+ * export class Machine extends Sandbox.Sandbox<Machine, { size: "small" | "large" }>()(
+ *   "Machine",
  * ) {}
  *
- * // src/Sandbox.cloudflare.ts
+ * // src/Machine.cloudflare.ts
  * export default Cloudflare.Containers.Sandbox(
- *   Sandbox,
+ *   Machine,
  *   {
  *     main: import.meta.url,
  *     runtime: "node",
@@ -404,7 +404,7 @@ type ContainerShape<Shape> = {
  * );
  *
  * // In the Durable Object
- * const sandbox = yield* Sandbox;
+ * const sandbox = yield* Machine;
  * yield* sandbox.start({ size: "large" });
  * ```
  *

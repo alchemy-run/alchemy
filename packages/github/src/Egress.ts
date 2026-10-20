@@ -818,7 +818,7 @@ export interface Egress extends EgressKind<"GitHub", Scope> {
  *
  * Name it in a gateway declaration (`{ repo: GitHub.Egress }`) and configure
  * it in the gateway's constructor. A sandbox that accepts it
- * (`AI.Sandbox<…, { egress: GitHub.Egress }>`) gets `git` and `gh`
+ * (`Sandbox.Sandbox<…, { egress: GitHub.Egress }>`) gets `git` and `gh`
  * installed at deploy, and `GH_TOKEN=alchemy-egress` when it is granted.
  *
  * ### Serving GitHub from a gateway

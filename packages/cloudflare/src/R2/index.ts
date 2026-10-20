@@ -21,3 +21,10 @@ export * from "./WriteBucket.ts";
 export * from "./WriteBucketBinding.ts";
 export * from "./WriteBucketHttp.ts";
 export * from "./WriteBucketLocal.ts";
+export { Volume, type VolumeProps } from "./Volume.ts";
+export {
+  VolumeImage,
+  VolumeImageError,
+  VolumeImageProvider,
+  type VolumeImageProps,
+} from "./VolumeImage.ts";

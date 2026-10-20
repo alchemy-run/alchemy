@@ -17,7 +17,6 @@ use serde_json::json;
 use std::io::{BufRead, BufReader, Write};
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::Path;
-use std::process::Command;
 use std::sync::Arc;
 
 #[derive(Deserialize)]
@@ -84,7 +83,7 @@ fn fork(device: &Device, to: &str, freeze: Option<&str>) -> Result<volume::Hash>
     }
     // FUSE filesystems can't be frozen: sync them, so everything written
     // before the fork reaches the device.
-    let status = Command::new("sync").args(["-f", mountpoint]).status()?;
+    let status = crate::helper("sync").args(["-f", mountpoint]).status()?;
     if !status.success() {
         bail!("sync -f {mountpoint} failed: {status}");
     }
@@ -92,7 +91,9 @@ fn fork(device: &Device, to: &str, freeze: Option<&str>) -> Result<volume::Hash>
 }
 
 fn fsfreeze(flag: &str, mountpoint: &str) -> Result<()> {
-    let status = Command::new("fsfreeze").args([flag, mountpoint]).status()?;
+    let status = crate::helper("fsfreeze")
+        .args([flag, mountpoint])
+        .status()?;
     if !status.success() {
         bail!("fsfreeze {flag} {mountpoint} failed: {status}");
     }

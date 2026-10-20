@@ -1,12 +1,3 @@
-import {
-  SandboxError,
-  type SandboxClient,
-  type SandboxEgressOptions,
-  type SandboxHostDescriptor,
-  type SandboxPort,
-  type SandboxStartOptions,
-} from "@alchemy.run/ai/Sandbox";
-import { execOverSocket } from "@alchemy.run/ai/SandboxExec";
 import { CreateAuthToken } from "@alchemy.run/aws/Lambda/CreateAuthToken";
 import { CreateAuthTokenHttp } from "@alchemy.run/aws/Lambda/CreateAuthTokenHttp";
 import { GetMicrovm } from "@alchemy.run/aws/Lambda/GetMicrovm";
@@ -23,9 +14,18 @@ import { RunMicrovm, type RunMicrovmRequest } from "@alchemy.run/aws/Lambda/RunM
 import { RunMicrovmHttp } from "@alchemy.run/aws/Lambda/RunMicrovmHttp";
 import { TerminateMicrovm } from "@alchemy.run/aws/Lambda/TerminateMicrovm";
 import { TerminateMicrovmHttp } from "@alchemy.run/aws/Lambda/TerminateMicrovmHttp";
+import {
+  SandboxError,
+  type SandboxClient,
+  type SandboxEgressOptions,
+  type SandboxHostDescriptor,
+  type SandboxPort,
+  type SandboxStartOptions,
+} from "@alchemy.run/sandbox/Sandbox";
+import { execOverSocket } from "@alchemy.run/sandbox/SandboxExec";
 /**
  * The Durable Object side of `AWS.Lambda.MicrovmSandbox` (Egress/DESIGN.md
- * §8 "Anywhere else", §10, §12): an `AI.Sandbox` client over Lambda
+ * §8 "Anywhere else", §10, §12): a `Sandbox.Sandbox` client over Lambda
  * MicroVMs, for a Cloudflare Durable Object.
  *
  * The object stores what it granted (`{ ttl, egress }`) and the MicroVM it
@@ -162,7 +162,7 @@ export const connectMicrovmSandbox = (id: string, descriptor: SandboxHostDescrip
       ),
     );
     const state = yield* DurableObjectState;
-    // Resolved to the ARN at deploy (see `AI.Sandbox`'s descriptor binding).
+    // Resolved to the ARN at deploy (see `Sandbox.Sandbox`'s descriptor binding).
     const networkConnector =
       typeof descriptor.networkConnector === "string" ? descriptor.networkConnector : undefined;
     return makeMicrovmSandboxClient(id, state.raw, ops, networkConnector);

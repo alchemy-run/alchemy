@@ -1,13 +1,5 @@
 import { connectHarness } from "@alchemy.run/ai/HarnessRpcs";
 import {
-  isSandbox,
-  type Sandbox as AISandbox,
-  type SandboxClient,
-  type SandboxKinds,
-  type SandboxSize,
-  type SandboxStartOptions,
-} from "@alchemy.run/ai/Sandbox";
-import {
   type Harness as AIHarness,
   type Session,
   SessionError,
@@ -17,6 +9,14 @@ import {
   StartSession,
 } from "@alchemy.run/ai/Session";
 import { SessionStore } from "@alchemy.run/ai/SessionStore";
+import {
+  isSandbox,
+  type Sandbox as AISandbox,
+  type SandboxClient,
+  type SandboxKinds,
+  type SandboxSize,
+  type SandboxStartOptions,
+} from "@alchemy.run/sandbox/Sandbox";
 import { RuntimeContext } from "alchemy/RuntimeContext";
 /**
  * A coding-agent harness in a container, kept working across container
@@ -253,7 +253,7 @@ const RECENT_SNAPSHOT_MS = 5_000;
  * container; its program serves the harness (e.g. `Anthropic.ClaudeCodeServer(…)`
  * as the program of `Cloudflare.Containers.Sandbox`).
  *
- * It takes an `AI.Sandbox` declaration hosted by `Cloudflare.Containers.Sandbox`
+ * It takes a `Sandbox.Sandbox` declaration hosted by `Cloudflare.Containers.Sandbox`
  * (`start({ size, … })`), or a `Cloudflare.Container` (`start({ instance, … })`).
  * Snapshots need the container's `schedulingPolicy: "durable_object"` (every
  * sandbox has it); without it, history is still kept but the filesystem

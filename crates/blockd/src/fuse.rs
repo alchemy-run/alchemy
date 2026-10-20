@@ -14,7 +14,7 @@ use fuser::{
 };
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
-use std::process::{Child, Command};
+use std::process::Child;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
@@ -221,7 +221,7 @@ impl Mounted {
 
 /// Unmounts a filesystem mounted by [`mount`] (from the control socket).
 pub fn unmount(mountpoint: &Path) -> Result<()> {
-    let status = Command::new("umount").arg(mountpoint).status()?;
+    let status = crate::helper("umount").arg(mountpoint).status()?;
     if !status.success() {
         bail!("umount {} failed: {status}", mountpoint.display());
     }
@@ -248,7 +248,7 @@ pub fn mount(device: Arc<Device>, dir: &Path, mountpoint: &Path) -> Result<Mount
         )
     })?;
     let image = dir.join(NAME);
-    let fuse2fs = Command::new("fuse2fs")
+    let fuse2fs = crate::helper("fuse2fs")
         .arg(&image)
         .arg(mountpoint)
         .args(["-f", "-o", "rw"])

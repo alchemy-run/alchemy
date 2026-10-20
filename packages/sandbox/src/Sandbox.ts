@@ -219,11 +219,11 @@ export class SandboxRuntime extends Context.Service<
       descriptor: SandboxHostDescriptor,
     ) => Effect.Effect<SandboxClient, never, any>;
   }
->()("alchemy/AI/SandboxRuntime") {}
+>()("alchemy/Sandbox/SandboxRuntime") {}
 
 /** @internal The service a host constructor provides for declaration `id`. */
 export const sandboxHost = (id: string) =>
-  Context.Service<Sandbox.Host<unknown>, SandboxHostService>(`alchemy/AI/Sandbox<${id}>`);
+  Context.Service<Sandbox.Host<unknown>, SandboxHostService>(`alchemy/Sandbox/Sandbox<${id}>`);
 
 /**
  * The declaration's second argument: the accepted egress kinds as values
@@ -235,7 +235,7 @@ export type SandboxDeclarationArgs<Kinds> = [Kinds] extends [never]
   : [options: { readonly egress: ReadonlyArray<Kinds> }];
 
 /** @internal Marks a sandbox declaration. */
-export const SandboxTypeId = "~alchemy/AI/Sandbox" as const;
+export const SandboxTypeId = "~alchemy/Sandbox/Sandbox" as const;
 
 export const isSandbox = (value: unknown): value is Sandbox.Decl.Any =>
   (typeof value === "function" || typeof value === "object") &&
@@ -302,11 +302,11 @@ const connect = (id: string, kinds: ReadonlyArray<EgressKind<string, never>>) =>
  * ### Declaring a sandbox
  * **Example:** Two sizes
  * ```typescript
- * // src/Sandbox.ts
- * import * as AI from "@alchemy.run/ai";
+ * // src/Machine.ts
+ * import * as Sandbox from "@alchemy.run/sandbox";
  *
- * export class Sandbox extends AI.Sandbox<Sandbox, { size: "small" | "large" }>()(
- *   "Sandbox",
+ * export class Machine extends Sandbox.Sandbox<Machine, { size: "small" | "large" }>()(
+ *   "Machine",
  * ) {}
  * ```
  *
@@ -319,14 +319,14 @@ const connect = (id: string, kinds: ReadonlyArray<EgressKind<string, never>>) =>
  *
  * **Example:** A sandbox for GitHub and the model
  * ```typescript
- * import * as AI from "@alchemy.run/ai";
+ * import * as Sandbox from "@alchemy.run/sandbox";
  * import * as Anthropic from "@alchemy.run/anthropic";
  * import * as GitHub from "@alchemy.run/github";
  *
- * export class Sandbox extends AI.Sandbox<
- *   Sandbox,
+ * export class Machine extends Sandbox.Sandbox<
+ *   Machine,
  *   { size: "small" | "large"; egress: GitHub.Egress | Anthropic.Egress }
- * >()("Sandbox", { egress: [GitHub.Egress, Anthropic.Egress] }) {}
+ * >()("Machine", { egress: [GitHub.Egress, Anthropic.Egress] }) {}
  * ```
  *
  * ### Hosting it
@@ -336,13 +336,13 @@ const connect = (id: string, kinds: ReadonlyArray<EgressKind<string, never>>) =>
  *
  * **Example:** Claude Code on a Cloudflare Container
  * ```typescript
- * // src/Sandbox.cloudflare.ts
+ * // src/Machine.cloudflare.ts
  * import * as Anthropic from "@alchemy.run/anthropic";
  * import * as Cloudflare from "@alchemy.run/cloudflare";
- * import { Sandbox } from "./Sandbox.ts";
+ * import { Machine } from "./Machine.ts";
  *
  * export default Cloudflare.Containers.Sandbox(
- *   Sandbox,
+ *   Machine,
  *   {
  *     main: import.meta.url,
  *     runtime: "node",
@@ -354,7 +354,7 @@ const connect = (id: string, kinds: ReadonlyArray<EgressKind<string, never>>) =>
  * ```
  *
  * ### Using it from a Durable Object
- * `yield* Sandbox` returns the {@link SandboxClient}. `start({ size })` only
+ * `yield* Machine` returns the {@link SandboxClient}. `start({ size })` only
  * takes declared sizes.
  *
  * **Example:** Start, run a command, stop
@@ -362,7 +362,7 @@ const connect = (id: string, kinds: ReadonlyArray<EgressKind<string, never>>) =>
  * export class Agent extends Cloudflare.DurableObject<Agent>()(
  *   "Agent",
  *   Effect.gen(function* () {
- *     const sandbox = yield* Sandbox;
+ *     const sandbox = yield* Machine;
  *     return Effect.gen(function* () {
  *       return {
  *         run: (cmd: string[]) =>
@@ -383,7 +383,7 @@ const connect = (id: string, kinds: ReadonlyArray<EgressKind<string, never>>) =>
  * export class Agent extends Cloudflare.DurableObject<Agent>()(
  *   "Agent",
  *   Effect.gen(function* () {
- *     const sandbox = yield* Sandbox;
+ *     const sandbox = yield* Machine;
  *     const work = yield* WorkGateway; // { model, repo }
  *     const personal = yield* PersonalGateway; // { repo }
  *     return Effect.gen(function* () {
@@ -419,13 +419,13 @@ const connect = (id: string, kinds: ReadonlyArray<EgressKind<string, never>>) =>
  *
  * ### Providing the host
  * The host is a Layer: provide it on the stack, like any other
- * implementation. Without it `yield* Sandbox` stays unsatisfied and the stack
+ * implementation. Without it `yield* Machine` stays unsatisfied and the stack
  * does not type-check.
  *
  * **Example:** Wiring the host into the stack
  * ```typescript
  * // alchemy.run.ts
- * import SandboxLive from "./src/Sandbox.cloudflare.ts";
+ * import MachineLive from "./src/Machine.cloudflare.ts";
  *
  * export default Alchemy.Stack(
  *   "App",
@@ -433,13 +433,13 @@ const connect = (id: string, kinds: ReadonlyArray<EgressKind<string, never>>) =>
  *   Effect.gen(function* () {
  *     const api = yield* Api;
  *     return { url: api.url };
- *   }).pipe(Effect.provide(SandboxLive)),
+ *   }).pipe(Effect.provide(MachineLive)),
  * );
  * ```
  *
  * @binding
- * @product AI
- * @category AI
+ * @product Sandbox
+ * @category Sandbox
  */
 export const Sandbox =
   <Self, Spec extends SandboxSpec>() =>
@@ -452,7 +452,7 @@ export const Sandbox =
     return Object.assign(
       class {},
       Effectable.Prototype({
-        label: `AI.Sandbox<${id}>`,
+        label: `Sandbox.Sandbox<${id}>`,
         evaluate: () => connect(id, kinds),
       }),
       {
