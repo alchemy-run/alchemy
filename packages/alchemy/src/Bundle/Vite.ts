@@ -51,19 +51,16 @@ interface EnvironmentLike {
   };
 }
 
-/**
- * @returns the specified directory, when it exists and is not empty; undefined, otherwise
- */
-const nonEmptyDirectory = (
+/** `directory` when it exists and is not empty; `undefined` otherwise. */
+const nonEmptyDirectory = Effect.fn(function* (
   fs: FileSystem.FileSystem,
   directory: string | undefined,
-): Effect.Effect<string | undefined, PlatformError> =>
-  Effect.gen(function* () {
-    if (directory === undefined) return undefined;
-    if (!(yield* fs.exists(directory))) return undefined;
-    const entries = yield* fs.readDirectory(directory);
-    return entries.length > 0 ? directory : undefined;
-  });
+) {
+  if (directory === undefined) return undefined;
+  if (!(yield* fs.exists(directory))) return undefined;
+  const entries = yield* fs.readDirectory(directory);
+  return entries.length > 0 ? directory : undefined;
+});
 
 /**
  * A Vite plugin that collects the output of the build and makes it available as an Effect.
