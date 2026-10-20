@@ -51,6 +51,10 @@ const SENSITIVE_FILES = [
   "custom-sensitive-file",
 ];
 const nodeEnvFixtureDir = pathe.resolve(import.meta.dirname, "vite-node-env-fixture");
+const additionalModulesFixtureDir = pathe.resolve(
+  import.meta.dirname,
+  "vite-additional-modules-fixture",
+);
 const hotChannelFixtureDir = pathe.resolve(import.meta.dirname, "vite-hot-channel-fixture");
 
 type Mode = "live" | "dev";
@@ -714,6 +718,64 @@ describe.concurrent(
           },
         );
       }
+    }
+
+    // `additional-modules`: Data, Text and CompiledWasm modules by extension,
+    // through subpath imports, and on `new_module_registry` (dev, as the
+    // playground runs it).
+    for (const [mode, newModuleRegistry] of [
+      ["live", false],
+      ["dev", false],
+      ["dev", true],
+    ] as const) {
+      const label = `${newModuleRegistry ? " on new_module_registry" : ""}${mode === "dev" ? " (dev)" : ""}`;
+      (mode === "live" ? test : devTest).provider(
+        `Vite runtime: additional modules load${label}`,
+        (stack) =>
+          Effect.gen(function* () {
+            yield* stack.destroy();
+            const rootDir = yield* cloneFixture(additionalModulesFixtureDir, {
+              prefix: "alchemy-vite-additional-modules-",
+              tempRoot,
+              entries: ["package.json", "src"],
+            });
+            const site = yield* stack.deploy(
+              Cloudflare.Website.Vite(
+                `ViteAdditionalModules${mode}${newModuleRegistry ? "Registry" : ""}`,
+                {
+                  rootDir,
+                  main: "./src/index.ts",
+                  workersDev: true,
+                  compatibility: {
+                    date: "2024-12-30",
+                    ...(newModuleRegistry ? { flags: ["new_module_registry"] } : {}),
+                  },
+                  memo: { include: ["**/*"] },
+                  ...(mode === "dev" ? { dev: { port: 0 } } : {}),
+                },
+              ),
+            );
+            const url = site.url!.replace(/\/$/, "");
+            const hello = (res: { body: string }) =>
+              res.body.includes("<h1>Hello world</h1>")
+                ? undefined
+                : `body ${res.body.slice(0, 120)}`;
+            yield* expectJson(`${url}/bin`, { byteLength: 342936 });
+            yield* expectResponse(`${url}/html`, hello);
+            yield* expectResponse(`${url}/subpath-html`, hello);
+            yield* expectResponse(`${url}/subpath-html-with-ext`, hello);
+            yield* expectText(`${url}/text`, "Example text content.\n");
+            yield* expectText(`${url}/sql`, "SELECT * FROM users;\n");
+            yield* expectText(`${url}/text2`, "Example text content 2");
+            yield* expectJson(`${url}/wasm`, { result: 7 });
+            yield* expectJson(`${url}/wasm-with-module-param`, { result: 11 });
+            yield* expectJson(`${url}/wasm-with-init-param`, { result: 15 });
+          }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.ignore)), logLevel),
+        {
+          tags: ["provider:cloudflare:worker", mode === "dev" ? "local" : "live"],
+          timeout: 300_000,
+        },
+      );
     }
 
     // Miniflare's outbound `cf.image` mock (dev only: deployed, `cf.image`
