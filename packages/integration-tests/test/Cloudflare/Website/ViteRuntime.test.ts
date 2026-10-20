@@ -66,6 +66,7 @@ const childEnvironmentFixtureDir = pathe.resolve(
   "vite-child-environment-fixture",
 );
 const errorsFixtureDir = pathe.resolve(import.meta.dirname, "vite-errors-fixture");
+const multiWorkerFixtureDir = pathe.resolve(import.meta.dirname, "vite-multi-worker-fixture");
 const hotChannelFixtureDir = pathe.resolve(import.meta.dirname, "vite-hot-channel-fixture");
 
 type Mode = "live" | "dev";
@@ -1145,6 +1146,60 @@ describe.concurrent(
         }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.ignore)), logLevel),
       { tags: ["provider:cloudflare:worker", "local"], timeout: 300_000 },
     );
+
+    // `multi-worker`: a Vite Worker calls another Worker over service
+    // bindings — fetch, RPC methods, promise pipelining, getters and a named
+    // entrypoint.
+    for (const mode of ["live", "dev"] as const) {
+      (mode === "live" ? test : devTest).provider(
+        `Vite runtime: a Vite Worker calls another Worker over service bindings${mode === "dev" ? " (dev)" : ""}`,
+        (stack) =>
+          Effect.gen(function* () {
+            yield* stack.destroy();
+            const rootDir = yield* cloneFixture(multiWorkerFixtureDir, {
+              prefix: "alchemy-vite-multi-worker-",
+              tempRoot,
+              entries: ["package.json", "worker-a", "worker-b"],
+            });
+            const site = yield* stack.deploy(
+              Effect.gen(function* () {
+                const workerB = yield* Cloudflare.Worker(`ViteMultiWorkerB${mode}`, {
+                  main: pathe.join(rootDir, "worker-b/index.ts"),
+                  compatibility: { date: "2024-12-30" },
+                });
+                return yield* Cloudflare.Website.Vite(`ViteMultiWorkerA${mode}`, {
+                  rootDir,
+                  main: "./worker-a/index.ts",
+                  workersDev: true,
+                  compatibility: { date: "2024-12-30" },
+                  memo: { include: ["**/*"] },
+                  env: {
+                    WORKER_B: workerB,
+                    NAMED_ENTRYPOINT: Cloudflare.WorkerEntrypoint(workerB, "NamedEntrypoint"),
+                  },
+                  ...(mode === "dev" ? { dev: { port: 0 } } : {}),
+                });
+              }),
+            );
+            const url = site.url!.replace(/\/$/, "");
+            yield* expectJson(url, { name: "Worker A" });
+            yield* expectJson(`${url}/fetch`, { result: { name: "Worker B" } });
+            yield* expectJson(`${url}/rpc-method`, { result: 9 });
+            yield* expectJson(`${url}/rpc-method/promise-pipelining`, {
+              result: "You made it! 🎉",
+            });
+            yield* expectJson(`${url}/rpc-getter`, { result: "Cloudflare" });
+            yield* expectJson(`${url}/rpc-named-entrypoint`, { result: 20 });
+            yield* expectJson(`${url}/rpc-named-entrypoint/promise-pipelining`, {
+              result: "You made it! 🚀",
+            });
+          }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.ignore)), logLevel),
+        {
+          tags: ["provider:cloudflare:worker", mode === "dev" ? "local" : "live"],
+          timeout: 300_000,
+        },
+      );
+    }
 
     // Miniflare's outbound `cf.image` mock (dev only: deployed, `cf.image`
     // needs a zone with Image Transformations, which workers.dev lacks).
