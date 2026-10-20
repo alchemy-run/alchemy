@@ -56,7 +56,7 @@ export const checkEnvironment = Effect.fn("Alchemist.provider.checkEnvironment")
           ? Effect.fail(
               new AlchemistInvalidInput({
                 field: "providers",
-                message: `Unknown provider '${requested}'. Registered: ${known.join(", ")}.`,
+                message: `Unknown provider '${requested}'. Registered: ${known.join(", ")}. Install the package that provides it.`,
               }),
             )
           : Effect.succeed(name);

@@ -15,6 +15,7 @@
     "test": "bun test"
   },
   "dependencies": {
+    "@alchemy.run/railway": "workspace:*",
     "alchemy": "workspace:*",
     "effect": "catalog:",
     "react": "catalog:",
