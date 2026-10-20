@@ -2,6 +2,7 @@ import * as Docker from "@alchemy.run/docker";
 import { describe, expect } from "alchemy-test";
 import { inMemoryState } from "alchemy/State";
 import * as Test from "alchemy/Test/Alchemy";
+import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import { localRegistry } from "./RemoteImage.testUtils.ts";
 
@@ -77,17 +78,19 @@ describe(
         yield* docker.image.pull("hello-world:latest");
         yield* docker.image.tag("hello-world:latest", sourceRef);
         const source = yield* docker.image.inspect(sourceRef);
-        const image = yield* stack.deploy(
-          Docker.RemoteImage("local-reuse", {
-            name: sourceTag,
-            tag: "smoke",
-            alwaysPull: false,
-            targetName,
-            targetTag,
-            registry: registry.credentials,
-            context: contextName,
-          }),
-        );
+        const image = yield* stack
+          .deploy(
+            Docker.RemoteImage("local-reuse", {
+              name: sourceTag,
+              tag: "smoke",
+              alwaysPull: false,
+              targetName,
+              targetTag,
+              registry: registry.credentials,
+              context: contextName,
+            }),
+          )
+          .pipe(Effect.provide(ConfigProvider.layer(ConfigProvider.fromEnv({ env: {} }))));
         const target = yield* docker.image.inspect(targetRef);
         const digest = yield* registry.manifestDigest("alchemy-local-reuse", targetTag);
 

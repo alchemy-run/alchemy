@@ -702,9 +702,9 @@ const makeDocker = (options: DockerOptions) =>
         const dir = yield* fs.makeTempDirectoryScoped({ prefix: "alchemy-docker-" });
         const ambient = yield* DockerEnvironment;
         const environment = {
-          DOCKER_CONFIG: yield* Config.String("DOCKER_CONFIG").pipe(Effect.orElseSucceed(() => "")),
-          HOME: yield* Config.String("HOME").pipe(Effect.orElseSucceed(() => "")),
-          USERPROFILE: yield* Config.String("USERPROFILE").pipe(Effect.orElseSucceed(() => "")),
+          DOCKER_CONFIG: process.env.DOCKER_CONFIG ?? "",
+          HOME: process.env.HOME ?? "",
+          USERPROFILE: process.env.USERPROFILE ?? "",
           ...ambient,
         };
         const isWindows = yield* Effect.sync(() => process.platform === "win32");
