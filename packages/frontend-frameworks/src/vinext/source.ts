@@ -487,6 +487,25 @@ const loadVite = async (projectRoot: string): Promise<ViteModule> => {
   }
 };
 
+/**
+ * Resolve the Worker env into the plain strings the build child sees on
+ * `process.env`, so Vinext inlines declared `NEXT_PUBLIC_*` values into the
+ * client bundle. Declared values override the parent's.
+ */
+const resolveBuildEnv = (env: Record<string, unknown> | undefined): Record<string, string> => {
+  const out: Record<string, string> = {};
+  for (const [key, value] of Object.entries(env ?? {})) {
+    if (typeof value === "string") {
+      out[key] = value;
+    } else if (Redacted.isRedacted(value) && typeof Redacted.value(value) === "string") {
+      out[key] = Redacted.value(value) as string;
+    } else if (typeof value === "number" || typeof value === "boolean") {
+      out[key] = String(value);
+    }
+  }
+  return out;
+};
+
 const getDefine = (env: Record<string, unknown>) =>
   Object.fromEntries(
     Object.entries(env).flatMap(([key, raw]) => {
@@ -766,12 +785,7 @@ export const makeVinextSourceProvider = (options: VinextSourceOptions): SourcePr
         module: import.meta.url,
         rootDir,
         framework: "vinext",
-        env: Object.fromEntries(
-          Object.entries(ctx.env ?? {}).flatMap(([key, value]) =>
-            key.startsWith("NEXT_PUBLIC_") && typeof value === "string" ? [[key, value]] : [],
-          ),
-        ),
-        excludeEnvPrefixes: ctx.stack.stage === "local" ? undefined : ["NEXT_PUBLIC_"],
+        env: resolveBuildEnv(ctx.env),
         config: {
           rootDir,
           main: options.main,

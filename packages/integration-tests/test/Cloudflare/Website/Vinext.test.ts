@@ -3,6 +3,7 @@ import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnviron
 import { describe, expect } from "alchemy-test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
 import { MinimumLogLevel } from "effect/References";
 import * as pathe from "pathe";
 import { cloneFixture } from "../Utils/Fixture.ts";
@@ -15,6 +16,7 @@ const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Deb
 
 const fixtureDir = pathe.resolve(import.meta.dirname, "fixtures", "vinext-app");
 const tempRoot = pathe.resolve(import.meta.dirname, "../../../.tmp");
+const publicMarker = "VINEXT_PUBLIC_ENV_MARKER";
 
 describe.concurrent(
   "Vinext",
@@ -23,7 +25,7 @@ describe.concurrent(
   },
   () => {
     test.provider(
-      "Vinext: deploys App Router SSR and serves public files through ASSETS",
+      "Vinext: deploys App Router SSR, inlines declared public env and serves public files through ASSETS",
       (stack) =>
         Effect.gen(function* () {
           const { accountId } = yield* yield* CloudflareEnvironment;
@@ -40,6 +42,7 @@ describe.concurrent(
             Cloudflare.Website.Vinext("VinextSite", {
               rootDir,
               workersDev: { enabled: true },
+              env: { NEXT_PUBLIC_SITE_MARKER: publicMarker },
               memo: {
                 include: ["app/**", "public/**", "worker/**", "package.json", "vite.config.ts"],
               },
@@ -52,6 +55,28 @@ describe.concurrent(
             timeout: "90 seconds",
             label: "vinext SSR home",
           });
+
+          // The declared `NEXT_PUBLIC_*` value is inlined into the deployed
+          // client bundle.
+          const fs = yield* FileSystem.FileSystem;
+          const clientDir = pathe.join(rootDir, "dist", "client");
+          const chunks = (yield* fs.readDirectory(clientDir, { recursive: true })).filter((file) =>
+            file.endsWith(".js"),
+          );
+          const inlined = yield* Effect.filter(chunks, (file) =>
+            fs
+              .readFileString(pathe.join(clientDir, file))
+              .pipe(Effect.map((code) => code.includes(publicMarker))),
+          );
+          expect(inlined).toHaveLength(1);
+          yield* expectUrlContains(
+            `${site.url!}/${inlined[0]!.replaceAll("\\", "/")}`,
+            publicMarker,
+            {
+              timeout: "60 seconds",
+              label: "vinext public env",
+            },
+          );
 
           // Static asset from `public/`.
           yield* expectUrlContains(`${site.url!}/robots.txt`, "User-agent", {

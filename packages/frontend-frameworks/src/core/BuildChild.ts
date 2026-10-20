@@ -97,8 +97,6 @@ export interface BuildChildOptions {
    * mutate theirs — that is why this is a child).
    */
   readonly env?: Record<string, string> | undefined;
-  /** Parent env prefixes to omit before applying explicit child env overrides. */
-  readonly excludeEnvPrefixes?: ReadonlyArray<string> | undefined;
 }
 
 /**
@@ -172,15 +170,7 @@ export const runBuildChild = (
           stderr: "pipe",
           // Default builds to production rather than inheriting the CLI/test
           // runner's mode, while preserving deliberate build-env overrides.
-          env: {
-            ...Object.fromEntries(
-              Object.entries(process.env).filter(
-                ([key]) => !options.excludeEnvPrefixes?.some((prefix) => key.startsWith(prefix)),
-              ),
-            ),
-            NODE_ENV: "production",
-            ...options.env,
-          },
+          env: { ...process.env, NODE_ENV: "production", ...options.env },
         }).pipe(
           Effect.mapError(
             fail(`Failed to spawn the ${options.framework} build child (${executable})`),
