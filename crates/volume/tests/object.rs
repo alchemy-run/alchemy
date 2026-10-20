@@ -255,5 +255,8 @@ async fn measure_sync_and_snapshot_latency() {
     eprintln!("snapshot of 4 extents: {}", percentiles(samples));
     let started = std::time::Instant::now();
     let _ = volume.acquire("main").await.unwrap();
-    eprintln!("acquire with nothing to fold: {}ms", started.elapsed().as_millis());
+    eprintln!(
+        "acquire with nothing to fold: {}ms",
+        started.elapsed().as_millis()
+    );
 }

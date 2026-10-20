@@ -65,7 +65,7 @@ export interface DiskExecOptions {
   /** Where the volume is mounted in the sandbox. @default "/volumes/<head>" */
   readonly dir?: string;
   /** How it's attached; `auto` picks the best the host allows. @default "auto" */
-  readonly mode?: "auto" | "ublk" | "nbd" | "fuse" | "copy";
+  readonly mode?: "auto" | "ublk" | "nbd" | "loop";
   readonly env?: Record<string, string>;
 }
 

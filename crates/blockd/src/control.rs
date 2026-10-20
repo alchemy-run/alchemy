@@ -5,7 +5,7 @@
 //! {"op":"sync"}                                   → {"ok":true}
 //! {"op":"snapshot"}                               → {"ok":true,"snapshot":"…"}
 //! {"op":"fork","to":"try-1","freeze":"/workspace"} → {"ok":true,"snapshot":"…"}
-//! {"op":"detach"}
+//! {"op":"detach"}                                → {"ok":true,"snapshot":"…"}
 //! ```
 //!
 //! `sync` makes every write so far durable in the journal; `snapshot` (`flush`
@@ -36,15 +36,19 @@ enum Request {
     Detach,
 }
 
-/// Serves the control socket at `path` until a `detach` arrives; then calls
-/// `on_detach` (which disconnects the attachment) and returns.
-pub fn serve(path: &Path, device: Arc<Device>, on_detach: impl Fn()) -> Result<()> {
+/// Serves the control socket at `path` until a `detach` arrives. A detach
+/// first calls `on_detach`, which unmounts or disconnects (so every write is
+/// in the device), then snapshots, replies with the snapshot and returns.
+pub fn serve(
+    path: &Path,
+    device: Arc<Device>,
+    mut on_detach: impl FnMut() -> Result<()>,
+) -> Result<()> {
     let _ = std::fs::remove_file(path);
     let listener = UnixListener::bind(path)?;
     for stream in listener.incoming() {
         let stream = stream?;
-        if handle(stream, &device)? {
-            on_detach();
+        if handle(stream, &device, &mut on_detach)? {
             let _ = std::fs::remove_file(path);
             return Ok(());
         }
@@ -52,8 +56,12 @@ pub fn serve(path: &Path, device: Arc<Device>, on_detach: impl Fn()) -> Result<(
     Ok(())
 }
 
-/// Answers one connection; true when it asked to detach.
-fn handle(stream: UnixStream, device: &Device) -> Result<bool> {
+/// Answers one connection; true when it detached.
+fn handle(
+    stream: UnixStream,
+    device: &Device,
+    on_detach: &mut impl FnMut() -> Result<()>,
+) -> Result<bool> {
     let mut writer = stream.try_clone()?;
     for line in BufReader::new(stream).lines() {
         let line = line?;
@@ -77,7 +85,13 @@ fn handle(stream: UnixStream, device: &Device) -> Result<bool> {
             Ok(Request::Fork { to, freeze }) => {
                 (result(fork(device, &to, freeze.as_deref())), false)
             }
-            Ok(Request::Detach) => (result(device.snapshot()), true),
+            Ok(Request::Detach) => match on_detach() {
+                Ok(()) => (result(device.snapshot()), true),
+                Err(e) => (
+                    json!({ "ok": false, "error": format!("detaching: {e:#}") }),
+                    false,
+                ),
+            },
         };
         writer.write_all(format!("{reply}\n").as_bytes())?;
         if detach {

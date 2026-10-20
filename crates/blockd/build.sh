@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Builds static Linux blockd binaries for sandbox images, into target/blockd/:
 #   blockd-x86_64   blockd-aarch64
-# (object storage, FUSE and copy modes; ublk needs a native build).
+# (object storage, NBD and loop modes; ublk needs a native build).
 # Usage: crates/blockd/build.sh [x86_64|aarch64 ...]
 set -euo pipefail
 repo="$(cd "$(dirname "$0")/../.." && pwd)"

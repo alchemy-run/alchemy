@@ -8,14 +8,17 @@
 //! blockd gc      --store <spec> [--history <n>] [--grace-seconds <s>] [--dry-run true]
 //! blockd heads   --store <spec>
 //! blockd history --store <spec> --head <name> [--limit <n>]
-//! blockd attach  --store <spec> --head <name> --cache <file> (--nbd /dev/nbd0 | --ublk <id> | --fuse <mountpoint>)
+//! blockd attach  --store <spec> --head <name> --cache <file> (--nbd /dev/nbd0 | --ublk <id>)
 //!                [--control <socket>] [--flush-every <seconds>] [--prefetch true]
-//! blockd run     --store <spec> --head <name> --cache <file> --dir <dir> --command <sh> [--keep true]
-//!                (copy mode: extract, run, write back; for hosts that can't mount)
-//! blockd exec    --store <spec> --head <name> --cache <file> --dir <dir> --command <sh> [--mode auto|ublk|nbd|fuse|copy]
-//!                (attach in the best mode the host allows, run, detach; exits with the command's code)
+//!                (a raw block device; mounting it is up to you)
+//! blockd mount   --store <spec> --head <name> --cache <file> --dir <dir> --control <socket>
+//!                [--mode auto|ublk|nbd|loop|fuse] [--flush-every <seconds>] [--prefetch true]
+//!                (mount in the best mode the host allows and print {"mounted":…} when ready;
+//!                 a detach on the control socket unmounts, snapshots and exits)
+//! blockd exec    --store <spec> --head <name> --cache <file> --dir <dir> --command <sh> [--mode …]
+//!                (mount, run, unmount, snapshot; exits with the command's code)
 //! blockd disconnect --nbd /dev/nbd0   (detach a device whose blockd died)
-//! blockd control --socket <socket> --request '{"op":"flush"}'
+//! blockd control --socket <socket> --request '{"op":"sync"}'
 //! ```
 //!
 //! Stores: `local:<dir>` or `s3://<bucket>/<prefix>`.
@@ -142,10 +145,7 @@ fn main() -> Result<()> {
                 cache,
                 runtime.handle().clone(),
             )?);
-            let mode = match flags.get("mode").unwrap_or("auto") {
-                "auto" => blockd::exec::Mode::detect(),
-                other => other.parse()?,
-            };
+            let mode = mode(&flags)?;
             tracing::info!("exec in {mode:?} mode");
             let code = blockd::exec::exec(
                 &device,
@@ -162,29 +162,13 @@ fn main() -> Result<()> {
             std::process::exit(code);
         }
         #[cfg(target_os = "linux")]
-        "run" => {
-            let device = blockd::Device::open(
-                std::sync::Arc::new(store()?),
-                flags.required("head")?,
-                std::path::Path::new(flags.required("cache")?),
-                runtime.handle().clone(),
-            )?;
-            let options = blockd::copy::RunOptions {
-                dir: flags.required("dir")?.into(),
-                command: flags.required("command")?.to_string(),
-                keep: flags.get("keep") == Some("true"),
-            };
-            let outcome = blockd::copy::run(&device, &options)?;
-            let snapshot = device.close()?;
-            tracing::info!("ran in copy mode: {outcome:?}, head at {snapshot}");
-            std::process::exit(outcome.exit_code);
-        }
+        "mount" => serve_mount(&flags, store()?, &runtime)?,
         #[cfg(target_os = "linux")]
         "disconnect" => {
             blockd::nbd::force_disconnect(std::path::Path::new(flags.required("nbd")?))?
         }
         _ => bail!(
-            "usage: blockd <create|import|fork|reset|drop|export|gc|heads|history|attach|exec|run|control|disconnect> …"
+            "usage: blockd <create|import|fork|reset|drop|export|gc|heads|history|attach|mount|exec|control|disconnect> …"
         ),
     }
     Ok(())
@@ -215,7 +199,7 @@ fn attach(flags: &Flags, volume: volume::Volume, runtime: &tokio::runtime::Runti
         });
     }
     let control = flags.get("control").map(PathBuf::from);
-    let serve_control = |on_detach: Box<dyn Fn() + Send>| {
+    let serve_control = |on_detach: Box<dyn FnMut() -> Result<()> + Send>| {
         if let Some(socket) = control.clone() {
             let device = device.clone();
             std::thread::spawn(move || {
@@ -226,13 +210,16 @@ fn attach(flags: &Flags, volume: volume::Volume, runtime: &tokio::runtime::Runti
         }
     };
 
-    match (flags.get("nbd"), flags.get("fuse")) {
+    match (flags.get("nbd"), flags.get("ublk")) {
         #[cfg(feature = "ublk")]
-        (None, None) if flags.get("ublk").is_some() => {
+        (None, Some(_)) => {
             let id: i32 = flags.required("ublk")?.parse()?;
             let ublk = blockd::ublk::Ublk::create(id, 1)?;
             let killer = ublk.killer();
-            serve_control(Box::new(move || killer.kill()));
+            serve_control(Box::new(move || {
+                killer.kill();
+                Ok(())
+            }));
             let size = device.size();
             let head_name = head.to_string();
             ublk.serve(device.clone(), move |path| {
@@ -244,33 +231,82 @@ fn attach(flags: &Flags, volume: volume::Volume, runtime: &tokio::runtime::Runti
             let attachment = blockd::nbd::attach(Path::new(nbd), device.clone())?;
             tracing::info!("attached {head} ({} bytes) at {nbd}", device.size());
             let disconnector = attachment.disconnector()?;
-            serve_control(Box::new(move || disconnector.disconnect()));
+            serve_control(Box::new(move || {
+                disconnector.disconnect();
+                Ok(())
+            }));
             attachment.wait()?;
         }
-        #[cfg(feature = "fuse")]
-        (None, Some(mountpoint)) => {
-            let disk_dir = cache.with_extension("disk");
-            let mounted = blockd::fuse::mount(device.clone(), &disk_dir, Path::new(mountpoint))?;
-            tracing::info!(
-                "mounted {head} ({} bytes) at {mountpoint} over FUSE",
-                device.size()
-            );
-            let target = PathBuf::from(mountpoint);
-            serve_control(Box::new(move || {
-                if let Err(e) = blockd::fuse::unmount(&target) {
-                    tracing::error!("{e:#}");
-                }
-            }));
-            mounted.wait()?;
-        }
         _ => {
-            bail!("attach needs exactly one of --nbd <device>, --ublk <id> or --fuse <mountpoint>")
+            bail!(
+                "attach needs exactly one of --nbd <device> or --ublk <id> (to mount, use blockd mount)"
+            )
         }
     }
     drop(flusher);
     let snapshot = device.close()?;
     tracing::info!("detached {head} at snapshot {snapshot}");
     println!("{snapshot}");
+    Ok(())
+}
+
+/// `--mode`, or the best this host allows.
+#[cfg(target_os = "linux")]
+fn mode(flags: &Flags) -> Result<blockd::mount::Mode> {
+    match flags.get("mode").unwrap_or("auto") {
+        "auto" => blockd::mount::Mode::detect(),
+        other => other.parse(),
+    }
+}
+
+/// Mounts a head and serves it until a detach on the control socket.
+#[cfg(target_os = "linux")]
+fn serve_mount(
+    flags: &Flags,
+    volume: volume::Volume,
+    runtime: &tokio::runtime::Runtime,
+) -> Result<()> {
+    use std::path::Path;
+    let head = flags.required("head")?;
+    let cache = Path::new(flags.required("cache")?);
+    let dir = Path::new(flags.required("dir")?);
+    let socket = Path::new(flags.required("control")?);
+    let device = Arc::new(blockd::Device::open(
+        Arc::new(volume),
+        head,
+        cache,
+        runtime.handle().clone(),
+    )?);
+    let every: u64 = flags
+        .get("flush-every")
+        .map(str::parse)
+        .transpose()?
+        .unwrap_or(5);
+    let flusher = (every > 0).then(|| device.start_flusher(std::time::Duration::from_secs(every)));
+    if flags.get("prefetch") == Some("true") {
+        let device = device.clone();
+        std::thread::spawn(move || match device.prefetch(16) {
+            Ok(n) => tracing::info!("prefetched {n} extents"),
+            Err(e) => tracing::warn!("prefetch stopped: {e:#}"),
+        });
+    }
+    let mode = mode(flags)?;
+    let mut mounted = Some(blockd::mount::mount(&device, mode, cache, dir)?);
+    let status = device.status();
+    println!(
+        "{}",
+        serde_json::json!({
+            "mounted": dir, "mode": mode, "head": head,
+            "snapshot": status.base, "epoch": status.epoch,
+        })
+    );
+    tracing::info!("mounted {head} at {} in {mode:?} mode", dir.display());
+    blockd::control::serve(socket, device.clone(), move || {
+        mounted.take().map_or(Ok(()), |mounted| mounted.unmount())
+    })?;
+    drop(flusher);
+    let snapshot = device.close()?;
+    tracing::info!("detached {head} at snapshot {snapshot}");
     Ok(())
 }
 

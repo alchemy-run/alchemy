@@ -1,12 +1,9 @@
-//! FUSE attach: the volume served as one file, `disk`, in a tiny FUSE
-//! filesystem. `fuse2fs` (e2fsprogs) then mounts the ext4 inside it in
-//! userspace. This needs only `/dev/fuse`: no block device and no kernel ext4
-//! mount, for hosts that allow FUSE but not block devices. It is slower than
-//! kernel attach (every operation crosses into userspace twice), and it is
-//! the same volume, so it can move between hosts without converting anything.
+//! The volume served as one file, `disk`, in a tiny FUSE filesystem, for
+//! loop mode: the file is attached to a loop device and mounted with the
+//! kernel's ext4. An `fsync` on the file is a [`Device::sync`].
 
 use crate::Device;
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result};
 use fuser::{
     Config, Errno, FileAttr, FileHandle, FileType, Filesystem, FopenFlags, Generation, INodeNo,
     LockOwner, MountOption, OpenFlags, ReplyAttr, ReplyData, ReplyDirectory, ReplyEmpty,
@@ -14,7 +11,6 @@ use fuser::{
 };
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
-use std::process::Child;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
@@ -187,52 +183,28 @@ impl Filesystem for DiskFs {
     }
 }
 
-/// The volume mounted with `fuse2fs` at a mountpoint.
-pub struct Mounted {
-    mountpoint: PathBuf,
-    fuse2fs: Child,
-    disk: Option<fuser::BackgroundSession>,
+/// The volume served as `<dir>/disk` until dropped.
+pub struct DiskFile {
+    dir: PathBuf,
+    session: Option<fuser::BackgroundSession>,
 }
 
-impl Mounted {
-    /// Unmounts the filesystem, then the disk file; returns when both are gone.
-    pub fn unmount(mut self) -> Result<()> {
-        unmount(&self.mountpoint)?;
-        self.fuse2fs.wait()?;
-        drop(self.disk.take());
-        Ok(())
-    }
-
-    /// Waits until the filesystem is unmounted (by `unmount` elsewhere, or
-    /// `umount` by hand), then unmounts the disk file.
-    pub fn wait(mut self) -> Result<()> {
-        let status = self.fuse2fs.wait()?;
-        drop(self.disk.take());
-        if !status.success() {
-            bail!("fuse2fs exited with {status}");
-        }
-        Ok(())
-    }
-
-    pub fn mountpoint(&self) -> &Path {
-        &self.mountpoint
+impl DiskFile {
+    /// The file that holds the volume.
+    pub fn file(&self) -> PathBuf {
+        self.dir.join(NAME)
     }
 }
 
-/// Unmounts a filesystem mounted by [`mount`] (from the control socket).
-pub fn unmount(mountpoint: &Path) -> Result<()> {
-    let status = crate::helper("umount").arg(mountpoint).status()?;
-    if !status.success() {
-        bail!("umount {} failed: {status}", mountpoint.display());
+impl Drop for DiskFile {
+    fn drop(&mut self) {
+        drop(self.session.take()); // unmounts the FUSE filesystem
     }
-    Ok(())
 }
 
-/// Serves `device` as `<dir>/disk` and mounts its ext4 at `mountpoint` with
-/// `fuse2fs`.
-pub fn mount(device: Arc<Device>, dir: &Path, mountpoint: &Path) -> Result<Mounted> {
+/// Serves `device` as `<dir>/disk`.
+pub fn serve_file(device: Arc<Device>, dir: &Path) -> Result<DiskFile> {
     std::fs::create_dir_all(dir)?;
-    std::fs::create_dir_all(mountpoint)?;
     let fs = DiskFs {
         device,
         uid: unsafe { libc::getuid() },
@@ -241,39 +213,14 @@ pub fn mount(device: Arc<Device>, dir: &Path, mountpoint: &Path) -> Result<Mount
     };
     let mut config = Config::default();
     config.mount_options = vec![MountOption::FSName("blockd".into()), MountOption::RW];
-    let disk = fuser::spawn_mount(fs, dir, &config).with_context(|| {
+    let session = fuser::spawn_mount(fs, dir, &config).with_context(|| {
         format!(
             "mounting the disk file at {} (is /dev/fuse available?)",
             dir.display()
         )
     })?;
-    let image = dir.join(NAME);
-    let fuse2fs = crate::helper("fuse2fs")
-        .arg(&image)
-        .arg(mountpoint)
-        .args(["-f", "-o", "rw"])
-        .spawn()
-        .context("starting fuse2fs (install e2fsprogs' fuse2fs)")?;
-    let mounted = Mounted {
-        mountpoint: mountpoint.to_path_buf(),
-        fuse2fs,
-        disk: Some(disk),
-    };
-    for _ in 0..300 {
-        if is_mounted(mountpoint)? {
-            return Ok(mounted);
-        }
-        std::thread::sleep(Duration::from_millis(100));
-    }
-    bail!("fuse2fs didn't mount {} within 30s", mountpoint.display())
-}
-
-fn is_mounted(mountpoint: &Path) -> Result<bool> {
-    let target = std::fs::canonicalize(mountpoint)?;
-    let mounts = std::fs::read_to_string("/proc/self/mounts")?;
-    Ok(mounts.lines().any(|line| {
-        line.split(' ')
-            .nth(1)
-            .is_some_and(|m| Path::new(m) == target)
-    }))
+    Ok(DiskFile {
+        dir: dir.to_path_buf(),
+        session: Some(session),
+    })
 }
