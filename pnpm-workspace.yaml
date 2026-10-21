@@ -100,6 +100,7 @@ catalog:
   "@prisma/orm-postgres": "^8.0.0-rc.11"
   partyserver: "^0.5.10"
   cross-fetch: "^4.0.0"
+  "@vitejs/plugin-basic-ssl": "^2.3.0"
   debug: "^4.4.1"
   prisma: "^8.0.0-rc.15"
   # `@cloudflare/vite-plugin`'s prisma playground (Prisma 7 + D1 adapter).

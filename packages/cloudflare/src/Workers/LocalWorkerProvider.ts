@@ -1090,6 +1090,7 @@ export const LocalWorkerProvider = () =>
           latestServes.delete(id);
           latestViteServes.delete(id);
           servedViteConsumers.delete(id);
+          servedViteHttps.delete(id);
         }
       };
 
@@ -1260,6 +1261,11 @@ export const LocalWorkerProvider = () =>
        * was started with, for the restart path's changed-wiring check. */
       const servedViteConsumers = new Map<string, string>();
 
+      /** Whether each running Vite child serves HTTPS (the app's
+       * `server.https`): the proxy relays TLS untouched, so its URL takes the
+       * child's scheme. */
+      const servedViteHttps = new Map<string, boolean>();
+
       // Serve a Vite dev-server child with the same two guarantees
       // `serveWith` gives a plain worker: a `workerRestarts` hook so sibling
       // `Consumer` reconciles can restart the child with fresh queue-consumer
@@ -1390,6 +1396,7 @@ export const LocalWorkerProvider = () =>
                   continue;
                 }
                 servedViteConsumers.set(worker.fqn, JSON.stringify(queueConsumers));
+                servedViteHttps.set(worker.fqn, child.url.protocol === "https:");
                 yield* proxy.set(child.url);
                 return;
               }
@@ -1406,13 +1413,15 @@ export const LocalWorkerProvider = () =>
         const start = Date.now();
         const proxy = yield* maybeStartProxy(worker.fqn, worker.dev);
         yield* serveVite({ worker, rootDir, invalidate, source, proxy });
+        const url = new URL(proxy.url);
+        if (servedViteHttps.get(worker.fqn)) url.protocol = "https:";
         // The programmatic vite API never prints the CLI's URL banner — and
         // vite's own URL is the internal (port-shuffled) server behind the
         // stable proxy, so advertise the proxy instead.
         yield* Effect.log(
-          workerStartedMessage(worker.fqn, Date.now() - start, proxy.url, workerLogDir(worker)),
+          workerStartedMessage(worker.fqn, Date.now() - start, url, workerLogDir(worker)),
         );
-        return proxy.url;
+        return url;
       });
 
       // External source provider (`props.source`): the provider owns the

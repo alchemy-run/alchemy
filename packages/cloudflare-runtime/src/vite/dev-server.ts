@@ -196,7 +196,12 @@ const serve = Effect.fn(function* <B extends BindingHooks = BindingHooks>(
   return yield* runtime.start({
     name,
     proxySharedSecret,
-    publicUrl: options.worker?.publicUrl,
+    // The stable proxy in front relays TLS as-is, so a dev server on HTTPS
+    // is public on HTTPS.
+    publicUrl:
+      options.worker?.publicUrl && server.config.server.https
+        ? options.worker.publicUrl.replace(/^http:/, "https:")
+        : options.worker?.publicUrl,
     zone: options.worker?.zone,
     access: options.worker?.access,
     onRestart,
