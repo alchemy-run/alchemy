@@ -54,9 +54,20 @@ describe("vinext Cloudflare build", () => {
           const root = yield* fixture({ prerender: false });
           const output = yield* build(root, "worker/server.ts");
           const names = output.serverModules?.map((module) => module.name) ?? [];
-          // vinext's rsc environment emits `index.js` next to the Worker main.
-          expect(names).toContain("dist/server/index.js");
-          expect(names[0]).toBe("dist/server/server.js");
+          // The Worker main builds as `index`, the entry chunk name of
+          // `@cloudflare/vite-plugin`, in place of the `index` entry vinext's
+          // rsc environment declares: the one top-level entry uploaded first
+          // is the main (`worker/server.ts`, its default export a `fetch`
+          // wrapper), and vinext's app entry is bundled into its chunks.
+          const entries = names.filter(
+            (name) =>
+              /^dist\/server\/[^/]+\.js$/.test(name) && !/__|vinext-client-assets/.test(name),
+          );
+          expect(entries).toEqual(["dist/server/index.js"]);
+          expect(names[0]).toBe("dist/server/index.js");
+          expect(String(output.serverModules?.[0]?.content)).toMatch(
+            /\{fetch\(\w+,\w+,\w+\)\{return \w+\.fetch\(\w+,\w+,\w+\)\}\};export\{\w+ as default\};$/,
+          );
         }),
       ),
     300_000,
