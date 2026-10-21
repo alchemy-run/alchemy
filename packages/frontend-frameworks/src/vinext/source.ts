@@ -32,7 +32,7 @@ import * as Path from "effect/Path";
 import type { PlatformError } from "effect/PlatformError";
 import * as Redacted from "effect/Redacted";
 import type * as Scope from "effect/Scope";
-import { runBuildChild } from "../core/BuildChild.ts";
+import { resolveBuildEnv, runBuildChild } from "../core/BuildChild.ts";
 import { toOutputFile, type BuildOutput } from "../core/BuildOutput.ts";
 import { resolveViteDevPort } from "../core/DevPort.ts";
 import { ModuleLoadError } from "../core/Loader.ts";
@@ -142,6 +142,7 @@ export type SourceRequirements = FileSystem.FileSystem | Path.Path;
 
 export interface SourceProvider {
   readonly ownsAssets: boolean;
+  readonly devAssetsBinding?: boolean;
   readonly build: (
     ctx: SourceContext,
   ) => Effect.Effect<SourceBuildOutput, VinextSourceError, SourceRequirements>;
@@ -755,6 +756,8 @@ export const makeVinextSourceProvider = (options: VinextSourceOptions): SourcePr
 
   return {
     ownsAssets: true,
+    // Dev runs the Worker in workerd with the Vite plugin's assets service.
+    devAssetsBinding: true,
     build: Effect.fn(function* (ctx) {
       const path = yield* Path.Path;
       const rootDir = rootDirOf(path);
@@ -763,6 +766,7 @@ export const makeVinextSourceProvider = (options: VinextSourceOptions): SourcePr
         module: import.meta.url,
         rootDir,
         framework: "vinext",
+        env: resolveBuildEnv(ctx.env),
         config: {
           rootDir,
           main: options.main,

@@ -2,6 +2,8 @@ import { URL as NodeURL } from "node:url";
 import type * as Context from "effect/Context";
 import * as vite from "vite";
 import type { RuntimeServices } from "../core/index.ts";
+import { parseStaticRouting } from "../internal/workers-shared/shared/configuration/parseStaticRouting.ts";
+import type { StaticRouting } from "../internal/workers-shared/shared/types.ts";
 import type { ExportTypes } from "../rolldown/export-types.ts";
 import {
   haveExportTypesChanged,
@@ -12,6 +14,7 @@ import { parseViteEnvironments } from "../rolldown/options.ts";
 import type { OptionsApi } from "../rolldown/plugins/index.ts";
 import { workerEntryId } from "../rolldown/plugins/index.ts";
 import { resolvePluginApi } from "../rolldown/utils.ts";
+import { VITE_ASSET_REQUEST } from "./assets/ViteAssets.ts";
 import { DistilledDevEnvironment } from "./dev-environment.ts";
 import type { ServerHandle } from "./dev-server.ts";
 import { configuredExportTypes, mergeExportTypes } from "./export-types.ts";
@@ -252,13 +255,37 @@ export function dev(options: CloudflareVitePluginOptions): Array<vite.Plugin> {
         }
       }
 
-      if (!input) {
-        // If there is no input, we are in SPA mode, so we don't need to route requests to the server.
-        return;
+      // An assets-only site (no input) still routes through the runtime, whose
+      // router applies the asset rules; only a Worker takes WebSockets.
+      if (input) bindWebSocket();
+
+      // `runWorkerFirst` routes matching requests to the Worker ahead of Vite's
+      // own middleware (which would otherwise serve a file at that path), as
+      // `@cloudflare/vite-plugin`'s pre-middleware does. The Worker's router
+      // applies the same rules once the request arrives.
+      const staticRouting = input
+        ? resolveStaticRouting(options.worker?.assets?.runWorkerFirst)
+        : undefined;
+      if (staticRouting) {
+        server.middlewares.use(function distilledCloudflareRunWorkerFirst(req, res, next) {
+          if (VITE_ASSET_REQUEST in req) return next();
+          const { pathname } = new NodeURL(req.url ?? "/", "http://localhost");
+          if (
+            matchesStaticRoutingRule(staticRouting.asset_worker ?? [], pathname) ||
+            !matchesStaticRoutingRule(staticRouting.user_worker, pathname)
+          ) {
+            return next();
+          }
+          const url = new NodeURL(req.originalUrl ?? req.url ?? "/", address.toString());
+          forwardWorkerRequest(req, res, url, proxySharedSecret, server.config.logger);
+        });
       }
-      bindWebSocket();
+
       return () => {
-        server.middlewares.use(function distilledCloudflareProxyMiddleware(req, res) {
+        server.middlewares.use(function distilledCloudflareProxyMiddleware(req, res, next) {
+          // The Worker's own `ASSETS` calls run through Vite's middleware;
+          // one Vite didn't serve must not come back to the Worker.
+          if (VITE_ASSET_REQUEST in req) return next();
           const url = new NodeURL(req.originalUrl ?? req.url ?? "/", address.toString());
           forwardWorkerRequest(req, res, url, proxySharedSecret, server.config.logger);
         });
@@ -278,6 +305,23 @@ export function dev(options: CloudflareVitePluginOptions): Array<vite.Plugin> {
   plugins.push(plugin);
   return plugins;
 }
+
+const resolveStaticRouting = (
+  runWorkerFirst: boolean | ReadonlyArray<string> | undefined,
+): StaticRouting | undefined =>
+  runWorkerFirst === true
+    ? { user_worker: ["/*"] }
+    : Array.isArray(runWorkerFirst) && runWorkerFirst.length > 0
+      ? parseStaticRouting([...runWorkerFirst])
+      : undefined;
+
+/** The glob-only rule matching of the asset worker's static routing. */
+const matchesStaticRoutingRule = (rules: ReadonlyArray<string>, pathname: string) =>
+  rules.some((rule) =>
+    new RegExp(`^${rule.split("*").map(escapeRegex).join(".*")}$`).test(pathname),
+  );
+
+const escapeRegex = (value: string) => value.replace(/[-/\\^$*+?.()|[\]{}]/g, "\\$&");
 
 const hasConfigureServerHook = (plugin: vite.Plugin): boolean => {
   const hook = plugin.configureServer;

@@ -33,7 +33,7 @@ Worker consumer once Cloudflare supports one.
 
 ```typescript
 // src/Orders.ts
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 
 export const Orders = Cloudflare.K2.Stream("Orders", {
   retention: "7 days",
@@ -63,7 +63,7 @@ In the Worker's init phase, ask `Cloudflare.K2.WriteStream` for a client. Its
 
 ```typescript
 // src/Api.ts
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
@@ -101,7 +101,7 @@ that schema:
 
 ```diff lang="typescript"
 // src/Orders.ts
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 +import * as Schema from "effect/Schema";
 +
 +export const Order = Schema.Struct({
@@ -179,8 +179,8 @@ stream. The handler receives each batch as an Effect `Stream`:
 
 ```typescript
 // src/Fraud.ts
-import * as Cloudflare from "alchemy/Cloudflare";
-import * as Fly from "alchemy/Fly";
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as Fly from "@alchemy.run/fly";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";

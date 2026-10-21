@@ -63,7 +63,9 @@ export const startServer = async <B extends BindingHooks = BindingHooks>(
     // friends) from the runtime context, so the context must feed the layer,
     // not just sit beside it.
     Effect.provide(
-      ViteAssets.ViteAssetsLive(server).pipe(Layer.provideMerge(Layer.succeedContext(context))),
+      ViteAssets.ViteAssetsLive(server, {
+        hasUserWorker: entryEnvironment.entryName !== undefined,
+      }).pipe(Layer.provideMerge(Layer.succeedContext(context))),
     ),
     Scope.provide(scope),
     Effect.runPromise,

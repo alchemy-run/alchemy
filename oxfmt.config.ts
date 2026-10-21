@@ -17,7 +17,7 @@ export default defineConfig({
   },
   ignorePatterns: [
     "dist/**",
-    "./submodules/**",
+    "submodules/**",
     "*.min.js",
     "**/lib/**",
     "**/mdx/**",
