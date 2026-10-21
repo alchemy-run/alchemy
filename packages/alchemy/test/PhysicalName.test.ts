@@ -5,7 +5,7 @@ import { createPhysicalName } from "@/PhysicalName.ts";
 import { ResourceContext } from "@/ResourceContext.ts";
 import { Stack, type StackSpec } from "@/Stack.ts";
 import { Stage } from "@/Stage.ts";
-import { resourceContext } from "./Utils/ResourceContext.ts";
+import { resourceContext } from "./Util/ResourceContext.ts";
 
 type StackShape = Omit<StackSpec, "output">;
 
