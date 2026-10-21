@@ -1265,6 +1265,16 @@ export const LiveContainerProvider = () =>
             return { action: "replace" } as const;
           }
 
+          // Observed attached, desired detached, and no recorded attachment to
+          // replace on: reconcile detaches in place under a new applicationId.
+          if (
+            application?.durableObjects?.namespaceId &&
+            !hasDurableObjects &&
+            !hasUnresolvedAttachment
+          ) {
+            return { action: "update", stables: ["accountId"] } as const;
+          }
+
           const { imageHash, dev } = yield* computeImage(
             id,
             news,

@@ -682,6 +682,8 @@ describe.sequential(
     test(
       "detaches in place an attached application whose bindings were never recorded",
       Effect.gen(function* () {
+        // The previous case destroys the stack but restores its state rows.
+        yield* destroyStack({ stack: AttachmentStack, stage, dev: false });
         const first = yield* deploy(AttachmentStack);
         assert(first.app.durableObjects?.namespaceId);
         const state = yield* yield* State;

@@ -23,7 +23,7 @@ export const attachmentStack = (attached = true) =>
         maxInstances: 2,
       });
       const worker = yield* Cloudflare.Worker("AttachmentWorker", {
-        main: path.join(import.meta.dirname, "worker.ts"),
+        main: path.join(import.meta.dirname, attached ? "worker.ts" : "detached-worker.ts"),
         env: attached ? { ECHO: container } : {},
       });
       const otherWorker = yield* Cloudflare.Worker("OtherAttachmentWorker", {
