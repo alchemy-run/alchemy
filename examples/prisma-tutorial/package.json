@@ -11,6 +11,8 @@
   },
   "dependencies": {
     "@alchemy.run/frontend-frameworks": "workspace:*",
+    "@alchemy.run/prisma": "workspace:*",
+    "@alchemy.run/sql": "workspace:*",
     "@effect/platform-node": "catalog:",
     "@effect/sql-pg": "catalog:",
     "alchemy": "workspace:*",

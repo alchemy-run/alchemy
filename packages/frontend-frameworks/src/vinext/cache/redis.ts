@@ -2,7 +2,7 @@
  * vinext data-cache adapter builder for Redis.
  *
  * Node Website.Vinext resources inject this adapter automatically.
- * The runtime factory uses {@link connect} from `alchemy/Redis` (the same
+ * The runtime factory uses {@link connect} from `@alchemy.run/redis` (the same
  * client Fly/Railway `*RedisHttp` layers use) and reads `REDIS_URL`
  * (or `urlEnv`) from the process environment.
  *

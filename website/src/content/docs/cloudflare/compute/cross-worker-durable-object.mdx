@@ -24,7 +24,7 @@ implementation.
 ```typescript
 // src/object.ts
 import type { RuntimeContext } from "alchemy";
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Effect from "effect/Effect";
 
 export class Counter extends Cloudflare.DurableObject<
@@ -97,7 +97,7 @@ The key move is the **third type argument** on `Cloudflare.Worker`:
 
 ```typescript
 // src/workerA.ts
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import { Counter } from "./object.ts";
 
 export class WorkerA extends Cloudflare.Worker<WorkerA, {}, Counter>()(
@@ -125,7 +125,7 @@ WorkerA's bundle actually contains the DO class:
 
 ```diff lang="typescript"
 // src/workerA.ts
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Effect from "effect/Effect";
 +import { HttpServerRequest } from "effect/http/HttpServerRequest";
 +import * as HttpServerResponse from "effect/http/HttpServerResponse";
@@ -164,7 +164,7 @@ to the existing namespace running under WorkerA's script:
 
 ```typescript
 // src/workerB.ts
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
@@ -210,7 +210,7 @@ binding only:
 ```typescript
 // alchemy.run.ts
 import * as Alchemy from "alchemy";
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Effect from "effect/Effect";
 import WorkerALive, { WorkerA } from "./src/workerA.ts";
 import WorkerB from "./src/workerB.ts";
@@ -240,7 +240,7 @@ Workers route to the same DO instance by name:
 
 ```typescript
 // test/integ.test.ts
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Test from "alchemy/Test/Vitest";
 import { expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
@@ -368,7 +368,7 @@ order correct (the new host uploads first).
 
 ```typescript
 // src/workerB.ts
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";

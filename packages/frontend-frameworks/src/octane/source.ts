@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
  * OctaneJS projects.
  *
  * The default export satisfies alchemy's `WorkerSourceModule` contract
- * (`packages/alchemy/src/Cloudflare/Workers/Source.ts`) **structurally**:
+ * (`packages/cloudflare/src/Workers/Source.ts`) **structurally**:
  * the `Source*` shapes below mirror alchemy's `SourceProvider` /
  * `SourceContext` / `SourceBuildOutput` interfaces rather than importing
  * them, so this package carries no dependency on alchemy. Version skew
@@ -40,7 +40,7 @@ import type * as Path from "effect/Path";
 import type { PlatformError } from "effect/PlatformError";
 import type * as Scope from "effect/Scope";
 import { glob } from "tinyglobby";
-import { runBuildChild } from "../core/BuildChild.ts";
+import { resolveBuildEnv, runBuildChild } from "../core/BuildChild.ts";
 import { makeCloudflareTarget } from "./cloudflare.ts";
 import { make as makeOctane, type OctaneOptions } from "./Octane.ts";
 
@@ -48,7 +48,7 @@ const PROVIDER = "@alchemy.run/frontend-frameworks/octane/source";
 
 // ─────────────────────────────────────────────────────────────────────
 // Structural mirror of alchemy's Worker source contract
-// (packages/alchemy/src/Cloudflare/Workers/Source.ts). Do not import
+// (packages/cloudflare/src/Workers/Source.ts). Do not import
 // alchemy here — the contract is structural by design.
 // ─────────────────────────────────────────────────────────────────────
 
@@ -525,6 +525,7 @@ export const makeOctaneSource = (options: OctaneSourceOptions): SourceProvider =
         module: import.meta.url,
         rootDir,
         framework: "octane",
+        env: resolveBuildEnv(ctx.env),
         config: {
           rootDir,
           compatibilityDate: ctx.compatibility.date,

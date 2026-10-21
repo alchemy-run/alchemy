@@ -1,5 +1,5 @@
+import * as AWS from "@alchemy.run/aws";
 import type * as microvms from "@distilled.cloud/aws/lambda-microvms";
-import * as AWS from "alchemy/AWS";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";

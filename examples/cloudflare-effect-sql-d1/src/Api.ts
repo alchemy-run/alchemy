@@ -1,5 +1,5 @@
-import * as Cloudflare from "alchemy/Cloudflare";
-import * as SQL from "alchemy/SQL/D1";
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as SQL from "@alchemy.run/cloudflare/D1/SQL";
 import * as Effect from "effect/Effect";
 import * as HttpServerRequest from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
