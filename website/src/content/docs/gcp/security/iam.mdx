@@ -1,6 +1,6 @@
 ---
-title: How bindings grant IAM
-description: What a yield* of a GCP binding actually does — the per-host service account, the role it grants, and how removing a binding revokes it.
+title: IAM & bindings
+description: What a GCP binding does — the per-runtime service account, the role it grants, where the grant lands, and how removing a binding revokes it.
 ---
 
 On GCP, giving a container permission to call an API normally means
@@ -21,7 +21,7 @@ That expression:
    request handler.
 
 It is the GCP counterpart of AWS `policyStatements` on a Lambda and of
-the scoped `AccountApiToken` a Cloudflare binding mints.
+the scoped `AccountApiToken` a Cloudflare binding creates.
 
 ## The per-host service account
 
@@ -36,7 +36,7 @@ generation of a replacement:
 alch-api-3f9c0a1b2d@my-project.iam.gserviceaccount.com
 ```
 
-Accounts Alchemy mints carry the display name `alchemy-host`, which is
+Accounts Alchemy creates carry the display name `alchemy-host`, which is
 how `pnpm nuke:gcp` finds them. Alchemy also grants
 `roles/iam.serviceAccountUser` to the Cloud Run and Cloud Functions
 service agents so they can `actAs` the account, and retries the deploy
@@ -141,7 +141,7 @@ from Firestore for a few minutes.
 The set of bindings you yield *is* the desired IAM state. The host
 records every grant it made; on the next deploy, a grant no binding
 asks for any more is revoked from that resource — delete a `yield*` and
-the permission goes away. For an Alchemy-minted account, the project
+the permission goes away. For an account Alchemy created, the project
 policy is also synced against what GCP reports, so project roles added
 out of band are removed too. Accounts you supply yourself only ever
 lose grants Alchemy recorded, because Alchemy cannot tell which of the
@@ -154,7 +154,7 @@ condition: Alchemy only ever edits the conditional bindings it wrote,
 and never one someone else added.
 
 Destroying the host revokes every role Alchemy granted and deletes the
-minted account.
+account it created.
 
 ## Provide the implementation
 
@@ -198,24 +198,6 @@ you will handle most; per-operation bindings also surface `NotFound`
 and `Conflict`. Anything you do not catch stays in the channel until
 you `Effect.orDie` it.
 
-## Which host to use
-
-- **`GCP.Function`** — alias of `GCP.Run.Service`. An HTTP server with
-  a `fetch` entry. Scales to zero. Public only when you pass
-  `invokerIamDisabled: true`.
-- **`GCP.Run.Job`** — a `run` entry that executes and exits. Nothing is
-  billed between executions. Start it with a `GCP.Run.RunJob` binding
-  or Cloud Scheduler.
-- **`GCP.Run.WorkerPool`** — a long-running pool with no request path,
-  for pulling from a queue continuously.
-- **`GCP.CloudFunctions.Function`** — a gen2 function. With `main`,
-  Alchemy bundles the program for Node.js, uploads the archive, and
-  serves `fetch` through the Functions Framework, so the Effect runs
-  exactly as on a Service. Without `main` it deploys your own archive.
-
-The Run hosts build a container image locally, which means Docker has
-to be running to deploy them. Cloud Functions build in the cloud.
-
 ## Event sources
 
 Bindings are calls your code makes. Event sources are the reverse:
@@ -254,9 +236,10 @@ IAM grants are read back, the subscription and scheduler job exist and
 are enabled, and an Eventarc trigger reports healthy. A pull source creates a subscription the host owns and runs
 a pull loop that acks each batch after the handler succeeds.
 
-## Next
+## Where next
 
-- [Serve an API on Cloud Run](/gcp/guides/cloud-run-api) — bindings in
-  a request path.
-- [Ingest events into BigQuery](/gcp/guides/event-pipeline) — a Service
-  triggering a Job.
+- [Cloud Run](/gcp/compute/cloud-run) — bindings in a request path.
+- [Secret Manager & KMS](/gcp/security/secrets-kms) — credentials and
+  encryption without keys in your code.
+- [Choosing a runtime](/gcp/compute/choosing-a-runtime) — every host
+  that takes bindings.
