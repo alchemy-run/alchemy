@@ -321,7 +321,7 @@ describe.concurrent(
 
             const rootDir = yield* foldkitFixture(mode);
             const site = yield* stack.deploy(
-              Cloudflare.Website.Foldkit("FixFoldkitMode", {
+              Cloudflare.Website.Foldkit(`FixFoldkit${mode}`, {
                 ...foldkitProps(rootDir),
                 memo: foldkitMemo,
               }),
@@ -329,7 +329,8 @@ describe.concurrent(
 
             expect(site.url).toBeDefined();
             yield* expectWorkerExists(site.workerName, accountId);
-            yield* verifyFoldkitRendering(site.url!, mode);
+            // The asset layer answers a POST to a prerendered page itself.
+            yield* verifyFoldkitRendering(site.url!, mode, { prerenderedPost: 405 });
             yield* verifyFoldkitBrowser(site.url!, mode);
 
             yield* stack.destroy();

@@ -1,4 +1,5 @@
 import { expect } from "alchemy-test";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import type { PlatformError } from "effect/PlatformError";
@@ -70,7 +71,7 @@ export const foldkitFixture = (mode: FoldkitMode) =>
     return root;
   });
 
-const request = (url: string, init?: RequestInit) =>
+const requestOnce = (url: string, init?: RequestInit) =>
   Effect.tryPromise({
     try: async () => {
       const response = await fetch(url, {
@@ -85,6 +86,31 @@ const request = (url: string, init?: RequestInit) =>
     },
     catch: (cause) => new Error(`Foldkit request failed: ${url}`, { cause }),
   });
+class EdgePlaceholder extends Data.TaggedError("EdgePlaceholder")<{ url: string }> {}
+
+/**
+ * A fresh deployment can briefly answer from an edge node that has not
+ * picked it up yet, with the CDN's own HTML error page (Cloudflare's
+ * workers.dev placeholder). The app's own 404s are plain text, so retry only
+ * the CDN's page (for bodiless HEAD responses: an HTML error).
+ */
+const request = (url: string, init?: RequestInit) =>
+  requestOnce(url, init).pipe(
+    Effect.flatMap((result) =>
+      result.status >= 400 &&
+      (init?.method === "HEAD"
+        ? (result.type ?? "").includes("text/html")
+        : result.body.includes("<!--[if lt IE 7]>"))
+        ? Effect.fail(new EdgePlaceholder({ url }))
+        : Effect.succeed(result),
+    ),
+    Effect.retry({
+      while: (error) => error._tag === "EdgePlaceholder",
+      schedule: Schedule.spaced("1 second"),
+      times: 15,
+    }),
+  );
+
 const routes = (mode: FoldkitMode) => [
   { path: "/?count=7", count: mode === "ssr" ? 7 : 0 },
   { path: "/about/?count=9", count: mode === "ssr" ? 9 : 0 },
@@ -94,18 +120,34 @@ const routes = (mode: FoldkitMode) => [
 ];
 
 /** Exercise the public origin, including asset routing and the actual deployed SSR handler. */
-export const verifyFoldkitRendering = (origin: string, mode: FoldkitMode) =>
+export const verifyFoldkitRendering = (
+  origin: string,
+  mode: FoldkitMode,
+  options: {
+    /**
+     * Where a POST to a prerendered page goes. Cloudflare's asset layer
+     * answers non-GET/HEAD requests for a matching asset with 405 before
+     * the Worker runs; other platforms forward them to the server.
+     * @default "server"
+     */
+    prerenderedPost?: "server" | 405;
+  } = {},
+) =>
   Effect.gen(function* () {
     const base = origin.replace(/\/+$/, "");
-    yield* request(`${base}/foldkit-probe.txt`).pipe(
-      Effect.flatMap((result) =>
-        result.status === 200 && result.body === "FOLDKIT_STATIC_ASSET"
-          ? Effect.void
-          : Effect.fail(new Error("Foldkit deployment is not serving its asset yet")),
-      ),
-      Effect.retry({ schedule: Schedule.spaced("1 second"), times: 8 }),
-      Effect.timeout("60 seconds"),
-    );
+    // Readiness: the asset layer and the server can go live at different
+    // moments, so wait for both an asset and the first page.
+    const ready = (path: string, check: (body: string) => boolean) =>
+      request(base + path).pipe(
+        Effect.flatMap((result) =>
+          result.status === 200 && check(result.body)
+            ? Effect.void
+            : Effect.fail(new Error(`Foldkit deployment is not serving ${path} yet`)),
+        ),
+        Effect.retry({ schedule: Schedule.spaced("1 second"), times: 15 }),
+      );
+    yield* ready("/foldkit-probe.txt", (body) => body === "FOLDKIT_STATIC_ASSET");
+    yield* ready(routes(mode)[0]!.path, () => true);
     const assetHead = yield* request(`${base}/foldkit-probe.txt`, {
       method: "HEAD",
     });
@@ -113,7 +155,10 @@ export const verifyFoldkitRendering = (origin: string, mode: FoldkitMode) =>
     expect(assetHead.body).toBe("");
     for (const route of routes(mode)) {
       const response = yield* request(base + route.path);
-      expect(response.status).toBe(200);
+      expect({ path: route.path, status: response.status }).toEqual({
+        path: route.path,
+        status: 200,
+      });
       if (mode === "spa") {
         expect(response.body).toContain("Foldkit Fixture");
         expect(response.body).not.toMatch(/id="count"/);
@@ -133,7 +178,10 @@ export const verifyFoldkitRendering = (origin: string, mode: FoldkitMode) =>
         expect(css.type).toMatch(/text\/css/);
       }
       const head = yield* request(base + route.path, { method: "HEAD" });
-      expect(head.status).toBe(200);
+      expect({ head: route.path, status: head.status }).toEqual({
+        head: route.path,
+        status: 200,
+      });
       expect(head.body).toBe("");
     }
     if (mode === "ssr" || mode === "hybrid") {
@@ -141,8 +189,12 @@ export const verifyFoldkitRendering = (origin: string, mode: FoldkitMode) =>
         method: "POST",
         body: "request body",
       });
-      expect(posted.status).toBe(200);
-      expect(posted.body).toMatch(/id="count"[^>]*>11</);
+      if (mode === "hybrid" && options.prerenderedPost === 405) {
+        expect(posted.status).toBe(405);
+      } else {
+        expect(posted.status).toBe(200);
+        expect(posted.body).toMatch(/id="count"[^>]*>11</);
+      }
       expect((yield* request(`${base}/assets/missing.js`)).status).toBe(404);
     }
     if (mode === "ssg") {
