@@ -17,6 +17,15 @@ export const MESSAGE_OVERHEAD_BYTES = 100;
 
 const encoder = new TextEncoder();
 
+const utf8ByteLength = (value: string): number => {
+  // Node-compatible Workers expose Buffer globally. Do not import node:buffer:
+  // older Workers and no_nodejs_compat deployments still need the web fallback.
+  const buffer = globalThis.Buffer;
+  return typeof buffer?.byteLength === "function"
+    ? buffer.byteLength(value, "utf8")
+    : encoder.encode(value).length;
+};
+
 /**
  * Approximate wire size of one message: its UTF-8 JSON encoding plus the
  * per-message metadata overhead. Values JSON cannot encode count as the
@@ -30,7 +39,7 @@ export const messageSize = (body: unknown): number => {
   } catch {
     json = undefined;
   }
-  return (json === undefined ? 0 : encoder.encode(json).length) + MESSAGE_OVERHEAD_BYTES;
+  return (json === undefined ? 0 : utf8ByteLength(json)) + MESSAGE_OVERHEAD_BYTES;
 };
 
 /**
