@@ -32,6 +32,21 @@ export default class LambdaWorkspaceWorker extends Cloudflare.Worker<LambdaWorks
                   return yield* box.exec("cat a.txt b.txt motd");
                 }),
               );
+            // One command in an open: on the session's own machine.
+            case "open":
+              return workspace.open(
+                session,
+                {},
+                Effect.flatMap(LambdaWorkspace.Session, (box) => box.exec(body.command!)),
+              );
+            // Commands at once, each on a fork.
+            case "fanout":
+              return Effect.all(
+                (JSON.parse(body.commands!) as ReadonlyArray<string>).map((command) =>
+                  workspace.exec(session, command),
+                ),
+                { concurrency: "unbounded" },
+              );
             case "history":
               return workspace.history(session, { limit: 50 });
             case "delete":

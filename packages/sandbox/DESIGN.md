@@ -151,26 +151,30 @@ returns are stopped, and the output says so:
 ### Automatic
 
 Serverless, except a call that leaves processes running isn't stopped. Its
-machine becomes a **process host** for those processes, and only for them: the
-session's later calls still fork onto other machines.
+machine becomes a **process host**: the fork stays mounted, its processes
+keep running, and the machine stays out of the pool until they exit.
 
-- **Its writes merge periodically**, every few seconds, and once more when the
-  last process exits. Then the machine goes back to the pool.
-- **Files it's writing are shared live.** These are mostly test output, logs
-  and caches, and mostly appended to. Appends stream through the Session
-  Durable Object, and other machines read those paths through a small FUSE
-  layer over their snapshot, so `tail -f` and a harness's monitor see new
-  lines within about a second. All other paths stay plain snapshot files at
-  kernel speed.
-- **Its ports are reachable.** `localhost:3000` in any later call is forwarded
-  to the process host, for the ports its processes listen on.
-- **It's billed for its processes,** which for tests is compute either way.
+- **The session's next calls run on the host**, in the same mount, so they
+  see exactly what its processes see: files as they're written (`tail -f`,
+  a harness's monitor), ports on `localhost`, `kill`. The machine is running
+  for those processes anyway, so this costs nothing extra; what it gives up
+  is fanning that session out while the host lives.
+- **What changes there merges every few seconds** and after each call,
+  with the same conflict check as any call. A host never conflicts with its
+  own earlier commits.
+- **When its last process exits**, the host makes a last commit and goes
+  back to the pool.
+- **A host whose changes conflict stops merging.** When it ends, everything
+  it changed since its fork is kept as a session of its own, and every call
+  that ran there in between said so.
 
-A file a process rewrites in place, like SQLite, needs real read-through, a
-round trip per read. That's the point where this becomes a distributed
-filesystem, so it stays limited to the few files live processes write. If
-agents turn out to need it often, the process host can export those paths over
-NFS instead of us writing read-through.
+Streaming its files to calls on other machines and forwarding its ports
+(so the session could fan out while a host lives) are possible later; nothing
+here depends on them.
+
+A file a process rewrites in place, like SQLite, merges whole. If agents turn
+out to need live sharing across machines, the process host can export the
+paths its processes write over NFS.
 
 ## Merge
 
@@ -193,7 +197,7 @@ could ever produce. The call's output says what happened:
 ```text
 Not applied: another agent changed these files since this command started:
   src/world.ts  (yours: +40 -3, theirs: +12 -1)
-Your version is kept as fork issue-42~7f3a. Inspect it, rerun, or apply it.
+Its version is kept as session issue-42.conflict-7f3a: inspect it, rerun the command, or apply it.
 ```
 
 The refused fork is kept, so nothing is lost: the model can read it, rerun the
@@ -252,32 +256,39 @@ Cloudflare.Containers.Workspace(Workspace, {
 });
 ```
 
-## Build order
+## Status
 
-Each step is useful alone.
+Built and tested live (21 October 2026):
 
-1. **Warm pool.** Pinned sessions start fast. Measure claim plus attach on
-   both machine types first.
-2. **btrfs.** Format and mount it in `blockd`, behind `filesystem`.
-3. **Patches.** `btrfs send` parsing, the overlay's upper layer, and fanotify
-   for head paths. Probe fanotify first.
-4. **Merge.** The commit log in the Session Durable Object, the conflict check,
-   applying patches with group commit, `lww`, kept forks, and `merge`.
-5. **Serverless `exec`.** Fork, run in a cgroup, stop what's left, merge.
-6. **Automatic.** Process hosts, live files by append streaming, ports.
-7. **Only if measured to matter:** the file tree in the store, NFS for files
-   rewritten in place, and `kill` across machines.
+- **Warm pool**, sessions on pooled machines (`Workspace.test.ts`, 8/8).
+- **btrfs** volumes: data as the default subvolume, snapshots and `send`
+  through ioctls, so images need no btrfs-progs.
+- **Patches** from overlays and `btrfs send`, byte ranges for in-place
+  writes; head checkpoints by fanotify (ext4) and snapshots (btrfs).
+- **Merge**: the commit log, conflict check, `lww`, kept forks, group
+  commit, `merge(from, into)` with recorded merge bases.
+- **Serverless and automatic placement**, process hosts
+  (`WorkspaceMerge.test.ts` on Cloudflare with btrfs, 6/6;
+  `WorkspaceLambda.test.ts` on MicroVMs with ext4).
+- Local end-to-end tests: `crates/blockd/tests/merge/run.sh` (ext4 and
+  btrfs).
 
-## What we measure
+First numbers, Cloudflare containers, btrfs: four 3-second commands of one
+session at once took 8.7 s with warm machines and 18.7 s cold. A 4 KiB write
+to an 8 MiB file merges as a 4,115-byte patch on btrfs (the whole file on
+ext4).
+
+Not built: streaming live files and forwarding ports across machines, the
+file tree in the store, `kill` across machines.
+
+## What we measure next
 
 | Question | Decides |
 |---|---|
-| Claim plus attach from a warm pool | Whether serverless calls are cheap enough |
+| Where the ~4–5 s per forked call goes (claim, attach, patch, commit) | What to cut first |
 | btrfs `fsync` through `blockd`, against ext4's 113–136 ms | Whether btrfs costs anything that matters |
-| How often calls conflict, with and without `lww` | Whether file-level conflicts are fine, or hot files need narrow format-aware merges |
-| Patches per second one machine can apply | When the file tree in the store is needed |
-| Whether fanotify reports every head write on both kernels | ext4 head paths, or the metadata diff |
-| Live-file lag for `tail -f` through the FUSE layer | Whether monitors feel live |
+| How often calls conflict, with and without `lww` | Whether file-level conflicts are fine |
+| Patches per second one machine applies | When the file tree in the store is needed |
 
 ## Prior work
 

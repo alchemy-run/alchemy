@@ -53,7 +53,7 @@ describe.skipIf(skip).sequential("Sandbox.Workspace with Lambda MicroVM machines
       const both = yield* call<Exec>("parallel", { session: "m1" });
       expect(both.exitCode, both.stderr).toBe(0);
       expect(both.stdout.split("\n").slice(0, 3)).toEqual(["a", "b", "base"]);
-      const again = yield* call<Exec>("exec", {
+      const again = yield* call<Exec>("open", {
         session: "m1",
         command: "cat a.txt && df -T . | tail -1",
       });
@@ -79,12 +79,71 @@ describe.skipIf(skip).sequential("Sandbox.Workspace with Lambda MicroVM machines
         "times.sort((a, b) => a - b);",
         "console.log(JSON.stringify({ p50: times[5], p90: times[9] }));",
       ].join(" ");
-      const run = yield* call<Exec>("exec", {
+      // In an open: a command on a fork has nothing to make durable.
+      const run = yield* call<Exec>("open", {
         session: "m1",
         command: `node -e ${JSON.stringify(script)}`,
       });
       expect(run.exitCode, run.stderr).toBe(0);
       console.log(`fsync on a Lambda MicroVM (ms): ${run.stdout.trim()}`);
+    }),
+    options,
+  );
+
+  interface Forked extends Exec {
+    readonly changes: {
+      readonly status: string;
+      readonly paths: ReadonlyArray<string>;
+      readonly fork?: string;
+    };
+    readonly stopped?: ReadonlyArray<{ readonly command: string }>;
+  }
+
+  test(
+    "commands on forks of one session run at once on ext4, and the ones that collide are refused",
+    Effect.gen(function* () {
+      const started = Date.now();
+      const results = yield* call<ReadonlyArray<Forked>>("fanout", {
+        session: "m1",
+        commands: JSON.stringify([
+          "echo 1 > x-1.txt && sleep 2",
+          "echo 2 > x-2.txt && sleep 2",
+          "sleep 2 && echo left > same.txt",
+          "sleep 2 && echo right > same.txt",
+        ]),
+      });
+      console.log(`4 commands on forks of one session on MicroVMs: ${Date.now() - started} ms`);
+      expect(results.slice(0, 2).map((r) => r.changes.status)).toEqual(["applied", "applied"]);
+      const same = results
+        .slice(2)
+        .map((r) => r.changes.status)
+        .sort();
+      expect(same).toEqual(["applied", "conflict"]);
+      const read = yield* call<Exec>("exec", {
+        session: "m1",
+        command: "cat x-1.txt x-2.txt same.txt",
+      });
+      expect(read.stdout.trim().split("\n").slice(0, 2)).toEqual(["1", "2"]);
+    }),
+    options,
+  );
+
+  test(
+    "a command that leaves a process running keeps its MicroVM for the session's next commands",
+    Effect.gen(function* () {
+      yield* call("delete", { session: "m2" }).pipe(Effect.ignore);
+      const started = yield* call<Forked>("exec", {
+        session: "m2",
+        command:
+          "(setsid sh -c 'for i in 1 2 3 4 5 6; do echo $i >> bg.log; sleep 1; done' < /dev/null > /dev/null 2>&1 &); echo ok",
+      });
+      expect(started.stopped).toBeUndefined();
+      yield* Effect.sleep("2 seconds");
+      const midway = yield* call<Exec>("exec", { session: "m2", command: "wc -l < bg.log" });
+      expect(Number(midway.stdout.trim())).toBeGreaterThan(0);
+      yield* Effect.sleep("15 seconds");
+      const after = yield* call<Exec>("exec", { session: "m2", command: "wc -l < bg.log" });
+      expect(after.stdout.trim()).toBe("6");
     }),
     options,
   );

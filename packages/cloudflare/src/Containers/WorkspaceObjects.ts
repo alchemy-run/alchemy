@@ -1876,7 +1876,9 @@ const machineImpl = (config: HostConfig, dockerfile?: string) =>
           "-c",
           [
             'for f in /run/workspace/*/pid; do [ -f "$f" ] && kill -9 -- "-$(cat "$f")" 2>/dev/null; done',
-            "rm -rf /run/workspace /tmp/* /tmp/.[!.]* /var/tmp/* 2>/dev/null",
+            // The machine's own files stay (a MicroVM's egress proxy keeps its CA in /tmp).
+            "rm -rf /run/workspace 2>/dev/null",
+            "find /tmp /var/tmp -mindepth 1 -maxdepth 1 ! -name 'alchemy-*' -exec rm -rf {} + 2>/dev/null",
             "true",
           ].join("; "),
         ],
