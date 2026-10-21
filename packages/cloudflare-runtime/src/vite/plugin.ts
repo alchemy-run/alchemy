@@ -110,6 +110,9 @@ export const disableOfficialCloudflareVitePlugins = (
 
 const disableOfficialCloudflareVitePlugin = (plugin: vite.Plugin): void => {
   const record = plugin as unknown as Record<string, unknown>;
+  // Its own `applyToEnvironment` reads the config its no-op `config` hook
+  // never resolved (`Expected resolvedPluginConfig to be defined`).
+  if ("applyToEnvironment" in record) record.applyToEnvironment = () => false;
   for (const key of Object.keys(record)) {
     if (key === "name" || key === "enforce" || key === "apply" || key === "applyToEnvironment") {
       continue;
