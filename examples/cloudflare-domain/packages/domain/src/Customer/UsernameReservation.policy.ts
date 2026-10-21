@@ -1,4 +1,4 @@
-import * as Domain from "alchemy/Domain";
+import * as Domain from "@alchemy.run/domain";
 import * as Effect from "effect/Effect";
 import { ClaimUsername } from "./ClaimUsername.command.ts";
 import { ConfirmRegistration } from "./ConfirmRegistration.command.ts";

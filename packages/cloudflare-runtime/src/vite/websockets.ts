@@ -3,6 +3,7 @@ import type { IncomingMessage } from "node:http";
 import type { Duplex } from "node:stream";
 import type * as vite from "vite";
 import { proxyRequestHeaders, resolveForwardedHost } from "./forwarded-host.ts";
+import { workerRequestUrl } from "./worker-request.ts";
 
 /**
  * Handles 'upgrade' requests on the Vite HTTP server and forwards the
@@ -38,7 +39,7 @@ export function handleWebSocket(
     // `X-Forwarded-Host`, so they fall back to `Host` and behave identically.
     const rawHost = resolveForwardedHost(request.headers, "localhost");
     const base = /^https?:\/\//i.test(rawHost) ? rawHost : `http://${rawHost}`;
-    const url = new URL(request.url ?? "/", base);
+    const url = workerRequestUrl(request.url, base);
 
     const isViteRequest = request.headers["sec-websocket-protocol"]?.startsWith("vite") ?? false;
     const isSandboxRequest = hasSandboxOrigin(url.origin);

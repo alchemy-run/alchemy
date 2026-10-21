@@ -10,7 +10,7 @@
  *
  * ```ts
  * import * as Alchemy from "alchemy";
- * import * as Axiom from "alchemy/Axiom";
+ * import * as Axiom from "@alchemy.run/axiom";
  *
  * Effect.gen(function* () {
  *   // ...

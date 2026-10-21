@@ -40,7 +40,7 @@ A branded id keeps an account id from being mixed up with any other string. The 
 
 ```typescript
 // src/OpenAccount.command.ts
-import * as Domain from "alchemy/Domain";
+import * as Domain from "@alchemy.run/domain";
 import * as Schema from "effect/Schema";
 
 export class AccountOpened extends Domain.Event("AccountOpened", { owner: Schema.String }) {}
@@ -66,7 +66,7 @@ A rejection is a typed reason to say no. Callers receive it exactly as declared.
 
 ```diff lang="typescript"
 // src/OpenAccount.command.ts
-import * as Domain from "alchemy/Domain";
+import * as Domain from "@alchemy.run/domain";
 import * as Schema from "effect/Schema";
 +import { AccountId } from "./Account.id.ts";
 
@@ -88,7 +88,7 @@ A command asks one account for a change. It lists every event it may record and 
 
 ```typescript
 // src/Account.aggregate.ts
-import * as Domain from "alchemy/Domain";
+import * as Domain from "@alchemy.run/domain";
 import * as Schema from "effect/Schema";
 import { AccountId } from "./Account.id.ts";
 import { AccountOpened, AlreadyOpen, OpenAccount } from "./OpenAccount.command.ts";
@@ -120,7 +120,7 @@ The account is an aggregate. `decide` takes a command and the current state, and
 
 ```typescript
 // src/Bank.model.ts
-import * as Domain from "alchemy/Domain";
+import * as Domain from "@alchemy.run/domain";
 import { Account } from "./Account.aggregate.ts";
 
 export class Bank extends Domain.Model("Bank", {
@@ -135,7 +135,7 @@ A model is everything you host together. You'll add views and policies to it in 
 ```typescript
 // test/Account.test.ts
 import { it } from "@effect/vitest";
-import { Story } from "alchemy/Domain/Story";
+import { Story } from "@alchemy.run/domain/Story";
 import { Account } from "../src/Account.aggregate.ts";
 import { Bank } from "../src/Bank.model.ts";
 import { AccountOpened, AlreadyOpen, OpenAccount } from "../src/OpenAccount.command.ts";
@@ -171,7 +171,7 @@ Both stories pass.
 
 ```typescript
 // src/DepositMoney.command.ts
-import * as Domain from "alchemy/Domain";
+import * as Domain from "@alchemy.run/domain";
 import * as Schema from "effect/Schema";
 
 export class MoneyDeposited extends Domain.Event("MoneyDeposited", {
@@ -186,7 +186,7 @@ The event carries the balance after the deposit, so anyone reading it knows the 
 
 ```typescript
 // src/NotOpen.rejection.ts
-import * as Domain from "alchemy/Domain";
+import * as Domain from "@alchemy.run/domain";
 
 export class NotOpen extends Domain.Rejection("NotOpen") {}
 ```
@@ -197,7 +197,7 @@ Deposits need an open account, and so will withdrawals. A rejection two commands
 
 ```diff lang="typescript"
 // src/DepositMoney.command.ts
-import * as Domain from "alchemy/Domain";
+import * as Domain from "@alchemy.run/domain";
 import * as Schema from "effect/Schema";
 +import { AccountId } from "./Account.id.ts";
 +import { NotOpen } from "./NotOpen.rejection.ts";
@@ -307,7 +307,7 @@ import { AccountOpened, AlreadyOpen, OpenAccount } from "../src/OpenAccount.comm
 
 ```typescript
 // src/WithdrawMoney.command.ts
-import * as Domain from "alchemy/Domain";
+import * as Domain from "@alchemy.run/domain";
 import * as Schema from "effect/Schema";
 import { AccountId } from "./Account.id.ts";
 import { NotOpen } from "./NotOpen.rejection.ts";

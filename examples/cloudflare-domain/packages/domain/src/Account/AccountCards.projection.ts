@@ -1,4 +1,4 @@
-import * as Domain from "alchemy/Domain";
+import * as Domain from "@alchemy.run/domain";
 import * as Effect from "effect/Effect";
 import { Account } from "./Account.aggregate.ts";
 import { AccountCard, CardChanged } from "./AccountCard.stream.ts";
