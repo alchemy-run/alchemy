@@ -1,5 +1,5 @@
 ---
-title: Local Providers
+title: Local Provider
 description: Build the local implementation of a resource — dual registration with ProviderLayer.dual and the LocalProvider runner for long-running processes.
 ---
 
@@ -40,6 +40,27 @@ export const WorkerProvider = () =>
 `dual` registers the run's default mode eagerly and builds the other
 **lazily** — e.g. the local provider is only constructed during a deploy
 if it has an instance to tear down.
+
+### Route deploy-time data-plane calls: `dataPlane`
+
+Binding clients can be invoked at deploy time — inside an `Action` body or
+a plan-time `execute` — and their API calls must target whatever data
+plane the bound resource actually lives on. Pass the local mode's
+environment override (endpoint, credentials, region — the same layer the
+local lifecycle runs under) as `dataPlane`:
+
+```typescript
+ProviderLayer.dual(Bucket, {
+  live: () => BucketProvider(),
+  local: () => provideProviderContext(BucketProvider(), flociServices()),
+  dataPlane: flociServices,
+});
+```
+
+With it registered, a client bound to a local-mode resource is routed to
+the emulator even when the ambient profile carries live credentials, while
+a client bound to an `Alchemy.remote()` resource keeps hitting the real
+cloud — per bound resource, within the same Action.
 
 ### Compose local deps inside the thunk
 
@@ -201,10 +222,10 @@ test.provider("promotes a dev worker to a live worker", (stack) =>
 - [`Command/Dev.ts`](https://github.com/alchemy-run/alchemy/blob/main/packages/alchemy/src/Command/Dev.ts)
   — the smallest `LocalProvider.make` provider: spawn a command, extract
   its URL, restart on prop changes.
-- [`Cloudflare/Workers/LocalWorkerProvider.ts`](https://github.com/alchemy-run/alchemy/blob/main/packages/alchemy/src/Cloudflare/Workers/LocalWorkerProvider.ts)
+- [`Cloudflare/Workers/LocalWorkerProvider.ts`](https://github.com/alchemy-run/alchemy/blob/main/packages/cloudflare/src/Workers/LocalWorkerProvider.ts)
   — the full-size one: bundler watch loop, `workerd` instances, a URL
   proxy torn down in `stop`.
-- [`Cloudflare/Queues/Queue.ts`](https://github.com/alchemy-run/alchemy/blob/main/packages/alchemy/src/Cloudflare/Queues/Queue.ts)
+- [`Cloudflare/Queues/Queue.ts`](https://github.com/alchemy-run/alchemy/blob/main/packages/cloudflare/src/Queues/Queue.ts)
   — the registry-style counter-example: a plain local provider under
   `dual`.
 

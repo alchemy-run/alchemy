@@ -21,9 +21,9 @@ messages to it from the existing function, and stands up a
 
 ```diff lang="typescript"
 // src/api.ts
-import * as AWS from "alchemy/AWS";
-import * as DynamoDB from "alchemy/AWS/DynamoDB";
-+import * as SQS from "alchemy/AWS/SQS";
+import * as AWS from "@alchemy.run/aws";
+import * as DynamoDB from "@alchemy.run/aws/DynamoDB";
++import * as SQS from "@alchemy.run/aws/SQS";
 // ...
 
 Effect.gen(function* () {
@@ -101,7 +101,7 @@ Consumers live as their own Lambda Function. Create
 
 ```typescript
 // src/worker.ts
-import * as AWS from "alchemy/AWS";
+import * as AWS from "@alchemy.run/aws";
 import * as Effect from "effect/Effect";
 
 export default class Worker extends AWS.Lambda.Function<Worker>()(
@@ -124,7 +124,7 @@ the cleanest way to do that is to lift the declaration out of
 
 ```typescript
 // src/queue.ts
-import * as SQS from "alchemy/AWS/SQS";
+import * as SQS from "@alchemy.run/aws/SQS";
 
 export const Jobs = SQS.Queue("Jobs");
 ```
@@ -142,12 +142,12 @@ the shared handle instead of declaring the queue inline:
 
 ## Resolve the queue in the consumer
 
-Yield the same `Jobs` handle in the consumer's outer init to get
+Yield the same `Jobs` handle in the consumer's constructor to get
 a typed `Queue` resource:
 
 ```diff lang="typescript"
 // src/worker.ts
-import * as AWS from "alchemy/AWS";
+import * as AWS from "@alchemy.run/aws";
 import * as Effect from "effect/Effect";
 +import { Jobs } from "./queue.ts";
 
@@ -170,8 +170,8 @@ subscription — log each message body:
 
 ```diff lang="typescript"
 // src/worker.ts
-import * as AWS from "alchemy/AWS";
-+import * as SQS from "alchemy/AWS/SQS";
+import * as AWS from "@alchemy.run/aws";
++import * as SQS from "@alchemy.run/aws/SQS";
 +import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
 +import * as Stream from "effect/Stream";
@@ -252,7 +252,7 @@ Trigger a write, then watch the consumer's logs:
 
 ```sh
 curl -X PUT --data 'hello queue' "$URL/items/q1"
-bun alchemy logs JobsWorker --follow
+bun alchemy logs JobsWorker --tail
 ```
 
 Within a couple of seconds you'll see:

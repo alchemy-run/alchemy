@@ -19,8 +19,8 @@ Add it alongside the existing bindings:
 
 ```diff lang="typescript"
 // src/api.ts
-import * as AWS from "alchemy/AWS";
-import * as DynamoDB from "alchemy/AWS/DynamoDB";
+import * as AWS from "@alchemy.run/aws";
+import * as DynamoDB from "@alchemy.run/aws/DynamoDB";
 +import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -154,7 +154,7 @@ Reuse the `PUT /items/:id` route to publish changes, then tail
 the function logs to confirm they arrive:
 
 ```sh
-bun alchemy logs Api --follow
+bun alchemy logs Api --tail
 ```
 
 In another terminal:

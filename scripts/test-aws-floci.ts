@@ -1,0 +1,366 @@
+import { existsSync, readFileSync, statSync } from "node:fs";
+import { join, relative, resolve } from "node:path";
+/**
+ * Run the live AWS suites for services that have a Floci local provider
+ * (`flociDual` / `ProviderLayer.dual` in Providers.ts) under
+ * `ALCHEMY_TEST_DEV=1`.
+ *
+ * Dedicated `*.local.test.ts` files are excluded — those already set
+ * `Test.make({ dev: true })` and some use `Alchemy.remote()` for out-of-band
+ * live checks, which this env would redirect onto the emulator. Suites for
+ * live-only resources (`liveOnlySuites`) are excluded too.
+ *
+ * Extra alchemy-test args are forwarded (`-t`, `--retry`, paths, …).
+ * `--list` prints selected files without starting tests or touching Floci.
+ * `--external` uses an existing server without Docker fallback or state reset.
+ * `--dry-run` prints the resolved command without starting tests or touching Floci.
+ * Shared state is preserved unless `--reset-shared` is explicitly passed.
+ * Standing prerequisites of gated suites (see floci-fixtures.ts) are
+ * provisioned in Floci before the run and removed after it.
+ */
+import { Glob } from "bun";
+import { startFlociForTests } from "./floci-container.ts";
+import { provisionFlociStandingFixtures, type FlociStandingFixtures } from "./floci-fixtures.ts";
+import { preferLocalFlociImage } from "./floci-image.ts";
+import { resolveFlociDefaultNetwork } from "./floci-network.ts";
+
+const repoRoot = resolve(import.meta.dir, "..");
+const testPackageRoot = join(repoRoot, "packages/integration-tests");
+const awsTestRoot = join(testPackageRoot, "test/AWS");
+const providersFile = join(repoRoot, "packages/aws/src/Providers.ts");
+
+const extraDirs: Record<string, ReadonlyArray<string>> = {
+  SecretsManager: ["Secret"],
+};
+
+// Opt-in gates whose tests are gated only for live-AWS cost, quota, slow
+// provisioning, or preview access. Floci emulates all of them, so enable them
+// here unless the caller set them explicitly. Gates that need standing
+// resources are provisioned by floci-fixtures.ts.
+const flociOptInGates = [
+  "ALCHEMY_TEST_IDENTITY_CENTER",
+  "AWS_LAMBDA_TEST_SHUTDOWN",
+  "AWS_ORG_MANAGEMENT_ACCOUNT",
+  "AWS_TEST_APIGWV2_VPCLINK",
+  "AWS_TEST_APPSYNC_CACHE",
+  "AWS_TEST_CLOUDHSM",
+  "AWS_TEST_CLOUDTRAIL_LAKE",
+  "AWS_TEST_CLOUDMAP_PUBLIC",
+  "AWS_TEST_CODEARTIFACT_EVENTS",
+  "AWS_TEST_CONFIG_RECORDER",
+  "AWS_TEST_EFS_MULTI_AZ",
+  "AWS_TEST_METRICSTREAM",
+  "AWS_TEST_NAT_GATEWAY",
+  "AWS_TEST_NETWORKFIREWALL",
+  "AWS_TEST_ORG_MANAGEMENT",
+  "AWS_TEST_POLICY_STORE_ALIAS",
+  "AWS_TEST_RDS_DBCLUSTER",
+  "AWS_TEST_RDS_DBCLUSTER_ENDPOINT",
+  "AWS_TEST_RDS_DBINSTANCE",
+  "AWS_TEST_RDS_DBSUBNETGROUP",
+  "AWS_TEST_RE2_AGGREGATOR",
+  "AWS_TEST_REDSHIFT",
+  "AWS_TEST_REGION_OPT_IN",
+  "AWS_TEST_SAGEMAKER_HYPERPOD",
+  "AWS_TEST_SERVICE_QUOTAS",
+  "AWS_TEST_SES_DEDICATED_IP",
+  "AWS_TEST_SLOW",
+  "AWS_TEST_TRANSFER_TRANSITIONS",
+  "AWS_TEST_WAF_ASSOCIATION",
+  "AWS_TEST_WAF_CLOUDFRONT",
+  "CLOUDFRONT_TEST_VPC_ORIGIN",
+  "INSPECTOR2_TEST_CIS",
+  "INSPECTOR2_TEST_ENABLER",
+  "LAMBDA_TEST_MICROVM",
+  "LAMBDA_TEST_NETWORK_CONNECTOR",
+  "RDS_TEST_LIFECYCLE",
+];
+
+// Values that gated suites need but Floci accepts without standing resources
+// (checked against each suite and Floci's validation). Applied with `??=`.
+const flociFixedValues: Record<string, string> = {
+  // Distinct from the delegated-admin principal: registering a delegated
+  // admin enables trusted access for its principal (Floci OrganizationsService).
+  AWS_ORG_TRUSTED_SERVICE_PRINCIPAL: "ssm.amazonaws.com",
+  AWS_ORG_DELEGATED_ADMIN_SERVICE_PRINCIPAL: "config.amazonaws.com",
+  AWS_TEST_SES_MAIL_FROM_IDENTITY: "ses-mailfrom.alchemy-test.example.com",
+  AWS_TEST_SES_MAIL_FROM_DOMAIN: "bounce.ses-mailfrom.alchemy-test.example.com",
+  AWS_TEST_SNS_PLATFORM: "1",
+  AWS_TEST_SNS_PLATFORM_NAME: "GCM",
+  // Floci accepts GCM credentials of 24+ chars without "invalid"/"fake"/"probe".
+  AWS_TEST_SNS_PLATFORM_CREDENTIAL: "alchemy-floci-gcm-server-key-000000000000",
+  AWS_TEST_SNS_PLATFORM_TOKEN: "alchemy-floci-device-token-0001",
+  // Floci's AgentCore control plane records the artifact without pulling it.
+  AWS_TEST_AGENTCORE: "1",
+  AWS_TEST_AGENTCORE_IMAGE:
+    "000000000000.dkr.ecr.us-east-1.amazonaws.com/alchemy-floci-agentcore:latest",
+  // Floci stores authorizer URIs without resolving the function.
+  ALCHEMY_TEST_AUTHORIZER_URI:
+    "arn:aws:apigateway:us-east-1:lambda:path/2015-03-31/functions/arn:aws:lambda:us-east-1:000000000000:function:alchemy-floci-standing-authorizer/invocations",
+};
+
+const dualizedServices = (): string[] => {
+  const source = readFileSync(providersFile, "utf8");
+  const names = new Set<string>(["Local"]);
+  const pattern = /(?:flociDual|ProviderLayer\.dual)\(\s*([A-Za-z0-9]+)\./g;
+  for (const match of source.matchAll(pattern)) {
+    const service = match[1]!;
+    names.add(service);
+    for (const extra of extraDirs[service] ?? []) names.add(extra);
+  }
+  return [...names].sort();
+};
+
+const flagsWithValue = new Set([
+  "-t",
+  "--test-name-pattern",
+  "--timeout",
+  "--retry",
+  "--concurrency",
+  "-c",
+  "--profile",
+]);
+
+const flags: string[] = [];
+const paths: string[] = [];
+let listOnly = false;
+let dryRun = false;
+let resetShared = false;
+let external = process.env.ALCHEMY_FLOCI_EXTERNAL === "1";
+const args = process.argv.slice(2);
+for (let i = 0; i < args.length; i++) {
+  const arg = args[i]!;
+  if (arg === "--external") {
+    external = true;
+    continue;
+  }
+  if (arg === "--dry-run") {
+    dryRun = true;
+    continue;
+  }
+  if (arg === "--reset-shared") {
+    resetShared = true;
+    continue;
+  }
+  if (arg === "--list") {
+    listOnly = true;
+    continue;
+  }
+  if (arg.startsWith("-")) {
+    flags.push(arg);
+    if (flagsWithValue.has(arg) && args[i + 1] && !args[i + 1]!.startsWith("-")) {
+      flags.push(args[++i]!);
+    }
+    continue;
+  }
+  paths.push(arg);
+}
+
+/**
+ * Suites inside a dualized service folder whose resources stay live-only
+ * (registered without `flociDual` in Providers.ts). This runner points every
+ * AWS client at the emulator, so they cannot reach the AWS service they test.
+ */
+const liveOnlySuites = new Set([
+  // Floci does not emulate Lambda Web Functions.
+  "Lambda/WebFunction.test.ts",
+  "Lambda/WebFunctionEndpoint.test.ts",
+  "Lambda/WebFunctionPermission.test.ts",
+]);
+
+const allowedRoots = dualizedServices()
+  .map((service) => join(awsTestRoot, service))
+  .filter((dir) => existsSync(dir));
+
+if (allowedRoots.length === 0) {
+  console.error("test:aws:floci: no dualized AWS service test dirs found");
+  process.exit(1);
+}
+
+const requestedRoots =
+  paths.length > 0 ? paths.map((p) => resolve(testPackageRoot, p)) : allowedRoots;
+
+const files: string[] = [];
+for (const root of requestedRoots) {
+  if (!existsSync(root)) {
+    files.push(relative(testPackageRoot, root));
+    continue;
+  }
+  if (statSync(root).isFile()) {
+    files.push(relative(testPackageRoot, root));
+    continue;
+  }
+  const glob = new Glob("**/*.test.ts");
+  for await (const file of glob.scan(root)) {
+    if (file.endsWith(".local.test.ts")) continue;
+    if (liveOnlySuites.has(relative(awsTestRoot, join(root, file)))) continue;
+    files.push(relative(testPackageRoot, join(root, file)));
+  }
+}
+
+if (listOnly) {
+  console.log([...new Set(files)].sort().join("\n"));
+  process.exit(0);
+}
+
+const fail = (message: string): never => {
+  console.error(`test:aws:floci: ${message}`);
+  process.exit(1);
+};
+
+if (resetShared && (external || process.env.ALCHEMY_FLOCI_NO_RESET)) {
+  fail("--reset-shared conflicts with --external or ALCHEMY_FLOCI_NO_RESET");
+}
+
+// Local providers currently use this gateway regardless of SDK overrides.
+const endpointError =
+  "AWS_ENDPOINT_URL must be http://localhost:4566; isolated gateways are not supported yet";
+const endpointValue = process.env.AWS_ENDPOINT_URL ?? "http://localhost:4566";
+if (!URL.canParse(endpointValue)) fail(endpointError);
+const endpoint = new URL(endpointValue);
+if (
+  endpoint.protocol !== "http:" ||
+  !["localhost", "127.0.0.1"].includes(endpoint.hostname) ||
+  endpoint.port !== "4566" ||
+  endpoint.pathname !== "/" ||
+  endpoint.search ||
+  endpoint.hash ||
+  endpoint.username ||
+  endpoint.password
+) {
+  fail(endpointError);
+}
+
+const hasFlag = (...names: string[]) =>
+  flags.some((flag) => names.some((name) => flag === name || flag.startsWith(`${name}=`)));
+if (!hasFlag("--profile")) flags.unshift("--profile", "testing");
+if (!hasFlag("--concurrency", "-c")) flags.unshift("--concurrency", "4");
+const command = ["bun", "alchemy-test", ...new Set(files.sort()), ...flags];
+if (dryRun) {
+  console.log(
+    JSON.stringify({
+      command,
+      cwd: testPackageRoot,
+      external,
+      resetShared,
+      endpoint: "http://localhost:4566",
+    }),
+  );
+  process.exit(0);
+}
+
+process.env.ALCHEMY_TEST_DEV = "1";
+process.env.AWS_ENDPOINT_URL = "http://localhost:4566";
+for (const gate of flociOptInGates) process.env[gate] ??= "1";
+// One test process deploys many functions at once; each rolldown build holds
+// its whole module graph in native memory.
+process.env.ALCHEMY_BUNDLE_CONCURRENCY ??= "2";
+for (const [name, value] of Object.entries(flociFixedValues)) {
+  process.env[name] ??= value;
+}
+if (external) {
+  process.env.ALCHEMY_FLOCI_EXTERNAL = "1";
+  console.log("test:aws:floci: using the existing Floci server (no Docker fallback)");
+} else {
+  preferLocalFlociImage("test:aws:floci");
+  try {
+    await startFlociForTests("test:aws:floci");
+  } catch (error) {
+    fail(
+      `could not start the Floci container: ${error instanceof Error ? error.message : String(error)}; tests were not started`,
+    );
+  }
+}
+
+// Suites that take subnet/security-group IDs from the environment (e.g.
+// Timestream DbInstance) get the emulator's default VPC network. Floci must
+// be serving for this lookup, so start it here in non-external mode.
+if (
+  process.env.AWS_TEST_SLOW &&
+  (!process.env.AWS_TEST_SUBNET_IDS || !process.env.AWS_TEST_SECURITY_GROUP_IDS)
+) {
+  try {
+    const network = await resolveFlociDefaultNetwork(external);
+    process.env.AWS_TEST_SUBNET_IDS ??= network.subnetIds.join(",");
+    process.env.AWS_TEST_SECURITY_GROUP_IDS ??= network.securityGroupIds.join(",");
+  } catch (error) {
+    fail(
+      `could not resolve the emulator's default VPC network: ${error instanceof Error ? error.message : String(error)}; tests were not started`,
+    );
+  }
+}
+
+if (resetShared) {
+  try {
+    const res = await fetch("http://localhost:4566/_floci/state/reset", {
+      method: "POST",
+      signal: AbortSignal.timeout(5_000),
+    });
+    if (!res.ok) fail(`emulator state reset returned ${res.status}; tests were not started`);
+    console.log("test:aws:floci: reset shared emulator state");
+  } catch (error) {
+    fail(
+      `could not reset emulator state: ${error instanceof Error ? error.message : String(error)}; tests were not started`,
+    );
+  }
+} else {
+  console.log("test:aws:floci: preserving shared emulator state");
+}
+
+// Provisioned after any reset so the reset cannot wipe them. A signal during
+// provisioning interrupts it; already-created fixtures are removed first.
+const provisioning = new AbortController();
+const abortProvisioning = () => provisioning.abort();
+process.on("SIGINT", abortProvisioning);
+process.on("SIGTERM", abortProvisioning);
+let fixtures: FlociStandingFixtures | undefined;
+try {
+  fixtures = await provisionFlociStandingFixtures(external, {
+    files,
+    signal: provisioning.signal,
+  });
+} catch (error) {
+  fail(
+    `could not provision standing fixtures: ${error instanceof Error ? error.message : String(error)}; tests were not started`,
+  );
+} finally {
+  process.off("SIGINT", abortProvisioning);
+  process.off("SIGTERM", abortProvisioning);
+}
+if (provisioning.signal.aborted) {
+  await fixtures?.teardown().catch(() => undefined);
+  fail("interrupted while provisioning standing fixtures");
+}
+for (const [name, value] of Object.entries(fixtures?.env ?? {})) {
+  process.env[name] ??= value;
+}
+
+const proc = Bun.spawn(command, {
+  cwd: testPackageRoot,
+  // Bun.spawn's default env is a snapshot taken at process start, so the
+  // `process.env.ALCHEMY_TEST_DEV` mutations above never reach the child
+  // unless the env is materialized explicitly. Without this the "floci"
+  // suite silently runs live against real AWS.
+  env: { ...process.env },
+  stdout: "inherit",
+  stderr: "inherit",
+  stdin: "inherit",
+});
+
+// Keep the runner alive until the child exits so teardown always runs.
+// Terminal Ctrl-C already reaches the child through the shared process
+// group; SIGTERM is usually aimed at the runner alone, so forward it.
+process.on("SIGINT", () => undefined);
+process.on("SIGTERM", () => proc.kill("SIGTERM"));
+const exitCode = await proc.exited;
+if (fixtures && Object.keys(fixtures.env).length > 0) {
+  console.log("test:aws:floci: removing standing fixtures");
+  await fixtures
+    .teardown()
+    .catch((error) =>
+      console.error(
+        `test:aws:floci: fixture teardown failed: ${error instanceof Error ? error.message : String(error)}`,
+      ),
+    );
+}
+process.exit(exitCode);

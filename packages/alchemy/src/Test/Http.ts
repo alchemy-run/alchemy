@@ -1,17 +1,14 @@
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as HttpClient from "effect/http/HttpClient";
+import { DecodeError, HttpClientError } from "effect/http/HttpClientError";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import type { HttpClientResponse } from "effect/http/HttpClientResponse";
 import * as Layer from "effect/Layer";
+import * as RpcClient from "effect/rpc/RpcClient";
+import * as RpcSerialization from "effect/rpc/RpcSerialization";
 import * as Schedule from "effect/Schedule";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import {
-  DecodeError,
-  HttpClientError,
-} from "effect/unstable/http/HttpClientError";
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-import type { HttpClientResponse } from "effect/unstable/http/HttpClientResponse";
-import * as RpcClient from "effect/unstable/rpc/RpcClient";
-import * as RpcSerialization from "effect/unstable/rpc/RpcSerialization";
 
 /**
  * A freshly-deployed Cloudflare Worker is not instantly reachable over HTTP.
@@ -27,9 +24,7 @@ import * as RpcSerialization from "effect/unstable/rpc/RpcSerialization";
  * the resource provider — the provider returning before every edge PoP has
  * converged is correct. Consumers ride out the window by retrying the request.
  */
-export class WorkerNotReady extends Data.TaggedError("WorkerNotReady")<{
-  status: number;
-}> {}
+export class WorkerNotReady extends Data.TaggedError("WorkerNotReady")<{ status: number }> {}
 
 /**
  * Status codes that indicate the edge hasn't finished converging on a fresh
@@ -37,8 +32,7 @@ export class WorkerNotReady extends Data.TaggedError("WorkerNotReady")<{
  * set, so assertions on those statuses still observe them immediately rather
  * than being retried away.
  */
-const isColdStartStatus = (status: number): boolean =>
-  status === 404 || status >= 500;
+const isColdStartStatus = (status: number): boolean => status === 404 || status >= 500;
 
 export interface WhenReadyOptions {
   /** Max retry attempts before surfacing {@link WorkerNotReady}. Default `20`. */
@@ -202,8 +196,6 @@ export const rpcClientLayer = (
         ? FetchHttpClient.layer
         : guardedFetchLayer(serialization.contentType, options),
     ),
-    Layer.provide(
-      Layer.succeed(RpcSerialization.RpcSerialization, serialization),
-    ),
+    Layer.provide(Layer.succeed(RpcSerialization.RpcSerialization, serialization)),
   );
 };

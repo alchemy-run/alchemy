@@ -1,11 +1,14 @@
-import * as AWS from "alchemy/AWS";
-import * as Kubernetes from "alchemy/Kubernetes";
+import * as AWS from "@alchemy.run/aws";
+import * as Kubernetes from "@alchemy.run/kubernetes";
 import * as Effect from "effect/Effect";
 import { EntriesTable, GuestbookCluster, GuestbookNamespace } from "./infra.ts";
 
 const seedEntries = [
   { id: "ada", message: "First computers, now clusters." },
-  { id: "grace", message: "A cluster in port is safe, but that is not what clusters are for." },
+  {
+    id: "grace",
+    message: "A cluster in port is safe, but that is not what clusters are for.",
+  },
   { id: "linus", message: "Talk is cheap. Show me the manifest." },
 ];
 

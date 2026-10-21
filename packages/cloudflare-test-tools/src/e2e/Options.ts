@@ -1,11 +1,11 @@
 import type { CloudflareVitePluginOptions } from "@alchemy.run/cloudflare-runtime/vite";
-import type { Framework } from "@alchemy.run/cloudflare-frameworks/core";
-import type * as Miniflare from "../miniflare/miniflare.ts";
+import type { Framework } from "@alchemy.run/frontend-frameworks/core";
 import * as Effect from "effect/Effect";
 import type * as FileSystem from "effect/FileSystem";
 import type * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Predicate from "effect/Predicate";
+import type * as Miniflare from "../miniflare/miniflare.ts";
 import { Cwd } from "./Cwd.ts";
 
 const kOptions = Symbol("@alchemy.run/cloudflare-test-tools/e2e/Options");
@@ -78,7 +78,7 @@ export interface Options {
    *
    * - omitted — the built-in Vite implementation (default; zero behavior
    *   change for existing fixtures)
-   * - a package specifier (e.g. `"@alchemy.run/cloudflare-frameworks/waku"`) — loaded from the
+   * - a package specifier (e.g. `"@alchemy.run/frontend-frameworks/waku"`) — loaded from the
    *   *fixture's* own `node_modules`; the module must default-export (or
    *   named-export `framework`) a factory `(options: Options) =>
    *   Layer<Framework>` (a `Layer<Framework>` export is also accepted)
@@ -115,9 +115,7 @@ export const resolveCloudflareOptions = (
  */
 export const resolveRoot: (
   options: Options,
-) => Effect.Effect<string | undefined, never, Path.Path> = Effect.fn(function* (
-  options: Options,
-) {
+) => Effect.Effect<string | undefined, never, Path.Path> = Effect.fn(function* (options: Options) {
   if (options.root === undefined) {
     return undefined;
   }
@@ -139,8 +137,8 @@ export declare namespace Options {
 
   /**
    * Services the harness runtime provides to a framework Layer while it is
-   * being built (from `@effect/platform-node`'s `NodeServices`, plus a
-   * dotenv/env `ConfigProvider`).
+   * being built (the package's Node platform services, plus a dotenv/env
+   * `ConfigProvider`).
    */
   type FrameworkServices = FileSystem.FileSystem | Path.Path;
 
@@ -156,15 +154,12 @@ export declare namespace Options {
    */
   type FrameworkFactory = (
     options: Options,
-  ) =>
-    | FrameworkLayer
-    | Effect.Effect<FrameworkLayer, unknown, FrameworkServices>;
+  ) => FrameworkLayer | Effect.Effect<FrameworkLayer, unknown, FrameworkServices>;
 
   type FrameworkInput = string | FrameworkLayer | FrameworkFactory;
 }
 
-export const make = (options: Options.Input) =>
-  Object.assign(options, { [kOptions]: true });
+export const make = (options: Options.Input) => Object.assign(options, { [kOptions]: true });
 
 export const load = Effect.fn(function* () {
   const path = yield* Path.Path;

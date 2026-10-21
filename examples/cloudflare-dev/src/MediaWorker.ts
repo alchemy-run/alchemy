@@ -29,9 +29,7 @@ interface Env {
 }
 
 const imagesInfo = async (images: cf.ImagesBinding, request: Request) => {
-  const info = await images.info(
-    request.body as unknown as cf.ReadableStream<Uint8Array>,
-  );
+  const info = await images.info(request.body as unknown as cf.ReadableStream<Uint8Array>);
   return Response.json(info);
 };
 
@@ -89,9 +87,7 @@ export default {
           return Response.json(video);
         }
         case "/stream/details": {
-          const video = await env.STREAM.video(
-            url.searchParams.get("id")!,
-          ).details();
+          const video = await env.STREAM.video(url.searchParams.get("id")!).details();
           return Response.json(video);
         }
         case "/stream/delete": {

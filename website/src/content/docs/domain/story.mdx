@@ -1,0 +1,60 @@
+---
+title: Story
+description: A specification you can run. Given some history, when a command is sent, then these events are recorded.
+---
+
+import DAG from "../../../components/DAG.astro";
+
+A story describes one piece of behavior in the business's own words: given this history, when this command is sent, then these events are recorded. It's also a test. It runs your real model in memory, so what it describes is what the model does.
+
+<DAG
+  nodes={[
+    { id: "given", label: "AccountOpened", type: "given · the history", kind: "event", col: 0, row: 0 },
+    { id: "when", label: "WithdrawMoney", type: "when · a command", kind: "command", col: 1, row: 0 },
+    { id: "account", label: "Account", type: "decides", kind: "aggregate", col: 2, row: 0 },
+    { id: "then", label: "MoneyWithdrawn", type: "then · the events", kind: "event", col: 3, row: 0 },
+    { id: "rejected", label: "InsufficientFunds", type: "or · the rejection", kind: "rejection", col: 3, row: 1 },
+  ]}
+  edges={[
+    { from: "given", to: "when" },
+    { from: "when", to: "account" },
+    { from: "account", to: "then" },
+    { from: "account", to: "rejected" },
+  ]}
+/>
+
+## Read one
+
+This story says an overdraft is refused, and what the refusal reports:
+
+```typescript title="packages/domain/test/withdrawals.test.ts"
+it.effect("an overdraft is rejected with the evidence", () =>
+  story(
+    Story.given(account, opened, new MoneyDeposited({ amount: 50, balanceAfter: 50 })),
+    asSam,
+    Story.when(account, new WithdrawMoney({ amount: 80 })),
+    Story.rejected(new InsufficientFunds({ balance: 50, requested: 80 })),
+  ),
+);
+```
+
+`given` writes history straight onto the account, without sending commands. `when` sends one command, and the checks after it say what must have happened.
+
+## It runs the whole model
+
+`Story.make` builds a runner from your model, so a story runs everything a command sets off. The aggregate decides, views update, and policies react and send their own commands.
+
+```typescript title="packages/domain/test/withdrawals.test.ts"
+const story = Story.make(Bank, {
+  layer: BankHandlers.pipe(Layer.provide(MemoryLedgerStore)),
+  externalSystems: [FraudCheck, Payments],
+});
+```
+
+Two things stay under your control. The clock only moves when the story moves it, so deadlines and daily limits are testable. And every call to an [external system](/domain/external-system) waits until the story answers it, so you decide what the outside world says.
+
+## A passing story accounts for everything
+
+A story fails if a command is rejected and no step checks the rejection, or if an external system call is still waiting at the end. So a story that passes has accounted for every outcome, not just the ones it mentions.
+
+See [Testing a model](/domain/testing-models) for the full set of checks, the clock, and answering outside systems.

@@ -13,9 +13,11 @@
     "build": "tsc -b",
     "deploy": "alchemy deploy",
     "destroy": "alchemy destroy",
-    "tail": "alchemy tail"
+    "tail": "alchemy logs --tail"
   },
   "dependencies": {
+    "@alchemy.run/cloudflare": "workspace:*",
+    "@alchemy.run/prisma": "workspace:*",
     "@effect/platform-bun": "catalog:",
     "alchemy": "workspace:*",
     "effect": "catalog:"

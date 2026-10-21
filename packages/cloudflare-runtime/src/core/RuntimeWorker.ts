@@ -1,12 +1,14 @@
+import type * as Effect from "effect/Effect";
 import type { HyperdriveOrigin } from "./bindings/hyperdrive/HyperdriveOrigin.shared.ts";
 import type { QueueConsumer } from "./bindings/queue/QueueOptions.shared.ts";
 import type { ContainerImage } from "./Docker.ts";
 import type { BindingHook } from "./PluginContext.ts";
 import type * as WorkerdConfig from "./workerd/Config.ts";
-import type { OutputSink } from "./workerd/Workerd.ts";
+import type { OutputSink, WorkerdExit } from "./workerd/Workerd.ts";
 
 export interface RuntimeWorker<B extends BindingHooks = BindingHooks> {
   readonly name: string;
+  readonly proxySharedSecret?: string;
   readonly compatibilityDate: string;
   readonly compatibilityFlags: Array<string>;
   readonly bindings: B;
@@ -85,6 +87,26 @@ export interface RuntimeWorker<B extends BindingHooks = BindingHooks> {
    * process output instead of inheriting the parent process's stdio.
    */
   readonly logging?: WorkerdLogging;
+  /**
+   * Called after the `workerd` process exited on its own (for example when
+   * V8 ran out of heap) and a replacement process is serving on the same
+   * ports again. The URL returned by `start` stays valid. Connections into
+   * the old process are gone, so a caller that keeps any (such as the Vite
+   * module runner sockets) reconnects here.
+   * Automatic recovery is limited to three restarts within a rolling minute,
+   * with backoff between attempts. A failed replacement stops recovery.
+   */
+  readonly onRestart?: (exit: WorkerdExit) => void;
+  /**
+   * Runs once, after bindings are prepared and container images are built or
+   * pulled, immediately before the first `workerd` process is spawned. A
+   * caller replacing a previous instance of this worker uses it to tear that
+   * instance down first when the two cannot overlap — e.g. containers, whose
+   * deterministic names make a new process adopt ("recover") the previous
+   * process's still-running container, which that process's teardown then
+   * removes.
+   */
+  readonly beforeServe?: Effect.Effect<void>;
   readonly unsafe?: Partial<WorkerdConfig.Worker>;
 }
 
@@ -113,13 +135,7 @@ export type { QueueConsumer } from "./bindings/queue/QueueOptions.shared.ts";
 export type Module =
   | {
       name: string;
-      type:
-        | "ESModule"
-        | "CommonJsModule"
-        | "Text"
-        | "Json"
-        | "PythonModule"
-        | "PythonRequirement";
+      type: "ESModule" | "CommonJsModule" | "Text" | "Json" | "PythonModule";
       content: string;
     }
   | {
@@ -132,11 +148,7 @@ export interface Assets {
   directory?: string;
   headers?: string;
   redirects?: string;
-  htmlHandling?:
-    | "auto-trailing-slash"
-    | "force-trailing-slash"
-    | "drop-trailing-slash"
-    | "none";
+  htmlHandling?: "auto-trailing-slash" | "force-trailing-slash" | "drop-trailing-slash" | "none";
   notFoundHandling?: "none" | "404-page" | "single-page-application";
   runWorkerFirst?: Array<string> | boolean;
   serveDirectly?: boolean;
@@ -152,7 +164,7 @@ export interface DurableObjectNamespace {
    * starts one per DO instance via the worker's `containerEngine` and exposes
    * it as `ctx.container`.
    */
-  container?: ContainerImage;
+  container?: ContainerImage | { images: Record<string, ContainerImage> };
 }
 
 export interface Workflow {

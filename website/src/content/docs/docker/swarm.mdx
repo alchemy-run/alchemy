@@ -11,7 +11,7 @@ overlay `Docker.Network`), targeting any engine through a `Docker.Context`.
 ## Create the swarm
 
 ```typescript
-import * as Docker from "alchemy/Docker";
+import * as Docker from "@alchemy.run/docker";
 
 const swarm = yield* Docker.Swarm("swarm");
 ```
@@ -98,7 +98,7 @@ database as `postgres`.
 
 ```typescript
 import * as Effect from "effect/Effect";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
 
 const api = yield* Docker.Service(
   "api",
@@ -128,7 +128,7 @@ are no-ops.
 ## Add background work
 
 ```diff lang="typescript"
-+import { ServerHost } from "alchemy/Server/Process";
++import { ServerHost } from "alchemy/Runtime/Process";
 +import * as Schedule from "effect/Schedule";
 
 const api = yield* Docker.Service(
@@ -223,7 +223,7 @@ production.
 
 ```typescript
 import * as Alchemy from "alchemy";
-import * as Docker from "alchemy/Docker";
+import * as Docker from "@alchemy.run/docker";
 import * as Effect from "effect/Effect";
 
 export default Alchemy.Stack(
