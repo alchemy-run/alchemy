@@ -125,27 +125,57 @@ const spawned = (
   } as unknown as SandboxProcess;
 };
 
+/**
+ * This Worker's gateway clients mint an open's grants; the host has none of
+ * its own. Returns the mint, and the key opens with the same grant share.
+ */
+const minting = (egress: NonNullable<WorkspaceOpenOptions["egress"]>) => ({
+  mint: (egress.length === 0
+    ? Effect.succeed(undefined)
+    : Effect.promise(() => import("alchemy/Egress/Gateway")).pipe(
+        Effect.flatMap(({ grant }) => grant(egress, { ttl: EGRESS_TTL })),
+        Effect.map((granted): DelegatedEgress => ({
+          refs: egress.map((e) => e.ref),
+          minted: granted.minted,
+          ttlMs: Duration.toMillis(EGRESS_TTL),
+        })),
+        Effect.mapError(toWorkspaceError),
+      )) as Effect.Effect<DelegatedEgress | undefined, WorkspaceError, any>,
+  grantKey: egress.length === 0 ? "" : canonicalJson(egress.map((e) => e.ref)),
+});
+
 const makeConnection = Effect.fn(function* (descriptor: WorkspaceHostDescriptor) {
   const { sessions, machines } = yield* connectWorkspace(descriptor);
   const connection: WorkspaceConnection = {
+    exec: (session, command, { egress = [], ...options } = {}) =>
+      Effect.gen(function* () {
+        const { mint, grantKey } = minting(egress);
+        return yield* sessions
+          .getByName(session)
+          .run(
+            session,
+            command,
+            {
+              ...(options.cwd ? { cwd: options.cwd } : {}),
+              ...(options.env ? { env: options.env } : {}),
+              ...(options.timeout !== undefined
+                ? { timeoutMs: Duration.toMillis(Duration.fromInputUnsafe(options.timeout)) }
+                : {}),
+            },
+            grantKey,
+            yield* mint,
+            descriptor.url,
+          )
+          .pipe(Effect.mapError(toWorkspaceError));
+      }),
+    merge: (from, into) =>
+      sessions
+        .getByName(into)
+        .merge(into, from, descriptor.url)
+        .pipe(Effect.mapError(toWorkspaceError)),
     acquire: (session: string, options: WorkspaceOpenOptions) =>
       Effect.gen(function* () {
-        const egress = options.egress ?? [];
-        // This Worker's gateway clients mint the open's grants; the host
-        // has none of its own.
-        const mint: Effect.Effect<DelegatedEgress | undefined, WorkspaceError, any> =
-          egress.length === 0
-            ? Effect.succeed(undefined)
-            : Effect.promise(() => import("alchemy/Egress/Gateway")).pipe(
-                Effect.flatMap(({ grant }) => grant(egress, { ttl: EGRESS_TTL })),
-                Effect.map((granted): DelegatedEgress => ({
-                  refs: egress.map((e) => e.ref),
-                  minted: granted.minted,
-                  ttlMs: Duration.toMillis(EGRESS_TTL),
-                })),
-                Effect.mapError(toWorkspaceError),
-              );
-        const grantKey = egress.length === 0 ? "" : canonicalJson(egress.map((e) => e.ref));
+        const { mint, grantKey } = minting(options.egress ?? []);
         const stub = sessions.getByName(session);
         const first = yield* mint;
         const lease = yield* Effect.acquireRelease(
@@ -227,6 +257,8 @@ const makeConnection = Effect.fn(function* (descriptor: WorkspaceHostDescriptor)
 /** At deploy the descriptor is an unresolved Output: nothing runs then. */
 const deployTime: WorkspaceConnection = {
   acquire: () => Effect.die(new Error("a workspace can't be opened at deploy")),
+  exec: () => Effect.die(new Error("a workspace can't run commands at deploy")),
+  merge: () => Effect.die(new Error("a workspace can't merge at deploy")),
   fork: () => Effect.die(new Error("a workspace can't be forked at deploy")),
   undo: () => Effect.die(new Error("a workspace can't be undone at deploy")),
   history: () => Effect.die(new Error("a workspace has no history at deploy")),

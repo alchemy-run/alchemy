@@ -46,11 +46,38 @@ export interface WorkspaceProps {
    * garbage collected. @default all
    */
   readonly history?: number;
+  /**
+   * The filesystem sessions' disks hold. btrfs merges a small write to a
+   * big file as just its bytes; it needs btrfs in the machine's kernel,
+   * which Cloudflare containers have and Lambda MicroVMs don't.
+   * @default "ext4"
+   */
+  readonly filesystem?: "ext4" | "btrfs";
   readonly machine?: {
     /** A Cloudflare container's instance type. @default "standard-1" */
     readonly instanceType?: ContainerInstanceType;
     /** Stop a machine this long after its last command. @default "5 minutes" */
     readonly idle?: Duration.Input;
+    /**
+     * Where `exec` runs. `pinned`: on the session's machine, mounted for the
+     * command (`open` always works this way). `serverless`: on a fork of the
+     * session on any free machine, so many commands of one session run at
+     * once; what each changed merges back file by file, and a command that
+     * changed a file changed since it started is refused whole. Processes
+     * it leaves running are stopped. `automatic`: serverless, except a
+     * command that leaves processes running keeps its machine for them.
+     * @default "pinned"
+     */
+    readonly placement?: "pinned" | "serverless" | "automatic";
+    /** The machines every session shares. */
+    readonly pool?: {
+      /** Free machines kept started, so a command never waits for one to boot. @default 0 */
+      readonly min?: number;
+      /** At most this many machines. @default 50 */
+      readonly max?: number;
+      /** Replace a machine after this many sessions or commands. @default 100 */
+      readonly retireAfter?: number;
+    };
     /**
      * Run machines on AWS Lambda MicroVMs instead of Cloudflare containers
      * (the sessions stay on Cloudflare). Each machine's blockd reads and
@@ -127,6 +154,13 @@ export const Workspace = <const D extends SandboxWorkspace.Decl.Any>(
     idleMs: Duration.toMillis(Duration.fromInputUnsafe(props.machine?.idle ?? "5 minutes")),
     machine: props.machine?.lambda ? "lambda" : "container",
     ...(props.history !== undefined ? { history: props.history } : {}),
+    placement: props.machine?.placement ?? "pinned",
+    pool: {
+      min: props.machine?.pool?.min ?? 0,
+      max: props.machine?.pool?.max ?? 50,
+      retireAfter: props.machine?.pool?.retireAfter ?? 100,
+    },
+    lww: workspace.Options?.lww ?? [],
   };
   const lambda = props.machine?.lambda;
   // A MicroVM machine is a sandbox: its host builds the image (the
@@ -147,6 +181,7 @@ export const Workspace = <const D extends SandboxWorkspace.Decl.Any>(
   const volume = R2Volume(volumeOf(id), {
     ...(props.size !== undefined ? { size: props.size } : {}),
     base: { dockerfile: props.dockerfile, path: props.path },
+    ...(props.filesystem ? { filesystem: props.filesystem } : {}),
   });
   return Layer.effect(
     workspaceHost(id),

@@ -36,6 +36,76 @@ export interface WorkspaceExecOutput {
   readonly stderr: string;
 }
 
+/**
+ * What happened to a command's changes (or a merge's). A command that ran
+ * on a fork of the session lands in it only if nothing it changed was
+ * changed in the session since the fork. Otherwise none of it lands: it's
+ * kept as a session of its own, `fork`, to inspect, rerun or apply.
+ */
+export type WorkspaceChanges =
+  | {
+      readonly status: "applied";
+      /** The session's snapshot with the changes in it, when one was taken. */
+      readonly snapshot?: Snapshot;
+      /** What changed. */
+      readonly paths: ReadonlyArray<string>;
+    }
+  | {
+      readonly status: "conflict";
+      /** Paths both sides changed. */
+      readonly paths: ReadonlyArray<string>;
+      /** A session holding the refused changes on their base; absent for `merge`. */
+      readonly fork?: string;
+    };
+
+/** A command run with `exec`: its output, and what happened to its changes. */
+export interface WorkspaceExecResult extends WorkspaceExecOutput {
+  readonly changes: WorkspaceChanges;
+  /** Processes it left running in the workspace, if they were stopped. */
+  readonly stopped?: ReadonlyArray<{ readonly pid: number; readonly command: string }>;
+}
+
+/**
+ * The words to show a model for what happened to a command's changes and
+ * processes, or `undefined` when there's nothing to say. Harness adapters
+ * append it to the output a harness sees: a model is told, never left to
+ * find the disk disagreeing with what it saw.
+ */
+export const describeChanges = (result: {
+  readonly changes: WorkspaceChanges;
+  readonly stopped?: WorkspaceExecResult["stopped"];
+}): string | undefined => {
+  const lines: Array<string> = [];
+  if (result.changes.status === "conflict") {
+    lines.push(
+      "Not applied: other changes to these files landed since this command started:",
+      ...result.changes.paths.map((path) => `  ${path}`),
+      result.changes.fork
+        ? `Nothing this command changed was applied. Its version is kept as session ${result.changes.fork}: inspect it, rerun the command, or apply it.`
+        : "Nothing was applied.",
+    );
+  }
+  const stopped = result.stopped ?? [];
+  if (stopped.length > 0) {
+    lines.push(
+      `${stopped.length} background process${stopped.length === 1 ? " was" : "es were"} stopped when this command ended:`,
+      ...stopped.map((process) => `  ${process.command || `pid ${process.pid}`}`),
+    );
+  }
+  return lines.length > 0 ? lines.join("\n") : undefined;
+};
+
+/** What a workspace's changes mean, the same on every host. */
+export interface WorkspaceOptions {
+  /**
+   * Paths where the newest change wins instead of conflicting: lockfiles,
+   * build output, caches. Patterns are relative to the workspace: `*`
+   * matches within a name, `**` across directories, and a pattern without
+   * a `/` matches a name at any depth. `dist/**` matches `dist` too.
+   */
+  readonly lww?: ReadonlyArray<string>;
+}
+
 /** Options for `open`. */
 export interface WorkspaceOpenOptions {
   /**
@@ -87,12 +157,26 @@ export interface WorkspaceClient<Self = any> {
     options: WorkspaceOpenOptions,
     effect: Effect.Effect<A, E, R>,
   ): Effect.Effect<A, E | WorkspaceError, Exclude<R, Workspace.Session<Self>> | RuntimeContext>;
-  /** `open` around one command. */
+  /**
+   * One command in `session`. Where it runs is the host's `placement`:
+   * pinned, it's `open` around the command; serverless or automatic, it
+   * runs on a fork of the session on any machine, and its changes merge
+   * back (see {@link WorkspaceChanges}).
+   */
   exec(
     session: string,
     command: string,
     options?: WorkspaceExecOptions & WorkspaceOpenOptions,
-  ): Effect.Effect<WorkspaceExecOutput, WorkspaceError, RuntimeContext>;
+  ): Effect.Effect<WorkspaceExecResult, WorkspaceError, RuntimeContext>;
+  /**
+   * Merge what session `from` changed since it was forked into session
+   * `into`, file by file. If both changed a file, nothing is merged and the
+   * conflict names the files.
+   */
+  merge(
+    from: string,
+    into: string,
+  ): Effect.Effect<WorkspaceChanges, WorkspaceError, RuntimeContext>;
   /** A new session `to` on `from`'s latest snapshot. Instant: nothing is copied. */
   fork(from: string, to: string): Effect.Effect<void, WorkspaceError, RuntimeContext>;
   /** Move `session` back `steps` snapshots (one per `open`). @default 1 */
@@ -117,6 +201,8 @@ export interface WorkspaceConnection {
     session: string,
     options: WorkspaceOpenOptions,
   ) => Effect.Effect<WorkspaceSession, WorkspaceError, RuntimeContext | Scope.Scope>;
+  readonly exec: WorkspaceClient["exec"];
+  readonly merge: WorkspaceClient["merge"];
   readonly fork: WorkspaceClient["fork"];
   readonly undo: WorkspaceClient["undo"];
   readonly history: WorkspaceClient["history"];
@@ -192,12 +278,8 @@ const makeClient = (
         Effect.provideService(effect, tag, opened),
       ),
     ),
-  exec: (session, command, { egress, ...options } = {}) =>
-    Effect.scoped(
-      Effect.flatMap(connection.acquire(session, { egress }), (opened) =>
-        opened.exec(command, options),
-      ),
-    ),
+  exec: connection.exec,
+  merge: connection.merge,
   fork: connection.fork,
   undo: connection.undo,
   history: connection.history,
@@ -270,7 +352,7 @@ const makeClient = (
  */
 export const Workspace =
   <Self>() =>
-  <const Id extends string>(id: Id): Workspace.Decl<Self, Id> => {
+  <const Id extends string>(id: Id, options: WorkspaceOptions = {}): Workspace.Decl<Self, Id> => {
     const session = Context.Service<Workspace.Session<Self>, WorkspaceSession>(
       `alchemy/Sandbox/Workspace<${id}>/Session`,
     );
@@ -283,6 +365,7 @@ export const Workspace =
         "~alchemy/Id": id,
         LogicalId: id,
         Session: session,
+        Options: options,
       },
     ) as unknown as Workspace.Decl<Self, Id>;
   };
@@ -306,6 +389,7 @@ export declare namespace Workspace {
     readonly LogicalId: Id;
     /** The session `open` provides: `yield* Workspace.Session` inside it. */
     readonly Session: Context.Service<Session<Self>, WorkspaceSession>;
+    readonly Options: WorkspaceOptions;
   }
   export namespace Decl {
     export type Any = Decl<any, string>;

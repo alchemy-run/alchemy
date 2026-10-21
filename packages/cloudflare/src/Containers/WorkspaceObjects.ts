@@ -2,11 +2,19 @@ import type { SandboxClient, SandboxProcess } from "@alchemy.run/sandbox/Sandbox
 import { SandboxError } from "@alchemy.run/sandbox/Sandbox";
 import {
   Volume as VolumeDeclaration,
+  type ChangedPaths,
   type Disk,
+  type DiskHostCommit,
   type DiskMount,
+  type DiskSurvivor,
+  type PatchSummary,
   type Snapshot,
 } from "@alchemy.run/sandbox/Volume";
-import { WorkspaceError } from "@alchemy.run/sandbox/Workspace";
+import {
+  WorkspaceError,
+  type WorkspaceChanges,
+  type WorkspaceExecResult,
+} from "@alchemy.run/sandbox/Workspace";
 /**
  * The Durable Objects behind `Cloudflare.Containers.Workspace`, and the host
  * Worker that serves them. Runtime code only: the host Worker's bundle
@@ -40,6 +48,7 @@ import { Container } from "./Container.ts";
 import type { ContainerClient } from "./ContainerClient.ts";
 import { registerControl } from "./EgressRelay.ts";
 import type { ContainerInstanceType } from "./SandboxClient.ts";
+import { conflicts } from "./WorkspaceMerge.ts";
 import { className, machineSandbox } from "./WorkspaceNames.ts";
 
 /** The `host` of a workspace's descriptor. */
@@ -80,6 +89,34 @@ export interface HostConfig {
   readonly machine: "container" | "lambda";
   /** Snapshots kept per session by garbage collection; all when absent. */
   readonly history?: number;
+  /** Where `exec` runs: on the session's machine, or on a fork anywhere. */
+  readonly placement: "pinned" | "serverless" | "automatic";
+  /** Machines shared by every session. */
+  readonly pool: {
+    /** Machines kept started while idle. */
+    readonly min: number;
+    readonly max: number;
+    /** A machine is replaced after this many sessions. */
+    readonly retireAfter: number;
+  };
+  /** Paths where the newest change wins (the declaration's `lww`). */
+  readonly lww: ReadonlyArray<string>;
+}
+
+/** The one cache file a machine keeps blocks in, for every head and call. */
+const CACHE = "/var/cache/blockd/volume.cache";
+
+/** How long the head stays mounted after a merge, for the next one. */
+const INTEGRATOR_IDLE = Duration.seconds(20);
+
+/** The lease a session's merges hold on its mount. */
+const INTEGRATOR = "integrator";
+
+/** Options for one command. */
+interface RunOptions {
+  readonly cwd?: string;
+  readonly env?: Record<string, string>;
+  readonly timeoutMs?: number;
 }
 
 /** How often a machine collects the store's garbage, at most. */
@@ -144,6 +181,28 @@ interface SessionShape {
     egress: DelegatedEgress | undefined,
   ): Effect.Effect<void, WorkspaceError, RuntimeContext>;
   release(session: string, lease: string): Effect.Effect<void, WorkspaceError, RuntimeContext>;
+  /** One command, where the host's placement says. */
+  run(
+    session: string,
+    command: string,
+    options: RunOptions,
+    grant: string,
+    egress: DelegatedEgress | undefined,
+    hostUrl: string | undefined,
+  ): Effect.Effect<WorkspaceExecResult, WorkspaceError, RuntimeContext>;
+  /** Merge what `from` changed since it forked into this session. */
+  merge(
+    session: string,
+    from: string,
+    hostUrl: string | undefined,
+  ): Effect.Effect<WorkspaceChanges, WorkspaceError, RuntimeContext>;
+  /** Become a session on `snapshot` with `patch` applied (a refused command's fork). */
+  adopt(
+    session: string,
+    snapshot: Snapshot,
+    patch: string,
+    hostUrl: string | undefined,
+  ): Effect.Effect<void, WorkspaceError, RuntimeContext>;
   fork(session: string, from: string): Effect.Effect<void, WorkspaceError, RuntimeContext>;
   undo(session: string, steps: number): Effect.Effect<void, WorkspaceError, RuntimeContext>;
   history(
@@ -171,7 +230,77 @@ interface MachineShape {
       readonly timeoutMs?: number;
     },
   ): Effect.Effect<ExecOutput, WorkspaceError, RuntimeContext>;
-  unmount(session: string): Effect.Effect<Snapshot | undefined, WorkspaceError, RuntimeContext>;
+  unmount(
+    session: string,
+  ): Effect.Effect<
+    { readonly snapshot: Snapshot | undefined; readonly paths: ChangedPaths },
+    WorkspaceError,
+    RuntimeContext
+  >;
+  /** The mounted head's changes since its last checkpoint. */
+  checkpoint(session: string): Effect.Effect<ChangedPaths, WorkspaceError, RuntimeContext>;
+  /** Checkpoint, then apply patches to the mounted head. */
+  apply(
+    session: string,
+    patches: ReadonlyArray<string>,
+  ): Effect.Effect<
+    { readonly paths: ChangedPaths; readonly applied: ReadonlyArray<PatchSummary> },
+    WorkspaceError,
+    RuntimeContext
+  >;
+  /** Snapshot the mounted head, frozen for the moment it takes. */
+  snapshot(session: string): Effect.Effect<Snapshot, WorkspaceError, RuntimeContext>;
+  /** Grant the running mount's commands `egress` (an open joining a merge's mount). */
+  grant(
+    config: HostConfig,
+    egress: DelegatedEgress | undefined,
+  ): Effect.Effect<void, WorkspaceError, RuntimeContext>;
+  /**
+   * A command on an ephemeral fork of `snapshot`; its patch goes to
+   * `patch`. With `keep`, processes it leaves running keep the fork (and
+   * this machine): `kept` says so, and `hostCommit`/`hostDetach` follow.
+   */
+  call(
+    snapshot: Snapshot,
+    command: string,
+    options: RunOptions & { readonly patch: string; readonly keep?: boolean },
+    config: HostConfig,
+    egress: DelegatedEgress | undefined,
+  ): Effect.Effect<
+    {
+      readonly exitCode: number;
+      readonly stdout: string;
+      readonly stderr: string;
+      readonly patch?: string;
+      readonly summary: PatchSummary;
+      readonly survivors: ReadonlyArray<DiskSurvivor>;
+      readonly kept: boolean;
+    },
+    WorkspaceError,
+    RuntimeContext
+  >;
+  /** The kept call's changes since its last commit (`full`: since its fork). */
+  hostCommit(
+    patch: string,
+    full: boolean,
+  ): Effect.Effect<DiskHostCommit, WorkspaceError, RuntimeContext>;
+  /** Stop the kept call's processes, commit the rest, and free the machine. */
+  hostDetach(patch: string): Effect.Effect<DiskHostCommit, WorkspaceError, RuntimeContext>;
+  /** A patch from `from` to `to` (uploaded to `patch` if given). */
+  diff(
+    from: Snapshot,
+    to: Snapshot,
+    patch: string | undefined,
+    config: HostConfig,
+  ): Effect.Effect<
+    { readonly patch?: string; readonly summary: PatchSummary },
+    WorkspaceError,
+    RuntimeContext
+  >;
+  /** Start the machine (a warm one in the pool) without mounting anything. */
+  warm(config: HostConfig): Effect.Effect<void, WorkspaceError, RuntimeContext>;
+  /** Stop the machine for good: the pool replaces it. */
+  retire(): Effect.Effect<void, WorkspaceError, RuntimeContext>;
   /** Start `command` in the background; its output goes to files `read` returns. */
   spawn(
     command: string,
@@ -189,6 +318,21 @@ interface MachineShape {
   >;
   kill(id: string, signal: number): Effect.Effect<void, WorkspaceError, RuntimeContext>;
 }
+
+/** What the pool answers: machines shared by every session. */
+interface PoolShape {
+  /** A free machine, preferring the one `session` used last; waits while all are busy. */
+  claim(session: string | undefined): Effect.Effect<string, WorkspaceError, RuntimeContext>;
+  release(machine: string, session: string | undefined): Effect.Effect<void, never, RuntimeContext>;
+  /** A machine held for a long open is still in use. */
+  touch(machine: string): Effect.Effect<void, never, RuntimeContext>;
+}
+
+/** @internal The workspace's machine pool: one Durable Object. */
+export const poolObject = (id: string) =>
+  DurableObject<PoolShape, PoolShape>()(className(id, "Pool"), {
+    errors: [WorkspaceError],
+  });
 
 /** @internal The workspace's sessions, one Durable Object each. */
 export const sessionObject = (id: string) =>
@@ -352,14 +496,28 @@ const parseRecord = (text: string): HeadRecord | null => {
 /**
  * @internal The session Durable Object: the head of its session (cached,
  * written through to R2 with conditional writes, so R2 stays the store of
- * record), and the leases of the `open`s running on it. Overlapping opens
- * with the same grant share one mount; the last to release snapshots it.
+ * record), the leases of the `open`s running on it, and its commit log.
+ *
+ * Overlapping opens with the same grant share one mount; the last to
+ * release snapshots it. A command forked from the session (placement
+ * `serverless` or `automatic`) merges back here: its patch lands only if
+ * nothing it changed was changed since its base, by a merge or by commands
+ * on the mounted head. The log records both, by sequence number.
  */
 const sessionImpl = (config: HostConfig) =>
   Effect.gen(function* () {
     const volume = yield* volumeOf(config.id);
-    // Through this Worker's own script: the two objects reference each other.
+    // Through this Worker's own script: the objects reference each other.
     const machines = yield* machineObject(config.id).from(thisWorker);
+    const pools = yield* poolObject(config.id).from(thisWorker);
+    // One pool per workspace.
+    const pool = {
+      claim: (session: string | undefined) => pools.getByName("pool").claim(session),
+      release: (machine: string, session: string | undefined) =>
+        pools.getByName("pool").release(machine, session),
+      touch: (machine: string) => pools.getByName("pool").touch(machine),
+    };
+    const sessions = yield* sessionObject(config.id).from(thisWorker);
     const env = (yield* WorkerEnvironment) as Record<string, unknown> | undefined;
     const prefix = `volumes/${config.id}`;
     const bucket = () => env?.[volumeBucketBinding(config.id)] as cf.R2Bucket | undefined;
@@ -367,6 +525,8 @@ const sessionImpl = (config: HostConfig) =>
       const state = yield* DurableObjectState;
       const headLock = yield* Semaphore.make(1);
       const openLock = yield* Semaphore.make(1);
+      // One merge at a time: each checks the log the one before it wrote.
+      const commitLock = yield* Semaphore.make(1);
       let cached:
         | { readonly record: HeadRecord | null; readonly etag: string | undefined }
         | undefined;
@@ -453,6 +613,83 @@ const sessionImpl = (config: HostConfig) =>
           ),
         );
 
+      /** A session that doesn't exist yet starts from the base. */
+      const ensureHead = Effect.fn(function* (session: string) {
+        if (
+          (yield* viaVolume(volume.head(session)).pipe(Effect.mapError(asWorkspaceError))) ===
+          undefined
+        ) {
+          yield* viaVolume(volume.fork(session)).pipe(Effect.mapError(asWorkspaceError));
+        }
+      });
+
+      //#region the commit log
+
+      const LOG = "workspace:log:";
+      const SEQ = "workspace:seq";
+      /** The last logged change the head's snapshot holds. */
+      const SNAPSHOT_SEQ = "workspace:snapshot-seq";
+      /** Commands forked and not merged yet: call → the sequence of their base. */
+      const CALLS = "workspace:calls";
+      const logKey = (seq: number) => `${LOG}${String(seq).padStart(16, "0")}`;
+
+      /** Log a change to the head: its paths, or `null` if nobody can name them. */
+      const appendLog = Effect.fn(function* (paths: ChangedPaths) {
+        const current = (yield* state.storage.get<number>(SEQ)) ?? 0;
+        if (paths !== null && paths.length === 0) return current;
+        const seq = current + 1;
+        yield* state.storage.put(logKey(seq), { paths });
+        yield* state.storage.put(SEQ, seq);
+        return seq;
+      });
+
+      /** Every change logged after `seq`, but those numbered in `except`. */
+      const logSince = Effect.fn(function* (seq: number, except: ReadonlyArray<number> = []) {
+        const entries = yield* state.storage.list<{ readonly paths: ChangedPaths }>({
+          prefix: LOG,
+          start: logKey(seq + 1),
+        });
+        const skip = new Set(except.map(logKey));
+        return [...entries.entries()]
+          .filter(([key]) => !skip.has(key))
+          .map(([, entry]) => entry.paths);
+      });
+
+      /** The head's snapshot now holds everything logged. */
+      const markSnapshot = Effect.gen(function* () {
+        yield* state.storage.put(SNAPSHOT_SEQ, (yield* state.storage.get<number>(SEQ)) ?? 0);
+      });
+
+      /** Drop entries no command still forked from could need. */
+      const pruneLog = Effect.gen(function* () {
+        const calls = (yield* state.storage.get<Record<string, number>>(CALLS)) ?? {};
+        const oldest = Math.min(
+          (yield* state.storage.get<number>(SNAPSHOT_SEQ)) ?? 0,
+          ...Object.values(calls),
+        );
+        const stale = yield* state.storage.list({ prefix: LOG, end: logKey(oldest + 1) });
+        for (const key of stale.keys()) yield* state.storage.delete(key);
+      });
+
+      const trackCall = (call: string, seq: number | undefined) =>
+        Effect.gen(function* () {
+          const calls = (yield* state.storage.get<Record<string, number>>(CALLS)) ?? {};
+          const { [call]: _done, ...rest } = calls;
+          yield* state.storage.put(CALLS, seq === undefined ? rest : { ...rest, [call]: seq });
+        });
+
+      /** A head moved some other way (undo, fork, delete): every base before it is stale. */
+      const headReplaced = Effect.gen(function* () {
+        yield* appendLog(null);
+        yield* markSnapshot;
+      });
+      // (A process host is dropped first: see `dropHost`.)
+
+      const deletePatch = (patch: string) =>
+        r2("deleting a patch", (b) => b.delete(`${prefix}/${patch}`)).pipe(Effect.ignore);
+
+      //#endregion
+
       //#region leases
 
       interface Opens {
@@ -467,25 +704,56 @@ const sessionImpl = (config: HostConfig) =>
         state.storage.get<Opens>(OPENS),
         (opens) => opens ?? { leases: {} },
       );
+      const HOST_SYNC_AT = "workspace:host-sync-at";
+      /** The next lease expiry, or the next commit of a process host, whichever is first. */
+      const schedule = (opens: Opens) =>
+        Effect.gen(function* () {
+          const sync = yield* state.storage.get<number>(HOST_SYNC_AT);
+          const times = [...Object.values(opens.leases), ...(sync !== undefined ? [sync] : [])];
+          if (times.length > 0) yield* state.storage.setAlarm(Math.min(...times));
+        });
       const saveOpens = (opens: Opens) =>
         Effect.gen(function* () {
           yield* state.storage.put(OPENS, opens);
-          const expiries = Object.values(opens.leases);
-          if (expiries.length > 0) yield* state.storage.setAlarm(Math.min(...expiries));
+          yield* schedule(opens);
         });
 
-      /** Unmount if nothing holds the mount any more. */
+      /** Mount the session's head on a machine from the pool. */
+      const mountHead = Effect.fn(function* (
+        session: string,
+        egress: DelegatedEgress | undefined,
+        hostUrl: string | undefined,
+      ) {
+        yield* ensureHead(session);
+        const machine = yield* pool.claim(session);
+        const mounted = yield* Effect.exit(
+          machines.getByName(machine).mount(session, config, egress, hostUrl),
+        );
+        if (mounted._tag === "Failure") {
+          yield* pool.release(machine, session);
+          return yield* Effect.failCause(mounted.cause);
+        }
+        return { machine, dir: mounted.value.dir };
+      });
+
+      /** Unmount if nothing holds the mount any more; returns what the unmount said. */
       const settle = Effect.fn(function* (session: string, opens: Opens) {
         if (Object.keys(opens.leases).length > 0 || !opens.machine) {
           yield* saveOpens(opens);
-          return;
+          return undefined;
         }
         const unmounted = yield* Effect.exit(machines.getByName(opens.machine).unmount(session));
+        yield* saveOpens({ leases: {} });
+        yield* pool.release(opens.machine, session);
         if (unmounted._tag === "Failure") {
           // The next mount recovers whatever the journal holds.
           yield* Effect.logWarning(`unmounting ${session} failed`, unmounted.cause);
+          yield* headReplaced;
+          return undefined;
         }
-        yield* saveOpens({ leases: {} });
+        yield* appendLog(unmounted.value.paths);
+        yield* markSnapshot;
+        return unmounted.value;
       });
 
       const dropExpired = (opens: Opens): Opens => {
@@ -524,6 +792,352 @@ const sessionImpl = (config: HostConfig) =>
           );
 
       const idle = (opens: Opens) => Object.keys(opens.leases).length === 0;
+      /** Only merges hold the mount: an open of any grant can take it over. */
+      const merging = (opens: Opens) =>
+        Object.keys(opens.leases).length === 1 && INTEGRATOR in opens.leases;
+
+      const acquire = (
+        session: string,
+        grant: string,
+        egress: DelegatedEgress | undefined,
+        hostUrl: string | undefined,
+      ) =>
+        whenReady(
+          session,
+          (opens) => idle(opens) || opens.grant === grant || merging(opens),
+          Effect.fn(function* (opens) {
+            const lease = crypto.randomUUID();
+            const expires = Date.now() + Duration.toMillis(LEASE_TTL);
+            if (!idle(opens)) {
+              if (opens.grant !== grant) {
+                yield* machines.getByName(opens.machine!).grant(config, egress);
+              }
+              yield* saveOpens({ ...opens, grant, leases: { ...opens.leases, [lease]: expires } });
+              return { lease, machine: opens.machine!, dir: opens.dir! };
+            }
+            const { machine, dir } = yield* mountHead(session, egress, hostUrl);
+            yield* saveOpens({ leases: { [lease]: expires }, session, grant, machine, dir });
+            return { lease, machine, dir };
+          }),
+        );
+
+      const release = (session: string, lease: string) =>
+        openLock.withPermits(1)(
+          Effect.gen(function* () {
+            const opens = yield* loadOpens;
+            const { [lease]: _released, ...leases } = opens.leases;
+            return yield* settle(session, { ...opens, leases });
+          }),
+        );
+
+      /**
+       * The session's head mounted for merges: the mount an open holds, or
+       * one of its own that stays a moment for the next merge.
+       */
+      const holdForMerge = Effect.fn(function* (
+        session: string,
+        hostUrl: string | undefined,
+        until: number,
+      ) {
+        return yield* openLock.withPermits(1)(
+          Effect.gen(function* () {
+            const opens = dropExpired(yield* loadOpens);
+            if (opens.machine) {
+              yield* saveOpens({ ...opens, leases: { ...opens.leases, [INTEGRATOR]: until } });
+              return opens.machine;
+            }
+            const { machine, dir } = yield* mountHead(session, undefined, hostUrl);
+            yield* saveOpens({
+              leases: { [INTEGRATOR]: until },
+              session,
+              grant: "",
+              machine,
+              dir,
+            });
+            return machine;
+          }),
+        );
+      });
+
+      //#endregion
+
+      //#region merging
+
+      /** While a merge runs its mount can't expire; afterwards it stays a moment. */
+      const LONG = Duration.toMillis(Duration.minutes(15));
+      const done = (session: string, hostUrl: string | undefined) =>
+        holdForMerge(session, hostUrl, Date.now() + Duration.toMillis(INTEGRATOR_IDLE)).pipe(
+          Effect.ignore,
+        );
+
+      /**
+       * Land `patch` (a command's, from base `seq`) on the head: refused, and
+       * kept as a fork, if it changed a path changed since.
+       */
+      const commit = Effect.fn(function* (
+        session: string,
+        base: { readonly snapshot: Snapshot; readonly seq: number },
+        patch: string,
+        summary: PatchSummary,
+        call: string,
+        hostUrl: string | undefined,
+      ) {
+        const machine = machines.getByName(
+          yield* holdForMerge(session, hostUrl, Date.now() + LONG),
+        );
+        // What the head's own commands changed counts as a change since the base.
+        yield* appendLog(yield* machine.checkpoint(session));
+        const clashes = conflicts(summary.paths, yield* logSince(base.seq), config.lww);
+        if (clashes.length > 0) {
+          const fork = `${session}~${call.slice(0, 8)}`;
+          yield* sessions.getByName(fork).adopt(fork, base.snapshot, patch, hostUrl);
+          return { status: "conflict", paths: clashes, fork } satisfies WorkspaceChanges;
+        }
+        yield* machine.apply(session, [patch]);
+        yield* appendLog(summary.paths);
+        const snapshot = yield* machine.snapshot(session);
+        yield* markSnapshot;
+        yield* deletePatch(patch);
+        return { status: "applied", snapshot, paths: summary.paths } satisfies WorkspaceChanges;
+      });
+
+      //#region process hosts
+
+      /**
+       * A command whose processes outlived it (placement `automatic`): its
+       * fork stays mounted on its machine for them. The session's next
+       * commands run there too, so they see what those processes see (their
+       * files, their ports), and what changes there merges into the head
+       * after each command and every few seconds.
+       */
+      interface Host {
+        readonly session: string;
+        readonly machine: string;
+        readonly call: string;
+        readonly base: { readonly snapshot: Snapshot; readonly seq: number };
+        readonly hostUrl?: string;
+        /** Its own commits' sequence numbers: they never conflict with it. */
+        readonly own: ReadonlyArray<number>;
+        /** Its changes stopped landing: these conflicted. Kept as a fork when it ends. */
+        readonly diverged?: ReadonlyArray<string>;
+      }
+      const HOST = "workspace:host";
+      const HOST_SYNC = Duration.toMillis(Duration.seconds(5));
+      const forkOf = (host: Host) => `${host.session}~${host.call.slice(0, 8)}`;
+      const saveHost = (host: Host | undefined) =>
+        Effect.gen(function* () {
+          if (host) {
+            yield* state.storage.put(HOST, host);
+            yield* state.storage.put(HOST_SYNC_AT, Date.now() + HOST_SYNC);
+          } else {
+            yield* state.storage.delete(HOST);
+            yield* state.storage.delete(HOST_SYNC_AT);
+          }
+          yield* schedule(yield* loadOpens);
+        });
+
+      /** Land one of a host's commits on the head, unless it conflicts. */
+      const landHost = Effect.fn(function* (host: Host, reply: DiskHostCommit) {
+        if (!reply.patch) {
+          return { host, changes: { status: "applied", paths: [] } satisfies WorkspaceChanges };
+        }
+        if (host.diverged) {
+          yield* deletePatch(reply.patch);
+          const changes: WorkspaceChanges = {
+            status: "conflict",
+            paths: host.diverged,
+            fork: forkOf(host),
+          };
+          return { host, changes };
+        }
+        const head = machines.getByName(
+          yield* holdForMerge(host.session, host.hostUrl, Date.now() + LONG),
+        );
+        yield* appendLog(yield* head.checkpoint(host.session));
+        const clashes = conflicts(
+          reply.summary.paths,
+          yield* logSince(host.base.seq, host.own),
+          config.lww,
+        );
+        if (clashes.length > 0) {
+          yield* deletePatch(reply.patch);
+          const next = { ...host, diverged: clashes };
+          yield* saveHost(next);
+          const changes: WorkspaceChanges = {
+            status: "conflict",
+            paths: clashes,
+            fork: forkOf(host),
+          };
+          return { host: next, changes };
+        }
+        yield* head.apply(host.session, [reply.patch]);
+        const seq = yield* appendLog(reply.summary.paths);
+        const snapshot = yield* head.snapshot(host.session);
+        yield* markSnapshot;
+        yield* deletePatch(reply.patch);
+        const next = { ...host, own: [...host.own, seq] };
+        yield* saveHost(next);
+        const changes: WorkspaceChanges = {
+          status: "applied",
+          snapshot,
+          paths: reply.summary.paths,
+        };
+        return { host: next, changes };
+      });
+
+      /** The host's processes are done (or it's dropped): the last of its changes, and its machine back. */
+      const endHost = Effect.fn(function* (host: Host, keep: boolean) {
+        const machine = machines.getByName(host.machine);
+        const key = `patches/${host.session}/${host.call}-last-${Date.now()}`;
+        let changes: WorkspaceChanges = { status: "applied", paths: [] };
+        if (keep && host.diverged) {
+          // Everything it changed since its fork, kept as a session of its own.
+          const full = yield* machine.hostCommit(`${key}-full`, true);
+          const detached = yield* machine.hostDetach(key);
+          if (detached.patch) yield* deletePatch(detached.patch);
+          if (full.patch) {
+            yield* sessions
+              .getByName(forkOf(host))
+              .adopt(forkOf(host), host.base.snapshot, full.patch, host.hostUrl);
+          }
+          changes = { status: "conflict", paths: host.diverged, fork: forkOf(host) };
+        } else {
+          const detached = yield* machine.hostDetach(key);
+          if (keep) changes = (yield* landHost(host, detached)).changes;
+          else if (detached.patch) yield* deletePatch(detached.patch);
+        }
+        yield* saveHost(undefined);
+        yield* trackCall(host.call, undefined);
+        yield* pool.release(host.machine, host.session);
+        return changes;
+      });
+
+      /** Commit what changed on the host since its last commit; end it if its processes are done. */
+      const syncHost = Effect.fn(function* () {
+        const host = yield* state.storage.get<Host>(HOST);
+        if (!host) return undefined;
+        yield* pool.touch(host.machine);
+        const key = `patches/${host.session}/${host.call}-${Date.now()}`;
+        const reply = yield* machines.getByName(host.machine).hostCommit(key, false);
+        const landed = yield* landHost(host, reply);
+        if (reply.survivors.length > 0) return landed.changes;
+        const last = yield* endHost(landed.host, true);
+        return last.paths.length > 0 || last.status === "conflict" ? last : landed.changes;
+      });
+
+      /** A command on the session's process host. */
+      const runOnHost = Effect.fn(function* (host: Host, command: string, options: RunOptions) {
+        const output = yield* machines.getByName(host.machine).exec(command, {
+          cwd: options.cwd ?? config.path,
+          ...(options.env ? { env: options.env } : {}),
+          ...(options.timeoutMs !== undefined ? { timeoutMs: options.timeoutMs } : {}),
+        });
+        const changes: WorkspaceChanges = (yield* commitLock
+          .withPermits(1)(syncHost())
+          .pipe(Effect.ensuring(done(host.session, host.hostUrl)))) ?? {
+          status: "applied",
+          paths: [],
+        };
+        return { ...output, changes } satisfies WorkspaceExecResult;
+      });
+
+      /** Stop a host without keeping what it changed (the head moved some other way). */
+      const dropHost = Effect.gen(function* () {
+        const host = yield* state.storage.get<Host>(HOST);
+        if (host) yield* Effect.ignore(endHost(host, false));
+      });
+
+      //#endregion
+
+      /** A command on a fork of the session, on any machine, merged back. */
+      const runForked = Effect.fn(function* (
+        session: string,
+        command: string,
+        options: RunOptions,
+        egress: DelegatedEgress | undefined,
+        hostUrl: string | undefined,
+      ) {
+        if (config.placement === "automatic") {
+          const host = yield* state.storage.get<Host>(HOST);
+          if (host) return yield* runOnHost(host, command, options);
+        }
+        const keep = config.placement === "automatic";
+        const call = crypto.randomUUID();
+        const base = yield* openLock.withPermits(1)(
+          Effect.gen(function* () {
+            yield* ensureHead(session);
+            const { record } = yield* headLock.withPermits(1)(readHead(session));
+            if (!record) return yield* fail(`${session} has no head`);
+            const seq = (yield* state.storage.get<number>(SNAPSHOT_SEQ)) ?? 0;
+            yield* trackCall(call, seq);
+            return { snapshot: record.snapshot, seq };
+          }),
+        );
+        const patch = `patches/${session}/${call}`;
+        let kept = false;
+        return yield* Effect.gen(function* () {
+          const machine = yield* pool.claim(session);
+          const ran = yield* machines
+            .getByName(machine)
+            .call(
+              base.snapshot,
+              command,
+              { ...options, patch, ...(keep ? { keep } : {}) },
+              config,
+              egress,
+            )
+            .pipe(Effect.onError(() => pool.release(machine, session)));
+          if (ran.kept) {
+            // Its processes keep the machine: the session's commands go there now.
+            kept = true;
+            const host: Host = {
+              session,
+              machine,
+              call,
+              base,
+              own: [],
+              ...(hostUrl ? { hostUrl } : {}),
+            };
+            yield* saveHost(host);
+            const changes = (yield* commitLock
+              .withPermits(1)(
+                landHost(host, {
+                  ...(ran.patch ? { patch: ran.patch } : {}),
+                  summary: ran.summary,
+                  survivors: ran.survivors,
+                }),
+              )
+              .pipe(Effect.ensuring(done(session, hostUrl)))).changes;
+            return {
+              exitCode: ran.exitCode,
+              stdout: ran.stdout,
+              stderr: ran.stderr,
+              changes,
+            } satisfies WorkspaceExecResult;
+          }
+          yield* pool.release(machine, session);
+          const changes: WorkspaceChanges = ran.patch
+            ? yield* commitLock
+                .withPermits(1)(commit(session, base, ran.patch, ran.summary, call, hostUrl))
+                .pipe(Effect.ensuring(done(session, hostUrl)))
+            : { status: "applied", paths: [] };
+          return {
+            exitCode: ran.exitCode,
+            stdout: ran.stdout,
+            stderr: ran.stderr,
+            changes,
+            ...(ran.survivors.length > 0 ? { stopped: ran.survivors } : {}),
+          } satisfies WorkspaceExecResult;
+        }).pipe(
+          Effect.onError(() => deletePatch(patch)),
+          // A host's base stays tracked until it ends.
+          Effect.ensuring(
+            Effect.suspend(() =>
+              kept ? Effect.void : Effect.andThen(trackCall(call, undefined), pruneLog),
+            ).pipe(Effect.ignore),
+          ),
+        );
+      });
 
       //#endregion
 
@@ -601,37 +1215,7 @@ const sessionImpl = (config: HostConfig) =>
               ),
             ),
 
-        acquire: (
-          session: string,
-          grant: string,
-          egress: DelegatedEgress | undefined,
-          hostUrl: string | undefined,
-        ) =>
-          whenReady(
-            session,
-            (opens) => idle(opens) || opens.grant === grant,
-            Effect.fn(function* (opens) {
-              const lease = crypto.randomUUID();
-              const expires = Date.now() + Duration.toMillis(LEASE_TTL);
-              if (!idle(opens)) {
-                yield* saveOpens({ ...opens, leases: { ...opens.leases, [lease]: expires } });
-                return { lease, machine: opens.machine!, dir: opens.dir! };
-              }
-              // A session that doesn't exist yet starts from the base.
-              if (
-                (yield* viaVolume(volume.head(session)).pipe(Effect.mapError(asWorkspaceError))) ===
-                undefined
-              ) {
-                yield* viaVolume(volume.fork(session)).pipe(Effect.mapError(asWorkspaceError));
-              }
-              const machine = session;
-              const { dir } = yield* machines
-                .getByName(machine)
-                .mount(session, config, egress, hostUrl);
-              yield* saveOpens({ leases: { [lease]: expires }, session, grant, machine, dir });
-              return { lease, machine, dir };
-            }),
-          ),
+        acquire,
 
         renew: (session: string, lease: string, egress: DelegatedEgress | undefined) =>
           openLock.withPermits(1)(
@@ -640,7 +1224,10 @@ const sessionImpl = (config: HostConfig) =>
               if (!(lease in opens.leases)) {
                 return yield* fail(`the lease on ${session} expired`);
               }
-              if (egress && opens.machine) yield* machines.getByName(opens.machine).refresh(egress);
+              if (opens.machine) {
+                if (egress) yield* machines.getByName(opens.machine).refresh(egress);
+                yield* pool.touch(opens.machine);
+              }
               yield* saveOpens({
                 ...opens,
                 leases: { ...opens.leases, [lease]: Date.now() + Duration.toMillis(LEASE_TTL) },
@@ -648,21 +1235,126 @@ const sessionImpl = (config: HostConfig) =>
             }),
           ),
 
-        release: (session: string, lease: string) =>
-          openLock.withPermits(1)(
+        release: (session: string, lease: string) => Effect.asVoid(release(session, lease)),
+
+        run: (
+          session: string,
+          command: string,
+          options: RunOptions,
+          grant: string,
+          egress: DelegatedEgress | undefined,
+          hostUrl: string | undefined,
+        ) =>
+          config.placement === "pinned"
+            ? Effect.gen(function* () {
+                // Released before it returns: an open's last release snapshots.
+                let released:
+                  | { readonly snapshot: Snapshot | undefined; readonly paths: ChangedPaths }
+                  | undefined;
+                const lease = yield* acquire(session, grant, egress, hostUrl);
+                const output = yield* machines
+                  .getByName(lease.machine)
+                  .exec(command, {
+                    cwd: options.cwd ?? lease.dir,
+                    ...(options.env ? { env: options.env } : {}),
+                    ...(options.timeoutMs !== undefined ? { timeoutMs: options.timeoutMs } : {}),
+                  })
+                  .pipe(
+                    Effect.onExit(() =>
+                      release(session, lease.lease).pipe(
+                        Effect.tap((value) => Effect.sync(() => (released = value))),
+                        Effect.ignore,
+                      ),
+                    ),
+                  );
+                return {
+                  ...output,
+                  changes: {
+                    status: "applied",
+                    ...(released?.snapshot ? { snapshot: released.snapshot } : {}),
+                    paths: released?.paths ?? [],
+                  },
+                } satisfies WorkspaceExecResult;
+              })
+            : runForked(session, command, options, egress, hostUrl),
+
+        merge: (session: string, from: string, hostUrl: string | undefined) =>
+          commitLock.withPermits(1)(
             Effect.gen(function* () {
-              const opens = yield* loadOpens;
-              const { [lease]: _released, ...leases } = opens.leases;
-              yield* settle(session, { ...opens, leases });
-            }),
+              const ours = yield* volume.history(session, { limit: 500 });
+              const theirs = yield* volume.history(from, { limit: 500 });
+              const known = new Set(ours);
+              const ancestor = theirs.find((snapshot) => known.has(snapshot));
+              if (ancestor === undefined) {
+                return yield* fail(`${from} and ${session} share no snapshot to merge from`);
+              }
+              if (theirs[0] === ancestor) {
+                return { status: "applied", paths: [] } satisfies WorkspaceChanges;
+              }
+              const head = machines.getByName(
+                yield* holdForMerge(session, hostUrl, Date.now() + LONG),
+              );
+              yield* appendLog(yield* head.checkpoint(session));
+              const now = yield* head.snapshot(session);
+              yield* markSnapshot;
+              const patch = `patches/${session}/merge-${crypto.randomUUID()}`;
+              const worker = yield* pool.claim(undefined);
+              const [incoming, local] = yield* Effect.all(
+                [
+                  machines.getByName(worker).diff(ancestor, theirs[0]!, patch, config),
+                  machines.getByName(worker).diff(ancestor, now, undefined, config),
+                ],
+                { concurrency: 1 },
+              ).pipe(Effect.ensuring(pool.release(worker, undefined)));
+              const clashes = conflicts(incoming.summary.paths, [local.summary.paths], config.lww);
+              if (clashes.length > 0 || !incoming.patch) {
+                yield* deletePatch(patch);
+                return clashes.length > 0
+                  ? ({ status: "conflict", paths: clashes } satisfies WorkspaceChanges)
+                  : ({ status: "applied", paths: [] } satisfies WorkspaceChanges);
+              }
+              yield* head.apply(session, [incoming.patch]);
+              yield* appendLog(incoming.summary.paths);
+              const snapshot = yield* head.snapshot(session);
+              yield* markSnapshot;
+              yield* deletePatch(patch);
+              return {
+                status: "applied",
+                snapshot,
+                paths: incoming.summary.paths,
+              } satisfies WorkspaceChanges;
+            }).pipe(Effect.mapError(asWorkspaceError), Effect.ensuring(done(session, hostUrl))),
+          ),
+
+        adopt: (session: string, snapshot: Snapshot, patch: string, hostUrl: string | undefined) =>
+          commitLock.withPermits(1)(
+            Effect.gen(function* () {
+              yield* whenReady(session, idle, () =>
+                Effect.gen(function* () {
+                  if ((yield* viaVolume(volume.head(session))) === undefined) {
+                    yield* viaVolume(volume.fork(session));
+                  }
+                  yield* viaVolume(volume.reset(session, snapshot));
+                  yield* headReplaced;
+                }).pipe(Effect.mapError(asWorkspaceError)),
+              );
+              const head = machines.getByName(
+                yield* holdForMerge(session, hostUrl, Date.now() + LONG),
+              );
+              const applied = yield* head.apply(session, [patch]);
+              yield* appendLog(applied.applied.flatMap((summary) => summary.paths));
+              yield* head.snapshot(session);
+              yield* markSnapshot;
+              yield* deletePatch(patch);
+            }).pipe(Effect.ensuring(done(session, hostUrl))),
           ),
 
         fork: (session: string, from: string) =>
           whenReady(session, idle, () =>
-            viaVolume(volume.fork(session, { from })).pipe(
-              Effect.asVoid,
-              Effect.mapError(asWorkspaceError),
-            ),
+            Effect.andThen(
+              commitLock.withPermits(1)(dropHost),
+              viaVolume(volume.fork(session, { from })),
+            ).pipe(Effect.asVoid, Effect.andThen(headReplaced), Effect.mapError(asWorkspaceError)),
           ),
 
         undo: (session: string, steps: number) =>
@@ -673,7 +1365,9 @@ const sessionImpl = (config: HostConfig) =>
               if (target === undefined) {
                 return yield* fail(`${session} has fewer than ${steps} snapshots to undo`);
               }
+              yield* commitLock.withPermits(1)(dropHost);
               yield* viaVolume(volume.reset(session, target));
+              yield* headReplaced;
             }).pipe(Effect.mapError(asWorkspaceError)),
           ),
 
@@ -682,22 +1376,43 @@ const sessionImpl = (config: HostConfig) =>
 
         remove: (session: string) =>
           whenReady(session, idle, () =>
-            viaVolume(volume.drop(session)).pipe(Effect.mapError(asWorkspaceError)),
+            Effect.andThen(
+              commitLock.withPermits(1)(dropHost),
+              viaVolume(volume.drop(session)),
+            ).pipe(Effect.andThen(headReplaced), Effect.mapError(asWorkspaceError)),
           ),
 
         alarm: () =>
-          openLock
-            .withPermits(1)(
-              Effect.gen(function* () {
-                const opens = yield* loadOpens;
-                const live = dropExpired(opens);
-                if (Object.keys(live.leases).length === Object.keys(opens.leases).length) {
-                  return yield* saveOpens(opens);
-                }
-                if (live.session) yield* settle(live.session, live);
-              }),
-            )
-            .pipe(Effect.catch((error) => Effect.logWarning("expiring leases failed", error))),
+          Effect.gen(function* () {
+            // A process host's changes, every few seconds.
+            const syncAt = yield* state.storage.get<number>(HOST_SYNC_AT);
+            if (syncAt !== undefined && syncAt <= Date.now()) {
+              const host = yield* state.storage.get<Host>(HOST);
+              yield* commitLock
+                .withPermits(1)(syncHost())
+                .pipe(
+                  Effect.ensuring(host ? done(host.session, host.hostUrl) : Effect.void),
+                  Effect.catch((error) =>
+                    Effect.logWarning("committing a process host failed", error),
+                  ),
+                );
+              if (yield* state.storage.get<Host>(HOST)) {
+                yield* state.storage.put(HOST_SYNC_AT, Date.now() + HOST_SYNC);
+              }
+            }
+            yield* openLock
+              .withPermits(1)(
+                Effect.gen(function* () {
+                  const opens = yield* loadOpens;
+                  const live = dropExpired(opens);
+                  if (Object.keys(live.leases).length === Object.keys(opens.leases).length) {
+                    return yield* saveOpens(opens);
+                  }
+                  if (live.session) yield* settle(live.session, live);
+                }),
+              )
+              .pipe(Effect.catch((error) => Effect.logWarning("expiring leases failed", error)));
+          }),
       };
     });
   });
@@ -740,6 +1455,8 @@ interface MachineBackend {
   readonly controls: boolean;
   /** Stop the machine (it's idle). */
   readonly stop: Effect.Effect<void, unknown, RuntimeContext>;
+  /** Stop it for good: its disk goes with it. */
+  readonly retire: Effect.Effect<void, { readonly message: string }, RuntimeContext>;
 }
 
 /** A Cloudflare container built from the workspace's Dockerfile. */
@@ -774,6 +1491,7 @@ const containerBackend = (config: HostConfig, dockerfile?: string) =>
       controls: true,
       // The container's inactivity timeout stops it.
       stop: Effect.void,
+      retire: container.destroy(),
     } satisfies MachineBackend;
   });
 
@@ -808,6 +1526,7 @@ const sandboxBackend = (config: HostConfig) =>
         }),
       controls: false,
       stop: sandbox.stop(),
+      retire: sandbox.stop(),
     } satisfies MachineBackend;
   });
 
@@ -859,9 +1578,174 @@ const serveHeads = (
   );
 
 /**
+ * @internal The pool: machines shared by every session of the workspace.
+ * A claim takes a free machine, preferring the one the session used last
+ * (its cache holds the session's blocks), then the most recently used;
+ * a new one while there are fewer than `max`; otherwise it waits. A machine
+ * retires after `retireAfter` sessions, and `min` free machines are kept
+ * started.
+ */
+const poolImpl = (config: HostConfig) =>
+  Effect.gen(function* () {
+    const machines = yield* machineObject(config.id).from(thisWorker);
+    return Effect.gen(function* () {
+      const state = yield* DurableObjectState;
+      const lock = yield* Semaphore.make(1);
+      interface Slot {
+        readonly busy: boolean;
+        readonly uses: number;
+        readonly last?: string;
+        /** When it was last claimed, released or touched. */
+        readonly at: number;
+      }
+      interface Pool {
+        readonly slots: Record<string, Slot>;
+        readonly next: number;
+      }
+      const KEY = "workspace:pool";
+      /** A machine claimed and never released or touched for this long is free. */
+      const STALE = Duration.toMillis(Duration.minutes(30));
+      const load = Effect.map(
+        state.storage.get<Pool>(KEY),
+        (pool) => pool ?? { slots: {}, next: 0 },
+      );
+      const save = (pool: Pool) => state.storage.put(KEY, pool);
+      const free = (slot: Slot) => !slot.busy || Date.now() - slot.at > STALE;
+      const warmEvery = Math.min(config.idleMs / 2, Duration.toMillis(Duration.minutes(1)));
+
+      const tryClaim = (session: string | undefined) =>
+        lock.withPermits(1)(
+          Effect.gen(function* () {
+            const pool = yield* load;
+            const candidates = Object.entries(pool.slots)
+              .filter(([, slot]) => free(slot))
+              .sort(([, a], [, b]) => b.at - a.at);
+            let name =
+              (session !== undefined
+                ? candidates.find(([, slot]) => slot.last === session)?.[0]
+                : undefined) ?? candidates[0]?.[0];
+            let next = pool.next;
+            if (name === undefined) {
+              if (Object.keys(pool.slots).length >= config.pool.max) return undefined;
+              name = `m${next++}`;
+            }
+            const slot = pool.slots[name];
+            yield* save({
+              next,
+              slots: {
+                ...pool.slots,
+                [name]: { ...slot, uses: slot?.uses ?? 0, busy: true, at: Date.now() },
+              },
+            });
+            if (config.pool.min > 0 && (yield* state.storage.getAlarm()) === null) {
+              yield* state.storage.setAlarm(Date.now() + warmEvery);
+            }
+            return name;
+          }),
+        );
+
+      return {
+        claim: (session: string | undefined) =>
+          tryClaim(session).pipe(
+            Effect.repeat({
+              schedule: Schedule.spaced("250 millis"),
+              until: (name) => name !== undefined,
+            }),
+            Effect.map((name) => name!),
+            Effect.timeoutOrElse({
+              duration: Duration.minutes(10),
+              orElse: () => Effect.fail(fail(`every machine of ${config.id} stayed busy`)),
+            }),
+          ),
+
+        release: (machine: string, session: string | undefined) =>
+          lock
+            .withPermits(1)(
+              Effect.gen(function* () {
+                const pool = yield* load;
+                const slot = pool.slots[machine];
+                if (!slot) return;
+                const uses = slot.uses + 1;
+                if (uses >= config.pool.retireAfter) {
+                  const { [machine]: _retired, ...slots } = pool.slots;
+                  yield* save({ ...pool, slots });
+                  yield* state.waitUntil(Effect.ignore(machines.getByName(machine).retire()));
+                  return;
+                }
+                yield* save({
+                  ...pool,
+                  slots: {
+                    ...pool.slots,
+                    [machine]: {
+                      busy: false,
+                      uses,
+                      at: Date.now(),
+                      ...(session ? { last: session } : slot.last ? { last: slot.last } : {}),
+                    },
+                  },
+                });
+              }),
+            )
+            .pipe(
+              Effect.catchCause((cause) => Effect.logWarning("releasing a machine failed", cause)),
+            ),
+
+        touch: (machine: string) =>
+          lock
+            .withPermits(1)(
+              Effect.gen(function* () {
+                const pool = yield* load;
+                const slot = pool.slots[machine];
+                if (slot) {
+                  yield* save({
+                    ...pool,
+                    slots: { ...pool.slots, [machine]: { ...slot, at: Date.now() } },
+                  });
+                }
+              }),
+            )
+            .pipe(Effect.ignore),
+
+        /** Keep `min` free machines started. */
+        alarm: () =>
+          lock
+            .withPermits(1)(
+              Effect.gen(function* () {
+                if (config.pool.min <= 0) return;
+                const pool = yield* load;
+                const idle = Object.entries(pool.slots)
+                  .filter(([, slot]) => !slot.busy)
+                  .sort(([, a], [, b]) => b.at - a.at)
+                  .map(([name]) => name);
+                let next = pool.next;
+                const slots = { ...pool.slots };
+                while (
+                  idle.length < config.pool.min &&
+                  Object.keys(slots).length < config.pool.max
+                ) {
+                  const name = `m${next++}`;
+                  slots[name] = { busy: false, uses: 0, at: Date.now() };
+                  idle.push(name);
+                }
+                yield* save({ slots, next });
+                for (const name of idle.slice(0, config.pool.min)) {
+                  yield* state.waitUntil(Effect.ignore(machines.getByName(name).warm(config)));
+                }
+                yield* state.storage.setAlarm(Date.now() + warmEvery);
+              }),
+            )
+            .pipe(
+              Effect.catchCause((cause) => Effect.logWarning("warming the pool failed", cause)),
+            ),
+      };
+    });
+  });
+
+/**
  * @internal A machine: one container or MicroVM with blockd, serving one
- * session's mount at a time. A container's blockd reads and moves its head
- * and appends its journal through the session's Durable Object.
+ * session's mount or one forked command at a time, for any session of the
+ * workspace (the pool hands it out). A container's blockd reads and moves
+ * its head and appends its journal through the session's Durable Object.
  */
 const machineImpl = (config: HostConfig, dockerfile?: string) =>
   Effect.gen(function* () {
@@ -892,7 +1776,8 @@ const machineImpl = (config: HostConfig, dockerfile?: string) =>
             [
               `pkill -9 -f "blockd mount .*--head ${session} " || true`,
               `umount -l ${config.path} 2>/dev/null || true`,
-              `umount -l /var/cache/blockd/${session}.disk 2>/dev/null || true`,
+              `umount -l ${CACHE.replace(/\.cache$/, ".top")} 2>/dev/null || true`,
+              `umount -l ${CACHE.replace(/\.cache$/, ".disk")} 2>/dev/null || true`,
               "losetup -D 2>/dev/null || true",
               `rm -f /run/blockd/${session}.sock`,
             ].join("; "),
@@ -901,15 +1786,33 @@ const machineImpl = (config: HostConfig, dockerfile?: string) =>
         ).pipe(Effect.ignore);
 
       /**
-       * Unmount `session` and return its snapshot. A detach that fails (blockd
-       * died, say) is cleaned up by force: its journal is still durable, and
-       * the next mount's lease folds it.
+       * What one session or command left behind, gone before the next: the
+       * processes `spawn` started, and scratch space.
+       */
+      const wipe = run(
+        [
+          "sh",
+          "-c",
+          [
+            'for f in /run/workspace/*/pid; do [ -f "$f" ] && kill -9 -- "-$(cat "$f")" 2>/dev/null; done',
+            "rm -rf /run/workspace /tmp/* /tmp/.[!.]* /var/tmp/* 2>/dev/null",
+            "true",
+          ].join("; "),
+        ],
+        {},
+      ).pipe(Effect.ignore);
+
+      /**
+       * Unmount `session`; returns its snapshot and what it changed since
+       * its last checkpoint. A detach that fails (blockd died, say) is
+       * cleaned up by force: its journal is still durable, and the next
+       * mount's lease folds it.
        */
       const detach = Effect.fn(function* (session: string) {
         const current = mounted?.head === session ? mounted : undefined;
         mounted = undefined;
         const detached = current
-          ? yield* Effect.exit(current.detach)
+          ? yield* Effect.exit(current.release)
           : // This object restarted while the machine kept the mount.
             yield* Effect.exit(
               run(
@@ -920,7 +1823,14 @@ const machineImpl = (config: HostConfig, dockerfile?: string) =>
                 ],
                 {},
               ).pipe(
-                Effect.map((reply) => /"snapshot":"([0-9a-f]+)"/.exec(decode(reply.stdout))?.[1]),
+                Effect.map((reply) => {
+                  const text = decode(reply.stdout);
+                  return {
+                    snapshot: /"snapshot":"([0-9a-f]+)"/.exec(text)?.[1] as Snapshot,
+                    // An object that lost its mount can't say what changed.
+                    paths: null as ChangedPaths,
+                  };
+                }),
               ),
             );
         if (detached._tag === "Success") return detached.value;
@@ -929,10 +1839,30 @@ const machineImpl = (config: HostConfig, dockerfile?: string) =>
           detached.cause,
         );
         yield* forceDetach(session);
-        return undefined;
+        return { snapshot: undefined, paths: null as ChangedPaths };
       });
 
+      /** The session mounted here, or a failure saying it isn't. */
+      const mountOf = (session: string) =>
+        mounted?.head === session
+          ? Effect.succeed(mounted)
+          : Effect.fail(fail(`${session} isn't mounted on this machine`));
+
       const IDLE_AT = "workspace:idle-at";
+      /** The control socket of a call whose processes this machine keeps. */
+      const HOST = "workspace:host";
+      /** A kept call left over (its session moved on): stop it, keep nothing. */
+      const detachHost = Effect.gen(function* () {
+        const socket = yield* state.storage.get<string>(HOST);
+        if (!socket) return;
+        yield* Effect.ignore(disk.host(socket).detach());
+        yield* state.storage.delete(HOST);
+      });
+      /** A machine that bills while it runs stops once it's been idle. */
+      const idleFromNow = Effect.gen(function* () {
+        yield* state.storage.put(IDLE_AT, Date.now() + config.idleMs);
+        yield* state.storage.setAlarm(Date.now() + config.idleMs);
+      });
 
       return {
         mount: (
@@ -945,6 +1875,7 @@ const machineImpl = (config: HostConfig, dockerfile?: string) =>
             // Sessions only ask for a mount when they hold none: anything
             // mounted here is stale.
             if (mounted) yield* detach(mounted.head);
+            yield* detachHost;
             yield* state.storage.delete(IDLE_AT);
             // The open's grant replaces whatever the last one granted.
             yield* backend.start(hostConfig, egress ? delegate(egress) : [], egress?.ttlMs);
@@ -958,6 +1889,7 @@ const machineImpl = (config: HostConfig, dockerfile?: string) =>
                 : undefined;
             mounted = yield* disk.mount(session, {
               dir: hostConfig.path,
+              cache: CACHE,
               ...(base ? { heads: `${base}/heads`, journal: `${base}/journal` } : {}),
               ...(!backend.controls && base ? { env: { BLOCKD_HEADS_TOKEN: String(token) } } : {}),
             });
@@ -1058,12 +1990,106 @@ const machineImpl = (config: HostConfig, dockerfile?: string) =>
             delegate(egress);
           }),
 
+        grant: (hostConfig: HostConfig, egress: DelegatedEgress | undefined) =>
+          backend
+            .start(hostConfig, egress ? delegate(egress) : [], egress?.ttlMs)
+            .pipe(Effect.mapError((error) => asWorkspaceError(error))),
+
+        checkpoint: (session: string) =>
+          Effect.flatMap(mountOf(session), (mount) => mount.checkpoint).pipe(
+            Effect.mapError((error) => asWorkspaceError(error)),
+          ),
+
+        apply: (session: string, patches: ReadonlyArray<string>) =>
+          Effect.flatMap(mountOf(session), (mount) => mount.apply(patches)).pipe(
+            Effect.mapError((error) => asWorkspaceError(error)),
+          ),
+
+        snapshot: (session: string) =>
+          Effect.flatMap(mountOf(session), (mount) => mount.snapshot).pipe(
+            Effect.mapError((error) => asWorkspaceError(error)),
+          ),
+
+        call: (
+          snapshot: Snapshot,
+          command: string,
+          options: RunOptions & { readonly patch: string; readonly keep?: boolean },
+          hostConfig: HostConfig,
+          egress: DelegatedEgress | undefined,
+        ) =>
+          Effect.gen(function* () {
+            if (mounted) yield* detach(mounted.head);
+            yield* detachHost;
+            yield* state.storage.delete(IDLE_AT);
+            yield* backend.start(hostConfig, egress ? delegate(egress) : [], egress?.ttlMs);
+            const ran = yield* disk.call(snapshot, command, {
+              dir: hostConfig.path,
+              cache: CACHE,
+              patch: options.patch,
+              ...(options.keep ? { keep: true } : {}),
+              ...(options.cwd ? { cwd: options.cwd } : {}),
+              ...(options.env ? { env: options.env } : {}),
+              ...(options.timeoutMs !== undefined ? { timeoutMs: options.timeoutMs } : {}),
+            });
+            if (ran.host) {
+              yield* state.storage.put(HOST, ran.host.socket);
+            } else {
+              yield* Effect.ignore(Effect.andThen(wipe, idleFromNow));
+            }
+            const { host, ...rest } = ran;
+            return { ...rest, kept: host !== undefined };
+          }).pipe(
+            Effect.onError(() => Effect.ignore(Effect.andThen(wipe, idleFromNow))),
+            Effect.mapError((error) => asWorkspaceError(error)),
+          ),
+
+        hostCommit: (patch: string, full: boolean) =>
+          Effect.gen(function* () {
+            const socket = yield* state.storage.get<string>(HOST);
+            if (!socket) return yield* fail("no command's processes are kept on this machine");
+            return yield* disk.host(socket).commit(patch, { full });
+          }).pipe(Effect.mapError((error) => asWorkspaceError(error))),
+
+        hostDetach: (patch: string) =>
+          Effect.gen(function* () {
+            const socket = yield* state.storage.get<string>(HOST);
+            if (!socket) {
+              return { summary: { paths: [], bytes: 0, operations: 0 }, survivors: [] };
+            }
+            const detached = yield* disk.host(socket).detach(patch);
+            yield* state.storage.delete(HOST);
+            yield* Effect.ignore(Effect.andThen(wipe, idleFromNow));
+            return detached;
+          }).pipe(Effect.mapError((error) => asWorkspaceError(error))),
+
+        diff: (from: Snapshot, to: Snapshot, patch: string | undefined, hostConfig: HostConfig) =>
+          Effect.gen(function* () {
+            yield* backend.start(hostConfig, [], undefined);
+            return yield* disk.diff(from, to, patch ? { patch } : {});
+          }).pipe(
+            Effect.ensuring(Effect.ignore(idleFromNow)),
+            Effect.mapError((error) => asWorkspaceError(error)),
+          ),
+
+        warm: (hostConfig: HostConfig) =>
+          Effect.gen(function* () {
+            if (mounted) return;
+            yield* backend.start(hostConfig, [], undefined);
+            yield* idleFromNow;
+          }).pipe(Effect.mapError((error) => asWorkspaceError(error))),
+
+        retire: () =>
+          Effect.gen(function* () {
+            if (mounted) yield* detach(mounted.head);
+            yield* state.storage.delete(IDLE_AT);
+            yield* backend.retire;
+          }).pipe(Effect.mapError((error) => asWorkspaceError(error))),
+
         unmount: (session: string) =>
           Effect.gen(function* () {
-            const snapshot = yield* detach(session);
-            // A machine that bills while it runs stops once it's been idle.
-            yield* state.storage.put(IDLE_AT, Date.now() + config.idleMs);
-            yield* state.storage.setAlarm(Date.now() + config.idleMs);
+            const detached = yield* detach(session);
+            yield* wipe;
+            yield* idleFromNow;
             // Collect garbage now and then, after an open, off the caller's path.
             const last = (yield* state.storage.get<number>("workspace:gc-at")) ?? 0;
             if (Date.now() - last > Duration.toMillis(GC_EVERY)) {
@@ -1077,13 +2103,14 @@ const machineImpl = (config: HostConfig, dockerfile?: string) =>
                 ),
               );
             }
-            return snapshot;
+            return detached;
           }).pipe(Effect.mapError((error) => asWorkspaceError(error))),
 
         alarm: () =>
           Effect.gen(function* () {
             const idleAt = yield* state.storage.get<number>(IDLE_AT);
             if (mounted || idleAt === undefined || Date.now() < idleAt) return;
+            if (yield* state.storage.get<string>(HOST)) return;
             yield* state.storage.delete(IDLE_AT);
             yield* backend.stop;
           }).pipe(
@@ -1112,6 +2139,7 @@ export const hostWorker = (
 ) => {
   const Sessions = sessionObject(config.id);
   const Machines = machineObject(config.id);
+  const Pools = poolObject(config.id);
   const provide = deploy?.provide ?? (<A, E, R>(effect: Effect.Effect<A, E, R>) => effect);
   return Worker<any>()(
     className(config.id, "Workspace"),
@@ -1127,6 +2155,7 @@ export const hostWorker = (
       Effect.gen(function* () {
         yield* Sessions;
         yield* Machines;
+        yield* Pools;
         const sessions = yield* Sessions;
         const env = (yield* WorkerEnvironment) as Record<string, unknown> | undefined;
         return {
@@ -1157,6 +2186,7 @@ export const hostWorker = (
           Layer.mergeAll(
             Sessions.make(sessionImpl(config)),
             Machines.make(machineImpl(config, deploy?.dockerfile)),
+            Pools.make(poolImpl(config)),
           ),
         ),
       ),

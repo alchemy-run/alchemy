@@ -53,7 +53,7 @@ export const program = Effect.gen(function* () {
   type _output = Assert<
     Equal<
       typeof output,
-      Effect.Effect<Sandbox.WorkspaceExecOutput, Sandbox.WorkspaceError, RuntimeContext>
+      Effect.Effect<Sandbox.WorkspaceExecResult, Sandbox.WorkspaceError, RuntimeContext>
     >
   >;
 

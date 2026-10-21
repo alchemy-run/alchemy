@@ -1,4 +1,4 @@
-import type { SandboxClient } from "@alchemy.run/ai";
+import type { SandboxClient } from "@alchemy.run/sandbox";
 import * as Effect from "effect/Effect";
 import type { Machine } from "./AgentRpcs.ts";
 

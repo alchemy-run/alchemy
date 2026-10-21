@@ -29,6 +29,7 @@
     { "path": "../../packages/aws/tsconfig.json" },
     { "path": "../../packages/cloudflare/tsconfig.json" },
     { "path": "../../packages/doppler/tsconfig.json" },
-    { "path": "../../packages/github/tsconfig.json" }
+    { "path": "../../packages/github/tsconfig.json" },
+    { "path": "../../packages/sandbox/tsconfig.json" }
   ]
 }

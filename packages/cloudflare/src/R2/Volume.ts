@@ -29,6 +29,12 @@ export interface VolumeProps {
    * `dockerfile`. Omitted, an empty filesystem.
    */
   readonly base?: VolumeImageProps["base"];
+  /**
+   * The filesystem on the volume. btrfs makes merging cheaper (a small
+   * write to a big file merges as its bytes) but needs a kernel with btrfs:
+   * Cloudflare containers have it, Lambda MicroVMs don't. @default "ext4"
+   */
+  readonly filesystem?: VolumeImageProps["filesystem"];
 }
 
 const bytes = (size: VolumeProps["size"]): number =>
@@ -102,6 +108,9 @@ export const Volume = <const D extends AIVolume.Decl.Any>(
         secretAccessKey: secretAccessKey.pipe(Output.map(Redacted.make)),
         size: bytes(props.size),
         ...(props.base ? { base: props.base } : {}),
+        ...(props.filesystem && props.filesystem !== "ext4"
+          ? { filesystem: props.filesystem }
+          : {}),
       });
       const descriptor = Output.all(store, image.head).pipe(
         Output.map(([store, base]): VolumeHostDescriptor => ({

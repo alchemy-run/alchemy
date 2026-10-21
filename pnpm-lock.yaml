@@ -10368,6 +10368,9 @@ importers:
       '@alchemy.run/github':
         specifier: workspace:*
         version: link:../../packages/github
+      '@alchemy.run/sandbox':
+        specifier: workspace:*
+        version: link:../../packages/sandbox
       '@radix-ui/react-use-controllable-state':
         specifier: ^1.2.6
         version: 1.2.6(@types/react@19.3.0)(react@19.3.0)

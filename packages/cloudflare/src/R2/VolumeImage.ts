@@ -19,6 +19,12 @@ export interface VolumeImageProps {
   /** The volume's size in bytes. */
   size: number;
   /**
+   * The filesystem the base is formatted with. A btrfs base keeps its files
+   * in the subvolume `data`, the default, with `.alchemy/` beside it for
+   * blockd's snapshots. @default "ext4"
+   */
+  filesystem?: "ext4" | "btrfs";
+  /**
    * The base's files: a directory of an image built from `dockerfile`.
    * Omitted, the base is an empty filesystem.
    */
@@ -32,7 +38,7 @@ export interface VolumeImageProps {
 }
 
 /**
- * The base image of a volume: an ext4 filesystem built at deploy (empty, or
+ * The base image of a volume: an ext4 or btrfs filesystem built at deploy (empty, or
  * from a directory of a Docker image) and imported into the volume's store
  * as head `base-<hash>`. The head is named by the inputs' hash, so the base
  * is built once per change and never overwritten under running sessions.
@@ -119,10 +125,20 @@ export const VolumeImageProvider = () =>
         );
         const blockd = yield* blockdBinaries;
         const kib = Math.ceil(news.size / 1024);
+        const btrfs = news.filesystem === "btrfs";
+        const format = btrfs
+          ? [
+              // The workspace is the default subvolume `data`; blockd's snapshots go beside it.
+              "mkdir -p /work/layout/.alchemy && mv /work/rootfs /work/layout/data",
+              `truncate -s ${kib}k /work/base.img`,
+              "mkfs.btrfs -q -f -s 4096 --rootdir /work/layout --subvol default:data /work/base.img >/dev/null",
+            ]
+          : [`mkfs.ext4 -q -F -b 4096 -d /work/rootfs /work/base.img ${kib}k`];
         const script = [
           "set -e",
-          "apt-get update -qq >/dev/null && apt-get install -y -qq --no-install-recommends ca-certificates e2fsprogs >/dev/null",
-          `mkfs.ext4 -q -F -b 4096 -d /work/rootfs /work/base.img ${kib}k`,
+          // btrfs-progs 6.11+ for --subvol: Debian trixie.
+          `apt-get update -qq >/dev/null && apt-get install -y -qq --no-install-recommends ca-certificates ${btrfs ? "btrfs-progs" : "e2fsprogs"} >/dev/null`,
+          ...format,
           'bin="/blockd/blockd-$(uname -m)"',
           // Already imported (an earlier deploy): the head exists and is the same build.
           '"$bin" heads --store "$STORE" | grep -q "^$HEAD " || "$bin" import --store "$STORE" --head "$HEAD" --image /work/base.img',
@@ -136,7 +152,7 @@ export const VolumeImageProvider = () =>
           `${work}:/work`,
           "-v",
           `${blockd}:/blockd:ro`,
-          "debian:bookworm-slim",
+          btrfs ? "debian:trixie-slim" : "debian:bookworm-slim",
           "sh",
           "-c",
           script,
@@ -147,7 +163,16 @@ export const VolumeImageProvider = () =>
         stables: ["head", "hash"],
         reconcile: Effect.fn(function* ({ news, output, session }) {
           const hash = yield* sha256(
-            JSON.stringify({ FORMAT, size: news.size, base: news.base ?? null, store: news.store }),
+            JSON.stringify({
+              FORMAT,
+              size: news.size,
+              base: news.base ?? null,
+              store: news.store,
+              // Absent for ext4, so existing bases keep their hash.
+              ...(news.filesystem && news.filesystem !== "ext4"
+                ? { filesystem: news.filesystem }
+                : {}),
+            }),
           );
           const head = `base-${hash.slice(0, 16)}`;
           if (output?.hash === hash) return output;
