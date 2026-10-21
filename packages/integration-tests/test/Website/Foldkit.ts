@@ -72,6 +72,8 @@ export const foldkitFixture = (mode: FoldkitMode) =>
     return root;
   });
 
+class RequestFailed extends Data.TaggedError("RequestFailed")<{ url: string; cause: unknown }> {}
+
 const requestOnce = (url: string, init?: RequestInit) =>
   Effect.tryPromise({
     try: async () => {
@@ -85,7 +87,7 @@ const requestOnce = (url: string, init?: RequestInit) =>
         type: response.headers.get("content-type"),
       };
     },
-    catch: (cause) => new Error(`Foldkit request failed: ${url}`, { cause }),
+    catch: (cause) => new RequestFailed({ url, cause }),
   });
 class EdgePlaceholder extends Data.TaggedError("EdgePlaceholder")<{ url: string }> {}
 
