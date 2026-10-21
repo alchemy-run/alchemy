@@ -85,7 +85,7 @@ describe.skipIf(!!process.env.FAST).sequential(
       { timeout: 420_000 },
     );
 
-    afterAll(sharedStack.destroy(), { timeout: 120_000 });
+    afterAll(sharedStack.destroy(), { timeout: 420_000 });
 
     describe("CreateEvent", () => {
       test.provider("records a conversational event", (_stack) =>

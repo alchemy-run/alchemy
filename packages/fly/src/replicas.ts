@@ -142,6 +142,13 @@ const getLeasedMachineById = (appName: string, machineId: string) =>
 
 export const listMachinesByApp = (appName: string) =>
   machines.listMachines({ app_name: appName }).pipe(
+    // A just-created App can answer 500 "failed to get app: sql: no rows in
+    // result set" until the Machines API sees it; safe to replay a read.
+    Effect.retry({
+      while: (error) => error._tag === "InternalServerError",
+      schedule: Schedule.spaced("2 seconds"),
+      times: 8,
+    }),
     Effect.map((machines) => machines.filter((machine) => !gone(machine))),
     Effect.catchTag("NotFound", () => Effect.succeed([])),
   );
@@ -649,6 +656,13 @@ export const leaseSnapshot = Effect.fn(function* (
         const id = machine.id;
         yield* leases.acquire([id]).pipe(
           Effect.tap(() => Effect.sync(() => leased.add(id))),
+          // A just-created Machine can 404 on the lease API while it already
+          // lists; a Machine that is really gone is dropped by the GET below.
+          Effect.retry({
+            while: (error) => error._tag === "NotFound",
+            schedule: Schedule.spaced("1 second"),
+            times: 5,
+          }),
           Effect.catchTag("NotFound", () => Effect.void),
         );
       }),

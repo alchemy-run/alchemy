@@ -2532,7 +2532,7 @@ importers:
     devDependencies:
       prisma:
         specifier: 'catalog:'
-        version: 8.0.0-rc.15(94462dc2550091ffccd70828a584b9cb)
+        version: 8.0.0-rc.15(863819fe1d2056818e77e83ec07bb980)
       typescript:
         specifier: 'catalog:'
         version: 7.0.2
@@ -6465,7 +6465,7 @@ importers:
         version: 17.4.2
       prisma:
         specifier: 'catalog:'
-        version: 8.0.0-rc.15(94462dc2550091ffccd70828a584b9cb)
+        version: 8.0.0-rc.15(863819fe1d2056818e77e83ec07bb980)
       tsx:
         specifier: 'catalog:'
         version: 4.23.15
@@ -9172,6 +9172,34 @@ importers:
         specifier: 'catalog:'
         version: 8.3.4(@types/node@22.20.1)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1)
 
+  packages/frontend-frameworks/fixtures/vinext:
+    dependencies:
+      react:
+        specifier: 'catalog:'
+        version: 19.3.0
+      react-dom:
+        specifier: 'catalog:'
+        version: 19.3.0(react@19.3.0)
+      react-server-dom-webpack:
+        specifier: 'catalog:'
+        version: 19.3.0(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(webpack@5.109.2(cssnano@9.7.0(postcss@8.5.29))(csso@5.0.5)(esbuild@0.28.2)(lightningcss@1.33.0)(postcss@8.5.29))
+      vinext:
+        specifier: 'catalog:'
+        version: 1.1.0(c57f56abd8ca2a30c0368e8b512eae0a)
+    devDependencies:
+      '@types/react':
+        specifier: 'catalog:'
+        version: 19.3.0
+      '@types/react-dom':
+        specifier: 'catalog:'
+        version: 19.3.0(@types/react@19.3.0)
+      '@vitejs/plugin-rsc':
+        specifier: ^0.5.34
+        version: 0.5.36(react-dom@19.3.0(react@19.3.0))(react-server-dom-webpack@19.3.0(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(webpack@5.109.2(cssnano@9.7.0(postcss@8.5.29))(csso@5.0.5)(esbuild@0.28.2)(lightningcss@1.33.0)(postcss@8.5.29)))(react@19.3.0)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))
+      vite:
+        specifier: 'catalog:'
+        version: 8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1)
+
   packages/frontend-frameworks/fixtures/vite-hmr:
     devDependencies:
       '@alchemy.run/cloudflare-test-tools':
@@ -9758,7 +9786,7 @@ importers:
         version: 8.23.1
       prisma:
         specifier: 'catalog:'
-        version: 8.0.0-rc.15(94462dc2550091ffccd70828a584b9cb)
+        version: 8.0.0-rc.15(863819fe1d2056818e77e83ec07bb980)
       react:
         specifier: 'catalog:'
         version: 19.3.0
@@ -10007,7 +10035,7 @@ importers:
         version: 4.0.5
       prisma:
         specifier: 'catalog:'
-        version: 8.0.0-rc.15(77cc7d567d65f4bf6e70e02f5254d191)
+        version: 8.0.0-rc.15(f61efafd0e0949396e2dfe0d66828eb9)
       typescript:
         specifier: 'catalog:'
         version: 7.0.2
@@ -28835,15 +28863,13 @@ snapshots:
       '@effect/tsgo-win32-arm64': 0.51.1
       '@effect/tsgo-win32-x64': 0.51.1
 
-  '@effect/vitest@4.0.0-rc.112(effect@4.0.5)(vitest@5.0.4(@types/node@26.6.5)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1)))':
+  '@effect/vitest@4.0.0-rc.112(effect@4.0.5)':
     dependencies:
       effect: 4.0.5
-      vitest: 5.0.4(@types/node@26.6.5)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))
 
-  '@effect/vitest@4.0.4(effect@4.0.5)(vitest@5.0.4(@types/node@26.6.5)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1)))':
+  '@effect/vitest@4.0.4(effect@4.0.5)':
     dependencies:
       effect: 4.0.5
-      vitest: 5.0.4(@types/node@26.6.5)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))
 
   '@effect/vitest@4.0.5(effect@4.0.5)(vitest@4.1.10(@types/node@26.6.5)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1)))':
     dependencies:
@@ -32338,11 +32364,11 @@ snapshots:
       - vitest
       - ws
 
-  '@prisma/composer-cli@0.20.0(a6774d4b9a2e0ff8e484a28ee0af693b)':
+  '@prisma/composer-cli@0.20.0(b52b987ee4f7ff11ed3e2996c6d60fbc)':
     dependencies:
       '@prisma/cli-engine': 0.4.0(@prisma/management-api-sdk@1.69.0)(magicast@0.5.5)
-      '@prisma/composer': 0.20.0(ae849c4db1b4dc99cbfe86574f932f39)
-      alchemy: 2.0.0-beta.74(ce712f0409a257e742c90208b7fb845a)
+      '@prisma/composer': 0.20.0(704478018275ffaa5628829b432f7f40)
+      alchemy: 2.0.0-beta.74(3884b328a73f9251887b880188c269ab)
       c12: 3.3.4(magicast@0.5.5)
       cross-spawn: 7.0.6
       effect: 4.0.5
@@ -32372,11 +32398,11 @@ snapshots:
       - vitest
       - ws
 
-  '@prisma/composer-cli@0.20.0(ea153d77c4ffe07c494853bc085873b6)':
+  '@prisma/composer-cli@0.20.0(db4fc72ede8d29846c5fc72e20f7c94f)':
     dependencies:
       '@prisma/cli-engine': 0.4.0(@prisma/management-api-sdk@1.69.0)(magicast@0.5.5)
-      '@prisma/composer': 0.20.0(77bf6ffab6345ee39d1bce857b7019f9)
-      alchemy: 2.0.0-beta.74(41367d076a61bfd84faec4daf0311699)
+      '@prisma/composer': 0.20.0(4e61b80932434df40d9317e0a7f5c10f)
+      alchemy: 2.0.0-beta.74(c2f641dee45b2fb1c86bcc11e34fbbd0)
       c12: 3.3.4(magicast@0.5.5)
       cross-spawn: 7.0.6
       effect: 4.0.5
@@ -32410,7 +32436,7 @@ snapshots:
     dependencies:
       '@effect/sql-d1': 4.0.5(effect@4.0.5)
       '@effect/sql-sqlite-do': 4.0.5(effect@4.0.5)
-      '@effect/vitest': 4.0.0-rc.112(effect@4.0.5)(vitest@5.0.4(@types/node@26.6.5)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1)))
+      '@effect/vitest': 4.0.0-rc.112(effect@4.0.5)
       '@prisma/management-api-sdk': 1.69.0
       '@standard-schema/spec': 1.1.0
       alchemy: 2.0.0-beta.74(a6b8cfef7492c90dcc1f930d43656402)
@@ -32444,14 +32470,14 @@ snapshots:
       - vitest
       - ws
 
-  '@prisma/composer@0.20.0(77bf6ffab6345ee39d1bce857b7019f9)':
+  '@prisma/composer@0.20.0(4e61b80932434df40d9317e0a7f5c10f)':
     dependencies:
       '@effect/sql-d1': 4.0.5(effect@4.0.5)
       '@effect/sql-sqlite-do': 4.0.5(effect@4.0.5)
-      '@effect/vitest': 4.0.0-rc.112(effect@4.0.5)(vitest@5.0.4(@types/node@26.6.5)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1)))
+      '@effect/vitest': 4.0.0-rc.112(effect@4.0.5)
       '@prisma/management-api-sdk': 1.69.0
       '@standard-schema/spec': 1.1.0
-      alchemy: 2.0.0-beta.74(41367d076a61bfd84faec4daf0311699)
+      alchemy: 2.0.0-beta.74(c2f641dee45b2fb1c86bcc11e34fbbd0)
       arktype: 2.2.8
       c12: 3.3.4(magicast@0.5.5)
       cross-spawn: 7.0.6
@@ -32482,14 +32508,14 @@ snapshots:
       - vitest
       - ws
 
-  '@prisma/composer@0.20.0(ae849c4db1b4dc99cbfe86574f932f39)':
+  '@prisma/composer@0.20.0(704478018275ffaa5628829b432f7f40)':
     dependencies:
       '@effect/sql-d1': 4.0.5(effect@4.0.5)
       '@effect/sql-sqlite-do': 4.0.5(effect@4.0.5)
-      '@effect/vitest': 4.0.0-rc.112(effect@4.0.5)(vitest@5.0.4(@types/node@26.6.5)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1)))
+      '@effect/vitest': 4.0.0-rc.112(effect@4.0.5)
       '@prisma/management-api-sdk': 1.69.0
       '@standard-schema/spec': 1.1.0
-      alchemy: 2.0.0-beta.74(ce712f0409a257e742c90208b7fb845a)
+      alchemy: 2.0.0-beta.74(3884b328a73f9251887b880188c269ab)
       arktype: 2.2.8
       c12: 3.3.4(magicast@0.5.5)
       cross-spawn: 7.0.6
@@ -37199,7 +37225,7 @@ snapshots:
       json-schema-traverse: 1.0.0
       require-from-string: 2.0.2
 
-  alchemy@2.0.0-beta.74(41367d076a61bfd84faec4daf0311699):
+  alchemy@2.0.0-beta.74(3884b328a73f9251887b880188c269ab):
     dependencies:
       '@alchemy.run/cloudflare-runtime': 2.0.0-beta.74(@distilled.cloud/cloudflare@1.0.0-rc.6(effect@4.0.5))(@effect/platform-bun@4.0.5(effect@4.0.5))(@effect/platform-node@4.0.5(effect@4.0.5)(redis@6.2.1))(@types/node@26.6.5)(effect@4.0.5)(rolldown@1.2.13)(typescript@7.0.2)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))
       '@alchemy.run/floci': 2.0.0-beta.74(effect@4.0.5)
@@ -37216,7 +37242,7 @@ snapshots:
       '@distilled.cloud/planetscale': 1.0.0-rc.6(effect@4.0.5)
       '@effect/sql-d1': 4.0.5(effect@4.0.5)
       '@effect/sql-sqlite-do': 4.0.5(effect@4.0.5)
-      '@effect/vitest': 4.0.4(effect@4.0.5)(vitest@5.0.4(@types/node@26.6.5)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1)))
+      '@effect/vitest': 4.0.4(effect@4.0.5)
       '@libsql/client': 0.17.4
       '@octokit/rest': 22.0.1
       '@octokit/webhooks': 14.2.0
@@ -37280,7 +37306,7 @@ snapshots:
       '@distilled.cloud/planetscale': 1.0.0-rc.6(effect@4.0.5)
       '@effect/sql-d1': 4.0.5(effect@4.0.5)
       '@effect/sql-sqlite-do': 4.0.5(effect@4.0.5)
-      '@effect/vitest': 4.0.4(effect@4.0.5)(vitest@5.0.4(@types/node@26.6.5)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1)))
+      '@effect/vitest': 4.0.4(effect@4.0.5)
       '@libsql/client': 0.17.4
       '@octokit/rest': 22.0.1
       '@octokit/webhooks': 14.2.0
@@ -37327,7 +37353,7 @@ snapshots:
       - utf-8-validate
       - vitest
 
-  alchemy@2.0.0-beta.74(ce712f0409a257e742c90208b7fb845a):
+  alchemy@2.0.0-beta.74(c2f641dee45b2fb1c86bcc11e34fbbd0):
     dependencies:
       '@alchemy.run/cloudflare-runtime': 2.0.0-beta.74(@distilled.cloud/cloudflare@1.0.0-rc.6(effect@4.0.5))(@effect/platform-bun@4.0.5(effect@4.0.5))(@effect/platform-node@4.0.5(effect@4.0.5)(redis@6.2.1))(@types/node@26.6.5)(effect@4.0.5)(rolldown@1.2.13)(typescript@7.0.2)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))
       '@alchemy.run/floci': 2.0.0-beta.74(effect@4.0.5)
@@ -37344,7 +37370,7 @@ snapshots:
       '@distilled.cloud/planetscale': 1.0.0-rc.6(effect@4.0.5)
       '@effect/sql-d1': 4.0.5(effect@4.0.5)
       '@effect/sql-sqlite-do': 4.0.5(effect@4.0.5)
-      '@effect/vitest': 4.0.4(effect@4.0.5)(vitest@5.0.4(@types/node@26.6.5)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1)))
+      '@effect/vitest': 4.0.4(effect@4.0.5)
       '@libsql/client': 0.17.4
       '@octokit/rest': 22.0.1
       '@octokit/webhooks': 14.2.0
@@ -43151,11 +43177,11 @@ snapshots:
       - vitest
       - ws
 
-  prisma@8.0.0-rc.15(77cc7d567d65f4bf6e70e02f5254d191):
+  prisma@8.0.0-rc.15(863819fe1d2056818e77e83ec07bb980):
     dependencies:
       '@manypkg/tools': 2.1.2
       '@prisma/cli-engine': 0.4.0(@prisma/management-api-sdk@1.69.0)(magicast@0.5.5)
-      '@prisma/composer-cli': 0.20.0(ea153d77c4ffe07c494853bc085873b6)
+      '@prisma/composer-cli': 0.20.0(db4fc72ede8d29846c5fc72e20f7c94f)
       '@prisma/compute-sdk': 0.42.0(@prisma/management-api-sdk@1.69.0)(rollup@4.62.4)(supports-color@10.2.2)
       '@prisma/management-api-sdk': 1.69.0
       '@prisma/orm-toolchain': 8.0.0-rc.11(@prisma/cli-engine@0.4.0(@prisma/management-api-sdk@1.69.0)(magicast@0.5.5))(magicast@0.5.5)(typanion@3.14.0)(typescript@7.0.2)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))
@@ -43197,11 +43223,11 @@ snapshots:
       - vitest
       - ws
 
-  prisma@8.0.0-rc.15(94462dc2550091ffccd70828a584b9cb):
+  prisma@8.0.0-rc.15(f61efafd0e0949396e2dfe0d66828eb9):
     dependencies:
       '@manypkg/tools': 2.1.2
       '@prisma/cli-engine': 0.4.0(@prisma/management-api-sdk@1.69.0)(magicast@0.5.5)
-      '@prisma/composer-cli': 0.20.0(a6774d4b9a2e0ff8e484a28ee0af693b)
+      '@prisma/composer-cli': 0.20.0(b52b987ee4f7ff11ed3e2996c6d60fbc)
       '@prisma/compute-sdk': 0.42.0(@prisma/management-api-sdk@1.69.0)(rollup@4.62.4)(supports-color@10.2.2)
       '@prisma/management-api-sdk': 1.69.0
       '@prisma/orm-toolchain': 8.0.0-rc.11(@prisma/cli-engine@0.4.0(@prisma/management-api-sdk@1.69.0)(magicast@0.5.5))(magicast@0.5.5)(typanion@3.14.0)(typescript@7.0.2)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))
