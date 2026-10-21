@@ -139,7 +139,9 @@ export const verifyFoldkitRendering = (
   Effect.gen(function* () {
     const base = origin.replace(/\/+$/, "");
     // Readiness: the asset layer and the server can go live at different
-    // moments, so wait for both an asset and the first page.
+    // moments, so wait for both an asset and the first page. A redeploy
+    // that changes which pages are prerendered also waits on the CDN's
+    // routing data (CloudFront KeyValueStore propagation).
     const ready = (path: string, check: (body: string) => boolean) =>
       request(base + path).pipe(
         Effect.flatMap((result) =>
@@ -147,7 +149,7 @@ export const verifyFoldkitRendering = (
             ? Effect.void
             : Effect.fail(new Error(`Foldkit deployment is not serving ${path} yet`)),
         ),
-        Effect.retry({ schedule: Schedule.spaced("1 second"), times: 15 }),
+        Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 45 }),
       );
     yield* ready("/foldkit-probe.txt", (body) => body === "FOLDKIT_STATIC_ASSET");
     yield* ready(routes(mode)[0]!.path, () => true);
