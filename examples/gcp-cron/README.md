@@ -25,7 +25,7 @@ From the repository root:
 ```sh
 pnpm install
 cd examples/gcp-cron
-pnpm deploy --profile alchemy-testing
+pnpm deploy --profile <name>
 ```
 
 This needs a local Docker daemon to build the image. Then:
@@ -34,12 +34,12 @@ This needs a local Docker daemon to build the image. Then:
 curl "$URL/heartbeats?kind=heartbeat&limit=5"
 ```
 
-Use the printed `url`. A heartbeat row appears within a minute. To run a schedule immediately, use `gcloud scheduler jobs run <job> --location us-central1`.
+Use the printed `url`. A heartbeat row appears within a minute. To run a schedule immediately, use `gcloud scheduler jobs run <job> --location <region>`.
 
 ## Live test
 
 ```sh
-ALCHEMY_PROFILE=alchemy-testing bun test
+ALCHEMY_PROFILE=<name> bun test
 ```
 
 The test deploys the stack and forces one run of each job with `cloudscheduler.runProjectsLocationsJobs`. It polls `GET /heartbeats` until both rows appear and checks them with a direct BigQuery query. Then it destroys the stack and verifies the scheduler jobs and table are gone.
@@ -47,5 +47,5 @@ The test deploys the stack and forces one run of each job with `cloudscheduler.r
 ## Destroy
 
 ```sh
-pnpm destroy --profile alchemy-testing
+pnpm destroy --profile <name>
 ```

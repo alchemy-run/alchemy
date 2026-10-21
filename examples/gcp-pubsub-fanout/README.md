@@ -80,12 +80,10 @@ and gain `CloudPubSubDeadLetterSourceSubscription`.
 
 ## Deploy
 
-Requires Docker (the services are built from `main`) and GCP credentials
-(`GOOGLE_PROJECT_ID` plus `GOOGLE_APPLICATION_CREDENTIALS` or
-`GOOGLE_ACCESS_TOKEN`).
+Requires Docker (the services are built from `main`). Credentials come from your alchemy profile: run `alchemy profile` once and pick GCP (*Service account JSON* for a key file, or *Stored* for an access token or key kept in `~/.alchemy/credentials`, plus a default region), then deploy with `--profile <name>`.
 
 ```sh
-pnpm deploy
+pnpm deploy --profile <name>
 ```
 
 ```sh
@@ -100,7 +98,7 @@ gcloud pubsub subscriptions pull "$deadLetterSubscription" --auto-ack
 ## Test
 
 ```sh
-pnpm test
+ALCHEMY_PROFILE=<name> bun test
 ```
 
 Deploys the stack and checks both push subscriptions (filter, dead-letter
@@ -114,7 +112,7 @@ services, subscriptions, topics, bucket, and dataset are gone.
 ## Destroy
 
 ```sh
-pnpm destroy
+pnpm destroy --profile <name>
 ```
 
 The bucket and dataset use `forceDestroy: true`, so destroy removes their

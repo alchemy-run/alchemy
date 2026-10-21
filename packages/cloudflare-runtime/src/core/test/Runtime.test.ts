@@ -1,3 +1,4 @@
+import * as NodeHttp from "node:http";
 import { expect, layer } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -27,20 +28,14 @@ layer(localRuntimeLayer, { excludeTestServices: true })("Runtime", (it) => {
           compatibilityDate: "2026-03-10",
           compatibilityFlags: [],
           bindings: [],
-          modules: [
-            { name: "main.js", type: "ESModule", content: HELLO_SCRIPT },
-          ],
+          modules: [{ name: "main.js", type: "ESModule", content: HELLO_SCRIPT }],
         });
         expect(url).toBeInstanceOf(URL);
         expect(url.href).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/$/);
-        const hello = yield* Effect.promise(() =>
-          fetch(new URL("/hello", url)),
-        );
+        const hello = yield* Effect.promise(() => fetch(new URL("/hello", url)));
         expect(hello.status).toBe(200);
         expect(yield* Effect.promise(() => hello.text())).toBe("hello");
-        const echo = yield* Effect.promise(() =>
-          fetch(new URL("/echo", url), { method: "POST" }),
-        );
+        const echo = yield* Effect.promise(() => fetch(new URL("/echo", url), { method: "POST" }));
         expect(yield* Effect.promise(() => echo.text())).toBe("POST");
       }),
     { timeout: 30_000 },
@@ -82,9 +77,7 @@ layer(localRuntimeLayer, { excludeTestServices: true })("Runtime", (it) => {
               compatibilityDate: "2026-03-10",
               compatibilityFlags: [],
               bindings: [],
-              modules: [
-                { name: "main.js", type: "ESModule", content: HELLO_SCRIPT },
-              ],
+              modules: [{ name: "main.js", type: "ESModule", content: HELLO_SCRIPT }],
             });
             yield* instance.set(worker);
             return instance.url;
@@ -146,6 +139,53 @@ layer(localRuntimeLayer, { excludeTestServices: true })("Runtime", (it) => {
           }),
         );
         expect(captured).toContain("kaboom-marker");
+      }),
+    { timeout: 30_000 },
+  );
+
+  // Bun's HTTP parser keeps only the last of repeated header lines, so the
+  // runtime sends each repeated header as one comma-joined line.
+  it.effect(
+    "sends repeated response headers as one line, keeping Set-Cookie lines",
+    () =>
+      Effect.gen(function* () {
+        const runtime = yield* Runtime.Runtime;
+        const url = yield* runtime.start({
+          name: "repeated-headers",
+          compatibilityDate: "2026-03-10",
+          compatibilityFlags: [],
+          bindings: [],
+          modules: [
+            {
+              name: "main.js",
+              type: "ESModule",
+              content: `export default {
+  fetch() {
+    const response = new Response("ok");
+    for (const value of ["one", "two", "three"]) response.headers.append("x-multi", value);
+    response.headers.append("set-cookie", "a=1");
+    response.headers.append("set-cookie", "b=2");
+    return response;
+  }
+};`,
+            },
+          ],
+        });
+        const rawHeaders = yield* Effect.promise(
+          () =>
+            new Promise<Array<string>>((resolve, reject) =>
+              NodeHttp.get(url, (res) => {
+                res.resume();
+                resolve(res.rawHeaders);
+              }).on("error", reject),
+            ),
+        );
+        const lines = (name: string) =>
+          rawHeaders.flatMap((value, index) =>
+            index % 2 === 1 && rawHeaders[index - 1]!.toLowerCase() === name ? [value] : [],
+          );
+        expect(lines("x-multi")).toEqual(["one, two, three"]);
+        expect(lines("set-cookie")).toEqual(["a=1", "b=2"]);
       }),
     { timeout: 30_000 },
   );

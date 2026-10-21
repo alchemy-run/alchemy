@@ -1,4 +1,4 @@
-import * as GCP from "alchemy/GCP";
+import * as GCP from "@alchemy.run/gcp";
 import * as Effect from "effect/Effect";
 
 /** Every ingested event lands here first. */
@@ -6,7 +6,6 @@ export const Events = GCP.PubSub.Topic("Events", {});
 
 /** The warehouse the drain job writes into. */
 export const Analytics = GCP.BigQuery.Dataset("Analytics", {
-  location: "US-CENTRAL1",
   forceDestroy: true,
 });
 

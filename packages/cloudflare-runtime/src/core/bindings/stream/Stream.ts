@@ -1,21 +1,15 @@
-import { loadInternalWorker } from "../../internal/internal-worker.ts";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
+import { loadInternalWorker } from "../../internal/internal-worker.ts";
 const StreamWorker = {
-  worker: () =>
-    loadInternalWorker(
-      "#cloudflare-runtime-core-worker/bindings/stream/Stream.worker",
-    ),
+  worker: () => loadInternalWorker("#cloudflare-runtime-core-worker/bindings/stream/Stream.worker"),
 };
 import * as Loopback from "../../globals/Loopback.ts";
 import type * as LoopbackServer from "../../globals/LoopbackServer.ts";
 import * as Storage from "../../globals/Storage.ts";
-import {
-  DEFAULT_COMPATIBILITY_DATE,
-  SOCKET_USER_ENTRY,
-} from "../../internal/constants.ts";
+import { DEFAULT_COMPATIBILITY_DATE, SOCKET_USER_ENTRY } from "../../internal/constants.ts";
 import { formatInternalWorkerModules } from "../../internal/internal-modules.ts";
 import * as Plugin from "../../Plugin.ts";
 import type { BindingHook, PluginContext } from "../../PluginContext.ts";
@@ -99,9 +93,7 @@ export const StreamLive = Layer.effect(
     const handler: LoopbackServer.RawHandler = (req, res) => {
       const url = new URL(req.url ?? "/", "http://localhost");
       if (url.pathname === PATH_STREAM_PUBLIC_URL) {
-        res
-          .writeHead(200, { "content-type": "application/json" })
-          .end(JSON.stringify(entryUrl));
+        res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify(entryUrl));
         return;
       }
       res.writeHead(404, { "content-type": "application/json" }).end(
@@ -112,27 +104,24 @@ export const StreamLive = Layer.effect(
     };
 
     const makeStorageService = Effect.gen(function* () {
-      const storageDiskPath =
-        "disk" in storage ? storage.disk?.path : undefined;
+      const storageDiskPath = "disk" in storage ? storage.disk?.path : undefined;
       if (!storageDiskPath) {
-        return yield* new ConfigError({
+        return yield* ConfigError.make({
           subtag: "Stream",
-          message:
-            "Cannot configure Stream persistence: the Storage service has no disk path.",
+          message: "Cannot configure Stream persistence: the Storage service has no disk path.",
           hint: "Configure a disk-backed storage layer (`Storage.layerDisk` or `Storage.layerTemp`).",
         });
       }
       const persistPath = path.join(storageDiskPath, "stream");
       yield* fs.makeDirectory(persistPath, { recursive: true }).pipe(
-        Effect.mapError(
-          (cause) =>
-            new ConfigError({
-              subtag: "Stream",
-              message: `Failed to create Stream persistence directory "${persistPath}": ${cause.message}`,
-              hint: "Ensure the storage directory is writable.",
-              detail: { persistPath },
-              cause,
-            }),
+        Effect.mapError((cause) =>
+          ConfigError.make({
+            subtag: "Stream",
+            message: `Failed to create Stream persistence directory "${persistPath}": ${cause.message}`,
+            hint: "Ensure the storage directory is writable.",
+            detail: { persistPath },
+            cause,
+          }),
         ),
       );
       return {
@@ -150,17 +139,14 @@ export const StreamLive = Layer.effect(
           api: {
             register: () =>
               Plugin.use(Loopback.Loopback, (loopback) =>
-                Effect.map(
-                  loopback.api.route(LOOPBACK_TARGET_STREAM, handler),
-                  (service) => {
-                    used = true;
-                    loopbackService = service;
-                    return {
-                      name: SERVICE_STREAM,
-                      entrypoint: STREAM_BINDING_ENTRYPOINT,
-                    };
-                  },
-                ),
+                Effect.map(loopback.api.route(LOOPBACK_TARGET_STREAM, handler), (service) => {
+                  used = true;
+                  loopbackService = service;
+                  return {
+                    name: SERVICE_STREAM,
+                    entrypoint: STREAM_BINDING_ENTRYPOINT,
+                  };
+                }),
               ),
           },
           start: (ports) =>
@@ -178,9 +164,7 @@ export const StreamLive = Layer.effect(
               name: SERVICE_STREAM,
               worker: {
                 compatibilityDate: DEFAULT_COMPATIBILITY_DATE,
-                modules: formatInternalWorkerModules(
-                  yield* Effect.promise(StreamWorker.worker),
-                ),
+                modules: formatInternalWorkerModules(yield* Effect.promise(StreamWorker.worker)),
                 durableObjectNamespaces: [
                   {
                     className: STREAM_OBJECT_CLASS_NAME,
@@ -265,17 +249,12 @@ export const StreamLive = Layer.effect(
  * a placeholder host), no signed URLs, and no direct creator uploads
  * (`createDirectUpload` throws), matching Miniflare's local fidelity limits.
  */
-export const local = (
-  props: StreamProps,
-): BindingHook<Stream | Loopback.Loopback> =>
+export const local = (props: StreamProps): BindingHook<Stream | Loopback.Loopback> =>
   Plugin.use(Stream, (stream) =>
-    Effect.map(
-      stream.api.register(),
-      (service): WorkerdConfig.Worker_Binding => ({
-        name: props.binding,
-        service,
-      }),
-    ),
+    Effect.map(stream.api.register(), (service): WorkerdConfig.Worker_Binding => ({
+      name: props.binding,
+      service,
+    })),
   );
 
 /** Bind to the deployed Cloudflare Stream service via the remote bindings proxy. */

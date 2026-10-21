@@ -14,7 +14,7 @@ version exists the API answers `503` instead of failing open.
 
 ## Architecture
 
-- `GCP.KMS.KeyRing` `Keys` — container for the key, in `us-central1`.
+- `GCP.KMS.KeyRing` `Keys` — container for the key, in the stack's region.
 - `GCP.KMS.CryptoKey` `DataKey` — symmetric `ENCRYPT_DECRYPT` key.
 - `GCP.SecretManager.Secret` `ApiKey` — the API key callers must present.
 - `GCP.Function` `Api` — public Cloud Run service (`invokerIamDisabled: true`)
@@ -37,8 +37,10 @@ version — no redeploy.
 
 ## Deploy
 
+Credentials come from your alchemy profile: run `alchemy profile` once and pick GCP (*Service account JSON* for a key file, or *Stored* for an access token or key kept in `~/.alchemy/credentials`, plus a default region), then deploy with `--profile <name>`.
+
 ```sh
-pnpm deploy
+pnpm deploy --profile <name>
 ```
 
 Then add the API key as a secret version (the stack prints `secretId`):
@@ -55,20 +57,19 @@ curl -X POST "$URL/encrypt" -H 'x-api-key: my-key' \
 ## Test
 
 ```sh
-pnpm test
+ALCHEMY_PROFILE=<name> bun test
 ```
 
 Deploys the stack, seeds the secret, checks the `401`s, round-trips a
 payload through `/encrypt` and `/decrypt`, decrypts the ciphertext directly
 with the KMS API, then destroys the stack and checks that the key was
-released and the secret, service, and image repository are gone. Needs GCP credentials
-(`GOOGLE_PROJECT_ID` + `GOOGLE_APPLICATION_CREDENTIALS`) and Docker (the
+released and the secret, service, and image repository are gone. Needs Docker (the
 service image is built locally).
 
 ## Destroy
 
 ```sh
-pnpm destroy
+pnpm destroy --profile <name>
 ```
 
 Cloud KMS never deletes key rings, and keeps keys for at least 24h after

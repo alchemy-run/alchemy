@@ -1,42 +1,34 @@
-import type {
-  ResourceSelection,
-  SelectionOutput,
-} from "../ResourceSelection.ts";
 /** @effect-diagnostics anyUnknownInErrorContext:off */
-
-import * as Floci from "@alchemy.run/floci";
 import * as Config from "effect/Config";
 import { ConfigProvider } from "effect/ConfigProvider";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Scope from "effect/Scope";
-import * as FetchHttpClient from "effect/http/FetchHttpClient";
-import * as HttpClient from "effect/http/HttpClient";
-import * as HttpClientRequest from "effect/http/HttpClientRequest";
-
-import { DEFAULT_LOCAL_ENDPOINT } from "../AWS/AuthProvider.ts";
-import { flociServices } from "../AWS/Local/FlociServices.ts";
 import { AdoptPolicy } from "../AdoptPolicy.ts";
 import { AlchemyContext, AlchemyContextLive } from "../AlchemyContext.ts";
 import { apply } from "../Apply.ts";
-import { provideFreshArtifactStore } from "../Artifacts.ts";
+import { ArtifactStore, provideFreshArtifactStore } from "../Artifacts.ts";
 import { AuthProviders } from "../Auth/AuthProvider.ts";
 import { CredentialsStoreLive } from "../Auth/Credentials.ts";
 import { ProfileStoreLive } from "../Auth/Profile.ts";
 import { withProfileOverride } from "../Auth/Resolve.ts";
-import * as Interaction from "../Interaction.ts";
 import { userStage } from "../Cli/commands/flags.ts";
 import { LoggingCli } from "../Cli/LoggingCli.ts";
+import * as Contributions from "../Contributions.ts";
 import { deploy as _deploy } from "../Deploy.ts";
 import { destroy as _destroy } from "../Destroy.ts";
 import type { Input } from "../Input.ts";
+import * as Interaction from "../Interaction.ts";
 import * as RpcProviderProxy from "../Local/RpcProviderProxy.ts";
 import * as RpcSpawner from "../Local/RpcSpawner.ts";
 import { ALCHEMY_DEV } from "../Phase.ts";
 import * as Plan from "../Plan.ts";
+import type { ResourceSelection, SelectionOutput } from "../ResourceSelection.ts";
 import {
   type CompiledStack,
   make as makeStack,
@@ -47,10 +39,7 @@ import {
 import { Stage } from "../Stage.ts";
 import * as State from "../State/index.ts";
 import { TelemetryLive } from "../Telemetry/Layer.ts";
-import {
-  loadConfigProvider,
-  StackConfigOverrides,
-} from "../Util/ConfigProvider.ts";
+import { loadConfigProvider, StackConfigOverrides } from "../Util/ConfigProvider.ts";
 import { PlatformServices } from "../Util/PlatformServices.ts";
 
 /**
@@ -122,9 +111,7 @@ export interface MakeOptions<ROut = any> {
  */
 export const sidecarProxy = (options: { profile?: string }) =>
   Layer.unwrap(
-    Effect.map(RpcSpawner.RpcSpawner, (spawner) =>
-      RpcProviderProxy.layer(spawner.url),
-    ),
+    Effect.map(RpcSpawner.RpcSpawner, (spawner) => RpcProviderProxy.layer(spawner.url)),
   ).pipe(
     Layer.provideMerge(
       RpcSpawner.layerServer({
@@ -140,9 +127,7 @@ export const sidecarProxy = (options: { profile?: string }) =>
  * in place. Accepts the usual truthy/falsey strings (`true`/`1`/`yes`/`on`,
  * `false`/`0`/`no`/`off`).
  */
-export const ALCHEMY_TEST_DEV = Config.Boolean("ALCHEMY_TEST_DEV").pipe(
-  Config.option,
-);
+export const ALCHEMY_TEST_DEV = Config.Boolean("ALCHEMY_TEST_DEV").pipe(Config.option);
 
 /** The `ALCHEMY_TEST_DEV` override, if the env var is set. */
 export const alchemyTestDevOverride = (): Option.Option<boolean> =>
@@ -196,19 +181,39 @@ export const resolveStage = (options: { stage?: string }): string =>
  * run `close` from the same final cleanup hook that closes the shared scope.
  */
 export interface SidecarHandle {
-  readonly provide: <A, E, R>(
-    eff: Effect.Effect<A, E, R>,
-  ) => Effect.Effect<A, any, any>;
+  readonly provide: <A, E, R>(eff: Effect.Effect<A, E, R>) => Effect.Effect<A, any, any>;
   readonly close: Effect.Effect<void>;
 }
 
 interface SidecarSingleton {
-  readonly lazy: Layer.Layer<RpcProviderProxy.RpcProviderProxy>;
+  readonly real: ReturnType<typeof sidecarProxy>;
+  readonly memoMap: Layer.MemoMap;
   readonly scope: Scope.Closeable;
+  proxy?: RpcProviderProxy.RpcProviderProxy["Service"];
   refs: number;
 }
 
 const sidecarSingletons = new Map<string, SidecarSingleton>();
+
+/** Payload-free counts; observing them never starts the singleton. */
+export const sidecarDiagnostics = Effect.gen(function* () {
+  const instances = [...sidecarSingletons.values()];
+  const counts = { sessions: 0, testSessions: 0, owners: 0, connections: 0 };
+  for (const instance of instances) {
+    if (instance.proxy === undefined) continue;
+    const current = yield* instance.proxy.diagnostics;
+    counts.sessions += current.sessions;
+    counts.testSessions += current.testSessions;
+    counts.owners += current.owners;
+    counts.connections += current.connections;
+  }
+  return {
+    singletons: instances.length,
+    reservations: instances.reduce((sum, instance) => sum + instance.refs, 0),
+    started: instances.filter((instance) => instance.proxy !== undefined).length,
+    ...counts,
+  };
+});
 
 export const makeSidecarHandle = <ROut = any>(
   options: MakeOptions<ROut>,
@@ -217,58 +222,105 @@ export const makeSidecarHandle = <ROut = any>(
   const key = options.profile ?? process.env.ALCHEMY_PROFILE ?? "";
   let singleton = sidecarSingletons.get(key);
   if (singleton === undefined) {
-    const scope = Scope.makeUnsafe("sequential");
-    const memoMap = Layer.makeMemoMapUnsafe();
-    const real = sidecarProxy(options);
-    const lazy = Layer.effect(
-      RpcProviderProxy.RpcProviderProxy,
-      Effect.gen(function* () {
-        // Capture the ambient platform context (provided by `toEffect`) so
-        // the deferred spawner build can run inside a provider's `get`
-        // without leaking platform requirements onto the RpcProviderProxy
-        // interface. Omit Scope: that key is the calling file's sharedScope
-        // (closed in afterAll). Merging it in would pin the process-wide
-        // spawner HTTP server to a file that exits while others still need
-        // it. Provide the sidecar singleton scope instead.
-        const ambient = Context.omit(Scope.Scope)(
-          yield* Effect.context<never>(),
-        );
-        const realProxy = Layer.buildWithMemoMap(real, memoMap, scope).pipe(
-          Effect.map((built) =>
-            Context.get(built, RpcProviderProxy.RpcProviderProxy),
-          ),
-          Effect.provideContext(ambient as Context.Context<any>),
-          Scope.provide(scope),
-          Effect.orDie,
-        );
-        return RpcProviderProxy.RpcProviderProxy.of({
-          get: (providersUrl, providerName) =>
-            Effect.flatMap(realProxy, (proxy) =>
-              proxy.get(providersUrl, providerName),
-            ),
-        });
-      }),
-    );
-    singleton = { lazy, scope, refs: 0 };
+    singleton = {
+      real: sidecarProxy(options),
+      memoMap: Layer.makeMemoMapUnsafe(),
+      scope: Scope.makeUnsafe("sequential"),
+      refs: 0,
+    };
     sidecarSingletons.set(key, singleton);
   }
   singleton.refs += 1;
-  const instance = singleton;
-  let closed = false;
-  return {
-    provide: (eff) => Effect.provide(eff, instance.lazy),
-    close: Effect.suspend(() => {
-      // Idempotent per handle: destroy(Stack) and the fallback afterAll can
-      // both run it without double-decrementing.
-      if (closed) return Effect.void;
-      closed = true;
-      instance.refs -= 1;
-      if (instance.refs > 0) return Effect.void;
-      if (sidecarSingletons.get(key) === instance) {
-        sidecarSingletons.delete(key);
+  let runtime:
+    | {
+        instance: SidecarSingleton;
+        owner: RpcProviderProxy.SessionOwner;
+        contexts: Set<{ ambient?: Context.Context<any> }>;
       }
-      return Scope.close(instance.scope, Exit.void);
-    }).pipe(Effect.ignore),
+    | undefined = {
+    instance: singleton,
+    owner: RpcProviderProxy.makeSessionOwner(),
+    contexts: new Set(),
+  };
+  const lazy = Layer.effect(
+    RpcProviderProxy.RpcProviderProxy,
+    Effect.gen(function* () {
+      if (runtime === undefined) {
+        return yield* Effect.die("Test sidecar handle is closed");
+      }
+      // Never pin the singleton to a file's scope, artifacts, or layer builds.
+      const context = {
+        ambient: Context.omit(
+          Scope.Scope,
+          ArtifactStore,
+          Layer.CurrentMemoMap,
+        )(yield* Effect.context<never>()) as Context.Context<any> | undefined,
+      };
+      if (runtime === undefined) {
+        return yield* Effect.die("Test sidecar handle is closed");
+      }
+      runtime.contexts.add(context);
+      return RpcProviderProxy.RpcProviderProxy.of({
+        diagnostics: Effect.suspend(
+          () =>
+            runtime?.instance.proxy?.diagnostics ??
+            Effect.succeed({
+              sessions: 0,
+              testSessions: 0,
+              owners: 0,
+              connections: 0,
+            }),
+        ),
+        serverDiagnostics: Effect.suspend(
+          () => runtime?.instance.proxy?.serverDiagnostics ?? Effect.succeed(undefined),
+        ),
+        get: Effect.fn(function* (providersUrl, providerName) {
+          if (runtime === undefined) {
+            return yield* Effect.die("Test sidecar handle is closed");
+          }
+          const { instance, owner } = runtime;
+          let proxy = instance.proxy;
+          if (proxy === undefined) {
+            const built = yield* Layer.buildWithMemoMap(
+              instance.real,
+              instance.memoMap,
+              instance.scope,
+            ).pipe(
+              Effect.provideContext(context.ambient!),
+              Scope.provide(instance.scope),
+              Effect.orDie,
+            );
+            proxy = Context.get(built, RpcProviderProxy.RpcProviderProxy);
+            instance.proxy = proxy;
+          }
+          context.ambient = undefined;
+          runtime?.contexts.delete(context);
+          // A handle may have closed while the singleton was building.
+          return yield* proxy.get(providersUrl, providerName, owner);
+        }),
+      });
+    }),
+  );
+  return {
+    provide: (eff) => Effect.provide(eff, lazy),
+    close: Effect.suspend(() => {
+      if (runtime === undefined) return Effect.void;
+      const { instance, owner, contexts } = runtime;
+      runtime = undefined;
+      for (const context of contexts) context.ambient = undefined;
+      contexts.clear();
+      return RpcProviderProxy.closeSessionOwner(owner).pipe(
+        Effect.ensuring(
+          Effect.suspend(() => {
+            instance.refs -= 1;
+            if (instance.refs > 0) return Effect.void;
+            if (sidecarSingletons.get(key) === instance) sidecarSingletons.delete(key);
+            instance.proxy = undefined;
+            return Scope.close(instance.scope, Exit.void);
+          }),
+        ),
+      );
+    }).pipe(Effect.uninterruptible, Effect.ignore),
   };
 };
 
@@ -280,70 +332,70 @@ const overrideAlchemyContext = (overrides: { dev: boolean }) =>
 
 export type TestEffect<A, Req = never> = StackEffect<A, any, Req>;
 
-/**
- * Floci serves virtual-host data planes on the gateway when the Host
- * header is the AWS hostname (`{bucket}.s3-website-{region}.amazonaws.com`,
- * `{apiId}.appsync-api.{region}.amazonaws.com`,
- * `{apiId}.execute-api.{region}.amazonaws.com`,
- * `{distributionId}.cloudfront.net`). Live tests GET those hosts; under
- * {@link ALCHEMY_TEST_DEV} rewrite the URL to the emulator and keep the
- * Host so the virtual-host filter still fires.
- */
-const rewriteAwsVirtualHostToFloci = (
-  request: HttpClientRequest.HttpClientRequest,
-): HttpClientRequest.HttpClientRequest => {
-  let url: URL;
-  try {
-    url = new URL(request.url);
-  } catch {
-    return request;
-  }
-  if (
-    !/\.s3-website-[a-z0-9-]+\.amazonaws\.com$/i.test(url.hostname) &&
-    !/\.appsync-api\.[a-z0-9-]+\.amazonaws\.com$/i.test(url.hostname) &&
-    !/\.execute-api\.[a-z0-9-]+\.amazonaws\.com$/i.test(url.hostname) &&
-    !/\.cloudfront\.net$/i.test(url.hostname)
-  ) {
-    return request;
-  }
-  const rewritten = new URL(url.href);
-  const endpoint = new URL(DEFAULT_LOCAL_ENDPOINT);
-  rewritten.protocol = endpoint.protocol;
-  rewritten.hostname = endpoint.hostname;
-  rewritten.port = endpoint.port;
-  return request.pipe(
-    HttpClientRequest.setUrl(rewritten.toString()),
-    HttpClientRequest.setHeader("host", url.hostname),
-  );
-};
+const testDev = Option.getOrElse(alchemyTestDevOverride(), () => false);
 
-if (Option.getOrElse(alchemyTestDevOverride(), () => false)) {
-  // Floci rewrites WebSocket invoke URLs onto wss://127.0.0.1:4566/ws/...
-  // The gateway cert is self-signed; Bun/Node would otherwise reject the
-  // upgrade. Scoped to ALCHEMY_TEST_DEV only.
+/**
+ * Every provider's test services (e.g. AWS's Floci emulator), applied under
+ * {@link ALCHEMY_TEST_DEV} only.
+ */
+const testServices: ReadonlyArray<Contributions.TestServices> = testDev
+  ? await Effect.runPromise(
+      Contributions.load().pipe(
+        Effect.flatMap((providers) =>
+          Effect.forEach(providers, (provider) =>
+            provider.testServices
+              ? Contributions.resolve(provider, "testServices", provider.testServices)
+              : Effect.succeed(undefined),
+          ),
+        ),
+        Effect.map((services) => services.filter((service) => service !== undefined)),
+        Effect.provide(PlatformServices),
+      ),
+    )
+  : [];
+
+if (testDev) {
+  // Emulators rewrite WebSocket invoke URLs onto their self-signed gateway;
+  // Bun/Node would otherwise reject the upgrade. Scoped to ALCHEMY_TEST_DEV
+  // only.
   process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
-  // Local workerd trusts no self-signed certs and ignores the flag above
-  // (it's C++, not Node). Its runtime DOES fold `NODE_EXTRA_CA_CERTS` into
-  // workerd's outbound `trustedCertificates` (see cloudflare-runtime
-  // Internet.ts), so point it at the emulator CA bundle that `ensureFloci`
-  // refreshes on every health check. Set here — before the RPC spawner or
-  // any vite child forks — so the whole dev process tree inherits it.
-  process.env.NODE_EXTRA_CA_CERTS ??= Floci.FLOCI_CA_PATH;
+  // Set here — before the RPC spawner or any vite child forks — so the whole
+  // dev process tree inherits it.
+  for (const services of testServices) {
+    for (const [key, value] of Object.entries(services.env ?? {})) process.env[key] ??= value;
+  }
 }
 
-const flociWebsiteHttp = Layer.effect(
+/** The test services' layers, closest wins over the stack's own. */
+const testServicesLayer =
+  testServices.length === 0
+    ? undefined
+    : testServices
+        .map((services) => services.layer)
+        .reduce((merged, layer) => Layer.merge(merged, layer));
+
+const provideTestServices = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+  // Test services override services already present in R.
+  testServicesLayer === undefined
+    ? effect
+    : // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- the layer overrides services already present in R
+      (Effect.provide(effect, testServicesLayer) as Effect.Effect<A, E, R>);
+
+const testHttp = Layer.effect(
   HttpClient.HttpClient,
   Effect.map(HttpClient.HttpClient, (client) =>
-    HttpClient.mapRequest(client, rewriteAwsVirtualHostToFloci),
+    testServices.reduce(
+      (mapped, services) =>
+        services.mapRequest ? HttpClient.mapRequest(mapped, services.mapRequest) : mapped,
+      client,
+    ),
   ),
 ).pipe(Layer.provide(FetchHttpClient.layer));
 
 const platformLayer = () =>
   Layer.mergeAll(
     PlatformServices,
-    Option.getOrElse(alchemyTestDevOverride(), () => false)
-      ? flociWebsiteHttp
-      : FetchHttpClient.layer,
+    testDev ? testHttp : FetchHttpClient.layer,
     Layer.provide(ProfileStoreLive, PlatformServices),
     Layer.provide(CredentialsStoreLive, PlatformServices),
   );
@@ -386,16 +438,11 @@ export const toEffect = <A, ROut = any>(
     // `Test.make({ dev: true })` files are unchanged (mixed
     // `Alchemy.remote()` suites keep their live SDK).
     const body = sidecar ? sidecar.provide(effect) : effect;
-    const locally =
-      Option.getOrElse(alchemyTestDevOverride(), () => false) === true
-        ? Effect.provide(body, flociServices())
-        : body;
+    const locally = testDev ? provideTestServices(body) : body;
     return yield* locally.pipe(
       provideFreshArtifactStore,
-      Effect.provide(Layer.succeed(ConfigProvider, configProvider)),
-      Effect.provideService(StackConfigOverrides, {
-        profile: options.profile,
-      }),
+      Effect.provideService(ConfigProvider, configProvider),
+      Effect.provideService(StackConfigOverrides, { profile: options.profile }),
     );
   }).pipe(
     Effect.provideService(AdoptPolicy, options.adopt ?? false),
@@ -409,9 +456,11 @@ export const toEffect = <A, ROut = any>(
     Effect.provide(Layer.provideMerge(alchemyLayer, platformLayer())),
   );
 
-  return (
-    scope === undefined ? Effect.scoped(base) : Scope.provide(base, scope)
-  ) as Effect.Effect<A, any, never>;
+  return (scope === undefined ? Effect.scoped(base) : Scope.provide(base, scope)) as Effect.Effect<
+    A,
+    any,
+    never
+  >;
 };
 
 /** Promise wrapper around {@link toEffect} for `bun.test`-style runners. */
@@ -435,11 +484,9 @@ export const withProviders = <A, E, R, ROut>(
   // Closest wins: when `ALCHEMY_TEST_DEV=1`, pin the test body's
   // distilled AWS clients to the emulator BEFORE `options.providers`
   // (which still carries the live `AWSEnvironment`).
-  const body =
-    Option.getOrElse(alchemyTestDevOverride(), () => false) === true
-      ? Effect.provide(effect, flociServices())
-      : effect;
+  const body = testDev ? provideTestServices(effect) : effect;
   const stage = resolveStage(options);
+  // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- providers layer is typed `any`; requirements are satisfied by it
   return body.pipe(
     Effect.provide(
       (options.providers as Layer.Layer<any, never, any>).pipe(
@@ -495,10 +542,7 @@ export interface Deploy {
   ): DeployResult<SelectionOutput<A, Call[0]>>;
 }
 
-export function deploy<
-  A,
-  Call extends [options?: FilteredDeployCallOptions] = FullDeployCall,
->(
+export function deploy<A, Call extends [options?: FilteredDeployCallOptions] = FullDeployCall>(
   options: MakeOptions,
   stack: TestEffect<CompiledStack<A>, Stage | AlchemyContext>,
   ...call: Call
@@ -527,14 +571,8 @@ const deployStack = <A>(
   }).pipe(Effect.provide(TelemetryLive));
 
 /** Bind test-file options and the shared runtime scope without erasing output types. */
-export const makeDeploy = (
-  options: MakeOptions,
-  scope: Scope.Scope,
-): Deploy => {
-  function run<
-    A,
-    Call extends [options?: FilteredDeployCallOptions] = FullDeployCall,
-  >(
+export const makeDeploy = (options: MakeOptions, scope: Scope.Scope): Deploy => {
+  function run<A, Call extends [options?: FilteredDeployCallOptions] = FullDeployCall>(
     stack: TestEffect<CompiledStack<A>, Stage | AlchemyContext>,
     ...call: Call
   ): DeployResult<SelectionOutput<A, Call[0]>>;
@@ -550,12 +588,7 @@ export const makeDeploy = (
 export const destroy = (
   options: MakeOptions,
   stack: TestEffect<CompiledStack, Stage | AlchemyContext>,
-  callOptions?: {
-    stage?: string;
-    scope?: Scope.Scope;
-    include?: never;
-    exclude?: never;
-  },
+  callOptions?: { stage?: string; scope?: Scope.Scope; include?: never; exclude?: never },
 ) =>
   _destroy({
     include: callOptions?.include,
@@ -611,15 +644,8 @@ export interface ScratchStack<ROut = any> {
   plan<A, E, R, Call extends [options?: Plan.FilteredPlanOptions] = []>(
     effect: Effect.Effect<A, E, R>,
     ...call: Call
-  ): Effect.Effect<
-    Plan.Plan<SelectionOutput<A, Call[0]>>,
-    any,
-    Exclude<R, ROut | StackServices>
-  >;
-  destroy(options?: {
-    include?: never;
-    exclude?: never;
-  }): Effect.Effect<void, any, never>;
+  ): Effect.Effect<Plan.Plan<SelectionOutput<A, Call[0]>>, any, Exclude<R, ROut | StackServices>>;
+  destroy(options?: { include?: never; exclude?: never }): Effect.Effect<void, any, never>;
 }
 
 const sanitizeStackName = (name: string) =>
@@ -662,36 +688,29 @@ export const scratchStack = <ROut>(
       ? Layer.succeed(State.State, State.InMemoryService({}))
       : Layer.provide(State.localState(), PlatformServices);
 
-  // `withProviders` already pins the test body to Floci, but the stack program
-  // and its later plan/apply phase run under `AWS.providers()`'s live services.
-  // Pin both phases separately: Actions execute during apply, after the stack
-  // program has finished. This override must be inside `compiled.services` so
-  // Effect's closest-layer precedence selects Floci for Action data-plane calls.
-  const pinToFloci = <A, E, R>(
-    effect: Effect.Effect<A, E, R>,
-  ): Effect.Effect<A, E, R> =>
-    Option.getOrElse(alchemyTestDevOverride(), () => false)
-      ? (Effect.provide(effect, flociServices()) as Effect.Effect<A, E, R>)
-      : effect;
+  // `withProviders` already pins the test body to the test services, but the
+  // stack program and its later plan/apply phase run under the providers'
+  // live services. Pin both phases separately: Actions execute during apply,
+  // after the stack program has finished. This override must be inside
+  // `compiled.services` so Effect's closest-layer precedence selects the test
+  // services for Action data-plane calls.
+  const pinToTestServices = <A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
+    testDev ? provideTestServices(effect) : effect;
 
   const buildAndApply = (
     effect: Effect.Effect<any, any, any>,
     planOptions?: Plan.FilteredPlanOptions,
   ) =>
-    (pinToFloci(effect) as Effect.Effect<any, any, never>).pipe(
-      makeStack({
-        name: stackName,
-        providers: options.providers,
-        state: stateLayer,
-      } as any) as any,
+    (pinToTestServices(effect) as Effect.Effect<any, any, never>).pipe(
+      makeStack({ name: stackName, providers: options.providers, state: stateLayer } as any) as any,
       Effect.flatMap((compiled: any) =>
         Plan.make(compiled, planOptions ?? {}).pipe(
           Effect.flatMap(apply),
-          pinToFloci,
+          pinToTestServices,
           Effect.provide(compiled.services),
         ),
       ),
-      Effect.provide(Layer.succeed(Stage, stage)),
+      Effect.provideService(Stage, stage),
       provideFreshArtifactStore,
     );
 
@@ -699,18 +718,14 @@ export const scratchStack = <ROut>(
     effect: Effect.Effect<any, any, any>,
     planOptions?: Plan.FilteredPlanOptions,
   ) =>
-    (pinToFloci(effect) as Effect.Effect<any, any, never>).pipe(
-      makeStack({
-        name: stackName,
-        providers: options.providers,
-        state: stateLayer,
-      } as any) as any,
+    (pinToTestServices(effect) as Effect.Effect<any, any, never>).pipe(
+      makeStack({ name: stackName, providers: options.providers, state: stateLayer } as any) as any,
       Effect.flatMap((compiled: any) =>
-        pinToFloci(Plan.make(compiled, planOptions ?? {})).pipe(
+        pinToTestServices(Plan.make(compiled, planOptions ?? {})).pipe(
           Effect.provide(compiled.services),
         ),
       ),
-      Effect.provide(Layer.succeed(Stage, stage)),
+      Effect.provideService(Stage, stage),
       provideFreshArtifactStore,
     );
 
@@ -718,29 +733,21 @@ export const scratchStack = <ROut>(
     name: stackName,
     stage,
     state: stateLayer,
-    deploy: ((
-      effect: Effect.Effect<any, any, any>,
-      planOptions?: Plan.FilteredPlanOptions,
-    ) => buildAndApply(effect, planOptions)) as ScratchStack<ROut>["deploy"],
-    plan: ((
-      effect: Effect.Effect<any, any, any>,
-      planOptions?: Plan.FilteredPlanOptions,
-    ) => buildPlan(effect, planOptions)) as ScratchStack<ROut>["plan"],
+    deploy: ((effect: Effect.Effect<any, any, any>, planOptions?: Plan.FilteredPlanOptions) =>
+      buildAndApply(effect, planOptions)) as ScratchStack<ROut>["deploy"],
+    plan: ((effect: Effect.Effect<any, any, any>, planOptions?: Plan.FilteredPlanOptions) =>
+      buildPlan(effect, planOptions)) as ScratchStack<ROut>["plan"],
     destroy: (callOptions) =>
       callOptions?.include !== undefined || callOptions?.exclude !== undefined
         ? Effect.die(
-            new Plan.InvalidResourceSelection({
-              message: "Filtered destroy is not supported.",
-            }),
+            new Plan.InvalidResourceSelection({ message: "Filtered destroy is not supported." }),
           )
         : (Plan.destroy({ name: stackName, stage }).pipe(
             Effect.flatMap(apply),
             Effect.asVoid,
             Effect.provide(
               stateLayer.pipe(
-                Layer.provideMerge(
-                  options.providers as Layer.Layer<any, never, any>,
-                ),
+                Layer.provideMerge(options.providers as Layer.Layer<any, never, any>),
                 Layer.provideMerge(
                   Layer.succeed(Stack, {
                     name: stackName,

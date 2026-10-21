@@ -1,6 +1,6 @@
 import * as NodeHttp from "node:http";
-import path from "node:path";
 import type { AddressInfo } from "node:net";
+import path from "node:path";
 import * as vite from "vite";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { WebSocketServer } from "ws";
@@ -53,10 +53,7 @@ describe("dev plugin", () => {
     await new Promise((resolve) => runtimeServer.close(resolve));
   });
 
-  const createDevServer = (
-    plugins: vite.PluginOption,
-    config: vite.UserConfig = {},
-  ) =>
+  const createDevServer = (plugins: vite.PluginOption, config: vite.UserConfig = {}) =>
     vite.createServer({
       ...config,
       configFile: false,
@@ -117,14 +114,25 @@ describe("dev plugin", () => {
     }
   });
 
-  it("creates the Distilled environment when configureServer is intact", async () => {
-    const server = await createDevServer(
-      cloudflareVitePlugin({ main: "./worker-entry.ts" }),
-    );
+  it("leaves the environment runnable when there is no Worker entry", async () => {
+    // An assets-only dev run boots workerd for the asset layer but evaluates
+    // no modules, so the `ssr` environment stays Vite's own: a framework
+    // plugin that renders through `ssrLoadModule` in dev keeps working.
+    const server = await createDevServer(cloudflareVitePlugin({}));
     try {
-      expect(server.environments["ssr"]).toBeInstanceOf(
-        DistilledDevEnvironment,
-      );
+      const environment = server.environments["ssr"];
+      expect(environment).toBeDefined();
+      expect(environment).not.toBeInstanceOf(DistilledDevEnvironment);
+      expect(vite.isRunnableDevEnvironment(environment!)).toBe(true);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("creates the Distilled environment when configureServer is intact", async () => {
+    const server = await createDevServer(cloudflareVitePlugin({ main: "./worker-entry.ts" }));
+    try {
+      expect(server.environments["ssr"]).toBeInstanceOf(DistilledDevEnvironment);
     } finally {
       await server.close();
     }
@@ -152,9 +160,7 @@ describe("dev plugin", () => {
       cloudflareVitePlugin({}),
     ]);
     try {
-      expect(server.environments["ssr"]).toBeInstanceOf(
-        DistilledDevEnvironment,
-      );
+      expect(server.environments["ssr"]).toBeInstanceOf(DistilledDevEnvironment);
       expect((await request(server, "/")).text).toBe("worker");
     } finally {
       await server.close();

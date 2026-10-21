@@ -15,6 +15,7 @@ export {
   exclusiveOf,
   it,
   layer,
+  registerFileCleanup,
   registerHook,
   registerTest,
   retryOf,
@@ -44,12 +45,4 @@ export {
 } from "./Expect.ts";
 export { currentFile } from "./Registry.ts";
 export type { Tags, TestTag, TestTags } from "./Tags.ts";
-export type {
-  FileSuite,
-  Hook,
-  LogEntry,
-  Mode,
-  Suite,
-  TestBody,
-  TestCase,
-} from "./Model.ts";
+export type { FileSuite, Hook, LogEntry, Mode, Suite, TestBody, TestCase } from "./Model.ts";

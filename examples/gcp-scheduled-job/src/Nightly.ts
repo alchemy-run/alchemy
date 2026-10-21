@@ -1,4 +1,4 @@
-import * as GCP from "alchemy/GCP";
+import * as GCP from "@alchemy.run/gcp";
 import * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";
 import Summarize from "./Summarize.ts";
@@ -24,7 +24,6 @@ export const Nightly = Effect.gen(function* () {
   });
 
   return yield* GCP.CloudScheduler.Job("Nightly", {
-    location: "us-central1",
     schedule: "0 2 * * *",
     timeZone: "Etc/UTC",
     description: "nightly order summary",

@@ -44,12 +44,13 @@ const answer = yield* gemini.text("Write a haiku about rain.");
 
 ## Deploy
 
+Credentials come from your alchemy profile: run `alchemy profile` once and pick GCP (*Service account JSON* for a key file, or *Stored* for an access token or key kept in `~/.alchemy/credentials`, plus a default region), then deploy with `--profile <name>`.
+
 The Vertex AI API (`aiplatform.googleapis.com`) must be enabled on the
 project, and Docker must be running for the local image build.
 
 ```sh
-export GOOGLE_PROJECT_ID=my-project
-pnpm deploy
+pnpm deploy --profile <name>
 ```
 
 ```sh
@@ -63,17 +64,16 @@ Vertex AI, during which `/chat` answers `500`.
 ## Test
 
 ```sh
-pnpm test
+ALCHEMY_PROFILE=<name> bun test
 ```
 
 Deploys the stack, checks the project IAM policy for the grant, sends
 `Reply with exactly: pong` to `/chat` and expects `pong` back, then destroys
 the stack and verifies the service is gone and the grant revoked. Skipped
-without GCP credentials (`GOOGLE_PROJECT_ID` plus
-`GOOGLE_APPLICATION_CREDENTIALS` or `GOOGLE_ACCESS_TOKEN`) or Docker.
+when Docker is not running.
 
 ## Destroy
 
 ```sh
-pnpm destroy
+pnpm destroy --profile <name>
 ```

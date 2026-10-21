@@ -67,9 +67,7 @@ export interface Callback<Payload> {
     options: CallbackScheduleOptions<Payload>,
   ) => Effect.Effect<void, CallbackError, RuntimeContext>;
   /** Cancel a pending job. Cancelling an absent ID succeeds; an already-running handler is not interrupted. */
-  readonly cancel: (
-    id: string,
-  ) => Effect.Effect<void, CallbackError, RuntimeContext>;
+  readonly cancel: (id: string) => Effect.Effect<void, CallbackError, RuntimeContext>;
   /** Inspect a pending job. Returns undefined after successful completion or cancellation. */
   readonly getStatus: (
     id: string,
@@ -88,11 +86,7 @@ export type CallbackFactory = <Payload, E, R>(
   name: string,
   handler: (payload: Payload) => Effect.Effect<unknown, E, R>,
   options?: CallbackOptions,
-) => Effect.Effect<
-  Callback<Payload>,
-  never,
-  RuntimeContext | Exclude<R, Scope.Scope>
->;
+) => Effect.Effect<Callback<Payload>, never, RuntimeContext | Exclude<R, Scope.Scope>>;
 
 /**
  * Register a durable callback with the current host.
@@ -178,11 +172,7 @@ export const makeCallback = <Payload, E, R>(
   name: string,
   handler: (payload: Payload) => Effect.Effect<unknown, E, R>,
   options?: CallbackOptions,
-): Effect.Effect<
-  Callback<Payload>,
-  never,
-  RuntimeContext | Exclude<R, Scope.Scope>
-> =>
+): Effect.Effect<Callback<Payload>, never, RuntimeContext | Exclude<R, Scope.Scope>> =>
   Effect.gen(function* () {
     const context = yield* RuntimeContext;
     if (!context.makeCallback) {
