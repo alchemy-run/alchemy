@@ -132,3 +132,88 @@ test("a Worker reads HTML and binary files in Vite's publicDir through ASSETS", 
   expect(image.headers.get("content-type")).toBe("image/png");
   expect(Buffer.from(await image.arrayBuffer())).toEqual(png);
 });
+
+// `@cloudflare/vite-plugin` serves HTML through `transformIndexHtml` (`public/`
+// HTML as is) and applies `server.headers` to asset responses.
+test("serves HTML through Vite with the dev server's headers", async () => {
+  onTestFinished(() => {
+    vi.unstubAllEnvs();
+  });
+  vi.stubEnv("CLOUDFLARE_API_TOKEN", "local-test-unused");
+  vi.stubEnv("CLOUDFLARE_ACCOUNT_ID", "00000000000000000000000000000000");
+  const tmpRoot = path.resolve(import.meta.dirname, "../.cache/test-roots");
+  await fs.mkdir(tmpRoot, { recursive: true });
+  const root = await fs.mkdtemp(path.join(tmpRoot, "dev-assets-html-"));
+  onTestFinished(() => fs.rm(root, { recursive: true, force: true }));
+  await fs.writeFile(path.join(root, "index.html"), "<html><head></head><body>shell</body></html>");
+  await fs.mkdir(path.join(root, "public"));
+  await fs.writeFile(
+    path.join(root, "public", "raw.html"),
+    "<html><head></head><body>raw</body></html>",
+  );
+  const entry = path.join(root, "worker.js");
+  await fs.writeFile(
+    entry,
+    `export default { fetch: (request, env) => env.ASSETS.fetch(request) };`,
+  );
+  const server = await vite.createServer({
+    root,
+    configFile: false,
+    logLevel: "silent",
+    server: { host: "127.0.0.1", port: 0, headers: { "x-dev-header": "from-vite" } },
+    plugins: [
+      cloudflareVitePlugin({
+        main: entry,
+        worker: { name: "vite-dev-assets-html-test", bindings: [Assets.local("ASSETS")] },
+      }),
+    ],
+  });
+  onTestFinished(() => server.close());
+  await server.listen();
+  const url = server.resolvedUrls!.local[0];
+
+  const index = await fetch(new URL("/", url), { signal: AbortSignal.timeout(5_000) });
+  expect(index.status).toBe(200);
+  expect(index.headers.get("x-dev-header")).toBe("from-vite");
+  expect(await index.text()).toContain("/@vite/client");
+
+  const raw = await fetch(new URL("/raw.html", url), { signal: AbortSignal.timeout(5_000) });
+  expect(raw.status).toBe(200);
+  expect(raw.headers.get("x-dev-header")).toBe("from-vite");
+  expect(await raw.text()).not.toContain("/@vite/client");
+});
+
+// Additional modules load as Worker modules, not through the module runner,
+// so editing one restarts the dev server, as `@cloudflare/vite-plugin` does.
+test("restarts the dev server when an additional module changes", async () => {
+  onTestFinished(() => {
+    vi.unstubAllEnvs();
+  });
+  vi.stubEnv("CLOUDFLARE_API_TOKEN", "local-test-unused");
+  vi.stubEnv("CLOUDFLARE_ACCOUNT_ID", "00000000000000000000000000000000");
+  const tmpRoot = path.resolve(import.meta.dirname, "../.cache/test-roots");
+  await fs.mkdir(tmpRoot, { recursive: true });
+  const root = await fs.mkdtemp(path.join(tmpRoot, "dev-assets-module-"));
+  onTestFinished(() => fs.rm(root, { recursive: true, force: true }));
+  await fs.writeFile(path.join(root, "message.txt"), "one");
+  const entry = path.join(root, "worker.js");
+  await fs.writeFile(
+    entry,
+    `import message from "./message.txt";\nexport default { fetch: () => new Response(message) };`,
+  );
+  const server = await vite.createServer({
+    root,
+    configFile: false,
+    logLevel: "silent",
+    server: { host: "127.0.0.1", port: 0 },
+    plugins: [cloudflareVitePlugin({ main: entry, worker: { name: "vite-dev-module-test" } })],
+  });
+  onTestFinished(() => server.close());
+  await server.listen();
+  const url = server.resolvedUrls!.local[0];
+  const first = await fetch(url, { signal: AbortSignal.timeout(10_000) });
+  expect(await first.text()).toBe("one");
+  const restart = vi.spyOn(server, "restart").mockResolvedValue();
+  await fs.writeFile(path.join(root, "message.txt"), "two");
+  await vi.waitFor(() => expect(restart).toHaveBeenCalled(), { timeout: 10_000 });
+});
