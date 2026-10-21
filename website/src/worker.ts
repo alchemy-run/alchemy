@@ -139,7 +139,6 @@ const REDIRECTS: Record<string, string> = {
   "/cloudflare/guides/frontends": "/cloudflare/frontend/frontends",
   "/cloudflare/guides/github-events": "/cloudflare/messaging/github-events",
   "/cloudflare/guides/hibernatable-websockets": "/cloudflare/compute/hibernatable-websockets",
-  "/cloudflare/guides/release-agent": "/cloudflare/ai/release-agent",
   "/cloudflare/guides/secrets-store": "/cloudflare/security/secrets-store",
   "/cloudflare/guides/shared-database": "/cloudflare/data/shared-database",
   "/cloudflare/guides/tunnel": "/cloudflare/networking/tunnel",

@@ -1,4 +1,4 @@
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Namespace from "alchemy/Namespace";
 import type * as ByteSize from "effect/ByteSize";
 import * as Config from "effect/Config";
@@ -127,7 +127,7 @@ export default RegistryLive.pipe(Layer.provide(RegistryConfigFromEnv));
  * // stacks/pkg.ts
  * import { PkgRegistry } from "@alchemy.run/pkg/Registry";
  * import * as Alchemy from "alchemy";
- * import * as Cloudflare from "alchemy/Cloudflare";
+ * import * as Cloudflare from "@alchemy.run/cloudflare";
  * import * as ByteSize from "effect/ByteSize";
  * import * as Config from "effect/Config";
  * import * as Duration from "effect/Duration";

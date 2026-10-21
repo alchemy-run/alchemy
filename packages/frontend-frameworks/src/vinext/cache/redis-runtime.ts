@@ -3,12 +3,12 @@
  * factory `virtual:vinext-cache-adapters` calls as
  * `({ env, options }) => CacheHandler`.
  *
- * Speaks RESP through `connect` from `alchemy/Redis` — the same client
+ * Speaks RESP through `connect` from `@alchemy.run/redis` — the same client
  * Fly/Railway `*RedisHttp` layers use. One process-lifetime connection
  * per URL. Prerender artifacts are seeded into Redis in the background.
  */
-import { connect, type Connection } from "alchemy/Redis";
-import type { Arg, Reply } from "alchemy/Redis";
+import { connect, type Connection } from "@alchemy.run/redis";
+import type { Arg, Reply } from "@alchemy.run/redis";
 import * as Effect from "effect/Effect";
 import * as Scope from "effect/Scope";
 import { makeDataCacheHandler, type DataCacheStore } from "./handler.ts";

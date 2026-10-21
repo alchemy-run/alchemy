@@ -28,7 +28,7 @@ the constructor's layer chain, the same way every other Worker binding works:
 
 ```typescript
 // src/AiWorker.ts
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
@@ -167,7 +167,7 @@ A plain async Worker (no Effect runtime) declares the binding on
 
 ```typescript
 // src/AiAsyncWorker.ts
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 
 export const AiAsyncWorker = Cloudflare.Worker("AiAsyncWorker", {
   main: "./src/handler.ts",

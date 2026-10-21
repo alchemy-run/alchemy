@@ -1,4 +1,3 @@
-import { useEffect, useState } from "@alchemy.run/sigil/react";
 /** @jsxRuntime automatic */
 /** @jsxImportSource @alchemy.run/sigil */
 /**
@@ -17,6 +16,7 @@ import { useEffect, useState } from "@alchemy.run/sigil/react";
  * configuration, credential refresh) resolve the session. The built-in
  * `default` profile is pinned first and can be neither renamed nor deleted.
  */
+import { useEffect, useState } from "@alchemy.run/sigil/react";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as Scheduler from "effect/Scheduler";
