@@ -1,7 +1,7 @@
 import { expect } from "bun:test";
+import * as Hetzner from "@alchemy.run/hetzner";
+import * as Neon from "@alchemy.run/neon";
 import * as Alchemy from "alchemy";
-import * as Hetzner from "alchemy/Hetzner";
-import * as Neon from "alchemy/Neon";
 import * as Test from "alchemy/Test/Bun";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";

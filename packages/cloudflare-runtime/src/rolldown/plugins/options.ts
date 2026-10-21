@@ -159,7 +159,13 @@ export const optionsPlugin = createPlugin<"options", OptionsApi>("options", (plu
               : {}),
           };
         };
-        const appType = userConfig.appType ?? (Object.keys(input).length === 0 ? "spa" : "custom");
+        // No Worker entry: an assets-only site.
+        const assetsOnly = Object.keys(input).length === 0;
+        // `custom` as `@cloudflare/vite-plugin` sets it: Vite's own SPA/MPA
+        // HTML middleware never answers in dev, so every request it doesn't
+        // serve reaches the Worker's router, which applies the asset rules
+        // (`htmlHandling`, `notFoundHandling`, `runWorkerFirst`).
+        const appType = userConfig.appType ?? "custom";
         return {
           appType,
           builder:
@@ -168,27 +174,43 @@ export const optionsPlugin = createPlugin<"options", OptionsApi>("options", (plu
             // `buildApp` orchestrator (e.g. Astro's prerender -> ssr -> client
             // pipeline). Only default it when the resolved user config doesn't
             // already define one.
-            appType === "spa" || userConfig.builder?.buildApp !== undefined
+            userConfig.builder?.buildApp !== undefined
               ? undefined
-              : {
-                  // We need to include this for `builder.buildApp()` to work
-                  // because not all frameworks provide it...
-                  buildApp: async (builder) => {
-                    for (const environment of Object.values(builder.environments)) {
-                      // Framework-owned environments we were told to leave
-                      // alone may have no build input; never drive them from
-                      // our default orchestrator.
-                      if (pluginOptions.skipEnvironments?.includes(environment.name)) continue;
-                      // ...however, if your framework does provide a `buildApp` hook,
-                      // this check prevents us from building the environment twice.
-                      if (environment.isBuilt) continue;
-                      // `skipEnvironments` opts out of environments the app
-                      // declared; this covers the one Vite creates unasked.
-                      if (isEntrylessClientEnvironment(environment)) continue;
-                      await builder.build(environment);
+              : assetsOnly
+                ? // An assets-only site with no `index.html` or client input
+                  // (only `public/`) has nothing to build: the build output
+                  // plugin uploads `public/`, as `@cloudflare/vite-plugin`'s
+                  // fallback client build does. Vite builds every environment
+                  // when none is marked built, which would build the client
+                  // from a missing `index.html`, so mark it handled.
+                  userConfig.build?.rollupOptions?.input === undefined &&
+                  userConfig.environments?.client?.build?.rollupOptions?.input === undefined &&
+                  !fs.existsSync(path.join(root, "index.html"))
+                  ? {
+                      buildApp: async (builder) => {
+                        if (builder.environments.client) builder.environments.client.isBuilt = true;
+                      },
                     }
+                  : undefined
+                : {
+                    // We need to include this for `builder.buildApp()` to work
+                    // because not all frameworks provide it...
+                    buildApp: async (builder) => {
+                      for (const environment of Object.values(builder.environments)) {
+                        // Framework-owned environments we were told to leave
+                        // alone may have no build input; never drive them from
+                        // our default orchestrator.
+                        if (pluginOptions.skipEnvironments?.includes(environment.name)) continue;
+                        // ...however, if your framework does provide a `buildApp` hook,
+                        // this check prevents us from building the environment twice.
+                        if (environment.isBuilt) continue;
+                        // `skipEnvironments` opts out of environments the app
+                        // declared; this covers the one Vite creates unasked.
+                        if (isEntrylessClientEnvironment(environment)) continue;
+                        await builder.build(environment);
+                      }
+                    },
                   },
-                },
           ssr: {
             noExternal: true,
             resolve: {
