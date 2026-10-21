@@ -41,7 +41,7 @@ import type { PlatformError } from "effect/PlatformError";
 import * as Redacted from "effect/Redacted";
 import type * as Scope from "effect/Scope";
 import { glob } from "tinyglobby";
-import { runBuildChild } from "../core/BuildChild.ts";
+import { resolveBuildEnv, runBuildChild } from "../core/BuildChild.ts";
 import { makeCloudflareTarget } from "./cloudflare.ts";
 import {
   make as makeSvelteKit,
@@ -582,6 +582,7 @@ export const makeSvelteKitSource = (options: SvelteKitSourceOptions): SourceProv
         module: import.meta.url,
         rootDir,
         framework: "sveltekit",
+        env: resolveBuildEnv(ctx.env),
         config: {
           rootDir,
           compatibilityDate: ctx.compatibility.date,

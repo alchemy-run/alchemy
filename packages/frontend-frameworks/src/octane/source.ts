@@ -40,7 +40,7 @@ import type * as Path from "effect/Path";
 import type { PlatformError } from "effect/PlatformError";
 import type * as Scope from "effect/Scope";
 import { glob } from "tinyglobby";
-import { runBuildChild } from "../core/BuildChild.ts";
+import { resolveBuildEnv, runBuildChild } from "../core/BuildChild.ts";
 import { makeCloudflareTarget } from "./cloudflare.ts";
 import { make as makeOctane, type OctaneOptions } from "./Octane.ts";
 
@@ -525,6 +525,7 @@ export const makeOctaneSource = (options: OctaneSourceOptions): SourceProvider =
         module: import.meta.url,
         rootDir,
         framework: "octane",
+        env: resolveBuildEnv(ctx.env),
         config: {
           rootDir,
           compatibilityDate: ctx.compatibility.date,
