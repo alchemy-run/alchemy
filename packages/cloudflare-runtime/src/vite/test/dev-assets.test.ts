@@ -206,7 +206,9 @@ test("restarts the dev server when an additional module changes", async () => {
     configFile: false,
     logLevel: "silent",
     server: { host: "127.0.0.1", port: 0 },
-    plugins: [cloudflareVitePlugin({ main: entry, worker: { name: "vite-dev-module-test" } })],
+    plugins: [
+      cloudflareVitePlugin({ main: entry, worker: { name: "vite-dev-module-test", bindings: [] } }),
+    ],
   });
   onTestFinished(() => server.close());
   await server.listen();
