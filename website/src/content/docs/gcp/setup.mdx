@@ -8,8 +8,8 @@ description: Connect alchemy to Google Cloud — project, service-account key, t
 - **A GCP project** and its id.
 - **A service-account key** with enough IAM to create what you deploy.
   A working starting point is Cloud Run Admin, Storage Admin, Pub/Sub
-  Admin, Service Account Admin (Alchemy mints a per-host `alch-*`
-  runtime account), and Project IAM Admin (it grants roles to that
+  Admin, Service Account Admin (Alchemy creates an `alch-*` service
+  account for each runtime), and Project IAM Admin (it grants roles to that
   account). Add the admin role for anything else you declare —
   Firestore, BigQuery, Secret Manager.
 - **Docker running locally.** `GCP.Function`, `GCP.Run.Service`,
@@ -112,6 +112,6 @@ whole project — including every service account stamped
 
 ## Next steps
 
-- [GCP overview](/gcp) — hosts, resources, and bindings.
-- [Serve an API on Cloud Run](/gcp/guides/cloud-run-api) — the first
-  thing to build.
+- [Tutorial](/gcp/tutorial/part-1) — deploy your first Stack.
+- [Cloud Run](/gcp/compute/cloud-run) — the runtime the rest of these
+  docs build on.
