@@ -33,7 +33,7 @@ base_image() { # fs image
       local layout="$work/layout-btrfs"
       rm -rf "$layout" && mkdir -p "$layout/.alchemy" && cp -a "$root" "$layout/data"
       truncate -s 512M "$2"
-      mkfs.btrfs -q -f --rootdir "$layout" --subvol default:data "$2" >/dev/null ;;
+      mkfs.btrfs -q -f -s 4096 --rootdir "$layout" --subvol default:data "$2" >/dev/null ;;
   esac
 }
 
@@ -89,6 +89,14 @@ for fs in "$@"; do
   [ "$(stat -c %a "$dir/motd")" = 600 ] || fail "$fs: chmod"
   [ "$(readlink "$dir/link")" = motd ] || fail "$fs: the symlink"
   [ "$(cat "$dir/headfile")" = mine ] || fail "$fs: the head's own file"
+  # A snapshot while mounted: the next call forks from it and sees the patch.
+  snap=$(control "$sock" "{\"op\":\"snapshot\",\"freeze\":\"$dir\"}" | sed -E 's/.*"snapshot":"([0-9a-f]+)".*/\1/')
+  seen=$("$blockd" call --store "$store" --snapshot "$snap" --cache "$work/cache-call-$fs" \
+    --dir "$work/ws-$fs" --work "$work/call-work-$fs" --mode loop --log "$work/call2-$fs.log" \
+    --result "$work/call2-$fs.json" --command 'cat src/renamed.ts headfile' 2>/dev/null) \
+    || { cat "$work/call2-$fs.log"; fail "$fs: a call on the mounted head's snapshot"; }
+  [ "$seen" = "$(printf 'b\nmine')" ] || fail "$fs: a call on the new snapshot saw $seen"
+  grep -q '"operations":0' "$work/call2-$fs.json" || fail "$fs: a read-only call made a patch"
   sleep 0.3
   after=$(control "$sock" '{"op":"checkpoint"}')
   for path in src/a.ts new big.db; do lacks "$after" "$path" "$fs: the patch's own writes"; done
@@ -110,5 +118,39 @@ for fs in "$@"; do
   "$blockd" apply --dir "$copy" --patch-file "$work/diff-$fs.patch" >/dev/null
   [ "$(cat "$copy/later")" = later ] && [ "$(cat "$copy/src/renamed.ts")" = b ] || fail "$fs: applying the diff"
   pass "$fs: a diff of two snapshots applies to a copy of the first"
+
+  # A call that leaves a process running keeps its fork for it, and commits
+  # what changed since its last commit.
+  hsock="$work/host-$fs.sock"; hresult="$work/host-$fs.json"; rm -f "$hresult"
+  "$blockd" call --store "$store" --snapshot "$S" --cache "$work/cache-call-$fs" \
+    --dir "$work/ws-$fs" --work "$work/call-work-$fs" --mode loop --log "$work/host-$fs.log" \
+    --patch "patches/$fs-h1" --result "$hresult" --keep true --control "$hsock" \
+    --command "(setsid sh -c 'for i in 1 2 3 4 5 6 7 8; do echo line\$i >> out.log; sleep 0.25; done; sleep 600' < /dev/null > /dev/null 2>&1 &); echo started > marker" \
+    > /dev/null 2>&1 &
+  for _ in $(seq 1 300); do [ -f "$hresult" ] && break; sleep 0.1; done
+  [ -f "$hresult" ] || { cat "$work/host-$fs.log"; fail "$fs: a kept call never reported"; }
+  first=$(cat "$hresult")
+  echo "$first" | grep -q '"kept":true' || fail "$fs: the call wasn't kept: $first"
+  has "$first" marker "$fs kept call"
+  sleep 2.5
+  second=$("$blockd" control --socket "$hsock" --request "{\"op\":\"commit\",\"patch\":\"patches/$fs-h2\"}")
+  has "$second" out.log "$fs second commit"
+  lacks "$second" marker "$fs second commit"
+  echo "$second" | grep -q 'sleep 600' || fail "$fs: the kept process in $second"
+  last=$("$blockd" control --socket "$hsock" --request "{\"op\":\"detach\",\"patch\":\"patches/$fs-h3\"}")
+  wait
+  pgrep -f "sleep 600" >/dev/null && fail "$fs: a kept process outlived its detach"
+  mountpoint -q "$work/ws-$fs" && fail "$fs: a kept call stayed mounted after its detach"
+  head="host-$fs"; dir="$work/hmnt-$fs"; sock="$work/h$fs.sock"
+  "$blockd" fork --store "$store" --from "base-$fs" --to "$head" >/dev/null
+  mount_head "$head" "$dir" "$sock" "$work/cache-hhead-$fs"
+  patches="\"patches/$fs-h1\",\"patches/$fs-h2\""
+  echo "$last" | grep -q '"patch":"' && patches="$patches,\"patches/$fs-h3\""
+  control "$sock" "{\"op\":\"apply\",\"patches\":[$patches]}" >/dev/null || fail "$fs: applying a kept call's commits"
+  [ "$(cat "$dir/marker")" = started ] || fail "$fs: the first commit"
+  [ "$(wc -l < "$dir/out.log")" -eq 8 ] || fail "$fs: out.log has $(wc -l < "$dir/out.log") lines"
+  control "$sock" '{"op":"detach"}' >/dev/null
+  wait
+  pass "$fs: a kept call's process ran on, and its commits applied in order rebuild what it wrote"
 done
 echo "ALL PASSED"

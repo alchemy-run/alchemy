@@ -18,10 +18,11 @@
 //! blockd exec    --store <spec> --head <name> --cache <file> --dir <dir> --command <sh> [--mode …]
 //!                (mount, run, unmount, snapshot; exits with the command's code)
 //! blockd call    --store <spec> --snapshot <id> --cache <file> --dir <dir> --work <dir> --command <sh>
-//!                [--cwd <dir>] [--env <json>] [--timeout-ms <n>] [--patch <key>] [--patch-file <file>]
-//!                [--result <file>] [--mode …]
+//!                [--cwd <dir>] [--env <json>] [--timeout-ms <n>] [--patch <key>]
+//!                [--result <file>] [--mode …] [--keep true --control <socket>]
 //!                (run a command on an ephemeral fork of a snapshot and make a patch of what it
-//!                 changed: uploaded to the store as <key>, or written to <file>)
+//!                 changed, uploaded to the store as <key>; --keep keeps processes it left
+//!                 running, with the fork, until a detach on the control socket)
 //! blockd diff    --store <spec> --from <id> --to <id> --cache <file> --cache-to <file> --work <dir>
 //!                (--patch <key> | --patch-file <file>)   (a patch from one snapshot to another)
 //! blockd apply   --dir <dir> --patch-file <file>     (apply a patch to a directory)
@@ -418,7 +419,15 @@ impl blockd::control::MountOps for HeadOps {
     }
 }
 
-/// `blockd call`: a command on an ephemeral fork, and its patch.
+/// `blockd call`: a command on an ephemeral fork, and its patch. With
+/// `--keep true`, a command that leaves processes running keeps the fork
+/// mounted for them, and blockd serves `--control` until a detach:
+///
+/// ```text
+/// {"op":"commit","patch":"<key>","full":false} → what changed since the last commit
+/// {"op":"status"}                              → the processes still running
+/// {"op":"detach","patch":"<key>"}              → stop them, a last commit, unmount, exit
+/// ```
 #[cfg(target_os = "linux")]
 fn call(flags: &Flags, volume: volume::Volume, runtime: &tokio::runtime::Runtime) -> Result<()> {
     use std::path::Path;
@@ -427,6 +436,7 @@ fn call(flags: &Flags, volume: volume::Volume, runtime: &tokio::runtime::Runtime
     let cache = Path::new(flags.required("cache")?);
     let dir = Path::new(flags.required("dir")?);
     let work = Path::new(flags.required("work")?);
+    let keep = flags.get("keep") == Some("true");
     let volume = Arc::new(volume);
     let device = Arc::new(blockd::Device::open_snapshot(
         volume.clone(),
@@ -434,7 +444,7 @@ fn call(flags: &Flags, volume: volume::Volume, runtime: &tokio::runtime::Runtime
         cache,
         runtime.handle().clone(),
     )?);
-    let call = blockd::call::Call::mount(&device, mode(flags)?, cache, dir, work)?;
+    let mut call = blockd::call::Call::mount(&device, mode(flags)?, cache, dir, work)?;
     let env: Vec<(String, String)> = match flags.get("env") {
         Some(json) => serde_json::from_str::<HashMap<String, String>>(json)
             .context("--env is a JSON object of strings")?
@@ -453,44 +463,135 @@ fn call(flags: &Flags, volume: volume::Volume, runtime: &tokio::runtime::Runtime
         &env,
         timeout,
     );
-    let survivors = call.stop_survivors();
-    let mut call = call;
-    let made = (|| -> Result<(blockd::patch::Summary, Option<String>)> {
-        let (code, _) = ran.as_ref().map_err(|e| anyhow::anyhow!("{e:#}"))?;
-        let _ = code;
-        let file_path = flags
-            .get("patch-file")
-            .map(std::path::PathBuf::from)
-            .unwrap_or_else(|| work.with_extension("patch"));
-        let mut file = std::io::BufWriter::new(std::fs::File::create(&file_path)?);
-        let summary = call.commit(Some(&mut file))?;
-        drop(file);
-        let mut key = None;
-        if let Some(name) = flags.get("patch")
-            && summary.operations > 0
-        {
-            let bytes = std::fs::read(&file_path)?;
-            runtime.block_on(volume.blobs().put(name, bytes))?;
-            key = Some(name.to_string());
-        }
-        if flags.get("patch-file").is_none() {
-            let _ = std::fs::remove_file(&file_path);
-        }
-        Ok((summary, key))
-    })();
+    let running = call.survivors();
+    let kept = keep && ran.is_ok() && !running.is_empty();
+    let survivors = if kept { running } else { call.stop_survivors() };
+    let made = ran
+        .as_ref()
+        .map_err(|e| anyhow::anyhow!("{e:#}"))
+        .and_then(|_| commit_call(&mut call, flags.get("patch"), &volume, runtime, false));
     let fs = call.fs();
+    let result = |made: &(blockd::patch::Summary, Option<String>), code, timed_out| {
+        serde_json::json!({
+            "exitCode": code, "timedOut": timed_out, "fs": fs, "snapshot": snapshot,
+            "patch": made.1, "summary": made.0, "survivors": survivors, "kept": kept,
+        })
+    };
+    let report = |value: serde_json::Value| -> Result<()> {
+        match flags.get("result") {
+            Some(path) => {
+                // Written whole, then renamed: a reader never sees half of it.
+                let tmp = format!("{path}.tmp");
+                std::fs::write(&tmp, format!("{value}\n"))?;
+                std::fs::rename(&tmp, path)?;
+            }
+            None => eprintln!("{value}"),
+        }
+        Ok(())
+    };
+    if kept && let (Ok((code, timed_out)), Ok(made)) = (&ran, &made) {
+        report(result(made, *code, *timed_out))?;
+        let socket = Path::new(flags.required("control")?);
+        serve_host(&mut call, socket, &volume, runtime)?;
+        call.stop_survivors();
+        let unmounted = call.unmount();
+        device.close()?;
+        return unmounted;
+    }
     let unmounted = call.unmount();
     device.close()?;
     let (code, timed_out) = ran?;
-    let (summary, key) = made?;
+    let made = made?;
     unmounted?;
-    let result = serde_json::json!({
-        "exitCode": code, "timedOut": timed_out, "fs": fs, "snapshot": snapshot,
-        "patch": key, "summary": summary, "survivors": survivors,
-    });
-    match flags.get("result") {
-        Some(path) => std::fs::write(path, format!("{result}\n"))?,
-        None => eprintln!("{result}"),
+    report(result(&made, code, timed_out))
+}
+
+/// A patch of what a call changed since its last commit, uploaded to `key`
+/// if it changed anything.
+#[cfg(target_os = "linux")]
+fn commit_call(
+    call: &mut blockd::call::Call,
+    key: Option<&str>,
+    volume: &volume::Volume,
+    runtime: &tokio::runtime::Runtime,
+    full: bool,
+) -> Result<(blockd::patch::Summary, Option<String>)> {
+    let path = std::env::temp_dir().join(format!("blockd-patch-{}", std::process::id()));
+    let mut file = std::io::BufWriter::new(std::fs::File::create(&path)?);
+    let summary = call.commit(Some(&mut file), full)?;
+    drop(file);
+    let mut uploaded = None;
+    if let Some(key) = key
+        && summary.operations > 0
+    {
+        runtime.block_on(volume.blobs().put(key, std::fs::read(&path)?))?;
+        uploaded = Some(key.to_string());
+    }
+    let _ = std::fs::remove_file(&path);
+    Ok((summary, uploaded))
+}
+
+/// Serves a kept call's control socket until a detach (see [`call`]).
+#[cfg(target_os = "linux")]
+fn serve_host(
+    call: &mut blockd::call::Call,
+    socket: &std::path::Path,
+    volume: &volume::Volume,
+    runtime: &tokio::runtime::Runtime,
+) -> Result<()> {
+    use std::io::{BufRead, BufReader, Write};
+    #[derive(serde::Deserialize)]
+    #[serde(tag = "op", rename_all = "lowercase")]
+    enum Request {
+        Commit {
+            patch: String,
+            #[serde(default)]
+            full: bool,
+        },
+        Status,
+        Detach {
+            patch: Option<String>,
+        },
+    }
+    let _ = std::fs::remove_file(socket);
+    let listener = std::os::unix::net::UnixListener::bind(socket)?;
+    for stream in listener.incoming() {
+        let stream = stream?;
+        let mut writer = stream.try_clone()?;
+        let mut detached = false;
+        for line in BufReader::new(stream).lines() {
+            let line = line?;
+            if line.trim().is_empty() {
+                continue;
+            }
+            let reply = match serde_json::from_str::<Request>(&line) {
+                Err(e) => serde_json::json!({ "ok": false, "error": format!("bad request: {e}") }),
+                Ok(Request::Status) => serde_json::json!({ "ok": true, "survivors": call.survivors() }),
+                Ok(Request::Commit { patch, full }) => {
+                    match commit_call(call, Some(&patch), volume, runtime, full) {
+                        Ok((summary, key)) => serde_json::json!({
+                            "ok": true, "patch": key, "summary": summary, "survivors": call.survivors(),
+                        }),
+                        Err(e) => serde_json::json!({ "ok": false, "error": format!("{e:#}") }),
+                    }
+                }
+                Ok(Request::Detach { patch }) => {
+                    let stopped = call.stop_survivors();
+                    detached = true;
+                    match commit_call(call, patch.as_deref(), volume, runtime, false) {
+                        Ok((summary, key)) => serde_json::json!({
+                            "ok": true, "patch": key, "summary": summary, "survivors": stopped,
+                        }),
+                        Err(e) => serde_json::json!({ "ok": false, "error": format!("{e:#}") }),
+                    }
+                }
+            };
+            writer.write_all(format!("{reply}\n").as_bytes())?;
+            if detached {
+                let _ = std::fs::remove_file(socket);
+                return Ok(());
+            }
+        }
     }
     Ok(())
 }

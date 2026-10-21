@@ -35,7 +35,10 @@ enum Request {
     Status,
     Sync,
     #[serde(alias = "flush")]
-    Snapshot,
+    Snapshot {
+        #[serde(default)]
+        freeze: Option<String>,
+    },
     Fork {
         to: String,
         freeze: Option<String>,
@@ -107,7 +110,10 @@ fn handle(stream: UnixStream, device: &Device, ops: &mut impl MountOps) -> Resul
                 },
                 false,
             ),
-            Ok(Request::Snapshot) => (result(device.snapshot()), false),
+            Ok(Request::Snapshot { freeze }) => (
+                result(frozen(freeze.as_deref(), || device.snapshot())),
+                false,
+            ),
             Ok(Request::Fork { to, freeze }) => {
                 (result(fork(device, &to, freeze.as_deref())), false)
             }
@@ -134,21 +140,27 @@ fn handle(stream: UnixStream, device: &Device, ops: &mut impl MountOps) -> Resul
 }
 
 fn fork(device: &Device, to: &str, freeze: Option<&str>) -> Result<volume::Hash> {
+    frozen(freeze, || device.fork(to))
+}
+
+/// Runs `take` (a snapshot) with the filesystem at `freeze` frozen, so the
+/// snapshot is a clean point even while programs are writing.
+fn frozen(freeze: Option<&str>, take: impl FnOnce() -> Result<volume::Hash>) -> Result<volume::Hash> {
     let Some(mountpoint) = freeze else {
-        return device.fork(to);
+        return take();
     };
     if fsfreeze("-f", mountpoint).is_ok() {
-        let forked = device.fork(to);
+        let taken = take();
         fsfreeze("-u", mountpoint)?;
-        return forked;
+        return taken;
     }
     // FUSE filesystems can't be frozen: sync them, so everything written
-    // before the fork reaches the device.
+    // before the snapshot reaches the device.
     let status = crate::helper("sync").args(["-f", mountpoint]).status()?;
     if !status.success() {
         bail!("sync -f {mountpoint} failed: {status}");
     }
-    device.fork(to)
+    take()
 }
 
 fn fsfreeze(flag: &str, mountpoint: &str) -> Result<()> {

@@ -18,6 +18,7 @@ use crate::mount::{self, Mode, Mount, User};
 use crate::patch::{self, Candidates, Summary};
 use crate::{Device, sendstream};
 use anyhow::{Context, Result, bail};
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::Arc;
@@ -49,9 +50,66 @@ pub struct Call {
     /// A tmpfs holding the overlay's upper layer, when the disk can't.
     tmpfs: Option<PathBuf>,
     commits: u32,
+    /// Overlay: the upper layer's entries at the last commit.
+    committed: BTreeMap<String, Fingerprint>,
 }
 
+/// btrfs: the state at the last commit, and at the fork.
 const BASE: &str = "call-base";
+const FORK: &str = "call-fork";
+
+/// What an upper layer's entry was at a commit. A directory's times move
+/// with its children, so they aren't part of it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct Fingerprint {
+    kind: u32,
+    ino: u64,
+    mode: u32,
+    owner: (u32, u32),
+    content: Option<(u64, i64, i64, i64, i64, u64)>,
+}
+
+fn fingerprints(upper: &Path) -> Result<BTreeMap<String, Fingerprint>> {
+    use std::os::unix::fs::MetadataExt;
+    let mut out = BTreeMap::new();
+    let mut stack = vec![upper.to_path_buf()];
+    while let Some(dir) = stack.pop() {
+        for entry in std::fs::read_dir(&dir)? {
+            let entry = entry?;
+            let full = entry.path();
+            let stat = std::fs::symlink_metadata(&full)?;
+            let path = full
+                .strip_prefix(upper)
+                .unwrap_or(&full)
+                .to_string_lossy()
+                .into_owned();
+            let content = (!stat.is_dir()).then(|| {
+                (
+                    stat.len(),
+                    stat.mtime(),
+                    stat.mtime_nsec(),
+                    stat.ctime(),
+                    stat.ctime_nsec(),
+                    stat.rdev(),
+                )
+            });
+            out.insert(
+                path,
+                Fingerprint {
+                    kind: stat.mode() & libc::S_IFMT,
+                    ino: stat.ino(),
+                    mode: stat.mode(),
+                    owner: (stat.uid(), stat.gid()),
+                    content,
+                },
+            );
+            if stat.is_dir() {
+                stack.push(full);
+            }
+        }
+    }
+    Ok(out)
+}
 
 impl Call {
     /// Mounts `device` (an ephemeral attach) at `dir`, with scratch space in
@@ -72,6 +130,7 @@ impl Call {
             snapshots: None,
             tmpfs: None,
             commits: 0,
+            committed: BTreeMap::new(),
         };
         match probe {
             Fs::Ext4 => {
@@ -128,7 +187,9 @@ impl Call {
                 let snapshots = top.join(fs::SNAPSHOTS);
                 std::fs::create_dir_all(&snapshots)?;
                 fs::destroy(&snapshots, BASE)?;
+                fs::destroy(&snapshots, FORK)?;
                 fs::snapshot(dir, &snapshots, BASE, true)?;
+                fs::snapshot(dir, &snapshots, FORK, true)?;
                 call.snapshots = Some(snapshots);
             }
         }
@@ -193,22 +254,37 @@ impl Call {
         users
     }
 
-    /// A patch of what changed since the fork (or the last commit), written
-    /// to `out`.
-    pub fn commit(&mut self, out: Option<&mut dyn std::io::Write>) -> Result<Summary> {
+    /// A patch of what changed since the last commit (`full`: since the
+    /// fork), written to `out`.
+    pub fn commit(&mut self, out: Option<&mut dyn std::io::Write>, full: bool) -> Result<Summary> {
         crate::mount::sync(&self.dir);
         self.commits += 1;
         match (&self.overlay, &self.snapshots) {
             (Some((lower, upper)), _) => {
-                let candidates = patch::overlay_candidates(upper)?;
+                let now = fingerprints(upper)?;
+                let mut candidates = patch::overlay_candidates(upper)?;
+                if !full && self.commits > 1 {
+                    // Only what changed since the last commit.
+                    candidates
+                        .paths
+                        .retain(|path| self.committed.get(path) != now.get(path));
+                    candidates.replaced.retain(|path| candidates.paths.contains(path));
+                    for path in self.committed.keys() {
+                        if !now.contains_key(path) && std::fs::symlink_metadata(lower.join(path)).is_err() {
+                            candidates.paths.insert(path.clone());
+                            candidates.deleted.insert(path.clone());
+                        }
+                    }
+                }
                 let summary = patch::create(lower, &self.dir, &candidates, out)?;
+                self.committed = now;
                 Ok(summary)
             }
             (None, Some(snapshots)) => {
                 let end = format!("call-{}", self.commits);
                 fs::destroy(snapshots, &end)?;
                 let current = fs::snapshot(&self.dir, snapshots, &end, true)?;
-                let base = snapshots.join(BASE);
+                let base = snapshots.join(if full { FORK } else { BASE });
                 let stream = fs::send(&current, &base, true)?;
                 let touched = sendstream::parse(&stream)?;
                 let candidates = Candidates {

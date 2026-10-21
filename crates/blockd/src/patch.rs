@@ -46,6 +46,9 @@ pub struct Candidates {
     pub replaced: BTreeSet<String>,
     /// Byte ranges known to be written, per path.
     pub ranges: BTreeMap<String, Vec<(u64, u64)>>,
+    /// Paths to delete even though the base doesn't have them: a commit
+    /// after the first, of something an earlier commit created.
+    pub deleted: BTreeSet<String>,
     /// Inode numbers mean the same thing in both trees (btrfs snapshots).
     pub same_inodes: bool,
 }
@@ -140,7 +143,12 @@ pub fn create(
         let old = lstat(&base.join(&path));
         let new = lstat(&current.join(&path));
         match (old, new) {
-            (None, None) => {}
+            (None, None) => {
+                if candidates.deleted.contains(&path) {
+                    writer.delete(&path)?;
+                    covered.insert(path);
+                }
+            }
             (Some(_), None) => {
                 writer.delete(&path)?;
                 covered.insert(path);
