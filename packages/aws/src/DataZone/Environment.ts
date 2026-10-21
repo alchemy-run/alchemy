@@ -143,7 +143,11 @@ export class EnvironmentDeploymentFailed extends Data.TaggedError(
   readonly environmentId: string;
   readonly status: string;
   readonly reason: string | undefined;
-}> {}
+}> {
+  override get message() {
+    return `DataZone environment ${this.environmentId} ${this.status}${this.reason ? `: ${this.reason}` : ""}`;
+  }
+}
 
 /** Environment status values indicating an in-flight transition to wait out. */
 const ENVIRONMENT_TRANSIENT = new Set(["CREATING", "UPDATING", "DELETING"]);

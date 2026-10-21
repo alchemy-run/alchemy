@@ -17,7 +17,7 @@ import type { LogLine, LogsInput } from "alchemy/Provider";
 import * as Provider from "alchemy/Provider";
 import { Resource, type ResourceBinding } from "alchemy/Resource";
 import type { FunctionContext, FunctionListener } from "alchemy/Runtime/Function";
-import { packEnvValue, unpackEnvValue } from "alchemy/RuntimeContext";
+import { packEnvValue, RuntimeContext, unpackEnvValue } from "alchemy/RuntimeContext";
 import { Stack } from "alchemy/Stack";
 import { Stage } from "alchemy/Stage";
 import { createInternalTags, createTagsList, hasAlchemyTags, hasTags } from "alchemy/Tags";
@@ -1087,6 +1087,10 @@ export const Function: Platform<
                     Layer.mergeAll(
                       Layer.succeed(HandlerContext, context),
                       Layer.succeed(Scope.Scope, scope),
+                      // Runtime readers (e.g. bindings that read their
+                      // values through `RuntimeContext.get`) run in the
+                      // handler, like on every other host bridge.
+                      Layer.succeed(RuntimeContext, ctx as FunctionContext),
                       // The configured telemetry exporters, attached to the
                       // invocation scope by `buildEventTelemetry` so
                       // buffered spans/logs/metrics flush when it settles
