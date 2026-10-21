@@ -24,7 +24,7 @@ import Stack from "../alchemy.run.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: GCP.providers(),
-  state: Alchemy.localState(),
+  state: GCP.state(),
 });
 ```
 
@@ -41,7 +41,7 @@ Deploy the Stack once, before any test runs:
 ```diff lang="typescript"
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: GCP.providers(),
-  state: Alchemy.localState(),
+  state: GCP.state(),
 });
 
 +const stack = beforeAll(deploy(Stack), { timeout: 600_000 });
@@ -99,7 +99,7 @@ import Stack from "../alchemy.run.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: GCP.providers(),
-  state: Alchemy.localState(),
+  state: GCP.state(),
 });
 
 const stack = beforeAll(deploy(Stack), { timeout: 600_000 });

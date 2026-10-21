@@ -35,7 +35,7 @@ export const Docs = GCP.Website.Vocs("Docs");
 
 export default Alchemy.Stack(
   "MySite",
-  { providers: GCP.providers(), state: Alchemy.localState() },
+  { providers: GCP.providers(), state: GCP.state() },
   Effect.gen(function* () {
     const site = yield* Docs;
     return { url: site.url };

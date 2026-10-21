@@ -56,7 +56,7 @@ import * as Effect from "effect/Effect";
 
 export default Alchemy.Stack(
   "App",
-  { providers: GCP.providers(), state: Alchemy.localState() },
+  { providers: GCP.providers(), state: GCP.state() },
   Effect.gen(function* () {
     return {};
   }),
@@ -81,7 +81,7 @@ export default Alchemy.Stack(
     providers: GCP.providers().pipe(
       Layer.provideMerge(GCP.Region("europe-west1")),
     ),
-    state: Alchemy.localState(),
+    state: GCP.state(),
   },
   program,
 );

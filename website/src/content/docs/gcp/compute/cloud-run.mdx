@@ -47,7 +47,7 @@ import Api from "./src/Api.ts";
 
 export default Alchemy.Stack(
   "MyApp",
-  { providers: GCP.providers(), state: Alchemy.localState() },
+  { providers: GCP.providers(), state: GCP.state() },
   Effect.gen(function* () {
     const api = yield* Api;
     return { url: api.uri };

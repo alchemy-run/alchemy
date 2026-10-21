@@ -238,7 +238,7 @@ export default Alchemy.Stack(
   "MyApp",
   {
     providers: GCP.providers(),
-    state: Alchemy.localState(),
+    state: GCP.state(),
   },
   Effect.gen(function* () {
 -    const bucket = yield* GCP.Storage.Bucket("Bucket", {});
