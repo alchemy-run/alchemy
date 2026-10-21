@@ -119,7 +119,15 @@ export const startViteChild = (
     );
 
     const ready = yield* Deferred.make<URL>();
-    yield* child.stdout.pipe(
+    // The last output lines explain a child that dies before it is ready
+    // (an entry that can't be resolved, a broken Vite config).
+    const outputTail: Array<string> = [];
+    const recordOutput = (stream: "stdout" | "stderr", line: string) =>
+      Effect.sync(() => {
+        outputTail.push(line);
+        if (outputTail.length > STARTUP_ERROR_TAIL) outputTail.shift();
+      }).pipe(Effect.andThen(onOutput(stream, line)));
+    const stdout = yield* child.stdout.pipe(
       Stream.decodeText,
       Stream.splitLines,
       Stream.runForEach((line) => {
@@ -129,14 +137,14 @@ export const startViteChild = (
           const value = line.slice(start + VITE_CHILD_READY_PREFIX.length, end);
           return Deferred.succeed(ready, new URL(value));
         }
-        return onOutput("stdout", line);
+        return recordOutput("stdout", line);
       }),
       Effect.forkScoped,
     );
-    yield* child.stderr.pipe(
+    const stderr = yield* child.stderr.pipe(
       Stream.decodeText,
       Stream.splitLines,
-      Stream.runForEach((line) => onOutput("stderr", line)),
+      Stream.runForEach((line) => recordOutput("stderr", line)),
       Effect.forkScoped,
     );
 
@@ -144,13 +152,25 @@ export const startViteChild = (
     const url = yield* Effect.raceAllFirst([
       Deferred.await(ready),
       exitCode.pipe(
+        Effect.tap(() =>
+          Fiber.joinAll([stdout, stderr]).pipe(Effect.timeout("1 second"), Effect.ignore),
+        ),
         Effect.flatMap((exitCode) =>
-          Effect.die(new Error(`Vite child exited with code ${exitCode} before becoming ready`)),
+          Effect.die(
+            new Error(
+              [`Vite child exited with code ${exitCode} before becoming ready`, ...outputTail].join(
+                "\n",
+              ),
+            ),
+          ),
         ),
       ),
     ]);
     return { url, pid: child.pid, exitCode } satisfies ViteChildHandle;
   });
+
+/** Number of trailing output lines echoed into a failed dev start's error. */
+const STARTUP_ERROR_TAIL = 50;
 
 /** Number of trailing stderr lines echoed into a failed build's error. */
 const BUILD_ERROR_TAIL = 200;

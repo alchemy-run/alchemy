@@ -1,3 +1,4 @@
+import * as NodePath from "node:path";
 import { URL as NodeURL } from "node:url";
 import type * as Context from "effect/Context";
 import * as vite from "vite";
@@ -126,6 +127,21 @@ export function dev(options: CloudflareVitePluginOptions): Array<vite.Plugin> {
         context ??= await createDefaultContext();
       }
       const [input] = inputs;
+      if (input) {
+        // An entry that can't be resolved fails the dev server, as under
+        // `@cloudflare/vite-plugin`, rather than serving errors.
+        const environment = server.environments[environmentNames[0]!];
+        const resolved =
+          (await environment?.pluginContainer.resolveId(input)) ??
+          (await environment?.pluginContainer.resolveId(
+            NodePath.resolve(server.config.root, input),
+          ));
+        if (!resolved) {
+          throw new Error(
+            `Failed to resolve Worker entrypoint "${input}" for environment "${environmentNames[0]}"`,
+          );
+        }
+      }
       const entryEnvironment = {
         environmentName: environmentNames[0],
         // The module runner imports the generated Worker entry rather than the

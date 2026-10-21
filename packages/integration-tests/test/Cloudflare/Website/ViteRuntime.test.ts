@@ -71,6 +71,7 @@ const customBuildAppFixtureDir = pathe.resolve(
   import.meta.dirname,
   "vite-custom-build-app-fixture",
 );
+const configChangesFixtureDir = pathe.resolve(import.meta.dirname, "vite-config-changes-fixture");
 const hotChannelFixtureDir = pathe.resolve(import.meta.dirname, "vite-hot-channel-fixture");
 
 type Mode = "live" | "dev";
@@ -1248,6 +1249,94 @@ describe.concurrent(
         },
       );
     }
+
+    // `config-changes` (dev only): a changed Worker config is served after
+    // the next deploy, a broken one fails without wedging the next, and a
+    // crashed workerd restarts.
+    const deployConfigChanges = (
+      stack: Test.ScratchStack,
+      rootDir: string,
+      myVar: string,
+      main = "./src/index.ts",
+    ) =>
+      stack.deploy(
+        Cloudflare.Website.Vite("ViteConfigChanges", {
+          rootDir,
+          main,
+          workersDev: true,
+          compatibility: { date: "2024-12-30" },
+          memo: { include: ["**/*"] },
+          env: { MY_VAR: myVar, MY_SECRET: Redacted.make("secret A") },
+          dev: { port: 0 },
+        }),
+      );
+    const configChangesBody = (myVar: string) =>
+      `The value of MY_VAR is "${myVar}" and the value of MY_SECRET is "secret A"`;
+
+    devTest.provider(
+      "Vite runtime: config changes are served after the next deploy (dev)",
+      (stack) =>
+        Effect.gen(function* () {
+          yield* stack.destroy();
+          const rootDir = yield* cloneFixture(configChangesFixtureDir, {
+            prefix: "alchemy-vite-config-changes-",
+            tempRoot,
+            entries: ["package.json", "src"],
+          });
+          const one = yield* deployConfigChanges(stack, rootDir, "one");
+          yield* expectText(one.url!, configChangesBody("one"));
+          const two = yield* deployConfigChanges(stack, rootDir, "two");
+          yield* expectText(two.url!, configChangesBody("two"));
+          const broken = yield* deployConfigChanges(
+            stack,
+            rootDir,
+            "two",
+            "./src/missing-after-broken-update.ts",
+          ).pipe(Effect.exit);
+          expect(Exit.isFailure(broken)).toBe(true);
+          expect(Cause.pretty((broken as Exit.Failure<never, unknown>).cause)).toContain(
+            "Failed to resolve Worker entrypoint",
+          );
+          expect(Cause.pretty((broken as Exit.Failure<never, unknown>).cause)).toContain(
+            'missing-after-broken-update.ts" for environment "ssr"',
+          );
+          const three = yield* deployConfigChanges(stack, rootDir, "three");
+          yield* expectText(three.url!, configChangesBody("three"));
+        }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.ignore)), logLevel),
+      { tags: ["provider:cloudflare:worker", "local"], timeout: 300_000 },
+    );
+
+    devTest.provider(
+      "Vite runtime: serves again after workerd crashes (dev)",
+      (stack) =>
+        Effect.gen(function* () {
+          yield* stack.destroy();
+          const rootDir = yield* cloneFixture(configChangesFixtureDir, {
+            prefix: "alchemy-vite-config-changes-",
+            tempRoot,
+            entries: ["package.json", "src"],
+          });
+          const site = yield* deployConfigChanges(stack, rootDir, "one");
+          const url = site.url!.replace(/\/$/, "");
+          yield* expectText(url, configChangesBody("one"));
+          const initialRuntimeId = (yield* fetchText(`${url}/__runtime-id`)).body;
+          // The crashing request is not expected to complete.
+          yield* Effect.promise(() =>
+            fetch(`${url}/__crash-workerd`, { signal: AbortSignal.timeout(2_000) }).catch(
+              () => undefined,
+            ),
+          );
+          yield* expectResponse(`${url}/__runtime-id`, (res) =>
+            res.status === 200 && res.body !== initialRuntimeId && res.body.length === 36
+              ? undefined
+              : `runtime ${res.status} ${res.body.slice(0, 80)}`,
+          );
+          yield* expectText(url, configChangesBody("one"));
+          const two = yield* deployConfigChanges(stack, rootDir, "two");
+          yield* expectText(two.url!, configChangesBody("two"));
+        }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.ignore)), logLevel),
+      { tags: ["provider:cloudflare:worker", "local"], timeout: 300_000 },
+    );
 
     // Miniflare's outbound `cf.image` mock (dev only: deployed, `cf.image`
     // needs a zone with Image Transformations, which workers.dev lacks).
