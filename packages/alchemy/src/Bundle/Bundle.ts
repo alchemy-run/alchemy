@@ -4,6 +4,7 @@ import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Queue from "effect/Queue";
 import * as Schema from "effect/Schema";
+import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
 import type * as rolldown from "rolldown";
 import { dotAlchemyDirectory } from "../AlchemyContext.ts";
@@ -14,6 +15,7 @@ import { sha256, sha256Object } from "../Util/sha256.ts";
 import { bundleAnalyzerPlugin, type BundleAnalyzerPluginOptions } from "./BundleAnalyzerPlugin.ts";
 import { purePlugin, type PurePluginOptions } from "./PurePlugin.ts";
 import { rawPlugin } from "./RawPlugin.ts";
+import { unreachableChunksPlugin } from "./UnreachableChunksPlugin.ts";
 
 /**
  * `resolve.conditionNames` for a bundle that runs on bun / node.
@@ -269,6 +271,19 @@ const resolveOutputOptions = (outputOptions?: rolldown.OutputOptions) =>
   });
 
 /**
+ * Process-wide limit on concurrent rolldown builds (one-shot builds and each
+ * watcher's initial build). Every build holds the full module graph in native
+ * memory, so an unbounded burst (a stack deploying dozens of functions, or a
+ * dev session starting one watcher per function) peaks at gigabytes of RSS.
+ * Override with `ALCHEMY_BUNDLE_CONCURRENCY`.
+ */
+const bundleConcurrency = (() => {
+  const configured = Number(process.env.ALCHEMY_BUNDLE_CONCURRENCY);
+  return Number.isInteger(configured) && configured > 0 ? configured : 4;
+})();
+const buildPermits = Semaphore.makeUnsafe(bundleConcurrency);
+
+/**
  * Build a bundle using rolldown from the given input options and output options.
  * @param inputOptions - The input options for the bundle.
  * @param outputOptions - The output options for the bundle.
@@ -301,7 +316,7 @@ export const build = (
           return result.output;
         },
         catch: bundleErrorFromUnknown,
-      }),
+      }).pipe(buildPermits.withPermits(1)),
     ),
     Effect.flatMap(Effect.forEach(bundleFileFromOutputChunk)),
     Effect.flatMap(bundleOutputFromFiles),
@@ -332,61 +347,81 @@ const watchResolved =
           readonly _tag: "Success";
           readonly output: rolldown.OutputBundle;
         }
-    >((queue) =>
-      Effect.acquireRelease(
-        Effect.promise(async () => {
-          const rolldown = await loadRolldown();
-          const watcher = rolldown.watch({
-            ...withAlchemyDefine(inputOptions),
-            plugins: [
-              inputOptions.plugins,
-              await builtInPlugins(extra),
-              // The watcher event listener does not receive the bundle output, so we grab it using a plugin.
-              {
-                name: "alchemy:watch-bundle",
-                watchChange() {
-                  Queue.offerUnsafe(queue, {
-                    _tag: "Start",
-                  });
-                },
-                generateBundle(_outputOptions, bundle) {
-                  Queue.offerUnsafe(queue, {
-                    _tag: "Success",
-                    output: bundle,
-                  });
-                },
+    >((queue) => {
+      const createWatcher = async (settle: () => void) => {
+        const rolldown = await loadRolldown();
+        const watcher = rolldown.watch({
+          ...withAlchemyDefine(inputOptions),
+          plugins: [
+            inputOptions.plugins,
+            await builtInPlugins(extra),
+            // The watcher event listener does not receive the bundle output, so we grab it using a plugin.
+            {
+              name: "alchemy:watch-bundle",
+              watchChange() {
+                Queue.offerUnsafe(queue, {
+                  _tag: "Start",
+                });
               },
-            ],
-            watch: {
-              // Watching the full module graph of an Effect worker (all of
-              // `effect`, `alchemy`, `@distilled.cloud/*`) registers thousands
-              // of OS watch handles *per worker*; with several Effect workers
-              // this exhausts the process fd table and the next `posix_spawn`
-              // (workerd / docker) fails with `spawn EBADF`. Workspace packages
-              // resolve to their real source paths (outside `node_modules`), so
-              // they stay watched and local HMR is unaffected.
-              exclude: ["**/node_modules/**"],
-              // `generateBundle` still fires, so the output is captured either way.
-              skipWrite: !hasOutputLocation(outputOptions),
+              generateBundle(_outputOptions, bundle) {
+                Queue.offerUnsafe(queue, {
+                  _tag: "Success",
+                  output: bundle,
+                });
+              },
             },
-            output: outputOptions,
-          });
-          watcher.on("event", (event) => {
-            if (event.code === "ERROR") {
-              Queue.offerUnsafe(queue, {
-                _tag: "Error",
-                error: bundleErrorFromUnknown(event.error),
-              });
-            } else if (event.code === "BUNDLE_END") {
-              // This must be called to avoid resource leaks.
-              event.result.close().catch(() => {});
-            }
-          });
-          return watcher;
+          ],
+          watch: {
+            // Watching the full module graph of an Effect worker (all of
+            // `effect`, `alchemy`, `@distilled.cloud/*`) registers thousands
+            // of OS watch handles *per worker*; with several Effect workers
+            // this exhausts the process fd table and the next `posix_spawn`
+            // (workerd / docker) fails with `spawn EBADF`. Workspace packages
+            // resolve to their real source paths (outside `node_modules`), so
+            // they stay watched and local HMR is unaffected.
+            exclude: ["**/node_modules/**"],
+            // `generateBundle` still fires, so the output is captured either way.
+            skipWrite: !hasOutputLocation(outputOptions),
+          },
+          output: outputOptions,
+        });
+        watcher.on("event", (event) => {
+          if (event.code === "ERROR" || event.code === "BUNDLE_END") {
+            settle();
+          }
+          if (event.code === "ERROR") {
+            Queue.offerUnsafe(queue, {
+              _tag: "Error",
+              error: bundleErrorFromUnknown(event.error),
+            });
+          } else if (event.code === "BUNDLE_END") {
+            // This must be called to avoid resource leaks.
+            event.result.close().catch(() => {});
+          }
+        });
+        return watcher;
+      };
+      return Effect.acquireRelease(
+        Effect.gen(function* () {
+          // Hold a build permit until the watcher's initial build settles.
+          yield* buildPermits.take(1);
+          let initialBuildSettled = false;
+          const settleInitialBuild = () => {
+            if (initialBuildSettled) return;
+            initialBuildSettled = true;
+            Effect.runFork(buildPermits.release(1));
+          };
+          const watcher = yield* Effect.promise(() => createWatcher(settleInitialBuild)).pipe(
+            Effect.onError(() => Effect.sync(settleInitialBuild)),
+          );
+          return { watcher, settleInitialBuild };
         }),
-        (watcher) => Effect.promise(() => watcher.close()),
-      ),
-    ).pipe(
+        ({ watcher, settleInitialBuild }) =>
+          Effect.promise(() => watcher.close()).pipe(
+            Effect.ensuring(Effect.sync(settleInitialBuild)),
+          ),
+      );
+    }).pipe(
       Stream.mapEffect((event) =>
         Effect.gen(function* () {
           if (event._tag !== "Success") {
@@ -460,7 +495,7 @@ export const virtualEntryPlugin = Effect.gen(function* () {
           // an unresolved import and leaves it external, which for a
           // generated entry means the deployed process dies at boot with
           // `Cannot find module` — the class of bug the shim design
-          // (alchemy/Runtime/Bootstrap/*) exists to prevent. Make it a build
+          // (`{Provider}/Bootstrap/*`) exists to prevent. Make it a build
           // error with the cause spelled out instead. Externals resolve to
           // `{ external: true }`, not null, so they pass through.
           if (importer === undefined || !ENTRY_REGEX.test(importer)) {
@@ -474,8 +509,8 @@ export const virtualEntryPlugin = Effect.gen(function* () {
             this.error(
               new Error(
                 `The generated entry for ${entry} imports "${id}", which cannot be resolved from the project. ` +
-                  "A generated entry may only import `alchemy/*` (resolvable from any project that depends on alchemy) and the entry itself; " +
-                  "check that `alchemy` is installed in the project containing the entry.",
+                  "A generated entry may only import its bootstrap module (from `alchemy` or the provider package that generated it) and the entry itself; " +
+                  "check that the package is installed in the project containing the entry.",
               ),
             );
           }
@@ -530,6 +565,7 @@ async function builtInPlugins(extra?: BundleExtraOptions): Promise<rolldown.Roll
       : undefined,
     extra?.pure !== false ? purePlugin(extra?.pure ?? {}) : undefined,
     rawPlugin(),
+    unreachableChunksPlugin(),
   ];
 }
 

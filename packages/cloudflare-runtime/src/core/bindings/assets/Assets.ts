@@ -31,6 +31,7 @@ import type {
 import { DEFAULT_COMPATIBILITY_DATE } from "../../internal/constants.ts";
 import { formatInternalWorkerModules } from "../../internal/internal-modules.ts";
 import { loadInternalWorker } from "../../internal/internal-worker.ts";
+import * as Paths from "../../internal/Paths.ts";
 import * as Plugin from "../../Plugin.ts";
 import { PluginContext, type BindingHook } from "../../PluginContext.ts";
 import { ConfigError, SystemError } from "../../RuntimeError.shared.ts";
@@ -56,6 +57,7 @@ export const AssetsLive = Layer.effect(
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
+    const paths = yield* Paths.Paths;
 
     interface ManifestEntry {
       readonly pathHash: Uint8Array;
@@ -244,6 +246,14 @@ export const AssetsLive = Layer.effect(
         const { encodedAssetManifest, assetsReverseMap } = yield* buildAssetManifest(
           path.resolve(worker.assets.directory),
         );
+        // workerd's disk service needs a directory that exists. A missing one
+        // (an app without a static directory yet) serves nothing, like the
+        // empty manifest built for it.
+        const filesDirectory = (yield* fs
+          .exists(worker.assets.directory)
+          .pipe(Effect.orElseSucceed(() => false)))
+          ? worker.assets.directory
+          : yield* paths.cache("assets", "empty");
         const { assetsConfig, routerConfig } = yield* buildAssetConfigs(worker);
         const [assetsKvWorker, assetsWorker, routerWorker] = yield* Effect.forEach(
           [AssetsKvWorker, AssetsWorker, RouterWorker],
@@ -255,7 +265,10 @@ export const AssetsLive = Layer.effect(
             {
               name: "assets:files",
               disk: {
-                path: worker.assets.directory,
+                path: filesDirectory,
+                // Deploys upload dot-paths such as `.well-known/`. Reads still
+                // go through the manifest, so ignored files stay unreachable.
+                allowDotfiles: true,
               },
             },
             {

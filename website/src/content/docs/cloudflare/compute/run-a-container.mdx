@@ -21,7 +21,7 @@ like the entrypoint file lives on `.make()` (next step), not here:
 
 ```typescript
 // src/Sandbox.ts
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Effect from "effect/Effect";
 import type { PlatformError } from "effect/PlatformError";
 
@@ -225,7 +225,7 @@ class:
 
 ```typescript
 // src/Agent.ts
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Effect from "effect/Effect";
 import { Sandbox } from "./Sandbox.ts";
 
@@ -303,7 +303,7 @@ runtime — it has to be reachable from `alchemy.run.ts`. Provide
 ```diff lang="typescript"
 // alchemy.run.ts
 import * as Alchemy from "alchemy";
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Effect from "effect/Effect";
 +import SandboxLive from "./src/Sandbox.runtime.ts";
 import Worker from "./src/worker.ts";
@@ -325,7 +325,7 @@ The Worker binds `Agent` and exposes the `/sandbox/exec` route:
 
 ```diff lang="typescript"
 // src/worker.ts
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Effect from "effect/Effect";
 +import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
@@ -377,7 +377,7 @@ stdout in the response:
 
 ```diff lang="typescript"
 // test/integ.test.ts
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Test from "alchemy/Test/Bun";
 import { expect } from "bun:test";
 import * as Effect from "effect/Effect";
@@ -423,7 +423,7 @@ to `Agent.ts` that proxies to it via `getTcpPort`:
 
 ```diff lang="typescript"
 // src/Agent.ts
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Effect from "effect/Effect";
 +import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import { Sandbox } from "./Sandbox.ts";
