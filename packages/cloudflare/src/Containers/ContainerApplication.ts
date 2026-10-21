@@ -48,8 +48,18 @@ export namespace ContainerApplication {
   export type Check = NonNullable<
     Containers.CreateContainerApplicationRequest["configuration"]["checks"]
   >[number];
-  export type Region = "ENAM" | "WNAM" | "EEUR" | "WEUR" | "APAC" | "SAM" | "ME" | "OC" | "AFR";
-  export type Jurisdiction = "eu" | "us" | "fedramp";
+  export type Region =
+    | "ENAM"
+    | "WNAM"
+    | "EEUR"
+    | "WEUR"
+    | "APAC"
+    | "SAM"
+    | "ME"
+    | "OC"
+    | "AFR"
+    | (string & {});
+  export type Jurisdiction = "eu" | "us" | "fedramp" | (string & {});
   export type Constraints = {
     tier?: number;
     /**

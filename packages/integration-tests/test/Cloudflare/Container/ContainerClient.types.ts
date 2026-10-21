@@ -143,9 +143,10 @@ const euOnly = Cloudflare.Container("EuOnlyTypes", {
   constraints: { jurisdiction: "eu", regions: ["WEUR", "EEUR"] },
 });
 
-const unknownJurisdiction: Cloudflare.Containers.ContainerApplication.Constraints = {
-  // @ts-expect-error Jurisdictions are the ones Cloudflare documents.
+// Open enums: values Cloudflare adds later need no alchemy release.
+const newerPlacement: Cloudflare.Containers.ContainerApplication.Constraints = {
   jurisdiction: "apac",
+  regions: ["NEWR"],
 };
 
-export const placements = [euOnly, unknownJurisdiction];
+export const placements = [euOnly, newerPlacement];
