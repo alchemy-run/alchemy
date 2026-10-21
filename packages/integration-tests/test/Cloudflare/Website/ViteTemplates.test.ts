@@ -57,7 +57,55 @@ const checkSpaWithApi = (mountId: string) => (url: string) =>
     );
   });
 
+// A server-rendered page and the same-origin stylesheet it links.
+const expectSsrPage = (url: string, text: string) =>
+  Effect.gen(function* () {
+    let stylesheet: string | undefined;
+    yield* expectResponse(url, (res) => {
+      if (res.status !== 200 || !res.body.includes(text))
+        return `${res.status} ${res.body.slice(0, 300)}`;
+      stylesheet = res.body.match(/rel="stylesheet" href="(\/[^"]+)"/)?.[1];
+      return stylesheet
+        ? undefined
+        : `no stylesheet link in ${JSON.stringify(res.body.match(/<link[^>]*>/g))}`;
+    });
+    // Tailwind v4's output (minified builds drop its banner).
+    yield* expectResponse(new URL(stylesheet!.replaceAll("&amp;", "&"), url).toString(), (res) =>
+      res.status === 200 && /tailwindcss|@layer properties/.test(res.body)
+        ? undefined
+        : `css ${res.status} ${res.body.slice(0, 200)}`,
+    );
+  });
+
 const TEMPLATES: ReadonlyArray<Template> = [
+  {
+    // `npm create cloudflare -- --framework=tanstack-start`: the
+    // `@tanstack/cli` Cloudflare starter, whose Worker entry is a package
+    // export, with Tailwind CSS and the TanStack devtools plugin.
+    name: "tanstack-start",
+    fixture: "vite-tanstack-start-template-fixture",
+    entries: [
+      "package.json",
+      "vite.config.ts",
+      "wrangler.jsonc",
+      "tsconfig.json",
+      "tsr.config.json",
+      "src",
+    ],
+    props: {
+      main: "@tanstack/react-start/server-entry",
+      compatibility: { date: "2025-09-02", flags: ["nodejs_compat"] },
+    },
+    check: (url) =>
+      Effect.gen(function* () {
+        yield* expectSsrPage(url, "Start simple, ship quickly.");
+        yield* expectResponse(`${url}/about`, (res) =>
+          res.status === 200 && res.body.includes("<title>TanStack Start Starter</title>")
+            ? undefined
+            : `about ${res.status} ${res.body.slice(0, 200)}`,
+        );
+      }),
+  },
   {
     // `npm create cloudflare -- --framework=react`: create-vite's
     // `react-ts` with a Worker for `/api/`.
