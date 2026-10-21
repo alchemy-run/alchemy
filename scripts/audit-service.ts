@@ -917,9 +917,9 @@ function suggestHelpers(operations: Operation[], service: string): SuggestedHelp
       basedOn: streamOps.map((op) => op.camelCase),
       existingExample:
         service.toLowerCase() === "s3"
-          ? "alchemy/src/AWS/S3/BucketNotifications.ts"
+          ? "aws/src/S3/BucketNotifications.ts"
           : service.toLowerCase() === "sqs"
-            ? "alchemy/src/AWS/SQS/QueueEventSource.ts"
+            ? "aws/src/SQS/QueueEventSource.ts"
             : null,
     });
   }
@@ -986,12 +986,12 @@ async function auditService(serviceName: string): Promise<AuditReport> {
     .then(() => preferredDistilledPath)
     .catch(() => undefined);
   const distilledPath = resolvedDistilledPath ?? `@distilled.cloud/aws/${config.distilled}`;
-  const alchemyPath = path.resolve(`packages/alchemy/src/AWS/${config.alchemy}`);
+  const alchemyPath = path.resolve(`packages/aws/src/${config.alchemy}`);
   const bindingTestPath = path.resolve(
-    `packages/alchemy/test/AWS/${config.alchemy}/Bindings.test.ts`,
+    `packages/integration-tests/test/AWS/${config.alchemy}/Bindings.test.ts`,
   );
   const indexPath = path.join(alchemyPath, "index.ts");
-  const providersPath = path.resolve("packages/alchemy/src/AWS/Providers.ts");
+  const providersPath = path.resolve("packages/aws/src/Providers.ts");
 
   // Extract data
   const distilledOps = await extractDistilledOperations(

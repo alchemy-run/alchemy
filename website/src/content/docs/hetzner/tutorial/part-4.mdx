@@ -26,7 +26,7 @@ Add a Network to `src/server.ts` and attach the Server to it:
 
 ```diff lang="typescript"
 // src/server.ts
-import * as Hetzner from "alchemy/Hetzner";
+import * as Hetzner from "@alchemy.run/hetzner";
 
 +export const Net = Hetzner.Network("net", {
 +  ipRange: "10.0.0.0/16",
@@ -127,7 +127,7 @@ instead of the Server's:
 ```diff lang="typescript"
 // alchemy.run.ts
 import * as Alchemy from "alchemy";
-import * as Hetzner from "alchemy/Hetzner";
+import * as Hetzner from "@alchemy.run/hetzner";
 +import * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";
 import Api from "./src/api.ts";

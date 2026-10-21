@@ -1,8 +1,8 @@
 import { describe, expect } from "bun:test";
+import * as AWS from "@alchemy.run/aws";
 import { Credentials } from "@distilled.cloud/aws/Credentials";
 import { sign } from "@distilled.cloud/aws/SigV4";
 import * as Alchemy from "alchemy";
-import * as AWS from "alchemy/AWS";
 import * as Test from "alchemy/Test/Bun";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";

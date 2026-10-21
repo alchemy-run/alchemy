@@ -100,10 +100,34 @@ for (const mode of Playwright.SERVER_METHODS) {
     });
 
     it("serves the page with a top-level cloudflare:workers import", async ({ page, server }) => {
-      const response = await page.goto(new URL("/ssg-env", server.url).toString());
-      expect(response?.status()).toBe(200);
-      await expect(page.getByTestId("ssg-env-marker")).toHaveText("SSG_ENV_MARKER");
-      await expect(page.getByTestId("ssg-env-message")).toHaveText("MESSAGE=hello-from-binding");
+      const errors: string[] = [];
+      page.on("pageerror", (error) => errors.push(error.message));
+      page.on("requestfailed", (request) => {
+        errors.push(`${request.method()} ${request.url()}: ${request.failure()?.errorText}`);
+      });
+      page.on("response", (response) => {
+        if (response.status() >= 400) errors.push(`${response.status()} ${response.url()}`);
+      });
+      try {
+        const response = await page.goto(new URL("/ssg-env", server.url).toString());
+        expect(response?.status()).toBe(200);
+        if (mode === "live") {
+          const html = await response!.text();
+          expect(html.replaceAll("<!-- -->", "")).toContain("MESSAGE=hello-from-binding");
+          const payload = await server.fetch("/custom-rsc/R/ssg-env.txt");
+          expect(payload.status).toBe(200);
+          expect(await payload.text()).toContain("hello-from-binding");
+        }
+        await expect(page.getByTestId("ssg-env-marker")).toHaveText("SSG_ENV_MARKER");
+        await expect(page.getByTestId("ssg-env-message")).toHaveText("MESSAGE=hello-from-binding");
+      } catch (error) {
+        console.error("Waku SSG browser failure", {
+          mode,
+          errors,
+          body: await page.locator("body").allTextContents(),
+        });
+        throw error;
+      }
     });
 
     it("honors waku.config.ts (user vite plugin's virtual module)", async ({ page, server }) => {

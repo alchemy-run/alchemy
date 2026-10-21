@@ -36,7 +36,7 @@ the program that runs in it.
 
 ```typescript
 // src/api.ts
-import * as Railway from "alchemy/Railway";
+import * as Railway from "@alchemy.run/railway";
 import * as Effect from "effect/Effect";
 import { Site } from "./project.ts";
 
@@ -62,7 +62,7 @@ image.
 Return `fetch` from the constructor Effect to boot an HTTP server.
 
 ```diff lang="typescript"
-import * as Railway from "alchemy/Railway";
+import * as Railway from "@alchemy.run/railway";
 import * as Effect from "effect/Effect";
 +import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import { Site } from "./project.ts";
@@ -288,8 +288,8 @@ Omit `fetch`. Use `ServerHost.run` for a long-running loop:
 
 ```typescript
 // src/worker.ts
-import * as Railway from "alchemy/Railway";
-import { ServerHost } from "alchemy/Server";
+import * as Railway from "@alchemy.run/railway";
+import { ServerHost } from "alchemy/Runtime/Process";
 import * as Effect from "effect/Effect";
 import { Site } from "./project.ts";
 
