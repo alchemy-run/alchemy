@@ -64,6 +64,7 @@ interface ViteBuilder {
     }
   >;
   readonly buildApp: () => Promise<unknown>;
+  readonly build: (environment: unknown) => Promise<unknown>;
 }
 interface ViteModule {
   readonly createBuilder: (config: Record<string, unknown>) => Promise<ViteBuilder>;
@@ -112,7 +113,9 @@ export const readFoldkitOutput = (
         ),
       );
     }
-    const distDirectory = path.join(root, ".alchemy", "foldkit");
+    // Packaging lives outside `.alchemy`, which Neon's packager refuses to
+    // ship from, and like it is gitignored and excluded from build memos.
+    const distDirectory = path.join(root, "node_modules", ".cache", "alchemy", "foldkit");
     const isWithin = (parent: string, child: string) => {
       const relative = path.relative(parent, child);
       return (
@@ -124,7 +127,7 @@ export const readFoldkitOutput = (
       if (isWithin(distDirectory, directory) || isWithin(directory, distDirectory)) {
         return yield* Effect.fail(
           fail(
-            "Foldkit output directories must not overlap .alchemy/foldkit, which is reserved for deployment packaging.",
+            "Foldkit output directories must not overlap node_modules/.cache/alchemy/foldkit, which is reserved for deployment packaging.",
           ),
         );
       }
@@ -263,7 +266,11 @@ export const make: (
             plugins: [outputPlugin],
           });
           const read = metadataReader(builder.config.plugins);
-          await builder.buildApp();
+          // Without Foldkit's SSR build plugin the app is client-only; the
+          // default `buildApp` would also build the `ssr` environment, whose
+          // only input is `index.html`.
+          if (read) await builder.buildApp();
+          else await builder.build(builder.environments.client);
           const metadata = read?.();
           const client = builder.environments.client?.config ?? builder.config;
           return {
