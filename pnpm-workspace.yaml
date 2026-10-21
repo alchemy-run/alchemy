@@ -8,6 +8,9 @@ allowBuilds:
   "@parcel/watcher": true
   core-js: false
   es5-ext: false
+  # Prisma 7 (prisma playground fixture): `generate` needs no downloaded engines.
+  "@prisma/engines": false
+  prisma: false
   esbuild: true
   sharp: true
   vue-demi: false
@@ -99,6 +102,10 @@ catalog:
   cross-fetch: "^4.0.0"
   debug: "^4.4.1"
   prisma: "^8.0.0-rc.15"
+  # `@cloudflare/vite-plugin`'s prisma playground (Prisma 7 + D1 adapter).
+  prisma7: "npm:prisma@7.10.1"
+  "@prisma/client": "7.10.1"
+  "@prisma/adapter-d1": "7.10.1"
   arktype: "2.2.8"
   "@prisma/dev": "^0.20.0"
   "@puppeteer/browsers": "^3.2.4"
