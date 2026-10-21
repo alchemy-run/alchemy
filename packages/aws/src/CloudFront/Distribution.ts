@@ -1584,13 +1584,19 @@ export const mergeWithObservedConfig = (
     merged.Origins = {
       ...merged.Origins,
       Items: merged.Origins.Items.map((item) => {
-        const current = observedOrigins.find((origin) => origin.Id === item.Id);
+        const current = observedOrigins.find((origin) => origin.Id === item.Id) ?? item;
+        if (originKind(current) === originKind(item)) return fillUndefined(item, current);
         // An origin that changes kind (custom <-> S3 <-> VPC) under the same
         // id must not inherit the old kind's config or access control:
         // CloudFront rejects an origin carrying both.
-        return current && originKind(current) === originKind(item)
-          ? fillUndefined(item, current)
-          : item;
+        const {
+          S3OriginConfig: _s3,
+          CustomOriginConfig: _custom,
+          VpcOriginConfig: _vpc,
+          OriginAccessControlId: _oac,
+          ...shared
+        } = current;
+        return fillUndefined(item, shared as cloudfront.Origin);
       }),
     };
   }
