@@ -120,7 +120,7 @@ describe.sequential(
             expect(yield* waitUntilGone(serverId)).toEqual("gone");
           }),
         {
-          timeout: 120_000,
+          timeout: 180_000,
         },
       );
     }
