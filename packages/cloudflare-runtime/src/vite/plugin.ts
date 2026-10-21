@@ -126,8 +126,32 @@ const disableOfficialCloudflareVitePlugin = (plugin: vite.Plugin): void => {
   // Its own `applyToEnvironment` reads the config its no-op `config` hook
   // never resolved (`Expected resolvedPluginConfig to be defined`).
   if ("applyToEnvironment" in record) record.applyToEnvironment = () => false;
+  // The root plugin's `config` only resolves the plugin's own config, which
+  // runs the user's `config` customizer: frameworks hand their Worker
+  // contributions through it and fail the build if it never runs (Flue's
+  // `cloudflare({ config: flueWorkerConfig() })`). It stays, in place, so it
+  // runs after the plugins listed before it, as it does under Wrangler. What
+  // it resolves feeds only the hooks disabled here.
+  const resolveConfig =
+    plugin.name === OFFICIAL_CLOUDFLARE_VITE_PLUGIN_NAME ? record.config : undefined;
+  if (typeof resolveConfig === "function") {
+    record.config = async function (this: unknown, ...args: Array<unknown>) {
+      try {
+        await resolveConfig.apply(this, args);
+      } catch {
+        // Its config (e.g. a missing `wrangler.jsonc`) doesn't apply under
+        // Alchemy, which configures the Worker itself.
+      }
+    };
+  }
   for (const key of Object.keys(record)) {
-    if (key === "name" || key === "enforce" || key === "apply" || key === "applyToEnvironment") {
+    if (
+      key === "name" ||
+      key === "enforce" ||
+      key === "apply" ||
+      key === "applyToEnvironment" ||
+      (key === "config" && typeof resolveConfig === "function")
+    ) {
       continue;
     }
     const value = record[key];

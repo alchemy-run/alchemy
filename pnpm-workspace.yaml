@@ -11,6 +11,10 @@ allowBuilds:
   # Prisma 7 (prisma playground fixture): `generate` needs no downloaded engines.
   "@prisma/engines": false
   prisma: false
+  # Flue's model clients: postinstall banners and version checks only.
+  "@google/genai": false
+  core-js-pure: false
+  protobufjs: false
   esbuild: true
   sharp: true
   vue-demi: false
@@ -103,6 +107,15 @@ catalog:
   cross-fetch: "^4.0.0"
   # Kept in the C3 React Router template's Vite config, which alchemy neutralizes.
   "@cloudflare/vite-plugin": "^1.64.0"
+  "@flue/runtime": "^2.3.0"
+  "@flue/sdk": "^2.3.0"
+  "@flue/vite": "^2.3.0"
+  # examples/cloudflare-agents; the MCP SDK is an exact peer of `agents`.
+  agents: "^0.29.0"
+  "@modelcontextprotocol/sdk": "1.32.1"
+  # `agents/vite` compiles decorators with these, resolved from the project.
+  "@babel/plugin-proposal-decorators": "^8.0.2"
+  "@rolldown/plugin-babel": "^0.2.3"
   # create-cloudflare's RedwoodSDK template.
   rwsdk: "1.7.4"
   # create-cloudflare's Vike template.

@@ -338,6 +338,12 @@
       "path": "./examples/cloudflare-website-nextjs/tsconfig.json"
     },
     {
+      "path": "./examples/cloudflare-agents/tsconfig.json"
+    },
+    {
+      "path": "./examples/cloudflare-flue/tsconfig.json"
+    },
+    {
       "path": "./examples/cloudflare-website-vinext/tsconfig.json"
     },
     {

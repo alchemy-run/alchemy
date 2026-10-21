@@ -49,6 +49,8 @@ const examples = [
   "./examples/cloudflare-website-vinext",
   "./examples/cloudflare-website-waku",
   "./examples/cloudflare-website-vocs",
+  "./examples/cloudflare-agents",
+  "./examples/cloudflare-flue",
   "./examples/aws-dev",
   // "./examples/aws-ecs",
   "./examples/aws-lambda",
