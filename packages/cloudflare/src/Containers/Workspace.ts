@@ -117,6 +117,31 @@ export interface WorkspaceProps {
  * });
  * ```
  *
+ * ### Commands on forks
+ * With `placement: "serverless"`, each `exec` forks the session, runs on any
+ * free machine of the pool, and merges what it changed back file by file:
+ * many commands of one session run at once. A command that changed a file
+ * changed since it started is refused whole (`changes.status` is
+ * `"conflict"`) and kept as a session of its own. `"automatic"` is the same,
+ * except a command that leaves processes running keeps its machine for
+ * them, and the session's next commands run there. On btrfs, a small write
+ * to a big file merges as just its bytes.
+ *
+ * **Example:** Commands that fan out over a pool of machines
+ * ```typescript
+ * // src/Workspace.cloudflare.ts
+ * import * as Cloudflare from "@alchemy.run/cloudflare";
+ * import { Workspace } from "./Workspace.ts";
+ *
+ * export default Cloudflare.Containers.Workspace(Workspace, {
+ *   dockerfile: `FROM node:24-bookworm
+ * RUN git clone --depth 1 https://github.com/alchemy-run/alchemy /workspace`,
+ *   path: "/workspace",
+ *   filesystem: "btrfs",
+ *   machine: { placement: "automatic", idle: "1 minute", pool: { min: 2, max: 20 } },
+ * });
+ * ```
+ *
  * ### Machines on Lambda MicroVMs
  * Sessions stay on Cloudflare; each session's machine is an AWS Lambda
  * MicroVM. The stack needs the AWS providers too.

@@ -30,6 +30,7 @@ import type { GatewayClient } from "alchemy/Egress/Gateway";
 import type { EgressRef, MintedGrant } from "alchemy/Egress/Kind";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Data from "effect/Data";
+import * as Deferred from "effect/Deferred";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
@@ -111,6 +112,9 @@ const INTEGRATOR_IDLE = Duration.seconds(20);
 
 /** The lease a session's merges hold on its mount. */
 const INTEGRATOR = "integrator";
+
+/** The session a refused command's changes are kept in. */
+const conflictFork = (session: string, call: string) => `${session}.conflict-${call.slice(0, 8)}`;
 
 /** Options for one command. */
 interface RunOptions {
@@ -865,15 +869,92 @@ const sessionImpl = (config: HostConfig) =>
 
       /** While a merge runs its mount can't expire; afterwards it stays a moment. */
       const LONG = Duration.toMillis(Duration.minutes(15));
-      const done = (session: string, hostUrl: string | undefined) =>
+      const linger = (session: string, hostUrl: string | undefined) =>
         holdForMerge(session, hostUrl, Date.now() + Duration.toMillis(INTEGRATOR_IDLE)).pipe(
           Effect.ignore,
         );
 
+      /** A command's patch waiting to land, with whoever waits for the outcome. */
+      interface Pending {
+        readonly base: { readonly snapshot: Snapshot; readonly seq: number };
+        readonly patch: string;
+        readonly summary: PatchSummary;
+        readonly call: string;
+        readonly done: Deferred.Deferred<WorkspaceChanges, WorkspaceError>;
+      }
+      const queue: Array<Pending> = [];
+
       /**
-       * Land `patch` (a command's, from base `seq`) on the head: refused, and
-       * kept as a fork, if it changed a path changed since.
+       * Land every waiting patch on the head, in order: each is refused (and
+       * kept as a fork) if it changed a path changed since its base, by the
+       * head's own commands or an earlier patch. The rest are applied
+       * together, under one snapshot (group commit).
        */
+      const drain = Effect.fn(function* (session: string, hostUrl: string | undefined) {
+        const batch = queue.splice(0);
+        if (batch.length === 0) return;
+        const landed = Effect.gen(function* () {
+          const machine = machines.getByName(
+            yield* holdForMerge(session, hostUrl, Date.now() + LONG),
+          );
+          // What the head's own commands changed counts as a change since every base.
+          yield* appendLog(yield* machine.checkpoint(session));
+          const accepted: Array<Pending> = [];
+          const refused: Array<{
+            readonly pending: Pending;
+            readonly paths: ReadonlyArray<string>;
+          }> = [];
+          for (const pending of batch) {
+            const clashes = conflicts(
+              pending.summary.paths,
+              yield* logSince(pending.base.seq),
+              config.lww,
+            );
+            if (clashes.length > 0) {
+              refused.push({ pending, paths: clashes });
+              continue;
+            }
+            accepted.push(pending);
+            yield* appendLog(pending.summary.paths);
+          }
+          if (accepted.length > 0) {
+            yield* machine.apply(
+              session,
+              accepted.map((pending) => pending.patch),
+            );
+            const snapshot = yield* machine.snapshot(session);
+            yield* markSnapshot;
+            for (const pending of accepted) {
+              yield* deletePatch(pending.patch);
+              yield* Deferred.succeed(pending.done, {
+                status: "applied",
+                snapshot,
+                paths: pending.summary.paths,
+              });
+            }
+          }
+          for (const { pending, paths } of refused) {
+            const fork = conflictFork(session, pending.call);
+            const adopted = yield* Effect.exit(
+              sessions.getByName(fork).adopt(fork, pending.base.snapshot, pending.patch, hostUrl),
+            );
+            yield* Deferred.succeed(
+              pending.done,
+              adopted._tag === "Success"
+                ? { status: "conflict", paths, fork }
+                : { status: "conflict", paths },
+            );
+          }
+        });
+        const exit = yield* Effect.exit(landed);
+        if (exit._tag === "Failure") {
+          for (const pending of batch) {
+            yield* Deferred.failCause(pending.done, exit.cause as never);
+          }
+        }
+      });
+
+      /** Land `patch` (a command's, from base `seq`), with any others waiting. */
       const commit = Effect.fn(function* (
         session: string,
         base: { readonly snapshot: Snapshot; readonly seq: number },
@@ -882,23 +963,12 @@ const sessionImpl = (config: HostConfig) =>
         call: string,
         hostUrl: string | undefined,
       ) {
-        const machine = machines.getByName(
-          yield* holdForMerge(session, hostUrl, Date.now() + LONG),
-        );
-        // What the head's own commands changed counts as a change since the base.
-        yield* appendLog(yield* machine.checkpoint(session));
-        const clashes = conflicts(summary.paths, yield* logSince(base.seq), config.lww);
-        if (clashes.length > 0) {
-          const fork = `${session}~${call.slice(0, 8)}`;
-          yield* sessions.getByName(fork).adopt(fork, base.snapshot, patch, hostUrl);
-          return { status: "conflict", paths: clashes, fork } satisfies WorkspaceChanges;
-        }
-        yield* machine.apply(session, [patch]);
-        yield* appendLog(summary.paths);
-        const snapshot = yield* machine.snapshot(session);
-        yield* markSnapshot;
-        yield* deletePatch(patch);
-        return { status: "applied", snapshot, paths: summary.paths } satisfies WorkspaceChanges;
+        const done = yield* Deferred.make<WorkspaceChanges, WorkspaceError>();
+        queue.push({ base, patch, summary, call, done });
+        yield* commitLock
+          .withPermits(1)(drain(session, hostUrl))
+          .pipe(Effect.ensuring(linger(session, hostUrl)));
+        return yield* Deferred.await(done);
       });
 
       //#region process hosts
@@ -923,7 +993,7 @@ const sessionImpl = (config: HostConfig) =>
       }
       const HOST = "workspace:host";
       const HOST_SYNC = Duration.toMillis(Duration.seconds(5));
-      const forkOf = (host: Host) => `${host.session}~${host.call.slice(0, 8)}`;
+      const forkOf = (host: Host) => conflictFork(host.session, host.call);
       const saveHost = (host: Host | undefined) =>
         Effect.gen(function* () {
           if (host) {
@@ -1034,7 +1104,7 @@ const sessionImpl = (config: HostConfig) =>
         });
         const changes: WorkspaceChanges = (yield* commitLock
           .withPermits(1)(syncHost())
-          .pipe(Effect.ensuring(done(host.session, host.hostUrl)))) ?? {
+          .pipe(Effect.ensuring(linger(host.session, host.hostUrl)))) ?? {
           status: "applied",
           paths: [],
         };
@@ -1107,7 +1177,7 @@ const sessionImpl = (config: HostConfig) =>
                   survivors: ran.survivors,
                 }),
               )
-              .pipe(Effect.ensuring(done(session, hostUrl)))).changes;
+              .pipe(Effect.ensuring(linger(session, hostUrl)))).changes;
             return {
               exitCode: ran.exitCode,
               stdout: ran.stdout,
@@ -1117,9 +1187,7 @@ const sessionImpl = (config: HostConfig) =>
           }
           yield* pool.release(machine, session);
           const changes: WorkspaceChanges = ran.patch
-            ? yield* commitLock
-                .withPermits(1)(commit(session, base, ran.patch, ran.summary, call, hostUrl))
-                .pipe(Effect.ensuring(done(session, hostUrl)))
+            ? yield* commit(session, base, ran.patch, ran.summary, call, hostUrl)
             : { status: "applied", paths: [] };
           return {
             exitCode: ran.exitCode,
@@ -1285,10 +1353,22 @@ const sessionImpl = (config: HostConfig) =>
               const theirs = yield* volume.history(from, { limit: 500 });
               const known = new Set(ours);
               const ancestor = theirs.find((snapshot) => known.has(snapshot));
-              if (ancestor === undefined) {
+              // Where the last merge from `from` left both sides, if they still descend from it.
+              const MERGED = `workspace:merged:${from}`;
+              const last = yield* state.storage.get<{
+                readonly from: Snapshot;
+                readonly into: Snapshot;
+              }>(MERGED);
+              const since =
+                last && theirs.includes(last.from) && ours.includes(last.into)
+                  ? last
+                  : ancestor !== undefined
+                    ? { from: ancestor, into: ancestor }
+                    : undefined;
+              if (since === undefined) {
                 return yield* fail(`${from} and ${session} share no snapshot to merge from`);
               }
-              if (theirs[0] === ancestor) {
+              if (theirs[0] === since.from) {
                 return { status: "applied", paths: [] } satisfies WorkspaceChanges;
               }
               const head = machines.getByName(
@@ -1301,8 +1381,8 @@ const sessionImpl = (config: HostConfig) =>
               const worker = yield* pool.claim(undefined);
               const [incoming, local] = yield* Effect.all(
                 [
-                  machines.getByName(worker).diff(ancestor, theirs[0]!, patch, config),
-                  machines.getByName(worker).diff(ancestor, now, undefined, config),
+                  machines.getByName(worker).diff(since.from, theirs[0]!, patch, config),
+                  machines.getByName(worker).diff(since.into, now, undefined, config),
                 ],
                 { concurrency: 1 },
               ).pipe(Effect.ensuring(pool.release(worker, undefined)));
@@ -1318,12 +1398,13 @@ const sessionImpl = (config: HostConfig) =>
               const snapshot = yield* head.snapshot(session);
               yield* markSnapshot;
               yield* deletePatch(patch);
+              yield* state.storage.put(MERGED, { from: theirs[0]!, into: snapshot });
               return {
                 status: "applied",
                 snapshot,
                 paths: incoming.summary.paths,
               } satisfies WorkspaceChanges;
-            }).pipe(Effect.mapError(asWorkspaceError), Effect.ensuring(done(session, hostUrl))),
+            }).pipe(Effect.mapError(asWorkspaceError), Effect.ensuring(linger(session, hostUrl))),
           ),
 
         adopt: (session: string, snapshot: Snapshot, patch: string, hostUrl: string | undefined) =>
@@ -1346,7 +1427,7 @@ const sessionImpl = (config: HostConfig) =>
               yield* head.snapshot(session);
               yield* markSnapshot;
               yield* deletePatch(patch);
-            }).pipe(Effect.ensuring(done(session, hostUrl))),
+            }).pipe(Effect.ensuring(linger(session, hostUrl))),
           ),
 
         fork: (session: string, from: string) =>
@@ -1391,7 +1472,7 @@ const sessionImpl = (config: HostConfig) =>
               yield* commitLock
                 .withPermits(1)(syncHost())
                 .pipe(
-                  Effect.ensuring(host ? done(host.session, host.hostUrl) : Effect.void),
+                  Effect.ensuring(host ? linger(host.session, host.hostUrl) : Effect.void),
                   Effect.catch((error) =>
                     Effect.logWarning("committing a process host failed", error),
                   ),

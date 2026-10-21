@@ -346,6 +346,37 @@ const makeClient = (
  * const output = yield* workspace.exec("issue-42", "git status");
  * ```
  *
+ * ### Commands that merge back
+ * When the host runs `exec` on forks (`placement: "serverless"` on
+ * `Cloudflare.Containers.Workspace`), each command's result says what
+ * happened to its changes. `lww` names paths where the newest change wins
+ * instead of conflicting. `describeChanges` puts it in words for a model.
+ *
+ * **Example:** Tell the model when a command's changes didn't land
+ * ```typescript
+ * // src/Workspace.ts
+ * import * as Sandbox from "@alchemy.run/sandbox";
+ *
+ * export class Workspace extends Sandbox.Workspace<Workspace>()("Workspace", {
+ *   lww: ["pnpm-lock.yaml", "dist/**", "node_modules/.cache/**"],
+ * }) {}
+ * ```
+ * ```typescript
+ * // src/Agent.ts
+ * const result = yield* workspace.exec(session, command);
+ * const notice = Sandbox.describeChanges(result);
+ * return notice ? `${result.stdout}\n${notice}` : result.stdout;
+ * ```
+ *
+ * ### Merging forks
+ * **Example:** Try something on a fork, then keep it
+ * ```typescript
+ * yield* workspace.fork("issue-42", "issue-42-try");
+ * yield* workspace.exec("issue-42-try", "pnpm up --latest");
+ * const merged = yield* workspace.merge("issue-42-try", "issue-42");
+ * if (merged.status === "conflict") console.log("both changed", merged.paths);
+ * ```
+ *
  * @binding
  * @product Sandbox
  * @category Sandbox

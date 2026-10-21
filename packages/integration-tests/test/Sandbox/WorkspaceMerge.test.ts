@@ -103,8 +103,6 @@ describe.sequential("Sandbox.Workspace with commands on forks (btrfs, automatic)
       const conflict = refused[0]!.changes as Extract<Changes, { status: "conflict" }>;
       expect(conflict.paths).toEqual(["src/shared.txt"]);
       expect(conflict.fork).toBeDefined();
-      const winner = applied[0]!.stdout === "" ? undefined : undefined;
-      void winner;
       const head = yield* exec("p1", "cat src/shared.txt; ls one.txt two.txt 2>/dev/null");
       const landed = head.stdout.split("\n")[0];
       expect(["one", "two"]).toContain(landed);
