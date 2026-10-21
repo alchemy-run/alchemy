@@ -508,7 +508,18 @@ export const ImageProvider = () =>
             },
           })
           .pipe(Effect.flatMap((operation) => waitGlobalOperation(env.project, operation)));
-        current = (yield* getByName(env.project, imageName)) ?? current;
+        // A read right after setLabels can still return the old labels.
+        current =
+          (yield* getByName(env.project, imageName).pipe(
+            Effect.repeat({
+              schedule: Schedule.spaced("2 seconds"),
+              until: (image) => {
+                const labels = diffLabels(tagRecord(image?.labels), desiredLabels);
+                return labels.upsert.length === 0 && labels.removed.length === 0;
+              },
+              times: 10,
+            }),
+          )) ?? current;
       }
 
       if (current === undefined) {

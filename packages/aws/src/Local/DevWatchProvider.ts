@@ -160,6 +160,17 @@ export interface DevWatchSpec<Props, Attrs> {
     attrs: Attrs;
   }) => Effect.Effect<void, unknown, any>;
   /**
+   * Runs alongside every reconcile (watcher-driven and engine-driven) and is
+   * interrupted when it returns. For work the live reconcile waits on but
+   * cannot do itself, e.g. stopping tasks the emulator keeps on an old
+   * revision while the reconcile waits for the new one to stabilize.
+   */
+  readonly whileReconciling?: (input: {
+    id: string;
+    news: Props;
+    previous: Attrs | undefined;
+  }) => Effect.Effect<void, unknown, any>;
+  /**
    * Resource-specific replacement rules, mirroring the LIVE diff's cheap
    * checks (never bundling/building). Checked before the generic dev policy.
    */
@@ -282,6 +293,29 @@ export const makeDevWatchProvider = <
               },
             };
 
+      // Run `spec.whileReconciling` beside a reconcile; interrupted when it returns.
+      const alongsideReconcile = <A, E, Req>(
+        input: { id: string; news: Props; previous: Attrs | undefined },
+        reconcile: Effect.Effect<A, E, Req>,
+      ): Effect.Effect<A, E, Req> =>
+        spec.whileReconciling === undefined
+          ? reconcile
+          : Effect.scoped(
+              Effect.gen(function* () {
+                yield* spec.whileReconciling!(input).pipe(
+                  Effect.provide(services),
+                  Effect.catchCause((cause) =>
+                    Effect.logWarning(
+                      `[alchemy dev] ${input.id}: reconcile side task failed`,
+                      cause,
+                    ),
+                  ),
+                  Effect.forkScoped,
+                );
+                return yield* reconcile;
+              }),
+            );
+
       const ensureWatch = Effect.fn(function* (input: any, attrs: any) {
         const strippedNews = stripEffects(input.news);
         const configHash = yield* canonicalHash(
@@ -321,13 +355,20 @@ export const makeDevWatchProvider = <
                   })
                   .pipe(Effect.provide(services))
               : entry.lastInput.news;
-          const fresh = yield* wrapped.reconcile(
-            withSafeSession({
-              ...entry.lastInput,
-              news: rerunNews,
-              olds: entry.lastInput.news,
-              output: entry.attrs,
-            }) as any,
+          const fresh = yield* alongsideReconcile(
+            {
+              id: input.id,
+              news: stripEffects(entry.lastInput.news) as Props,
+              previous,
+            },
+            wrapped.reconcile(
+              withSafeSession({
+                ...entry.lastInput,
+                news: rerunNews,
+                olds: entry.lastInput.news,
+                output: entry.attrs,
+              }) as any,
+            ),
           );
           entry.attrs = fresh;
           if (spec.onReconciled !== undefined) {
@@ -469,8 +510,9 @@ export const makeDevWatchProvider = <
                       })
                       .pipe(Effect.provide(services))
                   : input.news;
-              const attrs = yield* wrapped.reconcile(
-                withSafeSession({ ...input, news: reconcileNews }) as any,
+              const attrs = yield* alongsideReconcile(
+                { id: input.id, news: stripEffects(input.news) as Props, previous },
+                wrapped.reconcile(withSafeSession({ ...input, news: reconcileNews }) as any),
               );
               yield* ensureWatch(input, attrs);
               if (spec.onReconciled !== undefined) {
