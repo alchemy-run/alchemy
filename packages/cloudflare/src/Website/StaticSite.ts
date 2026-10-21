@@ -31,11 +31,16 @@ export interface StaticSiteProps<Bindings extends WorkerBindingProps = {}>
 
   assets?: AssetsConfig;
   /**
-   * Local dev configuration. When `alchemy dev` runs, the build command is
-   * skipped and `command` is spawned as a long-lived child process tied to
-   * the stack's scope. Alchemy does not proxy or interpret the process —
-   * the dev server's own URL (e.g. `http://localhost:5173`) is what you
-   * open in the browser.
+   * Local dev configuration, in one of two forms.
+   *
+   * With `command`, `alchemy dev` skips the build and spawns `command` as a
+   * long-lived child process tied to the stack's scope. Alchemy does not
+   * proxy or interpret the process — the dev server's own URL (e.g.
+   * `http://localhost:5173`) is what you open in the browser.
+   *
+   * Without `command`, `alchemy dev` runs the build and a local Worker
+   * serves the output; `port`, `strictPort` and `host` configure that
+   * Worker.
    *
    * @example
    * ```typescript
@@ -46,31 +51,76 @@ export interface StaticSiteProps<Bindings extends WorkerBindingProps = {}>
    *   dev: { command: "npm run dev" },
    * });
    * ```
+   *
+   * @example
+   * ```typescript
+   * Cloudflare.Website.StaticSite("App", {
+   *   command: "npm run build",
+   *   outdir: "dist",
+   *   dev: { port: 4321, strictPort: true },
+   * });
+   * ```
    */
-  dev?: {
-    /**
-     * Shell command to run as the local dev server (e.g. `npm run dev`).
-     */
-    command: string;
-    /**
-     * Working directory for {@link command}. Defaults to
-     * {@link Command.BuildProps.cwd} (the build command's `cwd`), or
-     * `process.cwd()` if neither is set.
-     */
-    cwd?: string;
-    /**
-     * Environment variables for {@link command}, merged on top of
-     * `process.env`. When set, these replace the top-level `env` for the
-     * dev process; otherwise the top-level `env` is passed through.
-     * `Redacted` values stay out of logs and state, so put secrets here
-     * rather than interpolating them into {@link command}.
-     */
-    env?: Record<string, string | Redacted.Redacted<string>>;
-    /**
-     * Override for the `url` output if alchemy fails to detect it from the stdout of the dev command
-     */
-    url?: string;
-  };
+  dev?: StaticSiteDevCommand | StaticSiteDevWorker;
+}
+
+/**
+ * `StaticSite` dev form that serves the site from an external dev server.
+ */
+export interface StaticSiteDevCommand {
+  /**
+   * Shell command to run as the local dev server (e.g. `npm run dev`).
+   */
+  command: string;
+  /**
+   * Working directory for {@link command}. Defaults to
+   * {@link Command.BuildProps.cwd} (the build command's `cwd`), or
+   * `process.cwd()` if neither is set.
+   */
+  cwd?: string;
+  /**
+   * Environment variables for {@link command}, merged on top of
+   * `process.env`. When set, these replace the top-level `env` for the
+   * dev process; otherwise the top-level `env` is passed through.
+   * `Redacted` values stay out of logs and state, so put secrets here
+   * rather than interpolating them into {@link command}.
+   */
+  env?: Record<string, string | Redacted.Redacted<string>>;
+  /**
+   * Override for the `url` output if alchemy fails to detect it from the stdout of the dev command
+   */
+  url?: string;
+  port?: never;
+  strictPort?: never;
+  host?: never;
+}
+
+/**
+ * `StaticSite` dev form that builds the site and serves it from a local
+ * Worker.
+ */
+export interface StaticSiteDevWorker {
+  /**
+   * Port the local Worker listens on. If the port is unavailable, the next
+   * free port is used unless {@link strictPort} is `true`.
+   * @default 1337
+   */
+  port?: number;
+  /**
+   * When `true`, fail instead of falling back to another port if
+   * {@link port} is already in use.
+   * @default false
+   */
+  strictPort?: boolean;
+  /**
+   * Host the local Worker binds to.
+   * @default "localhost"
+   */
+  host?: string;
+  command?: never;
+  cwd?: never;
+  env?: never;
+  url?: never;
 }
 
 type StaticSiteWorker<Bindings extends WorkerBindingProps> = Worker<{
@@ -257,17 +307,18 @@ const makeStaticSite = <const Bindings extends WorkerBindingProps = {}, Req = ne
     // In dev mode with a dev.command, declare a DevCommand resource so
     // the sidecar owns the process lifecycle (survives user-code HMR),
     // skip the build, and tell Worker not to start a local instance.
+    const devCommand = props.dev?.command !== undefined ? props.dev : undefined;
     const dev =
-      ctx.dev && props.dev
+      ctx.dev && devCommand
         ? yield* Command.Dev("Dev", {
-            command: props.dev.command,
-            cwd: props.dev.cwd ?? (typeof props.cwd === "string" ? props.cwd : undefined),
-            env: yield* serializeEnv(props.dev.env ?? props.env),
+            command: devCommand.command,
+            cwd: devCommand.cwd ?? (typeof props.cwd === "string" ? props.cwd : undefined),
+            env: yield* serializeEnv(devCommand.env ?? props.env),
           }).pipe(
             Namespace.push(id),
             Effect.map((d) =>
               Output.map(d.url, (url) => ({
-                url: url ?? props.dev?.url,
+                url: url ?? devCommand.url,
               })),
             ),
           )
@@ -304,7 +355,15 @@ const makeStaticSite = <const Bindings extends WorkerBindingProps = {}, Req = ne
       // Opt out of the local Worker in dev when the external DevCommand
       // is serving the content. The Worker resource still exists in
       // state with a stub Attributes shape.
-      dev: dev ? { mode: "external", url: dev.url } : undefined,
+      dev: dev
+        ? { mode: "external", url: dev.url }
+        : props.dev && !devCommand
+          ? {
+              port: props.dev.port,
+              strictPort: props.dev.strictPort,
+              host: props.dev.host,
+            }
+          : undefined,
       script: props.script,
     }).pipe(renamedFrom(`${id}/Worker`));
   });
