@@ -2782,7 +2782,7 @@ importers:
     devDependencies:
       prisma:
         specifier: 'catalog:'
-        version: 8.0.0-rc.15(d4c4216cefaa070b048acf843528d724)
+        version: 8.0.0-rc.15(4763fc4b200a143b5efa5569319305be)
       typescript:
         specifier: 'catalog:'
         version: 7.0.2
@@ -6684,7 +6684,7 @@ importers:
         version: 17.4.2
       prisma:
         specifier: 'catalog:'
-        version: 8.0.0-rc.15(d4c4216cefaa070b048acf843528d724)
+        version: 8.0.0-rc.15(4763fc4b200a143b5efa5569319305be)
       tsx:
         specifier: 'catalog:'
         version: 4.23.15
@@ -8508,6 +8508,9 @@ importers:
         specifier: 'catalog:'
         version: 3.4.0
     devDependencies:
+      '@cloudflare/vite-plugin':
+        specifier: 'catalog:'
+        version: 1.64.0(@types/node@26.6.5)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))(wrangler@4.151.3(@cloudflare/workers-types@5.20261012.1)(@types/node@26.6.5))
       '@cloudflare/vitest-plugin':
         specifier: 'catalog:'
         version: 1.4.0(@cloudflare/workers-types@5.20261012.1)(@types/node@26.6.5)(vitest@4.1.10(@types/node@26.6.5)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1)))
@@ -9897,7 +9900,7 @@ importers:
         version: 7.10.1
       '@prisma/client':
         specifier: 'catalog:'
-        version: 7.10.1(prisma@8.0.0-rc.15(d4c4216cefaa070b048acf843528d724))(typescript@7.0.2)
+        version: 7.10.1(prisma@8.0.0-rc.15(4763fc4b200a143b5efa5569319305be))(typescript@7.0.2)
       '@prisma/orm-family-sql':
         specifier: 'catalog:'
         version: 8.0.0-rc.11(@prisma/cli-engine@0.4.0(@prisma/management-api-sdk@1.69.0)(magicast@0.5.5))(magicast@0.5.5)(typanion@3.14.0)(typescript@7.0.2)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))
@@ -10047,7 +10050,7 @@ importers:
         version: 8.23.1
       prisma:
         specifier: 'catalog:'
-        version: 8.0.0-rc.15(d4c4216cefaa070b048acf843528d724)
+        version: 8.0.0-rc.15(4763fc4b200a143b5efa5569319305be)
       prisma7:
         specifier: 'catalog:'
         version: prisma@7.10.1(@types/node@26.6.5)(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(magicast@0.5.5)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(typescript@7.0.2)
@@ -10320,7 +10323,7 @@ importers:
         version: 4.0.5
       prisma:
         specifier: 'catalog:'
-        version: 8.0.0-rc.15(0edd7b7178baa29f7726da0478b5bbfc)
+        version: 8.0.0-rc.15(377101d99bda4ad9a495507570a43e61)
       typescript:
         specifier: 'catalog:'
         version: 7.0.2
@@ -30859,15 +30862,13 @@ snapshots:
       '@effect/tsgo-win32-arm64': 0.51.1
       '@effect/tsgo-win32-x64': 0.51.1
 
-  '@effect/vitest@4.0.0-rc.112(effect@4.0.5)(vitest@5.0.4(@types/node@26.6.5)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1)))':
+  '@effect/vitest@4.0.0-rc.112(effect@4.0.5)':
     dependencies:
       effect: 4.0.5
-      vitest: 5.0.4(@types/node@26.6.5)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))
 
-  '@effect/vitest@4.0.4(effect@4.0.5)(vitest@5.0.4(@types/node@26.6.5)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1)))':
+  '@effect/vitest@4.0.4(effect@4.0.5)':
     dependencies:
       effect: 4.0.5
-      vitest: 5.0.4(@types/node@26.6.5)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))
 
   '@effect/vitest@4.0.5(effect@4.0.5)(vitest@4.1.10(@types/node@26.6.5)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1)))':
     dependencies:
@@ -34732,12 +34733,80 @@ snapshots:
       typescript: 7.0.2
     optional: true
 
-  '@prisma/client@7.10.1(prisma@8.0.0-rc.15(d4c4216cefaa070b048acf843528d724))(typescript@7.0.2)':
+  '@prisma/client@7.10.1(prisma@8.0.0-rc.15(4763fc4b200a143b5efa5569319305be))(typescript@7.0.2)':
     dependencies:
       '@prisma/client-runtime-utils': 7.10.1
     optionalDependencies:
-      prisma: 8.0.0-rc.15(d4c4216cefaa070b048acf843528d724)
+      prisma: 8.0.0-rc.15(4763fc4b200a143b5efa5569319305be)
       typescript: 7.0.2
+
+  '@prisma/composer-cli@0.20.0(b01e1089a91aae732e84610525596991)':
+    dependencies:
+      '@prisma/cli-engine': 0.4.0(@prisma/management-api-sdk@1.69.0)(magicast@0.5.5)
+      '@prisma/composer': 0.20.0(304d8a56208ea4fda7299d50318f37aa)
+      alchemy: 2.0.0-beta.74(e13b73a28f3b1ddcc50fe7e690e88b26)
+      c12: 3.3.4(magicast@0.5.5)
+      cross-spawn: 7.0.6
+      effect: 4.0.5
+      esbuild: 0.28.2
+    transitivePeerDependencies:
+      - '@alchemy.run/frontend-frameworks'
+      - '@aws/durable-execution-sdk-js'
+      - '@effect/platform-bun'
+      - '@effect/platform-node'
+      - '@effect/sql-mysql2'
+      - '@effect/sql-pg'
+      - '@types/node'
+      - '@types/react'
+      - '@vercel/nft'
+      - bufferutil
+      - drizzle-kit
+      - drizzle-orm
+      - magicast
+      - mongodb
+      - mysql2
+      - pg
+      - proxy-agent
+      - react-devtools-core
+      - typescript
+      - utf-8-validate
+      - vite
+      - vitest
+      - ws
+
+  '@prisma/composer-cli@0.20.0(b844fae37b6cea18eb3ae168285a4e15)':
+    dependencies:
+      '@prisma/cli-engine': 0.4.0(@prisma/management-api-sdk@1.69.0)(magicast@0.5.5)
+      '@prisma/composer': 0.20.0(650dd213b4818760f8150b8ce615707a)
+      alchemy: 2.0.0-beta.74(d686c1e755f9bdbc7e50565e901e718a)
+      c12: 3.3.4(magicast@0.5.5)
+      cross-spawn: 7.0.6
+      effect: 4.0.5
+      esbuild: 0.28.2
+    transitivePeerDependencies:
+      - '@alchemy.run/frontend-frameworks'
+      - '@aws/durable-execution-sdk-js'
+      - '@effect/platform-bun'
+      - '@effect/platform-node'
+      - '@effect/sql-mysql2'
+      - '@effect/sql-pg'
+      - '@types/node'
+      - '@types/react'
+      - '@vercel/nft'
+      - bufferutil
+      - drizzle-kit
+      - drizzle-orm
+      - magicast
+      - mongodb
+      - mysql2
+      - pg
+      - proxy-agent
+      - react-devtools-core
+      - typescript
+      - utf-8-validate
+      - vite
+      - vitest
+      - ws
 
   '@prisma/composer-cli@0.20.0(c3e95ba41c234fa360c435492462145e)':
     dependencies:
@@ -34773,11 +34842,15 @@ snapshots:
       - vitest
       - ws
 
-  '@prisma/composer-cli@0.20.0(c6aabf39c3d75f53997a45637da5bbb7)':
+  '@prisma/composer@0.20.0(304d8a56208ea4fda7299d50318f37aa)':
     dependencies:
-      '@prisma/cli-engine': 0.4.0(@prisma/management-api-sdk@1.69.0)(magicast@0.5.5)
-      '@prisma/composer': 0.20.0(99967da7190f2f1f19e0fe7de313b154)
-      alchemy: 2.0.0-beta.74(72207ea421779596f4724334b59ff131)
+      '@effect/sql-d1': 4.0.5(effect@4.0.5)
+      '@effect/sql-sqlite-do': 4.0.5(effect@4.0.5)
+      '@effect/vitest': 4.0.0-rc.112(effect@4.0.5)
+      '@prisma/management-api-sdk': 1.69.0
+      '@standard-schema/spec': 1.1.0
+      alchemy: 2.0.0-beta.74(e13b73a28f3b1ddcc50fe7e690e88b26)
+      arktype: 2.2.8
       c12: 3.3.4(magicast@0.5.5)
       cross-spawn: 7.0.6
       effect: 4.0.5
@@ -34807,11 +34880,15 @@ snapshots:
       - vitest
       - ws
 
-  '@prisma/composer-cli@0.20.0(c82fcf8548ba64beca343a08f218f589)':
+  '@prisma/composer@0.20.0(650dd213b4818760f8150b8ce615707a)':
     dependencies:
-      '@prisma/cli-engine': 0.4.0(@prisma/management-api-sdk@1.69.0)(magicast@0.5.5)
-      '@prisma/composer': 0.20.0(ef49c3674377509b443f3a5c84850070)
-      alchemy: 2.0.0-beta.74(5d27483c0cf5b9c740ed1c5fa6c5a8a6)
+      '@effect/sql-d1': 4.0.5(effect@4.0.5)
+      '@effect/sql-sqlite-do': 4.0.5(effect@4.0.5)
+      '@effect/vitest': 4.0.0-rc.112(effect@4.0.5)
+      '@prisma/management-api-sdk': 1.69.0
+      '@standard-schema/spec': 1.1.0
+      alchemy: 2.0.0-beta.74(d686c1e755f9bdbc7e50565e901e718a)
+      arktype: 2.2.8
       c12: 3.3.4(magicast@0.5.5)
       cross-spawn: 7.0.6
       effect: 4.0.5
@@ -34845,86 +34922,10 @@ snapshots:
     dependencies:
       '@effect/sql-d1': 4.0.5(effect@4.0.5)
       '@effect/sql-sqlite-do': 4.0.5(effect@4.0.5)
-      '@effect/vitest': 4.0.0-rc.112(effect@4.0.5)(vitest@5.0.4(@types/node@26.6.5)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1)))
+      '@effect/vitest': 4.0.0-rc.112(effect@4.0.5)
       '@prisma/management-api-sdk': 1.69.0
       '@standard-schema/spec': 1.1.0
       alchemy: 2.0.0-beta.74(1027cf01b13ccd3aeacaaf8b7e37b3c9)
-      arktype: 2.2.8
-      c12: 3.3.4(magicast@0.5.5)
-      cross-spawn: 7.0.6
-      effect: 4.0.5
-      esbuild: 0.28.2
-    transitivePeerDependencies:
-      - '@alchemy.run/frontend-frameworks'
-      - '@aws/durable-execution-sdk-js'
-      - '@effect/platform-bun'
-      - '@effect/platform-node'
-      - '@effect/sql-mysql2'
-      - '@effect/sql-pg'
-      - '@types/node'
-      - '@types/react'
-      - '@vercel/nft'
-      - bufferutil
-      - drizzle-kit
-      - drizzle-orm
-      - magicast
-      - mongodb
-      - mysql2
-      - pg
-      - proxy-agent
-      - react-devtools-core
-      - typescript
-      - utf-8-validate
-      - vite
-      - vitest
-      - ws
-
-  '@prisma/composer@0.20.0(99967da7190f2f1f19e0fe7de313b154)':
-    dependencies:
-      '@effect/sql-d1': 4.0.5(effect@4.0.5)
-      '@effect/sql-sqlite-do': 4.0.5(effect@4.0.5)
-      '@effect/vitest': 4.0.0-rc.112(effect@4.0.5)(vitest@5.0.4(@types/node@26.6.5)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1)))
-      '@prisma/management-api-sdk': 1.69.0
-      '@standard-schema/spec': 1.1.0
-      alchemy: 2.0.0-beta.74(72207ea421779596f4724334b59ff131)
-      arktype: 2.2.8
-      c12: 3.3.4(magicast@0.5.5)
-      cross-spawn: 7.0.6
-      effect: 4.0.5
-      esbuild: 0.28.2
-    transitivePeerDependencies:
-      - '@alchemy.run/frontend-frameworks'
-      - '@aws/durable-execution-sdk-js'
-      - '@effect/platform-bun'
-      - '@effect/platform-node'
-      - '@effect/sql-mysql2'
-      - '@effect/sql-pg'
-      - '@types/node'
-      - '@types/react'
-      - '@vercel/nft'
-      - bufferutil
-      - drizzle-kit
-      - drizzle-orm
-      - magicast
-      - mongodb
-      - mysql2
-      - pg
-      - proxy-agent
-      - react-devtools-core
-      - typescript
-      - utf-8-validate
-      - vite
-      - vitest
-      - ws
-
-  '@prisma/composer@0.20.0(ef49c3674377509b443f3a5c84850070)':
-    dependencies:
-      '@effect/sql-d1': 4.0.5(effect@4.0.5)
-      '@effect/sql-sqlite-do': 4.0.5(effect@4.0.5)
-      '@effect/vitest': 4.0.0-rc.112(effect@4.0.5)(vitest@5.0.4(@types/node@26.6.5)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1)))
-      '@prisma/management-api-sdk': 1.69.0
-      '@standard-schema/spec': 1.1.0
-      alchemy: 2.0.0-beta.74(5d27483c0cf5b9c740ed1c5fa6c5a8a6)
       arktype: 2.2.8
       c12: 3.3.4(magicast@0.5.5)
       cross-spawn: 7.0.6
@@ -40346,7 +40347,7 @@ snapshots:
       '@distilled.cloud/planetscale': 1.0.0-rc.6(effect@4.0.5)
       '@effect/sql-d1': 4.0.5(effect@4.0.5)
       '@effect/sql-sqlite-do': 4.0.5(effect@4.0.5)
-      '@effect/vitest': 4.0.4(effect@4.0.5)(vitest@5.0.4(@types/node@26.6.5)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1)))
+      '@effect/vitest': 4.0.4(effect@4.0.5)
       '@libsql/client': 0.17.4
       '@octokit/rest': 22.0.1
       '@octokit/webhooks': 14.2.0
@@ -40393,7 +40394,7 @@ snapshots:
       - utf-8-validate
       - vitest
 
-  alchemy@2.0.0-beta.74(5d27483c0cf5b9c740ed1c5fa6c5a8a6):
+  alchemy@2.0.0-beta.74(d686c1e755f9bdbc7e50565e901e718a):
     dependencies:
       '@alchemy.run/cloudflare-runtime': 2.0.0-beta.74(@distilled.cloud/cloudflare@1.0.0-rc.6(effect@4.0.5))(@effect/platform-bun@4.0.5(effect@4.0.5))(@effect/platform-node@4.0.5(effect@4.0.5)(redis@6.2.1))(@types/node@26.6.5)(effect@4.0.5)(rolldown@1.2.13)(typescript@7.0.2)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))
       '@alchemy.run/floci': 2.0.0-beta.74(effect@4.0.5)
@@ -40410,7 +40411,7 @@ snapshots:
       '@distilled.cloud/planetscale': 1.0.0-rc.6(effect@4.0.5)
       '@effect/sql-d1': 4.0.5(effect@4.0.5)
       '@effect/sql-sqlite-do': 4.0.5(effect@4.0.5)
-      '@effect/vitest': 4.0.4(effect@4.0.5)(vitest@5.0.4(@types/node@26.6.5)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1)))
+      '@effect/vitest': 4.0.4(effect@4.0.5)
       '@libsql/client': 0.17.4
       '@octokit/rest': 22.0.1
       '@octokit/webhooks': 14.2.0
@@ -40458,7 +40459,7 @@ snapshots:
       - utf-8-validate
       - vitest
 
-  alchemy@2.0.0-beta.74(72207ea421779596f4724334b59ff131):
+  alchemy@2.0.0-beta.74(e13b73a28f3b1ddcc50fe7e690e88b26):
     dependencies:
       '@alchemy.run/cloudflare-runtime': 2.0.0-beta.74(@distilled.cloud/cloudflare@1.0.0-rc.6(effect@4.0.5))(@effect/platform-bun@4.0.5(effect@4.0.5))(@effect/platform-node@4.0.5(effect@4.0.5)(redis@6.2.1))(@types/node@26.6.5)(effect@4.0.5)(rolldown@1.2.13)(typescript@7.0.2)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))
       '@alchemy.run/floci': 2.0.0-beta.74(effect@4.0.5)
@@ -40475,7 +40476,7 @@ snapshots:
       '@distilled.cloud/planetscale': 1.0.0-rc.6(effect@4.0.5)
       '@effect/sql-d1': 4.0.5(effect@4.0.5)
       '@effect/sql-sqlite-do': 4.0.5(effect@4.0.5)
-      '@effect/vitest': 4.0.4(effect@4.0.5)(vitest@5.0.4(@types/node@26.6.5)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1)))
+      '@effect/vitest': 4.0.4(effect@4.0.5)
       '@libsql/client': 0.17.4
       '@octokit/rest': 22.0.1
       '@octokit/webhooks': 14.2.0
@@ -46912,11 +46913,11 @@ snapshots:
       - react
       - react-dom
 
-  prisma@8.0.0-rc.15(0edd7b7178baa29f7726da0478b5bbfc):
+  prisma@8.0.0-rc.15(377101d99bda4ad9a495507570a43e61):
     dependencies:
       '@manypkg/tools': 2.1.2
       '@prisma/cli-engine': 0.4.0(@prisma/management-api-sdk@1.69.0)(magicast@0.5.5)
-      '@prisma/composer-cli': 0.20.0(c6aabf39c3d75f53997a45637da5bbb7)
+      '@prisma/composer-cli': 0.20.0(b01e1089a91aae732e84610525596991)
       '@prisma/compute-sdk': 0.42.0(@prisma/management-api-sdk@1.69.0)(rollup@4.62.4)(supports-color@10.2.2)
       '@prisma/management-api-sdk': 1.69.0
       '@prisma/orm-toolchain': 8.0.0-rc.11(@prisma/cli-engine@0.4.0(@prisma/management-api-sdk@1.69.0)(magicast@0.5.5))(magicast@0.5.5)(typanion@3.14.0)(typescript@7.0.2)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))
@@ -46958,11 +46959,11 @@ snapshots:
       - vitest
       - ws
 
-  prisma@8.0.0-rc.15(d4c4216cefaa070b048acf843528d724):
+  prisma@8.0.0-rc.15(4763fc4b200a143b5efa5569319305be):
     dependencies:
       '@manypkg/tools': 2.1.2
       '@prisma/cli-engine': 0.4.0(@prisma/management-api-sdk@1.69.0)(magicast@0.5.5)
-      '@prisma/composer-cli': 0.20.0(c82fcf8548ba64beca343a08f218f589)
+      '@prisma/composer-cli': 0.20.0(b844fae37b6cea18eb3ae168285a4e15)
       '@prisma/compute-sdk': 0.42.0(@prisma/management-api-sdk@1.69.0)(rollup@4.62.4)(supports-color@10.2.2)
       '@prisma/management-api-sdk': 1.69.0
       '@prisma/orm-toolchain': 8.0.0-rc.11(@prisma/cli-engine@0.4.0(@prisma/management-api-sdk@1.69.0)(magicast@0.5.5))(magicast@0.5.5)(typanion@3.14.0)(typescript@7.0.2)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))

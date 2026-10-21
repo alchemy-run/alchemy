@@ -169,6 +169,8 @@ export const viteBuildOutputPlugin = Effect.fn(function* ({
       await Promise.all(
         files.map(async (file) => {
           if (file.type === "asset" && urlAssets.has(file.fileName)) return;
+          // Vite's build metadata (`.vite/manifest.json`), not a Worker module.
+          if (file.fileName.startsWith(".vite/")) return;
           if (file.type === "chunk") {
             file.imports
               .filter((self): self is keyof typeof RSC_MANIFEST => self in RSC_MANIFEST)

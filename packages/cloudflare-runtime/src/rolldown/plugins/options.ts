@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { nonPrefixedNodeModules } from "@cloudflare/unenv-preset";
 import type * as vite from "vite";
 import { createPlugin } from "../factory.ts";
 import { parseViteEnvironments, type BasePluginOptions } from "../options.ts";
@@ -73,7 +74,7 @@ export const optionsPlugin = createPlugin<"options", OptionsApi>("options", (plu
         options.transform ??= {};
         options.transform.target ??= TARGET;
         options.transform.define ??= {};
-        Object.assign(options.transform.define, getDefine(pluginOptions, "production"));
+        Object.assign(options.transform.define, getDefine(pluginOptions, "production", "wrangler"));
         return options;
       },
     },
@@ -119,6 +120,7 @@ export const optionsPlugin = createPlugin<"options", OptionsApi>("options", (plu
         const define = getDefine(
           pluginOptions,
           process.env.NODE_ENV || userConfig.mode || "production",
+          "vite",
         );
         const makeEnvironment = ({
           name,
@@ -149,15 +151,22 @@ export const optionsPlugin = createPlugin<"options", OptionsApi>("options", (plu
                 false,
               ignoreOutdatedRequests: true,
               entries: asArray(entries)?.map(vite.normalizePath),
+              // Node.js built-ins are never pre-bundled, with or without
+              // `nodejs_compat` (`cloudflare:*` modules: `cloudflare-externals`).
+              exclude: [
+                ...nonPrefixedNodeModules,
+                ...nonPrefixedNodeModules.map((module) => `node:${module}`),
+                "node:sea",
+                "node:sqlite",
+                "node:test",
+                "node:test/reporters",
+              ],
               ...(isRolldown
                 ? {
                     rolldownOptions: {
                       platform: "neutral",
                       resolve: {
-                        conditionNames: [
-                          ...DEFAULT_RESOLVE_CONDITION_NAMES,
-                          "development|production",
-                        ],
+                        conditionNames: [...DEFAULT_RESOLVE_CONDITION_NAMES, "development"],
                         mainFields: DEFAULT_RESOLVE_MAIN_FIELDS,
                         extensions: DEFAULT_RESOLVE_EXTENSIONS,
                       },
@@ -170,7 +179,7 @@ export const optionsPlugin = createPlugin<"options", OptionsApi>("options", (plu
                 : {
                     esbuildOptions: {
                       platform: "neutral",
-                      conditions: [...DEFAULT_RESOLVE_CONDITION_NAMES, "development|production"],
+                      conditions: [...DEFAULT_RESOLVE_CONDITION_NAMES, "development"],
                       resolveExtensions: DEFAULT_RESOLVE_EXTENSIONS,
                       mainFields: DEFAULT_RESOLVE_MAIN_FIELDS,
                       target: ESBUILD_TARGET,
@@ -190,6 +199,12 @@ export const optionsPlugin = createPlugin<"options", OptionsApi>("options", (plu
                     target: isRolldown ? TARGET : ESBUILD_TARGET,
                     cssTarget: CSS_TARGET,
                     emitAssets: true,
+                    manifest: true,
+                    // Source maps upload with the Worker, for readable stack traces.
+                    sourcemap:
+                      userConfig.environments?.[name]?.build?.sourcemap ??
+                      userConfig.build?.sourcemap ??
+                      true,
                     copyPublicDir: false,
                     outDir: getOutputDirectory(userConfig, name),
                     ...(isRolldown
@@ -261,12 +276,6 @@ export const optionsPlugin = createPlugin<"options", OptionsApi>("options", (plu
                       }
                     },
                   },
-          ssr: {
-            noExternal: true,
-            resolve: {
-              conditions: [...DEFAULT_RESOLVE_CONDITION_NAMES, "development|production"],
-            },
-          },
           environments: {
             client: {
               build: {
@@ -359,7 +368,14 @@ const resolveInputPath = (id: string, root: string): string => {
 const wrapInput = (input: Record<string, string>) =>
   Object.fromEntries(Object.entries(input).map(([key, id]) => [key, workerEntryId(id)]));
 
-const getDefine = (options: BasePluginOptions, nodeEnv: string): Record<string, string> => ({
+// `bundler` names the reference whose defines to match: Wrangler's own
+// bundler (plain Workers) or `@cloudflare/vite-plugin`, which leaves
+// `navigator.userAgent` to workerd and `import.meta.hot` to Vite.
+const getDefine = (
+  options: BasePluginOptions,
+  nodeEnv: string,
+  bundler: "wrangler" | "vite",
+): Record<string, string> => ({
   "process.env.NODE_ENV": JSON.stringify(nodeEnv),
   "global.process.env.NODE_ENV": JSON.stringify(nodeEnv),
   "globalThis.process.env.NODE_ENV": JSON.stringify(nodeEnv),
@@ -370,12 +386,14 @@ const getDefine = (options: BasePluginOptions, nodeEnv: string): Record<string, 
         "global.process.env": "{}",
         "globalThis.process.env": "{}",
       }),
-  ...(options.compatibilityDate && options.compatibilityDate >= "2022-03-21"
+  ...(bundler === "wrangler" &&
+  options.compatibilityDate &&
+  options.compatibilityDate >= "2022-03-21"
     ? {
         "navigator.userAgent": '"Cloudflare-Workers"',
       }
     : {}),
-  ...(nodeEnv === "production"
+  ...(bundler === "wrangler" && nodeEnv === "production"
     ? {
         "import.meta.hot": "false",
       }
