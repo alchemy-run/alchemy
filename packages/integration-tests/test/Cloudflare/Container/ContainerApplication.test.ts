@@ -1321,6 +1321,39 @@ describe.concurrent(
       }).pipe(logLevel),
     );
 
+    // Placement constraints pass through to Cloudflare unchanged and read back
+    // stable, so an unchanged redeploy plans no update. Whether an instance
+    // lands in the jurisdiction depends on account capacity; this pins the API
+    // boundary. Adapted from #1340 (@yovanoc).
+    test.provider(
+      "placement constraints round-trip and stay stable",
+      (stack) =>
+        Effect.gen(function* () {
+          yield* stack.destroy();
+
+          const program = Effect.gen(function* () {
+            return yield* Cloudflare.Container("ConstrainedPlacement", {
+              image: "mendhak/http-https-echo:41",
+              constraints: { jurisdiction: "eu", regions: ["WEUR", "EEUR"] },
+            }).Application;
+          });
+          const app = yield* stack.deploy(program);
+          expect(app.constraints).toEqual({ jurisdiction: "eu", regions: ["WEUR", "EEUR"] });
+
+          const observed = yield* Containers.getContainerApplication({
+            accountId: app.accountId,
+            applicationId: app.applicationId,
+          });
+          expect(observed.constraints).toEqual({ jurisdiction: "eu", regions: ["WEUR", "EEUR"] });
+
+          const plan = yield* stack.plan(program);
+          expect(plan.resources.ConstrainedPlacement?.action).toBe("noop");
+
+          yield* stack.destroy();
+        }).pipe(logLevel),
+      { timeout: 180_000 },
+    );
+
     // Right after a Worker upload creates a Durable Object namespace, the
     // containers API can briefly report it missing; the provider retries this
     // typed error. A namespace that never existed returns the same response,
