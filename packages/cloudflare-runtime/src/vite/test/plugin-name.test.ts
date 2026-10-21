@@ -102,7 +102,7 @@ describe("alchemy Cloudflare Vite plugin name", () => {
     const official: vite.Plugin = {
       name: OFFICIAL_CLOUDFLARE_VITE_PLUGIN_NAME,
       config: () => customizer(),
-      configureServer: vi.fn(),
+      configureServer: () => {},
     };
     const failing: vite.Plugin = {
       name: OFFICIAL_CLOUDFLARE_VITE_PLUGIN_NAME,
