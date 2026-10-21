@@ -34,6 +34,7 @@ import * as Redacted from "effect/Redacted";
 import type * as Scope from "effect/Scope";
 import { resolveBuildEnv, runBuildChild } from "../core/BuildChild.ts";
 import { toOutputFile, type BuildOutput } from "../core/BuildOutput.ts";
+import { WORKER_ENTRY_PREFIX } from "../core/Collector.ts";
 import { resolveViteDevPort } from "../core/DevPort.ts";
 import { ModuleLoadError } from "../core/Loader.ts";
 import { kvHttpNamespaceFromEnv, kvHttpSink } from "./cache/kv-http.ts";
@@ -513,7 +514,7 @@ interface EnvironmentLike {
   };
 }
 
-const makeOutputCollector = (entryEnvironment: string) => {
+export const makeOutputCollector = (entryEnvironment: string) => {
   let clientDirectory: string | undefined;
   let serverEntry: string | undefined;
   const serverChunks = new Map<string, { content: string | Uint8Array }>();
@@ -542,6 +543,7 @@ const makeOutputCollector = (entryEnvironment: string) => {
           type: string;
           fileName: string;
           isEntry?: boolean;
+          facadeModuleId?: string | null;
           code?: string;
           source?: string | Uint8Array;
           imports?: Array<string>;
@@ -561,7 +563,15 @@ const makeOutputCollector = (entryEnvironment: string) => {
       }
       const files = Object.values(bundle);
       if (this.environment.name === entryEnvironment) {
-        const entryChunk = files.find((file) => file.type === "chunk" && file.isEntry);
+        // Vinext's rsc environment can emit its own app entry alongside the
+        // wrapped Worker main; only the latter is a valid Worker module.
+        const entryChunk =
+          files.find(
+            (file) =>
+              file.type === "chunk" &&
+              file.isEntry &&
+              file.facadeModuleId?.startsWith(WORKER_ENTRY_PREFIX),
+          ) ?? files.find((file) => file.type === "chunk" && file.isEntry);
         if (entryChunk) {
           serverEntry = fileName(entryChunk.fileName, this.environment);
         }
@@ -612,13 +622,22 @@ const readRscManifestsFromDisk = Effect.fn(function* (
   }
 });
 
-const syncVinextServerModules = Effect.fn(function* (
+/**
+ * Vinext rewrites server chunks and writes sidecar modules (the action-owner
+ * manifest, `vinext-client-assets.js`) after `writeBundle`, so re-read every
+ * captured JS chunk from disk and follow its relative imports to pick up
+ * modules that were never part of a bundle.
+ */
+export const syncVinextServerModules = Effect.fn(function* (
   root: string,
   chunks: Map<string, { content: string | Uint8Array }>,
 ) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
-  const pending: string[] = [...VINEXT_SERVER_ENTRIES];
+  const pending: string[] = [
+    ...VINEXT_SERVER_ENTRIES,
+    ...[...chunks.keys()].filter((name) => /\.[mc]?js$/.test(name)),
+  ];
   const seen = new Set<string>();
   while (pending.length > 0) {
     const bundlePath = pending.pop()!;
