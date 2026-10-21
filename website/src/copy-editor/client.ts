@@ -10,6 +10,7 @@
 //   own renderer catches up.
 
 import { marked } from "marked";
+// @ts-expect-error -- virtual module served by the plugin in index.ts
 import config from "virtual:copy-editor/config";
 import type { MarkdownStyle } from "./index.ts";
 

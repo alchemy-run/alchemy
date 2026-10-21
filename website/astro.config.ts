@@ -1,12 +1,6 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import {
-  copyEditor,
-  markdownBlocks,
-  markdownFiles,
-  type MarkdownFilesOptions,
-} from "@alchemy.run/vite-plugin-copy-editor";
 import mdx from "@astrojs/mdx";
 import react from "@astrojs/react";
 import sitemap from "@astrojs/sitemap";
@@ -19,6 +13,12 @@ import starlightBlog from "starlight-blog";
 import { JSDOC_COPY_STYLE } from "../scripts/jsdoc-blocks.ts";
 import { buildOutputChecks, noindexPaths } from "./plugins/build-output.ts";
 import { jsdocCopyHandler, jsdocMarkdownStyle } from "./plugins/jsdoc-copy.ts";
+import {
+  copyEditor,
+  markdownBlocks,
+  markdownFiles,
+  type MarkdownFilesOptions,
+} from "./src/copy-editor/index.ts";
 import providersSidebar from "./src/generated/providers-sidebar.json" with { type: "json" };
 import { rewriteReferenceLinks } from "./src/reference-links.ts";
 
