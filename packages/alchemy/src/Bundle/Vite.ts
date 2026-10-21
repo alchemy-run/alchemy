@@ -1,4 +1,3 @@
-import type { NonEmptyArray } from "effect/Array";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -34,7 +33,6 @@ const RSC_MANIFEST = {
   "virtual:vite-rsc/assets-manifest": "__vite_rsc_assets_manifest.js",
   "virtual:vite-rsc/environment-imports": "__vite_rsc_env_imports_manifest.js",
 } as const;
-type RscManifestId = keyof typeof RSC_MANIFEST;
 
 /**
  * Structural subset of `vite.Environment` used by the bundling helpers.
@@ -82,7 +80,9 @@ export const viteBuildOutputPlugin = Effect.fn(function* ({
   // assets, not in the Worker bundle.
   const importedAssets = new Map<string, string>();
   let serverEntry: string | undefined;
-  const serverChunks = new Map<string, Effect.Effect<BundleFile, BundleError>>();
+  // `undefined` for an output a plugin removed after writing it (Vike deletes
+  // its `.vite/manifest.json`): it isn't deployed, as with Wrangler.
+  const serverChunks = new Map<string, Effect.Effect<BundleFile | undefined, BundleError>>();
   const maybeExternalWorkspaces = new Set<string>();
 
   const findUp = yield* cachedFunction(
@@ -141,7 +141,16 @@ export const viteBuildOutputPlugin = Effect.fn(function* ({
       }
       const files = Object.values(bundle);
       if (this.environment.name === entryEnvironment) {
-        const entryChunk = files.find((file) => file.type === "chunk" && file.isEntry);
+        // Frameworks can add entries of their own (Vike's export-less
+        // `entry.mjs`), so prefer the `index` entry the Cloudflare plugin
+        // names the Worker, then one with exports.
+        const entryChunks = files.filter(
+          (file): file is vite.Rolldown.OutputChunk => file.type === "chunk" && file.isEntry,
+        );
+        const entryChunk =
+          entryChunks.find((chunk) => chunk.name === "index") ??
+          entryChunks.find((chunk) => chunk.exports.length > 0) ??
+          entryChunks[0];
         if (!entryChunk) {
           throw new Error(`Entry chunk not found for environment "${this.environment.name}"`);
         }
@@ -177,15 +186,16 @@ export const viteBuildOutputPlugin = Effect.fn(function* ({
                 // deployed Worker fails at startup.
                 serverChunks.set(
                   fileName(RSC_MANIFEST[id], this.environment),
-                  readRscManifestChunk(id, this.environment),
+                  readOutputFile(RSC_MANIFEST[id], this.environment),
                 );
               });
           }
-          const name = fileName(file.fileName, this.environment);
-          const content = file.type === "chunk" ? file.code : file.source;
+          // Read back from disk once the build completes, as Wrangler deploys
+          // the output directory: plugins can rewrite written chunks in their
+          // own `writeBundle` (Vike inlines its assets manifest there).
           serverChunks.set(
-            name,
-            sha256(content).pipe(Effect.map((hash) => ({ path: name, content, hash }))),
+            fileName(file.fileName, this.environment),
+            readOutputFile(file.fileName, this.environment),
           );
         }),
       );
@@ -212,37 +222,51 @@ export const viteBuildOutputPlugin = Effect.fn(function* ({
     return `${relativeOutDir.replaceAll("\\", "/")}/${name}`;
   };
 
-  // Manually read the RSC manifest chunk from the file system.
+  // Read an output file from the file system.
   // This is only safe to run *after* the build has completed.
-  const readRscManifestChunk = (id: RscManifestId, environment: EnvironmentLike) => {
-    const name = RSC_MANIFEST[id];
-    return fs
-      .readFile(path.resolve(environment.config.root, environment.config.build.outDir, name))
-      .pipe(
-        Effect.flatMap((content) =>
-          sha256(content).pipe(
-            Effect.map((hash): BundleFile => ({
-              path: fileName(name, environment),
-              content,
-              hash,
-            })),
-          ),
-        ),
-        Effect.mapError(bundleErrorFromUnknown),
-      );
+  const readOutputFile = (name: string, environment: EnvironmentLike) => {
+    const file = path.resolve(environment.config.root, environment.config.build.outDir, name);
+    return fs.exists(file).pipe(
+      Effect.flatMap((exists) => (exists ? readFile(file, name, environment) : Effect.undefined)),
+      Effect.mapError(bundleErrorFromUnknown),
+    );
   };
+
+  const readFile = (file: string, name: string, environment: EnvironmentLike) =>
+    fs.readFile(file).pipe(
+      Effect.flatMap((content) =>
+        sha256(content).pipe(
+          Effect.map((hash): BundleFile => ({
+            path: fileName(name, environment),
+            content,
+            hash,
+          })),
+        ),
+      ),
+      Effect.mapError(bundleErrorFromUnknown),
+    );
 
   const makeServerBundle = () => {
     if (!serverEntry && !serverChunks.size) return Effect.undefined;
     if (!serverEntry) return Effect.die(new Cause.NoSuchElementError("Missing server entry"));
     const filePaths = Array.from(serverChunks.keys()).sort((a, b) => a.localeCompare(b));
-    const server: NonEmptyArray<Effect.Effect<BundleFile, BundleError>> = [getChunk(serverEntry)];
-    for (const filePath of filePaths) {
-      if (filePath === serverEntry) continue;
-      server.push(getChunk(filePath));
-    }
-    return Effect.all(server, { concurrency: "unbounded" }).pipe(
-      Effect.flatMap(bundleOutputFromFiles),
+    const entry = getChunk(serverEntry).pipe(
+      Effect.flatMap((file) =>
+        file
+          ? Effect.succeed(file)
+          : Effect.die(new Cause.NoSuchElementError(`Chunk ${serverEntry} not found`)),
+      ),
+    );
+    const rest = filePaths
+      .filter((filePath) => filePath !== serverEntry)
+      .map((filePath) => getChunk(filePath));
+    return Effect.all([entry, ...rest], { concurrency: "unbounded" }).pipe(
+      Effect.flatMap(([entryFile, ...files]) =>
+        bundleOutputFromFiles([
+          entryFile,
+          ...files.filter((file): file is BundleFile => file !== undefined),
+        ]),
+      ),
     );
   };
 

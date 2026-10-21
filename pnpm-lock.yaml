@@ -666,6 +666,12 @@ catalogs:
     uuid:
       specifier: ^14.0.3
       version: 14.0.3
+    vike:
+      specifier: ^0.4.268
+      version: 0.4.268
+    vike-react:
+      specifier: ^0.6.29
+      version: 0.6.31
     vinext:
       specifier: ^1.0.1
       version: 1.1.0
@@ -9874,6 +9880,12 @@ importers:
       uuid:
         specifier: 'catalog:'
         version: 14.0.3
+      vike:
+        specifier: 'catalog:'
+        version: 0.4.268(@cloudflare/workers-types@5.20261012.1)(h3@1.15.11)(hono@4.13.13)(react-streaming@0.4.21(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(srvx@1.0.5)(supports-color@10.2.2)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))
+      vike-react:
+        specifier: 'catalog:'
+        version: 0.6.31(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vike@0.4.268(@cloudflare/workers-types@5.20261012.1)(h3@1.15.11)(hono@4.13.13)(react-streaming@0.4.21(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(srvx@1.0.5)(supports-color@10.2.2)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1)))
       vinext:
         specifier: 'catalog:'
         version: 1.1.0(c57f56abd8ca2a30c0368e8b512eae0a)
@@ -12686,6 +12698,18 @@ packages:
 
   '@borewit/text-codec@0.2.2':
     resolution: {integrity: sha512-DDaRehssg1aNrH4+2hnj1B7vnUGEjU6OIlyRdkMd0aUdIUvKXrJfXsy8LVtXAy7DRvYVluWbMspsRhz2lcW0mQ==}
+
+  '@brillout/import@0.2.6':
+    resolution: {integrity: sha512-1GUTmADc8trUC1YSW2lp9r6PmwluMoEyHajnE1kxVdbKGD0wJOlq/DvTWMUqLtBDCnQR+n//qgMtz6HwA/lotA==}
+
+  '@brillout/json-serializer@0.5.27':
+    resolution: {integrity: sha512-D+Pc40tS6mme3dtlQzOD+nqP+yAWHQ+KX7gcJJ3DRs02pbqBh/6FBk/OWkLuNyaI0rgedh4KYla/xCSg0jArEw==}
+
+  '@brillout/picocolors@1.0.31':
+    resolution: {integrity: sha512-xFCPBefU/AevF8XkwXSd/jIHA0fWw+mZ/gd5x2WOc5ysG7keHnU8m0gwY2Bvq5lvTyjwT4tiyow6fnMoYdmSqw==}
+
+  '@brillout/vite-plugin-server-entry@0.7.23':
+    resolution: {integrity: sha512-tHI6zRUM+1yQxiC4CTwpPhYhU9Cdo4LkPy0JRxDiFBZSVSauzWTzZv/r7/+dKVk4/ihQmCtI1/XoegKVLMR7CQ==}
 
   '@bruits/satteri-darwin-arm64@0.10.5':
     resolution: {integrity: sha512-27KTVl4TJkVahMy/ohyA7qd4938G5UNneFUz/PsScYfpIhj0IVAS23mpcJXdPF44sa6nva198lmV/cKIb2YPyA==}
@@ -19239,6 +19263,104 @@ packages:
       webpack:
         optional: true
 
+  '@universal-deploy/netlify@0.2.4':
+    resolution: {integrity: sha512-NfBloag5iUdsKtt4cOGfidYSXzRL8esCJc9onl1HPGf+e2Kgnoz5f4mkxNJVGFzt4XZeEmBvETeDZFvrRu7SEw==}
+    peerDependencies:
+      vite: '>=7.1'
+
+  '@universal-deploy/node@0.1.13':
+    resolution: {integrity: sha512-hXRcp0edSjuyDtSb1kK1/kHcthGEWRxy4d+pybTiBOMV4IHkO3z+poBvV8DxB03SSq2Y+FVH/Aj2GHxcf/9Rtg==}
+    peerDependencies:
+      vite: '>=7.1'
+    peerDependenciesMeta:
+      vite:
+        optional: true
+
+  '@universal-deploy/store@0.3.0':
+    resolution: {integrity: sha512-LMU9X8ReJHv8zonj/Xb3e+/8CwtGCXF8FXOXFkR2QnHLXw3dBN7CUR4wppJtNodpyLau2F6AL5CMGatndqdv8Q==}
+
+  '@universal-deploy/vite@0.2.2':
+    resolution: {integrity: sha512-a8NE2qspKaMjMc+iQk1FzuhdCv+APKsBbxKMEu7sKQxmvSM62gSmWxfvE2ctkkmma/7/qctjEsFx+RfeTyCuvg==}
+    peerDependencies:
+      vite: '>=7.1'
+    peerDependenciesMeta:
+      vite:
+        optional: true
+
+  '@universal-middleware/core@0.6.2':
+    resolution: {integrity: sha512-E2hzrI74TBSfwxU3jEw4HUqwBHIf5SV94HXooo0Kg14xoqUgbLZk+SSn/eYQhfoZivwCOdb/O70zARTg1V8sCw==}
+    engines: {node: '>=22'}
+    peerDependencies:
+      '@cloudflare/workers-types': 5.20261012.1
+      '@hattip/core': ^0.0.49
+      '@types/express': ^4 || ^5
+      '@webroute/route': ^0.8
+      elysia: ^1
+      fastify: ^5
+      h3: ^1
+      hono: ^4
+      srvx: '>=0.8'
+    peerDependenciesMeta:
+      '@cloudflare/workers-types':
+        optional: true
+      '@hattip/core':
+        optional: true
+      '@types/express':
+        optional: true
+      '@webroute/route':
+        optional: true
+      elysia:
+        optional: true
+      fastify:
+        optional: true
+      h3:
+        optional: true
+      hono:
+        optional: true
+      srvx:
+        optional: true
+
+  '@universal-middleware/core@0.7.1':
+    resolution: {integrity: sha512-SVxKEjycCfibZnVnr9voo9AMTeAOVBt0V/T2QaiDQVzBVFlgfwMBtz74jrr8CABmc1hVOUCwzTFkpa+OqbC95A==}
+    engines: {node: '>=22'}
+    peerDependencies:
+      '@cloudflare/workers-types': 5.20261012.1
+      '@hattip/core': ^0.0.49
+      '@types/express': ^4 || ^5
+      '@webroute/route': ^0.8
+      elysia: ^1
+      fastify: ^5
+      h3: ^1 || ^2
+      hono: ^4
+      srvx: '>=0.8'
+    peerDependenciesMeta:
+      '@cloudflare/workers-types':
+        optional: true
+      '@hattip/core':
+        optional: true
+      '@types/express':
+        optional: true
+      '@webroute/route':
+        optional: true
+      elysia:
+        optional: true
+      fastify:
+        optional: true
+      h3:
+        optional: true
+      hono:
+        optional: true
+      srvx:
+        optional: true
+
+  '@universal-middleware/express@0.5.3':
+    resolution: {integrity: sha512-dqUIGYdTDc9Cg1AL/Ow4+wFfnRZsr8sfYUrqQAcp8io5E2f9YxbZMfoiV4vns9gIqS9TVai9hq7fLfCDbnB9lQ==}
+    engines: {node: '>=22'}
+
+  '@universal-middleware/node@0.2.9':
+    resolution: {integrity: sha512-a1zIvxlYGxCp1jPpkCsytDxGjyFwCevG/xkeGue1kS/NRF3Oxh8iZMQqdq/ojmiNKTVdXyPVJDtZ+8g8tM/FdA==}
+    engines: {node: '>=22'}
+
   '@unpic/core@1.0.3':
     resolution: {integrity: sha512-aum9YNVUGso7MjGLD0Rp/08kywCGLqZ03/q6VQBFFakDBOXWEc8D4kPGcZ8v5wEnGRex3lE+++bOuucBp3KJ/w==}
 
@@ -20915,6 +21037,9 @@ packages:
   convert-hrtime@5.0.0:
     resolution: {integrity: sha512-lOETlkIeYSJWcbbcvjRKGxVMXJR+8+OQb/mTPbA4ObPMytYIsUbuOE0Jzy60hjARYszq1id0j8KgVhC+WGZVTg==}
     engines: {node: '>=12'}
+
+  convert-route@2.0.0:
+    resolution: {integrity: sha512-AmkhLDhWQhWjniqUxv4s4u50MlDeFFpmdGb8qojEUMGN2VBjHjxrLw2Mgx71PsVvXPgcN32dEJX1qQf70cAqCQ==}
 
   convert-source-map@2.0.0:
     resolution: {integrity: sha512-Kvp459HrV2FEJ1CAsi1Ku+MY3kasH19TFykTz2xWmMeq6bk2NU3XXvfJ+Q61m0xktWwt+1HSYf3JZsTms3aRJg==}
@@ -22711,6 +22836,10 @@ packages:
 
   isarray@1.0.0:
     resolution: {integrity: sha512-VLghIWNM6ELQzo7zwmcg0NmTVyWKYjvIeM83yjp0wRDTmUnrM678fQbcKBo6n2CJEF0szoG//ytg+TKla89ALQ==}
+
+  isbot-fast@1.2.0:
+    resolution: {integrity: sha512-twjuQzy2gKMDVfKGQyQqrx6Uy4opu/fiVUTTpdqtFsd7OQijIp5oXvb27n5EemYXaijh5fomndJt/SPRLsEdSg==}
+    engines: {node: '>=6.0.0'}
 
   isbot@5.2.2:
     resolution: {integrity: sha512-iQcBXcd+Rv/pkubRyGh2utW2j1oPG5hZY6TUhVPpqK4G+o3IbxpJNx04hgksjc/N7GK5pEorUxDeg31cFgEk/w==}
@@ -24804,6 +24933,12 @@ packages:
       react-dom: ^19.3.0
       webpack: ^5.59.0
 
+  react-streaming@0.4.21:
+    resolution: {integrity: sha512-jR/px6b4BAC87T1wEGKoNjGVb7m0WnADcd3ib7wZ4AtXTebZe8GwNEgmGMuqTKcYb3nTasInTn90fw6YhlFzTA==}
+    peerDependencies:
+      react: '>=19'
+      react-dom: '>=19'
+
   react-style-singleton@2.2.3:
     resolution: {integrity: sha512-b6jSvxvVnyptAiLjbkWLE/lOnR4lfTtDAl+eUC7RZy+QQWc6wRzIV2CE6xBuMmDxc2qIihtDCZD5NPOFl7fRBQ==}
     engines: {node: '>=10'}
@@ -24898,6 +25033,10 @@ packages:
 
   regexp-to-ast@0.5.0:
     resolution: {integrity: sha512-tlbJqcMHnPKI9zSrystikWKwHkBqu2a/Sgw01h3zFjvYrMxEDYHzzoMZnUrbIfpTFEsoRnnviOXNCzFiSc54Qw==}
+
+  regexparam@3.0.0:
+    resolution: {integrity: sha512-RSYAtP31mvYLkAHrOlh25pCNQ5hWnT106VukGaaFfuJrZFkGRX5GhUAdPqpSDXxOhA2c4akmRuplv1mRqnBn6Q==}
+    engines: {node: '>=8'}
 
   rehype-autolink-headings@7.1.0:
     resolution: {integrity: sha512-rItO/pSdvnvsP4QRB1pmPiNHUskikqtPojZKJPPPAVx9Hj8i8TwMBhofrrAYRhYOOBZH9tgmG5lPqDLuIWPWmw==}
@@ -25093,6 +25232,10 @@ packages:
 
   rou3@0.9.2:
     resolution: {integrity: sha512-3SOzvaAg8rkHrXtRjpCvCvbyO5to9oOO27Z/XqHEYXfMRVSw/qMIVdmaOk9W2lcRLtR6dlqTjo9hDeJk70QBYQ==}
+
+  rou3@1.0.0:
+    resolution: {integrity: sha512-ySeaQkSrua+ut9g+65I7FHqOFBaY8tV0FmccXItoq0q21se32Q3u4YiW7/RqXSosWgYJaaKwRHXy3BST9PeCNQ==}
+    engines: {node: '>=20.19.0'}
 
   router@2.2.0:
     resolution: {integrity: sha512-nLTrUKm2UyiL7rlhapu/Zl45FwNgkZGaCpZbIHajDYgwlJCOzLSk+cIPAnsEqV955GjILJnKbdQC1nVPz+gAYQ==}
@@ -25799,6 +25942,13 @@ packages:
     resolution: {integrity: sha512-yau8yJdTt989Mm0Bd/236QnzEiPf2xLLTqUZRUJOo/3CB078LSwzei343DgtJVmfJKJE3TMINY1u42SQsP6mXw==}
     engines: {node: '>=14.0.0'}
 
+  tldts-core@7.4.19:
+    resolution: {integrity: sha512-goNXV6Ho9TIOfpJZanTd6CKG5DyYgYAL+k+22T0SLh8l6+KHIfBUPFuePuSZv05UttIaaLmI9tb7TmGIdK5AkQ==}
+
+  tldts@7.4.19:
+    resolution: {integrity: sha512-48dH6aSpQnpbzDUc4vIQZ1VjB8tkK+e8c1yx05/SZK+rkssgjEOlxDd/yU8/a4vGYQ9vRgJr9dwMq9TJ0b3X2Q==}
+    hasBin: true
+
   tmp-promise@3.0.3:
     resolution: {integrity: sha512-RwM7MoPojPxsOBYnyd2hy0bxtIlVrihNs9pj5SUvY8Zz1sQcQG2tG1hSr8PDxfgEB8RNKDhqbIlroIarSNDNsQ==}
 
@@ -25831,6 +25981,10 @@ packages:
 
   toucan-js@4.1.1:
     resolution: {integrity: sha512-GTPwEaCRN8IbYe5/VeGiwxYvMO0dKaC16fTeLbF+QGswjkLZ9JUqAfDhLMyH2SWukYhmetH+uxWa1Bhluv/evQ==}
+
+  tough-cookie@6.0.2:
+    resolution: {integrity: sha512-exgYmnmL/sJpR3upZfXG5PoatXQii55xAiXGXzY+sROLZ/Y+SLcp9PgJNI9Vz37HpQ74WvDcLT8eqm+kV3FzrA==}
+    engines: {node: '>=16'}
 
   tr46@0.0.3:
     resolution: {integrity: sha512-N3WMsuqV66lT30CrXNbEjx4GEwlow3v6rr4mCcv6prnfwhS01rkgyFdjPNBYd9br7LpXV1+Emh01fHnq2Gdgrw==}
@@ -26493,6 +26647,26 @@ packages:
     resolution: {integrity: sha512-uDiJnyjsNKgFrE96mONSh/z5wlNvmgUBJ3VAEqiZcE3ozIGNszGziqcCeMyZxDzA5/tdMKvUc3IAxWqi5xsaHA==}
     hasBin: true
 
+  vike-react@0.6.31:
+    resolution: {integrity: sha512-xkaFc3wUCGwtNwnVRYrTVilqGs3KkwwumGj3eMg7IkLm4nL4PzhYbho5OgE39Tn48V8HqKIYlkvYCO9+UF87bQ==}
+    peerDependencies:
+      react: '>=19'
+      react-dom: '>=19'
+      vike: '>=0.4.250'
+
+  vike@0.4.268:
+    resolution: {integrity: sha512-C/CxI/mtXrnIfM9gP8ewwpJIBn0lQvDaHB0jyA67SYGeeQF3i2WRhC7iYIjQtQZ9ngklnjKpOiysw7K0HtGfYQ==}
+    engines: {node: '>=20.19.0'}
+    hasBin: true
+    peerDependencies:
+      react-streaming: '>=0.3.42'
+      vite: '>=7.1.0'
+    peerDependenciesMeta:
+      react-streaming:
+        optional: true
+      vite:
+        optional: true
+
   vinext@1.1.0:
     resolution: {integrity: sha512-ZvmmkprGpni9N4ml4hmV0Z24PIJerTWWTbr8A15R36kvsJvDvgp0pL0UUY6432+9CJ9cftEAcd/7zecbQ0RiGg==}
     engines: {node: '>=22'}
@@ -26615,6 +26789,11 @@ packages:
     resolution: {integrity: sha512-mL/QPziiIA4RAA6DkaZZzOstdwbW5jO4Vz7Zenj0wieKWBlNvIvX5L5ljum9lcUX0ShNfBgCNLKTjNkRVVqcsw==}
     peerDependencies:
       vite: ^2 || ^3 || ^4 || ^5 || ^6 || ^7 || ^8
+
+  vite-plugin-wrapper@0.1.1:
+    resolution: {integrity: sha512-hbY5eLvv9YZ+SWLJ6wQRunzDCSiN59WuzBgYlhbiQSD2seDiUfmfuaSGBS07oPpA5+RAX2oDV2BGyusfKNcZcQ==}
+    peerDependencies:
+      vite: '>=7'
 
   vite-tsconfig-paths@6.1.1:
     resolution: {integrity: sha512-2cihq7zliibCCZ8P9cKJrQBkfgdvcFkOOc3Y02o3GWUDLgqjWsZudaoiuOwO/gzTzy17cS5F7ZPo4bsnS4DGkg==}
@@ -28932,6 +29111,17 @@ snapshots:
   '@better-fetch/fetch@1.3.2': {}
 
   '@borewit/text-codec@0.2.2': {}
+
+  '@brillout/import@0.2.6': {}
+
+  '@brillout/json-serializer@0.5.27': {}
+
+  '@brillout/picocolors@1.0.31': {}
+
+  '@brillout/vite-plugin-server-entry@0.7.23':
+    dependencies:
+      '@brillout/import': 0.2.6
+      '@brillout/picocolors': 1.0.31
 
   '@bruits/satteri-darwin-arm64@0.10.5':
     optional: true
@@ -37838,6 +38028,93 @@ snapshots:
       - rollup
       - unloader
 
+  '@universal-deploy/netlify@0.2.4(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))':
+    dependencies:
+      '@universal-deploy/store': 0.3.0
+      vite: 8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1)
+
+  '@universal-deploy/node@0.1.13(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))':
+    dependencies:
+      '@universal-deploy/store': 0.3.0
+      magic-string: 0.30.21
+      srvx: 0.12.5
+    optionalDependencies:
+      vite: 8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1)
+
+  '@universal-deploy/store@0.3.0':
+    dependencies:
+      srvx: 1.0.5
+
+  '@universal-deploy/vite@0.2.2(@cloudflare/workers-types@5.20261012.1)(h3@1.15.11)(hono@4.13.13)(srvx@1.0.5)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))':
+    dependencies:
+      '@universal-deploy/netlify': 0.2.4(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))
+      '@universal-deploy/node': 0.1.13(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))
+      '@universal-deploy/store': 0.3.0
+      '@universal-middleware/express': 0.5.3(@cloudflare/workers-types@5.20261012.1)(h3@1.15.11)(hono@4.13.13)(srvx@1.0.5)
+      magic-string: 0.30.21
+      rou3: 1.0.0
+    optionalDependencies:
+      vite: 8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1)
+    transitivePeerDependencies:
+      - '@cloudflare/workers-types'
+      - '@hattip/core'
+      - '@types/express'
+      - '@webroute/route'
+      - elysia
+      - fastify
+      - h3
+      - hono
+      - srvx
+
+  '@universal-middleware/core@0.6.2(@cloudflare/workers-types@5.20261012.1)(h3@1.15.11)(hono@4.13.13)(srvx@1.0.5)':
+    dependencies:
+      regexparam: 3.0.0
+      tough-cookie: 6.0.2
+    optionalDependencies:
+      '@cloudflare/workers-types': 5.20261012.1
+      h3: 1.15.11
+      hono: 4.13.13
+      srvx: 1.0.5
+
+  '@universal-middleware/core@0.7.1(@cloudflare/workers-types@5.20261012.1)(h3@1.15.11)(hono@4.13.13)(srvx@1.0.5)':
+    dependencies:
+      regexparam: 3.0.0
+      tough-cookie: 6.0.2
+    optionalDependencies:
+      '@cloudflare/workers-types': 5.20261012.1
+      h3: 1.15.11
+      hono: 4.13.13
+      srvx: 1.0.5
+
+  '@universal-middleware/express@0.5.3(@cloudflare/workers-types@5.20261012.1)(h3@1.15.11)(hono@4.13.13)(srvx@1.0.5)':
+    dependencies:
+      '@universal-middleware/core': 0.6.2(@cloudflare/workers-types@5.20261012.1)(h3@1.15.11)(hono@4.13.13)(srvx@1.0.5)
+      '@universal-middleware/node': 0.2.9(@cloudflare/workers-types@5.20261012.1)(h3@1.15.11)(hono@4.13.13)(srvx@1.0.5)
+    transitivePeerDependencies:
+      - '@cloudflare/workers-types'
+      - '@hattip/core'
+      - '@types/express'
+      - '@webroute/route'
+      - elysia
+      - fastify
+      - h3
+      - hono
+      - srvx
+
+  '@universal-middleware/node@0.2.9(@cloudflare/workers-types@5.20261012.1)(h3@1.15.11)(hono@4.13.13)(srvx@1.0.5)':
+    dependencies:
+      '@universal-middleware/core': 0.7.1(@cloudflare/workers-types@5.20261012.1)(h3@1.15.11)(hono@4.13.13)(srvx@1.0.5)
+    transitivePeerDependencies:
+      - '@cloudflare/workers-types'
+      - '@hattip/core'
+      - '@types/express'
+      - '@webroute/route'
+      - elysia
+      - fastify
+      - h3
+      - hono
+      - srvx
+
   '@unpic/core@1.0.3':
     dependencies:
       unpic: 4.2.2
@@ -40113,6 +40390,8 @@ snapshots:
 
   convert-hrtime@5.0.0: {}
 
+  convert-route@2.0.0: {}
+
   convert-source-map@2.0.0: {}
 
   convert-to-spaces@2.0.1: {}
@@ -42107,6 +42386,8 @@ snapshots:
       is-inside-container: 1.0.0
 
   isarray@1.0.0: {}
+
+  isbot-fast@1.2.0: {}
 
   isbot@5.2.2: {}
 
@@ -45901,6 +46182,15 @@ snapshots:
       webpack: 5.109.2(cssnano@9.7.0(postcss@8.5.29))(csso@5.0.5)(esbuild@0.28.2)(lightningcss@1.33.0)(postcss@8.5.29)
       webpack-sources: 3.5.1
 
+  react-streaming@0.4.21(react-dom@19.3.0(react@19.3.0))(react@19.3.0):
+    dependencies:
+      '@brillout/import': 0.2.6
+      '@brillout/json-serializer': 0.5.27
+      '@brillout/picocolors': 1.0.31
+      isbot-fast: 1.2.0
+      react: 19.3.0
+      react-dom: 19.3.0(react@19.3.0)
+
   react-style-singleton@2.2.3(@types/react@19.3.0)(react@19.3.0):
     dependencies:
       get-nonce: 1.0.1
@@ -46024,6 +46314,8 @@ snapshots:
       regex-utilities: 2.3.0
 
   regexp-to-ast@0.5.0: {}
+
+  regexparam@3.0.0: {}
 
   rehype-autolink-headings@7.1.0:
     dependencies:
@@ -46326,6 +46618,8 @@ snapshots:
   rou3@0.8.1: {}
 
   rou3@0.9.2: {}
+
+  rou3@1.0.0: {}
 
   router@2.2.0(supports-color@10.2.2):
     dependencies:
@@ -47262,6 +47556,12 @@ snapshots:
 
   tinyrainbow@3.1.1: {}
 
+  tldts-core@7.4.19: {}
+
+  tldts@7.4.19:
+    dependencies:
+      tldts-core: 7.4.19
+
   tmp-promise@3.0.3:
     dependencies:
       tmp: 0.2.7
@@ -47291,6 +47591,10 @@ snapshots:
       '@sentry/core': 8.9.2
       '@sentry/types': 8.9.2
       '@sentry/utils': 8.9.2
+
+  tough-cookie@6.0.2:
+    dependencies:
+      tldts: 7.4.19
 
   tr46@0.0.3: {}
 
@@ -48041,6 +48345,52 @@ snapshots:
       import-meta-resolve: 4.2.0
       zod: 4.5.4
 
+  vike-react@0.6.31(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vike@0.4.268(@cloudflare/workers-types@5.20261012.1)(h3@1.15.11)(hono@4.13.13)(react-streaming@0.4.21(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(srvx@1.0.5)(supports-color@10.2.2)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))):
+    dependencies:
+      react: 19.3.0
+      react-dom: 19.3.0(react@19.3.0)
+      react-streaming: 0.4.21(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
+      vike: 0.4.268(@cloudflare/workers-types@5.20261012.1)(h3@1.15.11)(hono@4.13.13)(react-streaming@0.4.21(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(srvx@1.0.5)(supports-color@10.2.2)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))
+
+  vike@0.4.268(@cloudflare/workers-types@5.20261012.1)(h3@1.15.11)(hono@4.13.13)(react-streaming@0.4.21(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(srvx@1.0.5)(supports-color@10.2.2)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1)):
+    dependencies:
+      '@babel/core': 7.29.7(supports-color@10.2.2)
+      '@babel/types': 7.29.8
+      '@brillout/import': 0.2.6
+      '@brillout/json-serializer': 0.5.27
+      '@brillout/picocolors': 1.0.31
+      '@brillout/vite-plugin-server-entry': 0.7.23
+      '@universal-deploy/store': 0.3.0
+      '@universal-deploy/vite': 0.2.2(@cloudflare/workers-types@5.20261012.1)(h3@1.15.11)(hono@4.13.13)(srvx@1.0.5)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))
+      '@universal-middleware/core': 0.7.1(@cloudflare/workers-types@5.20261012.1)(h3@1.15.11)(hono@4.13.13)(srvx@1.0.5)
+      '@universal-middleware/node': 0.2.9(@cloudflare/workers-types@5.20261012.1)(h3@1.15.11)(hono@4.13.13)(srvx@1.0.5)
+      cac: 6.7.14
+      convert-route: 2.0.0
+      es-module-lexer: 1.7.0
+      json5: 2.2.3
+      magic-string: 1.4.3
+      picomatch: 4.0.7
+      rolldown: 1.2.13
+      semver: 7.8.5
+      sirv: 3.0.2
+      source-map-support: 0.5.21
+      tinyglobby: 0.2.17
+      vite-plugin-wrapper: 0.1.1(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))
+    optionalDependencies:
+      react-streaming: 0.4.21(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
+      vite: 8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1)
+    transitivePeerDependencies:
+      - '@cloudflare/workers-types'
+      - '@hattip/core'
+      - '@types/express'
+      - '@webroute/route'
+      - elysia
+      - fastify
+      - h3
+      - hono
+      - srvx
+      - supports-color
+
   vinext@1.1.0(c57f56abd8ca2a30c0368e8b512eae0a):
     dependencies:
       '@unpic/react': 1.0.2(next@16.2.10(@babel/core@7.29.7(supports-color@10.2.2))(@playwright/test@1.64.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
@@ -48366,6 +48716,10 @@ snapshots:
       vite: 8.3.4(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1)
 
   vite-plugin-wasm@3.6.0(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1)):
+    dependencies:
+      vite: 8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1)
+
+  vite-plugin-wrapper@0.1.1(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1)):
     dependencies:
       vite: 8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1)
 

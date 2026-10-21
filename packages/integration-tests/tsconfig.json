@@ -38,6 +38,7 @@
     "test/Cloudflare/Website/vite-vue-template-fixture",
     "test/Cloudflare/Website/vite-tanstack-start-template-fixture",
     "test/Cloudflare/Website/vite-redwood-template-fixture",
+    "test/Cloudflare/Website/vite-vike-template-fixture",
     // Nuxt fixtures: server routes use nitro's auto-imported globals, which
     // only type-check against the `.nuxt/` types a nuxt build generates.
     "test/Cloudflare/Website/fixtures/nuxt-app",

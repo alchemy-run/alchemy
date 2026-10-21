@@ -127,6 +127,8 @@
     "typescript-api": "catalog:",
     "unenv": "catalog:",
     "uuid": "catalog:",
+    "vike": "catalog:",
+    "vike-react": "catalog:",
     "vinext": "catalog:",
     "vite": "catalog:",
     "vite-plugin-vue-devtools": "catalog:",

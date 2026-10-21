@@ -79,6 +79,44 @@ const expectSsrPage = (url: string, text: string) =>
 
 const TEMPLATES: ReadonlyArray<Template> = [
   {
+    // `npm create cloudflare -- --framework=vike`: create-vike's React
+    // starter, whose Worker entry is the virtual module `vike:server`.
+    name: "vike",
+    fixture: "vite-vike-template-fixture",
+    entries: [
+      "package.json",
+      "vite.config.ts",
+      "wrangler.jsonc",
+      "tsconfig.json",
+      "assets",
+      "components",
+      "pages",
+    ],
+    props: {
+      main: "vike:server",
+      compatibility: { date: "2026-03-12" },
+    },
+    check: (url) =>
+      Effect.gen(function* () {
+        let stylesheet: string | undefined;
+        yield* expectResponse(url, (res) => {
+          if (res.status !== 200 || !res.body.includes("<h1>My Vike app</h1>"))
+            return `${res.status} ${res.body.slice(0, 300)}`;
+          stylesheet = res.body.match(/rel="stylesheet"[^>]* href="(\/[^"]+)"/)?.[1];
+          return stylesheet ? undefined : `no stylesheet in ${res.body.slice(0, 300)}`;
+        });
+        yield* expectResponse(`${url}${stylesheet}`, (res) =>
+          res.status === 200 ? undefined : `css ${res.status} ${res.body.slice(0, 200)}`,
+        );
+        // A page whose `+data` hook runs on the server.
+        yield* expectResponse(`${url}/todo`, (res) =>
+          res.status === 200 && res.body.includes("Buy strawberries")
+            ? undefined
+            : `todo ${res.status} ${res.body.slice(0, 200)}`,
+        );
+      }),
+  },
+  {
     // `npm create cloudflare -- --framework=redwood`: create-rwsdk's
     // starter, server components rendered in the `worker` environment.
     name: "redwood",
