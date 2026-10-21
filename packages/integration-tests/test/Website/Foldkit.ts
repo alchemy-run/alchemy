@@ -152,7 +152,11 @@ export const verifyFoldkitRendering = (
         Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 45 }),
       );
     yield* ready("/foldkit-probe.txt", (body) => body === "FOLDKIT_STATIC_ASSET");
-    yield* ready(routes(mode)[0]!.path, () => true);
+    const first = routes(mode)[0]!;
+    yield* ready(
+      first.path,
+      (body) => mode === "spa" || new RegExp(`id="count"[^>]*>${first.count}<`).test(body),
+    );
     const assetHead = yield* request(`${base}/foldkit-probe.txt`, {
       method: "HEAD",
     });
