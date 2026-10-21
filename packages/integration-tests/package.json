@@ -53,6 +53,7 @@
     "@effect/platform-bun": "catalog:",
     "@effect/platform-node": "catalog:",
     "@effect/sql-pg": "catalog:",
+    "@electric-sql/pglite": "catalog:",
     "@foldkit/vite-plugin": "catalog:",
     "@libsql/client": "catalog:",
     "@neon/functions": "catalog:",

@@ -53,14 +53,16 @@ const baseInfra = Effect.gen(function* () {
   const domain = yield* Domain("EnvTestDomain", {
     description: "alchemy datazone environment test",
   });
+  // DataZone itself assumes the provisioning role to run the environment's
+  // CloudFormation deployment.
   const provisioningRole = yield* IAM.Role("EnvProvisioningRole", {
     assumeRolePolicyDocument: {
       Version: "2012-10-17",
       Statement: [
         {
           Effect: "Allow",
-          Principal: { Service: "cloudformation.amazonaws.com" },
-          Action: ["sts:AssumeRole"],
+          Principal: { Service: "datazone.amazonaws.com" },
+          Action: ["sts:AssumeRole", "sts:TagSession"],
         },
       ],
     },

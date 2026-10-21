@@ -66,16 +66,16 @@ catalog:
   "@cloudflare/unenv-preset": "^2.16.2"
   "@cloudflare/vitest-plugin": "^1.4.0"
   "@cloudflare/workers-types": "5.20261012.1"
-  "@effect/atom-react": "^4.0.4"
-  "@effect/platform-bun": "^4.0.0"
-  "@effect/platform-node": "^4.0.0"
-  "@effect/sql-d1": "^4.0.4"
-  "@effect/sql-libsql": "^4.0.0"
-  "@effect/sql-mysql2": "^4.0.0"
-  "@effect/sql-pg": "^4.0.0"
-  "@effect/sql-sqlite-do": "^4.0.4"
+  "@effect/atom-react": "^4.0.5"
+  "@effect/platform-bun": "^4.0.5"
+  "@effect/platform-node": "^4.0.5"
+  "@effect/sql-d1": "^4.0.5"
+  "@effect/sql-libsql": "^4.0.5"
+  "@effect/sql-mysql2": "^4.0.5"
+  "@effect/sql-pg": "^4.0.5"
+  "@effect/sql-sqlite-do": "^4.0.5"
   "@effect/tsgo": "^0.51.1"
-  "@effect/vitest": "^4.0.0"
+  "@effect/vitest": "^4.0.5"
   "@foldkit/vite-plugin": "^0.26.0"
   "@fontsource-variable/caveat": "^5.3.0"
   "@fontsource-variable/inter": "^5.3.0"
@@ -112,6 +112,8 @@ catalog:
   prisma: "^8.0.0-rc.15"
   # `@cloudflare/vite-plugin`'s prisma playground (Prisma 7 + D1 adapter).
   prisma7: "npm:prisma@7.10.1"
+  # Prisma 7 brings pglite 0.4; drizzle-orm's pglite peer must match packages/drizzle's.
+  "@electric-sql/pglite": "0.3.15"
   "@prisma/client": "7.10.1"
   "@prisma/adapter-d1": "7.10.1"
   arktype: "2.2.8"
@@ -173,7 +175,7 @@ catalog:
   dotenv: "^17.4.2"
   drizzle-kit: "1.0.0-rc.5-ab785fc"
   drizzle-orm: "1.0.0-rc.5-ab785fc"
-  effect: "^4.0.0"
+  effect: "^4.0.5"
   esbuild: "^0.28.1"
   fflate: "^0.8.3"
   fast-xml-parser: "^5.11.2"
@@ -283,8 +285,10 @@ catalogs:
 overrides:
   "@cloudflare/workers-types": 5.20261012.1
   workerd: 1.20261012.1
-  effect: 4.0.4
-  "@effect/platform-browser": 4.0.4
+  effect: 4.0.5
+  "@effect/platform-browser": 4.0.5
+  "@effect/sql-d1": 4.0.5
+  "@effect/sql-sqlite-do": 4.0.5
   drizzle-kit: 1.0.0-rc.5-ab785fc
   drizzle-orm: 1.0.0-rc.5-ab785fc
   # Keep drizzle-orm's optional peer graph identical across workspace
@@ -301,18 +305,7 @@ patchedDependencies:
 minimumReleaseAgeExclude:
   - typescript@7.1.0-dev.20260905.1 || 7.1.0-dev.20260923.1
   - "@alchemy.run/sigil@0.1.0-alpha.1"
-  - "@effect/atom-react@4.0.4"
-  - "@effect/platform-bun@4.0.4"
-  - "@effect/platform-node-shared@4.0.4"
-  - "@effect/platform-node@4.0.4"
-  - "@effect/sql-d1@4.0.4"
-  - "@effect/sql-libsql@4.0.4"
-  - "@effect/sql-mysql2@4.0.4"
-  - "@effect/sql-pg@4.0.4"
-  - "@effect/sql-sqlite-do@4.0.4"
-  - "@effect/vitest@4.0.4"
   - "@foldkit/vite-plugin@0.26.0"
-  - effect@4.0.4
   - foldkit@0.165.0
   - "@solidjs/start@2.0.6"
   - "@cloudflare/workers-types@5.20261012.1"
@@ -333,7 +326,6 @@ minimumReleaseAgeExclude:
   - "@neon/config@1.7.1"
   - neon@4.21.1
   - neonctl@4.21.1
-  - "@effect/platform-browser@4.0.4"
   - vitest@5.0.4
   - "@vitest/expect@5.0.4"
   - "@vitest/runner@5.0.4"

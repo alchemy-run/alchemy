@@ -11,11 +11,12 @@ const { test } = Test.make({ providers: GCP.providers() });
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-// New keys read inconsistently for a few seconds after create.
+// New keys read inconsistently for a few seconds after create — as 404, or
+// as a 403 "Permission iam.serviceAccountKeys.get is required".
 const getKey = (name: string) =>
   iam.getProjectsServiceAccountsKeys({ name }).pipe(
     Effect.retry({
-      while: (error) => error._tag === "NotFound",
+      while: (error) => error._tag === "NotFound" || error._tag === "Forbidden",
       schedule: Schedule.exponential("500 millis"),
       times: 8,
     }),

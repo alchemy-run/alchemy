@@ -1,11 +1,11 @@
-# @alchemy.run/vite-plugin-copy-editor
+# copy-editor
 
 Edit hardcoded copy in the browser while `vite dev` runs, and have each edit
 written back to the source file.
 
 ```ts
 // vite.config.ts (or `vite.plugins` in astro.config.ts)
-import { copyEditor } from "@alchemy.run/vite-plugin-copy-editor";
+import { copyEditor } from "./src/copy-editor/index.ts";
 
 export default defineConfig({
   // Register before framework plugins so it sees the raw source.
