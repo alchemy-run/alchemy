@@ -100,9 +100,10 @@ export interface ObservabilityDestinationAttributes {
   /**
    * The underlying Logpush destination string (the URL with the
    * configured headers encoded as query parameters). Redacted because it
-   * embeds the header values, including any credentials.
+   * embeds the header values, including any credentials. Undefined when
+   * Cloudflare omits it from the response.
    */
-  destinationConf: Redacted.Redacted<string>;
+  destinationConf?: Redacted.Redacted<string>;
   /**
    * Names of the Worker scripts currently opted in to this destination.
    */
@@ -208,7 +209,7 @@ export const ObservabilityDestinationProvider = () =>
       // State written by earlier versions holds `destinationConf` as a plain
       // string. Reconcile to re-read it as `Redacted`; without header or URL
       // drift this issues no PATCH.
-      if (output !== undefined && !Redacted.isRedacted(output.destinationConf)) {
+      if (output?.destinationConf !== undefined && !Redacted.isRedacted(output.destinationConf)) {
         return { action: "update" } as const;
       }
       return undefined;
@@ -281,9 +282,10 @@ export const ObservabilityDestinationProvider = () =>
               }),
             ),
           );
+        const createdSlug = created.slug;
         observed = isObservedDestination(created)
           ? created
-          : yield* freshObserved(accountId, created.slug);
+          : yield* freshObserved(accountId, createdSlug);
       }
 
       // 3. Sync — diff observed cloud state against desired and PATCH only
@@ -429,6 +431,9 @@ const toAttributes = (
   url: observed.configuration.url,
   // Distilled widens generated string enums to open unions (`string & {}`).
   logpushDataset: observed.configuration.logpushDataset as ObservabilityDataset,
-  destinationConf: Redacted.make(observed.configuration.destinationConf),
+  destinationConf:
+    observed.configuration.destinationConf == null
+      ? undefined
+      : Redacted.make(observed.configuration.destinationConf),
   scripts: [...observed.scripts],
 });
