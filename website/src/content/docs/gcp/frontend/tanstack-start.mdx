@@ -36,7 +36,7 @@ export const Website = GCP.Website.TanStackStart("Website");
 
 export default Alchemy.Stack(
   "MySite",
-  { providers: GCP.providers(), state: Alchemy.localState() },
+  { providers: GCP.providers(), state: GCP.state() },
   Effect.gen(function* () {
     const site = yield* Website;
     return { url: site.url };

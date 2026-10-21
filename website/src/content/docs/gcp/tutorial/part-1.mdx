@@ -45,7 +45,7 @@ export default Alchemy.Stack(
   "MyApp",
   {
     providers: GCP.providers(),
-    state: Alchemy.localState(),
+    state: GCP.state(),
   },
   Effect.gen(function* () {
     // resources go here next
@@ -56,9 +56,20 @@ export default Alchemy.Stack(
 The first argument, `"MyApp"`, names the Stack. Alchemy uses it as a
 prefix when it generates names for your resources.
 
-`GCP.providers()` registers every GCP resource. `Alchemy.localState()`
-keeps deploy state in `.alchemy/` next to your code. You move it
-somewhere shared in [Part 5](/gcp/tutorial/part-5).
+`GCP.providers()` registers every GCP resource.
+
+## Where state lives
+
+`state: GCP.state()` keeps deploy state in a Cloud Storage bucket in
+your project, `alchemy-state-{project}`, created on the first deploy.
+Because state lives in your project and not on your machine, the same
+setup works on your laptop and in CI.
+
+:::note[Other state stores]
+For purely local iteration, use `Alchemy.localState()` instead. It
+writes state under `.alchemy/` next to your code. See
+[State store](/state-store).
+:::
 
 ## Connect your project
 
@@ -86,7 +97,7 @@ export default Alchemy.Stack(
   "MyApp",
   {
     providers: GCP.providers(),
-    state: Alchemy.localState(),
+    state: GCP.state(),
   },
   Effect.gen(function* () {
 +    const bucket = yield* GCP.Storage.Bucket("Bucket", {});

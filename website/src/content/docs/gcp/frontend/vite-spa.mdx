@@ -57,7 +57,7 @@ export const Website = GCP.Website.Vite("Website", { rootDir: "./web" });
 
 export default Alchemy.Stack(
   "MyReactApp",
-  { providers: GCP.providers(), state: Alchemy.localState() },
+  { providers: GCP.providers(), state: GCP.state() },
   Effect.gen(function* () {
     const site = yield* Website;
     return { url: site.url };
