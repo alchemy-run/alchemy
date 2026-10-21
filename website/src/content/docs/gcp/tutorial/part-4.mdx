@@ -115,7 +115,7 @@ runs don't collide:
 // test/integ.test.ts
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: GCP.providers(),
-  state: Alchemy.localState(),
+  state: GCP.state(),
 +  stage: `pr-${process.env.PR_NUMBER}`,
 });
 ```

@@ -26,7 +26,7 @@ export const Blog = GCP.Website.StaticSite("Blog", {
 
 export default Alchemy.Stack(
   "MyBlog",
-  { providers: GCP.providers(), state: Alchemy.localState() },
+  { providers: GCP.providers(), state: GCP.state() },
   Effect.gen(function* () {
     const site = yield* Blog;
     return { url: site.url };
@@ -126,7 +126,7 @@ import * as Effect from "effect/Effect";
 
 export default Alchemy.Stack(
   "MySite",
-  { providers: GCP.providers(), state: Alchemy.localState() },
+  { providers: GCP.providers(), state: GCP.state() },
   Effect.gen(function* () {
     const bucket = yield* GCP.Storage.Bucket("Site", {
       uniformBucketLevelAccess: true,

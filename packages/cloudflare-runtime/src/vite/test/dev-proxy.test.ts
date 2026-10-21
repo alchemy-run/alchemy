@@ -201,3 +201,29 @@ test("forwards each request on a connection of its own", async () => {
   expect(await get()).toEqual({ status: 200, body: "worker" });
   expect(await get()).toEqual({ status: 200, body: "worker" });
 });
+
+test("never forwards to a host named in the request path", async () => {
+  // Another service on the machine that a `//host/` path must not reach (#2344).
+  const other = await listen(NodeHttp.createServer((_request, response) => response.end("other")));
+  const url = new NodeURL(
+    await devServer(`
+      export default {
+        fetch(request) {
+          const { pathname, search } = new URL(request.url);
+          return new Response("worker " + pathname + search);
+        },
+      };
+    `),
+  );
+  // `node:http` sends `path` verbatim, the way `curl --path-as-is` does.
+  const get = (path: string): Promise<string> =>
+    new Promise((resolve, reject) => {
+      NodeHttp.get({ host: url.hostname, port: url.port, path, agent: false }, (response) => {
+        const chunks: Array<Buffer> = [];
+        response.on("data", (chunk: Buffer) => chunks.push(chunk));
+        response.on("end", () => resolve(Buffer.concat(chunks).toString()));
+      }).on("error", reject);
+    });
+  expect(await get(`//${other.host}/marker.txt?x=1`)).toBe(`worker //${other.host}/marker.txt?x=1`);
+  expect(await get(`${other.origin}/marker.txt`)).toBe("worker /marker.txt");
+});

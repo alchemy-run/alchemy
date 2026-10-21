@@ -717,6 +717,71 @@ describe.sequential(
   },
 );
 
+describe.sequential(
+  "named container attachment (live)",
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:container",
+      "provider:cloudflare:worker",
+      "live",
+    ],
+  },
+  () => {
+    const stage = process.env.ALCHEMY_TEST_STAGE ?? "test-live";
+    const name = `alchemy-named-attachment-${stage}`;
+    const NamedStack = attachmentStack(true, name);
+    const services = Layer.effectContext(
+      NamedStack.pipe(Effect.map((stack) => stack.services)),
+    ).pipe(Layer.provide(Layer.succeed(Stage, stage)));
+    const { test, deploy } = Test.make({
+      providers: Cloudflare.providers(),
+      state: Cloudflare.state(),
+      stage,
+      dev: false,
+    });
+
+    test(
+      "re-attaches a named application after detaching it",
+      Effect.gen(function* () {
+        yield* destroyStack({ stack: NamedStack, stage, dev: false });
+        yield* Effect.gen(function* () {
+          const first = yield* deploy(NamedStack);
+          expect(first.app.applicationName).toBe(name);
+          assert(first.app.durableObjects?.namespaceId);
+
+          const detached = yield* deploy(attachmentStack(false, name));
+          expect(detached.app.applicationName).toBe(name);
+          expect(detached.app.durableObjects).toBeUndefined();
+          const observedDetached = yield* readAttachmentApplication(
+            detached.app.accountId,
+            detached.app.applicationId,
+          );
+          expect(observedDetached.name).toBe(name);
+          expect(observedDetached.durableObjects).toBeUndefined();
+
+          const attached = yield* deploy(attachmentStack(true, name));
+          expect(attached.app.applicationName).toBe(name);
+          assert(attached.app.durableObjects?.namespaceId);
+          const observedAttached = yield* readAttachmentApplication(
+            attached.app.accountId,
+            attached.app.applicationId,
+          );
+          expect(observedAttached.name).toBe(name);
+          expect(observedAttached.durableObjects?.namespaceId).toBe(
+            attached.app.durableObjects.namespaceId,
+          );
+        }).pipe(
+          Effect.ensuring(
+            destroyStack({ stack: NamedStack, stage, dev: false }).pipe(Effect.orDie),
+          ),
+        );
+      }).pipe(Effect.provide(services)),
+      { timeout: 240_000, retry: 0 },
+    );
+  },
+);
+
 const readAttachmentApplication = (accountId: string, applicationId: string) =>
   Containers.getContainerApplication({ accountId, applicationId }).pipe(
     Effect.retry({

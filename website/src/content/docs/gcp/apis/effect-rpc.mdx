@@ -126,7 +126,7 @@ import JobService from "./src/JobService.ts";
 
 export default Alchemy.Stack(
   "JobRpc",
-  { providers: GCP.providers(), state: Alchemy.localState() },
+  { providers: GCP.providers(), state: GCP.state() },
   Effect.gen(function* () {
     const service = yield* JobService;
     return { url: service.uri };

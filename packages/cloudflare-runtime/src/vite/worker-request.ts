@@ -1,10 +1,37 @@
 import * as NodeHttp from "node:http";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { finished } from "node:stream";
-import type { URL as NodeURL } from "node:url";
+import { URL as NodeURL } from "node:url";
 import type * as vite from "vite";
 import { proxyRequestHeaders } from "./forwarded-host.ts";
 import { HEADER_ERROR_STACK } from "./module-runner/constants.shared.ts";
+
+/**
+ * The Worker runtime URL for a request target (`req.url`): the path and
+ * query of the request on the runtime's `address`.
+ *
+ * Never `new URL(requestTarget, address)`: a target starting with `//` is a
+ * protocol-relative reference there, so `//127.0.0.1:8080/x` would replace
+ * the host and send the request to another service on the machine (#2344).
+ * An absolute-form target (`GET http://host/x`) keeps only its path too.
+ */
+export function workerRequestUrl(
+  requestTarget: string | undefined,
+  address: string | URL,
+): NodeURL {
+  const url = new NodeURL(address.toString());
+  const target = requestTarget || "/";
+  if (target.startsWith("/")) {
+    const query = target.indexOf("?");
+    url.pathname = query === -1 ? target : target.slice(0, query);
+    url.search = query === -1 ? "" : target.slice(query);
+  } else {
+    const parsed = new NodeURL(target, url);
+    url.pathname = parsed.pathname;
+    url.search = parsed.search;
+  }
+  return url;
+}
 
 /**
  * Forwards a dev or preview server request to the Worker runtime at `target`

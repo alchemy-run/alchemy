@@ -24,7 +24,7 @@ import * as Effect from "effect/Effect";
 
 export default Alchemy.Stack(
   "MySite",
-  { providers: GCP.providers(), state: Alchemy.localState() },
+  { providers: GCP.providers(), state: GCP.state() },
   Effect.gen(function* () {
     const site = yield* GCP.Website.Astro("Website");
     return { url: site.url };

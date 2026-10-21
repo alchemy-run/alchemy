@@ -5,10 +5,6 @@ sidebar:
   order: 5
 ---
 
-import PackageManagers from "../../../../components/PackageManagers.astro";
-
-export const statePkgs = "@alchemy.run/sql pg @effect/sql-pg";
-
 In [Part 4](/gcp/tutorial/part-4) you deployed stages by hand. Now
 GitHub Actions does it: pushes to `main` deploy `prod`, pull requests
 get a preview stage, and merged pull requests clean up after
@@ -18,39 +14,16 @@ GitHub signs in to Google Cloud with **Workload Identity Federation**.
 The workflow trades its GitHub token for a short-lived Google token,
 so no service-account key ever lives in GitHub.
 
-## Move state off your laptop
+## Bootstrap the state bucket
 
-CI can't read `.alchemy/` on your machine. Keep state in a Postgres
-database instead. Any Postgres works: Cloud SQL, Neon, or one you
-already run.
+CI shares state with your laptop through the `GCP.state()` bucket
+from [Part 1](/gcp/tutorial/part-1#where-state-lives). Your first
+deploy created it. In CI, a missing bucket fails the run instead of
+being created, so make sure it exists:
 
-<PackageManagers add={statePkgs} />
-
-```diff lang="typescript"
-// alchemy.run.ts
-import * as Alchemy from "alchemy";
-import * as GCP from "@alchemy.run/gcp";
-+import { postgresState } from "@alchemy.run/sql/PostgresState";
-+import * as Config from "effect/Config";
-import * as Effect from "effect/Effect";
-import Api from "./src/api.ts";
-
-export default Alchemy.Stack(
-  "MyApp",
-  {
-    providers: GCP.providers(),
--    state: Alchemy.localState(),
-+    state: postgresState({ url: Config.Redacted("STATE_DATABASE_URL") }),
-  },
+```sh
+bun alchemy state bootstrap --backend gcp
 ```
-
-Set `STATE_DATABASE_URL` in your shell and in `.env`. Make the same
-change in `test/integ.test.ts`.
-
-:::tip
-Already on Cloudflare? `Cloudflare.state()` works here too. See
-[State store](/state-store).
-:::
 
 ## Create the identity pool
 
@@ -105,9 +78,7 @@ Create `stacks/github.ts`:
 import * as Alchemy from "alchemy";
 import * as GCP from "@alchemy.run/gcp";
 import * as GitHub from "@alchemy.run/github";
-import { postgresState } from "@alchemy.run/sql/PostgresState";
 import * as Output from "alchemy/Output";
-import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 
@@ -115,7 +86,7 @@ export default Alchemy.Stack(
   "github",
   {
     providers: Layer.mergeAll(GCP.providers(), GitHub.providers()),
-    state: postgresState({ url: Config.Redacted("STATE_DATABASE_URL") }),
+    state: GCP.state(),
   },
   Effect.gen(function* () {
     // deployer account, roles, and repo variables go here
@@ -230,11 +201,7 @@ bun alchemy deploy --config stacks/github.ts --profile admin
 ```
 
 The three variables appear under **Settings → Secrets and variables →
-Actions → Variables**. Add the state database URL as a secret:
-
-```sh
-gh secret set STATE_DATABASE_URL
-```
+Actions → Variables**.
 
 ## Create the workflow
 
@@ -281,7 +248,6 @@ jobs:
         env:
           GOOGLE_ACCESS_TOKEN: ${{ steps.auth.outputs.access_token }}
           GOOGLE_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
-          STATE_DATABASE_URL: ${{ secrets.STATE_DATABASE_URL }}
           PULL_REQUEST: ${{ github.event.number }}
           GITHUB_SHA: ${{ github.sha }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -314,7 +280,6 @@ jobs:
         env:
           GOOGLE_ACCESS_TOKEN: ${{ steps.auth.outputs.access_token }}
           GOOGLE_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
-          STATE_DATABASE_URL: ${{ secrets.STATE_DATABASE_URL }}
           PULL_REQUEST: ${{ github.event.number }}
 ```
 
@@ -341,8 +306,6 @@ import * as Alchemy from "alchemy";
 import * as GCP from "@alchemy.run/gcp";
 +import * as GitHub from "@alchemy.run/github";
 +import * as Output from "alchemy/Output";
-import { postgresState } from "@alchemy.run/sql/PostgresState";
-import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 +import * as Layer from "effect/Layer";
 import Api from "./src/api.ts";
@@ -352,7 +315,7 @@ export default Alchemy.Stack(
   {
 -    providers: GCP.providers(),
 +    providers: Layer.mergeAll(GCP.providers(), GitHub.providers()),
-    state: postgresState({ url: Config.Redacted("STATE_DATABASE_URL") }),
+    state: GCP.state(),
   },
   Effect.gen(function* () {
     const api = yield* Api;
