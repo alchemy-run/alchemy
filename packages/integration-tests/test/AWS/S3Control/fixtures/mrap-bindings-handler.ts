@@ -41,10 +41,8 @@ export const BoundMrapLive = Layer.effect(
   BoundMrap,
   Effect.gen(function* () {
     const bucket = yield* AWS.S3.Bucket("S3ControlMrapBucket", {});
-    // Props are ignored at runtime, where the stage isn't provided.
-    const secondBucket = globalThis.__ALCHEMY_RUNTIME__ ? "" : secondRegionBucketName(yield* Stage);
     const mrap = yield* AWS.S3Control.MultiRegionAccessPoint("S3ControlMrapBindingsMrap", {
-      regions: [{ bucket: bucket.bucketName }, { bucket: secondBucket }],
+      regions: [{ bucket: bucket.bucketName }, { bucket: secondRegionBucketName(yield* Stage) }],
     });
     return { mrap };
   }),
