@@ -1,5 +1,9 @@
 import type * as cf from "@cloudflare/workers-types";
-import * as NodeServices from "@effect/platform-node/NodeServices";
+import * as NodeChildProcessSpawner from "@effect/platform-node/NodeChildProcessSpawner";
+import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
+import * as NodeFileSystem from "@effect/platform-node/NodeFileSystem";
+import * as NodePath from "@effect/platform-node/NodePath";
+import * as NodeStdio from "@effect/platform-node/NodeStdio";
 import { makeEntrypointLayer, reifyBoundConfigProvider } from "alchemy/Runtime";
 import { RuntimeContext } from "alchemy/RuntimeContext";
 import { Self } from "alchemy/Self";
@@ -235,8 +239,16 @@ const getSharedBuild = (entrypoint: any, stack: { name: string; stage: string })
 
   const layer = makeEntrypointLayer(tag, entrypoint);
 
+  // `NodeServices.layer` minus `NodeTerminal`, which reads `process.stdin`
+  // while it builds — and workerd's `process` has no usable `stdin` on
+  // compatibility dates before Node.js process v2.
+  const platformServices = Layer.provideMerge(
+    NodeChildProcessSpawner.layer,
+    Layer.mergeAll(NodeFileSystem.layer, NodeCrypto.layer, NodePath.layer, NodeStdio.layer),
+  );
+
   const platform = Layer.mergeAll(
-    NodeServices.layer,
+    platformServices,
     FetchHttpClient.layer,
     // TODO(sam): wire this up to telemetry more directly
     Logger.layer([Logger.consolePretty()]),
