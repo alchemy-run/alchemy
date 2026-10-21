@@ -33,6 +33,9 @@
     "test/Cloudflare/Website/vite-prisma-fixture",
     // Imports the route types `react-router typegen` generates.
     "test/Cloudflare/Website/vite-react-router-fixture",
+    // C3 templates, typed by their own tsconfigs and `wrangler types`.
+    "test/Cloudflare/Website/vite-react-template-fixture",
+    "test/Cloudflare/Website/vite-vue-template-fixture",
     // Nuxt fixtures: server routes use nitro's auto-imported globals, which
     // only type-check against the `.nuxt/` types a nuxt build generates.
     "test/Cloudflare/Website/fixtures/nuxt-app",

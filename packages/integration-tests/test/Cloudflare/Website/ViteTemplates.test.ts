@@ -27,7 +27,80 @@ interface Template {
   check: (url: string) => Effect.Effect<void, unknown>;
 }
 
+// The SPA templates: the HTML shell and its script, the Worker's `/api/`
+// route, and the SPA fallback for client-side routes.
+const checkSpaWithApi = (mountId: string) => (url: string) =>
+  Effect.gen(function* () {
+    let script: string | undefined;
+    yield* expectResponse(url, (res) => {
+      if (res.status !== 200 || !res.body.includes(`<div id="${mountId}">`))
+        return `${res.status} ${res.body.slice(0, 300)}`;
+      script = res.body.match(/<script type="module"[^>]* src="(\/[^"]+)"/)?.[1];
+      return script ? undefined : `no module script in ${res.body.slice(0, 300)}`;
+    });
+    yield* expectResponse(`${url}${script}`, (res) =>
+      res.status === 200 ? undefined : `script ${res.status} ${res.body.slice(0, 200)}`,
+    );
+    yield* expectResponse(`${url}/api/`, (res) =>
+      res.status === 200 && res.body === `{"name":"Cloudflare"}`
+        ? undefined
+        : `api ${res.status} ${res.body.slice(0, 200)}`,
+    );
+    // A browser navigation: other requests for unknown paths reach the Worker.
+    yield* expectResponse(
+      `${url}/client/route`,
+      (res) =>
+        res.status === 200 && res.body.includes(`<div id="${mountId}">`)
+          ? undefined
+          : `fallback ${res.status} ${res.body.slice(0, 200)}`,
+      { headers: { "sec-fetch-mode": "navigate" } },
+    );
+  });
+
 const TEMPLATES: ReadonlyArray<Template> = [
+  {
+    // `npm create cloudflare -- --framework=react`: create-vite's
+    // `react-ts` with a Worker for `/api/`.
+    name: "react",
+    fixture: "vite-react-template-fixture",
+    entries: [
+      "package.json",
+      "vite.config.ts",
+      "wrangler.jsonc",
+      "index.html",
+      "public",
+      "src",
+      "worker",
+    ],
+    props: {
+      main: "./worker/index.ts",
+      compatibility: { date: "2025-10-08" },
+      assets: { notFoundHandling: "single-page-application" },
+    },
+    check: checkSpaWithApi("root"),
+  },
+  {
+    // `npm create cloudflare -- --framework=vue`: create-vue with the
+    // router, TypeScript and Vue DevTools, and a Worker for `/api/`.
+    name: "vue",
+    fixture: "vite-vue-template-fixture",
+    entries: [
+      "package.json",
+      "vite.config.ts",
+      "wrangler.jsonc",
+      "env.d.ts",
+      "index.html",
+      "public",
+      "src",
+      "server",
+    ],
+    props: {
+      main: "./server/index.ts",
+      compatibility: { date: "2025-10-08" },
+      assets: { notFoundHandling: "single-page-application" },
+    },
+    check: checkSpaWithApi("app"),
+  },
   {
     // `npm create cloudflare -- --framework=react-router`: SSR through
     // `createRequestHandler`, a loader reading `env` from
