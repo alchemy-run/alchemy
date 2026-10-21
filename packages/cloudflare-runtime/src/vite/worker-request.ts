@@ -25,7 +25,13 @@ export function forwardWorkerRequest(
   if (client.destroyed) {
     return;
   }
+  // A connection per request, as a defense: with a pooled connection, requests
+  // were reported to fail with a 502 under load after workerd cut a stream
+  // short (#1869). We couldn't reproduce that against workerd, but a fresh
+  // loopback connection costs next to nothing. See
+  // https://github.com/alchemy-run/alchemy/pull/2242.
   const upstream = NodeHttp.request(target, {
+    agent: false,
     method: request.method,
     headers: proxyRequestHeaders(request, target, proxySharedSecret),
   });
@@ -62,8 +68,29 @@ export function forwardWorkerRequest(
   // Without a listener a connection error is an unhandled `error` event, which
   // takes down the server. Requests in flight while the Worker runtime is
   // being replaced hit exactly that.
-  upstream.on("error", fail);
+  //
+  // The Worker may answer before reading the whole request body (a 413 for an
+  // oversized upload). workerd then closes the connection, so forwarding the
+  // rest of the body fails. That is no failure of the response, which
+  // `workerResponse` reports on its own.
+  let answered = false;
+  upstream.on("error", (error) => {
+    if (!answered) {
+      fail(error);
+    }
+  });
+  // Drain what is left of the body: a request whose body is never read makes
+  // Node drop the client's kept-alive connection, failing its next request.
+  // Forwarding continues until workerd closes the connection, so a Worker can
+  // stream its response while it still reads the body.
+  upstream.on("close", () => {
+    if (answered) {
+      request.unpipe(upstream);
+      request.resume();
+    }
+  });
   upstream.on("response", (workerResponse) => {
+    answered = true;
     response.writeHead(workerResponse.statusCode ?? 500, workerResponse.headers);
     workerResponse.pipe(response);
     // `pipe` alone would leave the client's response open forever when the

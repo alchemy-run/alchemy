@@ -16,6 +16,7 @@
     "build": "nuxt build"
   },
   "dependencies": {
+    "@alchemy.run/prisma": "workspace:*",
     "alchemy": "workspace:*",
     "effect": "catalog:"
   },
