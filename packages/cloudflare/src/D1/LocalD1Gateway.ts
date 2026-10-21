@@ -23,6 +23,7 @@ import { SERVICE_D1 } from "@alchemy.run/cloudflare-runtime/core/bindings/d1/D1O
  */
 import { open } from "@alchemy.run/cloudflare-runtime/core/platform-proxy";
 import type { BindingHook } from "@alchemy.run/cloudflare-runtime/core/PluginContext";
+import { splitSqliteStatements } from "@alchemy.run/sql/SqlFile";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { gatewayName, localGatewayRuntime } from "../LocalGateway.ts";
@@ -140,9 +141,19 @@ export const withLocalD1Query = <A, E, R>(
 
 /**
  * SQL-only view of {@link withLocalD1Query} matching the migration flow's
- * {@link D1SqlExecutor} contract.
+ * {@link D1SqlExecutor} contract. Multi-statement SQL runs as a batch of its
+ * statements, as the cloud query endpoint splits it: the simulator's SQLite
+ * rejects one statement over its length limit.
  */
 export const withLocalD1Executor = <A, E, R>(
   databaseId: string,
   use: (executor: D1SqlExecutor<LocalD1QueryError>) => Effect.Effect<A, E, R>,
-) => withLocalD1Query(databaseId, (query) => use((sql) => query({ sql })));
+) =>
+  withLocalD1Query(databaseId, (query) =>
+    use((sql) => {
+      const statements = splitSqliteStatements(sql);
+      return statements.length > 1
+        ? query({ batch: statements.map((statement) => ({ sql: statement })) })
+        : query({ sql });
+    }),
+  );
