@@ -28,19 +28,19 @@ const waitUntilGone = (name: string) =>
     }),
   );
 
-// Only a Firebase project answers a missing app id with the typed 403; a
-// non-Firebase project answers every app lookup with 400 INVALID_ARGUMENT,
-// which the ungated "without Firebase" probe below covers.
-test.provider.skipIf(!runLifecycle)(
+// App ids are globally unique, so the `projects/-` wildcard resolves the app
+// without the project: Firebase answers a missing id there with the typed 403.
+// Under `projects/{project}` a project without Firebase (the testing project)
+// answers every app lookup with a generic 400 INVALID_ARGUMENT instead.
+test.provider(
   "getProjectsAndroidApps on a missing app fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {
-      const { project } = yield* GcpEnvironment.current;
       yield* stack.destroy();
 
       const error = yield* Effect.flip(
         firebase.getProjectsAndroidApps({
-          name: `projects/${project}/androidApps/1:1:android:missing`,
+          name: "projects/-/androidApps/1:1:android:missing",
         }),
       );
       expect(error._tag).toEqual("AndroidAppNotFound");
