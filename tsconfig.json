@@ -61,9 +61,6 @@
       "path": "./packages/node-utils/tsconfig.json"
     },
     {
-      "path": "./packages/vite-plugin-copy-editor/tsconfig.json"
-    },
-    {
       "path": "./packages/cloudflare-runtime/tsconfig.json"
     },
     {

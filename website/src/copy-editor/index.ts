@@ -22,10 +22,7 @@ const SOURCE_ENDPOINT = "/__copy-editor/source";
 const REFRESH_EVENT = "copy-editor:refresh";
 /** Time for watchers (e.g. a content layer) to pick up regenerated files. */
 const REFRESH_DELAY_MS = 1500;
-// Resolves to the TypeScript source under bun and the compiled file otherwise.
-const CLIENT_FILE = fileURLToPath(
-  new URL(import.meta.url.endsWith(".ts") ? "./client.ts" : "./client.js", import.meta.url),
-);
+const CLIENT_FILE = fileURLToPath(new URL("./client.ts", import.meta.url));
 
 /** How long after a save to swallow the full-page reload it triggers. */
 const RELOAD_SUPPRESS_MS = 1500;
