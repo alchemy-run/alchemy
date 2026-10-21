@@ -84,7 +84,7 @@ layer(localRuntimeLayer)("Assets binding", (it) => {
         "Contact: mailto:security@example.com\n",
       );
       // Dotfiles left out of the upload stay unreachable, as on deploy.
-      expect((yield* worker.fetch("/.env")).status).toBe(404);
+      expect((yield* worker.fetch("/.private.txt")).status).toBe(404);
       expect((yield* worker.fetch("/.assetsignore")).status).toBe(404);
     }),
   );
