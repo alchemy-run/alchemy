@@ -5,7 +5,7 @@ import { expect } from "bun:test";
  * A second user can read the public repository but cannot push to it, and
  * an unknown key is anonymous. Run with `bun test` from this directory.
  */
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Test from "alchemy/Test/Bun";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";

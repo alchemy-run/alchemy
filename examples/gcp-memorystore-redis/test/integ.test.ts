@@ -1,9 +1,9 @@
 import { describe, expect } from "bun:test";
 import { spawnSync } from "node:child_process";
+import * as GCP from "@alchemy.run/gcp";
 import * as redis from "@distilled.cloud/gcp/redis_v1";
 import * as run from "@distilled.cloud/gcp/run_v2";
 import * as Alchemy from "alchemy";
-import * as GCP from "alchemy/GCP";
 import * as Test from "alchemy/Test/Bun";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";

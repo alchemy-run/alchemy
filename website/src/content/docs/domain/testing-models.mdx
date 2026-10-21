@@ -1,0 +1,143 @@
+---
+title: Testing a model
+description: Test your model's rules, views, policies and deadlines with stories that run it in memory.
+---
+
+Your model is tested with [stories](/domain/story): given some history, when a command is sent, then these events are recorded. This page sets up a story runner and covers what a story can check.
+
+## Create a story runner
+
+Give `Story.make` your model, its policies' Layer, and the external systems its policies call.
+
+```typescript
+// packages/domain/test/withdrawals.test.ts
+import { it } from "@effect/vitest";
+import { Story } from "@alchemy.run/domain/Story";
+import { Account } from "../src/Account/Account.aggregate.ts";
+import { AccountSummary } from "../src/Account/AccountSummary.view.ts";
+import { MoneyDeposited } from "../src/Account/DepositMoney.command.ts";
+import { InsufficientFunds } from "../src/Account/InsufficientFunds.rejection.ts";
+import { AccountOpened } from "../src/Account/OpenAccount.command.ts";
+import { Statement } from "../src/Account/Statement.view.ts";
+import { MoneyWithdrawn, WithdrawMoney } from "../src/Account/WithdrawMoney.command.ts";
+import { customer } from "../src/Actor.ts";
+import * as Layer from "effect/Layer";
+import { Bank, BankHandlers } from "../src/Bank.model.ts";
+import { MemoryLedgerStore } from "../src/Ledger/LedgerStore.ts";
+import { CurrentActor } from "../src/CurrentActor.context.ts";
+import { CustomerId } from "../src/Customer/Customer.id.ts";
+import { FraudCheck } from "../src/Fraud/FraudCheck.external.ts";
+import { Payments } from "../src/Settlement/Payments.external.ts";
+
+const story = Story.make(Bank, {
+  layer: BankHandlers.pipe(Layer.provide(MemoryLedgerStore)),
+  externalSystems: [FraudCheck, Payments],
+});
+const account = Account.ref("a-1");
+const opened = new AccountOpened({ customerId: CustomerId.make("c-1"), owner: "sam" });
+const asSam = Story.provide(CurrentActor, customer("c-1"));
+
+it.effect("a withdrawal replies with the balance and updates the views", () =>
+  story(
+    Story.given(account, opened, new MoneyDeposited({ amount: 100, balanceAfter: 100 })),
+    asSam,
+    Story.when(account, new WithdrawMoney({ amount: 30 })),
+    Story.then(account, new MoneyWithdrawn({ amount: 30, balanceAfter: 70 })),
+    Story.replied({ balance: 70 }),
+    Story.view(AccountSummary, account, { balance: 70 }),
+    Story.emitted(Statement, account, [
+      { kind: "deposit", amount: 100, balance: 100 },
+      { kind: "withdrawal", amount: 30, balance: 70 },
+    ]),
+  ),
+);
+
+it.effect("an overdraft is rejected with the evidence", () =>
+  story(
+    Story.given(account, opened, new MoneyDeposited({ amount: 50, balanceAfter: 50 })),
+    asSam,
+    Story.when(account, new WithdrawMoney({ amount: 80 })),
+    Story.rejected(new InsufficientFunds({ balance: 50, requested: 80 })),
+  ),
+);
+```
+
+Run stories with Vitest and `@effect/vitest`: each story is an Effect, so `it.effect` runs it.
+
+## Check every outcome
+
+The test above uses most of the checks. `then` checks the next events recorded on an instance; with no events, it checks that nothing new was recorded. `replied` checks the last command's reply, and `rejected` checks that it was refused with exactly this rejection. `state` checks an instance's current state directly.
+
+Views and streams are checked as a client would read them. `view` checks a view key's state, or part of it, and `emitted` checks every event a view key has emitted. `streamed` checks the next entries a projection appended to a stream key.
+
+Commands run as whoever `provide` says, as their middleware would. Here `asSam` provides `CurrentActor`, so the account's ownership check passes.
+
+## Answer outside systems
+
+External system calls wait until you answer them, so you decide what the outside world says, and when.
+
+```typescript
+// packages/domain/test/fraud.test.ts
+import { it } from "@effect/vitest";
+import { Story } from "@alchemy.run/domain/Story";
+import { Account } from "../src/Account/Account.aggregate.ts";
+import { MoneyDeposited } from "../src/Account/DepositMoney.command.ts";
+import { AccountFrozen } from "../src/Account/FreezeAccount.command.ts";
+import { AccountOpened } from "../src/Account/OpenAccount.command.ts";
+import { MoneyWithdrawn, WithdrawMoney } from "../src/Account/WithdrawMoney.command.ts";
+import { customer, system } from "../src/Actor.ts";
+import * as Layer from "effect/Layer";
+import { Bank, BankHandlers } from "../src/Bank.model.ts";
+import { MemoryLedgerStore } from "../src/Ledger/LedgerStore.ts";
+import { CurrentActor } from "../src/CurrentActor.context.ts";
+import { CustomerId } from "../src/Customer/Customer.id.ts";
+import { FraudCheck } from "../src/Fraud/FraudCheck.external.ts";
+import { Payments } from "../src/Settlement/Payments.external.ts";
+
+const story = Story.make(Bank, {
+  layer: BankHandlers.pipe(Layer.provide(MemoryLedgerStore)),
+  externalSystems: [FraudCheck, Payments],
+});
+const account = Account.ref("a-1");
+
+it.effect("a risky withdrawal freezes the account", () =>
+  story(
+    Story.given(
+      account,
+      new AccountOpened({ customerId: CustomerId.make("c-1"), owner: "sam" }),
+      new MoneyDeposited({ amount: 90_000, balanceAfter: 90_000 }),
+    ),
+    Story.provide(CurrentActor, customer("c-1")),
+    Story.when(account, new WithdrawMoney({ amount: 60_000 })),
+    Story.then(account, new MoneyWithdrawn({ amount: 60_000, balanceAfter: 30_000 })),
+    Story.expectCall(FraudCheck.score, { accountId: account.id, amount: 60_000 }),
+    Story.resolve(FraudCheck.score, { risk: 0.95 }),
+    Story.then(account, new AccountFrozen({ reason: "fraud risk 0.95", by: system("FraudReview") })),
+  ),
+);
+```
+
+## Answer several calls
+
+`resolve` answers the only call waiting on an operation. When several are waiting, name each one as you expect it, and answer it by name:
+
+```typescript
+Story.expectCall("a-1", FraudCheck.score, { accountId: a1.id }),
+Story.expectCall("a-2", FraudCheck.score, { accountId: a2.id }),
+Story.resolve("a-2", FraudCheck.score, { risk: 0.1 }),
+Story.resolve("a-1", FraudCheck.score, { risk: 0.95 }),
+```
+
+When several waiting calls match, `expectCall` names the earliest one made. A `resolve` without a name fails if more than one call is waiting, so a story never answers the wrong one.
+
+## Move the clock
+
+A story's clock starts at `2026-01-01T00:00:00Z`, and `Story.clock` moves it. Commands are stamped with it, so time-based rules like a daily limit are easy to test, and scheduled commands fire when it passes their time. See [Deadlines](/domain/deadlines).
+
+## Trust a passing story
+
+A story fails if a command is rejected and no `rejected` step checks it, or if an external system call is left waiting at the end. A passing story has accounted for every outcome.
+
+:::note
+Test what clients see through an Api in [Testing an Api](/domain/testing-apis).
+:::

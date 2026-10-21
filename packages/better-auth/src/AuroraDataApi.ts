@@ -1,6 +1,6 @@
+import * as AWS from "@alchemy.run/aws";
 import type * as rdsdata from "@distilled.cloud/aws/rds-data";
 import type { RuntimeContext } from "alchemy";
-import * as AWS from "alchemy/AWS";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
@@ -210,7 +210,7 @@ const transientRetry = <A, E extends { _tag: string }, R>(
  * ```typescript
  * import { BetterAuth } from "@alchemy.run/better-auth";
  * import { AuroraDataApi } from "@alchemy.run/better-auth/AuroraDataApi";
- * import * as AWS from "alchemy/AWS";
+ * import * as AWS from "@alchemy.run/aws";
  *
  * export const Db = AWS.RDS.Aurora("AuthDb", { subnetIds, securityGroupIds });
  *
