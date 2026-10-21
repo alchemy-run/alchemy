@@ -514,7 +514,7 @@ interface EnvironmentLike {
   };
 }
 
-export const makeOutputCollector = (entryEnvironment: string) => {
+const makeOutputCollector = (entryEnvironment: string) => {
   let clientDirectory: string | undefined;
   let serverEntry: string | undefined;
   const serverChunks = new Map<string, { content: string | Uint8Array }>();
@@ -628,7 +628,7 @@ const readRscManifestsFromDisk = Effect.fn(function* (
  * captured JS chunk from disk and follow its relative imports to pick up
  * modules that were never part of a bundle.
  */
-export const syncVinextServerModules = Effect.fn(function* (
+const syncVinextServerModules = Effect.fn(function* (
   root: string,
   chunks: Map<string, { content: string | Uint8Array }>,
 ) {
