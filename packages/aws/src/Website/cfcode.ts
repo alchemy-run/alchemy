@@ -46,6 +46,16 @@ export const buildHostRedirectInjection = ({
 
 const CLOUDFRONT_FUNCTION_SAFE_HEADER_LIMIT = 10240 - 512;
 
+/**
+ * The viewer-request router shared by every site. Requests resolve to an S3
+ * file, an asset route, the custom 404 page, the image optimizer, or the
+ * server, in that order. When the site has a server, only GET and HEAD look
+ * in S3: the bucket grants CloudFront read-only access, so any other method
+ * (a form POST to a prerendered page, say) must reach the server.
+ *
+ * Comments belong here rather than in the string, which ships inside the
+ * CloudFront Function and counts toward its 10 KB size limit.
+ */
 export const CF_ROUTER_INJECTION = `
 async function routeSite(kvNamespace, metadata) {
   if (metadata.redirect && metadata.redirect.hosts.indexOf(event.request.headers.host.value) !== -1) {
