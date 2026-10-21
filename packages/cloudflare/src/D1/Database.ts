@@ -637,9 +637,14 @@ export const ProviderLocal = () =>
             if (pending.length > 0) {
               const { unstable_splitSqlQuery } = yield* Effect.promise(() => import("wrangler"));
               yield* withLocalD1Query(databaseId, (query) =>
-                Effect.forEach(pending, (file) => query({
-                  batch: unstable_splitSqlQuery(file.sql).map((sql) => ({ sql })),
-                }), { discard: true }),
+                Effect.forEach(
+                  pending,
+                  (file) =>
+                    query({
+                      batch: unstable_splitSqlQuery(file.sql).map((sql) => ({ sql })),
+                    }),
+                  { discard: true },
+                ),
               ).pipe(Effect.provideContext(runtimeContext));
               for (const file of pending) {
                 importHashes[file.path] = file.hash;
