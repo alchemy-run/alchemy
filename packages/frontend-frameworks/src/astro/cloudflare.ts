@@ -1,3 +1,4 @@
+import * as NodePath from "node:path";
 /**
  * The Cloudflare Workers deploy target for `@alchemy.run/frontend-frameworks/astro`
  * (`@alchemy.run/frontend-frameworks/astro/cloudflare`).
@@ -16,9 +17,8 @@
  * re-expose the underlying integration surface for direct/advanced use.
  */
 import type { CloudflareVitePluginOptions } from "@alchemy.run/cloudflare-runtime/vite";
-import { makeDeployTarget } from "../core/index.ts";
 import * as Effect from "effect/Effect";
-import * as NodePath from "node:path";
+import { makeDeployTarget } from "../core/index.ts";
 import { distilledCloudflare } from "./integration.ts";
 import type { AstroTarget } from "./Target.ts";
 
@@ -80,9 +80,7 @@ export interface AstroCloudflareTarget extends AstroTarget<AstroCloudflareConfig
  * - `bundle` — workerd resolve conditions + `cloudflare:` externals
  *   (informational for Astro: the integration configures the bundler itself).
  */
-export const target = (
-  config: AstroCloudflareConfig = {},
-): AstroCloudflareTarget => {
+export const target = (config: AstroCloudflareConfig = {}): AstroCloudflareTarget => {
   // Written by the integration's `astro:config:done` (the client directory
   // before the `base !== "/"` remap nests it); read by `finish` below.
   let originalClientDir: string | undefined;

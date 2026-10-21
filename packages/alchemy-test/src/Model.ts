@@ -6,6 +6,7 @@
  * runner then walks the tree and executes every test as an Effect.
  */
 import type * as Effect from "effect/Effect";
+import { mergeTags, type Tags } from "./Tags.ts";
 
 /** Execution mode attached to a suite or test at registration time. */
 export type Mode = "run" | "skip" | "only" | "todo";
@@ -40,6 +41,10 @@ export interface Hook {
 }
 
 export interface TestCase {
+  /** Deduplicated labels, including tags inherited from suites. */
+  readonly tags: ReadonlyArray<string>;
+  /** Inherited tags requiring explicit selection. */
+  readonly optInTags: ReadonlyArray<string>;
   readonly type: "test";
   readonly name: string;
   readonly mode: Mode;
@@ -60,6 +65,10 @@ export interface TestCase {
 }
 
 export interface Suite {
+  /** Deduplicated labels, including tags inherited from parent suites. */
+  readonly tags: ReadonlyArray<string>;
+  /** Inherited tags requiring explicit selection. */
+  readonly optInTags: ReadonlyArray<string>;
   readonly type: "suite";
   readonly name: string;
   mode: Mode;
@@ -77,13 +86,19 @@ export interface Suite {
 export interface FileSuite extends Suite {
   /** Path relative to the run root, e.g. `test/Cloudflare/R2/Bucket.test.ts`. */
   readonly file: string;
+  /** Framework resources, disposed even when user hooks are skipped. */
+  readonly cleanups: Array<Hook>;
 }
 
 export const makeSuite = (
   name: string,
   parent: Suite | undefined,
   mode: Mode = "run",
+  tags?: Tags,
+  optInTags?: Tags,
 ): Suite => ({
+  tags: mergeTags(parent?.tags ?? [], tags),
+  optInTags: mergeTags(parent?.optInTags ?? [], optInTags),
   type: "suite",
   name,
   mode,
@@ -99,6 +114,7 @@ export const makeSuite = (
 export const makeFileSuite = (file: string): FileSuite => ({
   ...makeSuite(file, undefined),
   file,
+  cleanups: [],
 });
 
 /** Full title path from the file root down to (and including) this node. */
@@ -117,14 +133,10 @@ export const titlePath = (node: Suite | TestCase): ReadonlyArray<string> => {
   return parts;
 };
 
-export const fullTitle = (node: Suite | TestCase): string =>
-  titlePath(node).join(" > ");
+export const fullTitle = (node: Suite | TestCase): string => titlePath(node).join(" > ");
 
 /** Walk every test in a suite subtree (depth-first, registration order). */
-export const forEachTest = (
-  suite: Suite,
-  f: (test: TestCase) => void,
-): void => {
+export const forEachTest = (suite: Suite, f: (test: TestCase) => void): void => {
   for (const child of suite.children) {
     if (child.type === "test") f(child);
     else forEachTest(child, f);

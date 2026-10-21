@@ -1,9 +1,11 @@
+import { execFileSync } from "node:child_process";
+import { existsSync } from "node:fs";
 import { expect, layer } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
-import { execFileSync } from "node:child_process";
 import * as DurableObjectNamespace from "../../bindings/DurableObjectNamespace.ts";
 import type { ContainerImage } from "../../Docker.ts";
+import { isDockerAvailable } from "../helpers/docker.ts";
 import { getFixture } from "../helpers/fixture.ts";
 import { localRuntimeLayer, startTestWorker } from "../helpers/runtime.ts";
 
@@ -146,6 +148,97 @@ layer(localRuntimeLayer, { excludeTestServices: true, timeout: 30_000 })(
   },
 );
 
+// Starts the container (from its named image when it has one) and returns
+// what the fixture reports about its privileges.
+const FUSE_SCRIPT = `
+import { DurableObject } from "cloudflare:workers";
+
+class FuseContainer extends DurableObject {
+  async fetch() {
+    const container = this.ctx.container;
+    if (!container.running) {
+      const image = container.images?.fuse;
+      if (image) container.start({ image });
+      else container.start();
+    }
+    const port = container.getTcpPort(8080);
+    let lastError = "";
+    for (let i = 0; i < 100; i++) {
+      try {
+        const res = await port.fetch("http://container/");
+        if (res.ok) return new Response(await res.text());
+        lastError = "status " + res.status;
+      } catch (error) {
+        lastError = String(error);
+      }
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    }
+    return new Response("container not ready: " + lastError, { status: 504 });
+  }
+}
+
+export class FuseImageName extends FuseContainer {}
+export class FuseNamedImages extends FuseContainer {}
+
+export default {
+  fetch(request, env) {
+    const namespace = new URL(request.url).pathname === "/images" ? env.NAMED_IMAGES : env.IMAGE_NAME;
+    return namespace.getByName("singleton").fetch(request);
+  },
+};
+`;
+
+// A Linux host without /dev/fuse has no device to pass through.
+const canPassFuseDevice = process.platform !== "linux" || existsSync("/dev/fuse");
+
+layer(localRuntimeLayer, { excludeTestServices: true, timeout: 30_000 })(
+  "Container FUSE privileges",
+  (it) => {
+    it.effect.skipIf(!isDockerAvailable() || !canPassFuseDevice)(
+      "gives both image shapes CAP_SYS_ADMIN and /dev/fuse",
+      () => {
+        const image = { dockerfile: "Dockerfile", context: getFixture("container-fuse") };
+        return Effect.gen(function* () {
+          const worker = yield* startTestWorker({
+            name: "container-fuse",
+            compatibilityDate: "2026-03-17",
+            compatibilityFlags: [],
+            bindings: [
+              DurableObjectNamespace.local({ binding: "IMAGE_NAME", className: "FuseImageName" }),
+              DurableObjectNamespace.local({
+                binding: "NAMED_IMAGES",
+                className: "FuseNamedImages",
+              }),
+            ],
+            modules: [{ name: "main.js", type: "ESModule", content: FUSE_SCRIPT }],
+            durableObjectNamespaces: [
+              { className: "FuseImageName", sql: true, container: image },
+              { className: "FuseNamedImages", sql: true, container: { images: { fuse: image } } },
+            ],
+          });
+          for (const path of ["/image-name", "/images"]) {
+            const text = yield* worker.fetchText(path);
+            const capEff = /CapEff:\s*([0-9a-f]+)/.exec(text)?.[1];
+            expect(capEff, text).toBeDefined();
+            // CAP_SYS_ADMIN is capability 21.
+            expect((BigInt(`0x${capEff}`) >> 21n) & 1n, text).toBe(1n);
+            expect(text).toContain("fuse-device");
+          }
+        }).pipe(
+          Effect.scoped,
+          Effect.ensuring(
+            Effect.sync(() => {
+              removeImage("alchemy-dev/fuseimagename");
+              removeImage("alchemy-dev/fusenamedimages");
+            }),
+          ),
+        );
+      },
+      60_000,
+    );
+  },
+);
+
 const testContainer = Effect.fn(
   function* (options: {
     index: number;
@@ -185,11 +278,7 @@ const testContainer = Effect.fn(
   (self, options) =>
     self.pipe(
       Effect.scoped,
-      Effect.ensuring(
-        Effect.sync(() =>
-          removeImage(`alchemy-dev/mycontainer${options.index}`),
-        ),
-      ),
+      Effect.ensuring(Effect.sync(() => removeImage(`alchemy-dev/mycontainer${options.index}`))),
     ),
 );
 
@@ -197,13 +286,7 @@ const removeImage = (reference: string) => {
   try {
     const output = execFileSync(
       DOCKER_BIN,
-      [
-        "images",
-        "--format",
-        "{{.Repository}}:{{.Tag}}",
-        "--filter",
-        `reference=${reference}`,
-      ],
+      ["images", "--format", "{{.Repository}}:{{.Tag}}", "--filter", `reference=${reference}`],
       {
         stdio: "pipe",
         encoding: "utf-8",
@@ -220,22 +303,5 @@ const removeImage = (reference: string) => {
     }
   } catch {
     // ignore errors - best effort
-  }
-};
-
-const isDockerAvailable = () => {
-  // Containers are not supported on Windows: the Docker daemon there runs
-  // Windows containers and cannot pull the `linux/amd64` images these tests
-  // depend on. This mirrors upstream workers-sdk, which bails out on Windows.
-  if (process.platform === "win32") {
-    return false;
-  }
-  try {
-    execFileSync(DOCKER_BIN, ["info"], {
-      stdio: "ignore",
-    });
-    return true;
-  } catch {
-    return false;
   }
 };

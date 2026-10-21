@@ -1,3 +1,4 @@
+import * as zlib from "node:zlib";
 /**
  * Gzipped ustar of a directory. Used to upload a generated Docker
  * context (Railway `/up`, and any other gzip-tarball consumer).
@@ -5,34 +6,18 @@
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
-import * as zlib from "node:zlib";
 
 const encoder = new TextEncoder();
 
 const pad512 = (size: number) => (512 - (size % 512)) % 512;
 
-const writeBytes = (
-  buf: Uint8Array,
-  offset: number,
-  value: string,
-  length: number,
-) => {
+const writeBytes = (buf: Uint8Array, offset: number, value: string, length: number) => {
   const bytes = encoder.encode(value);
   buf.set(bytes.subarray(0, length), offset);
 };
 
-const writeOctal = (
-  buf: Uint8Array,
-  offset: number,
-  value: number,
-  length: number,
-) => {
-  writeBytes(
-    buf,
-    offset,
-    `${value.toString(8).padStart(length - 1, "0")}\0`,
-    length,
-  );
+const writeOctal = (buf: Uint8Array, offset: number, value: number, length: number) => {
+  writeBytes(buf, offset, `${value.toString(8).padStart(length - 1, "0")}\0`, length);
 };
 
 const headerBlock = (input: {
@@ -63,9 +48,7 @@ const headerBlock = (input: {
   return buf;
 };
 
-const splitUstarName = (
-  rel: string,
-): { name: string; prefix?: string } | undefined => {
+const splitUstarName = (rel: string): { name: string; prefix?: string } | undefined => {
   if (rel.length <= 100) return { name: rel };
   for (let i = rel.length - 101; i >= 1; i--) {
     if (rel[i] !== "/") continue;
@@ -105,6 +88,7 @@ type WalkEntry = {
   rel: string;
   abs: string;
   dir: boolean;
+  mode: number;
 };
 
 const walkDirectory = (
@@ -123,10 +107,20 @@ const walkDirectory = (
           const posixRel = childRel.replaceAll("\\", "/");
           const stat = yield* fs.stat(abs);
           if (stat.type === "Directory") {
-            files.push({ rel: posixRel, abs, dir: true });
+            files.push({
+              rel: posixRel,
+              abs,
+              dir: true,
+              mode: stat.mode & 0o7777,
+            });
             yield* walk(abs, posixRel);
           } else if (stat.type === "File") {
-            files.push({ rel: posixRel, abs, dir: false });
+            files.push({
+              rel: posixRel,
+              abs,
+              dir: false,
+              mode: stat.mode & 0o7777,
+            });
           }
         }
       });
@@ -134,12 +128,7 @@ const walkDirectory = (
     return files;
   });
 
-const fileBlocks = (
-  rel: string,
-  size: number,
-  type: "0" | "5",
-  mode: number,
-): Uint8Array[] => {
+const fileBlocks = (rel: string, size: number, type: "0" | "5", mode: number): Uint8Array[] => {
   const split = splitUstarName(rel);
   if (split === undefined) {
     return [
@@ -159,17 +148,22 @@ const fileBlocks = (
  * Pack `root` into a gzipped tar (ustar + GNU long-name). Paths are
  * relative to `root` with POSIX separators.
  */
-export const tarGzipDirectory = Effect.fn(function* (root: string) {
+export const tarGzipDirectory = Effect.fn(function* (
+  root: string,
+  options?: { preserveMode?: boolean },
+) {
   const fs = yield* FileSystem.FileSystem;
   const files = yield* walkDirectory(root);
   const chunks: Uint8Array[] = [];
   for (const file of files) {
     if (file.dir) {
-      chunks.push(...fileBlocks(`${file.rel}/`, 0, "5", 0o755));
+      chunks.push(...fileBlocks(`${file.rel}/`, 0, "5", options?.preserveMode ? file.mode : 0o755));
       continue;
     }
     const content = yield* fs.readFile(file.abs);
-    chunks.push(...fileBlocks(file.rel, content.byteLength, "0", 0o644));
+    chunks.push(
+      ...fileBlocks(file.rel, content.byteLength, "0", options?.preserveMode ? file.mode : 0o644),
+    );
     chunks.push(content);
     const pad = pad512(content.byteLength);
     if (pad > 0) chunks.push(new Uint8Array(pad));

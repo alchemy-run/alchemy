@@ -1,14 +1,16 @@
+import type { Crypto } from "effect/Crypto";
+import type { Input as DurationInput } from "effect/Duration";
 import * as Effect from "effect/Effect";
 import type { FileSystem } from "effect/FileSystem";
+import type { HttpServer } from "effect/http/HttpServer";
+import type { ServeError } from "effect/http/HttpServerError";
 import * as Layer from "effect/Layer";
 import type { Path } from "effect/Path";
+import type { ChildProcessSpawner } from "effect/process/ChildProcessSpawner";
 import { defaultTeardown, type Teardown } from "effect/Runtime";
+import type { WebSocketConstructor } from "effect/socket/Socket";
 import type { Stdio } from "effect/Stdio";
 import type { Terminal } from "effect/Terminal";
-import type { HttpServer } from "effect/unstable/http/HttpServer";
-import type { ServeError } from "effect/unstable/http/HttpServerError";
-import type { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner";
-import type { WebSocketConstructor } from "effect/unstable/socket/Socket";
 import { disableCrossSpawnChdir } from "./Node.ts";
 
 const isBun = typeof Bun !== "undefined";
@@ -47,6 +49,7 @@ export const platformLayer = <A, E, R>(constructors: {
 
 export type PlatformServices =
   | ChildProcessSpawner
+  | Crypto
   | FileSystem
   | Path
   | Stdio
@@ -57,14 +60,8 @@ export type PlatformServices =
 export const PlatformServices: Layer.Layer<PlatformServices> = platformLayer({
   bun: async () => {
     const [BunServices, BunSocket] = await Promise.all([
-      importPlatformPeer(
-        "@effect/platform-bun",
-        () => import("@effect/platform-bun/BunServices"),
-      ),
-      importPlatformPeer(
-        "@effect/platform-bun",
-        () => import("@effect/platform-bun/BunSocket"),
-      ),
+      importPlatformPeer("@effect/platform-bun", () => import("@effect/platform-bun/BunServices")),
+      importPlatformPeer("@effect/platform-bun", () => import("@effect/platform-bun/BunSocket")),
     ]);
     return Layer.merge(BunServices.layer, BunSocket.layerWebSocketConstructor);
   },
@@ -74,15 +71,9 @@ export const PlatformServices: Layer.Layer<PlatformServices> = platformLayer({
         "@effect/platform-node",
         () => import("@effect/platform-node/NodeServices"),
       ),
-      importPlatformPeer(
-        "@effect/platform-node",
-        () => import("@effect/platform-node/NodeSocket"),
-      ),
+      importPlatformPeer("@effect/platform-node", () => import("@effect/platform-node/NodeSocket")),
     ]);
-    return Layer.merge(
-      NodeServices.layer,
-      NodeSocket.layerWebSocketConstructor,
-    );
+    return Layer.merge(NodeServices.layer, NodeSocket.layerWebSocketConstructor);
   },
 });
 
@@ -134,6 +125,9 @@ export const runMain = <E, A>(
 export const httpServer = (
   port: number = 0,
   host: string = "127.0.0.1",
+  options?: {
+    readonly gracefulShutdownTimeout?: DurationInput | undefined;
+  },
 ): Layer.Layer<HttpServer, ServeError> =>
   platformLayer({
     bun: async () => {
@@ -155,6 +149,10 @@ export const httpServer = (
         ),
         import("node:http"),
       ]);
-      return NodeHttpServer.layerServer(Http.createServer, { host, port });
+      return NodeHttpServer.layerServer(Http.createServer, {
+        host,
+        port,
+        gracefulShutdownTimeout: options?.gracefulShutdownTimeout,
+      });
     },
   });

@@ -1,3 +1,7 @@
+import type { RouteData } from "astro";
+import type { RenderOptions } from "astro/app";
+import { createApp } from "astro/app/entrypoint";
+import { setGetEnv } from "astro/env/setup";
 // Alchemy modifications are licensed under Apache-2.0.
 // This file includes third-party code; see /THIRD_PARTY_LICENSES.md.
 /**
@@ -8,10 +12,6 @@
  * virtual module served by this package's config plugin.
  */
 import { env as globalEnv } from "cloudflare:workers";
-import type { RouteData } from "astro";
-import type { RenderOptions } from "astro/app";
-import { createApp } from "astro/app/entrypoint";
-import { setGetEnv } from "astro/env/setup";
 import {
   cacheProviderEnabled,
   compileImageConfig,
@@ -67,8 +67,7 @@ export async function handle(
   // Handle prerender endpoints (only active during build prerender phase)
   if (isPrerender) {
     if (compileImageConfig) {
-      const { installAddStaticImage } =
-        await import("./static-image-collection.ts");
+      const { installAddStaticImage } = await import("./static-image-collection.ts");
       installAddStaticImage(compileImageConfig);
     }
 
@@ -124,10 +123,7 @@ export async function handle(
   // When the Cloudflare cache provider is configured, default uncached
   // responses to `no-store` so opting in to route caching never
   // accidentally caches a route that didn't set any cache intent.
-  if (
-    cacheProviderEnabled &&
-    !response.headers.has("Cloudflare-CDN-Cache-Control")
-  ) {
+  if (cacheProviderEnabled && !response.headers.has("Cloudflare-CDN-Cache-Control")) {
     response.headers.set("Cloudflare-CDN-Cache-Control", "no-store");
   }
 

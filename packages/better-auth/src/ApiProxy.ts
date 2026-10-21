@@ -1,5 +1,4 @@
 import type { RuntimeContext } from "alchemy";
-import type { Auth } from "better-auth";
 import * as Effect from "effect/Effect";
 import { BetterAuthApiError, isAPIErrorLike } from "./Errors.ts";
 
@@ -14,9 +13,7 @@ import { BetterAuthApiError, isAPIErrorLike } from "./Errors.ts";
  * endpoints. Use the raw `auth` escape hatch for those.
  */
 export type BetterAuthApi<Api> = {
-  readonly [K in keyof Api]: Api[K] extends (
-    ...args: infer Args
-  ) => Promise<infer A>
+  readonly [K in keyof Api]: Api[K] extends (...args: infer Args) => Promise<infer A>
     ? (...args: Args) => Effect.Effect<A, BetterAuthApiError, RuntimeContext>
     : never;
 };
@@ -31,9 +28,7 @@ export const makeApiProxy = <A extends { api: unknown }>(
 ): BetterAuthApi<A["api"]> => {
   const wrappers = new Map<
     PropertyKey,
-    (
-      ...args: unknown[]
-    ) => Effect.Effect<unknown, BetterAuthApiError, RuntimeContext>
+    (...args: unknown[]) => Effect.Effect<unknown, BetterAuthApiError, RuntimeContext>
   >();
   return new Proxy(
     {},
@@ -50,12 +45,9 @@ export const makeApiProxy = <A extends { api: unknown }>(
             Effect.flatMap(makeAuth, (auth) =>
               Effect.tryPromise({
                 try: () =>
-                  (
-                    auth.api as Record<
-                      string,
-                      (...args: unknown[]) => Promise<unknown>
-                    >
-                  )[key]!(...args),
+                  (auth.api as Record<string, (...args: unknown[]) => Promise<unknown>>)[key]!(
+                    ...args,
+                  ),
                 catch: (error) => error,
               }).pipe(
                 Effect.catch((error: unknown) =>
