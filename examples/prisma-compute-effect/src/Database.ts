@@ -1,5 +1,5 @@
+import * as Prisma from "@alchemy.run/prisma";
 import { Stage } from "alchemy";
-import * as Prisma from "alchemy/Prisma";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 

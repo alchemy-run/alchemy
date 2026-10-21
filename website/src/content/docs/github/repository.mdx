@@ -18,7 +18,7 @@ New here? [Set up credentials](/github/setup) first.
 ```typescript
 // alchemy.run.ts
 import * as Alchemy from "alchemy";
-import * as GitHub from "alchemy/GitHub";
+import * as GitHub from "@alchemy.run/github";
 import * as Effect from "effect/Effect";
 
 export default Alchemy.Stack(
@@ -178,7 +178,7 @@ For anything the resource model doesn't cover, the
 every GitHub resource uses:
 
 ```typescript
-import * as GitHub from "alchemy/GitHub";
+import * as GitHub from "@alchemy.run/github";
 import * as Effect from "effect/Effect";
 
 const program = Effect.gen(function* () {
