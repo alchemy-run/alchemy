@@ -29,6 +29,11 @@ const STATE_MAGIC: &[u8; 8] = b"BLKDCS01";
 /// If another attach supersedes the lease, every later write and sync fails:
 /// the device never acknowledges what it can't make durable.
 ///
+/// An *ephemeral* device ([`Device::open_snapshot`]) attaches a snapshot with
+/// no head and no lease. Its writes stay in the cache: syncs and snapshots
+/// write nothing to the store, and closing forgets them. Many machines can
+/// attach one snapshot this way at once (a command forked from a session).
+///
 /// A clean [`Device::close`] leaves the cache reusable: the next attach of any
 /// head keeps every cached extent that its snapshot shares with the cache's.
 pub struct Device {
@@ -43,8 +48,9 @@ pub struct Device {
     unjournaled: Bitmap,
     /// Serializes block operations; holds the snapshot the cache is based on.
     base: Mutex<Hash>,
-    /// One journal append or snapshot at a time; holds the lease.
-    lease: Mutex<Lease>,
+    /// One journal append or snapshot at a time; holds the lease, or `None`
+    /// on an ephemeral device.
+    lease: Mutex<Option<Lease>>,
     /// Writes accepted, and how many of them are durable: a sync returns at
     /// once if another caller's append already covered its writes.
     written: AtomicU64,
@@ -92,6 +98,33 @@ impl Device {
     ) -> Result<Self> {
         let lease = runtime.block_on(volume.acquire(head))?;
         let base = lease.snapshot();
+        Self::attach(volume, head, base, Some(lease), cache_path, runtime)
+    }
+
+    /// Attaches `snapshot` with no lease: writes stay in the cache and are
+    /// forgotten at close. See the type's docs.
+    pub fn open_snapshot(
+        volume: Arc<Volume>,
+        snapshot: Hash,
+        cache_path: &Path,
+        runtime: Handle,
+    ) -> Result<Self> {
+        Self::attach(volume, &format!("@{snapshot}"), snapshot, None, cache_path, runtime)
+    }
+
+    /// Whether writes stay on this machine ([`Device::open_snapshot`]).
+    pub fn ephemeral(&self) -> bool {
+        self.lease.lock().unwrap().is_none()
+    }
+
+    fn attach(
+        volume: Arc<Volume>,
+        head: &str,
+        base: Hash,
+        lease: Option<Lease>,
+        cache_path: &Path,
+        runtime: Handle,
+    ) -> Result<Self> {
         let size = runtime.block_on(volume.manifest(&base))?.size;
         let blocks = size / BLOCK_SIZE;
         let state_path = state_path(cache_path);
@@ -216,11 +249,16 @@ impl Device {
     /// blocks unjournaled.
     pub fn sync(&self) -> Result<()> {
         let target = self.written.load(Ordering::Acquire);
-        let mut lease = self.lease.lock().unwrap();
+        let mut guard = self.lease.lock().unwrap();
         if self.journaled.load(Ordering::Acquire) >= target {
             return Ok(()); // an append that started after our writes covered them
         }
         self.check_lease()?;
+        let Some(lease) = guard.as_mut() else {
+            // Ephemeral: nothing outlives this machine, so there's nothing to append.
+            self.journaled.fetch_max(target, Ordering::AcqRel);
+            return Ok(());
+        };
         let (blocks, mark) = {
             let _base = self.base.lock().unwrap();
             let mut blocks = Vec::new();
@@ -238,7 +276,7 @@ impl Device {
         for entry in blocks.chunks(per_entry) {
             result = self
                 .runtime
-                .block_on(self.volume.append(&mut lease, entry.to_vec()));
+                .block_on(self.volume.append(lease, entry.to_vec()));
             if result.is_err() {
                 break;
             }
@@ -267,8 +305,11 @@ impl Device {
     /// finished before the call is in the snapshot; the upload then runs
     /// without blocking reads and writes. A failed upload leaves them dirty.
     pub fn snapshot(&self) -> Result<Hash> {
-        let mut lease = self.lease.lock().unwrap();
+        let mut guard = self.lease.lock().unwrap();
         self.check_lease()?;
+        let Some(lease) = guard.as_mut() else {
+            return Ok(*self.base.lock().unwrap()); // ephemeral: writes stay here
+        };
         let (extents, changes, mark) = {
             let base = self.base.lock().unwrap();
             let extents = self.dirty_extents();
@@ -290,7 +331,7 @@ impl Device {
         };
         match self
             .runtime
-            .block_on(self.volume.commit_leased(&mut lease, changes))
+            .block_on(self.volume.commit_leased(lease, changes))
         {
             Ok(next) => {
                 *self.base.lock().unwrap() = next;
@@ -330,6 +371,9 @@ impl Device {
     /// Snapshots, then creates head `to` on the snapshot. The attached head
     /// keeps going; `to` can be attached anywhere.
     pub fn fork(&self, to: &str) -> Result<Hash> {
+        if self.ephemeral() {
+            bail!("an ephemeral attach can't fork: its writes never reach the store");
+        }
         let id = self.snapshot()?;
         self.runtime.block_on(self.volume.fork_at(id, to))?;
         Ok(id)
@@ -340,13 +384,23 @@ impl Device {
     pub fn close(&self) -> Result<Hash> {
         let id = self.snapshot()?;
         let _base = self.base.lock().unwrap(); // no operation in flight
+        let lease = self.lease.lock().unwrap().clone();
+        let Some(lease) = lease else {
+            // Ephemeral: forget the writes, keep what the snapshot holds.
+            for block in self.set_blocks(&self.dirty) {
+                self.present.clear(block);
+                self.dirty.clear(block);
+            }
+            self.cache.sync_all()?;
+            save_state(&state_path(&self.cache_path), &id, self.size, &self.present)?;
+            return Ok(id);
+        };
         if self.dirty.count() > 0 {
             bail!("writes arrived while closing");
         }
         self.cache.sync_all()?;
         save_state(&state_path(&self.cache_path), &id, self.size, &self.present)?;
         // Garbage collection stops sparing this lease's writes.
-        let lease = self.lease.lock().unwrap().clone();
         if let Err(e) = self.runtime.block_on(self.volume.release(&lease)) {
             tracing::warn!("releasing the lease on {} failed: {e}", self.head);
         }
@@ -482,7 +536,7 @@ impl Device {
             dirty_blocks: self.dirty.count(),
             reused_blocks: self.reused_blocks,
             unjournaled_blocks: self.unjournaled.count(),
-            epoch: self.lease.lock().unwrap().epoch(),
+            epoch: self.lease.lock().unwrap().as_ref().map_or(0, Lease::epoch),
             fetches: self.fetches.load(Ordering::Relaxed),
             syncs: self.syncs.load(Ordering::Relaxed),
             flushes: self.flushes.load(Ordering::Relaxed),

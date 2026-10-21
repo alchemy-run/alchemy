@@ -5,8 +5,15 @@
 //! {"op":"sync"}                                   → {"ok":true}
 //! {"op":"snapshot"}                               → {"ok":true,"snapshot":"…"}
 //! {"op":"fork","to":"try-1","freeze":"/workspace"} → {"ok":true,"snapshot":"…"}
-//! {"op":"detach"}                                → {"ok":true,"snapshot":"…"}
+//! {"op":"detach"}                                → {"ok":true,"snapshot":"…","paths":[…]}
+//! {"op":"checkpoint"}                            → {"ok":true,"paths":[…]}
+//! {"op":"apply","patches":["patches/…"]}         → {"ok":true,"paths":[…],"applied":[…]}
 //! ```
+//!
+//! `checkpoint` reports which paths the head changed since the last one
+//! (`null`: unknown). `apply` takes a checkpoint, then applies patches from
+//! the store to the mounted workspace; its own writes aren't reported by the
+//! next checkpoint. A detach reports the last checkpoint's paths too.
 //!
 //! `sync` makes every write so far durable in the journal; `snapshot` (`flush`
 //! is the old name) commits them as a snapshot. `freeze` names the mounted
@@ -34,21 +41,44 @@ enum Request {
         freeze: Option<String>,
     },
     Detach,
+    Checkpoint,
+    Apply {
+        patches: Vec<String>,
+    },
+}
+
+/// What a mount adds to the control socket.
+pub trait MountOps {
+    /// Unmounts (or disconnects), so every write is in the device; returns
+    /// fields for the detach's reply.
+    fn detach(&mut self) -> Result<serde_json::Value>;
+    fn checkpoint(&mut self) -> Result<serde_json::Value> {
+        bail!("this attach has no mount to checkpoint")
+    }
+    fn apply(&mut self, _patches: &[String]) -> Result<serde_json::Value> {
+        bail!("this attach has no mount to apply a patch to")
+    }
+}
+
+/// A [`MountOps`] that only detaches.
+pub struct DetachOnly<F: FnMut() -> Result<()>>(pub F);
+
+impl<F: FnMut() -> Result<()>> MountOps for DetachOnly<F> {
+    fn detach(&mut self) -> Result<serde_json::Value> {
+        (self.0)()?;
+        Ok(json!({}))
+    }
 }
 
 /// Serves the control socket at `path` until a `detach` arrives. A detach
 /// first calls `on_detach`, which unmounts or disconnects (so every write is
 /// in the device), then snapshots, replies with the snapshot and returns.
-pub fn serve(
-    path: &Path,
-    device: Arc<Device>,
-    mut on_detach: impl FnMut() -> Result<()>,
-) -> Result<()> {
+pub fn serve(path: &Path, device: Arc<Device>, mut ops: impl MountOps) -> Result<()> {
     let _ = std::fs::remove_file(path);
     let listener = UnixListener::bind(path)?;
     for stream in listener.incoming() {
         let stream = stream?;
-        if handle(stream, &device, &mut on_detach)? {
+        if handle(stream, &device, &mut ops)? {
             let _ = std::fs::remove_file(path);
             return Ok(());
         }
@@ -57,11 +87,7 @@ pub fn serve(
 }
 
 /// Answers one connection; true when it detached.
-fn handle(
-    stream: UnixStream,
-    device: &Device,
-    on_detach: &mut impl FnMut() -> Result<()>,
-) -> Result<bool> {
+fn handle(stream: UnixStream, device: &Device, ops: &mut impl MountOps) -> Result<bool> {
     let mut writer = stream.try_clone()?;
     for line in BufReader::new(stream).lines() {
         let line = line?;
@@ -85,13 +111,19 @@ fn handle(
             Ok(Request::Fork { to, freeze }) => {
                 (result(fork(device, &to, freeze.as_deref())), false)
             }
-            Ok(Request::Detach) => match on_detach() {
-                Ok(()) => (result(device.snapshot()), true),
+            Ok(Request::Detach) => match ops.detach() {
+                Ok(extra) => {
+                    let mut reply = result(device.snapshot());
+                    merge(&mut reply, extra);
+                    (reply, true)
+                }
                 Err(e) => (
                     json!({ "ok": false, "error": format!("detaching: {e:#}") }),
                     false,
                 ),
             },
+            Ok(Request::Checkpoint) => (outcome(ops.checkpoint()), false),
+            Ok(Request::Apply { patches }) => (outcome(ops.apply(&patches)), false),
         };
         writer.write_all(format!("{reply}\n").as_bytes())?;
         if detach {
@@ -127,6 +159,22 @@ fn fsfreeze(flag: &str, mountpoint: &str) -> Result<()> {
         bail!("fsfreeze {flag} {mountpoint} failed: {status}");
     }
     Ok(())
+}
+
+fn outcome(outcome: Result<serde_json::Value>) -> serde_json::Value {
+    match outcome {
+        Ok(mut value) => {
+            merge(&mut value, json!({ "ok": true }));
+            value
+        }
+        Err(e) => json!({ "ok": false, "error": format!("{e:#}") }),
+    }
+}
+
+fn merge(into: &mut serde_json::Value, extra: serde_json::Value) {
+    if let (Some(into), serde_json::Value::Object(extra)) = (into.as_object_mut(), extra) {
+        into.extend(extra);
+    }
 }
 
 fn result(outcome: Result<volume::Hash>) -> serde_json::Value {

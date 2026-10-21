@@ -8,17 +8,27 @@
 //! calls.
 
 mod bitmap;
+#[cfg(target_os = "linux")]
+pub mod call;
 pub mod control;
 mod device;
 #[cfg(target_os = "linux")]
 pub mod exec;
+#[cfg(target_os = "linux")]
+pub mod fs;
 #[cfg(all(target_os = "linux", feature = "fuse"))]
 pub mod fuse;
 #[cfg(target_os = "linux")]
 pub mod mount;
 #[cfg(target_os = "linux")]
 pub mod nbd;
+#[cfg(target_os = "linux")]
+pub mod patch;
+#[cfg(target_os = "linux")]
+pub mod sendstream;
 pub mod store;
+#[cfg(target_os = "linux")]
+pub mod track;
 #[cfg(all(target_os = "linux", feature = "ublk"))]
 pub mod ublk;
 

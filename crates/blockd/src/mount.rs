@@ -1,7 +1,8 @@
 //! A volume mounted at a directory, in the best mode the host allows.
 //!
-//! Every mode serves the same [`Device`] and mounts the same ext4; they
-//! differ in how blocks reach the kernel:
+//! Every mode serves the same [`Device`] and mounts its filesystem (ext4 or
+//! btrfs, see [`crate::fs`]) with the kernel's own driver; they differ in how
+//! blocks reach the kernel:
 //!
 //! - **ublk**: a kernel block device served over io_uring. The fastest.
 //! - **nbd**: a kernel block device served over a socket.
@@ -15,6 +16,7 @@
 //! that an `fsync`ed write survives the machine.
 
 use crate::Device;
+use crate::fs::Fs;
 use anyhow::{Context, Result, bail};
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -67,7 +69,11 @@ impl Mode {
 /// the transport down; every write is then in the device.
 pub struct Mount {
     mode: Mode,
+    fs: Fs,
     dir: PathBuf,
+    block: PathBuf,
+    /// More mounts of the same filesystem, unmounted first.
+    extra: Vec<PathBuf>,
     teardown: Box<dyn FnOnce() -> Result<()> + Send>,
 }
 
@@ -76,11 +82,25 @@ impl Mount {
         self.mode
     }
 
+    pub fn fs(&self) -> Fs {
+        self.fs
+    }
+
     pub fn dir(&self) -> &Path {
         &self.dir
     }
 
+    /// Mounts a btrfs volume's top level at `dir` too, until this unmounts.
+    pub fn mount_top(&mut self, dir: &Path, readonly: bool) -> Result<()> {
+        crate::fs::mount_top(&self.block, dir, readonly)?;
+        self.extra.push(dir.to_path_buf());
+        Ok(())
+    }
+
     pub fn unmount(self) -> Result<()> {
+        for dir in self.extra.iter().rev() {
+            umount(dir)?;
+        }
         (self.teardown)()
     }
 }
@@ -88,13 +108,31 @@ impl Mount {
 /// Mounts `device` at `dir` in `mode`. `cache` is the device's cache file;
 /// FUSE modes put their disk file's mountpoint next to it.
 pub fn mount(device: &Arc<Device>, mode: Mode, cache: &Path, dir: &Path) -> Result<Mount> {
+    mount_as(device, mode, cache, dir, false)
+}
+
+/// [`mount`], read-only if asked: nothing is replayed or written.
+pub fn mount_as(
+    device: &Arc<Device>,
+    mode: Mode,
+    cache: &Path,
+    dir: &Path,
+    readonly: bool,
+) -> Result<Mount> {
     std::fs::create_dir_all(dir)?;
+    let fs = Fs::detect(device)?;
+    if !fs.supported() {
+        bail!("this machine's kernel can't mount {fs:?}");
+    }
+    let mount_fs = |block: &Path, dir: &Path| crate::fs::mount(fs, block, dir, readonly);
+    let block: PathBuf;
     let teardown: Box<dyn FnOnce() -> Result<()> + Send> = match mode {
         #[cfg(feature = "fuse")]
         Mode::Loop => {
             let disk = crate::fuse::serve_file(device.clone(), &cache.with_extension("disk"))?;
             let loop_device = attach_loop(&disk.file())?;
-            if let Err(e) = mount_ext4(&loop_device, dir) {
+            block = loop_device.clone();
+            if let Err(e) = mount_fs(&loop_device, dir) {
                 let _ = detach_loop(&loop_device);
                 return Err(e);
             }
@@ -109,7 +147,8 @@ pub fn mount(device: &Arc<Device>, mode: Mode, cache: &Path, dir: &Path) -> Resu
         Mode::Nbd => {
             let nbd = free_nbd()?;
             let attachment = crate::nbd::attach(&nbd, device.clone())?;
-            if let Err(e) = wait_until_sized(&nbd).and_then(|()| mount_ext4(&nbd, dir)) {
+            block = nbd.clone();
+            if let Err(e) = wait_until_sized(&nbd).and_then(|()| mount_fs(&nbd, dir)) {
                 let _ = attachment.detach();
                 return Err(e);
             }
@@ -129,7 +168,8 @@ pub fn mount(device: &Arc<Device>, mode: Mode, cache: &Path, dir: &Path) -> Resu
                 std::thread::spawn(move || ublk.serve(device, move |path| drop(ready.send(path))))
             };
             let path = PathBuf::from(path.recv().context("the ublk device never started")?);
-            if let Err(e) = wait_until_sized(&path).and_then(|()| mount_ext4(&path, dir)) {
+            block = path.clone();
+            if let Err(e) = wait_until_sized(&path).and_then(|()| mount_fs(&path, dir)) {
                 killer.kill();
                 let _ = serving.join();
                 return Err(e);
@@ -148,32 +188,19 @@ pub fn mount(device: &Arc<Device>, mode: Mode, cache: &Path, dir: &Path) -> Resu
     };
     Ok(Mount {
         mode,
+        fs,
         dir: dir.to_path_buf(),
+        block,
+        extra: Vec::new(),
         teardown,
     })
-}
-
-fn mount_ext4(device: &Path, dir: &Path) -> Result<()> {
-    let status = crate::helper("mount")
-        .args(["-t", "ext4"])
-        .arg(device)
-        .arg(dir)
-        .status()?;
-    if !status.success() {
-        bail!(
-            "mount {} {} failed: {status}",
-            device.display(),
-            dir.display()
-        );
-    }
-    Ok(())
 }
 
 /// Syncs and unmounts `dir`: every write is in the device afterwards. A
 /// process still using the mount when it ends (a server a command left
 /// running, a shell parked in it) is killed first: the mount's lifetime is
 /// the caller's, not theirs.
-fn umount(dir: &Path) -> Result<()> {
+pub(crate) fn umount(dir: &Path) -> Result<()> {
     sync(dir);
     for attempt in 0..10 {
         let killed = kill_users(dir);
@@ -197,15 +224,32 @@ fn umount(dir: &Path) -> Result<()> {
 
 /// Kills (SIGKILL) every process other than this one whose working
 /// directory or any open file is under `dir`. Returns how many.
-fn kill_users(dir: &Path) -> usize {
+pub(crate) fn kill_users(dir: &Path) -> usize {
+    users(dir)
+        .into_iter()
+        .filter(|user| unsafe { libc::kill(user.pid as i32, libc::SIGKILL) } == 0)
+        .count()
+}
+
+/// A process using a mount.
+#[derive(Clone, Debug, serde::Serialize)]
+pub struct User {
+    pub pid: u32,
+    /// Its command line, spaces between arguments.
+    pub command: String,
+}
+
+/// Every process other than this one whose working directory or any open
+/// file is under `dir`.
+pub fn users(dir: &Path) -> Vec<User> {
     let Ok(dir) = std::fs::canonicalize(dir) else {
-        return 0;
+        return Vec::new();
     };
     let me = std::process::id();
     let under = |link: std::io::Result<PathBuf>| link.is_ok_and(|target| target.starts_with(&dir));
-    let mut killed = 0;
+    let mut found = Vec::new();
     let Ok(entries) = std::fs::read_dir("/proc") else {
-        return 0;
+        return found;
     };
     for entry in entries.flatten() {
         let Some(pid) = entry
@@ -223,11 +267,25 @@ fn kill_users(dir: &Path) -> usize {
         if !uses && let Ok(fds) = std::fs::read_dir(proc.join("fd")) {
             uses = fds.flatten().any(|fd| under(std::fs::read_link(fd.path())));
         }
-        if uses && unsafe { libc::kill(pid as i32, libc::SIGKILL) } == 0 {
-            killed += 1;
+        // A zombie, or a process mid-exit, holds nothing.
+        let exiting = std::fs::read_to_string(proc.join("stat")).is_ok_and(|stat| {
+            stat.rsplit_once(") ")
+                .is_some_and(|(_, rest)| rest.starts_with('Z') || rest.starts_with('X'))
+        });
+        if uses && !exiting {
+            let command = std::fs::read(proc.join("cmdline"))
+                .map(|bytes| {
+                    String::from_utf8_lossy(&bytes)
+                        .split('\0')
+                        .filter(|part| !part.is_empty())
+                        .collect::<Vec<_>>()
+                        .join(" ")
+                })
+                .unwrap_or_default();
+            found.push(User { pid, command });
         }
     }
-    killed
+    found
 }
 
 /// Attaches `file` to a free loop device, bypassing the page cache where
@@ -282,7 +340,7 @@ fn wait_until_sized(device: &Path) -> Result<()> {
     bail!("{} never came up", device.display())
 }
 
-pub(crate) fn sync(dir: &Path) {
+pub fn sync(dir: &Path) {
     let _ = crate::helper("sync").arg("-f").arg(dir).status();
 }
 
