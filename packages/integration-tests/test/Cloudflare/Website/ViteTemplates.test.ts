@@ -79,6 +79,43 @@ const expectSsrPage = (url: string, text: string) =>
 
 const TEMPLATES: ReadonlyArray<Template> = [
   {
+    // `npm create cloudflare -- --framework=redwood`: create-rwsdk's
+    // starter, server components rendered in the `worker` environment.
+    name: "redwood",
+    fixture: "vite-redwood-template-fixture",
+    entries: [
+      "package.json",
+      "vite.config.mts",
+      "wrangler.jsonc",
+      "tsconfig.json",
+      "public",
+      "src",
+      "types",
+    ],
+    props: {
+      main: "./src/worker.tsx",
+      compatibility: { date: "2025-08-21", flags: ["nodejs_compat"] },
+      viteEnvironments: { entry: "worker" },
+    },
+    check: (url) =>
+      Effect.gen(function* () {
+        let script: string | undefined;
+        yield* expectResponse(url, (res) => {
+          if (res.status !== 200 || !res.body.includes("Welcome to RedwoodSDK"))
+            return `${res.status} ${res.body.slice(0, 300)}`;
+          // The client entry, imported by an inline script.
+          script = res.body.match(/rel="modulepreload" href="(\/[^"]+)"/)?.[1];
+          return script ? undefined : `no client script in ${res.body.slice(0, 600)}`;
+        });
+        yield* expectResponse(`${url}${script}`, (res) =>
+          res.status === 200 ? undefined : `script ${res.status} ${res.body.slice(0, 200)}`,
+        );
+        yield* expectResponse(`${url}/favicon-light.svg`, (res) =>
+          res.status === 200 ? undefined : `favicon ${res.status}`,
+        );
+      }),
+  },
+  {
     // `npm create cloudflare -- --framework=tanstack-start`: the
     // `@tanstack/cli` Cloudflare starter, whose Worker entry is a package
     // export, with Tailwind CSS and the TanStack devtools plugin.

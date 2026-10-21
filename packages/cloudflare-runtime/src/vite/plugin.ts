@@ -85,13 +85,20 @@ const noopHook = (): undefined => undefined;
  * the app called the official factory. `ALCHEMY_CLOUDFLARE_VITE_INJECTED`
  * remains the way to skip that factory.
  */
-export const disableOfficialCloudflareVitePlugins = (
+export const disableOfficialCloudflareVitePlugins = async (
   plugins: ReadonlyArray<unknown> | undefined,
-): number => {
+): Promise<number> => {
   let disabled = 0;
-  const visit = (entry: unknown): void => {
+  const visit = async (entry: unknown): Promise<void> => {
+    // Async plugin factories (e.g. RedwoodSDK's `redwood()`, which adds its
+    // own `cloudflare()`) leave promises here. Vite resolves the same
+    // promises, so their plugins are the same objects.
+    if (isPromiseLike(entry)) {
+      await visit(await entry);
+      return;
+    }
     if (Array.isArray(entry)) {
-      for (const child of entry) visit(child);
+      for (const child of entry) await visit(child);
       return;
     }
     if (entry === null || typeof entry !== "object" || !("name" in entry)) {
@@ -104,9 +111,15 @@ export const disableOfficialCloudflareVitePlugins = (
     disableOfficialCloudflareVitePlugin(plugin);
     disabled += 1;
   };
-  for (const entry of plugins ?? []) visit(entry);
+  for (const entry of plugins ?? []) await visit(entry);
   return disabled;
 };
+
+const isPromiseLike = (value: unknown): value is PromiseLike<unknown> =>
+  typeof value === "object" &&
+  value !== null &&
+  "then" in value &&
+  typeof (value as { then: unknown }).then === "function";
 
 const disableOfficialCloudflareVitePlugin = (plugin: vite.Plugin): void => {
   const record = plugin as unknown as Record<string, unknown>;
@@ -143,8 +156,8 @@ const alchemyCloudflareVitePlugin = (): vite.Plugin => ({
   enforce: "pre",
   config: {
     order: "pre",
-    handler(config) {
-      disableOfficialCloudflareVitePlugins(config.plugins);
+    async handler(config) {
+      await disableOfficialCloudflareVitePlugins(config.plugins);
       // Vite concatenates this with a user's own `server.fs.deny`, which
       // would otherwise replace Vite's defaults and expose `.env`.
       return { server: { fs: { deny: [...DENIED_FILES] } } };

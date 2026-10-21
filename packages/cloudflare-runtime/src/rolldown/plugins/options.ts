@@ -79,9 +79,16 @@ export const optionsPlugin = createPlugin<"options", OptionsApi>("options", (plu
         const environmentNames = parseViteEnvironments(pluginOptions);
         const root = path.resolve(userConfig.root ?? ".");
         input = resolveInputPaths(
-          normalizeInput(
-            pluginOptions.main ?? defaultEnvironmentEntries(environmentNames[0], userConfig) ?? {},
-          ),
+          // `main` builds as `index`, `@cloudflare/vite-plugin`'s entry chunk
+          // name, which frameworks read back (RedwoodSDK links
+          // `<outDir>/index.js`).
+          typeof pluginOptions.main === "string"
+            ? { index: pluginOptions.main }
+            : normalizeInput(
+                pluginOptions.main ??
+                  defaultEnvironmentEntries(environmentNames[0], userConfig) ??
+                  {},
+              ),
           root,
         );
         const rollupOptions: vite.Rollup.RollupOptions = {

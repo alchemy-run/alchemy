@@ -46,7 +46,8 @@ describe("preview plugin", () => {
     });
     runtimeAddress = await listen(runtimeServer);
     // A fake built project: the entry environment's outDir with the entry
-    // chunk, and a client outDir with a static asset.
+    // chunk (`index`, as a string `main` builds), and a client outDir with a
+    // static asset.
     // Canonicalize the temp root: Windows may hand back an 8.3 short path
     // (C:\Users\RUNNER~1\...) that the plugin keeps while realpath expands it.
     root = await NodeFs.realpath(
@@ -57,7 +58,7 @@ describe("preview plugin", () => {
       recursive: true,
     });
     await NodeFs.writeFile(
-      NodePath.join(root, "dist", "ssr", "worker-entry.js"),
+      NodePath.join(root, "dist", "ssr", "index.js"),
       "export default { fetch: () => new Response('built worker') };",
     );
     await NodeFs.writeFile(NodePath.join(root, "dist", "client", "index.html"), "<html></html>");
@@ -105,7 +106,7 @@ describe("preview plugin", () => {
       expect(startedBuilds).toHaveLength(1);
       const build = startedBuilds[0]!;
       expect(build.directory).toBe(await NodeFs.realpath(NodePath.join(root, "dist", "ssr")));
-      expect(build.entryModule).toBe("worker-entry.js");
+      expect(build.entryModule).toBe("index.js");
       expect(build.assetsDirectory).toBe(
         await NodeFs.realpath(NodePath.join(root, "dist", "client")),
       );
@@ -134,8 +135,14 @@ describe("preview plugin", () => {
   });
 
   it("fails fast when the built entry chunk is missing", async () => {
-    await expect(
-      createPreviewServer(cloudflareVitePlugin({ main: "./missing-entry.ts" })),
-    ).rejects.toThrow(/missing-entry\.js/);
+    const entry = NodePath.join(root, "dist", "ssr", "index.js");
+    await NodeFs.rename(entry, `${entry}.bak`);
+    try {
+      await expect(
+        createPreviewServer(cloudflareVitePlugin({ main: "./worker-entry.ts" })),
+      ).rejects.toThrow(/index\.js/);
+    } finally {
+      await NodeFs.rename(`${entry}.bak`, entry);
+    }
   });
 });

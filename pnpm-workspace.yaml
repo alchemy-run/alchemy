@@ -102,6 +102,8 @@ catalog:
   cross-fetch: "^4.0.0"
   # Kept in the C3 React Router template's Vite config, which alchemy neutralizes.
   "@cloudflare/vite-plugin": "^1.64.0"
+  # create-cloudflare's RedwoodSDK template.
+  rwsdk: "1.7.4"
   "@vitejs/plugin-basic-ssl": "^2.3.0"
   debug: "^4.4.1"
   prisma: "^8.0.0-rc.15"

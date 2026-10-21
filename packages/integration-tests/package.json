@@ -119,6 +119,7 @@
     "react-router": "catalog:",
     "react-server-dom-webpack": "catalog:",
     "rolldown": "catalog:",
+    "rwsdk": "catalog:",
     "solid-js": "catalog:",
     "svelte": "catalog:",
     "tailwindcss": "catalog:",

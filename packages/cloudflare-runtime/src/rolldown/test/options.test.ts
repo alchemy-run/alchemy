@@ -111,7 +111,7 @@ describe("options plugin", () => {
       ".cts",
       ".ctx",
     ]);
-    expect(output.transform?.target).toBe("es2024");
+    expect(output.transform?.target).toBe("es2026");
   });
 
   it("defines production node env values and stubs process.env without nodejs_compat", () => {
