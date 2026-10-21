@@ -75,11 +75,12 @@ import { isPythonMain, watchPythonWorkerBundle } from "./Sources/Python.ts";
 import { WorkerBundle, type WorkerBundleOptions } from "./Sources/Rolldown.ts";
 import { DEFAULT_DEV_PORT, type ViteChildConfig } from "./ViteChild.shared.ts";
 import { startViteChild } from "./ViteChild.ts";
+import { resolveViteMain } from "./ViteMain.ts";
 import { isSelfUrl, Worker } from "./Worker.ts";
 import { getCronBindings } from "./WorkerAsyncBindings.ts";
 import type { WorkerBinding } from "./WorkerBinding.ts";
 import { createWorkerName } from "./WorkerName.ts";
-import { resolveTailConsumers, resolveViteMain } from "./WorkerProvider.ts";
+import { resolveTailConsumers } from "./WorkerProvider.ts";
 
 /** Local dev-server options (the worker-mode arm of `WorkerProps["dev"]`). */
 type DevServerOptions = Extract<WorkerProps["dev"], { mode?: "worker" }> & {
@@ -1456,6 +1457,9 @@ export const LocalWorkerProvider = () =>
           entry: worker.bundleOptions.entry,
           stack: { name: stack.name, stage: stack.stage },
           env: worker.env,
+          // Dev hands `env` to the source unresolved; the Worker's own URL
+          // is only substituted into a build's inlined env on deploy.
+          selfUrl: undefined,
           extraOptions: worker.bundleOptions.extraOptions,
           assets: worker.assets,
           worker: {

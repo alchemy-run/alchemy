@@ -65,7 +65,10 @@
     // `.react-router/types` typegen output (gitignored) that a build or dev
     // run produces, and the `.tsx` files use React's JSX runtime rather than
     // this package's default `@opentui/solid` jsxImportSource.
-    "test/AWS/Website/fixtures/react-router-app"
+    "test/AWS/Website/fixtures/react-router-app",
+    // Foldkit mode overlays are copied over a clone of the SSR fixture;
+    // their imports resolve only inside that clone.
+    "test/Website/fixtures/foldkit-modes"
   ],
   "compilerOptions": {
     "composite": true,

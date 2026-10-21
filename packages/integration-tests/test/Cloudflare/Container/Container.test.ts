@@ -431,6 +431,32 @@ describe.sequential(
     );
 
     test(
+      "keeps an attached application whose bindings were never recorded",
+      Effect.gen(function* () {
+        const first = yield* stack;
+        assert(first.app.durableObjects?.namespaceId);
+        const state = yield* yield* State;
+        const containerRow = yield* state.get(containerKey);
+        assert(containerRow?.status === "created" || containerRow?.status === "updated");
+        // What a deploy that adopted the application and then failed leaves
+        // behind: the observed application, attachment included, and no
+        // recorded bindings.
+        yield* state.set({ ...containerKey, value: { ...containerRow, bindings: [] } });
+        yield* Effect.gen(function* () {
+          const plan = yield* AttachmentStack.pipe(
+            Effect.flatMap((stack) => Plan.make(stack).pipe(Effect.provide(stack.services))),
+          );
+          expect(plan.resources.AttachmentContainer.action).not.toBe("replace");
+          const next = yield* deploy(AttachmentStack);
+          expect(next.app.applicationId).toBe(first.app.applicationId);
+        }).pipe(
+          Effect.ensuring(state.set({ ...containerKey, value: containerRow }).pipe(Effect.orDie)),
+        );
+      }).pipe(Effect.provide(services)),
+      { timeout: 120_000, retry: 0 },
+    );
+
+    test(
       "recovers an interrupted create with an unresolved Worker attachment",
       Effect.gen(function* () {
         const first = yield* stack;
@@ -650,6 +676,43 @@ describe.sequential(
         );
       }).pipe(Effect.provide(services)),
       { timeout: 120_000, retry: 0 },
+    );
+
+    // Runs last: detaching recreates the application under a new id.
+    test(
+      "detaches in place an attached application whose bindings were never recorded",
+      Effect.gen(function* () {
+        // The previous case destroys the stack but restores its state rows.
+        yield* destroyStack({ stack: AttachmentStack, stage, dev: false });
+        const first = yield* deploy(AttachmentStack);
+        assert(first.app.durableObjects?.namespaceId);
+        const state = yield* yield* State;
+        const containerRow = yield* state.get(containerKey);
+        assert(containerRow?.status === "created" || containerRow?.status === "updated");
+        yield* state.set({ ...containerKey, value: { ...containerRow, bindings: [] } });
+        yield* Effect.gen(function* () {
+          // The observed attachment must not turn a detach into a replace:
+          // the new generation would re-adopt a named application by name
+          // and the old generation's delete would then remove it.
+          const plan = yield* attachmentStack(false).pipe(
+            Effect.flatMap((stack) => Plan.make(stack).pipe(Effect.provide(stack.services))),
+          );
+          expect(plan.resources.AttachmentContainer.action).toBe("update");
+          const next = yield* deploy(attachmentStack(false));
+          expect(next.app.applicationName).toBe(first.app.applicationName);
+          expect(next.app.durableObjects).toBeUndefined();
+          const observed = yield* readAttachmentApplication(
+            next.app.accountId,
+            next.app.applicationId,
+          );
+          expect(observed.durableObjects).toBeUndefined();
+        }).pipe(
+          Effect.ensuring(
+            destroyStack({ stack: AttachmentStack, stage, dev: false }).pipe(Effect.orDie),
+          ),
+        );
+      }).pipe(Effect.provide(services)),
+      { timeout: 180_000, retry: 0 },
     );
   },
 );
