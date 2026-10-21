@@ -67,6 +67,10 @@ const childEnvironmentFixtureDir = pathe.resolve(
 );
 const errorsFixtureDir = pathe.resolve(import.meta.dirname, "vite-errors-fixture");
 const multiWorkerFixtureDir = pathe.resolve(import.meta.dirname, "vite-multi-worker-fixture");
+const customBuildAppFixtureDir = pathe.resolve(
+  import.meta.dirname,
+  "vite-custom-build-app-fixture",
+);
 const hotChannelFixtureDir = pathe.resolve(import.meta.dirname, "vite-hot-channel-fixture");
 
 type Mode = "live" | "dev";
@@ -1193,6 +1197,50 @@ describe.concurrent(
             yield* expectJson(`${url}/rpc-named-entrypoint/promise-pipelining`, {
               result: "You made it! 🚀",
             });
+          }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.ignore)), logLevel),
+        {
+          tags: ["provider:cloudflare:worker", mode === "dev" ? "local" : "live"],
+          timeout: 300_000,
+        },
+      );
+    }
+
+    // `custom-build-app`: the user's own `buildApp` builds the site (the
+    // Worker environment twice), which serves its page and its Worker.
+    for (const mode of ["live", "dev"] as const) {
+      (mode === "live" ? test : devTest).provider(
+        `Vite runtime: a custom buildApp builds the site${mode === "dev" ? " (dev)" : ""}`,
+        (stack) =>
+          Effect.gen(function* () {
+            yield* stack.destroy();
+            const rootDir = yield* cloneFixture(customBuildAppFixtureDir, {
+              prefix: "alchemy-vite-custom-build-app-",
+              tempRoot,
+              entries: ["package.json", "index.html", "vite.config.ts", "src"],
+            });
+            const site = yield* stack.deploy(
+              Cloudflare.Website.Vite(`ViteCustomBuildApp${mode}`, {
+                rootDir,
+                main: "./src/index.ts",
+                workersDev: true,
+                compatibility: { date: "2024-12-30" },
+                memo: { include: ["index.html", "src/**", "vite.config.ts", "package.json"] },
+                ...(mode === "dev" ? { dev: { port: 0 } } : {}),
+              }),
+            );
+            const url = site.url!.replace(/\/$/, "");
+            yield* expectResponse(`${url}/`, (res) =>
+              res.body.includes("<h1>HTML page</h1>")
+                ? undefined
+                : `body ${res.body.slice(0, 120)}`,
+            );
+            yield* expectText(`${url}/another-path`, "Worker response");
+            if (mode === "live") {
+              const fs = yield* FileSystem.FileSystem;
+              expect(yield* fs.readFileString(pathe.join(rootDir, "build-app.log"))).toBe(
+                "__before-build__\n__after-build__\n",
+              );
+            }
           }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.ignore)), logLevel),
         {
           tags: ["provider:cloudflare:worker", mode === "dev" ? "local" : "live"],
