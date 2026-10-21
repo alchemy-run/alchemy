@@ -18,6 +18,10 @@ export const profilesDirPath = () => path.join(rootDir(), "profiles");
 /** Directory containing all provider documents for a named profile. */
 export const profileDirPath = (profile: string) => path.join(profilesDirPath(), profile);
 
+/** Cached state-store credentials for a profile, beside its provider documents. */
+export const profileStateStoresDirPath = (profile: string) =>
+  path.join(profileDirPath(profile), "state-stores");
+
 /** The single persisted document for one provider in one profile. */
 export const profileProviderFilePath = (profile: string, provider: string) =>
   path.join(profileDirPath(profile), `${provider.toLowerCase()}.json`);

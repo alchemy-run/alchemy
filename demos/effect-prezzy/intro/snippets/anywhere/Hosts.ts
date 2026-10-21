@@ -1,7 +1,7 @@
-import * as AWS from "alchemy/AWS";
-import * as Hetzner from "alchemy/Hetzner";
-import * as Neon from "alchemy/Neon";
-import * as Railway from "alchemy/Railway";
+import * as AWS from "@alchemy.run/aws";
+import * as Hetzner from "@alchemy.run/hetzner";
+import * as Neon from "@alchemy.run/neon";
+import * as Railway from "@alchemy.run/railway";
 import * as Effect from "effect/Effect";
 
 /** What each host needs to run on, shared by the host roll's snippets. */

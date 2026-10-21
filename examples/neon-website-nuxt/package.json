@@ -16,6 +16,7 @@
     "build": "nuxt build"
   },
   "dependencies": {
+    "@alchemy.run/neon": "workspace:*",
     "alchemy": "workspace:*",
     "effect": "catalog:"
   },
