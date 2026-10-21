@@ -104,6 +104,9 @@ describe("Website.Vite streaming", () => {
       {
         tags: ["provider:cloudflare:worker", mode === "dev" ? "local" : "live"],
         timeout: 300_000,
+        // The chunk timing must not absorb event-loop stalls from tests
+        // running alongside in this process.
+        exclusive: mode === "dev",
       },
     );
   }
