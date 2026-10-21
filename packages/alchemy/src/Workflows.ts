@@ -186,42 +186,8 @@ export const RunWorkflow = <W extends Workflow.Any>(
   Effect.gen(function* () {
     const engine = yield* WorkflowEngine.WorkflowEngine;
     const typed = workflow as unknown as Workflow.Workflow<string, any, any, any>;
-    const run = (executionId: string): Run<SuccessOf<W>, ErrorOf<W>> => {
-      const poll = engine.poll(typed, executionId);
-      return {
-        executionId,
-        status: Effect.map(poll, (result): Status<SuccessOf<W>, ErrorOf<W>> => {
-          if (Option.isNone(result)) return { _tag: "NotStarted" };
-          if (result.value._tag === "Suspended") return { _tag: "Running" };
-          const exit = result.value.exit;
-          if (Exit.isSuccess(exit)) return { _tag: "Completed", result: exit.value };
-          const failure = exit.cause.reasons.find((reason) => reason._tag === "Fail");
-          if (failure?._tag === "Fail") return { _tag: "Failed", error: failure.error };
-          const defect = exit.cause.reasons.find((reason) => reason._tag === "Die");
-          return defect?._tag === "Die"
-            ? { _tag: "Died", defect: defect.defect }
-            : { _tag: "Interrupted" };
-        }) as Effect.Effect<Status<SuccessOf<W>, ErrorOf<W>>>,
-        result: poll.pipe(
-          Effect.flatMap((result) =>
-            Option.isSome(result) && result.value._tag === "Complete"
-              ? Effect.succeed(result.value.exit)
-              : Effect.fail("running" as const),
-          ),
-          Effect.retry({ schedule: POLL }),
-          Effect.orDie,
-          Effect.flatten,
-        ) as Effect.Effect<SuccessOf<W>, ErrorOf<W>>,
-        signal: (deferred, value) =>
-          engine.deferredDone(deferred, {
-            workflowName: typed._tag,
-            executionId,
-            deferredName: deferred.name,
-            exit: Exit.succeed(value),
-          }) as Effect.Effect<void>,
-        interrupt: engine.interrupt(typed, executionId),
-      };
-    };
+    const run = (executionId: string) =>
+      makeRun(engine, typed, executionId) as Run<SuccessOf<W>, ErrorOf<W>>;
     return {
       start: (payload) =>
         typed
@@ -233,3 +199,49 @@ export const RunWorkflow = <W extends Workflow.Any>(
       get: run,
     } satisfies WorkflowClient<W>;
   });
+
+/**
+ * A handle to one run of a workflow on an engine.
+ *
+ * @internal
+ */
+export const makeRun = (
+  engine: WorkflowEngine.WorkflowEngine["Service"],
+  workflow: Workflow.Workflow<string, any, any, any>,
+  executionId: string,
+): Run<unknown, unknown> => {
+  const poll = engine.poll(workflow, executionId);
+  return {
+    executionId,
+    status: Effect.map(poll, (result): Status<unknown, unknown> => {
+      if (Option.isNone(result)) return { _tag: "NotStarted" };
+      if (result.value._tag === "Suspended") return { _tag: "Running" };
+      const exit = result.value.exit;
+      if (Exit.isSuccess(exit)) return { _tag: "Completed", result: exit.value };
+      const failure = exit.cause.reasons.find((reason) => reason._tag === "Fail");
+      if (failure?._tag === "Fail") return { _tag: "Failed", error: failure.error };
+      const defect = exit.cause.reasons.find((reason) => reason._tag === "Die");
+      return defect?._tag === "Die"
+        ? { _tag: "Died", defect: defect.defect }
+        : { _tag: "Interrupted" };
+    }) as Effect.Effect<Status<unknown, unknown>>,
+    result: poll.pipe(
+      Effect.flatMap((result) =>
+        Option.isSome(result) && result.value._tag === "Complete"
+          ? Effect.succeed(result.value.exit)
+          : Effect.fail("running" as const),
+      ),
+      Effect.retry({ schedule: POLL }),
+      Effect.orDie,
+      Effect.flatten,
+    ) as Effect.Effect<unknown, unknown>,
+    signal: (deferred, value) =>
+      engine.deferredDone(deferred, {
+        workflowName: workflow._tag,
+        executionId,
+        deferredName: deferred.name,
+        exit: Exit.succeed(value),
+      }) as Effect.Effect<void>,
+    interrupt: engine.interrupt(workflow, executionId),
+  };
+};
