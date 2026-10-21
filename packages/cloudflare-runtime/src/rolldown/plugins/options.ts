@@ -21,7 +21,12 @@ const DEFAULT_RESOLVE_EXTENSIONS = [
   ".ctx",
 ];
 
-const TARGET = "es2024";
+// workerd runs `using` declarations natively, so Rolldown builds keep them.
+// esbuild (Vite 6 and 7) has no `es2026`, so it gets `supported.using`.
+const TARGET = "es2026";
+const ESBUILD_TARGET = "es2024";
+const CSS_TARGET = "es2024";
+const ESBUILD_SUPPORTED = { using: true };
 
 export interface OptionsApi {
   input: () => Record<string, string>;
@@ -53,6 +58,21 @@ export const optionsPlugin = createPlugin<"options", OptionsApi>("options", (plu
       },
     },
     vite: {
+      // On Vite 6 and 7, `vite:esbuild-transpile` lowers every chunk with the
+      // top-level `esbuild` options, which would also leave `using` in the
+      // client bundle. Each environment reads its own `esbuild` first, so
+      // the Worker environments get theirs.
+      configResolved(config) {
+        if (this.meta.rolldownVersion || config.esbuild === false) return;
+        const esbuild = {
+          ...config.esbuild,
+          supported: { ...config.esbuild.supported, ...ESBUILD_SUPPORTED },
+        };
+        for (const name of parseViteEnvironments(pluginOptions)) {
+          const environment = config.environments[name];
+          if (environment) Object.assign(environment, { esbuild });
+        }
+      },
       async config(userConfig) {
         const vite = await import("vite");
         const isRolldown = "rolldownVersion" in this.meta;
@@ -125,7 +145,8 @@ export const optionsPlugin = createPlugin<"options", OptionsApi>("options", (plu
                       conditions: [...DEFAULT_RESOLVE_CONDITION_NAMES, "development|production"],
                       resolveExtensions: DEFAULT_RESOLVE_EXTENSIONS,
                       mainFields: DEFAULT_RESOLVE_MAIN_FIELDS,
-                      target: TARGET,
+                      target: ESBUILD_TARGET,
+                      supported: ESBUILD_SUPPORTED,
                       define,
                     },
                   }),
@@ -138,7 +159,8 @@ export const optionsPlugin = createPlugin<"options", OptionsApi>("options", (plu
               ? {
                   build: {
                     ssr: true,
-                    target: TARGET,
+                    target: isRolldown ? TARGET : ESBUILD_TARGET,
+                    cssTarget: CSS_TARGET,
                     emitAssets: true,
                     copyPublicDir: false,
                     outDir: getOutputDirectory(userConfig, name),
