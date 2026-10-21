@@ -158,6 +158,10 @@ import {
 import { delayedResourceWrite, ResourceRow } from "./fixtures/state-persistence.ts";
 import { transportProxy, throughProxy, type TransportEvent } from "./fixtures/transport.ts";
 
+/** URL param values may be `Redacted` (sent unwrapped); compare their plain text. */
+const unredact = (value: string | Redacted.Redacted | undefined) =>
+  Redacted.isRedacted(value) ? String(Redacted.value(value)) : value;
+
 const decodeAutostop = Schema.decodeUnknownSync(MachineServiceAutostop);
 
 describe.sequential(
@@ -2803,7 +2807,9 @@ describe.sequential(
                   registry: {
                     server: "registry.fly.io",
                     username: "x",
-                    password: Redacted.make(minted.token!),
+                    password: Redacted.isRedacted(minted.token)
+                      ? minted.token
+                      : Redacted.make(minted.token!),
                   },
                 }),
               );
@@ -5295,7 +5301,7 @@ describe.sequential(
                 method: request.method,
                 path,
                 force:
-                  request.urlParams.params.find(([key]) => key === "force")?.[1] ??
+                  unredact(request.urlParams.params.find(([key]) => key === "force")?.[1]) ??
                   url.searchParams.get("force") ??
                   undefined,
               });
