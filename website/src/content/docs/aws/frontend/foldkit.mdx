@@ -107,10 +107,11 @@ export const Website = AWS.Website.Foldkit("Website", {
 ```
 
 CloudFront serves assets and prerendered pages from S3. Requests that match no
-file, and methods other than GET or HEAD, reach the streaming Lambda handler.
-The application owns its response status and headers through `renderPage`.
+file, and methods other than GET or HEAD, reach the server: a Lambda Web
+Function by default, or a Lambda Function with `server: "function"`. The
+application owns its response status and headers through `renderPage`.
 
-For static-only SSG, deploy the prerendered client output without a Lambda:
+For static-only SSG, deploy the prerendered client output without a server:
 
 ```typescript
 // alchemy.run.ts
@@ -210,7 +211,7 @@ export const Website = AWS.Website.Foldkit("Website", {
 ```
 
 Server code reads these values from `process.env`. Alchemy applies them to the
-native dev server under `alchemy dev` and to the Lambda on deploy.
+native dev server under `alchemy dev` and to the server on deploy.
 
 An Output from another resource can be passed inside the Stack generator:
 
