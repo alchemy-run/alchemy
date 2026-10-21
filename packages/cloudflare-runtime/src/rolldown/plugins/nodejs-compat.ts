@@ -70,12 +70,14 @@ export const nodejsUnenvPlugin = createPlugin<"nodejs-unenv", UnenvApi>(
     polyfill.forEach((module) => entries.add(module));
     external.forEach((module) => entries.delete(module));
     const require = createRequire(import.meta.url);
-    const resolve = (id: string) => {
+    // `unresolved` is the polyfill's bare specifier: the key it is
+    // pre-bundled under, shared by every import that aliases to it.
+    const resolveNodejsImport = (id: string) => {
       if (alias[id] && !external.includes(alias[id])) {
-        return require.resolve(alias[id]);
+        return { unresolved: alias[id], resolved: require.resolve(alias[id]) };
       }
       if (entries.has(id)) {
-        return require.resolve(id);
+        return { unresolved: id, resolved: require.resolve(id) };
       }
     };
     const RESOLVE_ID_FILTER = {
@@ -101,9 +103,9 @@ export const nodejsUnenvPlugin = createPlugin<"nodejs-unenv", UnenvApi>(
         resolveId: {
           filter: RESOLVE_ID_FILTER,
           handler(source, importer, options) {
-            const resolved = resolve(source);
-            if (!resolved) return;
-            return this.resolve(resolved, importer, options);
+            const result = resolveNodejsImport(source);
+            if (!result) return;
+            return this.resolve(result.resolved, importer, options);
           },
         },
       },
@@ -172,9 +174,12 @@ export const nodejsUnenvPlugin = createPlugin<"nodejs-unenv", UnenvApi>(
               if (!supportsMissingImportRegistration(environment)) return;
               await depsOptimizer.init();
               return Array.from(entries).map((entry) => {
-                const resolved = resolve(entry);
-                if (!resolved) return;
-                const registration = depsOptimizer.registerMissingImport(entry, resolved);
+                const result = resolveNodejsImport(entry);
+                if (!result) return;
+                const registration = depsOptimizer.registerMissingImport(
+                  result.unresolved,
+                  result.resolved,
+                );
                 return registration?.processing;
               });
             }),
@@ -183,8 +188,8 @@ export const nodejsUnenvPlugin = createPlugin<"nodejs-unenv", UnenvApi>(
         resolveId: {
           filter: RESOLVE_ID_FILTER,
           handler(source, importer, options) {
-            const resolved = resolve(source);
-            if (!resolved) return;
+            const result = resolveNodejsImport(source);
+            if (!result) return;
             if (
               this.environment.mode === "dev" &&
               this.environment.depsOptimizer &&
@@ -192,12 +197,15 @@ export const nodejsUnenvPlugin = createPlugin<"nodejs-unenv", UnenvApi>(
             ) {
               // We are in dev mode (rather than build).
               // So let's pre-bundle this polyfill entry-point using the dependency optimizer.
-              const { id } = this.environment.depsOptimizer.registerMissingImport(source, resolved);
+              const { id } = this.environment.depsOptimizer.registerMissingImport(
+                result.unresolved,
+                result.resolved,
+              );
               // We use the unresolved path to the polyfill and let the dependency optimizer's
               // resolver find the resolved path to the bundled version.
               return this.resolve(id, importer, options);
             }
-            return this.resolve(resolved, importer, options);
+            return this.resolve(result.resolved, importer, options);
           },
         },
       },
