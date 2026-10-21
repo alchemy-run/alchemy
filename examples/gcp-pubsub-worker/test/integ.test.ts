@@ -1,11 +1,11 @@
 import { describe, expect } from "bun:test";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
+import * as GCP from "@alchemy.run/gcp";
 import * as firestore from "@distilled.cloud/gcp/firestore_v1";
 import * as pubsub from "@distilled.cloud/gcp/pubsub_v1";
 import * as run from "@distilled.cloud/gcp/run_v2";
 import * as Alchemy from "alchemy";
-import * as GCP from "alchemy/GCP";
 import * as Test from "alchemy/Test/Bun";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
