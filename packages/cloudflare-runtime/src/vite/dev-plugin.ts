@@ -1,4 +1,3 @@
-import { URL as NodeURL } from "node:url";
 import type * as Context from "effect/Context";
 import * as vite from "vite";
 import type { RuntimeServices } from "../core/index.ts";
@@ -20,7 +19,7 @@ import type { ServerHandle } from "./dev-server.ts";
 import { configuredExportTypes, mergeExportTypes } from "./export-types.ts";
 import type { CloudflareVitePluginOptions } from "./plugin.ts";
 import { handleWebSocket } from "./websockets.ts";
-import { forwardWorkerRequest } from "./worker-request.ts";
+import { forwardWorkerRequest, workerRequestUrl } from "./worker-request.ts";
 
 let context: Context.Context<RuntimeServices> | undefined;
 
@@ -282,14 +281,14 @@ export function dev(options: CloudflareVitePluginOptions): Array<vite.Plugin> {
       if (staticRouting) {
         server.middlewares.use(function distilledCloudflareRunWorkerFirst(req, res, next) {
           if (VITE_ASSET_REQUEST in req) return next();
-          const { pathname } = new NodeURL(req.url ?? "/", "http://localhost");
+          const { pathname } = workerRequestUrl(req.url, "http://localhost");
           if (
             matchesStaticRoutingRule(staticRouting.asset_worker ?? [], pathname) ||
             !matchesStaticRoutingRule(staticRouting.user_worker, pathname)
           ) {
             return next();
           }
-          const url = new NodeURL(req.originalUrl ?? req.url ?? "/", address.toString());
+          const url = workerRequestUrl(req.originalUrl ?? req.url, address);
           forwardWorkerRequest(req, res, url, proxySharedSecret, server.config.logger);
         });
       }
@@ -299,7 +298,7 @@ export function dev(options: CloudflareVitePluginOptions): Array<vite.Plugin> {
           // The Worker's own `ASSETS` calls run through Vite's middleware;
           // one Vite didn't serve must not come back to the Worker.
           if (VITE_ASSET_REQUEST in req) return next();
-          const url = new NodeURL(req.originalUrl ?? req.url ?? "/", address.toString());
+          const url = workerRequestUrl(req.originalUrl ?? req.url, address);
           forwardWorkerRequest(req, res, url, proxySharedSecret, server.config.logger);
         });
         if (options.dev?.middlewareOrder === "pre" && middlewareBoundary !== undefined) {
