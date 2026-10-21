@@ -30,6 +30,7 @@ const overlay = (
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     if (!(yield* fs.exists(from))) return;
+    yield* fs.makeDirectory(to, { recursive: true });
     for (const entry of yield* fs.readDirectory(from)) {
       const source = pathe.join(from, entry);
       const target = pathe.join(to, entry);
