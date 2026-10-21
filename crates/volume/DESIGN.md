@@ -22,7 +22,9 @@ from one of them says so.
 4. **Fork and undo cost nothing.** They move pointers; they never copy data.
 5. **Attach is fast.** A machine reads only the blocks a command touches, and
    blocks shared between forks are fetched once per machine.
-6. **No merge.** Forks are explore-and-pick. Keeping one is moving a head.
+6. **No merging of blocks.** The volume only moves heads. Merging forks
+   happens at the level of files, above the volume: see
+   `packages/sandbox/DESIGN.md`.
 
 ## The three levels of durability
 
