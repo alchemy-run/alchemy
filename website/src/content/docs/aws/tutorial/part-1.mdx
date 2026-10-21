@@ -15,7 +15,7 @@ with an AWS S3 Bucket, and deploy it — all in under five minutes.
 
 ## Prerequisites
 
-- [Bun](https://bun.sh) or Node.js 22+
+- [Bun](https://bun.sh) or Node.js 24.11.1+
 - An AWS account and an IAM identity with permission to create the
   resources you plan to deploy
 
@@ -41,7 +41,7 @@ Create an `alchemy.run.ts` file:
 ```typescript
 // alchemy.run.ts
 import * as Alchemy from "alchemy";
-import * as AWS from "alchemy/AWS";
+import * as AWS from "@alchemy.run/aws";
 import * as Effect from "effect/Effect";
 
 export default Alchemy.Stack(
@@ -93,7 +93,7 @@ Add an S3 Bucket:
 ```diff lang="typescript"
 // alchemy.run.ts
 import * as Alchemy from "alchemy";
-import * as AWS from "alchemy/AWS";
+import * as AWS from "@alchemy.run/aws";
 import * as Effect from "effect/Effect";
 
 export default Alchemy.Stack(

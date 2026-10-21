@@ -32,18 +32,14 @@ export const isClassSchema = (schema: S.Schema<any>) => {
   return false;
 };
 
-export const isStructSchema = (schema: S.Schema<any>) => {
-  return AST.isObjects(schema.ast);
-};
+export const isStructSchema = (schema: S.Schema<any>) => AST.isObjects(schema.ast);
 
 export const isRecordSchema = (schema: S.Schema<any>) => {
   const ast = schema.ast;
   return AST.isObjects(ast) && ast.indexSignatures?.length > 0;
 };
 
-export const isListSchema = (schema: S.Schema<any>) => {
-  return AST.isArrays(schema.ast);
-};
+export const isListSchema = (schema: S.Schema<any>) => AST.isArrays(schema.ast);
 
 export const isSetSchema = (schema: S.Schema<any>): boolean =>
   getDeclarationRepresentationId(schema.ast) === "effect/schema/ReadonlySet";
@@ -175,15 +171,14 @@ export const makeExtSchema = <Schema extends SchemaExt>(schema: Schema): SchemaE
   });
   return new Proxy(() => {}, {
     get: (_target, prop) => s[prop as keyof typeof s],
-    apply: (_target, _thisArg, [template, ...references]) => {
-      return S.annotate({
+    apply: (_target, _thisArg, [template, ...references]) =>
+      S.annotate({
         aspect: {
           ...schema,
           template,
           references,
         },
-      });
-    },
+      }),
   }) as any as SchemaExt;
 };
 

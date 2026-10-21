@@ -32,7 +32,7 @@ import * as Path from "effect/Path";
 import type { PlatformError } from "effect/PlatformError";
 import * as Redacted from "effect/Redacted";
 import type * as Scope from "effect/Scope";
-import { runBuildChild } from "../core/BuildChild.ts";
+import { resolveBuildEnv, runBuildChild } from "../core/BuildChild.ts";
 import { toOutputFile, type BuildOutput } from "../core/BuildOutput.ts";
 import { resolveViteDevPort } from "../core/DevPort.ts";
 import { ModuleLoadError } from "../core/Loader.ts";
@@ -142,6 +142,7 @@ export type SourceRequirements = FileSystem.FileSystem | Path.Path;
 
 export interface SourceProvider {
   readonly ownsAssets: boolean;
+  readonly devAssetsBinding?: boolean;
   readonly build: (
     ctx: SourceContext,
   ) => Effect.Effect<SourceBuildOutput, VinextSourceError, SourceRequirements>;
@@ -714,6 +715,7 @@ const resolveVinextCacheEnv = (env: Record<string, unknown>) =>
     for (const key of [VINEXT_KV_CACHE_BINDING, VINEXT_CACHE_BINDING]) {
       const value = env[key];
       if (value == null || isBindingMarker(value)) continue;
+      // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- cache bindings are pre-resolved resource Effects
       resolved[key] = Effect.isEffect(value) ? yield* value as Effect.Effect<unknown> : value;
     }
     return resolved;
@@ -728,6 +730,7 @@ const seedVinextPrerenderCache = (
   rootDir: string,
   env: Record<string, unknown>,
 ): Effect.Effect<void> =>
+  // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- closed so the source contract stays SourceRequirements, see JSDoc
   Effect.gen(function* () {
     const namespace = kvHttpNamespaceFromEnv(env);
     if (namespace === undefined) return;
@@ -753,6 +756,8 @@ export const makeVinextSourceProvider = (options: VinextSourceOptions): SourcePr
 
   return {
     ownsAssets: true,
+    // Dev runs the Worker in workerd with the Vite plugin's assets service.
+    devAssetsBinding: true,
     build: Effect.fn(function* (ctx) {
       const path = yield* Path.Path;
       const rootDir = rootDirOf(path);
@@ -761,6 +766,7 @@ export const makeVinextSourceProvider = (options: VinextSourceOptions): SourcePr
         module: import.meta.url,
         rootDir,
         framework: "vinext",
+        env: resolveBuildEnv(ctx.env),
         config: {
           rootDir,
           main: options.main,
@@ -779,12 +785,10 @@ export const makeVinextSourceProvider = (options: VinextSourceOptions): SourcePr
         ),
       );
       if (output.serverModules === undefined || output.serverModules.length === 0) {
-        return yield* Effect.fail(
-          new SourceProviderError({
-            provider: PROVIDER,
-            message: "vinext build produced no server modules",
-          }),
-        );
+        return yield* new SourceProviderError({
+          provider: PROVIDER,
+          message: "vinext build produced no server modules",
+        });
       }
       const files = output.serverModules.map((file) => ({
         path: file.name.replaceAll("\\", "/"),
@@ -878,12 +882,10 @@ export const makeVinextSourceProvider = (options: VinextSourceOptions): SourcePr
       );
       const local = server.resolvedUrls?.local[0];
       if (!local) {
-        return yield* Effect.fail(
-          new SourceProviderError({
-            provider: PROVIDER,
-            message: "vinext dev server started without a local URL",
-          }),
-        );
+        return yield* new SourceProviderError({
+          provider: PROVIDER,
+          message: "vinext dev server started without a local URL",
+        });
       }
       return { mode: "server", url: new URL(local) } satisfies ServerDevHandle;
     }),

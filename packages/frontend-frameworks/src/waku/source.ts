@@ -18,7 +18,7 @@ import * as Path from "effect/Path";
 import type { PlatformError } from "effect/PlatformError";
 import type * as Scope from "effect/Scope";
 import * as Semaphore from "effect/Semaphore";
-import { runBuildChild } from "../core/BuildChild.ts";
+import { resolveBuildEnv, runBuildChild } from "../core/BuildChild.ts";
 import * as FrameworkCore from "../core/index.ts";
 import { makeWakuCloudflareTarget } from "./cloudflare.ts";
 import { layer as wakuFrameworkLayer } from "./Waku.ts";
@@ -27,7 +27,7 @@ import { layer as wakuFrameworkLayer } from "./Waku.ts";
 // Structural mirror of alchemy's Worker source-provider contract.
 //
 // This module is loaded dynamically by alchemy's `loadSource` (see
-// `packages/alchemy/src/Cloudflare/Workers/Source.ts` — `WorkerSourceModule`,
+// `packages/cloudflare/src/Workers/Source.ts` — `WorkerSourceModule`,
 // `SourceProvider`, `SourceContext`, `DevContext`, `SourceBuildOutput`). The
 // contract is deliberately implemented STRUCTURALLY — no alchemy import — so
 // version skew degrades to a load-time `SourceProviderError` instead of a
@@ -128,6 +128,7 @@ export type SourceRequirements = FileSystem.FileSystem | Path.Path;
 /** Mirror of alchemy `Cloudflare/Workers/Source.SourceProvider` (narrowed E/R). */
 export interface SourceProvider {
   readonly ownsAssets: boolean;
+  readonly devAssetsBinding?: boolean;
   readonly build: (
     ctx: SourceContext,
   ) => Effect.Effect<SourceBuildOutput, WakuSourceError, SourceRequirements>;
@@ -680,6 +681,8 @@ export const makeWakuSourceProvider = (
     // Waku's assets are a build product (`dist/public`), not a props-level
     // directory — the provider reads and diffs them itself.
     ownsAssets: true,
+    // Dev runs the Worker in workerd with the Vite plugin's assets service.
+    devAssetsBinding: true,
 
     build: Effect.fn(function* (ctx) {
       const path = yield* Path.Path;
@@ -691,6 +694,7 @@ export const makeWakuSourceProvider = (
         module: integration.buildModule,
         rootDir,
         framework: integration.framework,
+        env: resolveBuildEnv(ctx.env),
         config: {
           rootDir,
           compatibilityDate: ctx.compatibility.date,
@@ -713,12 +717,10 @@ export const makeWakuSourceProvider = (
       );
 
       if (output.serverModules === undefined || output.serverModules.length === 0) {
-        return yield* Effect.fail(
-          new SourceProviderError({
-            provider: integration.provider,
-            message: `${integration.displayName} build produced no server modules`,
-          }),
-        );
+        return yield* new SourceProviderError({
+          provider: integration.provider,
+          message: `${integration.displayName} build produced no server modules`,
+        });
       }
       const [entry, ...rest] = output.serverModules;
       const files: [BundleFile, ...Array<BundleFile>] = [entry!, ...rest].map((file) => ({

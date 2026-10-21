@@ -416,7 +416,7 @@ export default <ExportedHandler<Env>>{
         return Response.json({ ok: true, result });
       } catch (error) {
         return makeErrorResponse(
-          new SystemError({
+          SystemError.make({
             subtag: "UserQueueHandler",
             message: `User worker's queue handler threw: ${
               error instanceof Error ? error.message : String(error)
@@ -444,7 +444,7 @@ export default <ExportedHandler<Env>>{
         return new Response(result.outcome, { status: result.outcome === "ok" ? 200 : 500 });
       } catch (error) {
         return makeErrorResponse(
-          new SystemError({
+          SystemError.make({
             subtag: "UserScheduledHandler",
             message: `User worker's scheduled handler threw: ${
               error instanceof Error ? error.message : String(error)
@@ -515,6 +515,28 @@ export default <ExportedHandler<Env>>{
     if (url.pathname === PATH_MODULE_RUNNER_INIT) {
       return await env[BINDING_USER_WORKER_DIRECT].fetch(userRequest as unknown as typeof request);
     }
-    return await env.USER_WORKER.fetch(userRequest as unknown as typeof request);
+    // The experimental and standard workers-types `Response` disagree too.
+    return combineRepeatedHeaders(
+      (await env.USER_WORKER.fetch(
+        userRequest as unknown as typeof request,
+      )) as unknown as Response,
+    );
   },
+};
+
+/**
+ * Sends each repeated response header (other than `Set-Cookie`) as one
+ * comma-joined line. HTTP treats the two forms as equivalent, but Bun's HTTP
+ * parser (its `node:http` client and `fetch`) keeps only the last of repeated
+ * lines, so a client running on Bun, such as the Vite dev proxy, would drop
+ * `a` and `b` from `x: a`, `x: b`, `x: c`. Iterating `Headers` yields each
+ * name once with its values joined, which `set` stores as a single line.
+ */
+const combineRepeatedHeaders = (response: Response): Response => {
+  if (response.status === 101) return response;
+  const combined = new Response(response.body, response);
+  for (const [name, value] of response.headers) {
+    if (name !== "set-cookie") combined.headers.set(name, value);
+  }
+  return combined;
 };

@@ -32,6 +32,12 @@ export interface BaseRuntimeContext {
   /** additional services to provide to the plan  */
   planServices?: Layer.Layer<any>;
   /**
+   * Services the host provides its init in every phase, built over the
+   * instance (e.g. a Cloudflare Worker's `WebhookHost`), so user code
+   * doesn't provide them itself.
+   */
+  hostServices?: Layer.Layer<any, never, any>;
+  /**
    * Telemetry exporter Layer registered during init via
    * `Telemetry.layer(...)` / `Telemetry.layerOtlp(...)` (see Telemetry.ts).
    * The runtime bridges build it into every event's request scope,
@@ -134,7 +140,7 @@ export const packEnvValue = (value: unknown): string =>
  * payload still carries the marker for the runtime `get` accessor.
  */
 export const packEnvValueKeepRedacted = (value: unknown): string | Redacted.Redacted<string> =>
-  Redacted.isRedacted(value) ? Redacted.make(packEnvValue(value)) : packEnvValue(value);
+  Redacted.isRedacted(value) ? value.pipe(packEnvValue, Redacted.make) : packEnvValue(value);
 
 /**
  * Parse an env-var string produced by {@link packEnvValue} back into its

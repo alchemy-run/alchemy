@@ -71,7 +71,7 @@ export const R2BucketLive = Layer.effect(
     const makeStorageService = Effect.gen(function* () {
       const storageDiskPath = "disk" in storage ? storage.disk?.path : undefined;
       if (!storageDiskPath) {
-        return yield* new ConfigError({
+        return yield* ConfigError.make({
           subtag: "R2Bucket",
           message: "Cannot configure R2 persistence: the Storage service has no disk path.",
           hint: "Configure a disk-backed storage layer (`Storage.layerDisk` or `Storage.layerTemp`).",
@@ -79,15 +79,14 @@ export const R2BucketLive = Layer.effect(
       }
       const persistPath = path.join(storageDiskPath, "r2");
       yield* fs.makeDirectory(persistPath, { recursive: true }).pipe(
-        Effect.mapError(
-          (cause) =>
-            new ConfigError({
-              subtag: "R2Bucket",
-              message: `Failed to create R2 persistence directory "${persistPath}": ${cause.message}`,
-              hint: "Ensure the storage directory is writable.",
-              detail: { persistPath },
-              cause,
-            }),
+        Effect.mapError((cause) =>
+          ConfigError.make({
+            subtag: "R2Bucket",
+            message: `Failed to create R2 persistence directory "${persistPath}": ${cause.message}`,
+            hint: "Ensure the storage directory is writable.",
+            detail: { persistPath },
+            cause,
+          }),
         ),
       );
       return {
@@ -153,7 +152,7 @@ export const R2BucketLive = Layer.effect(
           defer: Effect.gen(function* () {
             if (!used) return {};
             if (s3Conflicts.size > 0) {
-              return yield* new ConfigError({
+              return yield* ConfigError.make({
                 subtag: "R2Bucket",
                 message: `R2 bucket(s) ${[...s3Conflicts].map((name) => `"${name}"`).join(", ")} were bound with different S3 credentials.`,
                 hint: "Use the same `s3Credentials` for every binding of a bucket.",

@@ -9,7 +9,7 @@ next:
 import Terminal from "../../components/Terminal.astro";
 import PackageManagers from "../../components/PackageManagers.astro";
 
-export const pkgs = `alchemy@latest effect @effect/platform-bun @effect/platform-node`;
+export const pkgs = `alchemy@latest @alchemy.run/cloudflare@latest effect @effect/platform-bun @effect/platform-node`;
 
 :::tip
 Want the idea before the install? [What is Alchemy?](/what-is-alchemy)
@@ -19,7 +19,7 @@ next page.
 
 ## Prerequisites
 
-- [Bun](https://bun.sh) or Node.js 22+
+- [Bun](https://bun.sh) or Node.js 24.11.1+
 - A [Cloudflare](https://dash.cloudflare.com/sign-up) account
 
 ## Create a project
@@ -37,7 +37,7 @@ Every Alchemy program starts with a Stack — create `alchemy.run.ts`:
 ```typescript
 // alchemy.run.ts
 import * as Alchemy from "alchemy";
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Effect from "effect/Effect";
 
 export default Alchemy.Stack(

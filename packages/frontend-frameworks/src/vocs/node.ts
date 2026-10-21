@@ -57,11 +57,11 @@ const makeNodeAdapterTarget = (
         const fs = yield* FileSystem.FileSystem;
         const path = yield* Path.Path;
         if (output.distDirectory === undefined) {
-          return yield* Effect.fail(fail("The vocs build produced no dist directory"));
+          return yield* fail("The vocs build produced no dist directory");
         }
         if (output.clientDirectory === undefined) {
-          return yield* Effect.fail(
-            fail("The vocs build produced no client directory for the Node serve entry"),
+          return yield* fail(
+            "The vocs build produced no client directory for the Node serve entry",
           );
         }
         const serverDir = path.join(output.distDirectory, "server");
@@ -70,9 +70,7 @@ const makeNodeAdapterTarget = (
           .exists(serverIndex)
           .pipe(Effect.mapError((error) => fail("Failed to probe the built server entry", error)));
         if (!hasServerIndex) {
-          return yield* Effect.fail(
-            fail(`The vocs build produced no server entry at ${serverIndex}`),
-          );
+          return yield* fail(`The vocs build produced no server entry at ${serverIndex}`);
         }
         yield* fs
           .writeFileString(

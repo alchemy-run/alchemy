@@ -1,3 +1,4 @@
+/** @jsxRuntime automatic */
 /** @jsxImportSource @alchemy.run/sigil */
 import { useWindowSize } from "@alchemy.run/sigil";
 import { createContext, useContext, useMemo } from "@alchemy.run/sigil/react";

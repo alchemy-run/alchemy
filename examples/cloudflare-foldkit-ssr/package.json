@@ -21,6 +21,7 @@
     "foldkit": "catalog:"
   },
   "devDependencies": {
+    "@alchemy.run/cloudflare": "workspace:*",
     "@foldkit/vite-plugin": "catalog:",
     "@tailwindcss/vite": "catalog:",
     "@types/node": "catalog:node24",

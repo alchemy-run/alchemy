@@ -1,12 +1,6 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import {
-  copyEditor,
-  markdownBlocks,
-  markdownFiles,
-  type MarkdownFilesOptions,
-} from "@alchemy.run/vite-plugin-copy-editor";
 import mdx from "@astrojs/mdx";
 import react from "@astrojs/react";
 import sitemap from "@astrojs/sitemap";
@@ -19,6 +13,12 @@ import starlightBlog from "starlight-blog";
 import { JSDOC_COPY_STYLE } from "../scripts/jsdoc-blocks.ts";
 import { buildOutputChecks, noindexPaths } from "./plugins/build-output.ts";
 import { jsdocCopyHandler, jsdocMarkdownStyle } from "./plugins/jsdoc-copy.ts";
+import {
+  copyEditor,
+  markdownBlocks,
+  markdownFiles,
+  type MarkdownFilesOptions,
+} from "./src/copy-editor/index.ts";
 import providersSidebar from "./src/generated/providers-sidebar.json" with { type: "json" };
 import { rewriteReferenceLinks } from "./src/reference-links.ts";
 
@@ -41,6 +41,7 @@ function providersSidebarEntry() {
       { label: "Railway", link: "/railway" },
       { label: "PlanetScale", link: "/planetscale" },
       { label: "Neon", link: "/neon" },
+      { label: "Turso", link: "/turso" },
       { label: "Prisma", link: "/prisma" },
       { label: "Better Auth", link: "/better-auth" },
       { label: "Axiom", link: "/axiom" },
@@ -51,6 +52,7 @@ function providersSidebarEntry() {
       { label: "SQL", link: "/sql" },
       { label: "Command", link: "/command" },
       { label: "ACME", link: "/acme" },
+      { label: "Domain", link: "/domain" },
     ],
   };
 }
@@ -125,12 +127,22 @@ function providerApiReferenceEntry(...providers: string[]) {
  * serve raw markdown for clients (e.g. coding agents) that prefer it.
  */
 /**
- * Dev only: hand-written docs (`.md`/`.mdx`) are editable in the browser.
- * Generated reference pages are edited through their JSDoc instead.
+ * Dev only: in-browser copy editing (`contenteditable`) is on for the home
+ * page. Every other page (docs, reference, compare) only gets it when the dev
+ * server is launched with `ALCHEMY_DOCS_EDIT=1`. Builds never ship the editor.
+ */
+const docsEditing = process.env.ALCHEMY_DOCS_EDIT === "1";
+const copyEditablePage = (pathname: string) => docsEditing || pathname === "/";
+
+/**
+ * Dev only, with `ALCHEMY_DOCS_EDIT=1`: hand-written docs (`.md`/`.mdx`) are
+ * editable in the browser. Generated reference pages are edited through their
+ * JSDoc instead, and blog posts aren't editable (in-place editing breaks
+ * selecting and copying text).
  */
 const markdownCopy: MarkdownFilesOptions = {
   root: fileURLToPath(new URL(".", import.meta.url)),
-  exclude: /\/src\/content\/docs\/providers\//,
+  exclude: /\/src\/content\/docs\/(providers|blog)\//,
   style: JSDOC_COPY_STYLE,
 };
 
@@ -139,7 +151,7 @@ function markdownCopyEditing(): AstroIntegration {
     name: "markdown-copy-editing",
     hooks: {
       "astro:config:setup": ({ command, config }) => {
-        if (command !== "dev") return;
+        if (command !== "dev" || !docsEditing) return;
         const processor = config.markdown.processor as
           | { name: string; options?: { mdastPlugins?: unknown[] } }
           | undefined;
@@ -242,6 +254,13 @@ export default defineConfig({
     "/better-auth/database-layers": "/better-auth/databases",
     "/better-auth/migrations": "/better-auth/guides/migrations",
     "/better-auth/upgrading": "/better-auth/upgrades/from-1-6-to-1-7",
+    // The Birthday Week post was published as beta.82, then re-released as beta.83.
+    "/blog/2026-10-12-beta-82": "/blog/2026-10-12-beta-83",
+    // Get started was folded into the overview and the tutorial.
+    "/domain/getting-started": "/domain/tutorial/part-1",
+    "/domain/stories": "/domain/testing-models",
+    "/domain/sagas": "/domain/saga",
+    "/domain/external-systems": "/domain/external-system",
   },
   prefetch: true,
   devToolbar: { enabled: false },
@@ -335,6 +354,10 @@ export default defineConfig({
                 {
                   label: "Local Provider",
                   link: "/infrastructure-as-code/local-provider",
+                },
+                {
+                  label: "Provider Contributions",
+                  link: "/infrastructure-as-code/contributions",
                 },
               ],
             },
@@ -571,7 +594,12 @@ export default defineConfig({
                   link: "/cloudflare/compute/hibernatable-websockets",
                 },
                 { label: "Containers", link: "/cloudflare/compute/containers" },
+                {
+                  label: "Container lifecycle",
+                  link: "/cloudflare/compute/container-lifecycle",
+                },
                 { label: "Workflows", link: "/cloudflare/compute/workflows" },
+                { label: "Effect workflows", link: "/cloudflare/compute/effect-workflows" },
               ],
             },
             {
@@ -642,6 +670,10 @@ export default defineConfig({
                   link: "/cloudflare/data/r2-presigned-urls",
                 },
                 { label: "Hyperdrive", link: "/cloudflare/data/hyperdrive" },
+                {
+                  label: "Private database (Workers VPC)",
+                  link: "/cloudflare/data/hyperdrive-private-database",
+                },
                 { label: "Drizzle ORM", link: "/cloudflare/data/drizzle" },
                 { label: "Prisma ORM", link: "/cloudflare/data/prisma" },
                 { label: "Drizzle on D1", link: "/cloudflare/data/d1-drizzle" },
@@ -691,10 +723,6 @@ export default defineConfig({
                 },
                 { label: "Effect AI", link: "/cloudflare/ai/effect-ai" },
                 { label: "Vectorize", link: "/cloudflare/ai/vectorize" },
-                {
-                  label: "Release agent",
-                  link: "/cloudflare/ai/release-agent",
-                },
               ],
             },
             {
@@ -767,6 +795,8 @@ export default defineConfig({
                   link: "/aws/compute/choosing-a-runtime",
                 },
                 { label: "Lambda", link: "/aws/compute/lambda" },
+                { label: "Lambda Web Functions", link: "/aws/compute/web-functions" },
+                { label: "Effect workflows", link: "/aws/compute/effect-workflows" },
                 { label: "ECS", link: "/aws/compute/ecs" },
                 { label: "EC2", link: "/aws/compute/ec2" },
                 { label: "EKS", link: "/aws/compute/eks" },
@@ -1213,6 +1243,36 @@ export default defineConfig({
           ],
         },
         {
+          label: "Turso",
+          items: [
+            { label: "Overview", link: "/turso" },
+            { label: "Setup", link: "/turso/setup" },
+            {
+              label: "Tutorial",
+              items: [{ autogenerate: { directory: "turso/tutorial" } }],
+            },
+            {
+              label: "Databases",
+              items: [
+                { label: "Groups", link: "/turso/groups" },
+                { label: "Create & configure", link: "/turso/databases" },
+                { label: "Migrations", link: "/turso/migrations" },
+                { label: "Connections", link: "/turso/connections" },
+                { label: "Database per tenant", link: "/turso/database-per-tenant" },
+                { label: "Preview databases", link: "/turso/preview-databases" },
+              ],
+            },
+            {
+              label: "Access",
+              items: [
+                { label: "Tokens", link: "/turso/tokens" },
+                { label: "Team & organization", link: "/turso/organization" },
+              ],
+            },
+            providerResourcesEntry("Turso"),
+          ],
+        },
+        {
           label: "Neon",
           items: [
             { label: "Overview", link: "/neon" },
@@ -1427,6 +1487,74 @@ export default defineConfig({
           ],
         },
         {
+          label: "Domain",
+          items: [
+            { label: "Overview", link: "/domain" },
+            { label: "What is Domain-Driven Design?", link: "/domain/what-is-ddd" },
+            { label: "Project layout", link: "/domain/project-layout" },
+            {
+              label: "Tutorial",
+              collapsed: false,
+              items: [{ autogenerate: { directory: "domain/tutorial" } }],
+            },
+            {
+              label: "Concepts",
+              items: [
+                { label: "Domain Model", link: "/domain/model" },
+                { label: "Command", link: "/domain/command" },
+                { label: "Event", link: "/domain/event" },
+                { label: "Aggregate", link: "/domain/aggregate" },
+                { label: "View", link: "/domain/view" },
+                { label: "Projection", link: "/domain/projection" },
+                { label: "Stream", link: "/domain/stream" },
+                { label: "Policy", link: "/domain/policy" },
+                { label: "Saga", link: "/domain/saga" },
+                { label: "External System", link: "/domain/external-system" },
+                { label: "Api", link: "/domain/api" },
+                { label: "Story", link: "/domain/story" },
+              ],
+            },
+            {
+              label: "Testing",
+              items: [
+                { label: "Testing a model", link: "/domain/testing-models" },
+                { label: "Testing an Api", link: "/domain/testing-apis" },
+              ],
+            },
+            {
+              label: "Frontends",
+              items: [
+                { label: "Integrate with foldkit", link: "/domain/foldkit" },
+                { label: "Optimistic updates", link: "/domain/optimistic-updates" },
+                { label: "Offline and local first", link: "/domain/local-first" },
+              ],
+            },
+            {
+              label: "Security",
+              items: [
+                { label: "Sessions and middleware", link: "/domain/sessions" },
+                { label: "Views as security boundaries", link: "/domain/view-security" },
+              ],
+            },
+            {
+              label: "Consistency patterns",
+              items: [
+                { label: "Unique values", link: "/domain/unique-values" },
+                { label: "Deadlines", link: "/domain/deadlines" },
+              ],
+            },
+            {
+              label: "Hosting",
+              items: [
+                { label: "Cloudflare Durable Objects", link: "/domain/cloudflare" },
+                { label: "In memory", link: "/domain/in-memory" },
+                { label: "Observability", link: "/domain/observability" },
+              ],
+            },
+            { ...providerResourcesEntry("Domain"), label: "Reference" },
+          ],
+        },
+        {
           label: "Axiom",
           items: [
             { label: "Overview", link: "/axiom" },
@@ -1624,6 +1752,7 @@ export default defineConfig({
                 { label: "Postgres", link: "/sql/effect-sql/postgres" },
                 { label: "MySQL", link: "/sql/effect-sql/mysql" },
                 { label: "D1", link: "/sql/effect-sql/d1" },
+                { label: "libSQL", link: "/sql/effect-sql/libsql" },
                 { label: "Migrations", link: "/sql/effect-sql/migrations" },
                 {
                   label: "Connection lifecycle",
@@ -1637,6 +1766,7 @@ export default defineConfig({
                 { label: "Postgres", link: "/sql/drizzle/postgres" },
                 { label: "MySQL", link: "/sql/drizzle/mysql" },
                 { label: "D1", link: "/sql/drizzle/d1" },
+                { label: "libSQL", link: "/sql/drizzle/libsql" },
                 { label: "Migrations", link: "/sql/drizzle/migrations" },
               ],
             },
@@ -1698,6 +1828,7 @@ export default defineConfig({
   vite: {
     plugins: [
       copyEditor({
+        pages: copyEditablePage,
         handlers: {
           jsdoc: jsdocCopyHandler(),
           md: markdownFiles(markdownCopy),

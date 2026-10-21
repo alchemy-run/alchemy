@@ -1,3 +1,4 @@
+/** @jsxRuntime automatic */
 /** @jsxImportSource @alchemy.run/sigil */
 import { stripVTControlCharacters } from "node:util";
 import { AnsiText, Box, render, renderToString, Static, useTitle } from "@alchemy.run/sigil";

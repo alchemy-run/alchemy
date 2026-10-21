@@ -1,4 +1,4 @@
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 
 /** Click events, counted off the redirect's hot path. */
 export const Clicks = Cloudflare.Queues.Queue("Clicks");

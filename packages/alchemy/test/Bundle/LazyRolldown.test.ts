@@ -20,10 +20,14 @@ import { exec } from "@/Util/exec.ts";
  * pulled it in.
  */
 
-const entries = ["src/Bundle/index.ts", "src/Cli/main.ts", "src/Cloudflare/index.ts"] as const;
+const entries = [
+  "alchemy/src/Bundle/index.ts",
+  "alchemy/src/Cli/main.ts",
+  "cloudflare/src/index.ts",
+] as const;
 
 const importInSubprocess = (entry: string) => {
-  const entryPath = fileURLToPath(new URL(`../../${entry}`, import.meta.url));
+  const entryPath = fileURLToPath(new URL(`../../../${entry}`, import.meta.url));
   const script = `
     const orig = process.dlopen;
     const loaded = [];

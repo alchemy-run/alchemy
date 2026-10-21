@@ -321,9 +321,7 @@ export const make = <TargetConfig = unknown>(
             ? `http://localhost:${server.address.port}/`
             : undefined);
         if (url === undefined) {
-          return yield* Effect.fail(
-            fail("Could not determine the URL of the astro dev server")(undefined),
-          );
+          return yield* fail("Could not determine the URL of the astro dev server")(undefined);
         }
         return { url };
       }),

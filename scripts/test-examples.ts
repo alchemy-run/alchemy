@@ -36,6 +36,8 @@ const examples = [
   "./examples/cloudflare-website-solidstart",
   "./examples/cloudflare-foldkit-spa",
   "./examples/cloudflare-foldkit-ssr",
+  "./examples/cloudflare-foldkit-ssg",
+  "./examples/cloudflare-foldkit-hybrid",
   "./examples/cloudflare-octane",
   "./examples/cloudflare-website-astro",
   "./examples/cloudflare-website-nextjs",

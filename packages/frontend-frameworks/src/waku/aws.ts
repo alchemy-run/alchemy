@@ -126,7 +126,7 @@ const makeAwsAdapterTarget = (
           new DeployTargetError({ platform: "aws", message, cause });
 
         if (output.distDirectory === undefined) {
-          return yield* Effect.fail(fail("The waku build produced no dist directory")(undefined));
+          return yield* fail("The waku build produced no dist directory")(undefined);
         }
         const serverDir = path.join(output.distDirectory, "server");
         const serverIndex = path.join(serverDir, "index.js");
@@ -134,8 +134,8 @@ const makeAwsAdapterTarget = (
           .exists(serverIndex)
           .pipe(Effect.mapError(fail("Failed to probe the built server entry")));
         if (!hasServerIndex) {
-          return yield* Effect.fail(
-            fail(`The waku build produced no server entry at ${serverIndex}`)(undefined),
+          return yield* fail(`The waku build produced no server entry at ${serverIndex}`)(
+            undefined,
           );
         }
 

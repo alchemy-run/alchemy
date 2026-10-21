@@ -173,7 +173,7 @@ const makeActionClass = (
   let resolveRunner: Effect.Effect<ActionRunner<any, any, any>, any, any> | undefined;
   if (baked !== undefined) {
     resolveRunner = isRunnerEffect(baked)
-      ? Effect.runSync(Effect.cached(baked))
+      ? baked.pipe(Effect.cached, Effect.runSync)
       : Effect.succeed(baked);
   }
 
