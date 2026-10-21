@@ -65,7 +65,13 @@ describe("vinext Cloudflare build", () => {
           );
           expect(entries).toEqual(["dist/server/index.js"]);
           expect(names[0]).toBe("dist/server/index.js");
-          expect(String(output.serverModules?.[0]?.content)).toMatch(
+          // (Source maps are on by default, as with `@cloudflare/vite-plugin`.)
+          expect(
+            String(output.serverModules?.[0]?.content).replace(
+              /\n\/\/# sourceMappingURL=.*\n?$/,
+              "",
+            ),
+          ).toMatch(
             /\{fetch\(\w+,\w+,\w+\)\{return \w+\.fetch\(\w+,\w+,\w+\)\}\};export\{\w+ as default\};$/,
           );
         }),

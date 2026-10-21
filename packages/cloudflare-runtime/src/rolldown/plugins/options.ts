@@ -224,8 +224,11 @@ export const optionsPlugin = createPlugin<"options", OptionsApi>("options", (plu
               : {}),
           };
         };
-        // No Worker entry: an assets-only site.
-        const assetsOnly = Object.keys(input).length === 0;
+        // No Worker entry: an assets-only site. Declared `viteEnvironments`
+        // mean a framework plugin supplies the entry later (e.g.
+        // `@vitejs/plugin-rsc` in its own `config` hook).
+        const assetsOnly =
+          Object.keys(input).length === 0 && pluginOptions.viteEnvironments === undefined;
         // `custom` as `@cloudflare/vite-plugin` sets it: Vite's own SPA/MPA
         // HTML middleware never answers in dev, so every request it doesn't
         // serve reaches the Worker's router, which applies the asset rules
