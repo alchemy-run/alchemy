@@ -107,7 +107,7 @@ export function handleWebSocket(
  * [^.]+ groups separated by - cause quadratic backtracking on hyphen-heavy input. Tokens
  * are documented as letters/digits/underscores only.
  */
-const SANDBOX_ORIGIN_REGEXP = /^https?:\/\/\d{4,}-[^.]+-[a-z0-9_]+\.localhost(:\d+)?$/i;
+export const SANDBOX_ORIGIN_REGEXP = /^https?:\/\/\d{4,}-[^.]+-[a-z0-9_]+\.localhost(:\d+)?$/i;
 
 function hasSandboxOrigin(origin: string) {
   return SANDBOX_ORIGIN_REGEXP.test(origin);

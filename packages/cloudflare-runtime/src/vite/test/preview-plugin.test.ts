@@ -122,6 +122,9 @@ describe("preview plugin", () => {
   });
 
   it("stays out of the way in SPA mode (no worker entry)", async () => {
+    // With no Worker, the client builds to Vite's own outDir, as with
+    // `@cloudflare/vite-plugin`.
+    await NodeFs.writeFile(NodePath.join(root, "dist", "index.html"), "<html></html>");
     const server = await createPreviewServer(cloudflareVitePlugin({}));
     try {
       expect(startedBuilds).toHaveLength(0);

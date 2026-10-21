@@ -30,8 +30,15 @@ afterAll(async () => {
   await NodeFs.rm(root, { recursive: true, force: true });
 });
 
-const resolve = (plugins: vite.PluginOption, command: "serve" | "build") =>
-  vite.resolveConfig({ configFile: false, root, logLevel: "silent", plugins: [plugins] }, command);
+const resolve = (
+  plugins: vite.PluginOption,
+  command: "serve" | "build",
+  userConfig: vite.InlineConfig = {},
+) =>
+  vite.resolveConfig(
+    { ...userConfig, configFile: false, root, logLevel: "silent", plugins: [plugins] },
+    command,
+  );
 
 const official = (flags: Array<string>) =>
   officialCloudflare({
@@ -111,6 +118,7 @@ const clientEnvironment = (config: vite.ResolvedConfig) => ({
 describe.each([
   { name: "without nodejs_compat", flags: [] },
   { name: "with nodejs_compat", flags: ["nodejs_compat"] },
+  { name: "with nodejs_als", flags: ["nodejs_als"] },
 ])("resolved config matches @cloudflare/vite-plugin $name", ({ flags }) => {
   it.each(["serve", "build"] as const)("%s: the Worker environment", async (command) => {
     const expected = workerEnvironment(await resolve(official(flags), command));
@@ -130,5 +138,36 @@ describe.each([
     expect(actual.appType).toBe(expected.appType);
     // Alchemy also denies its own state and stack files.
     expect(actual.server.fs.deny).toEqual(expect.arrayContaining(expected.server.fs.deny));
+  });
+});
+
+describe.each([
+  { name: "a custom build.outDir", userConfig: { build: { outDir: "out" } } },
+  { name: "source maps turned off", userConfig: { build: { sourcemap: false } } },
+  {
+    name: "the Worker's own source map setting",
+    userConfig: { environments: { ssr: { build: { sourcemap: "hidden" as const } } } },
+  },
+])("resolved config matches @cloudflare/vite-plugin with $name", ({ userConfig }) => {
+  it.each(["serve", "build"] as const)("%s", async (command) => {
+    const expected = await resolve(official(["nodejs_compat"]), command, userConfig);
+    const actual = await resolve(alchemy(["nodejs_compat"]), command, userConfig);
+    expect(workerEnvironment(actual)).toEqual(workerEnvironment(expected));
+    expect(clientEnvironment(actual)).toEqual(clientEnvironment(expected));
+  });
+});
+
+describe("resolved config matches @cloudflare/vite-plugin in production", () => {
+  it("defines the production NODE_ENV", async () => {
+    const previous = process.env.NODE_ENV;
+    process.env.NODE_ENV = "production";
+    try {
+      const expected = workerEnvironment(await resolve(official(["nodejs_compat"]), "build"));
+      const actual = workerEnvironment(await resolve(alchemy(["nodejs_compat"]), "build"));
+      expect(actual.define).toEqual(expected.define);
+      expect(actual.optimizeDeps.define).toEqual(expected.optimizeDeps.define);
+    } finally {
+      process.env.NODE_ENV = previous;
+    }
   });
 });

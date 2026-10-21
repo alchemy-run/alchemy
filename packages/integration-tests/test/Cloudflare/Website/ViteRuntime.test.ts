@@ -73,6 +73,7 @@ const customBuildAppFixtureDir = pathe.resolve(
 );
 const configChangesFixtureDir = pathe.resolve(import.meta.dirname, "vite-config-changes-fixture");
 const hotChannelFixtureDir = pathe.resolve(import.meta.dirname, "vite-hot-channel-fixture");
+const bundledDevFixtureDir = pathe.resolve(import.meta.dirname, "vite-bundled-dev-fixture");
 
 type Mode = "live" | "dev";
 
@@ -507,6 +508,40 @@ describe.concurrent(
             "__worker-module-event-data-received__",
             "__worker-request-event-data-received__",
           ]);
+        }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.ignore)), logLevel),
+      { tags: ["provider:cloudflare:worker", "local"], timeout: 180_000 },
+    );
+
+    // Vite's bundled dev mode (`experimental.bundledDev`, dev only): the
+    // HTML shell comes from Vite's in-memory bundle, the API from the Worker.
+    devTest.provider(
+      "Vite runtime: Vite's bundled dev mode serves the HTML shell (dev)",
+      (stack) =>
+        Effect.gen(function* () {
+          yield* stack.destroy();
+          const rootDir = yield* cloneFixture(bundledDevFixtureDir, {
+            prefix: "alchemy-vite-bundled-dev-",
+            tempRoot,
+            entries: ["package.json", "vite.config.ts", "index.html", "src"],
+          });
+          const site = yield* stack.deploy(
+            Cloudflare.Website.Vite("ViteBundledDev", {
+              rootDir,
+              main: "./src/worker.ts",
+              workersDev: true,
+              compatibility: { date: "2026-03-17" },
+              memo: { include: ["**/*"] },
+              assets: { runWorkerFirst: ["/api"] },
+              dev: { port: 0 },
+            }),
+          );
+          const url = site.url!.replace(/\/$/, "");
+          yield* expectResponse(url, (res) =>
+            res.status === 200 && res.body.includes("<h1>bundled-dev-shell</h1>")
+              ? undefined
+              : `${res.status} ${res.body.slice(0, 300)}`,
+          );
+          yield* expectJson(`${url}/api`, { worker: "bundled-dev" });
         }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.ignore)), logLevel),
       { tags: ["provider:cloudflare:worker", "local"], timeout: 180_000 },
     );

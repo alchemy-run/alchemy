@@ -241,59 +241,123 @@ export const optionsPlugin = createPlugin<"options", OptionsApi>("options", (plu
             // already define one.
             userConfig.builder?.buildApp !== undefined
               ? undefined
-              : assetsOnly
-                ? // An assets-only site with no `index.html` or client input
-                  // (only `public/`) has nothing to build: the build output
-                  // plugin uploads `public/`, as `@cloudflare/vite-plugin`'s
-                  // fallback client build does. Vite builds every environment
-                  // when none is marked built, which would build the client
-                  // from a missing `index.html`, so mark it handled.
-                  userConfig.build?.rollupOptions?.input === undefined &&
-                  userConfig.environments?.client?.build?.rollupOptions?.input === undefined &&
-                  !fs.existsSync(path.join(root, "index.html"))
-                  ? {
-                      buildApp: async (builder) => {
-                        if (builder.environments.client) builder.environments.client.isBuilt = true;
-                      },
-                    }
-                  : undefined
-                : {
-                    // We need to include this for `builder.buildApp()` to work
-                    // because not all frameworks provide it...
-                    buildApp: async (builder) => {
-                      for (const environment of Object.values(builder.environments)) {
-                        // Framework-owned environments we were told to leave
-                        // alone may have no build input; never drive them from
-                        // our default orchestrator.
-                        if (pluginOptions.skipEnvironments?.includes(environment.name)) continue;
-                        // ...however, if your framework does provide a `buildApp` hook,
-                        // this check prevents us from building the environment twice.
-                        if (environment.isBuilt) continue;
-                        // `skipEnvironments` opts out of environments the app
-                        // declared; this covers the one Vite creates unasked.
-                        if (isEntrylessClientEnvironment(environment)) continue;
-                        await builder.build(environment);
-                      }
-                    },
+              : {
+                  buildApp: (builder) =>
+                    // An assets-only site builds only its client.
+                    buildApp(builder, assetsOnly ? [] : environmentNames, pluginOptions),
+                },
+          // An assets-only site has no Worker environments, as with
+          // `@cloudflare/vite-plugin`: the client builds to Vite's own outDir.
+          environments: assetsOnly
+            ? undefined
+            : {
+                client: {
+                  build: {
+                    outDir: getOutputDirectory(userConfig, "client"),
                   },
-          environments: {
-            client: {
-              build: {
-                outDir: getOutputDirectory(userConfig, "client"),
+                },
+                ...Object.fromEntries(
+                  environmentNames.map((name, index) => [
+                    name,
+                    makeEnvironment({ name, isEntry: index === 0 }),
+                  ]),
+                ),
               },
-            },
-            ...Object.fromEntries(
-              environmentNames.map((name, index) => [
-                name,
-                makeEnvironment({ name, isEntry: index === 0 }),
-              ]),
-            ),
-          },
         };
       },
     },
   };
 });
+
+export const CLIENT_FALLBACK_ENTRY_ID = "virtual:cloudflare/client-fallback-entry";
+const CLIENT_FALLBACK_ENTRY_NAME = "__cloudflare_fallback_entry__";
+
+/**
+ * `@cloudflare/vite-plugin`'s default build: the Worker environments, any
+ * other environment the app declares, then the client. A client with no
+ * entry still builds when it has `public/` files or the Worker imports
+ * assets, so its output holds every static asset; the Worker's imported
+ * assets then move into it.
+ */
+const buildApp = async (
+  builder: vite.ViteBuilder,
+  environmentNames: ReadonlyArray<string>,
+  options: BasePluginOptions,
+) => {
+  const client = builder.environments.client;
+  const workerEnvironments = environmentNames.flatMap((name) => {
+    const environment = builder.environments[name];
+    return environment ? [environment] : [];
+  });
+  const others = Object.values(builder.environments).filter(
+    (environment) =>
+      workerEnvironments.length > 0 &&
+      environment !== client &&
+      !environmentNames.includes(environment.name) &&
+      // Framework-owned environments we were told to leave alone may have
+      // no build input; never drive them from the default orchestrator.
+      !options.skipEnvironments?.includes(environment.name),
+  );
+  for (const environment of [...workerEnvironments, ...others]) {
+    if (!environment.isBuilt) await builder.build(environment);
+  }
+  if (!client || client.isBuilt) return;
+  const entry = workerEnvironments[0];
+  const entryDirectory = entry
+    ? path.resolve(builder.config.root, entry.config.build.outDir)
+    : undefined;
+  const importedAssets = entryDirectory ? readImportedAssets(entryDirectory) : new Set<string>();
+  if (!isEntrylessClientEnvironment(client)) {
+    await builder.build(client);
+  } else if (importedAssets.size > 0 || hasPublicAssets(builder.config)) {
+    client.config.build.rollupOptions = {
+      input: CLIENT_FALLBACK_ENTRY_ID,
+      logLevel: "silent",
+      output: { entryFileNames: CLIENT_FALLBACK_ENTRY_NAME },
+    };
+    await builder.build(client);
+    fs.rmSync(
+      path.resolve(builder.config.root, client.config.build.outDir, CLIENT_FALLBACK_ENTRY_NAME),
+      { force: true },
+    );
+  } else {
+    return;
+  }
+  if (!entryDirectory) return;
+  const clientDirectory = path.resolve(builder.config.root, client.config.build.outDir);
+  for (const asset of importedAssets) {
+    const source = path.join(entryDirectory, asset);
+    const destination = path.join(clientDirectory, asset);
+    if (!fs.existsSync(source)) continue;
+    if (fs.existsSync(destination)) {
+      fs.unlinkSync(source);
+    } else {
+      fs.mkdirSync(path.dirname(destination), { recursive: true });
+      fs.renameSync(source, destination);
+    }
+  }
+};
+
+/** The assets the Worker's chunks import, from its build manifest. */
+const readImportedAssets = (directory: string): Set<string> => {
+  try {
+    const manifest = JSON.parse(
+      fs.readFileSync(path.join(directory, ".vite", "manifest.json"), "utf8"),
+    ) as Record<string, { assets?: Array<string> }>;
+    return new Set(Object.values(manifest).flatMap((chunk) => chunk.assets ?? []));
+  } catch {
+    return new Set();
+  }
+};
+
+const hasPublicAssets = ({ publicDir }: { publicDir: string | false }): boolean => {
+  if (!publicDir) return false;
+  try {
+    return fs.readdirSync(publicDir).length > 0;
+  } catch {
+    return false;
+  }
+};
 
 /**
  * Vite always creates a default `client` environment, even for a pure Worker

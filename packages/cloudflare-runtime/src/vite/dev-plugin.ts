@@ -26,6 +26,8 @@ let context: Context.Context<RuntimeServices> | undefined;
 
 export function dev(options: CloudflareVitePluginOptions): Array<vite.Plugin> {
   const environmentNames = parseViteEnvironments(options);
+  const isWorkerEnvironment = (environment: { name: string } | undefined) =>
+    environment === undefined || environmentNames.includes(environment.name);
   const configured = configuredExportTypes(options);
   // Which exports the running Worker was generated for. Kept across dev server
   // restarts so a restart does not undo what was detected.
@@ -104,13 +106,16 @@ export function dev(options: CloudflareVitePluginOptions): Array<vite.Plugin> {
         environments: Object.fromEntries(environmentNames.map((name) => [name, environment])),
       };
     },
+    // The Worker environments' builds end when the dev server closes. Vite's
+    // bundled dev mode (`experimental.bundledDev`) also builds the client
+    // while serving, which must not take the runtime down with it.
     async buildEnd() {
-      if (!isServerRestarting) {
+      if (!isServerRestarting && isWorkerEnvironment(this.environment)) {
         await close();
       }
     },
     async closeBundle() {
-      if (!isServerRestarting) {
+      if (!isServerRestarting && isWorkerEnvironment(this.environment)) {
         await close();
       }
     },

@@ -3,6 +3,7 @@ import type * as vite from "vite";
 import type { BindingHooks, RuntimeServices, RuntimeWorker } from "../core/index.ts";
 import type { BasePluginOptions } from "../rolldown/options.ts";
 import {
+  CLIENT_FALLBACK_ENTRY_ID,
   additionalModulesPlugin,
   cloudflareExternalsPlugin,
   nodejsAlsPlugin,
@@ -210,6 +211,23 @@ const DENIED_FILES = [
   "alchemy.run.*",
 ];
 
+/**
+ * The empty entry the default build gives a client with no `index.html`, so
+ * its output still receives `public/` and the Worker's imported assets.
+ */
+const clientFallbackPlugin = (): vite.Plugin => ({
+  name: "distilled-cloudflare:client-fallback",
+  applyToEnvironment: (environment) => environment.name === "client",
+  resolveId: {
+    filter: { id: /^virtual:cloudflare\/client-fallback-entry$/ },
+    handler: (id) => (id === CLIENT_FALLBACK_ENTRY_ID ? `\0${id}` : undefined),
+  },
+  load: {
+    filter: { id: /^\0virtual:cloudflare\/client-fallback-entry$/ },
+    handler: (id) => (id === `\0${CLIENT_FALLBACK_ENTRY_ID}` ? "" : undefined),
+  },
+});
+
 export default function cloudflareVitePlugin(
   options: CloudflareVitePluginOptions = {},
 ): vite.PluginOption {
@@ -223,6 +241,7 @@ export default function cloudflareVitePlugin(
     virtualModulesPlugin.vite(options),
     wasmInitPlugin.vite(options),
     additionalModulesPlugin.vite(options),
+    clientFallbackPlugin(),
     {
       name: "distilled-cloudflare:rsc",
       enforce: "pre",

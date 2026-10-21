@@ -222,6 +222,28 @@ export const nodejsImportWarningPlugin = createPlugin("nodejs-import-warning", (
   if (hasNodejsCompat(options.compatibilityFlags, options.compatibilityDate)) return;
   const imports = new Map<string, Set<string>>();
   let root = process.cwd();
+  // In dev there is no `buildEnd` until the server closes, so, as
+  // `@cloudflare/vite-plugin` does, warn once imports go quiet.
+  const devImports = new Map<string, Set<string>>();
+  let devTimer: ReturnType<typeof setTimeout> | undefined;
+  const warnInDev = (environment: {
+    name: string;
+    logger: { warn: (message: string, options?: { timestamp?: boolean }) => void };
+  }) => {
+    if (devTimer) clearTimeout(devTimer);
+    devTimer = setTimeout(() => {
+      devTimer = undefined;
+      if (devImports.size === 0) return;
+      let message = `Unexpected Node.js imports for environment "${environment.name}". Do you need to enable the "nodejs_compat" compatibility flag? Refer to https://developers.cloudflare.com/workers/runtime-apis/nodejs/ for more details.\n`;
+      for (const [id, importers] of devImports) {
+        for (const importer of importers) {
+          message += ` - "${id}" imported from "${toPosixPath(path.relative(root, importer))}"\n`;
+        }
+      }
+      devImports.clear();
+      environment.logger.warn(message, { timestamp: true });
+    }, 500);
+  };
   return {
     rolldown: {
       options(options) {
@@ -249,6 +271,20 @@ export const nodejsImportWarningPlugin = createPlugin("nodejs-import-warning", (
               imports.set(id, new Set());
             }
             imports.get(id)?.add(importer);
+            const environment = (
+              this as {
+                environment?: {
+                  name: string;
+                  mode: string;
+                  logger: Parameters<typeof warnInDev>[0]["logger"];
+                };
+              }
+            ).environment;
+            if (environment?.mode === "dev") {
+              if (!devImports.has(id)) devImports.set(id, new Set());
+              devImports.get(id)?.add(importer);
+              warnInDev(environment);
+            }
           }
           return { id, external: true };
         },
