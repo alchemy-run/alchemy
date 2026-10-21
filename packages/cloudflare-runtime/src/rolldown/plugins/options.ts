@@ -34,6 +34,26 @@ export interface OptionsApi {
 
 export const optionsPlugin = createPlugin<"options", OptionsApi>("options", (pluginOptions) => {
   let input: Record<string, string> = {};
+  // A framework's own `index` input in the Worker environment (Waku's server
+  // entry) merges over the Worker entry's, so once every config is merged the
+  // Worker entry takes `index` back and the framework's builds under its own
+  // name.
+  const restoreWorkerEntryInput = (config: vite.ResolvedConfig) => {
+    if (typeof pluginOptions.main !== "string" || input.index === undefined) return;
+    const workerEntry = workerEntryId(input.index);
+    const build = config.environments[parseViteEnvironments(pluginOptions)[0]]?.build;
+    for (const options of new Set([build?.rolldownOptions, build?.rollupOptions])) {
+      const current = options?.input;
+      if (!options || !current || typeof current !== "object" || Array.isArray(current)) continue;
+      const displaced = current.index;
+      if (displaced === undefined || displaced === workerEntry) continue;
+      options.input = {
+        ...current,
+        [path.parse(displaced).name || "framework"]: displaced,
+        index: workerEntry,
+      };
+    }
+  };
   return {
     shared: {
       api: {
@@ -63,6 +83,7 @@ export const optionsPlugin = createPlugin<"options", OptionsApi>("options", (plu
       // client bundle. Each environment reads its own `esbuild` first, so
       // the Worker environments get theirs.
       configResolved(config) {
+        restoreWorkerEntryInput(config);
         if (this.meta.rolldownVersion || config.esbuild === false) return;
         const esbuild = {
           ...config.esbuild,
