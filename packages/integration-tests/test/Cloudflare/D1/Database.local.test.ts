@@ -280,6 +280,12 @@ test.provider(
         [
           "CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT NOT NULL);",
           "INSERT INTO users (name) VALUES ('imported');",
+          // ~180 KB of small statements: over SQLite's statement length
+          // limit as a whole, so the file must not run as one statement.
+          ...Array.from(
+            { length: 150 },
+            (_, i) => `INSERT INTO users (name) VALUES ('bulk-${i}-${"x".repeat(1200)}');`,
+          ),
         ].join("\n"),
       );
 
@@ -304,7 +310,8 @@ test.provider(
       const users = (yield* getJsonReady(`${deployed.worker.url}/users`)) as {
         users: string[];
       };
-      expect(users.users).toEqual(["imported"]);
+      expect(users.users).toHaveLength(151);
+      expect(users.users).toContain("imported");
 
       yield* stack.destroy();
     }).pipe(logLevel),
