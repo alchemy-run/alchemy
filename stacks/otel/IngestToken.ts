@@ -1,5 +1,5 @@
+import * as Axiom from "@alchemy.run/axiom";
 import * as Alchemy from "alchemy";
-import * as Axiom from "alchemy/Axiom";
 import * as Output from "alchemy/Output";
 import { Effect } from "effect";
 import { Logs, Metrics, Traces } from "./Datasets.ts";

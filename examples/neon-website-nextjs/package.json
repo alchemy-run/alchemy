@@ -22,6 +22,7 @@
   },
   "devDependencies": {
     "@alchemy.run/frontend-frameworks": "workspace:*",
+    "@alchemy.run/neon": "workspace:*",
     "@effect/platform-node": "catalog:",
     "@tailwindcss/postcss": "catalog:",
     "@types/react": "catalog:",

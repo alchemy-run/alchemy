@@ -5,7 +5,7 @@ import { createRequire } from "node:module";
  * (`@alchemy.run/frontend-frameworks/nextjs/source`).
  *
  * The default export implements alchemy's `WorkerSourceModule` contract
- * (`packages/alchemy/src/Cloudflare/Workers/Source.ts`) **structurally** —
+ * (`packages/cloudflare/src/Workers/Source.ts`) **structurally** —
  * this package deliberately does not import alchemy types. The shapes
  * mirrored here are:
  *
@@ -33,7 +33,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import type { PlatformError } from "effect/PlatformError";
 import type * as Scope from "effect/Scope";
-import { runBuildChild } from "../core/BuildChild.ts";
+import { resolveBuildEnv, runBuildChild } from "../core/BuildChild.ts";
 import * as FrameworkCore from "../core/index.ts";
 import * as Nextjs from "./Nextjs.ts";
 import * as Runner from "./Runner.ts";
@@ -99,6 +99,7 @@ export interface SourceContext {
     readonly date: string;
     readonly flags: Array<string>;
   };
+  readonly env?: Record<string, unknown> | undefined;
   readonly assets?: string | Record<string, unknown> | undefined;
 }
 
@@ -617,6 +618,7 @@ const makeProvider = (options: NextjsSourceOptions): SourceProvider => {
         module: import.meta.url,
         rootDir: root,
         framework: "nextjs",
+        env: resolveBuildEnv(ctx.env),
         config: {
           rootDir: root,
           compatibilityDate: ctx.compatibility.date,

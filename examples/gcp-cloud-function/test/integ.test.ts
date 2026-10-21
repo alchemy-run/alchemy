@@ -1,8 +1,8 @@
 import { expect } from "bun:test";
+import * as GCP from "@alchemy.run/gcp";
 import * as cloudfunctions from "@distilled.cloud/gcp/cloudfunctions_v2";
 import * as firestore from "@distilled.cloud/gcp/firestore_v1";
 import * as Alchemy from "alchemy";
-import * as GCP from "alchemy/GCP";
 import * as Test from "alchemy/Test/Bun";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
