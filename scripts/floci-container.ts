@@ -8,7 +8,7 @@
  * first, so the suites never run against an emulator configured differently
  * from the one they were validated on.
  */
-import * as Floci from "@alchemy.run/floci";
+import * as Floci from "@alchemy.run/aws/Local/Floci";
 import * as Effect from "effect/Effect";
 
 /** Emulator settings the suites assume, mirroring a real AWS account. */

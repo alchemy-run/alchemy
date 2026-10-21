@@ -66,32 +66,36 @@ const program = Effect.scoped(
       devAccess,
       ...runtimeWorker
     } = config.worker;
-    const bindings = yield* materializeRuntimeBindings(
-      {
-        name: config.worker.name,
-        env: config.env,
-        hasAssets,
-        bindingDescriptors,
-        devRemote,
-        devAccess,
-      },
-      { accountId: config.accountId, selfUrl: config.publicUrl, stack: config.stack },
-    );
     const source = config.source;
-    const viteHost = "127.0.0.1";
-    // `viteDev` resolves `port: 0` per the loaded Vite: a true OS-assigned
-    // random port on Vite >= 8.2.1 (vitejs/vite#23158), a probed ephemeral
-    // port on older Vite.
-    const vitePort = source ? undefined : 0;
-    const url = source
+    const provider = source
       ? yield* loadSource(source.descriptor).pipe(
           // `loadSource` is typed against the full `SourceServices` union
           // (which includes the per-run Artifacts cache the live provider
           // supplies); the dev child has no run-scoped cache, so hand the
           // module a fresh one.
           Effect.provideService(Artifacts, makeScopedArtifacts(createArtifactStore(), source.fqn)),
-          Effect.flatMap((provider) =>
-            provider.dev({
+        )
+      : undefined;
+    const bindings = yield* materializeRuntimeBindings(
+      {
+        name: config.worker.name,
+        env: config.env,
+        hasAssets: hasAssets || provider?.devAssetsBinding === true,
+        bindingDescriptors,
+        devRemote,
+        devAccess,
+      },
+      { accountId: config.accountId, selfUrl: config.publicUrl, stack: config.stack },
+    );
+    const viteHost = "127.0.0.1";
+    // `viteDev` resolves `port: 0` per the loaded Vite: a true OS-assigned
+    // random port on Vite >= 8.2.1 (vitejs/vite#23158), a probed ephemeral
+    // port on older Vite.
+    const vitePort = source ? undefined : 0;
+    const url =
+      source && provider
+        ? yield* provider
+            .dev({
               id: source.id,
               fqn: source.fqn,
               workerName: config.worker.name,
@@ -99,6 +103,9 @@ const program = Effect.scoped(
               entry: { kind: "external" },
               stack: config.stack,
               env: config.env,
+              // Dev hands `env` to the source unresolved; the Worker's own
+              // URL is only substituted into a build's inlined env on deploy.
+              selfUrl: undefined,
               extraOptions: undefined,
               assets: source.assets,
               worker: {
@@ -109,44 +116,44 @@ const program = Effect.scoped(
                 assets: config.worker.assets,
               },
               runtimeContext,
-            }),
-          ),
-          Effect.flatMap((handle) =>
-            Match.value(handle).pipe(
-              Match.when({ mode: "server" }, (handle) =>
-                (handle.serviceBinding === "http"
-                  ? registerHttpServer(config.worker.name, handle.url).pipe(
-                      Effect.provideContext(runtimeContext),
-                    )
-                  : Effect.void
-                ).pipe(Effect.as(handle.url.toString())),
-              ),
-              Match.when({ mode: "bundle" }, () =>
-                Effect.fail(
-                  new SourceProviderError({
-                    provider: source.descriptor.provider,
-                    message:
-                      "A source declared devMode 'server' but returned a bundle-mode dev handle.",
-                  }),
+            })
+            .pipe(
+              Effect.flatMap((handle) =>
+                Match.value(handle).pipe(
+                  Match.when({ mode: "server" }, (handle) =>
+                    (handle.serviceBinding === "http"
+                      ? registerHttpServer(config.worker.name, handle.url).pipe(
+                          Effect.provideContext(runtimeContext),
+                        )
+                      : Effect.void
+                    ).pipe(Effect.as(handle.url.toString())),
+                  ),
+                  Match.when({ mode: "bundle" }, () =>
+                    Effect.fail(
+                      new SourceProviderError({
+                        provider: source.descriptor.provider,
+                        message:
+                          "A source declared devMode 'server' but returned a bundle-mode dev handle.",
+                      }),
+                    ),
+                  ),
+                  Match.exhaustive,
                 ),
               ),
-              Match.exhaustive,
-            ),
-          ),
-        )
-      : yield* Vite.viteDev(
-          config.rootDir,
-          config.env,
-          {
-            main,
-            compatibilityDate: compatibility.date,
-            compatibilityFlags: compatibility.flags,
-            viteEnvironments,
-            worker: { ...runtimeWorker, bindings },
-            context: runtimeContext,
-          },
-          { host: viteHost, port: vitePort, strictPort: false },
-        ).pipe(Effect.map((server) => server.resolvedUrls?.local[0]));
+            )
+        : yield* Vite.viteDev(
+            config.rootDir,
+            config.env,
+            {
+              main,
+              compatibilityDate: compatibility.date,
+              compatibilityFlags: compatibility.flags,
+              viteEnvironments,
+              worker: { ...runtimeWorker, bindings },
+              context: runtimeContext,
+            },
+            { host: viteHost, port: vitePort, strictPort: false },
+          ).pipe(Effect.map((server) => server.resolvedUrls?.local[0]));
     if (!url) {
       return yield* Effect.die("Dev server child started without a local URL");
     }

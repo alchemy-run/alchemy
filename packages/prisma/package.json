@@ -29,18 +29,9 @@
   "sideEffects": false,
   "exports": {
     ".": "./src/index.ts",
+    "./Bootstrap": "./src/Bootstrap.ts",
     "./ORM": "./src/ORM/index.ts",
     "./Website": "./src/Website/index.ts",
-    "./ComputeApp": null,
-    "./ComputeService": null,
-    "./ComputeVersion": null,
-    "./ComputeVersionObserve": null,
-    "./EnvironmentVariableValidation": null,
-    "./Credentials": null,
-    "./Internal/*": null,
-    "./PrismaDevDatabase": null,
-    "./Refs": null,
-    "./Bootstrap": "./src/Bootstrap.ts",
     "./*": "./src/*.ts",
     "./package.json": "./package.json"
   },
@@ -51,6 +42,11 @@
         "bun": "./src/index.ts",
         "worker": "./src/index.ts",
         "default": "./lib/index.js"
+      },
+      "./Bootstrap": {
+        "types": "./src/Bootstrap.ts",
+        "bun": "./src/Bootstrap.ts",
+        "default": "./src/Bootstrap.ts"
       },
       "./ORM": {
         "types": "./lib/ORM/index.d.ts",
@@ -64,20 +60,8 @@
         "worker": "./src/Website/index.ts",
         "default": "./lib/Website/index.js"
       },
-      "./ComputeApp": null,
-      "./ComputeService": null,
-      "./ComputeVersion": null,
-      "./ComputeVersionObserve": null,
-      "./EnvironmentVariableValidation": null,
-      "./Credentials": null,
-      "./Internal/*": null,
-      "./PrismaDevDatabase": null,
-      "./Refs": null,
-      "./Bootstrap": {
-        "types": "./src/Bootstrap.ts",
-        "bun": "./src/Bootstrap.ts",
-        "default": "./src/Bootstrap.ts"
-      },
+      "./internal/*": null,
+      "./*/internal": null,
       "./*": {
         "types": "./lib/*.d.ts",
         "bun": "./src/*.ts",

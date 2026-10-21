@@ -17,19 +17,7 @@
   },
   "references": [
     {
-      "path": "../floci/tsconfig.json"
-    },
-    {
       "path": "../alchemy-test/tsconfig.json"
-    },
-    {
-      "path": "../../submodules/distilled/packages/aws/tsconfig.json"
-    },
-    {
-      "path": "../../submodules/distilled/packages/core/tsconfig.json"
-    },
-    {
-      "path": "../../submodules/distilled/packages/gcp/tsconfig.json"
     }
   ]
 }

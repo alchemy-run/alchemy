@@ -196,50 +196,6 @@ yield* GitHub.consumeRepositoryEvents(
 Selecting `["*"]` (or omitting `events`) widens the union back to
 every GitHub event name.
 
-## Case study: a release-blogging agent
-
-The [`cloudflare-agent` example](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-agent)
-uses this event source as the front door of an autonomous pipeline:
-a Worker consumes push events on the alchemy repo, filters for
-release commits on `main`, and hands each one to a Durable Object
-that drives an AI agent to write the release blog post.
-
-The filter is ordinary handler code over the typed `push` payload:
-
-```typescript
-// src/ReleaseService.ts
-yield* GitHub.consumeRepositoryEvents(
-  {
-    owner: "alchemy-run",
-    repository: "alchemy",
-    events: ["push"],
-  },
-  (event) => {
-    const title = event.payload.head_commit?.message.split("\n")[0] ?? "";
-    const isRelease =
-      event.payload.ref === "refs/heads/main" &&
-      title.startsWith("chore(release):");
-
-    return isRelease
-      ? versions.getByName(event.payload.head_commit!.id).generateBlog({
-          input: event.payload,
-        })
-      : Effect.log(`skipping ${event.payload.head_commit?.id}`);
-  },
-);
-```
-
-Worth reading in the example:
-
-- `src/ReleaseService.ts` — the Worker above; each release commit is
-  routed to a Durable Object keyed by commit hash.
-- `src/ReleaseVersion.ts` — the per-release Durable Object that
-  forwards the payload to the agent.
-- `src/ReleaseBlogger.ts` — an `Alchemy.Agent` whose prompt
-  references its tools directly.
-- `src/DevBox.ts` — a Cloudflare Container the agent's file and shell
-  tools execute in.
-
 ## Cloudflare-only today
 
 `GitHub.RepositoryEventSourceLive` runs on any host that is a

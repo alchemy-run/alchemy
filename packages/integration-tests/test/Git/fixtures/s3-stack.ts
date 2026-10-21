@@ -1,3 +1,10 @@
+/**
+ * The Git host with its bytes on S3 (DESIGN §22): the same building-block
+ * assembly as `stack.ts`, with `BlobStoreS3(GitObjects)` in place of R2. Needs BOTH
+ * provider sets — the bucket is an `AWS.S3.Bucket` and the Worker binds
+ * the S3 operations cross-cloud (an IAM identity is minted for it).
+ */
+import * as AWS from "@alchemy.run/aws";
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import {
   BlobStoreS3,
@@ -8,13 +15,6 @@ import {
   RegistryDurableObject,
 } from "@alchemy.run/git";
 import * as Alchemy from "alchemy";
-/**
- * The Git host with its bytes on S3 (DESIGN §22): the same building-block
- * assembly as `stack.ts`, with `BlobStoreS3(GitObjects)` in place of R2. Needs BOTH
- * provider sets — the bucket is an `AWS.S3.Bucket` and the Worker binds
- * the S3 operations cross-cloud (an IAM identity is minted for it).
- */
-import * as AWS from "alchemy/AWS";
 import * as Effect from "effect/Effect";
 import * as HttpRouter from "effect/http/HttpRouter";
 import * as Layer from "effect/Layer";

@@ -21,6 +21,9 @@
     },
     {
       "path": "../alchemy/tsconfig.json"
-    }
+    },
+    { "path": "../sql/tsconfig.json" },
+    { "path": "../redis/tsconfig.json" },
+    { "path": "../docker/tsconfig.json" }
   ]
 }

@@ -1,5 +1,5 @@
 /**
- * Generate `packages/alchemy/src/AWS/IAM/actions.generated.ts` — a SHALLOW
+ * Generate `packages/aws/src/IAM/actions.generated.ts` — a SHALLOW
  * string-literal union type `IamAction` built from distilled's per-service
  * operation names.
  *
@@ -30,8 +30,7 @@
 
 const SERVICES_DIR = new URL("../submodules/distilled/packages/aws/src/services/", import.meta.url)
   .pathname;
-const OUT_FILE = new URL("../packages/alchemy/src/AWS/IAM/actions.generated.ts", import.meta.url)
-  .pathname;
+const OUT_FILE = new URL("../packages/aws/src/IAM/actions.generated.ts", import.meta.url).pathname;
 
 /**
  * sigv4 signing name -> IAM action service prefix, for the known cases where

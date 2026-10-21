@@ -1,5 +1,5 @@
+import type { ReadClient } from "@alchemy.run/redis";
 import * as Binding from "alchemy/Binding";
-import type { ReadClient } from "alchemy/Redis";
 import type * as Effect from "effect/Effect";
 import type { Redis } from "./Redis.ts";
 

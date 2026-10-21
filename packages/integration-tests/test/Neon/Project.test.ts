@@ -4,6 +4,8 @@ import type { PostgresOrigin } from "@alchemy.run/neon/PostgresOrigin";
 import { Project, type ProjectProps } from "@alchemy.run/neon/Project";
 import { waitForOperations } from "@alchemy.run/neon/Project";
 import { providers } from "@alchemy.run/neon/Providers";
+import { makePgMigrationExecutor } from "@alchemy.run/sql/Migrations";
+import { hashMigrations } from "@alchemy.run/sql/SqlFile";
 import {
   createProject,
   deleteProject,
@@ -14,8 +16,6 @@ import {
 import { expect } from "alchemy-test";
 import { adopt, OwnedBySomeoneElse, Unowned } from "alchemy/AdoptPolicy";
 import * as Provider from "alchemy/Provider";
-import { makePgMigrationExecutor } from "alchemy/SQL/Migrations/index";
-import { hashMigrations } from "alchemy/SQL/SqlFile";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";

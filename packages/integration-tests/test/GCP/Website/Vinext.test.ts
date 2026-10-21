@@ -1,5 +1,5 @@
+import * as GCP from "@alchemy.run/gcp";
 import { expect } from "alchemy-test";
-import * as GCP from "alchemy/GCP";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as pathe from "pathe";

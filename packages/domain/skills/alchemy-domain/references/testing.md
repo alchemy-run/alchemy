@@ -1,0 +1,126 @@
+# Testing
+
+## Stories: specify the model
+
+A story is given/when/then over the real model, in memory. Policies, sagas and projections run for real. External system calls wait until the story answers them, and a clock you control stamps commands. A story fails on any rejection, external call or saga defect it doesn't account for, so a passing story has accounted for every outcome.
+
+```ts
+// packages/domain/test/Bank.story.test.ts
+import { it } from "@effect/vitest";
+import { Story } from "@alchemy.run/domain/Story";
+import * as Layer from "effect/Layer";
+import { Account } from "../src/Account/Account.aggregate.ts";
+import { MoneyDeposited } from "../src/Account/DepositMoney.command.ts";
+import { AccountOpened } from "../src/Account/OpenAccount.command.ts";
+import { InsufficientFunds } from "../src/Account/InsufficientFunds.rejection.ts";
+import { MoneyWithdrawn, WithdrawMoney } from "../src/Account/WithdrawMoney.command.ts";
+import { customer } from "../src/Actor.ts";
+import { Bank, BankHandlers } from "../src/Bank.model.ts";
+import { CurrentActor } from "../src/CurrentActor.context.ts";
+import { CustomerId } from "../src/Customer/Customer.id.ts";
+import { FraudCheck } from "../src/Fraud/FraudCheck.external.ts";
+import { MemoryLedgerStore } from "../src/Ledger/LedgerStore.ts";
+
+const story = Story.make(Bank, {
+  layer: BankHandlers.pipe(Layer.provide(MemoryLedgerStore)),  // required when the model has handlers
+  externalSystems: [FraudCheck],                                // replaced by ones the story controls
+});
+const a1 = Account.ref("a-1");
+
+it.effect("withdraws within the balance, and refuses beyond it", () =>
+  story(
+    Story.given(a1, new AccountOpened({ customerId: CustomerId.make("c-1"), owner: "sam" }),
+                    new MoneyDeposited({ amount: 100, balanceAfter: 100 })),
+    Story.provide(CurrentActor, customer("c-1")),        // what the command's middleware would provide
+    Story.when(a1, new WithdrawMoney({ amount: 30 })),
+    Story.then(a1, new MoneyWithdrawn({ amount: 30, balanceAfter: 70 })),
+    Story.replied({ balance: 70 }),
+    Story.when(a1, new WithdrawMoney({ amount: 100 })),
+    Story.rejected(new InsufficientFunds({ balance: 70, requested: 100 })),
+  ),
+);
+```
+
+The steps:
+
+- `given(ref, ...events)` records history. It reaches views, but never triggers policies.
+- `when(ref, command)` sends a command, then runs every policy, saga and projection until the model settles.
+- `then(ref, ...events)` asserts the events committed since the last `then` on that stream. With no events, it asserts that nothing new was committed.
+- `rejected(rejection)` asserts the last command's rejection. An unasserted rejection fails the story.
+- `replied(value)` asserts the last command's reply.
+- `state(ref, partial | fn)` asserts aggregate state.
+- `view(View, ref, partial | fn | Story.none)` asserts view state. `emitted(View, ref, [...])` asserts a view's emitted events, and `streamed(Stream, ref, ...)` a stream's entries.
+- `provide(Service, value)` stands in for middleware on the commands that follow.
+- `clock("2026-01-02T09:00:00Z")` moves time: commands are stamped with it, and scheduled commands and saga sleeps that are now due fire.
+
+### External system calls
+
+```ts
+Story.expectCall(FraudCheck.score, { accountId: a1.id }),  // a matching call is waiting (partial args)
+Story.resolve(FraudCheck.score, { risk: 0.95 }),           // answers the only waiting call to score
+```
+
+When several calls are waiting, tag each one as you expect it, and answer it by tag. A tag names the earliest matching call, in the order calls were made:
+
+```ts
+Story.expectCall("a-1", FraudCheck.score, { accountId: a1.id }),
+Story.expectCall("a-2", FraudCheck.score, { accountId: a2.id }),
+Story.resolve("a-2", FraudCheck.score, { risk: 0.1 }),
+Story.resolve("a-1", FraudCheck.score, { risk: 0.95 }),
+```
+
+An untagged `resolve` with several calls waiting fails the story, and so does a call left unanswered at the end.
+
+### Sagas
+
+Test what a saga does: the events its steps record on aggregates, and how the run ended. Don't test its internal steps.
+
+```ts
+Story.then(a1, new TransferDebited({ ... }), new TransferRefunded({ ... })),   // the compensation ran
+Story.saga(ExecuteTransfer, t1, { _tag: "Rejected", rejection: new DestinationClosed() }),
+Story.saga(ExecuteTransfer, t1, { _tag: "Running" }),
+Story.signal(ExecuteTransfer, t1, Decision, "approved"),    // complete a DurableDeferred it waits on
+```
+
+The statuses are `NotStarted`, `Running`, `Completed`, `Rejected`, `Interrupted` and `Died`. A run that dies fails the story unless a step asserts `{ _tag: "Died" }`.
+
+### What to cover
+
+For every command, cover the happy path, each rejection, and each authorization case (owner, other customer, agent). For every policy, cover the reaction, and the reaction when its command is rejected. For every saga, cover completion, each failure with its compensation, and each wait (signal, timeout via `clock`). For every view, check its state after the events it folds.
+
+## Api tests: the client's view
+
+In the server package, host the model in memory with the real middleware, and drive it through the Api client. This checks authentication, `validate`, and live reads.
+
+```ts
+// packages/server/test/CustomerApi.test.ts
+const Ports = Layer.mergeAll(SiftFraudCheck, StripePayments, MemoryLedgerStore);
+const BankInMemory = Bank.layer(BankHandlers).pipe(Layer.provide(Layer.mergeAll(Ports, Domain.InMemory)));
+const World = Layer.mergeAll(SessionLive, MfaChallengeLive).pipe(Layer.provideMerge(BankInMemory));
+
+const asCustomer = (id: string) =>
+  CustomerApi.testClient.pipe(Effect.provide(sessionClient(`customer:${id}`)));
+
+it.live("only the owner may withdraw", () =>
+  Effect.gen(function* () {
+    const sam = yield* asCustomer("c-1");
+    const deposited = yield* sam.DepositMoney({ target: accountId, amount: 250 });
+    // deposited: { reply: { balance: 250 }, stream: "Account/...", version: 2 }
+    const alex = yield* asCustomer("c-2");
+    const refused = yield* alex.WithdrawMoney({ target: accountId, amount: 10 }, mfa).pipe(Effect.flip);
+    expect(refused._tag).toBe("NotOwner");
+  }).pipe(Effect.scoped, Effect.provide(World)),
+);
+```
+
+`testClient` talks to the in-memory host directly. Use `Domain.protocolHttp` with a local HTTP server to cover the wire too.
+
+## Integration: the deployed stack
+
+At the root, deploy `alchemy.run.ts` with `alchemy/Test/Bun` and drive the deployed Api over HTTP and WebSocket. Keep it to one end-to-end flow. Stories carry the behavior.
+
+## Commands
+
+- Domain package: `pnpm --filter @acme/domain test` (vitest).
+- Monorepo type-check: `tsc -b`.
+- Integration: `bun test test/integ.test.ts`, with cloud credentials.

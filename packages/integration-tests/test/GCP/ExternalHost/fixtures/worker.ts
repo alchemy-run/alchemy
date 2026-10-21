@@ -1,5 +1,5 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
-import * as GCP from "alchemy/GCP";
+import * as GCP from "@alchemy.run/gcp";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";

@@ -11,7 +11,7 @@ The app shows the signed-in customer's balance, opens their account, and deposit
 
 ```typescript
 // packages/web/src/App.ts
-import type * as Domain from "alchemy/Domain";
+import type * as Domain from "@alchemy.run/domain";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
@@ -154,7 +154,7 @@ The client is a foldkit resource, built once for the app's life. Sign in first, 
 
 ```typescript
 // packages/web/src/main.ts
-import * as Domain from "alchemy/Domain";
+import * as Domain from "@alchemy.run/domain";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as HttpClient from "effect/http/HttpClient";

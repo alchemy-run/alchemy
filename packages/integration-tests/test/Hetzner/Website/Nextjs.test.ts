@@ -16,10 +16,7 @@ const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Deb
 
 const hasHetznerCreds = !!process.env.HCLOUD_TOKEN;
 
-const fixtureDir = pathe.resolve(
-  import.meta.dirname,
-  "../../../../alchemy/test/AWS/Website/fixtures/nextjs-app",
-);
+const fixtureDir = pathe.resolve(import.meta.dirname, "../../AWS/Website/fixtures/nextjs-app");
 const fixtureEntries = [
   ".gitignore",
   "package.json",

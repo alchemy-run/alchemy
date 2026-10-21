@@ -1,6 +1,4 @@
 import { spawn } from "node:child_process";
-import * as cloudfront from "@distilled.cloud/aws/cloudfront";
-import { expect } from "alchemy-test";
 /**
  * Cross-version upgrade tests for moving AWS framework sites onto Lambda Web
  * Functions.
@@ -11,10 +9,13 @@ import { expect } from "alchemy-test";
  * must move onto Web Functions and keep its CloudFront distribution, and
  * the old functions must be deleted.
  */
-import * as AWS from "alchemy/AWS";
+import * as AWS from "@alchemy.run/aws";
+import * as cloudfront from "@distilled.cloud/aws/cloudfront";
+import { expect } from "alchemy-test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import effectPackage from "effect/package.json" with { type: "json" };
 import * as Path from "effect/Path";
 import * as Schedule from "effect/Schedule";
 import * as pathe from "pathe";
@@ -30,6 +31,17 @@ const STAGE = "wfupgrade";
 const repoRoot = pathe.resolve(import.meta.dirname, "../../../../..");
 const workspaceCli = pathe.join(repoRoot, "packages/alchemy/bin/alchemy.js");
 const fixtures = pathe.resolve(import.meta.dirname, "fixtures");
+
+/**
+ * The published alchemy's platform peers, pinned to the workspace's exact
+ * Effect: a newer platform patch calls Effect APIs (e.g. `Path.make`) that an
+ * older `effect` does not export.
+ */
+const platformPeers = {
+  "@effect/platform-node": effectPackage.version,
+  "@effect/platform-bun": effectPackage.version,
+  "@effect/platform-node-shared": effectPackage.version,
+};
 
 /**
  * Run a command to completion without blocking the runner's event loop.
@@ -73,8 +85,7 @@ interface UpgradeCase {
   readonly tempRoot: string | undefined;
   readonly install: string[];
   /**
-   * Peers the published alchemy needs when nothing above the temp project
-   * provides them, pinned to the workspace's Effect.
+   * Peers the published alchemy needs, pinned to the workspace's Effect.
    */
   readonly peers?: Record<string, string>;
   readonly marker: string;
@@ -92,6 +103,7 @@ const cases: UpgradeCase[] = [
     tempRoot: pathe.resolve(import.meta.dirname, "../../../.tmp"),
     // Peers (nuxt, astro, ...) resolve from the workspace above.
     install: ["install", "--omit", "peer"],
+    peers: platformPeers,
     marker: "NUXT_AWS_PAGE_MARKER",
     moved: [{ from: "Site__Server", to: "Site__WebServer" }],
   },
@@ -101,12 +113,7 @@ const cases: UpgradeCase[] = [
     entries: [".gitignore", "package.json", "next.config.ts", "tsconfig.json", "app", "public"],
     tempRoot: undefined,
     install: ["install", "--linker=hoisted", "--omit", "peer"],
-    peers: {
-      effect: "4.0.4",
-      // Patch releases of the platform packages track `effect`'s.
-      "@effect/platform-node": "~4.0.0",
-      "@effect/platform-bun": "~4.0.0",
-    },
+    peers: { effect: effectPackage.version, ...platformPeers },
     marker: "NEXTJS_AWS_PAGE_MARKER",
     moved: [{ from: "Site__Server", to: "Site__WebServer" }],
     // Next's standalone server optimizes images and revalidates in-process.
@@ -197,7 +204,8 @@ for (const upgrade of cases) {
                   alchemy: PUBLISHED,
                   "@alchemy.run/frontend-frameworks": PUBLISHED,
                 },
-                ...(upgrade.peers?.effect ? { overrides: { effect: upgrade.peers.effect } } : {}),
+                // Transitive platform packages must not float past them either.
+                ...(upgrade.peers ? { overrides: upgrade.peers } : {}),
               },
               null,
               2,
@@ -213,7 +221,7 @@ for (const upgrade of cases) {
             stackProgram(
               upgrade.framework,
               pathe.join(repoRoot, "packages/alchemy/src/index.ts"),
-              pathe.join(repoRoot, "packages/alchemy/src/AWS/index.ts"),
+              pathe.join(repoRoot, "packages/aws/src/index.ts"),
             ),
           );
 

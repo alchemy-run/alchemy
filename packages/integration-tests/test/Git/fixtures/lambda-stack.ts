@@ -1,3 +1,10 @@
+/**
+ * The Git host with its pack hasher on AWS Lambda (DESIGN §22.11): the
+ * same building-block assembly as `stack.ts`, with `HasherLambda` in place
+ * of the in-process hasher. Needs BOTH provider sets — the Worker binds
+ * `InvokeFunction` cross-cloud (an IAM identity is minted for it).
+ */
+import * as AWS from "@alchemy.run/aws";
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import {
   BlobStoreR2,
@@ -8,13 +15,6 @@ import {
 } from "@alchemy.run/git";
 import { HasherFunction, HasherLambda } from "@alchemy.run/git/Hasher";
 import * as Alchemy from "alchemy";
-/**
- * The Git host with its pack hasher on AWS Lambda (DESIGN §22.11): the
- * same building-block assembly as `stack.ts`, with `HasherLambda` in place
- * of the in-process hasher. Needs BOTH provider sets — the Worker binds
- * `InvokeFunction` cross-cloud (an IAM identity is minted for it).
- */
-import * as AWS from "alchemy/AWS";
 import * as Effect from "effect/Effect";
 import * as HttpRouter from "effect/http/HttpRouter";
 import * as Layer from "effect/Layer";

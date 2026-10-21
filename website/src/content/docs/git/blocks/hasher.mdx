@@ -71,7 +71,7 @@ GitHasher.HasherWorkerLoader({ concurrency: 2 })
 ## On Lambda
 
 ```typescript
-import * as AWS from "alchemy/AWS";
+import * as AWS from "@alchemy.run/aws";
 import * as GitHasher from "@alchemy.run/git/Hasher";
 
 Layer.provide(GitHasher.HasherLambda(GitHasher.HasherFunction)),

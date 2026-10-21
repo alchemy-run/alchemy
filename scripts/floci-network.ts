@@ -3,7 +3,7 @@
  * the default security group) for suites that read subnet and security-group
  * IDs from the environment.
  */
-import * as Floci from "@alchemy.run/floci";
+import * as Floci from "@alchemy.run/aws/Local/Floci";
 import * as Credentials from "@distilled.cloud/aws/Credentials";
 import * as EC2 from "@distilled.cloud/aws/ec2";
 import * as Endpoint from "@distilled.cloud/aws/Endpoint";

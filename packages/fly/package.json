@@ -28,8 +28,8 @@
   "sideEffects": false,
   "exports": {
     ".": "./src/index.ts",
-    "./Website": "./src/Website/index.ts",
     "./Bootstrap": "./src/Bootstrap.ts",
+    "./Website": "./src/Website/index.ts",
     "./*": "./src/*.ts",
     "./package.json": "./package.json"
   },
@@ -41,16 +41,16 @@
         "worker": "./src/index.ts",
         "default": "./lib/index.js"
       },
+      "./Bootstrap": {
+        "types": "./src/Bootstrap.ts",
+        "bun": "./src/Bootstrap.ts",
+        "default": "./src/Bootstrap.ts"
+      },
       "./Website": {
         "types": "./lib/Website/index.d.ts",
         "bun": "./src/Website/index.ts",
         "worker": "./src/Website/index.ts",
         "default": "./lib/Website/index.js"
-      },
-      "./Bootstrap": {
-        "types": "./src/Bootstrap.ts",
-        "bun": "./src/Bootstrap.ts",
-        "default": "./src/Bootstrap.ts"
       },
       "./*": {
         "types": "./lib/*.d.ts",
@@ -67,6 +67,9 @@
     "build:package": "node scripts/build.ts"
   },
   "dependencies": {
+    "@alchemy.run/docker": "workspace:*",
+    "@alchemy.run/redis": "workspace:*",
+    "@alchemy.run/sql": "workspace:*",
     "@distilled.cloud/aws": "workspace:*",
     "@distilled.cloud/core": "workspace:*",
     "@distilled.cloud/fly-io": "workspace:*",

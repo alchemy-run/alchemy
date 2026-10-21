@@ -480,12 +480,11 @@ export const LocalWorkerProvider = () =>
            * editing the script restarts the instance.
            */
           script: props.script,
-          // External source providers (`props.source`) own their asset
-          // wiring: their dev servers either serve assets natively or add
-          // their own ASSETS hook against a runtime that configures
-          // `worker.assets`. Auto-injecting the hook here would fail in
-          // proxy-hosted dev modes with no assets directory (the hook
-          // errors when the Assets service is unconfigured).
+          // External source providers (`props.source`) opt in through
+          // `devAssetsBinding` instead (see `ViteChildRunner`): injecting
+          // the hook for every source would fail in dev hosts with no
+          // assets service configured (the hook errors when the Assets
+          // service is unconfigured).
           hasAssets: !!(props.assets || props.vite) && !props.source,
           /**
            * Assets-only Worker (no entry module at all): served locally by
@@ -1422,6 +1421,9 @@ export const LocalWorkerProvider = () =>
           entry: worker.bundleOptions.entry,
           stack: { name: stack.name, stage: stack.stage },
           env: worker.env,
+          // Dev hands `env` to the source unresolved; the Worker's own URL
+          // is only substituted into a build's inlined env on deploy.
+          selfUrl: undefined,
           extraOptions: worker.bundleOptions.extraOptions,
           assets: worker.assets,
           worker: {

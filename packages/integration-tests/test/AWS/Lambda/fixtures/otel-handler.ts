@@ -1,4 +1,4 @@
-import * as Lambda from "alchemy/AWS/Lambda";
+import * as Lambda from "@alchemy.run/aws/Lambda";
 import * as Telemetry from "alchemy/Telemetry";
 import * as Config from "effect/Config";
 import * as Duration from "effect/Duration";

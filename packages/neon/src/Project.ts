@@ -1,4 +1,12 @@
 import {
+  diffMigrations,
+  migrationsAttrs,
+  migrationsInputOf,
+  stampedOf,
+  type MigrationsInput,
+} from "@alchemy.run/sql/Migrations";
+import { hashImports, readSqlFile } from "@alchemy.run/sql/SqlFile";
+import {
   deleteProject,
   getConnectionURI,
   getProject,
@@ -16,14 +24,6 @@ import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
-import {
-  diffMigrations,
-  migrationsAttrs,
-  migrationsInputOf,
-  stampedOf,
-  type MigrationsInput,
-} from "alchemy/SQL/Migrations/index";
-import { hashImports, readSqlFile } from "alchemy/SQL/SqlFile";
 import { recordsEqual } from "alchemy/Util/equal";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";

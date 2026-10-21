@@ -6,7 +6,7 @@ import { Connection } from "@alchemy.run/prisma/Connection";
 import { Postgres } from "@alchemy.run/prisma/Postgres";
 import type { PostgresOrigin } from "@alchemy.run/prisma/PostgresOrigin";
 import { Project } from "@alchemy.run/prisma/Project";
-import * as SQL from "alchemy/SQL/Postgres";
+import * as SQL from "@alchemy.run/sql/Postgres";
 import * as Effect from "effect/Effect";
 import * as HttpServerRequest from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";

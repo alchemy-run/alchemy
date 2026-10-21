@@ -1,7 +1,7 @@
 import * as Binding from "alchemy/Binding";
 import * as Namespace from "alchemy/Namespace";
+import { ServerHost } from "alchemy/Runtime/Process";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
-import { ServerHost } from "alchemy/Server/Process";
 import * as Cause from "effect/Cause";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";

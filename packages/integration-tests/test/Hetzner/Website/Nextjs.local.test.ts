@@ -9,10 +9,7 @@ import { prepareNextjsFixture } from "../../Cloudflare/Website/TypeScriptCompat.
 
 const { test } = Test.make({ providers: Hetzner.providers(), dev: true });
 
-const fixtureDir = pathe.resolve(
-  import.meta.dirname,
-  "../../../../alchemy/test/AWS/Website/fixtures/nextjs-app",
-);
+const fixtureDir = pathe.resolve(import.meta.dirname, "../../AWS/Website/fixtures/nextjs-app");
 const fixtureEntries = [
   ".gitignore",
   "package.json",

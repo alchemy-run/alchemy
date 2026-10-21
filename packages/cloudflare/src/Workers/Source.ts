@@ -100,6 +100,12 @@ export interface SourceContext {
    * as the vite arm always has.
    */
   readonly env: Record<string, unknown> | undefined;
+  /**
+   * This Worker's own URL, when it has one and an env entry refers to
+   * it (`Worker.URL`). Only the WorkerProvider knows it — a source that
+   * resolves `env` substitutes it for that entry.
+   */
+  readonly selfUrl: string | undefined;
   /** `props.build` passthrough for rolldown-based sources. */
   readonly extraOptions: Bundle.BundleExtraOptions | undefined;
   /**
@@ -204,6 +210,19 @@ export interface SourceProvider {
    * AssetsWithHash fast path — and the source only supplies the bundle.
    */
   readonly ownsAssets: boolean;
+
+  /**
+   * Whether a server-mode `dev()` hosts `ctx.worker.bindings` in a runtime
+   * whose assets service is configured: the Vite plugin (which serves
+   * `publicDir` and the app's HTML), or a platform proxy given the app's
+   * static directory. The host then adds the `ASSETS` binding to
+   * `ctx.worker.bindings`, as a deployed Worker with assets has it. Leave
+   * unset otherwise: the binding fails when the assets service is
+   * unconfigured.
+   *
+   * @default false
+   */
+  readonly devAssetsBinding?: boolean;
 
   /**
    * Full build. Called from reconcile (`putWorker`). If the build is
@@ -383,6 +402,7 @@ export const makeSourceContext = (params: {
   props: WorkerProps;
   compatibility: { date: string; flags: string[] };
   stack: { name: string; stage: string };
+  selfUrl?: string;
 }): SourceContext => ({
   dotAlchemy: params.dotAlchemy,
   id: params.id,
@@ -394,6 +414,7 @@ export const makeSourceContext = (params: {
     : { kind: "effect", exports: params.props.exports ?? {} },
   stack: { name: params.stack.name, stage: params.stack.stage },
   env: params.props.env,
+  selfUrl: params.selfUrl,
   extraOptions: params.props.build,
   assets: params.props.assets,
 });

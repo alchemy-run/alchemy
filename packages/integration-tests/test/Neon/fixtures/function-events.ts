@@ -7,7 +7,7 @@ import { Function } from "@alchemy.run/neon/Function";
 import { Project } from "@alchemy.run/neon/Project";
 import { WriteBucket } from "@alchemy.run/neon/WriteBucket";
 import { WriteBucketHttp } from "@alchemy.run/neon/WriteBucketHttp";
-import { Postgres } from "alchemy/SQL/Postgres";
+import { Postgres } from "@alchemy.run/sql/Postgres";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
