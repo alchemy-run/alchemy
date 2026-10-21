@@ -27,6 +27,8 @@
     // Resolves its `@playground/*` packages only once the test installs
     // them into the cloned fixture's `node_modules`.
     "test/Cloudflare/Website/vite-module-resolution-fixture",
+    // The plugin's playground sources, typed against workers-types globals.
+    "test/Cloudflare/Website/vite-node-compat-fixture",
     // Nuxt fixtures: server routes use nitro's auto-imported globals, which
     // only type-check against the `.nuxt/` types a nuxt build generates.
     "test/Cloudflare/Website/fixtures/nuxt-app",

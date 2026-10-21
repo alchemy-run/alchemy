@@ -15,6 +15,13 @@ export const REQUEST_EXPORT_TYPES_EVENT = "distilled-cloudflare:request-export-t
 /** Reply to {@link REQUEST_EXPORT_TYPES_EVENT}, carrying an `ExportTypes` payload. */
 export const EXPORT_TYPES_EVENT = "distilled-cloudflare:export-types";
 
+/**
+ * `Symbol.for` key of the {@link EntryEnvironment} the generated entry module
+ * sets on `globalThis`. A JSON binding would also land in the Worker's `env`
+ * and, with `nodejs_compat_populate_process_env`, its `process.env`.
+ */
+export const ENTRY_ENVIRONMENT_KEY = "distilled-cloudflare:entry-environment";
+
 export interface EntryEnvironment {
   environmentName: string;
   entryId: string;

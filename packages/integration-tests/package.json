@@ -85,6 +85,8 @@
     "arktype": "catalog:",
     "astro": "catalog:",
     "aws4fetch": "catalog:",
+    "cross-fetch": "catalog:",
+    "debug": "catalog:",
     "drizzle-orm": "catalog:",
     "effect": "catalog:",
     "fflate": "catalog:",

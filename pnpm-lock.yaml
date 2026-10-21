@@ -456,9 +456,15 @@ catalogs:
     cookie:
       specifier: ^2.0.1
       version: 2.0.1
+    cross-fetch:
+      specifier: ^4.0.0
+      version: 4.1.0
     cuelume:
       specifier: ^0.2.4
       version: 0.2.4
+    debug:
+      specifier: ^4.4.1
+      version: 4.4.3
     devalue:
       specifier: 5.8.1
       version: 5.8.1
@@ -9724,6 +9730,12 @@ importers:
       aws4fetch:
         specifier: 'catalog:'
         version: 1.0.20
+      cross-fetch:
+        specifier: 'catalog:'
+        version: 4.1.0
+      debug:
+        specifier: 'catalog:'
+        version: 4.4.3(supports-color@10.2.2)
       drizzle-orm:
         specifier: 1.0.0-rc.5-ab785fc
         version: 1.0.0-rc.5-ab785fc(@cloudflare/workers-types@5.20261012.1)(@effect/sql-d1@4.0.4(effect@4.0.4))(@effect/sql-libsql@4.0.4(effect@4.0.4))(@effect/sql-mysql2@4.0.4(@types/node@26.6.5)(effect@4.0.4))(@effect/sql-pg@4.0.4(effect@4.0.4))(@effect/sql-sqlite-do@4.0.4(effect@4.0.4))(@electric-sql/pglite@0.3.15)(@libsql/client@0.17.4)(@neondatabase/serverless@1.1.0)(@types/pg@8.20.4)(arktype@2.2.8)(bun-types@1.4.3)(effect@4.0.4)(mysql2@3.24.5(@types/node@26.6.5))(pg@8.23.1)(valibot@1.2.0(typescript@7.0.2))(zod@4.5.4)
@@ -20583,6 +20595,9 @@ packages:
   croner@10.0.1:
     resolution: {integrity: sha512-ixNtAJndqh173VQ4KodSdJEI6nuioBWI0V1ITNKhZZsO0pEMoDxz539T4FTTbSZ/xIOSuDnzxLVRqBVSvPNE2g==}
     engines: {node: '>=18.0'}
+
+  cross-fetch@4.1.0:
+    resolution: {integrity: sha512-uKm5PU+MHTootlWEY+mZ4vvXoCn4fLQxT9dSc1sXVMSFkINTJVN8cAQROpwcKm8bJ/c7rgZVIBWzH5T78sNZZw==}
 
   cross-spawn@7.0.6:
     resolution: {integrity: sha512-uV2QOWP2nWzsy2aMp8aRibhi9dlzF5Hgh5SHaB9OiTGEyDTiJJyx0uy51QXdyWbtAHNua4XJzUKca3OzKUd3vA==}
@@ -38358,6 +38373,12 @@ snapshots:
   crelt@1.0.7: {}
 
   croner@10.0.1: {}
+
+  cross-fetch@4.1.0:
+    dependencies:
+      node-fetch: 2.7.0
+    transitivePeerDependencies:
+      - encoding
 
   cross-spawn@7.0.6:
     dependencies:

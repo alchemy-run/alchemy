@@ -1,7 +1,7 @@
 import { DurableObject, WorkerEntrypoint, WorkflowEntrypoint } from "cloudflare:workers";
 import { HEADER_ERROR_STACK, INIT_PATH } from "./constants.shared.ts";
 import type { Env as WrapperEnv } from "./env.worker.ts";
-import { stripInternalEnv } from "./env.worker.ts";
+import { getEntryEnvironment, stripInternalEnv } from "./env.worker.ts";
 import { getWorkerEntryExport } from "./module-runner.worker.ts";
 
 /**
@@ -108,7 +108,7 @@ export function createWorkerEntrypointWrapper(
 
           if (typeof maybeFn !== "function") {
             throw new TypeError(
-              `Expected "${exportName}" export of "${this.env.__DISTILLED_ENVIRONMENT__.entryName}" to define a \`${key}()\` function.`,
+              `Expected "${exportName}" export of "${getEntryEnvironment().entryName}" to define a \`${key}()\` function.`,
             );
           }
 
@@ -120,7 +120,7 @@ export function createWorkerEntrypointWrapper(
 
           if (!(instance instanceof WorkerEntrypoint)) {
             throw new TypeError(
-              `Expected "${exportName}" export of "${this.env.__DISTILLED_ENVIRONMENT__.entryName}" to be a subclass of \`WorkerEntrypoint\`.`,
+              `Expected "${exportName}" export of "${getEntryEnvironment().entryName}" to be a subclass of \`WorkerEntrypoint\`.`,
             );
           }
 
@@ -128,14 +128,14 @@ export function createWorkerEntrypointWrapper(
 
           if (typeof maybeFn !== "function") {
             throw new TypeError(
-              `Expected "${exportName}" export of "${this.env.__DISTILLED_ENVIRONMENT__.entryName}" to define a \`${key}()\` method.`,
+              `Expected "${exportName}" export of "${getEntryEnvironment().entryName}" to define a \`${key}()\` method.`,
             );
           }
 
           return (maybeFn as (arg: unknown) => unknown).call(instance, arg);
         } else {
           throw new TypeError(
-            `Expected "${exportName}" export of "${this.env.__DISTILLED_ENVIRONMENT__.entryName}" to be an object or a class.`,
+            `Expected "${exportName}" export of "${getEntryEnvironment().entryName}" to be an object or a class.`,
           );
         }
       };
@@ -185,7 +185,7 @@ async function getWorkerEntrypointRpcProperty(
 ): Promise<unknown> {
   const ctor = (await getWorkerEntryExport(this.env, exportName)) as WorkerEntrypointConstructor;
   const userEnv = stripInternalEnv(this.env);
-  const expectedWorkerEntrypointMessage = `Expected "${exportName}" export of "${this.env.__DISTILLED_ENVIRONMENT__.entryName}" to be a subclass of \`WorkerEntrypoint\` for RPC.`;
+  const expectedWorkerEntrypointMessage = `Expected "${exportName}" export of "${getEntryEnvironment().entryName}" to be a subclass of \`WorkerEntrypoint\` for RPC.`;
 
   if (typeof ctor !== "function") {
     throw new TypeError(expectedWorkerEntrypointMessage);
@@ -243,7 +243,7 @@ async function getDurableObjectRpcProperty(
 
   if (!(instance instanceof DurableObject)) {
     throw new TypeError(
-      `Expected "${exportName}" export of "${this.env.__DISTILLED_ENVIRONMENT__.entryName}" to be a subclass of \`DurableObject\` for RPC.`,
+      `Expected "${exportName}" export of "${getEntryEnvironment().entryName}" to be a subclass of \`DurableObject\` for RPC.`,
     );
   }
 
@@ -301,7 +301,7 @@ export function createDurableObjectWrapper(
 
       if (typeof ctor !== "function") {
         throw new TypeError(
-          `Expected "${exportName}" export of "${this.env.__DISTILLED_ENVIRONMENT__.entryName}" to be a subclass of \`DurableObject\`.`,
+          `Expected "${exportName}" export of "${getEntryEnvironment().entryName}" to be a subclass of \`DurableObject\`.`,
         );
       }
 
@@ -327,7 +327,7 @@ export function createDurableObjectWrapper(
 
       if (typeof maybeFn !== "function") {
         throw new TypeError(
-          `Expected "${exportName}" export of "${this.env.__DISTILLED_ENVIRONMENT__.entryName}" to define a \`${key}()\` function.`,
+          `Expected "${exportName}" export of "${getEntryEnvironment().entryName}" to define a \`${key}()\` function.`,
         );
       }
 
@@ -361,7 +361,7 @@ export function createWorkflowEntrypointWrapper(
 
       if (!(instance instanceof WorkflowEntrypoint)) {
         throw new TypeError(
-          `Expected "${exportName}" export of "${this.env.__DISTILLED_ENVIRONMENT__.entryName}" to be a subclass of \`WorkflowEntrypoint\`.`,
+          `Expected "${exportName}" export of "${getEntryEnvironment().entryName}" to be a subclass of \`WorkflowEntrypoint\`.`,
         );
       }
 
@@ -369,7 +369,7 @@ export function createWorkflowEntrypointWrapper(
 
       if (typeof maybeFn !== "function") {
         throw new TypeError(
-          `Expected "${exportName}" export of "${this.env.__DISTILLED_ENVIRONMENT__.entryName}" to define a \`${key}()\` function.`,
+          `Expected "${exportName}" export of "${getEntryEnvironment().entryName}" to define a \`${key}()\` function.`,
         );
       }
 
