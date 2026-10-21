@@ -7,7 +7,7 @@ import {
   stampedOf,
   type MigrationsInput,
 } from "@alchemy.run/sql/Migrations";
-import { hashImports, readSqlFile } from "@alchemy.run/sql/SqlFile";
+import { hashImports, readSqlFile, splitSqliteStatements } from "@alchemy.run/sql/SqlFile";
 import * as d1 from "@distilled.cloud/cloudflare/d1";
 import { isResolved } from "alchemy/Diff";
 import * as ProviderLayer from "alchemy/Local/ProviderLayer";
@@ -635,14 +635,15 @@ export const ProviderLocal = () =>
               pending.push({ path: filePath, sql: file.sql, hash: file.hash });
             }
             if (pending.length > 0) {
-              const { unstable_splitSqlQuery } = yield* Effect.promise(() => import("wrangler"));
               yield* withLocalD1Query(databaseId, (query) =>
                 Effect.forEach(
                   pending,
-                  (file) =>
-                    query({
-                      batch: unstable_splitSqlQuery(file.sql).map((sql) => ({ sql })),
-                    }),
+                  (file) => {
+                    // One statement per batch entry: the simulator's SQLite
+                    // rejects a whole file over its statement length limit.
+                    const batch = splitSqliteStatements(file.sql).map((sql) => ({ sql }));
+                    return batch.length > 0 ? query({ batch }) : Effect.void;
+                  },
                   { discard: true },
                 ),
               ).pipe(Effect.provideContext(runtimeContext));
