@@ -6,9 +6,11 @@ import type { AttachmentContainerObject } from "./worker.ts";
 
 export const stackName = "ContainerAttachmentStack";
 
-export const attachmentStack = (attached = true) =>
+export const namedStackName = "ContainerNamedAttachmentStack";
+
+export const attachmentStack = (attached = true, name?: string) =>
   Alchemy.Stack(
-    stackName,
+    name === undefined ? stackName : namedStackName,
     { providers: Cloudflare.providers(), state: Cloudflare.state() },
     Effect.gen(function* () {
       const path = yield* Path.Path;
@@ -16,6 +18,7 @@ export const attachmentStack = (attached = true) =>
         className: "AttachmentContainerObject",
         image: "mendhak/http-https-echo:41",
         maxInstances: 2,
+        name,
       });
       const other = Cloudflare.Container<AttachmentContainerObject>("OtherAttachmentContainer", {
         className: "AttachmentContainerObject",
