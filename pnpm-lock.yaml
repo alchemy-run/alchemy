@@ -8195,9 +8195,9 @@ importers:
       '@alchemy.run/sql':
         specifier: workspace:*
         version: link:../sql
-      '@distilled.cloud/aws':
+      '@distilled.cloud/aws4signer':
         specifier: workspace:*
-        version: link:../../submodules/distilled/packages/aws
+        version: link:../../submodules/distilled/packages/aws4signer
       '@distilled.cloud/cloudflare':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/cloudflare
