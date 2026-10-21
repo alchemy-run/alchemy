@@ -127,6 +127,7 @@ import {
 import {
   appName,
   candidateId,
+  MachineServiceAutostop,
   metadata,
   protocolClient,
   reconcile,
@@ -162,6 +163,12 @@ import { transportProxy, throughProxy, type TransportEvent } from "./fixtures/tr
 // in six concurrent shards balanced by measured duration (~35 min each);
 // blocks run one at a time within a shard, and process-wide cases keep
 // `exclusive: true`.
+/** URL param values may be `Redacted` (sent unwrapped); compare their plain text. */
+const unredact = (value: string | Redacted.Redacted | undefined) =>
+  Redacted.isRedacted(value) ? String(Redacted.value(value)) : value;
+
+const decodeAutostop = Schema.decodeUnknownSync(MachineServiceAutostop);
+
 describe.concurrent("BlueGreen", () => {
   describe.sequential("shard 1", () => {
     describe.sequential(
@@ -5876,7 +5883,7 @@ describe.concurrent("BlueGreen", () => {
                     method: request.method,
                     path,
                     force:
-                      request.urlParams.params.find(([key]) => key === "force")?.[1] ??
+                      unredact(request.urlParams.params.find(([key]) => key === "force")?.[1]) ??
                       url.searchParams.get("force") ??
                       undefined,
                   });
@@ -7029,9 +7036,17 @@ describe.concurrent("BlueGreen", () => {
           { tags: ["provider:fly:machine"] },
         );
 
-        // The SDK no longer exports its schemas as values, so the pure
-        // autostop decode is covered by the live P3 cases below, which decode
-        // `autostop` from real Fly responses.
+        test(
+          "P3 pure autostop schema accepts strings and legacy booleans",
+          Effect.sync(() => {
+            for (const value of ["off", "stop", "suspend", false, true]) {
+              expect(decodeAutostop(value)).toBe(value);
+            }
+            expect(() => decodeAutostop({ mode: "stop" })).toThrow();
+            expect(() => decodeAutostop(1)).toThrow();
+          }),
+          { tags: ["provider:fly:machine"] },
+        );
 
         for (const autostop of ["stop", "suspend"] as const) {
           test.provider(
@@ -7495,7 +7510,9 @@ describe.concurrent("BlueGreen", () => {
                       registry: {
                         server: "registry.fly.io",
                         username: "x",
-                        password: Redacted.make(minted.token!),
+                        password: Redacted.isRedacted(minted.token)
+                          ? minted.token
+                          : Redacted.make(minted.token!),
                       },
                     }),
                   );

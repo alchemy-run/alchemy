@@ -12,9 +12,12 @@
 // that stamp is missing or older than any tracked or untracked-but-not-ignored
 // file of the package or its workspace dependencies, test files excepted.
 //
-// It also re-bundles distilled packages whose `lib/` the root `tsc -b`
-// emitted but distilled's `bundle-lib` has not yet bundled (see
-// `staleDistilledBundles`).
+// Distilled SDKs are consumed the same way by bundlers: their `module` and
+// `default` export conditions point at `lib/services.full/*.js`, which only
+// distilled's `scripts/bundle-lib.ts` writes (`tsc -b` emits the rest of
+// `lib/`). After the builds above, every distilled package that has a `lib/`
+// but no bundle stamp newer than its source and its `lib/` is bundled. Stamps live in `node_modules/.cache/distilled-bundle/<package>`
+// (bundle-lib prunes unknown files from `lib/`).
 //
 // Usage: pnpm -w ensure:built [package...]
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
@@ -36,6 +39,7 @@ const packages = {
 
 // pnpm may be a `.cmd` shim on Windows, which only a shell can run.
 const shell = process.platform === "win32";
+const pathDelimiter = process.platform === "win32" ? ";" : ":";
 
 type PackageName = keyof typeof packages;
 const packageNames = Object.keys(packages) as Array<PackageName>;
@@ -116,38 +120,36 @@ const isStale = Effect.fn(function* (root: string, name: PackageName) {
   return Math.max(...newest) > stamp.value;
 });
 
-/**
- * distilled packages are emitted into their `lib/` by the root `tsc -b`, but
- * bundlers (a Lambda or Worker build) resolve them through the
- * `lib/services.full/` entry chunks that only distilled's own `bundle-lib`
- * step writes. A package is stale when it has a `lib/` but no bundle, or when
- * `tsc` re-emitted it (its `tsconfig.tsbuildinfo`) after the last bundle.
- */
-const distilledBundleStamp = ".bundle-stamp";
+/** Where the last successful bundle of a distilled package is recorded. */
+const distilledStamp = (root: string, path: Path.Path, name: string) =>
+  path.join(root, "node_modules", ".cache", "distilled-bundle", name);
 
-const staleDistilledBundles = Effect.fn(function* (root: string) {
+/** Distilled packages whose `lib/services.full` is missing or older than their source. */
+const staleDistilled = Effect.fn(function* (root: string) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
-  const packagesDir = path.join(root, "submodules", "distilled", "packages");
-  if (!(yield* fs.exists(packagesDir))) return [];
-  const mtime = (file: string) =>
-    fs.stat(file).pipe(
-      Effect.map((info) => Option.getOrElse(info.mtime, () => new Date(0)).getTime()),
-      Effect.option,
-    );
-  const names = yield* fs.readDirectory(packagesDir);
+  const distilled = path.join(root, "submodules", "distilled");
+  if (!(yield* fs.exists(path.join(distilled, "scripts", "bundle-lib.ts")))) return [];
+  const names = yield* fs.readDirectory(path.join(distilled, "packages"));
   return yield* Effect.filter(
     names.filter((name) => name !== "core"),
-    Effect.fn(function* (name) {
-      const dir = path.join(packagesDir, name);
-      if (!(yield* fs.exists(path.join(dir, "lib")))) return false;
-      if (!(yield* fs.exists(path.join(dir, "src", "services")))) return false;
-      const stamp = yield* mtime(path.join(dir, "lib", distilledBundleStamp));
+    Effect.fnUntraced(function* (name) {
+      const directory = path.join(distilled, "packages", name);
+      if (!(yield* fs.exists(path.join(directory, "lib")))) return false;
+      if (!(yield* fs.exists(path.join(directory, "src", "services")))) return false;
+      const mtime = (file: string) =>
+        fs.stat(file).pipe(
+          Effect.map((info) => Option.getOrElse(info.mtime, () => new Date(0)).getTime()),
+          Effect.option,
+        );
+      const stamp = yield* mtime(distilledStamp(root, path, name));
       if (Option.isNone(stamp)) return true;
-      const emitted = yield* mtime(path.join(dir, "tsconfig.tsbuildinfo"));
-      return Option.isSome(emitted) && emitted.value > stamp.value;
+      // A wiped and re-emitted `lib/` (fresh tsc output) is newer than the stamp.
+      const lib = yield* mtime(path.join(directory, "lib"));
+      if (Option.isSome(lib) && lib.value > stamp.value) return true;
+      return (yield* newestSourceTime(path.join(directory, "src"))) > stamp.value;
     }),
-    { concurrency: "unbounded" },
+    { concurrency: 16 },
   );
 });
 
@@ -155,26 +157,36 @@ const bundleDistilled = Effect.fn(function* (root: string) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const spawner = yield* ChildProcessSpawner;
-  const stale = yield* staleDistilledBundles(root);
+  const stale = yield* staleDistilled(root);
   if (stale.length === 0) return;
-  yield* Effect.logInfo(`Bundling distilled packages: ${stale.join(", ")}`);
-  const distilled = path.join(root, "submodules", "distilled");
+  yield* Effect.logInfo(`Bundling stale distilled packages: ${stale.join(", ")}`);
+  const pathEnv = yield* Effect.sync(() => process.env.PATH ?? "");
   const exitCode = yield* spawner.exitCode(
     ChildProcess.make(
       "node",
       ["scripts/bundle-lib.ts", ...stale.map((name) => `packages/${name}`)],
-      { cwd: distilled, shell, stdin: "inherit", stdout: "inherit", stderr: "inherit" },
+      {
+        cwd: path.join(root, "submodules", "distilled"),
+        // bundle-lib resolves rolldown and the formatters from the workspace.
+        env: {
+          PATH: [path.join(root, "node_modules", ".bin"), pathEnv].join(
+            process.platform === "win32" ? ";" : ":",
+          ),
+        },
+        extendEnv: true,
+        stdin: "inherit",
+        stdout: "inherit",
+        stderr: "inherit",
+      },
     ),
   );
   if (exitCode !== 0) {
-    return yield* Effect.fail(new Error(`distilled bundle-lib failed with exit code ${exitCode}`));
+    return yield* Effect.fail(new Error(`Distilled bundle failed with exit code ${exitCode}`));
   }
-  yield* Effect.forEach(stale, (name) =>
-    fs.writeFileString(
-      path.join(distilled, "packages", name, "lib", distilledBundleStamp),
-      new Date().toISOString(),
-    ),
-  );
+  yield* fs.makeDirectory(path.dirname(distilledStamp(root, path, stale[0]!)), {
+    recursive: true,
+  });
+  yield* Effect.forEach(stale, (name) => fs.writeFileString(distilledStamp(root, path, name), ""));
 });
 
 const command = Command.make(

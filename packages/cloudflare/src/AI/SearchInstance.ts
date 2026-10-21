@@ -615,7 +615,7 @@ export const SearchInstanceProvider = () =>
       const rows = yield* Effect.forEach(
         allNamespaces,
         (namespace) =>
-          aisearch.listNamespaceInstances.pages({ accountId, name: namespace }).pipe(
+          aisearch.listNamespaceInstances.pages({ accountId, namespace }).pipe(
             Stream.runCollect,
             Effect.map((chunk) =>
               Array.from(chunk).flatMap((page) =>
@@ -647,7 +647,7 @@ export const SearchInstanceProvider = () =>
         const ensured = yield* aisearch
           .createNamespaceInstance({
             accountId: acct,
-            name: namespace,
+            namespace,
             id: instanceId,
             type: news.type ?? "r2",
             ...toMutableBody(news),
@@ -683,7 +683,7 @@ export const SearchInstanceProvider = () =>
             yield* aisearch
               .createNamespaceInstanceJob({
                 accountId: acct,
-                name: namespace,
+                namespace,
                 id: instanceId,
               })
               .pipe(
@@ -728,7 +728,7 @@ export const SearchInstanceProvider = () =>
       const updated = yield* aisearch
         .updateNamespaceInstance({
           accountId: acct,
-          name: namespace,
+          namespace,
           id: instanceId,
           ...preserveObserved(observed),
           ...defined(desired),
@@ -742,7 +742,7 @@ export const SearchInstanceProvider = () =>
       yield* aisearch
         .deleteNamespaceInstance({
           accountId: output.accountId,
-          name: output.namespace,
+          namespace: output.namespace,
           id: output.instanceId,
         })
         .pipe(
@@ -803,7 +803,7 @@ const resolveNamespace = (namespace: string | undefined): string => namespace ??
  */
 const getInstance = (accountId: string, namespace: string, id: string) =>
   aisearch
-    .readNamespaceInstance({ accountId, name: namespace, id })
+    .readNamespaceInstance({ accountId, namespace, id })
     .pipe(
       Effect.catchTag(["AiSearchInstanceNotFound", "NamespaceNotFound"], () =>
         Effect.succeed(undefined),

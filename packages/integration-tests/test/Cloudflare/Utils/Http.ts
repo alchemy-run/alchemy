@@ -1,6 +1,8 @@
 import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
 import * as Schedule from "effect/Schedule";
 
 /**
@@ -444,5 +446,112 @@ export const expectUrlAbsent = (
         ),
     }),
     Effect.tapError((error) => Effect.logError(`expectUrlAbsent(${label}) failed`, error)),
+  );
+};
+
+/**
+ * Assert a build-time public env value was inlined into the client
+ * bundle a site deployed: find the client chunk under `clientDir` (the
+ * build's assets directory) that contains `marker`, then fetch that chunk
+ * from the deployed site.
+ */
+export const expectClientChunkContains = (
+  url: string,
+  clientDir: string,
+  marker: string,
+  options: ExpectUrlContainsOptions = {},
+) =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const chunks = (yield* fs.readDirectory(clientDir, { recursive: true })).filter((file) =>
+      /\.m?js$/.test(file),
+    );
+    const inlined = yield* Effect.filter(chunks, (file) =>
+      fs
+        .readFileString(path.join(clientDir, file))
+        .pipe(Effect.map((code) => code.includes(marker))),
+    );
+    if (inlined.length === 0) {
+      return yield* new HttpAssertionFailed({
+        url,
+        marker,
+        status: 0,
+        bodyExcerpt: `[no client chunk under ${clientDir} contains "${marker}"]`,
+      });
+    }
+    yield* expectUrlContains(`${url}/${inlined[0]!.replaceAll("\\", "/")}`, marker, options);
+  });
+
+export interface ExpectedResponse {
+  readonly status: number;
+  readonly headers: Headers;
+  readonly body: string;
+}
+
+/**
+ * Fetch `url` without following redirects and retry until `check` accepts
+ * the response (returns `undefined`); `check` returns a description of what
+ * is wrong otherwise. For assertions on status codes, headers and redirect
+ * responses the body-marker helpers can't express (404 pages, `Location`).
+ */
+export const expectResponse = (
+  url: string,
+  check: (response: ExpectedResponse) => string | undefined,
+  options: ExpectUrlContainsOptions = {},
+) => {
+  const expected = options.label ?? "response check";
+  const totalTimeout = Duration.fromInputUnsafe(options.timeout ?? "90 seconds");
+  // Reported on timeout, so a failure shows what the URL actually returned.
+  let lastActual = "no response";
+  return Effect.tryPromise({
+    try: async (signal) => {
+      const u = new URL(url);
+      u.searchParams.set("__alchemy_cb", String(Date.now()));
+      const res = await fetch(u, {
+        signal,
+        cache: "no-store",
+        redirect: "manual",
+        headers: {
+          "cache-control": "no-cache",
+          pragma: "no-cache",
+          accept: "*/*",
+          connection: "close",
+          ...options.headers,
+        },
+      });
+      const body = await res.text();
+      const mismatch = looksLikeCloudflarePlaceholder(body)
+        ? "Cloudflare placeholder page"
+        : check({ status: res.status, headers: res.headers, body });
+      if (mismatch !== undefined) {
+        lastActual = `${res.status} ${mismatch} :: ${body.replace(/\s+/g, " ").slice(0, 160)}`;
+        throw new HttpResponseMismatch({ url, expected, actual: lastActual });
+      }
+      return res;
+    },
+    catch: (e) =>
+      e instanceof HttpResponseMismatch
+        ? e
+        : new HttpFetchFailed({ url, message: e instanceof Error ? e.message : String(e) }),
+  }).pipe(
+    Effect.retry({
+      schedule: Schedule.min([
+        Schedule.exponential(options.initialBackoff ?? "750 millis", 1.5),
+        Schedule.spaced("8 seconds"),
+      ]),
+    }),
+    Effect.timeoutOrElse({
+      duration: totalTimeout,
+      orElse: () =>
+        Effect.fail(
+          new HttpResponseMismatch({
+            url,
+            expected,
+            actual: `[timed out after ${Duration.toMillis(totalTimeout)}ms; last: ${lastActual}]`,
+          }),
+        ),
+    }),
+    Effect.tapError((error) => Effect.logError(`expectResponse(${expected}) failed`, error)),
   );
 };
