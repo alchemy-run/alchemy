@@ -1,7 +1,7 @@
 import { expect } from "bun:test";
+import * as AWS from "@alchemy.run/aws";
 import * as S3 from "@distilled.cloud/aws/s3";
 import * as Alchemy from "alchemy";
-import * as AWS from "alchemy/AWS";
 import * as Test from "alchemy/Test/Bun";
 import * as Console from "effect/Console";
 import * as Data from "effect/Data";

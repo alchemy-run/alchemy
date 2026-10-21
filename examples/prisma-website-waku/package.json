@@ -16,6 +16,7 @@
     "build": "waku build"
   },
   "dependencies": {
+    "@alchemy.run/prisma": "workspace:*",
     "alchemy": "workspace:*",
     "effect": "catalog:",
     "hono": "catalog:",

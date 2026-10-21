@@ -22,6 +22,7 @@
     "solid-js": "catalog:"
   },
   "devDependencies": {
+    "@alchemy.run/cloudflare": "workspace:*",
     "@tailwindcss/postcss": "catalog:",
     "alchemy": "workspace:*",
     "effect": "catalog:",
