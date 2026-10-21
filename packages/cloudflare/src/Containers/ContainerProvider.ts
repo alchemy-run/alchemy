@@ -1405,9 +1405,17 @@ export const LiveContainerProvider = () =>
             (hasUnresolvedAttachment && recordedDurableObjects?.namespaceId
               ? recordedDurableObjects
               : undefined);
-          // Nothing recorded to keep (e.g. re-attaching a detached application):
-          // reconcile unattached, like precreate. The Worker publishes the
-          // namespace in the same apply and the convergence pass attaches it.
+          // An observed detached application being re-attached reconciles
+          // unattached, like precreate: the Worker publishes the namespace in
+          // the same apply and the convergence pass attaches it. A missing
+          // application is never created without its attachment.
+          if (hasUnresolvedAttachment && durableObjectsForRecovery === undefined && !existing) {
+            return yield* Effect.fail(
+              new Error(
+                `Container application "${name}" has an unresolved Durable Object namespace and no recorded attachment. Reconcile its Worker first.`,
+              ),
+            );
+          }
           const { build, imageRef, imageHash, dev } = yield* computeImage(id, news, env);
 
           // Special case: precreate produced an application without the
