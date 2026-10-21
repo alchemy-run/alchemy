@@ -62,7 +62,7 @@ replace the `Cluster` declaration:
 
 ```diff lang="typescript"
 +import { Stage } from "alchemy";
-import * as Kubernetes from "alchemy/Kubernetes";
+import * as Kubernetes from "@alchemy.run/kubernetes";
 import * as Effect from "effect/Effect";
 
 -export const Cluster = Kubernetes.LocalCluster("Cluster", {
@@ -156,7 +156,7 @@ where it's missing:
 
 ```diff lang="typescript"
 +import { Stage } from "alchemy";
-import * as Kubernetes from "alchemy/Kubernetes";
+import * as Kubernetes from "@alchemy.run/kubernetes";
 ```
 
 ```diff lang="typescript"

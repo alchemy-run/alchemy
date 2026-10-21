@@ -15,4 +15,5 @@ bun alchemy unsafe nuke --config ./stacks/nuke-gcp.ts \
   --profile alchemy-testing \
   --concurrency 16 \
   --timeout 300 \
+  --filter 'resource.Type === "GCP.Storage.Bucket" && String(resource.bucketName).startsWith("alchemy-state-")' \
   "$@"

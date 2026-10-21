@@ -18,12 +18,12 @@ import { Platform, type Main, type PlatformProps } from "@/Platform.ts";
 import * as Provider from "@/Provider.ts";
 import { LOCAL_ID_PREFIX, type ProviderMode } from "@/ProviderMode.ts";
 import { Resource, type ResourceBinding } from "@/Resource";
-import { unpackEnvValue } from "@/RuntimeContext.ts";
 import {
   createHostRuntimeContext,
   type HostRuntimeContext,
   type ServerHost,
-} from "@/Server/Process.ts";
+} from "@/Runtime/Process.ts";
+import { unpackEnvValue } from "@/RuntimeContext.ts";
 import { Stack } from "@/Stack";
 import * as State from "@/State/index";
 import { isUnknown } from "@/Util/unknown";

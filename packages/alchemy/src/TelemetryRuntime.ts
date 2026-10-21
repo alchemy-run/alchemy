@@ -235,35 +235,45 @@ const fanoutClient = (
     }),
   );
 
+/**
+ * Every destination this runtime exports to: the bound `layerOtlp` list,
+ * plus the standard `OTEL_EXPORTER_OTLP_*` variables as an implicit extra
+ * destination. Resolved per call, since providers can change between events.
+ *
+ * @internal
+ */
+export const configuredDestinations: Effect.Effect<ResolvedDestination[]> = Effect.gen(
+  function* () {
+    // Depending on the secret/plain packing path, the bound list arrives
+    // as a JSON string or already parsed into an array.
+    const rawList = yield* readBoundValue(EXPORTERS_KEY);
+    const bound: ResolvedDestination[] = Array.isArray(rawList)
+      ? (rawList as ResolvedDestination[])
+      : typeof rawList === "string" && rawList !== ""
+        ? yield* Effect.try(() => JSON.parse(rawList) as ResolvedDestination[]).pipe(Effect.orDie)
+        : [];
+    const baseEndpoint = yield* readBound("OTEL_EXPORTER_OTLP_ENDPOINT");
+    const [stdTraces, stdLogs, stdMetrics] = yield* Effect.all([
+      signalConfig("TRACES", baseEndpoint),
+      signalConfig("LOGS", baseEndpoint),
+      signalConfig("METRICS", baseEndpoint),
+    ]);
+    return [
+      ...bound,
+      ...(stdTraces || stdLogs || stdMetrics
+        ? [{ traces: stdTraces, logs: stdLogs, metrics: stdMetrics }]
+        : []),
+    ];
+  },
+);
+
 const makeExporterLayer = (options?: {
   exportInterval?: Duration.Input;
   shutdownTimeout?: Duration.Input;
 }): TelemetryLayer =>
   Layer.unwrap(
     Effect.gen(function* () {
-      // Depending on the secret/plain packing path, the bound list arrives
-      // as a JSON string or already parsed into an array.
-      const rawList = yield* readBoundValue(EXPORTERS_KEY);
-      const bound: ResolvedDestination[] = Array.isArray(rawList)
-        ? (rawList as ResolvedDestination[])
-        : typeof rawList === "string" && rawList !== ""
-          ? yield* Effect.try(() => JSON.parse(rawList) as ResolvedDestination[])
-          : [];
-      // The standard OTEL_* env vars form an implicit extra destination.
-      // Resolve the shared endpoint once per event; custom providers can change
-      // between events, so no configuration or exporters are cached here.
-      const baseEndpoint = yield* readBound("OTEL_EXPORTER_OTLP_ENDPOINT");
-      const [stdTraces, stdLogs, stdMetrics] = yield* Effect.all([
-        signalConfig("TRACES", baseEndpoint),
-        signalConfig("LOGS", baseEndpoint),
-        signalConfig("METRICS", baseEndpoint),
-      ]);
-      const destinations: ResolvedDestination[] = [
-        ...bound,
-        ...(stdTraces || stdLogs || stdMetrics
-          ? [{ traces: stdTraces, logs: stdLogs, metrics: stdMetrics }]
-          : []),
-      ];
+      const destinations = yield* configuredDestinations;
       const targets = (signal: keyof ResolvedDestination) =>
         destinations.flatMap((destination) => {
           const resolved = destination[signal];

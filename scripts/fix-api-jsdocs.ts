@@ -4,11 +4,34 @@ import * as path from "node:path";
 const roots = [
   path.join(import.meta.dir, "../packages/alchemy/src"),
   path.join(import.meta.dir, "../packages/better-auth/src"),
+  path.join(import.meta.dir, "../packages/git/src"),
+  path.join(import.meta.dir, "../packages/drizzle/src"),
+  path.join(import.meta.dir, "../packages/acme/src"),
+  path.join(import.meta.dir, "../packages/axiom/src"),
+  path.join(import.meta.dir, "../packages/doppler/src"),
+  path.join(import.meta.dir, "../packages/infisical/src"),
+  path.join(import.meta.dir, "../packages/turso/src"),
+  path.join(import.meta.dir, "../packages/planetscale/src"),
+  path.join(import.meta.dir, "../packages/neon/src"),
+  path.join(import.meta.dir, "../packages/prisma/src"),
+  path.join(import.meta.dir, "../packages/hetzner/src"),
+  path.join(import.meta.dir, "../packages/railway/src"),
+  path.join(import.meta.dir, "../packages/fly/src"),
+  path.join(import.meta.dir, "../packages/github/src"),
+  path.join(import.meta.dir, "../packages/stripe/src"),
+  path.join(import.meta.dir, "../packages/cloudflare/src"),
+  path.join(import.meta.dir, "../packages/gcp/src"),
+  path.join(import.meta.dir, "../packages/aws/src"),
+  path.join(import.meta.dir, "../packages/domain/src"),
+  path.join(import.meta.dir, "../packages/kubernetes/src"),
+  path.join(import.meta.dir, "../packages/docker/src"),
+  path.join(import.meta.dir, "../packages/redis/src"),
+  path.join(import.meta.dir, "../packages/sql/src"),
 ];
 
-const pageTag = /^\s*\*\s+@(resource|binding|layer)\b/;
+const pageTag = /^\s*\*\s+@(resource|binding|layer|primitive)\b/;
 const generatorTag =
-  /^\s*\*\s+@(resource|binding|layer|product|category|group|label|provides|peer)\b/;
+  /^\s*\*\s+@(resource|binding|layer|primitive|product|category|group|label|title|provides|peer)\b/;
 const sectionTag = /^(\s*\*\s+)@section(?:\s+(.*))?$/;
 const exampleTag = /^(\s*\*\s+)@example(?:\s+(.*))?$/;
 

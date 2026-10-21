@@ -1,6 +1,7 @@
 import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import { UserFacingError } from "../UserFacingError.ts";
 import type { ActionState } from "./ActionState.ts";
 import type { ReplacedResourceState, ResourceState } from "./ResourceState.ts";
 
@@ -24,7 +25,11 @@ export class StateStoreError extends Data.TaggedError("StateStoreError")<{
     /** Undefined when the HTTP client failed before receiving a response. */
     status?: number;
   };
-}> {}
+  /** Set when the store must be bootstrapped or upgraded first, as CI never does either. */
+  requires?: { readonly action: "bootstrap" | "upgrade"; readonly command: string };
+}> {
+  readonly [UserFacingError] = true;
+}
 
 export class State extends Context.Service<State, Effect.Effect<StateService>>()("alchemy/State") {}
 
