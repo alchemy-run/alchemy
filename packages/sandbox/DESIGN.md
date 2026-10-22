@@ -408,6 +408,12 @@ region, commands run on the host. Warm, per command:
 | Four 2-second commands at once, snapshot to snapshot | 3.8 s | 4.0 s |
 | `fsync` on the head | 93 ms | 110 ms |
 
+The smallest instances do as well. c6gd.medium (1 vCPU, NVMe) and t4g.small
+(2 vCPUs, the cache on EBS), both spot: a warm forked call 0.27–0.48 s,
+landing 0.12–0.14 s (ext4) or 0.33–0.39 s (btrfs), four 2-second commands at
+once 3.8–4.2 s, `fsync` 95–110 ms. EBS costs nothing measurable at this
+size.
+
 A cold read of the whole base (10,000 small files and 64 MiB) took 12.2 s
 (ext4) and 7.8 s (btrfs): extents are fetched one at a time on demand.
 
