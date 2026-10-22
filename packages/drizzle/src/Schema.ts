@@ -68,10 +68,49 @@ class GenerateMigrationFailed extends Data.TaggedError("GenerateMigrationFailed"
   }
 }
 
+class GenerateSnapshotFailed extends Data.TaggedError("GenerateSnapshotFailed")<{
+  readonly cause: unknown;
+}> {
+  override get message() {
+    return `drizzle-kit generateDrizzleJson failed: ${this.cause}`;
+  }
+}
+
+class SchemaImportFailed extends Data.TaggedError("SchemaImportFailed")<{
+  readonly schema: string;
+  readonly cause: unknown;
+}> {
+  override get message() {
+    return `Failed to import schema at ${this.schema}: ${this.cause}`;
+  }
+}
+
+class DrizzleKitLoadFailed extends Data.TaggedError("DrizzleKitLoadFailed")<{
+  readonly dialect: Dialect;
+  readonly cause: unknown;
+}> {
+  override get message() {
+    return `Failed to load drizzle-kit/${this.dialect} (is drizzle-kit installed?): ${this.cause}`;
+  }
+}
+
 /** An ambiguous schema change with no terminal to ask. */
 class UndecidedSchemaChange extends Data.TaggedError("UndecidedSchemaChange")<{
-  readonly message: string;
-}> {}
+  readonly props: SchemaProps;
+  readonly hint: MissingHint;
+}> {
+  override get message() {
+    const { props, hint } = this;
+    const dialect = props.dialect ?? "postgres";
+    return [
+      `drizzle-kit needs a decision for ${props.schema} that cannot be made non-interactively:`,
+      `  ${hint.kind} ${formatEntity(hint.entity)}: created or renamed?`,
+      "",
+      "Re-run the deploy in an interactive terminal to answer it, or generate the migration yourself and commit it:",
+      `  npx drizzle-kit generate --dialect ${dialect === "postgres" ? "postgresql" : dialect} --schema ${props.schema} --out ${props.out ?? "./migrations"}`,
+    ].join("\n");
+  }
+}
 
 export type SchemaProps = {
   /**
@@ -195,16 +234,13 @@ export const SchemaProvider = () =>
         Effect.tryPromise({
           try: () =>
             import(/* @vite-ignore */ resolveSchema(p)) as Promise<Record<string, unknown>>,
-          catch: (cause) => new Error(`Failed to import schema at ${p.schema}: ${cause}`),
+          catch: (cause) => new SchemaImportFailed({ schema: p.schema, cause }),
         });
 
       const loadKit = (dialect: Dialect) =>
         Effect.tryPromise({
           try: () => import(/* @vite-ignore */ dialectModule(dialect)) as Promise<DrizzleKitApi>,
-          catch: (cause) =>
-            new Error(
-              `Failed to load drizzle-kit/${dialect} (is drizzle-kit installed?): ${cause}`,
-            ),
+          catch: (cause) => new DrizzleKitLoadFailed({ dialect, cause }),
         });
 
       // List `<ts>_*` migration directories under `out`, sorted by numeric
@@ -257,7 +293,7 @@ export const SchemaProvider = () =>
         const prevEntry = yield* readLatestSnapshot(out);
         const cur = yield* Effect.tryPromise({
           try: () => generateDrizzleJson(schemaModule, prevEntry?.snapshot.id),
-          catch: (cause) => new Error(`drizzle-kit generateDrizzleJson failed: ${cause}`),
+          catch: (cause) => new GenerateSnapshotFailed({ cause }),
         });
 
         // For the initial migration, drizzle-kit needs an *empty* snapshot
@@ -267,8 +303,7 @@ export const SchemaProvider = () =>
           prevEntry?.snapshot ??
           (yield* Effect.tryPromise({
             try: () => generateDrizzleJson({}),
-            catch: (cause) =>
-              new Error(`drizzle-kit generateDrizzleJson (empty baseline) failed: ${cause}`),
+            catch: (cause) => new GenerateSnapshotFailed({ cause }),
           }));
 
         // An ambiguous change (rename vs create, or one that loses data)
@@ -455,19 +490,6 @@ const renameCandidates = (
     );
 };
 
-const undecided = (props: SchemaProps, hint: MissingHint) => {
-  const dialect = props.dialect ?? "postgres";
-  return new UndecidedSchemaChange({
-    message: [
-      `drizzle-kit needs a decision for ${props.schema} that cannot be made non-interactively:`,
-      `  ${hint.kind} ${formatEntity(hint.entity)}: created or renamed?`,
-      "",
-      "Re-run the deploy in an interactive terminal to answer it, or generate the migration yourself and commit it:",
-      `  npx drizzle-kit generate --dialect ${dialect === "postgres" ? "postgresql" : dialect} --schema ${props.schema} --out ${props.out ?? "./migrations"}`,
-    ].join("\n"),
-  });
-};
-
 /**
  * Answer one drizzle-kit `MissingHint` with an Alchemy prompt. A dismissed
  * prompt stays a `TerminalCancelled` so the CLI exits quietly, the same as
@@ -482,7 +504,7 @@ const askHint = Effect.fn("Drizzle.askHint")(
     hints: ReadonlyArray<Hint>,
   ) {
     const interaction = yield* Effect.serviceOption(Interaction);
-    if (Option.isNone(interaction)) return yield* undecided(props, hint);
+    if (Option.isNone(interaction)) return yield* new UndecidedSchemaChange({ props, hint });
     const { prompt } = interaction.value;
 
     const create = { type: "create", kind: hint.kind, entity: hint.entity } satisfies Hint;
@@ -505,6 +527,8 @@ const askHint = Effect.fn("Drizzle.askHint")(
   },
   (effect, props, hint) =>
     effect.pipe(
-      Effect.catchTag("NonInteractiveTerminal", () => Effect.fail(undecided(props, hint))),
+      Effect.catchTag("NonInteractiveTerminal", () =>
+        Effect.fail(new UndecidedSchemaChange({ props, hint })),
+      ),
     ),
 );
