@@ -16,6 +16,7 @@
 use crate::fs::{self, Fs};
 use crate::mount::{self, Mode, Mount, User};
 use crate::patch::{self, Candidates, Summary};
+use crate::container::{Container, Isolation};
 use crate::timings::Timings;
 use crate::{Device, sendstream};
 use anyhow::{Context, Result, bail};
@@ -56,15 +57,38 @@ pub struct Spec<'a> {
     pub patch: Option<String>,
     /// Keep the fork mounted for processes the command leaves running.
     pub keep: bool,
+    /// Run the command in a container over the fork, not on this machine.
+    pub contained: Option<Contained<'a>>,
+}
+
+/// A call's container: how it's isolated, and where its bundle goes.
+pub struct Contained<'a> {
+    pub isolation: &'a Isolation,
+    /// The container's id (unique on this machine).
+    pub id: String,
+    /// Where its bundle and scratch space go.
+    pub state: &'a Path,
+    /// A static blockd, the container's init.
+    pub init: &'a Path,
 }
 
 /// A call whose processes are still running, its fork still mounted.
 pub struct Kept {
     pub call: Call,
     pub device: Arc<Device>,
+    /// Where they run, if not on this machine.
+    pub container: Option<Container>,
 }
 
 impl Kept {
+    /// The processes still running.
+    pub fn survivors(&self) -> Vec<User> {
+        match &self.container {
+            Some(container) => container.processes(),
+            None => self.call.survivors(),
+        }
+    }
+
     /// Stops what's left, a last commit to `patch`, unmounts, closes.
     pub fn detach(
         mut self,
@@ -73,8 +97,14 @@ impl Kept {
         runtime: &Handle,
     ) -> Result<(Summary, Option<String>, Vec<User>, Timings)> {
         let mut timings = Timings::new();
-        let stopped = timings.time("stop", || self.call.stop_survivors());
+        let stopped = timings.time("stop", || match &self.container {
+            Some(container) => container.stop_others(),
+            None => self.call.stop_survivors(),
+        });
         let made = commit_to_store(&mut self.call, patch, volume, runtime, false, &mut timings);
+        if let Some(container) = self.container.take() {
+            timings.time("container", || container.destroy())?;
+        }
         let unmounted = timings.time("unmount", || self.call.unmount());
         timings.time("close", || self.device.close())?;
         let (summary, key) = made?;
@@ -99,13 +129,38 @@ pub fn call(
     let mut call = timings.time("mount", || {
         Call::mount(&device, spec.mode, spec.cache, spec.dir, spec.work)
     })?;
-    let ran = timings.time("run", || call.run(&spec.run));
-    let running = timings.time("settle", || call.survivors());
+    let container = match &spec.contained {
+        Some(contained) => {
+            let started = timings.time("container", || {
+                Container::start(&contained.id, contained.isolation, spec.dir, contained.state, contained.init)
+            });
+            match started {
+                Ok(container) => Some(container),
+                Err(e) => {
+                    let _ = call.unmount();
+                    let _ = device.close();
+                    return Err(e);
+                }
+            }
+        }
+        None => None,
+    };
+    let ran = timings.time("run", || match &container {
+        Some(container) => container.exec(&spec.run),
+        None => call.run(&spec.run),
+    });
+    let running = timings.time("settle", || match &container {
+        Some(container) => container.processes(),
+        None => call.survivors(),
+    });
     let kept = spec.keep && ran.is_ok() && !running.is_empty();
     let survivors = if kept || running.is_empty() {
         running
     } else {
-        timings.time("stop", || call.stop_survivors())
+        timings.time("stop", || match &container {
+            Some(container) => container.stop_others(),
+            None => call.stop_survivors(),
+        })
     };
     let made = ran.as_ref().map_err(|e| anyhow::anyhow!("{e:#}")).and_then(|_| {
         commit_to_store(&mut call, spec.patch.as_deref(), volume, runtime, false, &mut timings)
@@ -123,7 +178,10 @@ pub fn call(
             kept: true,
             timings,
         };
-        return Ok((report, Some(Kept { call, device })));
+        return Ok((report, Some(Kept { call, device, container })));
+    }
+    if let Some(container) = container {
+        timings.time("container", || container.destroy())?;
     }
     let unmounted = timings.time("unmount", || call.unmount());
     timings.time("close", || device.close())?;

@@ -27,7 +27,7 @@
 //!                (--patch <key> | --patch-file <file>)   (a patch from one snapshot to another)
 //! blockd apply   --dir <dir> --patch-file <file>     (apply a patch to a directory)
 //! blockd daemon  [--listen <host:port>] [--socket <path>] [--pidfile <file>]
-//!                [--state /var/cache/blockd] [--run /run/blockd]
+//!                [--state /var/cache/blockd] [--run /run/blockd] [--init <static blockd>]
 //!                (every head, call and cache on this machine, over HTTP: see `daemon.rs`;
 //!                 BLOCKD_DAEMON_TOKEN is the bearer token every request needs)
 //! blockd request --daemon <host:port|socket> --path /v1/… [--body <json>] [--method …]
@@ -48,6 +48,11 @@ use volume::Hash;
 fn main() -> Result<()> {
     let mut args = std::env::args().skip(1);
     let command = args.next().unwrap_or_default();
+    // A container's first process: nothing else, not even logging.
+    #[cfg(target_os = "linux")]
+    if command == "init" {
+        blockd::container::init();
+    }
     let flags = parse_flags(args)?;
     let filter = || {
         tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into())
@@ -420,6 +425,7 @@ fn call(flags: &Flags, volume: volume::Volume, runtime: &tokio::runtime::Runtime
             run,
             patch: flags.get("patch").map(str::to_string),
             keep: flags.get("keep") == Some("true"),
+            contained: None,
         },
         runtime.handle(),
     )?;
@@ -474,7 +480,7 @@ fn serve_host(
             let reply = match serde_json::from_str::<Request>(&line) {
                 Err(e) => serde_json::json!({ "ok": false, "error": format!("bad request: {e}") }),
                 Ok(Request::Status) => {
-                    serde_json::json!({ "ok": true, "survivors": kept.call.survivors() })
+                    serde_json::json!({ "ok": true, "survivors": kept.survivors() })
                 }
                 Ok(Request::Commit { patch, full }) => {
                     let mut timings = blockd::timings::Timings::new();
@@ -488,7 +494,7 @@ fn serve_host(
                     ) {
                         Ok((summary, key)) => serde_json::json!({
                             "ok": true, "patch": key, "summary": summary,
-                            "survivors": kept.call.survivors(), "timings": timings,
+                            "survivors": kept.survivors(), "timings": timings,
                         }),
                         Err(e) => serde_json::json!({ "ok": false, "error": format!("{e:#}") }),
                     }
@@ -546,6 +552,7 @@ fn daemon(flags: &Flags, runtime: &tokio::runtime::Runtime) -> Result<()> {
             token: std::env::var("BLOCKD_DAEMON_TOKEN").ok().filter(|t| !t.is_empty()),
             state: flags.get("state").unwrap_or("/var/cache/blockd").into(),
             run: flags.get("run").unwrap_or("/run/blockd").into(),
+            init: flags.get("init").map(Into::into),
         },
         runtime.handle().clone(),
     )?;

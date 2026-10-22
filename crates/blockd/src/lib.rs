@@ -10,6 +10,8 @@
 mod bitmap;
 #[cfg(target_os = "linux")]
 pub mod call;
+#[cfg(target_os = "linux")]
+pub mod container;
 pub mod control;
 #[cfg(target_os = "linux")]
 pub mod daemon;

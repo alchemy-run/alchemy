@@ -5,6 +5,7 @@
 //! GET  /v1/status                      the daemon's heads, calls and counters
 //! POST /v1/heads                       mount a head
 //! POST /v1/heads/<head>/<op>           sync | snapshot | checkpoint | apply | status | detach
+//!                                      | exec (→ {"id"}, waited on as a call) | processes
 //! POST /v1/calls                       start a command on a fork of a snapshot → {"id":…}
 //! GET  /v1/calls/<id>?wait=<ms>        its result once done, else {"done":false} after <ms>
 //! POST /v1/calls/<id>/<op>             a kept call's commit | status | detach
@@ -20,7 +21,8 @@
 //! token (`BLOCKD_DAEMON_TOKEN`). A command run by a call gets the daemon's
 //! environment without `AWS_*` and `BLOCKD_*`.
 
-use crate::call::{self, Kept, Run, Spec};
+use crate::call::{self, Contained, Kept, Run, Spec};
+use crate::container::{Container, Isolation, Runtime};
 use crate::head::{Head, HeadOptions};
 use crate::http::{Request, Response};
 use crate::mount::Mode;
@@ -42,6 +44,8 @@ pub struct Config {
     pub state: PathBuf,
     /// Commands' output while they run.
     pub run: PathBuf,
+    /// A static blockd: the init of every container. Default: this binary.
+    pub init: Option<PathBuf>,
 }
 
 pub struct Daemon {
@@ -52,19 +56,33 @@ pub struct Daemon {
     caches: Arc<Mutex<HashSet<PathBuf>>>,
     heads: Mutex<HashMap<String, Arc<Mutex<Option<MountedHead>>>>>,
     calls: Mutex<HashMap<String, Arc<CallEntry>>>,
+    /// Images mounted read-only, shared by every container that uses one.
+    images: Mutex<HashMap<Hash, Arc<Image>>>,
     counters: Mutex<Counters>,
+}
+
+/// An image snapshot, attached and mounted read-only.
+struct Image {
+    dir: PathBuf,
+    _mount: Mutex<crate::mount::Mount>,
+    _device: Arc<crate::Device>,
+    _cache: CacheLease,
 }
 
 #[derive(Default, serde::Serialize)]
 struct Counters {
     mounts: u64,
     calls: u64,
+    execs: u64,
+    images: u64,
     diffs: u64,
     applies: u64,
 }
 
 struct MountedHead {
     head: Head,
+    /// Where its commands run, if not on this machine.
+    container: Option<Arc<Container>>,
     _cache: CacheLease,
 }
 
@@ -104,6 +122,37 @@ struct MountRequest {
     flush_every: Option<u64>,
     #[serde(default)]
     prefetch: bool,
+    /// Run the head's commands (`exec`) in a container.
+    isolation: Option<IsolationRequest>,
+}
+
+/// How a request asks for isolation: a runtime, and an image by directory or
+/// by snapshot (mounted read-only from the request's store).
+#[derive(Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct IsolationRequest {
+    runtime: Runtime,
+    rootfs: Option<PathBuf>,
+    image: Option<String>,
+    path: String,
+    #[serde(default = "yes")]
+    host_network: bool,
+    #[serde(default)]
+    env: HashMap<String, String>,
+}
+
+fn yes() -> bool {
+    true
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ExecRequest {
+    command: String,
+    cwd: Option<PathBuf>,
+    #[serde(default)]
+    env: HashMap<String, String>,
+    timeout_ms: Option<u64>,
 }
 
 #[derive(Deserialize)]
@@ -123,6 +172,7 @@ struct CallRequest {
     keep: bool,
     mode: Option<String>,
     cache: Option<PathBuf>,
+    isolation: Option<IsolationRequest>,
 }
 
 #[derive(Deserialize)]
@@ -153,6 +203,7 @@ impl Daemon {
             caches: Arc::new(Mutex::new(HashSet::new())),
             heads: Mutex::new(HashMap::new()),
             calls: Mutex::new(HashMap::new()),
+            images: Mutex::new(HashMap::new()),
             counters: Mutex::new(Counters::default()),
         }))
     }
@@ -277,6 +328,61 @@ impl Daemon {
         CacheLease::acquire(&self.caches, &preferred)
     }
 
+    fn init(&self) -> PathBuf {
+        self.config
+            .init
+            .clone()
+            .or_else(|| std::env::current_exe().ok())
+            .unwrap_or_else(|| PathBuf::from("/usr/local/bin/blockd"))
+    }
+
+    /// An image snapshot mounted read-only, once per machine.
+    fn image(&self, volume: &Arc<Volume>, snapshot: Hash, mode: Mode) -> Result<Arc<Image>> {
+        let mut images = self.images.lock().unwrap();
+        if let Some(image) = images.get(&snapshot) {
+            return Ok(image.clone());
+        }
+        let cache = self.cache(None, &format!("image-{}.cache", &snapshot.to_hex()[..16]));
+        let device = Arc::new(crate::Device::open_snapshot(
+            volume.clone(),
+            snapshot,
+            cache.path(),
+            self.runtime.clone(),
+        )?);
+        let dir = self.config.state.join(format!("image-{}", snapshot.to_hex()));
+        let mount = crate::mount::mount_as(&device, mode, cache.path(), &dir, true)?;
+        let image = Arc::new(Image {
+            dir,
+            _mount: Mutex::new(mount),
+            _device: device,
+            _cache: cache,
+        });
+        images.insert(snapshot, image.clone());
+        self.counters.lock().unwrap().images += 1;
+        Ok(image)
+    }
+
+    /// What a request's isolation means here: its image as a directory.
+    fn isolation(&self, request: &IsolationRequest, volume: &Arc<Volume>, mode: Mode) -> Result<Isolation> {
+        let rootfs = match (&request.rootfs, &request.image) {
+            (Some(rootfs), _) => rootfs.clone(),
+            (None, Some(image)) => {
+                let snapshot = Hash::from_hex(image).context("`image` is not a snapshot id")?;
+                self.image(volume, snapshot, mode)?.dir.clone()
+            }
+            (None, None) => bail!("isolation needs `rootfs` (a directory) or `image` (a snapshot)"),
+        };
+        let mut env: Vec<(String, String)> = request.env.clone().into_iter().collect();
+        env.sort();
+        Ok(Isolation {
+            runtime: request.runtime,
+            rootfs,
+            path: request.path.clone(),
+            host_network: request.host_network,
+            env,
+        })
+    }
+
     //#region heads
 
     fn mount(&self, request: MountRequest) -> Result<Value> {
@@ -292,7 +398,12 @@ impl Daemon {
         }
         let cache = self.cache(request.cache.as_deref(), &format!("{}.cache", request.head));
         let mounted = mode(request.mode.as_deref()).and_then(|mode| {
-            Head::mount(
+            let isolation = request
+                .isolation
+                .as_ref()
+                .map(|isolation| self.isolation(isolation, &volume, mode))
+                .transpose()?;
+            let (head, ready) = Head::mount(
                 volume,
                 &request.head,
                 HeadOptions {
@@ -303,11 +414,25 @@ impl Daemon {
                     prefetch: request.prefetch,
                 },
                 self.runtime.clone(),
-            )
+            )?;
+            let container = match &isolation {
+                Some(isolation) => {
+                    let id = format!("head-{}", sanitize(&request.head));
+                    match Container::start(&id, isolation, &request.dir, &self.config.state, &self.init()) {
+                        Ok(container) => Some(Arc::new(container)),
+                        Err(e) => {
+                            let _ = head.detach();
+                            return Err(e);
+                        }
+                    }
+                }
+                None => None,
+            };
+            Ok((head, ready, container))
         });
         match mounted {
-            Ok((head, ready)) => {
-                *slot = Some(MountedHead { head, _cache: cache });
+            Ok((head, ready, container)) => {
+                *slot = Some(MountedHead { head, container, _cache: cache });
                 self.counters.lock().unwrap().mounts += 1;
                 Ok(serde_json::to_value(ready)?)
             }
@@ -335,6 +460,19 @@ impl Daemon {
         let device = mounted.head.device().clone();
         match op {
             "status" => Ok(json!({ "status": device.status() })),
+            "exec" => {
+                let body: ExecRequest = serde_json::from_slice(&request.body).context("an exec's body")?;
+                let container = mounted.container.clone();
+                let dir = mounted.head.dir().to_path_buf();
+                drop(slot);
+                self.start_exec(container, dir, body)
+            }
+            "processes" => Ok(json!({
+                "processes": match &mounted.container {
+                    Some(container) => container.processes(),
+                    None => crate::mount::users(mounted.head.dir()),
+                }
+            })),
             "sync" => {
                 let mut timings = Timings::new();
                 timings.time("sync", || device.sync())?;
@@ -370,6 +508,9 @@ impl Daemon {
                 let taken = slot.take().unwrap();
                 drop(slot);
                 self.heads.lock().unwrap().remove(head);
+                if let Some(container) = &taken.container {
+                    container.destroy()?;
+                }
                 let (snapshot, paths, timings) = taken.head.detach()?;
                 Ok(json!({ "snapshot": snapshot, "paths": paths, "timings": timings }))
             }
@@ -443,6 +584,12 @@ impl Daemon {
             stderr: Some(std::fs::File::create(&err)?),
             clean_env: true,
         };
+        let isolation = request
+            .isolation
+            .as_ref()
+            .map(|isolation| timings.time("image", || self.isolation(isolation, &volume, mode)))
+            .transpose()?;
+        let init = self.init();
         let called = call::call(
             &volume,
             snapshot,
@@ -454,6 +601,12 @@ impl Daemon {
                 run,
                 patch: request.patch,
                 keep: request.keep,
+                contained: isolation.as_ref().map(|isolation| Contained {
+                    isolation,
+                    id: format!("call-{id}"),
+                    state: &self.config.state,
+                    init: &init,
+                }),
             },
             &self.runtime,
         );
@@ -519,7 +672,7 @@ impl Daemon {
         match op {
             "status" => {
                 let (held, _, _) = &**kept.as_ref().unwrap();
-                Ok(json!({ "survivors": held.call.survivors() }))
+                Ok(json!({ "survivors": held.survivors() }))
             }
             "commit" => {
                 let (held, volume, _) = &mut **kept.as_mut().unwrap();
@@ -534,7 +687,7 @@ impl Daemon {
                 )?;
                 Ok(json!({
                     "patch": patch, "summary": summary,
-                    "survivors": held.call.survivors(), "timings": timings,
+                    "survivors": held.survivors(), "timings": timings,
                 }))
             }
             "detach" => {
@@ -549,6 +702,63 @@ impl Daemon {
             }
             other => Err(anyhow!(NotFound)).context(format!("no call operation {other:?}")),
         }
+    }
+
+    /// A command on a mounted head, in its container or on this machine,
+    /// waited on like a call (`GET /v1/calls/<id>`).
+    fn start_exec(
+        &self,
+        container: Option<Arc<Container>>,
+        dir: PathBuf,
+        request: ExecRequest,
+    ) -> Result<Value> {
+        let id = new_id();
+        let entry = Arc::new(CallEntry {
+            state: Mutex::new(CallState::Running),
+            done: Condvar::new(),
+        });
+        self.calls.lock().unwrap().insert(id.clone(), entry.clone());
+        self.counters.lock().unwrap().execs += 1;
+        let out = self.config.run.join(format!("exec-{id}.out"));
+        let err = self.config.run.join(format!("exec-{id}.err"));
+        let run = Run {
+            command: request.command,
+            cwd: request.cwd,
+            env: request.env.into_iter().collect(),
+            timeout: request.timeout_ms.map(Duration::from_millis),
+            stdout: Some(std::fs::File::create(&out)?),
+            stderr: Some(std::fs::File::create(&err)?),
+            clean_env: true,
+        };
+        std::thread::Builder::new()
+            .name(format!("blockd-exec-{}", &id[..8]))
+            .spawn(move || {
+                let mut timings = Timings::new();
+                let ran = timings.time("run", || match &container {
+                    Some(container) => container.exec(&run),
+                    None => run_on_host(&run, &dir),
+                });
+                let encode = |path: &Path| {
+                    let bytes = std::fs::read(path).unwrap_or_default();
+                    let _ = std::fs::remove_file(path);
+                    base64::engine::general_purpose::STANDARD.encode(bytes)
+                };
+                let (stdout, stderr) = (encode(&out), encode(&err));
+                let result = match ran {
+                    Ok((code, timed_out)) => json!({
+                        "done": true, "exitCode": code, "timedOut": timed_out,
+                        "stdout": stdout, "stderr": stderr, "timings": timings,
+                    }),
+                    Err(e) => json!({ "ok": false, "done": true, "error": format!("{e:#}") }),
+                };
+                *entry.state.lock().unwrap() = CallState::Done {
+                    result,
+                    kept: None,
+                    at: Instant::now(),
+                };
+                entry.done.notify_all();
+            })?;
+        Ok(json!({ "id": id }))
     }
 
     //#endregion
@@ -668,6 +878,47 @@ fn decode(segment: &str) -> String {
         i += 1;
     }
     String::from_utf8_lossy(&out).into_owned()
+}
+
+/// A name as a container id allows it.
+fn sanitize(name: &str) -> String {
+    name.chars()
+        .map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '_' { c } else { '-' })
+        .collect()
+}
+
+/// A head's command on this machine, in the head's directory.
+fn run_on_host(run: &Run, dir: &Path) -> Result<(i32, bool)> {
+    use std::os::unix::process::CommandExt;
+    let mut child = std::process::Command::new("sh");
+    child
+        .args(["-c", &run.command])
+        .current_dir(run.cwd.as_deref().unwrap_or(dir))
+        .process_group(0)
+        .env_clear()
+        .envs(std::env::vars().filter(|(name, _)| !name.starts_with("AWS_") && !name.starts_with("BLOCKD_")))
+        .envs(run.env.iter().map(|(k, v)| (k, v)))
+        .stdin(std::process::Stdio::null());
+    if let Some(stdout) = &run.stdout {
+        child.stdout(stdout.try_clone()?);
+    }
+    if let Some(stderr) = &run.stderr {
+        child.stderr(stderr.try_clone()?);
+    }
+    let mut child = child.spawn().context("starting the command")?;
+    let pid = child.id() as i32;
+    let started = Instant::now();
+    loop {
+        if let Some(status) = child.try_wait()? {
+            return Ok((status.code().unwrap_or(128), false));
+        }
+        if run.timeout.is_some_and(|t| started.elapsed() >= t) {
+            unsafe { libc::kill(-pid, libc::SIGKILL) };
+            let _ = child.wait();
+            return Ok((124, true));
+        }
+        std::thread::sleep(Duration::from_millis(10));
+    }
 }
 
 fn new_id() -> String {
