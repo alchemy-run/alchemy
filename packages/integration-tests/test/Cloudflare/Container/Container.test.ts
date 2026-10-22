@@ -143,7 +143,8 @@ describe.concurrent.each([
     /**
      * External container (`context` / `dockerfile`): Alchemy builds the user's
      * Dockerfile against the context directory (nginx serving a static page on
-     * port 8080) and the DO proxies a request to it.
+     * port 8080) and the DO proxies a request to it. A second container builds
+     * the same server from inline `dockerfile.content`.
      */
     describe("external container (context/dockerfile)", () => {
       const { test, beforeAll, afterAll, deploy, destroy } = make();
@@ -157,6 +158,19 @@ describe.concurrent.each([
 
           const hello = yield* fetchReady(new URL("/hello", url), "external container");
           expect(hello).toContain("external container");
+        }).pipe(logLevel),
+        { tags: [...(dev ? ["local"] : ["live"])], timeout },
+      );
+
+      // Inline `dockerfile.content` has no user build context: the provider
+      // materializes one, which needs the Docker service in reconcile.
+      test(
+        "builds an inline Dockerfile and serves it over its TCP port",
+        Effect.gen(function* () {
+          const { url } = yield* stack;
+
+          const hello = yield* fetchReady(new URL("/inline", url), "inline dockerfile container");
+          expect(hello).toContain("inline dockerfile container");
         }).pipe(logLevel),
         { tags: [...(dev ? ["local"] : ["live"])], timeout },
       );
