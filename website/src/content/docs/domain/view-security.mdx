@@ -32,7 +32,7 @@ export const mustOwn = Effect.fn(function* (owner: CustomerId | null) {
 
 ```typescript
 // packages/domain/src/Account/AccountSummary.view.ts
-import * as Domain from "alchemy/Domain";
+import * as Domain from "@alchemy.run/domain";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import { CustomerId } from "../Customer/Customer.id.ts";
@@ -94,7 +94,7 @@ When the key itself says whose data it is, judge the key. A dashboard is keyed b
 
 ```typescript
 // packages/domain/src/Customer/CustomerDashboard.view.ts
-import * as Domain from "alchemy/Domain";
+import * as Domain from "@alchemy.run/domain";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import { AccountId } from "../Account/Account.id.ts";
@@ -171,7 +171,7 @@ A view decides who may read it, not which parts they may see. To show an audienc
 
 ```typescript
 // packages/domain/src/Account/AccountActivity.view.ts
-import * as Domain from "alchemy/Domain";
+import * as Domain from "@alchemy.run/domain";
 import * as Effect from "effect/Effect";
 import { CurrentActor } from "../CurrentActor.context.ts";
 import { Forbidden } from "../Forbidden.rejection.ts";
@@ -203,7 +203,7 @@ Expose it in the agents' Api only.
 
 ```typescript
 // packages/domain/src/SupportApi.api.ts
-import * as Domain from "alchemy/Domain";
+import * as Domain from "@alchemy.run/domain";
 import { AccountActivity } from "./Account/AccountActivity.view.ts";
 import { AccountSummary } from "./Account/AccountSummary.view.ts";
 import { ChangeOwner } from "./Account/ChangeOwner.command.ts";

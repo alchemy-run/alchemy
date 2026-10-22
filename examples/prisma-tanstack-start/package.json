@@ -25,6 +25,8 @@
     "typecheck": "tsc -b"
   },
   "dependencies": {
+    "@alchemy.run/cloudflare": "workspace:*",
+    "@alchemy.run/prisma": "workspace:*",
     "@prisma/orm-postgres": "catalog:",
     "@tanstack/react-router": "catalog:",
     "@tanstack/react-start": "catalog:",

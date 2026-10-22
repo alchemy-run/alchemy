@@ -2,8 +2,8 @@ import {
   resolveConnectionSource,
   staticConnectionSource,
   type ConnectionSource,
-} from "alchemy/SQL/ConnectionSource";
-import { openMySQLPool } from "alchemy/SQL/MySQLDriver";
+} from "@alchemy.run/sql/ConnectionSource";
+import { openMySQLPool } from "@alchemy.run/sql/MySQLDriver";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import type * as Redacted from "effect/Redacted";

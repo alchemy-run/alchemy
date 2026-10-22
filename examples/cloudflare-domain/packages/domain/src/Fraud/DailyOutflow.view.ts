@@ -1,4 +1,4 @@
-import * as Domain from "alchemy/Domain";
+import * as Domain from "@alchemy.run/domain";
 import * as DateTime from "effect/DateTime";
 import * as Schema from "effect/Schema";
 import { Account } from "../Account/Account.aggregate.ts";
