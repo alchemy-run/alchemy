@@ -30,6 +30,27 @@ const listHooks = Effect.gen(function* () {
   );
 });
 
+// Ping the webhook and return the status the Worker answered GitHub with.
+const pingStatus = Effect.fn(function* (hookId: number) {
+  const octokit = yield* Octokit;
+  const pings = Effect.tryPromise(() =>
+    octokit.rest.repos.listWebhookDeliveries({ owner, repo: repository, hook_id: hookId }),
+  ).pipe(Effect.map(({ data }) => data.filter((delivery) => delivery.event === "ping")));
+  const before = (yield* pings).length;
+  yield* Effect.tryPromise(() =>
+    octokit.rest.repos.pingWebhook({ owner, repo: repository, hook_id: hookId }),
+  );
+  // Deliveries are listed newest first.
+  const after = yield* pings.pipe(
+    Effect.repeat({
+      schedule: Schedule.spaced("2 seconds"),
+      until: (deliveries) => deliveries.length > before,
+      times: 15,
+    }),
+  );
+  return after.length > before ? after[0]!.status_code : undefined;
+});
+
 test.provider(
   "consumeRepositoryEvents without a secret verifies every delivery",
   (stack) =>
@@ -62,22 +83,17 @@ test.provider(
       );
       expect(forged.status).toBe(401);
 
-      // A delivery GitHub signs with the generated secret is accepted.
-      const octokit = yield* Octokit;
-      yield* Effect.tryPromise(() =>
-        octokit.rest.repos.pingWebhook({ owner, repo: repository, hook_id: hook!.id }),
-      );
-      const ping = yield* Effect.tryPromise(() =>
-        octokit.rest.repos.listWebhookDeliveries({ owner, repo: repository, hook_id: hook!.id }),
-      ).pipe(
-        Effect.map(({ data }) => data.find((delivery) => delivery.event === "ping")),
+      // A delivery GitHub signs with the generated secret is accepted. GitHub
+      // can reach the fresh workers.dev URL before it serves there (404), so
+      // ping again until a delivery gets past the cold start.
+      const status = yield* pingStatus(hook!.id).pipe(
         Effect.repeat({
-          schedule: Schedule.spaced("2 seconds"),
-          until: (delivery) => delivery !== undefined,
-          times: 20,
+          schedule: Schedule.spaced("3 seconds"),
+          until: (status) => status !== undefined && status !== 404 && status < 500,
+          times: 10,
         }),
       );
-      expect(ping?.status_code).toBe(202);
+      expect(status).toBe(202);
 
       yield* stack.destroy();
       expect((yield* listHooks).filter((hook) => hook.config.url === deliveryUrl)).toEqual([]);
