@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Measures blockd's daemon on a real EC2 host (tests/ec2/bench.sh): Ubuntu
+# Measures blockd's daemon on a real EC2 host (tests/ec2/bench.sh, or
+# BENCH=gvisor.sh for what gVisor costs on top): Ubuntu
 # 24.04 on Graviton with instance NVMe for the cache, and a scratch S3 bucket
 # in the same region for the store. Launches everything, measures, and tears
 # it all down (instance, security group, key, bucket).
@@ -11,6 +12,8 @@ repo="$(cd "$(dirname "$0")/../../../.." && pwd)"
 region="${AWS_REGION:-us-west-2}"
 # The cheapest Graviton with instance NVMe; t4g.small for an EBS-only cache.
 type="${INSTANCE_TYPE:-c6gd.medium}"
+# What to run there: bench.sh (calls and merges) or gvisor.sh (gVisor's cost).
+bench="${BENCH:-bench.sh}"
 name="blockd-bench-$(date +%s)"
 filesystems=("$@")
 [ ${#filesystems[@]} -eq 0 ] && filesystems=(ext4 btrfs)
@@ -60,10 +63,10 @@ ssh_() { ssh -i "$work/key.pem" -o StrictHostKeyChecking=no -o UserKnownHostsFil
 for _ in $(seq 1 60); do ssh_ true 2>/dev/null && break; sleep 5; done
 
 scp -i "$work/key.pem" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
-  "$repo/target/blockd-linux-arm64" "$repo/crates/blockd/tests/ec2/bench.sh" "ubuntu@$host:"
-ssh_ 'sudo apt-get update -qq && sudo apt-get install -y -qq e2fsprogs btrfs-progs fuse3 >/dev/null
+  "$repo/target/blockd-linux-arm64" "$repo/crates/blockd/tests/ec2/$bench" "ubuntu@$host:"
+ssh_ 'sudo apt-get update -qq && sudo apt-get install -y -qq e2fsprogs btrfs-progs fuse3 git python3 curl >/dev/null
   sudo modprobe ublk_drv || (sudo apt-get install -y -qq "linux-modules-extra-$(uname -r)" >/dev/null && sudo modprobe ublk_drv)
   sudo modprobe nbd nbds_max=16'
 # Short-lived credentials for the bucket, for this run only.
 creds=$(command aws configure export-credentials --format env-no-export | tr '\n' ' ')
-ssh_ "sudo env $creds AWS_REGION=$region timeout 1800 bash bench.sh ./blockd-linux-arm64 $bucket ${filesystems[*]}"
+ssh_ "sudo env $creds AWS_REGION=$region GVISOR_FLAGS='${GVISOR_FLAGS:-}' timeout 1800 bash $bench ./blockd-linux-arm64 $bucket ${filesystems[*]}"
