@@ -1,11 +1,102 @@
-# Provider docs hub
+# Provider docs
 
-A provider ships two kinds of docs:
+A provider ships two kinds of docs, and both have a bar:
 
 - **The API reference**, generated from JSDoc by `pnpm docs:gen` into
   `website/src/content/docs/providers/<P>/`. Never edit it by hand.
 - **The hub**, hand-written pages under
-  `website/src/content/docs/<provider>/`. This file covers the hub.
+  `website/src/content/docs/<provider>/`.
+
+## API reference (JSDoc)
+
+The generated reference page is the first thing a user reads about a
+resource, and it is only as good as the JSDoc on the source. The bar
+depends on how much the resource is used. Compare every runtime and
+fat-head resource side by side with its AWS or Cloudflare counterpart
+before you call it done.
+
+Azure missed this bar. `Azure.Functions.Function` shipped with two
+examples, an HTTP handler and a schedule, while `AWS.Lambda.Function`
+has 21 across eleven sections. Its fat-head resources had 2–5 examples
+each, against 10–21 for S3 Bucket, SQS Queue and R2 Bucket.
+
+### Runtimes
+
+Copy the shape of `packages/aws/src/Lambda/Function.ts` and
+`packages/cloudflare/src/Workers/Worker.ts`. A runtime's JSDoc has:
+
+- **An intro** that says what the runtime is, what Alchemy creates and
+  owns for you (role or identity, registry, plan), what it does not own,
+  and the forms it takes (async, Effect, image). Link to the hub's
+  compute page.
+- **`:::caution` callouts** for platform behavior that will bite
+  (finalizers and response timing, cold starts, read-only file systems,
+  size limits), each with a link to the hub page that explains it.
+- **One section per form**: `### Async …` with the stack declaration and
+  the handler file, `### Effect …` with a construction/runtime split, and
+  a section for container images if the runtime takes them.
+- **`### Configuration`**: one example per common setup (public URL and
+  its auth, networking, scaling and concurrency, retries and failure
+  destinations, architecture, environment).
+- **Packaging**: bundling options and native packages, or the Dockerfile
+  contract.
+- **One `### <Service> Bindings` section per service** with bindings the
+  runtime uses (storage, database, queue, topic, secrets), each showing
+  the binding in construction and its call at runtime.
+- **`### Event Sources`**: one example per trigger the runtime supports.
+- **Storage mounts, networking, and other attachments** the runtime
+  supports, one section each.
+
+Aim for ten or more examples. If you have fewer, find which section is
+missing.
+
+### Fat-head resources
+
+The 10–20 resources most apps use (see the PR description in step 10).
+Copy `packages/aws/src/S3/Bucket.ts`, `packages/aws/src/SQS/Queue.ts`
+and `packages/cloudflare/src/R2/Bucket.ts`:
+
+- **An intro**: what it is in user terms, the secure defaults Alchemy
+  applies, and what replacing it costs (data loss, downtime).
+- **`### Creating …`**: the minimal declaration, then the common
+  variants (sizes, tiers, regions, serverless vs provisioned).
+- **One section per feature users configure**: encryption, lifecycle or
+  retention, CORS, dead-letter queues, custom domains, networking,
+  backups, scaling. Each is a heading with one or more examples.
+- **`### Binding to a runtime`**: the binding inside a host, with its
+  `Effect.provide(...)` layer, and the role or grant it gives.
+- **`### Runtime operations`**: the calls users make through the binding.
+- **`### Event sources`** when the resource triggers runtimes.
+- **Adoption and deletion** when they behave in a way users must know
+  (`forceDestroy`, retained data, soft delete, name reuse windows).
+
+Aim for five sections or more.
+
+### Long tail
+
+Everything else gets, at minimum:
+
+- An intro naming the cloud's resource type (the ARM type, API resource,
+  or console name), what it's for, and a docs link.
+- One realistic creation example that declares or names every value it
+  uses.
+- A `:::caution` for each prop whose change replaces the resource, and
+  for each prerequisite a fresh account trips on (a feature to register,
+  a quota, a parent resource that must exist).
+
+### Every page
+
+- Every prop and attribute has JSDoc with its unit, allowed values,
+  `@default`, and whether changing it replaces the resource.
+- Every snippet either declares what it uses or is clearly a fragment
+  inside a host (`// init` and `// runtime` comments, as on Lambda).
+- Every `@binding` example shows the host and its `Effect.provide(...)`
+  layer.
+- Section headings are `###`, examples are `**Example:**`, and the
+  generator tags (`@resource`, `@binding`, `@category`, …) come last;
+  run `pnpm docs:check-jsdoc`.
+
+## The hub
 
 The hub copies the AWS hub (`website/src/content/docs/aws/`), not the
 order the provider was built in. GCP's first hub was four long "guides"
@@ -15,7 +106,7 @@ was rebuilt to match AWS in alchemy-run/alchemy#2374. Use the rebuilt
 GCP hub (`website/src/content/docs/gcp/`) as the model, and compare each
 page with its AWS sibling before you write it.
 
-## Structure
+### Structure
 
 ```
 <P>
@@ -49,7 +140,7 @@ There is no `guides/` directory.
 | `apis/effect-http-api.mdx`, `apis/effect-rpc.mdx` | Effect HTTP and RPC servers on the default runtime |
 | `<section>/<service>.mdx` | one page per service a user builds with |
 
-## Every page
+### Every hub page
 
 - **Code comes from what's tested**: the `examples/<provider>-*` projects
   and the resource JSDoc examples. If a page needs code no example has,
@@ -85,7 +176,7 @@ integration as a dev dependency (`<PackageManagers dev=… />`), deploy the
 site from `alchemy.run.ts`, then one heading per option (env, assets,
 domain, `alchemy dev`).
 
-## Wiring
+### Wiring
 
 - `website/astro.config.ts`: the hub's sidebar. Overview, Setup,
   `Tutorial` (autogenerated from `<provider>/tutorial`), one group per

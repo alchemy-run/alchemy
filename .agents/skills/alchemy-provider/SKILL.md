@@ -741,9 +741,11 @@ counts, so they can see what was checked without re-reviewing by hand.
 
 ## Step 10 — docs, examples, and the PR
 
-- JSDoc on every resource, prop, attribute, and binding, with `###`
-  sections and `**Example:**` blocks; then `pnpm docs:check-jsdoc` and
-  `pnpm docs:gen`.
+- JSDoc on every resource, prop, attribute, and binding, to the bar in
+  [docs.md](docs.md#api-reference-jsdoc): runtimes as complete as
+  `AWS.Lambda.Function`, fat-head resources as complete as S3 Bucket or
+  R2 Bucket, and a creation example plus replacement cautions for the
+  long tail. Then run `pnpm docs:check-jsdoc` and `pnpm docs:gen`.
 - The hand-written hub at `website/src/content/docs/<provider>/`, built
   to [docs.md](docs.md): the AWS hub's structure (Overview, Setup, a
   five-part tutorial, sections by concern), code taken from tested
