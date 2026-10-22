@@ -52,6 +52,11 @@ S=$(snapshot_of base)
 mode=$(modprobe ublk_drv 2>/dev/null && echo ublk || echo nbd)
 common="\"store\":\"$store\",\"mode\":\"$mode\",\"isolation\":{\"runtime\":\"firecracker\",\"image\":\"$I\",\"path\":\"/workspace\"}"
 
+# Warming the image makes the snapshot microVMs are restored from.
+t=$(date +%s%N)
+req /v1/images "{\"store\":\"$store\",\"image\":\"$I\",\"mode\":\"$mode\"}" >/dev/null || fail "warming the image"
+echo "{\"step\":\"warm the image and snapshot a microVM\",\"ms\":$(( ($(date +%s%N) - t) / 1000000 ))}"
+
 t=$(date +%s%N)
 result=$(call "{$common,\"snapshot\":\"$S\",\"dir\":\"$work/ws\",\"patch\":\"patches/vm-1\",
   \"command\":\"cat /etc/motd; pwd; cat src/a.ts; echo new > new.txt; echo outside > /etc/outside; uname -r; exit 5\"}")
@@ -86,11 +91,33 @@ req "/v1/calls/$id/detach" "{\"patch\":\"patches/vm-k3\"}" >/dev/null || fail "d
 pgrep -x firecracker >/dev/null && fail "a microVM outlived its detach"
 pass "a microVM call keeps what it left running, commits what it writes, and runs later commands beside it"
 
+# A call that leaves nothing running isn't kept, even when it may be.
+result=$(call "{$common,\"snapshot\":\"$S\",\"dir\":\"$work/nokeep\",\"keep\":true,\"command\":\"echo hi\"}")
+echo "$result" | grep -q '"kept":true' && fail "a call with nothing left running was kept: $result"
+pass "a call that leaves nothing running ends with its microVM"
+
+# A VM restored from the host's snapshot has the host's time, not the snapshot's.
+sleep 3
+result=$(call "{$common,\"snapshot\":\"$S\",\"dir\":\"$work/clock\",\"command\":\"date +%s\"}")
+guest=$(field "$result" stdout | base64 -d); host=$(date +%s)
+[ $(( host - guest )) -le 2 ] && [ $(( guest - host )) -le 2 ] || fail "the microVM's clock is $guest, the host's $host"
+pass "a restored microVM's clock is the host's"
+
+# Calls at once.
+t=$(date +%s%N)
+pids=()
+for i in 1 2 3 4; do req /v1/calls "{$common,\"snapshot\":\"$S\",\"dir\":\"$work/p$i\",\"command\":\"sleep 1\"}" > "$work/p$i.id" & pids+=($!); done
+wait "${pids[@]}"
+for i in 1 2 3 4; do wait_for "$(field "$(cat "$work/p$i.id")" id)" >/dev/null; done
+echo "{\"step\":\"4 calls of 1 s at once\",\"ms\":$(( ($(date +%s%N) - t) / 1000000 ))}"
+
 # Boot time, warm: five calls one after another.
 for i in 1 2 3 4 5; do
   t=$(date +%s%N)
   result=$(call "{$common,\"snapshot\":\"$S\",\"dir\":\"$work/w$i\",\"command\":\"true\"}")
   echo "{\"step\":\"warm call $i\",\"ms\":$(( ($(date +%s%N) - t) / 1000000 )),\"timings\":$(echo "$result" | grep -o '"timings":{[^}]*}' | sed 's/"timings"://')}"
 done
+grep -E "restoring one failed|no template to restore" "$work/daemon.log" && fail "microVMs booted instead of restoring"
+pass "every microVM was restored from the host's snapshot"
 kill "$(cat "$work/daemon.pid")"
 echo "ALL PASSED"

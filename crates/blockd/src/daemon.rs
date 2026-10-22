@@ -70,6 +70,8 @@ pub struct Daemon {
     calls: Mutex<HashMap<String, Arc<CallEntry>>>,
     /// Calls in microVMs that keep what they left running: their VM stays up.
     vms: Mutex<HashMap<String, Arc<KeptVm>>>,
+    /// What microVMs are restored from: made on the first, tried once.
+    vm_template: Mutex<Option<Option<Arc<crate::vm::Template>>>>,
     /// Images mounted read-only, shared by every container that uses one.
     images: Mutex<HashMap<Hash, Arc<Image>>>,
     /// Background processes (`spawn`), until read to their end and reaped.
@@ -275,6 +277,7 @@ impl Daemon {
             heads: Mutex::new(HashMap::new()),
             calls: Mutex::new(HashMap::new()),
             vms: Mutex::new(HashMap::new()),
+            vm_template: Mutex::new(None),
             images: Mutex::new(HashMap::new()),
             spawns: Mutex::new(HashMap::new()),
             counters: Mutex::new(Counters::default()),
@@ -898,7 +901,7 @@ impl Daemon {
         };
         let attached = timings.time("block", || crate::mount::attach_block(&device, mode, cache.path()))?;
         let vm = timings.time("vm", || {
-            crate::vm::Vm::start(
+            self.start_vm(
                 &firecracker,
                 &self.config.state.join(format!("vm-{id}")),
                 &[(image.as_path(), true), (attached.path(), true)],
@@ -977,6 +980,41 @@ impl Daemon {
     }
 
     /// A kept microVM call's operations: commit, status, exec, detach.
+    /// The snapshot microVMs are restored from: made once (the first time
+    /// takes seconds: it writes the VM's memory), tried once.
+    fn vm_template(&self, firecracker: &crate::vm::Firecracker) -> Option<Arc<crate::vm::Template>> {
+        self.vm_template
+            .lock()
+            .unwrap()
+            .get_or_insert_with(|| {
+                match crate::vm::Template::make(firecracker, &self.config.state.join("vm-template")) {
+                    Ok(template) => Some(Arc::new(template)),
+                    Err(e) => {
+                        tracing::warn!("microVMs will boot: no template to restore ({e:#})");
+                        None
+                    }
+                }
+            })
+            .clone()
+    }
+
+    /// A microVM restored from the host's template, or booted if it can't be.
+    fn start_vm(
+        &self,
+        firecracker: &crate::vm::Firecracker,
+        dir: &Path,
+        drives: &[(&Path, bool)],
+        path: &str,
+    ) -> Result<crate::vm::Vm> {
+        if let Some(template) = self.vm_template(firecracker) {
+            match crate::vm::Vm::restore(firecracker, &template, dir, drives, path) {
+                Ok(vm) => return Ok(vm),
+                Err(e) => tracing::warn!("booting a microVM: restoring one failed ({e:#})"),
+            }
+        }
+        crate::vm::Vm::start(firecracker, dir, drives, path)
+    }
+
     fn vm_op(&self, id: &str, kept: Arc<KeptVm>, op: &str, request: &Request) -> Result<Value> {
         #[derive(Deserialize, Default)]
         struct Body {
@@ -1390,6 +1428,10 @@ impl Daemon {
         let snapshot = Hash::from_hex(&request.image).context("`image` is not a snapshot id")?;
         let volume = self.volume(&request.store)?;
         let image = self.image(&volume, snapshot, mode(request.mode.as_deref())?)?;
+        // A host that runs microVMs makes their snapshot now, not on a call.
+        if let Some(firecracker) = &self.config.firecracker {
+            self.vm_template(firecracker);
+        }
         Ok(json!({ "dir": image.dir, "prefetching": image.prefetching }))
     }
 

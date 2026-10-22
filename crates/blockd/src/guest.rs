@@ -7,10 +7,13 @@
 //! from its upper layer, as `blockd call` makes it on a host.
 //!
 //! The host talks to it over vsock (port [`PORT`]): one JSON request per line,
-//! one JSON reply per line.
+//! one JSON reply per line. Nothing is mounted until `start`, so a VM booted
+//! once and snapshotted can be restored for any call: the host points the
+//! restored VM's drives at the call's disks, then starts it.
 //!
 //! ```text
 //! {"op":"ping"}                                         → {"ok":true}
+//! {"op":"start","path":…,"sectors":[…],"timeNs":…,"entropy":<base64>} → {"ok":true}
 //! {"op":"exec","command":…,"cwd":…,"env":{…},"timeoutMs":…} → {"exitCode":…,"timedOut":…,"stdout":…,"stderr":…}
 //! {"op":"processes"}                                    → {"processes":[{pid, command}]}
 //! {"op":"stop"}                                         → {"stopped":[…]}  (everything the commands left)
@@ -49,17 +52,6 @@ const IMAGE: &str = "/image";
 const BASE: &str = "/base";
 const MEMORY: &str = "/rw";
 const PATH: &str = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin";
-
-/// The workspace's path, from the kernel's command line (`alchemy.path=…`).
-fn workspace_path() -> String {
-    std::fs::read_to_string("/proc/cmdline")
-        .ok()
-        .and_then(|line| {
-            line.split_whitespace()
-                .find_map(|arg| arg.strip_prefix("alchemy.path=").map(str::to_string))
-        })
-        .unwrap_or_else(|| "/workspace".into())
-}
 
 fn sh(program: &str, args: &[&str]) -> Result<()> {
     let status = Command::new(program).args(args).status()?;
@@ -100,13 +92,67 @@ fn mount_syscall(kind: &str, source: &str, target: &str, options: &str) -> Resul
 }
 
 /// The VM's filesystems: the image and the workspace, each over memory.
-fn prepare(path: &str) -> Result<()> {
+/// What boot sets up: everything but the drives.
+fn prepare() -> Result<()> {
     mount("proc", "proc", "/proc", "")?;
     mount("sysfs", "sysfs", "/sys", "")?;
     mount("devtmpfs", "devtmpfs", "/dev", "")?;
     mount("tmpfs", "tmpfs", MEMORY, "mode=0755")?;
     for dir in ["root-upper", "root-work", "ws-upper", "ws-work"] {
         std::fs::create_dir_all(Path::new(MEMORY).join(dir))?;
+    }
+    Ok(())
+}
+
+/// The workspace's path, once started.
+static STARTED: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+
+/// A call's disks mounted, its clock set and its entropy mixed in. A VM
+/// restored from a snapshot has the snapshot's clock, its random state and
+/// its drives' old sizes; the host re-attaches the drives before this.
+fn start(request: &Value) -> Result<()> {
+    let path = request["path"].as_str().unwrap_or("/workspace").to_string();
+    if let Some(started) = STARTED.get() {
+        if *started == path {
+            return Ok(());
+        }
+        bail!("already started at {started}");
+    }
+    if let Some(ns) = request["timeNs"].as_u64() {
+        let now = libc::timespec {
+            tv_sec: (ns / 1_000_000_000) as libc::time_t,
+            tv_nsec: (ns % 1_000_000_000) as libc::c_long,
+        };
+        unsafe { libc::clock_settime(libc::CLOCK_REALTIME, &now) };
+    }
+    if let Some(entropy) = request["entropy"].as_str() {
+        let bytes = base64::engine::general_purpose::STANDARD.decode(entropy)?;
+        std::fs::write("/dev/urandom", bytes)?;
+    }
+    let sectors: Vec<u64> = request["sectors"]
+        .as_array()
+        .map(|all| all.iter().filter_map(Value::as_u64).collect())
+        .unwrap_or_default();
+    for (i, device) in ["vda", "vdb"].iter().enumerate() {
+        // The new size arrives as a config change; wait for it.
+        if let Some(&want) = sectors.get(i) {
+            let size = format!("/sys/block/{device}/size");
+            let deadline = Instant::now() + Duration::from_secs(2);
+            loop {
+                let have = std::fs::read_to_string(&size).ok().and_then(|s| s.trim().parse::<u64>().ok());
+                if have == Some(want) {
+                    break;
+                }
+                if Instant::now() > deadline {
+                    bail!("{device} is {have:?} sectors, not {want}");
+                }
+                std::thread::sleep(Duration::from_millis(1));
+            }
+        }
+        // What was read before the snapshot (the partition scan) is stale.
+        let file = std::fs::File::open(format!("/dev/{device}"))?;
+        const BLKFLSBUF: libc::c_ulong = 0x1261;
+        unsafe { libc::ioctl(std::os::fd::AsRawFd::as_raw_fd(&file), BLKFLSBUF as _, 0) };
     }
     mount("ext4", "/dev/vda", IMAGE, "ro,noload")?;
     mount(
@@ -128,6 +174,7 @@ fn prepare(path: &str) -> Result<()> {
     for (kind, target) in [("proc", "proc"), ("sysfs", "sys"), ("devtmpfs", "dev"), ("tmpfs", "tmp")] {
         let _ = mount(kind, kind, &format!("{ROOT}/{target}"), "");
     }
+    let _ = STARTED.set(path);
     Ok(())
 }
 
@@ -139,7 +186,9 @@ fn processes() -> Vec<User> {
         let Some(pid) = entry.file_name().to_str().and_then(|n| n.parse::<u32>().ok()) else {
             continue;
         };
-        if pid == me || pid == 1 {
+        // The commands' processes, in their root: not the kernel's helpers
+        // (`bpfilter_umh`) or anything else outside it.
+        if pid == me || pid == 1 || std::fs::read_link(entry.path().join("root")).ok().as_deref() != Some(Path::new(ROOT)) {
             continue;
         }
         let command = std::fs::read(entry.path().join("cmdline"))
@@ -243,15 +292,17 @@ fn stop() -> Vec<User> {
     running
 }
 
-fn handle(request: &Value, path: &str, commits: &Mutex<OverlayCommits>) -> Value {
+fn handle(request: &Value, commits: &Mutex<OverlayCommits>) -> Value {
     let outcome: Result<Value> = (|| match request["op"].as_str().unwrap_or("") {
         "ping" => Ok(json!({})),
-        "exec" => exec(request, path),
+        "start" => start(request).map(|()| json!({})),
+        _ if STARTED.get().is_none() => bail!("not started"),
+        "exec" => exec(request, STARTED.get().unwrap()),
         "processes" => Ok(json!({ "processes": processes() })),
         "stop" => Ok(json!({ "stopped": stop() })),
         "commit" => {
             let full = request["full"].as_bool().unwrap_or(false);
-            let workspace = PathBuf::from(format!("{ROOT}{path}"));
+            let workspace = PathBuf::from(format!("{ROOT}{}", STARTED.get().unwrap()));
             unsafe { libc::sync() };
             let mut bytes = Vec::new();
             let summary = commits.lock().unwrap().commit(
@@ -318,14 +369,7 @@ fn listen(port: u32) -> Result<i32> {
 
 /// The guest's first process: never returns.
 pub fn run() -> ! {
-    let path = {
-        // /proc isn't mounted yet: mount it to read the command line.
-        let _ = std::fs::create_dir_all("/proc");
-        let _ = mount_syscall("proc", "proc", "/proc", "");
-        workspace_path()
-    };
-    let _ = unsafe { libc::umount2(c"/proc".as_ptr(), libc::MNT_DETACH) };
-    if let Err(e) = prepare(&path) {
+    if let Err(e) = prepare() {
         eprintln!("blockd guest: {e:#}");
         unsafe { libc::reboot(libc::RB_POWER_OFF) };
     }
@@ -365,7 +409,7 @@ pub fn run() -> ! {
             continue;
         }
         let stream = unsafe { std::net::TcpStream::from_raw_fd(conn) };
-        let (path, commits) = (path.clone(), commits.clone());
+        let commits = commits.clone();
         std::thread::spawn(move || {
             let Ok(mut writer) = stream.try_clone() else { return };
             for line in BufReader::new(stream).lines() {
@@ -374,7 +418,7 @@ pub fn run() -> ! {
                     continue;
                 }
                 let reply = match serde_json::from_str::<Value>(&line) {
-                    Ok(request) => handle(&request, &path, &commits),
+                    Ok(request) => handle(&request, &commits),
                     Err(e) => json!({ "ok": false, "error": format!("bad request: {e}") }),
                 };
                 if writer.write_all(format!("{reply}\n").as_bytes()).is_err() {
