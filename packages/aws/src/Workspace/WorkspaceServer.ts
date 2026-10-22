@@ -420,18 +420,18 @@ export const serveWorkspace = (config: HostConfig) =>
     const base = (s: Session) =>
       s.head.withPermits(1)(
         Effect.gen(function* () {
-          yield* ensureHead(s);
-          if (s.mounted) {
-            // What the head's own commands changed counts as changed since now.
-            const checkpoint = yield* daemon.post<{ readonly paths: ReadonlyArray<string> | null }>(
-              `/v1/heads/${encodeURIComponent(s.name)}/checkpoint`,
-            );
-            if (checkpoint.paths === null || checkpoint.paths.length > 0) {
-              appendLog(s, checkpoint.paths);
-              s.dirty = true;
-            }
-            yield* snapshotIfDirty(s);
+          // Mounting folds in what another host journaled but never
+          // snapshotted (it took the session over from a host that died).
+          yield* mount(s);
+          // What the head's own commands changed counts as changed since now.
+          const checkpoint = yield* daemon.post<{ readonly paths: ReadonlyArray<string> | null }>(
+            `/v1/heads/${encodeURIComponent(s.name)}/checkpoint`,
+          );
+          if (checkpoint.paths === null || checkpoint.paths.length > 0) {
+            appendLog(s, checkpoint.paths);
+            s.dirty = true;
           }
+          yield* snapshotIfDirty(s);
           const snapshot = yield* headSnapshot(s.name);
           if (snapshot === null) return yield* fail(`${s.name} has no head`);
           return { snapshot, seq: s.seq };
@@ -767,14 +767,15 @@ export const serveWorkspace = (config: HostConfig) =>
         ...(keep ? { keep } : {}),
         ...(isolation ? { isolation } : {}),
       };
-      // A mounted head is forked as it is: nothing waits for its snapshot,
-      // which uploads while the command runs and is the command's base.
+      // The head is forked as it is mounted: nothing waits for its snapshot,
+      // which uploads while the command runs and is the command's base. A
+      // head is mounted first, which folds in what another host journaled.
       const local = yield* timed(
         timings,
         "base",
         s.head.withPermits(1)(
           Effect.gen(function* () {
-            if (!s.mounted) return undefined;
+            yield* mount(s);
             const checkpoint = yield* daemon.post<{ readonly paths: ReadonlyArray<string> | null }>(
               `/v1/heads/${encodeURIComponent(s.name)}/checkpoint`,
             );
@@ -790,22 +791,16 @@ export const serveWorkspace = (config: HostConfig) =>
           }),
         ),
       );
-      const unmounted = local ? undefined : yield* timed(timings, "base", base(s));
-      const id =
-        local?.id ??
-        (yield* daemon.post<{ readonly id: string }>("/v1/calls", {
-          ...request,
-          snapshot: unmounted!.snapshot,
-        })).id;
+      const { id } = local;
       const reply = yield* timed(
         timings,
         "call",
         daemon.wait<CallReply & { readonly snapshot: string }>(id),
       );
       Object.assign(timings, prefixed("blockd.", reply.timings));
-      const from = local ? { snapshot: reply.snapshot, seq: local.seq } : unmounted!;
+      const from = { snapshot: reply.snapshot, seq: local.seq };
       // The head's snapshot as it forked holds what was unsnapshotted then.
-      if (local?.dirty) {
+      if (local.dirty) {
         s.points.push(reply.snapshot);
         if (s.landings === local.landings) {
           s.dirty = false;

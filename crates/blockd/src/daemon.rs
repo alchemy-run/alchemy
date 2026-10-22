@@ -1093,7 +1093,10 @@ impl Daemon {
             #[serde(default)]
             full: bool,
         }
-        if let Some(kept) = self.vms.lock().unwrap().get(id).cloned() {
+        // Not `if let` on the lock: its guard would live through the body,
+        // and detach takes the lock again.
+        let kept = self.vms.lock().unwrap().get(id).cloned();
+        if let Some(kept) = kept {
             return self.vm_op(id, kept, op, request);
         }
         let entry = self.call_entry(id)?;
