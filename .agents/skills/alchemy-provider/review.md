@@ -155,6 +155,10 @@ Skip this section when the provider can't host websites; then `src/<P>/Website` 
 | Undeclared names in examples | `rg -n 'existing\.' src/<P>` and read every `**Example:**` | every identifier is declared in the example |
 | Binding examples | count `@binding` blocks vs those showing the host and `Effect.provide(...)` | all of them |
 | Resource examples | every `@resource` has at least one example | yes |
+| Runtime JSDoc | `rg -c '\*\*Example:\*\*' <runtime file>` and its `###` headings next to `packages/aws/src/Lambda/Function.ts` | ten or more examples; intro, cautions, each form, configuration, packaging, a bindings section per service, event sources |
+| Fat-head JSDoc | the same for each fat-head resource next to `packages/aws/src/S3/Bucket.ts` / `packages/cloudflare/src/R2/Bucket.ts` | five or more sections: creating, each configurable feature, binding to a runtime, runtime operations, event sources where they apply |
+| Long-tail JSDoc | sample 20 long-tail files | intro with the cloud's type name, one complete creation example, a caution per replacing prop |
+| Prop JSDoc | `rg -n '^  [a-zA-Z]+\??:' src/<P>/<Service>/<Resource>.ts` minus documented ones | every prop and attribute documented, with `@default` where there is one |
 | Namespace casing | `ls src/<P>` | PascalCase |
 | Singular names | read the list of exported resource names | correct English (`Index`, `Process`, `Batch`) |
 | Scope | read the service list | no end-user data, OAuth-scoped, retired, or duplicate APIs; out-of-scope list on the overview page |
