@@ -1,16 +1,21 @@
 import crypto from "node:crypto";
+import * as dns from "node:dns/promises";
 import { DEFAULT_COMPATIBILITY_DATE } from "@alchemy.run/cloudflare-runtime/core/internal/constants";
 import * as durableObjects from "@distilled.cloud/cloudflare/durable-objects";
 import * as secretsStore from "@distilled.cloud/cloudflare/secrets-store";
 import * as workers from "@distilled.cloud/cloudflare/workers";
+import * as zones from "@distilled.cloud/cloudflare/zones";
+import { StateStoreError } from "alchemy/State/State";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
+import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { waitForSecretActive } from "../SecretsStore/Secret.ts";
 import { getCompatibility } from "../Workers/Compatibility.ts";
 import { WorkerBundle } from "../Workers/Sources/Rolldown.ts";
 import { contentTypeForModule, putWorkerScript } from "../Workers/WorkerProvider.ts";
+import { resolveZoneId } from "../Zone/lookup.ts";
 import { API_MAIN } from "./Api.ts";
 import {
   AuthTokenBinding,
@@ -35,17 +40,24 @@ const RUNTIME_STACK_NAME = "CloudflareStateStore";
  * lose the encryption key. The Worker itself is re-uploaded on every call
  * with the same `Store` Durable Object class, keeping its stored state.
  *
+ * With a `domain`, the Worker is also attached to that hostname as a custom
+ * domain and served there.
+ *
  * Returns the Worker's URL, and the auth token when this call created it
  * (an existing token can only be read back through a Worker binding).
  */
 export const deployStateStoreWorker = Effect.fn("state_store.deploy_worker")(function* ({
   accountId,
   scriptName,
+  domain,
 }: {
   accountId: string;
   scriptName: string;
+  domain: string | undefined;
 }) {
   yield* Effect.annotateCurrentSpan({ "alchemy.state_store.script_name": scriptName });
+  // Fail on a hostname another Worker owns before changing anything.
+  if (domain !== undefined) yield* observeStateStoreDomain({ accountId, scriptName, domain });
   const storeId = yield* ensureSecretsStore(accountId);
   const authToken = yield* ensureSecret({
     accountId,
@@ -132,8 +144,112 @@ export const deployStateStoreWorker = Effect.fn("state_store.deploy_worker")(fun
     enabled: true,
     previewsEnabled: true,
   });
+  if (domain !== undefined) yield* attachDomain({ accountId, scriptName, domain });
+  return { url: yield* stateStoreUrl({ accountId, scriptName, domain }), authToken };
+});
+
+/** The origin a store serves on: its custom domain, or its workers.dev URL. */
+export const stateStoreUrl = Effect.fn(function* ({
+  accountId,
+  scriptName,
+  domain,
+}: {
+  accountId: string;
+  scriptName: string;
+  domain: string | undefined;
+}) {
+  if (domain !== undefined) return `https://${domain}`;
   const { subdomain } = yield* workers.getSubdomain({ accountId });
-  return { url: `https://${scriptName}.${subdomain}.workers.dev`, authToken };
+  return `https://${scriptName}.${subdomain}.workers.dev`;
+});
+
+/**
+ * The zone of the custom domain `domain` when it is attached to this Worker,
+ * or `undefined`. Fails when another Worker owns the hostname.
+ */
+export const observeStateStoreDomain = Effect.fn(function* ({
+  accountId,
+  scriptName,
+  domain,
+}: {
+  accountId: string;
+  scriptName: string;
+  domain: string;
+}) {
+  const { result } = yield* workers.listDomains({ accountId, hostname: domain });
+  const attached = (result ?? []).find((d) => d.hostname === domain);
+  if (attached === undefined) return undefined;
+  if (attached.service !== scriptName) {
+    return yield* new StateStoreError({
+      message:
+        `Cannot serve the Cloudflare State Store '${scriptName}' on '${domain}': it is ` +
+        `already attached to Worker '${attached.service ?? "<unknown>"}'.`,
+    });
+  }
+  return attached.zoneId ?? undefined;
+});
+
+/** Attach `domain` to the Worker as a custom domain, unless it already is. */
+const attachDomain = Effect.fn(function* ({
+  accountId,
+  scriptName,
+  domain,
+}: {
+  accountId: string;
+  scriptName: string;
+  domain: string;
+}) {
+  if ((yield* observeStateStoreDomain({ accountId, scriptName, domain })) !== undefined) return;
+  const zoneId = yield* resolveZoneId({ accountId, zone: undefined, hostname: domain }).pipe(
+    Effect.mapError(
+      (cause) =>
+        new StateStoreError({
+          message: `Couldn't find the Cloudflare zone of '${domain}' on account ${accountId}.`,
+          cause,
+        }),
+    ),
+  );
+  yield* workers.putDomain({ accountId, hostname: domain, service: scriptName, zoneId }).pipe(
+    // The script registry can lag the upload by a few seconds.
+    Effect.retry({
+      while: (error) => error._tag === "WorkerNotFound",
+      schedule: Schedule.max([Schedule.exponential(200), Schedule.recurs(15)]),
+    }),
+  );
+  yield* waitForAuthoritativeDns(zoneId, domain);
+});
+
+/**
+ * Wait until the zone's nameservers answer for a newly attached `domain`.
+ * Resolving it any earlier caches NXDOMAIN in the local resolver for the
+ * zone's negative TTL (30 minutes on Cloudflare), and the store would be
+ * unreachable from this machine for that long.
+ */
+const waitForAuthoritativeDns = Effect.fn(function* (zoneId: string, domain: string) {
+  const { nameServers } = yield* zones.getZone({ zoneId });
+  const servers = yield* Effect.forEach(nameServers, (ns) =>
+    Effect.tryPromise(() => dns.resolve4(ns)).pipe(Effect.orElseSucceed(() => [])),
+  ).pipe(Effect.map((ips) => ips.flat()));
+  if (servers.length === 0) return;
+  // A fresh resolver per attempt: one caches the NXDOMAIN it got first.
+  const resolver = Effect.sync(() => {
+    const resolver = new dns.Resolver({ timeout: 2_000, tries: 1 });
+    resolver.setServers(servers);
+    return resolver;
+  });
+  yield* resolver.pipe(
+    Effect.flatMap((resolver) => Effect.tryPromise(() => resolver.resolve4(domain))),
+    Effect.filterOrFail((addresses) => addresses.length > 0),
+    // Cloudflare can take a minute to publish a re-attached custom domain.
+    Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 45 }),
+    Effect.mapError(
+      (cause) =>
+        new StateStoreError({
+          message: `'${domain}' was attached to the State Store but its DNS record never appeared.`,
+          cause,
+        }),
+    ),
+  );
 });
 
 /** The account's Secrets Store (Cloudflare allows one), created when missing. */

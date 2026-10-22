@@ -37,7 +37,7 @@ import {
   writeStoreCredentials,
   isStateStoreCredentialsStale,
 } from "./CredentialsFile.ts";
-import { deployStateStoreWorker } from "./Deploy.ts";
+import { deployStateStoreWorker, observeStateStoreDomain, stateStoreUrl } from "./Deploy.ts";
 import { AuthTokenSecretName, EncryptionKeySecretName, stateStoreSecretName } from "./Token.ts";
 
 const CI = Config.Boolean("CI").pipe(Config.withDefault(false));
@@ -50,6 +50,12 @@ export type CloudflareStateOptions = {
    * store somewhere else.
    */
   readonly accountId?: string;
+  /**
+   * Serve the store on this hostname in one of the account's zones instead of
+   * its workers.dev URL, for networks that can't reach workers.dev. Bootstrap
+   * attaches it to the store's Worker as a custom domain.
+   */
+  readonly domain?: string;
 } & (
   | {
       /**
@@ -75,7 +81,7 @@ export const state = (options: CloudflareStateOptions = {}) =>
     State,
     Effect.gen(function* () {
       const isCI = yield* CI;
-      const { name } = options;
+      const { name, domain } = options;
       const scriptName = options.workerName ?? stateStoreScriptName(name);
       const profileName = yield* currentProfileName;
       const credStore = yield* CredentialsStore;
@@ -91,7 +97,7 @@ export const state = (options: CloudflareStateOptions = {}) =>
         const accountId = yield* resolveAccountId(options.accountId);
         const deployMissing = Provisioning.deployMissing(
           store,
-          bootstrap({ workerName: scriptName, profile: profileName, accountId }),
+          bootstrap({ workerName: scriptName, profile: profileName, accountId, domain }),
         );
 
         const ensureLatest = ({ url, authToken }: { url: string; authToken: string }) =>
@@ -114,7 +120,7 @@ export const state = (options: CloudflareStateOptions = {}) =>
                   label: `Updating Cloudflare State Store '${scriptName}'`,
                   detail: `v${observed ?? "unknown"} → v${expected}`,
                 },
-                deployStateStore({ accountId, scriptName, profileName, isCI }).pipe(
+                deployStateStore({ accountId, scriptName, domain, profileName, isCI }).pipe(
                   Effect.flatMap(makeCloudflareStateStore),
                 ),
               );
@@ -128,7 +134,13 @@ export const state = (options: CloudflareStateOptions = {}) =>
               return yield* makeCloudflareStateStore(credentials);
             }
             // our token is wrong, force a refresh
-            const refreshed = yield* loginWithCloudflare(profileName, true, scriptName, accountId);
+            const refreshed = yield* loginWithCloudflare(
+              profileName,
+              true,
+              scriptName,
+              accountId,
+              domain,
+            );
             if (!(yield* checkHttpStateStoreAuth(refreshed))) {
               return yield* new StateStoreError({
                 message: `${store.label} authentication failed, after refreshing credentials.`,
@@ -151,13 +163,16 @@ export const state = (options: CloudflareStateOptions = {}) =>
                 `Cloudflare account; re-deriving for the current account.`,
             );
             yield* deleteStoreCredentials(credStore, profileName, scriptName).pipe(Effect.ignore);
+          } else if (!servesOn(credentials.url, domain)) {
+            // The store's `domain` changed since these were cached.
+            yield* deleteStoreCredentials(credStore, profileName, scriptName).pipe(Effect.ignore);
           } else {
             return yield* ensureLatest(credentials);
           }
         }
-        if (yield* isStateStoreServing(accountId, scriptName)) {
+        if (yield* isStateStoreServing(accountId, scriptName, domain)) {
           return yield* ensureLatest(
-            yield* loginWithCloudflare(profileName, false, scriptName, accountId),
+            yield* loginWithCloudflare(profileName, false, scriptName, accountId, domain),
           );
         }
         return yield* deployMissing;
@@ -182,6 +197,8 @@ export interface BootstrapOptions {
   workerName?: string;
   /** The account to deploy into. Defaults to the profile's account. */
   accountId?: string;
+  /** A hostname to serve the store on, attached as a custom domain. */
+  domain?: string;
   /** @default false */
   force?: boolean;
   /** @default "default" */
@@ -215,6 +232,7 @@ export const bootstrap = (options: BootstrapOptions = {}) =>
       const scriptName = options.workerName ?? STATE_STORE_SCRIPT_NAME;
       const force = options.force ?? false;
       const accountId = yield* resolveAccountId(options.accountId);
+      const { domain } = options;
       yield* Effect.annotateCurrentSpan({
         "alchemy.state_store.script_name": scriptName,
         "alchemy.state_store.profile": profileName,
@@ -223,13 +241,19 @@ export const bootstrap = (options: BootstrapOptions = {}) =>
       });
       yield* annotateAccountHash(accountId);
 
-      const serving = yield* isStateStoreServing(accountId, scriptName);
+      const serving = yield* isStateStoreServing(accountId, scriptName, domain);
       if (serving && !force) {
         yield* Interaction.accessors.output.info(
           `Worker '${scriptName}' already exists; adopting and refreshing credentials. ` +
             `Use --force to redeploy.`,
         );
-        const credentials = yield* loginWithCloudflare(profileName, true, scriptName, accountId);
+        const credentials = yield* loginWithCloudflare(
+          profileName,
+          true,
+          scriptName,
+          accountId,
+          domain,
+        );
         const { matches } = yield* checkStateStoreVersion(credentials.url, scriptName, accountId);
         if (matches) return yield* makeCloudflareStateStore(credentials);
       }
@@ -237,7 +261,7 @@ export const bootstrap = (options: BootstrapOptions = {}) =>
         {
           label: `${serving ? "Updating" : "Deploying"} Cloudflare State Store '${scriptName}'`,
         },
-        deployStateStore({ accountId, scriptName, profileName, isCI }).pipe(
+        deployStateStore({ accountId, scriptName, domain, profileName, isCI }).pipe(
           Effect.flatMap(makeCloudflareStateStore),
         ),
       );
@@ -377,22 +401,24 @@ export const teardownStateStore = (options: TeardownOptions = {}) =>
 const deployStateStore = ({
   accountId,
   scriptName,
+  domain,
   profileName,
   isCI,
 }: {
   accountId: string;
   scriptName: string;
+  domain: string | undefined;
   profileName: string;
   isCI: boolean;
 }) =>
   Effect.gen(function* () {
-    const { url, authToken } = yield* deployStateStoreWorker({ accountId, scriptName });
+    const { url, authToken } = yield* deployStateStoreWorker({ accountId, scriptName, domain });
     // Cloudflare's worker upload is eventually consistent: the edge can keep
     // serving the previous version for several seconds. Wait until `/version`
     // reports the version this CLI was built against before using it.
     yield* waitForStateStoreVersion(url, scriptName, accountId);
     if (authToken === undefined) {
-      return yield* loginWithCloudflare(profileName, true, scriptName, accountId);
+      return yield* loginWithCloudflare(profileName, true, scriptName, accountId, domain);
     }
     const credentials = { url, authToken, accountId };
     if (!isCI) {
@@ -438,9 +464,8 @@ const resolveAccountId = (pinned: string | undefined) =>
  * 1. Find the single account-wide Secrets Store.
  * 2. Upload a short-lived edge-preview worker that binds the
  *    auth-token secret and returns its value.
- * 3. Derive the state-store worker URL from
- *    {@link STATE_STORE_SCRIPT_NAME} and the account's workers.dev
- *    subdomain.
+ * 3. Derive the state-store worker URL: its custom `domain`, or its
+ *    workers.dev URL.
  * 4. Persist `{ url, token }` under the `http-state-store`
  *    credentials file.
  *
@@ -458,6 +483,7 @@ export const loginWithCloudflare = Effect.fn("state_store.login", {
     force: boolean,
     scriptName: string = STATE_STORE_SCRIPT_NAME,
     pinnedAccountId?: string,
+    domain?: string,
   ) {
     yield* Effect.annotateCurrentSpan({ "alchemy.state_store.script_name": scriptName });
     const credStore = yield* CredentialsStore;
@@ -470,7 +496,11 @@ export const loginWithCloudflare = Effect.fn("state_store.login", {
       // Ignore a cache minted for a different account (or a legacy file with
       // no `accountId`) — reusing it would hand back the wrong account's
       // state-store URL. Fall through to re-derive against `accountId`.
-      if (credentials && !isStateStoreCredentialsStale(credentials, accountId)) {
+      if (
+        credentials &&
+        !isStateStoreCredentialsStale(credentials, accountId) &&
+        servesOn(credentials.url, domain)
+      ) {
         return credentials;
       }
     }
@@ -489,12 +519,18 @@ export const loginWithCloudflare = Effect.fn("state_store.login", {
           });
         }
 
-        // 2. Fetch the auth-token from Secrets Store with a temporary edge-preview worker.
+        // 2. Fetch the auth-token from Secrets Store with a temporary edge-preview
+        // worker, served on the custom domain when the store has one attached.
+        const zoneId =
+          domain === undefined
+            ? undefined
+            : yield* observeStateStoreDomain({ accountId, scriptName, domain });
         const authToken = yield* readSecretViaEdge(
           accountId,
           scriptName,
           store.id,
           stateStoreSecretName(AuthTokenSecretName, scriptName),
+          domain !== undefined && zoneId !== undefined ? { zoneId, host: domain } : undefined,
         ).pipe(
           Effect.retry({
             while: (error) =>
@@ -509,8 +545,7 @@ export const loginWithCloudflare = Effect.fn("state_store.login", {
         );
 
         // 3. Derive the deployed worker URL.
-        const { subdomain } = yield* workers.getSubdomain({ accountId });
-        const url = `https://${scriptName}.${subdomain}.workers.dev`;
+        const url = yield* stateStoreUrl({ accountId, scriptName, domain });
         const credentials = {
           url,
           authToken: authToken.trim(),
@@ -561,16 +596,30 @@ const isStateStoreAvailable = (accountId: string, scriptName: string) =>
   });
 
 /**
+ * Whether cached credentials point at where the store serves now: its
+ * custom `domain`, or workers.dev without one.
+ */
+const servesOn = (url: string, domain: string | undefined) =>
+  domain === undefined
+    ? new URL(url).hostname.endsWith(".workers.dev")
+    : url === `https://${domain}`;
+
+/**
  * Does this account have a *functioning* state-store worker,
  * verified by checking the /version endpoint
  *
  */
-const isStateStoreServing = (accountId: string, scriptName: string) =>
+const isStateStoreServing = (accountId: string, scriptName: string, domain?: string) =>
   Effect.gen(function* () {
-    const url = yield* workers.getSubdomain({ accountId }).pipe(
-      Effect.map(({ subdomain }) =>
-        subdomain ? `https://${scriptName}.${subdomain}.workers.dev` : undefined,
-      ),
+    // Ask the API whether the domain is attached before resolving it, so a
+    // lookup before the first deploy can't leave a cached NXDOMAIN behind.
+    if (
+      domain !== undefined &&
+      (yield* observeStateStoreDomain({ accountId, scriptName, domain })) === undefined
+    ) {
+      return false;
+    }
+    const url = yield* stateStoreUrl({ accountId, scriptName, domain }).pipe(
       Effect.orElseSucceed(() => undefined),
     );
     if (url === undefined) return false;
@@ -710,6 +759,7 @@ const readSecretViaEdge = (
   scriptName: string,
   storeId: string,
   secretName: string,
+  route?: { readonly zoneId: string; readonly host: string },
 ) =>
   Effect.gen(function* () {
     const http = yield* HttpClient.HttpClient;
@@ -723,6 +773,7 @@ const readSecretViaEdge = (
       scriptName,
       files: [file],
       bindings: [{ type: "secrets_store_secret", name: "SECRET", secretName, storeId }],
+      route,
     }).pipe(
       Effect.provideService(
         CloudflareEnvironment.CloudflareEnvironment,

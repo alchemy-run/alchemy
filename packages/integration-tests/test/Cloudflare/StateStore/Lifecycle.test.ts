@@ -1,6 +1,10 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
-import { bootstrap, teardownStateStore } from "@alchemy.run/cloudflare/StateStore/State";
+import {
+  bootstrap,
+  loginWithCloudflare,
+  teardownStateStore,
+} from "@alchemy.run/cloudflare/StateStore/State";
 import {
   AuthTokenSecretName,
   EncryptionKeySecretName,
@@ -10,6 +14,8 @@ import * as secretsStore from "@distilled.cloud/cloudflare/secrets-store";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import { expect } from "alchemy-test";
 import * as Alchemist from "alchemy/Alchemist";
+import { currentProfileName } from "alchemy/Auth/Profile";
+import { checkHttpStateStoreAuth } from "alchemy/State/HttpStateStore";
 import { State } from "alchemy/State/State";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Cause from "effect/Cause";
@@ -198,6 +204,71 @@ test.provider(
 
       yield* teardownStateStore({ workerName, accountId });
       expect(yield* scriptExists(accountId, workerName)).toBe(false);
+    }),
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:statestore", "live"],
+    timeout: 300_000,
+  },
+);
+
+const ZONE = process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
+
+/** The Workers custom domains attached to `hostname`. */
+const attachedDomains = (accountId: string, hostname: string) =>
+  workers
+    .listDomains({ accountId, hostname })
+    .pipe(
+      Effect.map(({ result }) =>
+        (result ?? []).filter((d) => d.hostname === hostname).map((d) => d.service),
+      ),
+    );
+
+test.provider(
+  "a state store with a domain serves and logs in on it",
+  () =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const stage = Test.defaultStage().replaceAll("_", "-");
+      const workerName = `alchemy-state-store-domain-${stage}`;
+      const domain = `state-${stage}.${ZONE}`;
+      const record = {
+        kind: "resource" as const,
+        resourceType: "Test.Resource",
+        namespace: undefined,
+        fqn: "domain/a",
+        logicalId: "a",
+        instanceId: "kept",
+        providerVersion: 1,
+        status: "created" as const,
+        downstream: [],
+        bindings: [],
+        props: { hello: "world" },
+        attr: { id: "kept" },
+      };
+      yield* teardownStateStore({ workerName });
+
+      // First use deploys the store and attaches the domain to its Worker.
+      const state = yield* State.pipe(
+        Effect.flatten,
+        Effect.provide(Cloudflare.state({ workerName, domain })),
+      );
+      yield* state.set({ stack: "domain", stage: "test", fqn: "domain/a", value: record });
+      expect(yield* attachedDomains(accountId, domain)).toEqual([workerName]);
+
+      // A fresh login reads the token through a preview served on the domain
+      // and points the store at it.
+      const profile = yield* currentProfileName;
+      const credentials = yield* loginWithCloudflare(profile, true, workerName, accountId, domain);
+      expect(credentials.url).toBe(`https://${domain}`);
+      expect(yield* checkHttpStateStoreAuth(credentials)).toBe(true);
+      const adopted = yield* bootstrap({ workerName, domain });
+      expect(yield* adopted.get({ stack: "domain", stage: "test", fqn: "domain/a" })).toEqual(
+        record,
+      );
+
+      yield* teardownStateStore({ workerName });
+      expect(yield* scriptExists(accountId, workerName)).toBe(false);
+      expect(yield* attachedDomains(accountId, domain)).toEqual([]);
     }),
   {
     tags: ["provider:cloudflare", "provider:cloudflare:statestore", "live"],

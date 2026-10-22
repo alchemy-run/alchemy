@@ -163,6 +163,16 @@ fails instead of reading or deploying the store there:
 state: Cloudflare.state({ accountId: "c8eeff0e..." }),
 ```
 
+### Serve it on your own domain
+
+The store answers on its `workers.dev` URL. Some networks can't reach
+`workers.dev`, so give it a hostname in one of your zones instead. Alchemy
+attaches it to the store's Worker as a custom domain and uses it from then on:
+
+```typescript
+state: Cloudflare.state({ domain: "alchemy-state.example.com" }),
+```
+
 ## Postgres state store
 
 `postgresState()` persists state in a Postgres database you already run, and it locks: each `(stack, stage)` holds a session advisory lock for the duration of a run, so two concurrent deploys of the same stage cannot interleave.
