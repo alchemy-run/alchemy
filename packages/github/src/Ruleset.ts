@@ -139,6 +139,17 @@ export interface RulesetProps {
        * Required review thread resolution.
        */
       requiredReviewThreadResolution?: boolean;
+
+      /**
+       * Merge methods allowed for pull requests. GitHub allows all three when omitted.
+       */
+      allowedMergeMethods?: Array<"merge" | "squash" | "rebase">;
+
+      /**
+       * Require another approval for changes pushed by someone other than the commit author.
+       * @default true
+       */
+      requireExtraApprovalForUnattributedChanges?: boolean;
     };
 
     /**
@@ -387,19 +398,24 @@ export const RulesetProvider = () =>
         rules.push({ type: "required_signatures" });
       }
       if (news.rules?.pullRequest) {
-        rules.push({
-          type: "pull_request",
-          parameters: {
-            required_approving_review_count:
-              news.rules.pullRequest.requiredApprovingReviewCount ?? 0,
-            dismiss_stale_reviews_on_push:
-              news.rules.pullRequest.dismissStaleReviewsOnPush ?? false,
-            require_code_owner_review: news.rules.pullRequest.requireCodeOwnerReview ?? false,
-            require_last_push_approval: news.rules.pullRequest.requireLastPushApproval ?? false,
-            required_review_thread_resolution:
-              news.rules.pullRequest.requiredReviewThreadResolution ?? false,
-          },
-        });
+        const pullRequest = news.rules.pullRequest;
+        // `require_extra_approval_for_unattributed_changes` is accepted by the API but missing
+        // from its OpenAPI description, so it is added outside the typed literal.
+        const parameters = {
+          required_approving_review_count: pullRequest.requiredApprovingReviewCount ?? 0,
+          dismiss_stale_reviews_on_push: pullRequest.dismissStaleReviewsOnPush ?? false,
+          require_code_owner_review: pullRequest.requireCodeOwnerReview ?? false,
+          require_last_push_approval: pullRequest.requireLastPushApproval ?? false,
+          required_review_thread_resolution: pullRequest.requiredReviewThreadResolution ?? false,
+          ...(pullRequest.allowedMergeMethods !== undefined && {
+            allowed_merge_methods: pullRequest.allowedMergeMethods,
+          }),
+          ...(pullRequest.requireExtraApprovalForUnattributedChanges !== undefined && {
+            require_extra_approval_for_unattributed_changes:
+              pullRequest.requireExtraApprovalForUnattributedChanges,
+          }),
+        };
+        rules.push({ type: "pull_request", parameters });
       }
       if (news.rules?.requiredStatusChecks) {
         rules.push({
