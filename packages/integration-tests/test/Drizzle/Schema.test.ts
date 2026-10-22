@@ -1,5 +1,11 @@
 import * as Drizzle from "@alchemy.run/drizzle";
 import { expect } from "@alchemy.run/test";
+import {
+  Interaction,
+  type InteractionError,
+  type SelectOptions,
+  TerminalCancelled,
+} from "alchemy/Interaction";
 import * as Provider from "alchemy/Provider";
 import * as Stack from "alchemy/Stack";
 import { State } from "alchemy/State";
@@ -7,6 +13,7 @@ import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
+import * as Predicate from "effect/Predicate";
 import * as Result from "effect/Result";
 
 const { test } = Test.make({ providers: Drizzle.providers() });
@@ -54,6 +61,30 @@ export const users = sqliteTable("users", {
   fullName: text("full_name").notNull(),
 });
 `;
+
+const RENAMED_SCHEMA_SOURCE = `
+import { pgTable, serial, text } from "drizzle-orm/pg-core";
+
+export const people = pgTable("people", {
+  id: serial("id").primaryKey(),
+  fullName: text("full_name").notNull(),
+});
+`;
+
+// The ambient Interaction with `select` answered by `answer`.
+const scriptedSelect = Effect.fn(function* (
+  answer: (options: SelectOptions<unknown>) => Effect.Effect<unknown, InteractionError>,
+) {
+  const base = yield* Interaction;
+  return Interaction.of({
+    ...base,
+    prompt: {
+      ...base.prompt,
+      select: <Value>(options: SelectOptions<Value>) =>
+        answer(options) as Effect.Effect<Value, InteractionError>,
+    },
+  });
+});
 
 const stageWorkspace = (initialSource: string) =>
   Effect.gen(function* () {
@@ -201,7 +232,7 @@ test.provider(
 );
 
 test.provider(
-  "sqlite schemas generate migrations through the CLI fallback",
+  "sqlite schemas generate migrations programmatically",
   (stack) =>
     Effect.gen(function* () {
       const ws = yield* stageWorkspace(SQLITE_SCHEMA_SOURCE);
@@ -212,10 +243,7 @@ test.provider(
 
       const dirs = yield* readMigrationDirs(ws.out);
       expect(dirs).toHaveLength(1);
-      // The CLI owns the real write path for sqlite fallback; it should keep
-      // drizzle-kit's generated migration directory names instead of
-      // Alchemy's programmatic `<timestamp>_migration` convention.
-      expect(dirs[0]).not.toMatch(/_migration$/);
+      expect(dirs[0]).toMatch(/_migration$/);
 
       const snapshots = yield* readSnapshots(ws.out);
       expect(snapshots).toHaveLength(1);
@@ -225,7 +253,7 @@ test.provider(
 );
 
 test.provider(
-  "sqlite CLI fallback repeated deploys with no drift stay noop",
+  "sqlite repeated deploys with no drift stay noop",
   (stack) =>
     Effect.gen(function* () {
       const ws = yield* stageWorkspace(SQLITE_SCHEMA_SOURCE);
@@ -247,7 +275,7 @@ test.provider(
 );
 
 test.provider(
-  "sqlite CLI fallback updates after schema drift",
+  "sqlite updates after schema drift",
   (stack) =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
@@ -261,6 +289,7 @@ test.provider(
 
       const driftedSchemaPath = path.join(ws.root, "schema-sqlite-drifted.ts");
       yield* fs.writeFileString(driftedSchemaPath, SQLITE_DRIFTED_SCHEMA_SOURCE);
+      yield* Effect.sleep("1 second");
 
       yield* stack.deploy(
         Drizzle.Schema("sqlite-schema", {
@@ -273,7 +302,7 @@ test.provider(
       expect(yield* getStatus("sqlite-schema")).toEqual("updated");
       const dirs = yield* readMigrationDirs(ws.out);
       expect(dirs).toHaveLength(2);
-      expect(dirs.every((dir) => !dir.endsWith("_migration"))).toBe(true);
+      expect(dirs.every((dir) => dir.endsWith("_migration"))).toBe(true);
 
       const snapshots = yield* readSnapshots(ws.out);
       expect(snapshots).toHaveLength(2);
@@ -283,7 +312,7 @@ test.provider(
 );
 
 test.provider(
-  "sqlite CLI fallback refuses ambiguous drift without a TTY",
+  "sqlite refuses ambiguous drift",
   (stack) =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
@@ -301,7 +330,7 @@ test.provider(
 
       // A column rename is ambiguous (rename vs drop+create) and the chosen
       // SQL is applied to the real database later in the same deploy, so the
-      // non-interactive CLI must fail with guidance instead of deciding.
+      // deploy must fail with guidance instead of deciding.
       const result = yield* Effect.result(
         stack.deploy(
           Drizzle.Schema("sqlite-schema", {
@@ -318,6 +347,113 @@ test.provider(
       }
       // No migration was written for the undecided drift.
       expect(yield* readMigrationDirs(ws.out)).toEqual(initialDirs);
+    }),
+  { tags: ["unit", "local"] },
+);
+
+test.provider(
+  "ambiguous renames are answered through Alchemy's prompts",
+  (stack) =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const ws = yield* stageWorkspace(SCHEMA_SOURCE);
+
+      yield* stack.deploy(Drizzle.Schema("app-schema", { schema: ws.schemaPath, out: ws.out }));
+
+      const renamedSchemaPath = path.join(ws.root, "schema-renamed.ts");
+      yield* fs.writeFileString(renamedSchemaPath, RENAMED_SCHEMA_SOURCE);
+      yield* Effect.sleep("1 second");
+
+      // Answer every rename-or-create question with the offered rename.
+      const asked: Array<{ message: string; labels: string[] }> = [];
+      const scripted = yield* scriptedSelect((options) =>
+        Effect.sync(() => {
+          asked.push({
+            message: options.message,
+            labels: options.options.map((option) => option.label),
+          });
+          const rename = options.options.find(
+            ({ value }) => Predicate.hasProperty(value, "type") && value.type === "rename",
+          );
+          return (rename ?? options.options[0]!).value;
+        }),
+      );
+
+      yield* stack
+        .deploy(Drizzle.Schema("app-schema", { schema: renamedSchemaPath, out: ws.out }))
+        .pipe(Effect.provideService(Interaction, scripted));
+
+      // Table first, then the column inside the already-renamed table.
+      expect(asked).toEqual([
+        {
+          message: "Is table people created or renamed from another table?",
+          labels: ["+ people", "~ users › people"],
+        },
+        {
+          message: "Is column people.full_name created or renamed from another column?",
+          labels: ["+ people.full_name", "~ people.name › people.full_name"],
+        },
+      ]);
+      const dirs = yield* readMigrationDirs(ws.out);
+      expect(dirs).toHaveLength(2);
+      const sql = yield* fs.readFileString(path.join(ws.out, dirs[1]!, "migration.sql"));
+      expect(sql).toContain('ALTER TABLE "users" RENAME TO "people"');
+      expect(sql).toContain('RENAME COLUMN "name" TO "full_name"');
+      expect(sql).not.toContain("DROP");
+    }),
+  { tags: ["unit", "local"] },
+);
+
+test.provider(
+  "cancelling a rename prompt cancels the deploy without writing a migration",
+  (stack) =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const ws = yield* stageWorkspace(SCHEMA_SOURCE);
+
+      yield* stack.deploy(Drizzle.Schema("app-schema", { schema: ws.schemaPath, out: ws.out }));
+      const initialDirs = yield* readMigrationDirs(ws.out);
+
+      const renamedSchemaPath = path.join(ws.root, "schema-renamed.ts");
+      yield* fs.writeFileString(renamedSchemaPath, RENAMED_SCHEMA_SOURCE);
+
+      const scripted = yield* scriptedSelect(() => Effect.fail(new TerminalCancelled()));
+      const result = yield* stack
+        .deploy(Drizzle.Schema("app-schema", { schema: renamedSchemaPath, out: ws.out }))
+        .pipe(Effect.provideService(Interaction, scripted), Effect.result);
+
+      // The CLI exits quietly on a `TerminalCancelled`, so it must reach the
+      // caller unwrapped rather than as a generic Error.
+      expect(
+        Result.isFailure(result) && Predicate.isTagged(result.failure, "TerminalCancelled"),
+      ).toBe(true);
+      expect(yield* readMigrationDirs(ws.out)).toEqual(initialDirs);
+    }),
+  { tags: ["unit", "local"] },
+);
+
+test.provider(
+  "mysql schemas generate migrations programmatically",
+  (stack) =>
+    Effect.gen(function* () {
+      const ws = yield* stageWorkspace(`
+import { int, mysqlTable, varchar } from "drizzle-orm/mysql-core";
+
+export const users = mysqlTable("users", {
+  id: int("id").primaryKey(),
+  name: varchar("name", { length: 255 }).notNull(),
+});
+`);
+
+      yield* stack.deploy(
+        Drizzle.Schema("mysql-schema", { dialect: "mysql", schema: ws.schemaPath, out: ws.out }),
+      );
+
+      const snapshots = yield* readSnapshots(ws.out);
+      expect(snapshots).toHaveLength(1);
+      expect(snapshots[0]?.prevIds).toEqual([DRIZZLE_ORIGIN_UUID]);
     }),
   { tags: ["unit", "local"] },
 );

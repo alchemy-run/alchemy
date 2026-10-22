@@ -1,15 +1,15 @@
 import * as crypto from "node:crypto";
 import * as Artifacts from "alchemy/Artifacts";
 import { isResolved } from "alchemy/Diff";
+import { Interaction } from "alchemy/Interaction";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
-import { exec } from "alchemy/Util/exec";
-import { isNonInteractive } from "alchemy/Util/interactive";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import * as Option from "effect/Option";
 import * as Path from "effect/Path";
-import type { PlatformError } from "effect/PlatformError";
-import { ChildProcess } from "effect/process";
+import * as Predicate from "effect/Predicate";
 import type { Providers } from "./Providers.ts";
 
 export type Dialect = "postgres" | "mysql" | "sqlite";
@@ -17,16 +17,61 @@ export type Dialect = "postgres" | "mysql" | "sqlite";
 type DrizzleSnapshot = {
   id?: string;
   prevIds?: string[];
+  ddl?: ReadonlyArray<DdlEntry>;
 };
 
+type DdlEntry = {
+  entityType: string;
+  schema?: string;
+  table?: string;
+  name?: string;
+};
+
+// drizzle-kit's `MissingHint` / `Hint`, narrowed to what `generateMigration`
+// can ask: rename-or-create. Its `confirm_data_loss` questions need a live
+// database (`push` checks whether tables are empty), so generate never raises
+// them. Entity ids are tuples: `[name]`, `[schema, name]` or
+// `[schema, table, name]`.
+type MissingHint = {
+  type: "rename_or_create";
+  kind: string;
+  entity: ReadonlyArray<string>;
+};
+
+type Hint =
+  | { type: "rename"; kind: string; from: ReadonlyArray<string>; to: ReadonlyArray<string> }
+  | { type: "create"; kind: string; entity: ReadonlyArray<string> };
+
+// The shape shared by `drizzle-kit/payload/{postgres,mysql,sqlite}`.
 type DrizzleKitApi = {
-  generateDrizzleJson?: (
+  generateDrizzleJson: (
     imports: Record<string, unknown>,
     prevId?: string,
-    schemaFilters?: string[],
-  ) => Promise<unknown>;
-  generateMigration?: (prev: unknown, cur: unknown) => Promise<string[]>;
+  ) => Promise<DrizzleSnapshot>;
+  generateMigration: (
+    prev: DrizzleSnapshot,
+    cur: DrizzleSnapshot,
+    options?: { hints?: Hint[] },
+  ) => Promise<string[]>;
 };
+
+/** drizzle-kit needs answers before it can generate the migration. */
+class MissingHints extends Data.TaggedError("MissingHints")<{
+  readonly missing: ReadonlyArray<MissingHint>;
+}> {}
+
+class GenerateMigrationFailed extends Data.TaggedError("GenerateMigrationFailed")<{
+  readonly cause: unknown;
+}> {
+  override get message() {
+    return `drizzle-kit generateMigration failed: ${this.cause}`;
+  }
+}
+
+/** An ambiguous schema change with no terminal to ask. */
+class UndecidedSchemaChange extends Data.TaggedError("UndecidedSchemaChange")<{
+  readonly message: string;
+}> {}
 
 export type SchemaProps = {
   /**
@@ -49,8 +94,8 @@ export type SchemaProps = {
    */
   out?: string;
   /**
-   * SQL dialect to generate migrations for. Selects which `drizzle-kit/api-*`
-   * module is loaded.
+   * SQL dialect to generate migrations for. Selects which
+   * `drizzle-kit/payload/*` module is loaded.
    *
    * @default "postgres"
    */
@@ -117,11 +162,11 @@ export const Schema = Resource<Schema>("Drizzle.Schema");
 const dialectModule = (dialect: Dialect): string => {
   switch (dialect) {
     case "postgres":
-      return "drizzle-kit/api-postgres";
+      return "drizzle-kit/payload/postgres";
     case "mysql":
-      return "drizzle-kit/api-mysql";
+      return "drizzle-kit/payload/mysql";
     case "sqlite":
-      return "drizzle-kit/api-sqlite";
+      return "drizzle-kit/payload/sqlite";
   }
 };
 
@@ -147,12 +192,10 @@ export const SchemaProvider = () =>
       const resolveSchema = (p: SchemaProps) => path.resolve(process.cwd(), p.schema);
 
       const loadSchemaModule = (p: SchemaProps) =>
-        Effect.gen(function* () {
-          const schemaPath = resolveSchema(p);
-          return yield* Effect.tryPromise({
-            try: () => import(/* @vite-ignore */ schemaPath) as Promise<Record<string, unknown>>,
-            catch: (cause) => new Error(`Failed to import schema at ${p.schema}: ${cause}`),
-          });
+        Effect.tryPromise({
+          try: () =>
+            import(/* @vite-ignore */ resolveSchema(p)) as Promise<Record<string, unknown>>,
+          catch: (cause) => new Error(`Failed to import schema at ${p.schema}: ${cause}`),
         });
 
       const loadKit = (dialect: Dialect) =>
@@ -164,170 +207,39 @@ export const SchemaProvider = () =>
             ),
         });
 
-      const drizzleKitBin = (dialect: Dialect) =>
-        Effect.gen(function* () {
-          const apiUrl = yield* Effect.try({
-            try: () => import.meta.resolve(dialectModule(dialect)),
-            catch: (cause) => new Error(`Failed to resolve drizzle-kit/${dialect}: ${cause}`),
-          });
-          const apiFileUrl = yield* Effect.try({
-            try: () => new URL(apiUrl),
-            catch: (cause) => new Error(`Failed to parse drizzle-kit/${dialect} URL: ${cause}`),
-          });
-          const apiPath = yield* path.fromFileUrl(apiFileUrl);
-          return path.join(path.dirname(apiPath), "bin.cjs");
-        });
-
-      const runDrizzleGenerate = (props: SchemaProps, out: string) =>
-        Effect.gen(function* () {
-          const dialect = props.dialect ?? "postgres";
-          const bin = yield* drizzleKitBin(dialect);
-          const schemaPath = resolveSchema(props);
-          const nodeExecPath = yield* Effect.sync(() => process.execPath);
-          const nodeModulesPath = path.join(process.cwd(), "node_modules");
-
-          // drizzle-kit globs the --schema/--out values; Windows backslashes
-          // are treated as glob escapes and match nothing, so pass forward
-          // slashes.
-          const args = [
-            bin,
-            "generate",
-            "--dialect",
-            dialect === "postgres" ? "postgresql" : dialect,
-            "--schema",
-            schemaPath.replaceAll("\\", "/"),
-            "--out",
-            out.replaceAll("\\", "/"),
-          ];
-
-          const commandOptions = {
-            cwd: process.cwd(),
-            env: { NODE_PATH: nodeModulesPath },
-            extendEnv: true,
-          };
-
-          // Hand the terminal to drizzle-kit only when this process may
-          // prompt at all — the same detection (TTY, CI, `--no-input`,
-          // `ALCHEMY_NO_TUI`, agent env) every other spawned command uses.
-          if (!isNonInteractive() && process.stderr.isTTY) {
-            const handle = yield* ChildProcess.make(nodeExecPath, args, {
-              ...commandOptions,
-              stdin: "inherit",
-              stdout: "inherit",
-              stderr: "inherit",
-            }).pipe(
-              Effect.mapError(
-                (cause) => new Error(`drizzle-kit generate failed: ${String(cause)}`),
-              ),
-            );
-            const exitCode = yield* handle.exitCode;
-            if (exitCode !== 0) {
-              return yield* Effect.fail(
-                new Error(`drizzle-kit generate failed with exit ${exitCode}`),
-              );
-            }
-            return;
-          }
-
-          const result = yield* exec(ChildProcess.make(nodeExecPath, args, commandOptions)).pipe(
-            Effect.mapError((cause) => new Error(`drizzle-kit generate failed: ${String(cause)}`)),
-          );
-          if (result.exitCode === 0) return;
-
-          // Since drizzle-kit 1.0.0-rc.4 the non-interactive CLI refuses
-          // ambiguous decisions (rename-vs-create, data-loss confirmation)
-          // with a `missing_hints` report on exit 2. These are deliberate
-          // safety prompts — the generated SQL is applied to the real
-          // database later in the same deploy — so we never answer them
-          // automatically. Ask the user to decide.
-          if (result.exitCode === 2) {
-            return yield* Effect.fail(
-              new Error(
-                [
-                  `drizzle-kit needs a decision for ${props.schema} that cannot be made non-interactively (rename vs create, or a change that loses data):`,
-                  "",
-                  result.stdout.trim(),
-                  "",
-                  "To resolve, generate the migration yourself and commit it:",
-                  `  npx drizzle-kit generate --dialect ${dialect === "postgres" ? "postgresql" : dialect} --schema ${props.schema} --out ${props.out ?? "./migrations"}`,
-                  "then re-run the deploy (the schema resource will see no drift and apply the committed migration).",
-                  "Alternatively, run the deploy in a terminal to answer drizzle-kit's prompts interactively.",
-                ].join("\n"),
-              ),
-            );
-          }
-
-          return yield* Effect.fail(
-            new Error(`drizzle-kit generate failed: ${result.stdout}\n${result.stderr}`),
-          );
-        });
-
       // List `<ts>_*` migration directories under `out`, sorted by numeric
       // prefix. Returns an empty array if `out` doesn't exist.
-      const listMigrationDirs = (out: string) =>
-        Effect.gen(function* () {
-          const exists = yield* fs.exists(out);
-          if (!exists) return [] as string[];
-          const entries = yield* fs.readDirectory(out);
-          return entries.filter((name) => /^\d+_/.test(name)).sort();
-        });
+      const listMigrationDirs = Effect.fn("Drizzle.listMigrationDirs")(function* (out: string) {
+        if (!(yield* fs.exists(out))) return [];
+        const entries = yield* fs.readDirectory(out);
+        return entries.filter((name) => /^\d+_/.test(name)).sort();
+      });
 
       // The latest snapshot is the head of the `prevIds` chain — the one no
       // other snapshot points back to. Directory-name order alone is not
       // enough: two migrations generated within the same second share the
       // timestamp prefix, and the random name suffix then decides the sort.
-      const readLatestSnapshot = (out: string) =>
-        Effect.gen(function* () {
-          const dirs = yield* listMigrationDirs(out);
-          const entries: Array<{ snapshot: DrizzleSnapshot; hash: string }> = [];
-          for (const dir of dirs) {
-            const snapshotPath = path.join(out, dir, "snapshot.json");
-            const exists = yield* fs.exists(snapshotPath);
-            if (!exists) continue;
-            const text = yield* fs.readFileString(snapshotPath);
-            entries.push({
-              snapshot: JSON.parse(text) as DrizzleSnapshot,
-              hash: sha(text),
-            });
-          }
-          if (entries.length === 0) return undefined;
-          const referenced = new Set(entries.flatMap((entry) => entry.snapshot.prevIds ?? []));
-          const head = entries.find(
-            (entry) => entry.snapshot.id !== undefined && !referenced.has(entry.snapshot.id),
-          );
-          // Fall back to name order for snapshots without id/prevIds chains.
-          return head ?? entries[entries.length - 1];
-        });
-
-      const detectDriftWithCli = (props: SchemaProps) =>
-        Effect.gen(function* () {
-          const out = resolveOut(props);
-          const tmpOut = yield* fs.makeTempDirectory({
-            prefix: "alchemy-drizzle-generate-",
+      const readLatestSnapshot = Effect.fn("Drizzle.readLatestSnapshot")(function* (out: string) {
+        const dirs = yield* listMigrationDirs(out);
+        const entries: Array<{ snapshot: DrizzleSnapshot; hash: string }> = [];
+        for (const dir of dirs) {
+          const snapshotPath = path.join(out, dir, "snapshot.json");
+          const exists = yield* fs.exists(snapshotPath);
+          if (!exists) continue;
+          const text = yield* fs.readFileString(snapshotPath);
+          entries.push({
+            snapshot: JSON.parse(text) as DrizzleSnapshot,
+            hash: sha(text),
           });
-
-          return yield* Effect.gen(function* () {
-            const outExists = yield* fs.exists(out);
-            if (outExists) yield* copyDirectory(out, tmpOut);
-
-            const before = yield* listMigrationDirs(tmpOut);
-            yield* runDrizzleGenerate(props, tmpOut);
-
-            const after = yield* listMigrationDirs(tmpOut);
-            const latest = yield* readLatestSnapshot(tmpOut);
-            const changed = after.some((dir) => !before.includes(dir));
-
-            const prevEntry = outExists ? yield* readLatestSnapshot(out) : undefined;
-
-            return {
-              mode: "cli" as const,
-              out,
-              cur: latest?.snapshot,
-              prevEntry,
-              changed,
-            };
-          }).pipe(Effect.ensuring(fs.remove(tmpOut, { recursive: true }).pipe(Effect.ignore)));
-        });
+        }
+        if (entries.length === 0) return undefined;
+        const referenced = new Set(entries.flatMap((entry) => entry.snapshot.prevIds ?? []));
+        const head = entries.find(
+          (entry) => entry.snapshot.id !== undefined && !referenced.has(entry.snapshot.id),
+        );
+        // Fall back to name order for snapshots without id/prevIds chains.
+        return head ?? entries[entries.length - 1];
+      });
 
       /**
        * Run drizzle-kit's diff against the latest stored snapshot and
@@ -335,96 +247,82 @@ export const SchemaProvider = () =>
        * `diff` (to decide whether the resource actually needs an update)
        * and `regenerate` (to decide whether to write a new migration dir).
        */
-      const detectDrift = (props: SchemaProps) =>
-        Effect.gen(function* () {
-          const out = resolveOut(props);
-          const dialect = props.dialect ?? "postgres";
+      const detectDrift = Effect.fn("Drizzle.detectDrift")(function* (props: SchemaProps) {
+        const out = resolveOut(props);
+        const { generateDrizzleJson, generateMigration } = yield* loadKit(
+          props.dialect ?? "postgres",
+        );
 
-          const kit = yield* loadKit(dialect);
-          if (!kit.generateDrizzleJson || !kit.generateMigration) {
-            return yield* detectDriftWithCli(props);
+        const schemaModule = yield* loadSchemaModule(props);
+        const prevEntry = yield* readLatestSnapshot(out);
+        const cur = yield* Effect.tryPromise({
+          try: () => generateDrizzleJson(schemaModule, prevEntry?.snapshot.id),
+          catch: (cause) => new Error(`drizzle-kit generateDrizzleJson failed: ${cause}`),
+        });
+
+        // For the initial migration, drizzle-kit needs an *empty* snapshot
+        // produced by `generateDrizzleJson({})`, not a bare `{}` — the
+        // snapshot has internal fields (`ddl`, etc.) that the differ reads.
+        const prev =
+          prevEntry?.snapshot ??
+          (yield* Effect.tryPromise({
+            try: () => generateDrizzleJson({}),
+            catch: (cause) =>
+              new Error(`drizzle-kit generateDrizzleJson (empty baseline) failed: ${cause}`),
+          }));
+
+        // An ambiguous change (rename vs create, or one that loses data)
+        // rejects with drizzle-kit's `MissingHintsError`. Its SQL is applied
+        // to the real database later in the same deploy, so we never answer
+        // it automatically: each round asks the user, then retries with
+        // the accumulated hints until drizzle-kit has no more questions.
+        const hints: Array<Hint> = [];
+        while (true) {
+          const result = yield* Effect.tryPromise({
+            try: () => generateMigration(prev, cur, { hints }),
+            catch: (cause) =>
+              Predicate.hasProperty(cause, "missingHints")
+                ? new MissingHints({ missing: cause.missingHints as Array<MissingHint> })
+                : new GenerateMigrationFailed({ cause }),
+          }).pipe(Effect.catchTag("MissingHints", Effect.succeed));
+          if (!(result instanceof MissingHints)) {
+            return { out, cur, prevEntry, sqlStatements: result };
           }
-
-          const generateDrizzleJson = kit.generateDrizzleJson;
-          const generateMigration = kit.generateMigration;
-
-          const schemaModule = yield* loadSchemaModule(props);
-          const prevEntry = yield* readLatestSnapshot(out);
-          const cur = yield* Effect.tryPromise({
-            try: () => generateDrizzleJson(schemaModule, prevEntry?.snapshot.id),
-            catch: (cause) => new Error(`drizzle-kit generateDrizzleJson failed: ${cause}`),
-          });
-
-          // For the initial migration, drizzle-kit needs an *empty* snapshot
-          // produced by `generateDrizzleJson({})`, not a bare `{}` — the
-          // snapshot has internal fields (`ddl`, etc.) that the differ reads.
-          const prev =
-            prevEntry?.snapshot ??
-            (yield* Effect.tryPromise({
-              try: () => generateDrizzleJson({}),
-              catch: (cause) =>
-                new Error(`drizzle-kit generateDrizzleJson (empty baseline) failed: ${cause}`),
-            }));
-          const sqlStatements = yield* Effect.tryPromise({
-            try: () => generateMigration(prev, cur),
-            catch: (cause) => new Error(`drizzle-kit generateMigration failed: ${cause}`),
-          });
-          return {
-            mode: "programmatic" as const,
-            out,
-            cur,
-            prevEntry,
-            sqlStatements,
-          };
-        }).pipe(Artifacts.cached("detectDrift"));
+          for (const hint of result.missing) {
+            hints.push(yield* askHint(props, hint, prev, cur, hints));
+          }
+        }
+      }, Artifacts.cached("detectDrift"));
 
       /**
        * Generate a new migration directory if the schema has drifted from
        * the latest snapshot. Returns the new state regardless.
        */
-      const regenerate = (props: SchemaProps) =>
-        Effect.gen(function* () {
-          const drift = yield* detectDrift(props);
+      const regenerate = Effect.fn("Drizzle.regenerate")(function* (props: SchemaProps) {
+        const { out, cur, sqlStatements } = yield* detectDrift(props);
 
-          if (drift.mode === "cli") {
-            if (drift.changed) {
-              yield* runDrizzleGenerate(props, drift.out);
-            }
+        if (sqlStatements.length > 0) {
+          yield* fs.makeDirectory(out, { recursive: true });
+          const dirName = `${tsStamp()}_migration`;
+          const dirPath = path.join(out, dirName);
+          yield* fs.makeDirectory(dirPath, { recursive: true });
+          const sql = sqlStatements.join("\n--> statement-breakpoint\n") + "\n";
+          yield* fs.writeFileString(path.join(dirPath, "migration.sql"), sql);
+          yield* fs.writeFileString(
+            path.join(dirPath, "snapshot.json"),
+            JSON.stringify(cur, null, 2),
+          );
+        }
 
-            const migrations = yield* listMigrationDirs(drift.out);
-            const latest = yield* readLatestSnapshot(drift.out);
-            const snapshotHash = latest?.hash ?? sha(JSON.stringify(drift.cur));
-            return {
-              out: relativeOut(drift.out),
-              snapshotHash,
-              migrations,
-            };
-          }
-
-          const { out, cur, sqlStatements } = drift;
-
-          if (sqlStatements.length > 0) {
-            yield* fs.makeDirectory(out, { recursive: true });
-            const dirName = `${tsStamp()}_migration`;
-            const dirPath = path.join(out, dirName);
-            yield* fs.makeDirectory(dirPath, { recursive: true });
-            const sql = sqlStatements.join("\n--> statement-breakpoint\n") + "\n";
-            yield* fs.writeFileString(path.join(dirPath, "migration.sql"), sql);
-            yield* fs.writeFileString(
-              path.join(dirPath, "snapshot.json"),
-              JSON.stringify(cur, null, 2),
-            );
-          }
-
-          const migrations = yield* listMigrationDirs(out);
-          const latest = yield* readLatestSnapshot(out);
-          const snapshotHash = latest?.hash ?? sha(JSON.stringify(cur));
-          return {
-            out: relativeOut(out),
-            snapshotHash,
-            migrations,
-          };
-        });
+        const migrations = yield* listMigrationDirs(out);
+        const latest = yield* readLatestSnapshot(out);
+        const snapshotHash = latest?.hash ?? sha(JSON.stringify(cur));
+        return {
+          out: relativeOut(out),
+          snapshotHash,
+          migrations,
+        };
+      });
 
       return {
         // Non-listable: a Drizzle.Schema is a local build artifact (generated
@@ -440,7 +338,7 @@ export const SchemaProvider = () =>
           // `schema.out` as an unresolved Output during plan and cascade
           // into spurious updates of their own.
           const drift = yield* detectDrift(news);
-          const changed = drift.mode === "cli" ? drift.changed : drift.sqlStatements.length > 0;
+          const changed = drift.sqlStatements.length > 0;
           // Originally `output.out` was an absolute path, which is not portable.
           // So, we trigger an update to migrate existing resources to the
           // canonical (cwd-relative) form. This is safe because `regenerate`
@@ -479,26 +377,134 @@ export const SchemaProvider = () =>
     }),
   );
 
-const copyDirectory = (
-  from: string,
-  to: string,
-): Effect.Effect<void, PlatformError, Path.Path | FileSystem.FileSystem> =>
-  Effect.gen(function* () {
-    const path = yield* Path.Path;
-    const fs = yield* FileSystem.FileSystem;
+// drizzle-kit hint kinds → snapshot `ddl` entity types.
+const ddlEntityTypes: Record<string, string> = {
+  table: "tables",
+  column: "columns",
+  index: "indexes",
+  enum: "enums",
+  sequence: "sequences",
+  view: "views",
+  schema: "schemas",
+  policy: "policies",
+  role: "roles",
+  check: "checks",
+  unique: "uniques",
+  primary_key: "pks",
+  "foreign key": "fks",
+};
 
-    yield* fs.makeDirectory(to, { recursive: true });
-    const entries = yield* fs.readDirectory(from);
+// mysql and sqlite have no schemas; drizzle-kit fills ids with `public`.
+const formatEntity = (entity: ReadonlyArray<string>) =>
+  (entity.length > 1 && entity[0] === "public" ? entity.slice(1) : entity).join(".");
 
-    for (const entry of entries) {
-      const source = path.join(from, entry);
-      const target = path.join(to, entry);
-      const stat = yield* fs.stat(source);
-      if (stat.type === "Directory") {
-        yield* copyDirectory(source, target);
-      } else {
-        const contents = yield* fs.readFile(source);
-        yield* fs.writeFile(target, contents);
-      }
-    }
+const entityId = (entry: DdlEntry, arity: number, defaultSchema: string, table?: string) => {
+  const schema = entry.schema ?? defaultSchema;
+  const name = entry.name ?? "";
+  return arity === 1
+    ? [name]
+    : arity === 2
+      ? [schema, name]
+      : [schema, table ?? entry.table ?? "", name];
+};
+
+/**
+ * Entities a `rename_or_create` hint could have been renamed from: same kind,
+ * present in the previous snapshot, gone from the current one, and not yet
+ * claimed by an earlier rename. Hints arrive in rounds and later ones refer
+ * to already-renamed tables, so previous entries are re-parented through the
+ * table renames answered so far.
+ */
+const renameCandidates = (
+  hint: MissingHint,
+  prev: DrizzleSnapshot,
+  cur: DrizzleSnapshot,
+  hints: ReadonlyArray<Hint>,
+) => {
+  const entityType = ddlEntityTypes[hint.kind];
+  if (entityType === undefined) return [];
+  const arity = hint.entity.length;
+  const defaultSchema = hint.entity[0] ?? "public";
+  const key = (id: ReadonlyArray<string>) => JSON.stringify(id);
+  const renamedTables = new Map(
+    hints.flatMap((h) =>
+      h.type === "rename" && h.kind === "table" ? [[key(h.from), h.to[1]] as const] : [],
+    ),
+  );
+  const claimed = new Set(
+    hints.flatMap((h) => (h.type === "rename" && h.kind === hint.kind ? [key(h.from)] : [])),
+  );
+  const current = new Set(
+    (cur.ddl ?? [])
+      .filter((entry) => entry.entityType === entityType)
+      .map((entry) => key(entityId(entry, arity, defaultSchema))),
+  );
+  return (prev.ddl ?? [])
+    .filter((entry) => entry.entityType === entityType)
+    .map((entry) => {
+      const schema = entry.schema ?? defaultSchema;
+      const table = renamedTables.get(key([schema, entry.table ?? ""])) ?? entry.table;
+      return entityId(entry, arity, defaultSchema, table);
+    })
+    .filter(
+      (id) =>
+        !current.has(key(id)) &&
+        !claimed.has(key(id)) &&
+        // Columns, indexes, … can only be renamed within the same table.
+        (arity < 3 || (id[0] === hint.entity[0] && id[1] === hint.entity[1])),
+    );
+};
+
+const undecided = (props: SchemaProps, hint: MissingHint) => {
+  const dialect = props.dialect ?? "postgres";
+  return new UndecidedSchemaChange({
+    message: [
+      `drizzle-kit needs a decision for ${props.schema} that cannot be made non-interactively:`,
+      `  ${hint.kind} ${formatEntity(hint.entity)}: created or renamed?`,
+      "",
+      "Re-run the deploy in an interactive terminal to answer it, or generate the migration yourself and commit it:",
+      `  npx drizzle-kit generate --dialect ${dialect === "postgres" ? "postgresql" : dialect} --schema ${props.schema} --out ${props.out ?? "./migrations"}`,
+    ].join("\n"),
   });
+};
+
+/**
+ * Answer one drizzle-kit `MissingHint` with an Alchemy prompt. A dismissed
+ * prompt stays a `TerminalCancelled` so the CLI exits quietly, the same as
+ * cancelling the deploy confirmation.
+ */
+const askHint = Effect.fn("Drizzle.askHint")(
+  function* (
+    props: SchemaProps,
+    hint: MissingHint,
+    prev: DrizzleSnapshot,
+    cur: DrizzleSnapshot,
+    hints: ReadonlyArray<Hint>,
+  ) {
+    const interaction = yield* Effect.serviceOption(Interaction);
+    if (Option.isNone(interaction)) return yield* undecided(props, hint);
+    const { prompt } = interaction.value;
+
+    const create = { type: "create", kind: hint.kind, entity: hint.entity } satisfies Hint;
+    const candidates = renameCandidates(hint, prev, cur, hints);
+    if (candidates.length === 0) return create;
+
+    const name = formatEntity(hint.entity);
+    return yield* prompt.select<Hint>({
+      message: `Is ${hint.kind} ${name} created or renamed from another ${hint.kind}?`,
+      options: [
+        { value: create, label: `+ ${name}`, description: `create ${hint.kind}` },
+        ...candidates.map((from) => ({
+          value: { type: "rename", kind: hint.kind, from, to: hint.entity } satisfies Hint,
+          label: `~ ${formatEntity(from)} › ${name}`,
+          description: `rename ${hint.kind}`,
+        })),
+      ],
+      descriptionPlacement: "inline",
+    });
+  },
+  (effect, props, hint) =>
+    effect.pipe(
+      Effect.catchTag("NonInteractiveTerminal", () => Effect.fail(undecided(props, hint))),
+    ),
+);
