@@ -170,20 +170,54 @@ deploy comes later.
 
 ## Status
 
-Built and tested live (22 October 2026), `test/Sandbox/WorkspaceService.test.ts`:
-a Cloudflare Worker using a workspace whose host is a t4g.small spot
-instance, containers (runc) on a `node:24-bookworm-slim` image.
+All six steps are built and tested live (22 October 2026). Commands run in
+containers (runc), gVisor (runsc) or Firecracker microVMs. Each has a
+network of its own.
 
-- Commands on forks merge back, a colliding one is refused whole and kept
-  as a fork, a command that leaves processes running keeps them and later
-  commands see what they write, opens run commands on the mounted head and
-  reach a server on its port, and fork, merge, history, undo and delete.
-- From the test, through the Worker and the load balancer: four 2-second
-  commands at once in 4.7 s. A warm forked call: 0.34 s on the host (0.15 s
-  of it starting its container), plus up to 0.6 s for the head's snapshot
-  when changes landed since the last one.
-- The first command on a fresh host: 4.5 s, nearly all of it Node loading
-  from an image no one had read yet. Prefetch traces are for that.
+### Containers on two hosts
+
+`test/Sandbox/WorkspaceService.test.ts`: a Cloudflare Worker using a
+workspace on two t4g.small spot hosts, in containers (runc) on a
+`node:24-bookworm-slim` image.
+
+- Commands on forks merge back, and a colliding one is refused whole and
+  kept as a fork. A command that leaves processes running keeps them, and
+  later commands see what they write.
+- Opens run commands on the mounted head and reach a server on its port, at
+  the head's own address. Fork, merge, history, undo and delete all work.
+- A command reaches the internet, but not the instance's metadata service
+  (the host's credentials), its own host, or either host's service port in
+  the VPC.
+- Requests reach either host and are forwarded to the session's own. When
+  the host with a session is terminated, the other host takes it over with
+  its files: the takeover folds in the dead host's journal before forking.
+- Through the Worker and the load balancer, four 2-second commands at once
+  take 4.7 s. A warm forked call takes 0.34 s on the host.
+
+### MicroVMs
+
+`test/Sandbox/WorkspaceFirecracker.test.ts`: the same, with isolation
+`"firecracker"` on one c8i.large spot host (nested virtualization).
+`crates/blockd/tests/ec2/firecracker.sh` measures blockd alone on the same
+type.
+
+- A call restored from the host's memory snapshot takes about 135 ms in
+  all. The VM starts in 72 ms, 25 of it making its tap (a cold boot takes
+  265 ms), and four 1-second calls at once take 1.4 s. The snapshot is made once per host,
+  when the image warms, and writing the VM's 1 GiB of memory takes 9 s.
+- A restored VM gets the host's clock, fresh entropy, a MAC of its own and
+  its own address on the bridge.
+- A kept VM serves later commands and commits what its processes write.
+  Opens and `placement: "pinned"` aren't supported yet: both run on the
+  session's head, and microVMs only run on forks.
+
+### Networks
+
+Every container and microVM gets a network namespace (or a tap) on a bridge
+and reaches out through NAT. Bridge ports can't reach each other. The
+metadata service, the host and the VPC are dropped, though DNS to the host's
+resolvers is allowed. `egress` narrows a command to an allowlist of CIDRs.
+`crates/blockd/tests/network` covers it under runc and gVisor.
 
 ## Open
 

@@ -45,8 +45,8 @@ export interface WorkspaceProps {
    * Firecracker needs KVM: hosts default to `c8i.large` with nested
    * virtualization (`c8i`, `m8i` and `r8i` support it), or use a `.metal`
    * type. Its commands run on forks, so it doesn't take `placement:
-   * "pinned"`, and microVMs have no network yet, so sessions can't be
-   * opened (no ports).
+   * "pinned"`, and sessions can't be opened yet (an open runs on the
+   * session's head).
    * @default "container"
    */
   isolation?: "container" | "gvisor" | "firecracker" | "none";

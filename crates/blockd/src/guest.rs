@@ -13,7 +13,8 @@
 //!
 //! ```text
 //! {"op":"ping"}                                         → {"ok":true}
-//! {"op":"start","path":…,"sectors":[…],"timeNs":…,"entropy":<base64>} → {"ok":true}
+//! {"op":"start","path":…,"sectors":[…],"timeNs":…,"entropy":<base64>,
+//!  "network":{"mac":…,"address":…,"prefix":…,"gateway":…,"resolvConf":…}} → {"ok":true}
 //! {"op":"exec","command":…,"cwd":…,"env":{…},"timeoutMs":…} → {"exitCode":…,"timedOut":…,"stdout":…,"stderr":…}
 //! {"op":"processes"}                                    → {"processes":[{pid, command}]}
 //! {"op":"stop"}                                         → {"stopped":[…]}  (everything the commands left)
@@ -174,7 +175,107 @@ fn start(request: &Value) -> Result<()> {
     for (kind, target) in [("proc", "proc"), ("sysfs", "sys"), ("devtmpfs", "dev"), ("tmpfs", "tmp")] {
         let _ = mount(kind, kind, &format!("{ROOT}/{target}"), "");
     }
+    if let Some(network) = request.get("network").filter(|n| n.is_object()) {
+        configure_network(network)?;
+    }
     let _ = STARTED.set(path);
+    Ok(())
+}
+
+/// `struct rtentry` (libc has it on musl only).
+#[repr(C)]
+struct RtEntry {
+    rt_pad1: libc::c_ulong,
+    rt_dst: libc::sockaddr,
+    rt_gateway: libc::sockaddr,
+    rt_genmask: libc::sockaddr,
+    rt_flags: libc::c_ushort,
+    rt_pad2: libc::c_short,
+    rt_pad3: libc::c_ulong,
+    rt_pad4: *mut libc::c_void,
+    rt_metric: libc::c_short,
+    rt_dev: *mut libc::c_char,
+    rt_mtu: libc::c_ulong,
+    rt_window: libc::c_ulong,
+    rt_irtt: libc::c_ushort,
+}
+
+fn inet(address: std::net::Ipv4Addr) -> libc::sockaddr {
+    let inet = libc::sockaddr_in {
+        sin_family: libc::AF_INET as _,
+        sin_port: 0,
+        sin_addr: libc::in_addr { s_addr: u32::from_ne_bytes(address.octets()) },
+        sin_zero: [0; 8],
+    };
+    // sockaddr_in and sockaddr are the same size.
+    unsafe { std::mem::transmute(inet) }
+}
+
+/// eth0 as the host leased it (a restored VM has the template's MAC), lo
+/// up, the default route, and the image's resolv.conf and hosts.
+fn configure_network(network: &Value) -> Result<()> {
+    use std::net::Ipv4Addr;
+    let address: Ipv4Addr = network["address"].as_str().context("`network.address`")?.parse()?;
+    let gateway: Ipv4Addr = network["gateway"].as_str().context("`network.gateway`")?.parse()?;
+    let prefix = network["prefix"].as_u64().unwrap_or(16) as u32;
+    let mask = Ipv4Addr::from(u32::MAX.checked_shl(32 - prefix).unwrap_or(0));
+    let fd = unsafe { libc::socket(libc::AF_INET, libc::SOCK_DGRAM | libc::SOCK_CLOEXEC, 0) };
+    if fd < 0 {
+        bail!("a socket: {}", std::io::Error::last_os_error());
+    }
+    let socket = unsafe { std::os::fd::OwnedFd::from_raw_fd(fd) };
+    let ioctl = |request: libc::c_ulong, argument: *mut libc::c_void, what: &str| -> Result<()> {
+        if unsafe { libc::ioctl(std::os::fd::AsRawFd::as_raw_fd(&socket), request as _, argument) } < 0 {
+            bail!("{what}: {}", std::io::Error::last_os_error());
+        }
+        Ok(())
+    };
+    let named = |name: &str| {
+        let mut request: libc::ifreq = unsafe { std::mem::zeroed() };
+        for (to, from) in request.ifr_name.iter_mut().zip(name.bytes()) {
+            *to = from as libc::c_char;
+        }
+        request
+    };
+    let up = |name: &str| -> Result<()> {
+        let mut request = named(name);
+        ioctl(libc::SIOCGIFFLAGS, (&mut request as *mut libc::ifreq).cast(), "reading flags")?;
+        unsafe { request.ifr_ifru.ifru_flags |= (libc::IFF_UP | libc::IFF_RUNNING) as libc::c_short };
+        ioctl(libc::SIOCSIFFLAGS, (&mut request as *mut libc::ifreq).cast(), "bringing it up")
+    };
+    up("lo")?;
+    if let Some(mac) = network["mac"].as_str() {
+        let mut request = named("eth0");
+        let mut hardware: libc::sockaddr = unsafe { std::mem::zeroed() };
+        hardware.sa_family = 1; // ARPHRD_ETHER
+        for (to, octet) in hardware.sa_data.iter_mut().zip(mac.split(':')) {
+            *to = u8::from_str_radix(octet, 16)? as libc::c_char;
+        }
+        request.ifr_ifru.ifru_hwaddr = hardware;
+        ioctl(libc::SIOCSIFHWADDR, (&mut request as *mut libc::ifreq).cast(), "setting the MAC")?;
+    }
+    let mut request = named("eth0");
+    request.ifr_ifru.ifru_addr = inet(address);
+    ioctl(libc::SIOCSIFADDR, (&mut request as *mut libc::ifreq).cast(), "setting the address")?;
+    let mut request = named("eth0");
+    request.ifr_ifru.ifru_netmask = inet(mask);
+    ioctl(libc::SIOCSIFNETMASK, (&mut request as *mut libc::ifreq).cast(), "setting the netmask")?;
+    up("eth0")?;
+    let mut route: RtEntry = unsafe { std::mem::zeroed() };
+    route.rt_dst = inet(Ipv4Addr::UNSPECIFIED);
+    route.rt_genmask = inet(Ipv4Addr::UNSPECIFIED);
+    route.rt_gateway = inet(gateway);
+    route.rt_flags = (libc::RTF_UP | libc::RTF_GATEWAY) as libc::c_ushort;
+    ioctl(libc::SIOCADDRT, (&mut route as *mut RtEntry).cast(), "adding the default route")?;
+    // The root's overlay: the image's files are untouched, and none of this
+    // is in the patch (only the workspace's changes are).
+    let etc = Path::new(ROOT).join("etc");
+    std::fs::create_dir_all(&etc)?;
+    let _ = std::fs::remove_file(etc.join("resolv.conf"));
+    std::fs::write(etc.join("resolv.conf"), network["resolvConf"].as_str().unwrap_or("nameserver 1.1.1.1\n"))?;
+    if !etc.join("hosts").exists() {
+        std::fs::write(etc.join("hosts"), "127.0.0.1 localhost\n::1 localhost\n")?;
+    }
     Ok(())
 }
 

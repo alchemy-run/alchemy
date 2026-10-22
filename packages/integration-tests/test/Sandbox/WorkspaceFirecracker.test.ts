@@ -109,7 +109,35 @@ describe.skipIf(!!process.env.FAST).sequential("AWS.Workspace: commands in micro
   );
 
   test(
-    "opening a session says microVMs have no network yet",
+    "a command in a microVM reaches the internet, but not the host's credentials or the host",
+    Effect.gen(function* () {
+      const urls = [
+        "https://example.com/",
+        "http://169.254.169.254/latest/meta-data/",
+        "http://10.200.0.1:8080/health",
+      ];
+      const probe = urls
+        .map(
+          (url) =>
+            `fetch('${url}', { signal: AbortSignal.timeout(3000) }).then((r) => 'reached ' + r.status, () => 'unreachable')`,
+        )
+        .join(", ");
+      const result = yield* call<Result>("exec", {
+        session: "s3",
+        command: `node -e "Promise.all([${probe}]).then((all) => console.log(all.join('\\n')))"`,
+      });
+      expect(result.exitCode, result.stderr).toBe(0);
+      expect(result.stdout.trim().split("\n")).toEqual([
+        "reached 200",
+        "unreachable",
+        "unreachable",
+      ]);
+    }),
+    options,
+  );
+
+  test(
+    "opening a session says it isn't supported in microVMs yet",
     Effect.gen(function* () {
       const opened = yield* Effect.flip(call("open", { session: "s1", command: "true" }));
       expect(String(opened)).toContain(`isn't supported with isolation "firecracker" yet`);

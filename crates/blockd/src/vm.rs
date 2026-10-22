@@ -38,6 +38,14 @@ pub struct Vm {
     dir: PathBuf,
     child: Child,
     vsock: PathBuf,
+    /// Its tap on the host's bridge, released with it.
+    lease: Option<crate::net::Lease>,
+}
+
+/// A VM's network interface, as Firecracker configures it.
+struct Nic<'a> {
+    tap: &'a str,
+    mac: String,
 }
 
 /// The drives every VM has, by the names its paths use.
@@ -46,17 +54,22 @@ const DRIVES: [&str; 2] = ["image", "workspace"];
 /// A booted VM, snapshotted as its agent listens: what calls restore.
 pub struct Template {
     dir: PathBuf,
+    /// Whether it has a network interface: restores then need a tap.
+    nic: bool,
 }
 
 impl Template {
-    /// Boots a VM in `dir` on placeholder drives, and snapshots it.
-    pub fn make(firecracker: &Firecracker, dir: &Path) -> Result<Self> {
+    /// Boots a VM in `dir` on placeholder drives (and a tap on `networks`,
+    /// for its interface), and snapshots it.
+    pub fn make(firecracker: &Firecracker, dir: &Path, networks: Option<&std::sync::Arc<crate::net::Networks>>) -> Result<Self> {
+        let lease = networks.map(|networks| networks.tap(&[])).transpose()?;
         let placeholders: Vec<PathBuf> = DRIVES.iter().map(|name| dir.with_extension(format!("{name}.placeholder"))).collect();
         for placeholder in &placeholders {
             std::fs::File::create(placeholder)?.set_len(1024 * 1024)?;
         }
         let drives: Vec<(&Path, bool)> = placeholders.iter().map(|p| (p.as_path(), true)).collect();
-        let mut vm = Vm::boot(firecracker, dir, &drives)?;
+        let nic = lease.as_ref().map(|lease| Nic { tap: lease.tap.as_deref().unwrap_or_default(), mac: lease.mac() });
+        let mut vm = Vm::boot(firecracker, dir, &drives, nic.as_ref())?;
         let api = dir.join("api.sock");
         api_call(&api, "PATCH", "/vm", &json!({ "state": "Paused" }))?;
         api_call(
@@ -72,21 +85,44 @@ impl Template {
         let _ = vm.child.kill();
         let _ = vm.child.wait();
         std::mem::forget(vm); // keeps the snapshot's directory
-        Ok(Self { dir: dir.to_path_buf() })
+        Ok(Self { dir: dir.to_path_buf(), nic: lease.is_some() })
     }
 }
 
 impl Vm {
     /// Boots a VM in `dir` with `drives` (path, read-only) and starts its
-    /// agent on them. `path` is where the workspace appears inside.
-    pub fn start(firecracker: &Firecracker, dir: &Path, drives: &[(&Path, bool)], path: &str) -> Result<Self> {
-        let vm = Self::boot(firecracker, dir, drives)?;
-        vm.begin(drives, path)?;
+    /// agent on them. `path` is where the workspace appears inside; `lease`,
+    /// its network (handed to the VM with [`Vm::hold`]).
+    pub fn start(
+        firecracker: &Firecracker,
+        dir: &Path,
+        drives: &[(&Path, bool)],
+        path: &str,
+        lease: Option<&crate::net::Lease>,
+    ) -> Result<Self> {
+        let nic = lease.map(|lease| Nic { tap: lease.tap.as_deref().unwrap_or_default(), mac: lease.mac() });
+        let vm = Self::boot(firecracker, dir, drives, nic.as_ref())?;
+        vm.begin(drives, path, lease)?;
         Ok(vm)
     }
 
+    /// The VM keeps `lease` (its tap) until it stops.
+    pub fn hold(&mut self, lease: crate::net::Lease) {
+        self.lease = Some(lease);
+    }
+
     /// Restores `template` in `dir` on `drives`, and starts its agent on them.
-    pub fn restore(firecracker: &Firecracker, template: &Template, dir: &Path, drives: &[(&Path, bool)], path: &str) -> Result<Self> {
+    pub fn restore(
+        firecracker: &Firecracker,
+        template: &Template,
+        dir: &Path,
+        drives: &[(&Path, bool)],
+        path: &str,
+        lease: Option<&crate::net::Lease>,
+    ) -> Result<Self> {
+        if template.nic != lease.is_some() {
+            bail!("the template's network interface doesn't match the call's");
+        }
         let mut vm = Self::spawn(firecracker, dir, drives, None)?;
         let api = dir.join("api.sock");
         let started = Instant::now();
@@ -105,6 +141,11 @@ impl Vm {
                     "snapshot_path": template.dir.join("vmstate"),
                     "mem_backend": { "backend_type": "File", "backend_path": template.dir.join("memory") },
                     "resume_vm": true,
+                    // The call's own tap, not the template's.
+                    "network_overrides": lease
+                        .and_then(|lease| lease.tap.as_deref())
+                        .map(|tap| vec![json!({ "iface_id": "eth0", "host_dev_name": tap })])
+                        .unwrap_or_default(),
                 }),
             )?;
             // The drives are opened again, so the guest learns their sizes.
@@ -118,12 +159,12 @@ impl Vm {
             vm.stop();
             return Err(e.context(console));
         }
-        vm.begin(drives, path)?;
+        vm.begin(drives, path, lease)?;
         Ok(vm)
     }
 
     /// A VM booted in `dir`, its agent listening (not yet started).
-    fn boot(firecracker: &Firecracker, dir: &Path, drives: &[(&Path, bool)]) -> Result<Self> {
+    fn boot(firecracker: &Firecracker, dir: &Path, drives: &[(&Path, bool)], nic: Option<&Nic>) -> Result<Self> {
         let config = json!({
             "boot-source": {
                 "kernel_image_path": firecracker.kernel,
@@ -141,6 +182,11 @@ impl Vm {
                 "mem_size_mib": firecracker.memory_mib,
             },
             "vsock": { "guest_cid": 3, "uds_path": "vsock.sock" },
+            "network-interfaces": nic.map(|nic| vec![json!({
+                "iface_id": "eth0",
+                "host_dev_name": nic.tap,
+                "guest_mac": nic.mac,
+            })]).unwrap_or_default(),
         });
         let mut vm = Self::spawn(firecracker, dir, drives, Some(&config))?;
         if let Err(e) = vm.wait_for_agent() {
@@ -176,6 +222,7 @@ impl Vm {
             dir: dir.to_path_buf(),
             child,
             vsock: dir.join("vsock.sock"),
+            lease: None,
         })
     }
 
@@ -196,8 +243,9 @@ impl Vm {
         }
     }
 
-    /// The agent mounts `drives` (their sizes, so it waits for them) at `path`.
-    fn begin(&self, drives: &[(&Path, bool)], path: &str) -> Result<()> {
+    /// The agent mounts `drives` (their sizes, so it waits for them) at
+    /// `path`, and configures `lease`'s network.
+    fn begin(&self, drives: &[(&Path, bool)], path: &str, lease: Option<&crate::net::Lease>) -> Result<()> {
         let mut sectors = Vec::new();
         for (drive, _) in drives {
             let mut file = std::fs::File::open(drive).with_context(|| format!("opening {}", drive.display()))?;
@@ -212,6 +260,13 @@ impl Vm {
             "sectors": sectors,
             "timeNs": now.as_nanos() as u64,
             "entropy": base64::engine::general_purpose::STANDARD.encode(entropy),
+            "network": lease.map(|lease| json!({
+                "mac": lease.mac(),
+                "address": lease.address.to_string(),
+                "prefix": lease.prefix(),
+                "gateway": lease.gateway().to_string(),
+                "resolvConf": lease.resolv_conf(),
+            })),
         }))
         .map(|_| ())
     }
@@ -247,6 +302,7 @@ impl Vm {
     pub fn stop(&mut self) {
         let _ = self.child.kill();
         let _ = self.child.wait();
+        self.lease = None;
         let _ = std::fs::remove_dir_all(&self.dir);
     }
 }

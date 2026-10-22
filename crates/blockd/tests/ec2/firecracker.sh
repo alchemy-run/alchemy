@@ -28,6 +28,9 @@ call() { wait_for "$(field "$(req /v1/calls "$1")" id)"; }
 [ -c /dev/kvm ] || fail "no /dev/kvm: nested virtualization isn't on"
 echo "{\"kvm\":true,\"kernel\":\"$(uname -r)\",\"cpus\":$(nproc)}"
 
+# The bridge's tools, for microVMs' networks.
+command -v iptables >/dev/null || DEBIAN_FRONTEND=noninteractive apt-get install -y -qq iptables >/dev/null
+
 # Firecracker and its CI guest kernel (6.1: overlayfs, vsock, ext4, fanotify).
 curl -fsSL "https://github.com/firecracker-microvm/firecracker/releases/download/v1.17.0/firecracker-v1.17.0-$arch.tgz" | tar -xz -C /tmp
 install -m 0755 "/tmp/release-v1.17.0-$arch/firecracker-v1.17.0-$arch" /usr/local/bin/firecracker
@@ -103,6 +106,16 @@ guest=$(field "$result" stdout | base64 -d); host=$(date +%s)
 [ $(( host - guest )) -le 2 ] && [ $(( guest - host )) -le 2 ] || fail "the microVM's clock is $guest, the host's $host"
 pass "a restored microVM's clock is the host's"
 
+# A microVM has a network of its own: out through NAT, not to the metadata
+# service (the host's credentials); an allowlist narrows it.
+probe() { echo "wget -q -T 3 -O- $1 >/dev/null 2>&1 && echo reached || echo unreachable"; }
+result=$(call "{$common,\"snapshot\":\"$S\",\"dir\":\"$work/net\",\"command\":\"$(probe http://example.com/); $(probe http://169.254.169.254/latest/meta-data/)\"}")
+[ "$(field "$result" stdout | base64 -d | tr '\n' '|')" = "reached|unreachable|" ] || fail "a microVM's network: $result"
+narrow="\"isolation\":{\"runtime\":\"firecracker\",\"image\":\"$I\",\"path\":\"/workspace\",\"egress\":[\"10.99.0.0/16\"]}"
+result=$(call "{\"store\":\"$store\",\"mode\":\"$mode\",$narrow,\"snapshot\":\"$S\",\"dir\":\"$work/net2\",\"command\":\"$(probe http://example.com/)\"}")
+[ "$(field "$result" stdout | base64 -d)" = unreachable ] || fail "an allowlist let a microVM out: $result"
+pass "a microVM reaches the internet but not the metadata service, and an allowlist narrows it"
+
 # Calls at once.
 t=$(date +%s%N)
 pids=()
@@ -117,7 +130,8 @@ for i in 1 2 3 4 5; do
   result=$(call "{$common,\"snapshot\":\"$S\",\"dir\":\"$work/w$i\",\"command\":\"true\"}")
   echo "{\"step\":\"warm call $i\",\"ms\":$(( ($(date +%s%N) - t) / 1000000 )),\"timings\":$(echo "$result" | grep -o '"timings":{[^}]*}' | sed 's/"timings"://')}"
 done
-grep -E "restoring one failed|no template to restore" "$work/daemon.log" && fail "microVMs booted instead of restoring"
+grep -E "restoring one failed|no template to restore|have no network" "$work/daemon.log" && fail "microVMs booted instead of restoring"
+ip -o link show | grep -q " bdt" && fail "a microVM's tap outlived it: $(ip -o link show | grep bdt)"
 pass "every microVM was restored from the host's snapshot"
 kill "$(cat "$work/daemon.pid")"
 echo "ALL PASSED"

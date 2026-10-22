@@ -514,7 +514,12 @@ impl Daemon {
             image_block,
             path: request.path.clone(),
             host_network: request.host_network,
-            networks: if request.host_network { None } else { Some(self.networks()?) },
+            // A microVM can't share the host's network: it always has its own.
+            networks: if request.host_network && request.runtime != Runtime::Firecracker {
+                None
+            } else {
+                Some(self.networks()?)
+            },
             egress: request.egress.clone(),
             env,
         })
@@ -935,6 +940,7 @@ impl Daemon {
                 &self.config.state.join(format!("vm-{id}")),
                 &[(image.as_path(), true), (attached.path(), true)],
                 &isolation.path,
+                isolation,
             )
         })?;
         let mut env = serde_json::Map::new();
@@ -1008,7 +1014,6 @@ impl Daemon {
         ))
     }
 
-    /// A kept microVM call's operations: commit, status, exec, detach.
     /// The snapshot microVMs are restored from: made once (the first time
     /// takes seconds: it writes the VM's memory), tried once.
     fn vm_template(&self, firecracker: &crate::vm::Firecracker) -> Option<Arc<crate::vm::Template>> {
@@ -1016,7 +1021,9 @@ impl Daemon {
             .lock()
             .unwrap()
             .get_or_insert_with(|| {
-                match crate::vm::Template::make(firecracker, &self.config.state.join("vm-template")) {
+                // With the host's bridge, if it has one: VMs then have networks.
+                let networks = self.networks().inspect_err(|e| tracing::warn!("microVMs have no network: {e:#}")).ok();
+                match crate::vm::Template::make(firecracker, &self.config.state.join("vm-template"), networks.as_ref()) {
                     Ok(template) => Some(Arc::new(template)),
                     Err(e) => {
                         tracing::warn!("microVMs will boot: no template to restore ({e:#})");
@@ -1034,16 +1041,25 @@ impl Daemon {
         dir: &Path,
         drives: &[(&Path, bool)],
         path: &str,
+        isolation: &Isolation,
     ) -> Result<crate::vm::Vm> {
-        if let Some(template) = self.vm_template(firecracker) {
-            match crate::vm::Vm::restore(firecracker, &template, dir, drives, path) {
-                Ok(vm) => return Ok(vm),
-                Err(e) => tracing::warn!("booting a microVM: restoring one failed ({e:#})"),
-            }
+        let lease = isolation.networks.as_ref().map(|networks| networks.tap(&isolation.egress)).transpose()?;
+        let restored = self.vm_template(firecracker).and_then(|template| {
+            crate::vm::Vm::restore(firecracker, &template, dir, drives, path, lease.as_ref())
+                .inspect_err(|e| tracing::warn!("booting a microVM: restoring one failed ({e:#})"))
+                .ok()
+        });
+        let mut vm = match restored {
+            Some(vm) => vm,
+            None => crate::vm::Vm::start(firecracker, dir, drives, path, lease.as_ref())?,
+        };
+        if let Some(lease) = lease {
+            vm.hold(lease);
         }
-        crate::vm::Vm::start(firecracker, dir, drives, path)
+        Ok(vm)
     }
 
+    /// A kept microVM call's operations: commit, status, exec, detach.
     fn vm_op(&self, id: &str, kept: Arc<KeptVm>, op: &str, request: &Request) -> Result<Value> {
         #[derive(Deserialize, Default)]
         struct Body {

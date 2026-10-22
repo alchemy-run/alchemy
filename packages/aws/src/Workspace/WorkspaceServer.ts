@@ -282,7 +282,7 @@ export const serveWorkspace = (config: HostConfig) =>
     const headIsolation = microVMs ? undefined : isolation;
     const notInMicroVMs = (what: string) =>
       fail(
-        `${what} isn't supported with isolation "firecracker" yet: microVMs have no network yet`,
+        `${what} isn't supported with isolation "firecracker" yet: it runs on the session's head, and microVMs run on forks`,
       );
 
     //#region setup
