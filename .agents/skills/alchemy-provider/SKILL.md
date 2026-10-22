@@ -719,7 +719,28 @@ counts, so they can see what was checked without re-reviewing by hand.
 - Type-check with `pnpm exec tsrs -b`, run `pnpm exports:check` and
   `pnpm lint:providers`, and format with `pnpm exec oxfmt`.
 - Open the alchemy PR per **Pull Request Conventions**, linking the
-  distilled PRs it depends on.
+  distilled PRs it depends on. The description shows the provider's DX,
+  not a list of what was built:
+  - One or two lines on what the package is, then a few bullets of
+    counts (services, resources, live test files, gated tests).
+  - A `###` section for every runtime (each form), the event sources,
+    and the websites.
+  - A `###` section for each **fat-head** resource: the 10–20 that most
+    apps on this cloud use (resource groups or projects, identity and
+    roles, object storage, the main SQL and document databases, queues
+    and topics, secrets, the container registry, networking and DNS,
+    logs). Pick them from the cloud's own quickstarts, not from the
+    catalog's order. Group a resource with the ones it's always used
+    with (a namespace and its queue) and its bindings.
+  - Each section is one or two sentences, then one snippet copied from
+    that resource's JSDoc example, so the code is already checked.
+  - One closing line names the long tail and points to the generated
+    reference. Don't list it.
+
+  Don't show a binding running in a host unless a test deploys it that
+  way. On Azure, the description was going to show bindings inside
+  `Azure.Functions.Function`, which isn't a registered binding host, so
+  those bindings did nothing.
 
 A draft PR for an early wave is fine; its description states the index
 counts and that the provider is incomplete.

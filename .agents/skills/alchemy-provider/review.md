@@ -155,6 +155,7 @@ Skip this section when the provider can't host websites; then `src/<P>/Website` 
 | Namespace casing | `ls src/<P>` | PascalCase |
 | Singular names | read the list of exported resource names | correct English (`Index`, `Process`, `Batch`) |
 | Scope | read the service list | no end-user data, OAuth-scoped, retired, or duplicate APIs; out-of-scope list on the overview page |
+| PR description | read it | a `###` section with a snippet for every runtime, event source, websites, and each fat-head resource; long tail in one line; no snippet claims behavior no test proves |
 | Docs build | `pnpm docs:check-jsdoc && pnpm docs:gen && pnpm docs:check` | clean |
 | Hub structure | `ls website/src/content/docs/<p>/*/` next to `ls website/src/content/docs/aws/*/` | Overview, Setup, `tutorial/part-1..5`, `compute/choosing-a-runtime`, sections by concern; no `guides/`; every AWS section has a counterpart unless the provider has nothing for it |
 | Hub snippets | read every fenced block with `import` lines | a complete file with a `// path` first line; no `...`, no module-scope `yield*`; code matches an `examples/<p>-*` project or a JSDoc example |
