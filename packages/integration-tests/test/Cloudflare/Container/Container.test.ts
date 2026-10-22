@@ -25,6 +25,12 @@ import makeInferredClassStack from "./fixtures/inferred/stack.ts";
 import { DEMO_PLAIN, DEMO_SECRET } from "./fixtures/remote/object.ts";
 import makeRemoteStack from "./fixtures/remote/stack.ts";
 
+/** Narrows a Containers application to the scheduler-placed shape. */
+const scheduledApplication = (app: Containers.ContainerApplicationItem) => {
+  assert("version" in app, `${app.name} is a Durable Object application`);
+  return app;
+};
+
 describe.concurrent.each([
   {
     dev: true,
@@ -840,6 +846,7 @@ describe.sequential(
 
 const readAttachmentApplication = (accountId: string, applicationId: string) =>
   Containers.getContainerApplication({ accountId, applicationId }).pipe(
+    Effect.map(scheduledApplication),
     Effect.retry({
       while: (error) => error._tag === "ContainerApplicationNotFound",
       schedule: Schedule.spaced("1 second"),
