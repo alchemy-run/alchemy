@@ -85,7 +85,10 @@ test.provider(
           nonFastForward: true,
           deletion: true,
           update: true,
-          pullRequest: {},
+          pullRequest: {
+            allowedMergeMethods: ["squash"],
+            requireExtraApprovalForUnattributedChanges: true,
+          },
           requiredStatusChecks: { checks: [{ context: "ci/test" }] },
         },
       });
@@ -101,6 +104,12 @@ test.provider(
         "required_status_checks",
         "update",
       ]);
+      expect(
+        fetched?.rules?.find((rule) => rule.type === "pull_request")?.parameters,
+      ).toMatchObject({
+        allowed_merge_methods: ["squash"],
+        require_extra_approval_for_unattributed_changes: true,
+      });
       expect(fetched?.bypass_actors).toEqual([
         { actor_type: "RepositoryRole", actor_id: 5, bypass_mode: "always" },
       ]);
