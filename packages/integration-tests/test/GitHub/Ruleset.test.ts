@@ -89,7 +89,7 @@ test.provider(
           update: true,
           pullRequest: {
             allowedMergeMethods: ["squash"],
-            requireExtraApprovalForUnattributedChanges: true,
+            requireExtraApprovalForUnattributedChanges: false,
           },
           requiredStatusChecks: { checks: [{ context: "ci/test" }] },
         },
@@ -110,15 +110,15 @@ test.provider(
         fetched?.rules?.find((rule) => rule.type === "pull_request")?.parameters,
       ).toMatchObject({
         allowed_merge_methods: ["squash"],
-        require_extra_approval_for_unattributed_changes: true,
+        require_extra_approval_for_unattributed_changes: false,
       });
       expect(fetched?.bypass_actors).toEqual([
         { actor_type: "RepositoryRole", actor_id: 5, bypass_mode: "always" },
       ]);
       expect(created.createdAt).toBe(fetched?.created_at);
 
-      // Dropping the merge-method props resets them: GitHub allows every
-      // merge method again and stops requiring the extra approval.
+      // Dropping both props resets them to GitHub's defaults: every merge
+      // method is allowed again and the extra approval is required again.
       const relaxed = yield* deploy({
         name: "main protection",
         conditions: { include: ["refs/heads/main"] },
@@ -137,7 +137,7 @@ test.provider(
         afterRelax?.rules?.find((rule) => rule.type === "pull_request")?.parameters,
       ).toMatchObject({
         allowed_merge_methods: ["merge", "squash", "rebase"],
-        require_extra_approval_for_unattributed_changes: false,
+        require_extra_approval_for_unattributed_changes: true,
       });
 
       const updated = yield* deploy({

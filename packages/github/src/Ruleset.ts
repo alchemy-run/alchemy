@@ -147,7 +147,7 @@ export interface RulesetProps {
 
       /**
        * Require another approval for changes pushed by someone other than the commit author.
-       * @default false
+       * @default true
        */
       requireExtraApprovalForUnattributedChanges?: boolean;
     };
@@ -411,7 +411,7 @@ export const RulesetProvider = () =>
             allowed_merge_methods: pullRequest.allowedMergeMethods,
           }),
           require_extra_approval_for_unattributed_changes:
-            pullRequest.requireExtraApprovalForUnattributedChanges ?? false,
+            pullRequest.requireExtraApprovalForUnattributedChanges ?? true,
         };
         rules.push({ type: "pull_request", parameters });
       }
