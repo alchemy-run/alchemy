@@ -58,6 +58,9 @@ pub struct Config {
     pub trace_for: Option<Duration>,
     /// Firecracker and a guest kernel, on a host with KVM.
     pub firecracker: Option<crate::vm::Firecracker>,
+    /// CIDRs no command with a network of its own reaches (besides the
+    /// metadata service, always denied): the host's VPC, say.
+    pub egress_deny: Vec<String>,
 }
 
 pub struct Daemon {
@@ -70,6 +73,8 @@ pub struct Daemon {
     calls: Mutex<HashMap<String, Arc<CallEntry>>>,
     /// Calls in microVMs that keep what they left running: their VM stays up.
     vms: Mutex<HashMap<String, Arc<KeptVm>>>,
+    /// The bridge commands' own networks are on: set up on the first.
+    networks: Mutex<Option<Arc<crate::net::Networks>>>,
     /// What microVMs are restored from: made on the first, tried once.
     vm_template: Mutex<Option<Option<Arc<crate::vm::Template>>>>,
     /// Images mounted read-only, shared by every container that uses one.
@@ -191,8 +196,12 @@ struct IsolationRequest {
     rootfs: Option<PathBuf>,
     image: Option<String>,
     path: String,
+    /// Off, commands get a network of their own: NAT out, the host's
+    /// egress policy, and `egress` (CIDRs) narrowing it.
     #[serde(default = "yes")]
     host_network: bool,
+    #[serde(default)]
+    egress: Vec<String>,
     #[serde(default)]
     env: HashMap<String, String>,
 }
@@ -278,6 +287,7 @@ impl Daemon {
             calls: Mutex::new(HashMap::new()),
             vms: Mutex::new(HashMap::new()),
             vm_template: Mutex::new(None),
+            networks: Mutex::new(None),
             images: Mutex::new(HashMap::new()),
             spawns: Mutex::new(HashMap::new()),
             counters: Mutex::new(Counters::default()),
@@ -504,8 +514,21 @@ impl Daemon {
             image_block,
             path: request.path.clone(),
             host_network: request.host_network,
+            networks: if request.host_network { None } else { Some(self.networks()?) },
+            egress: request.egress.clone(),
             env,
         })
+    }
+
+    /// The host's bridge and egress policy, set up once.
+    fn networks(&self) -> Result<Arc<crate::net::Networks>> {
+        let mut networks = self.networks.lock().unwrap();
+        if let Some(networks) = networks.as_ref() {
+            return Ok(networks.clone());
+        }
+        let made = crate::net::Networks::setup(&self.config.egress_deny).context("setting up commands' networks")?;
+        *networks = Some(made.clone());
+        Ok(made)
     }
 
     //#region heads
@@ -562,9 +585,15 @@ impl Daemon {
         });
         match mounted {
             Ok((head, ready, container)) => {
+                let address = container.as_ref().and_then(|c| c.address());
                 *slot = Some(MountedHead { head, container, _cache: cache });
                 self.counters.lock().unwrap().mounts += 1;
-                Ok(serde_json::to_value(ready)?)
+                let mut reply = serde_json::to_value(ready)?;
+                // Where its processes listen, with a network of their own.
+                if let (Some(address), Some(object)) = (address, reply.as_object_mut()) {
+                    object.insert("address".into(), Value::String(address.to_string()));
+                }
+                Ok(reply)
             }
             Err(e) => {
                 drop(slot);

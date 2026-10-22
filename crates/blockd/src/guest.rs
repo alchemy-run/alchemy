@@ -120,8 +120,8 @@ fn start(request: &Value) -> Result<()> {
     }
     if let Some(ns) = request["timeNs"].as_u64() {
         let now = libc::timespec {
-            tv_sec: (ns / 1_000_000_000) as libc::time_t,
-            tv_nsec: (ns % 1_000_000_000) as libc::c_long,
+            tv_sec: (ns / 1_000_000_000) as _,
+            tv_nsec: (ns % 1_000_000_000) as _,
         };
         unsafe { libc::clock_settime(libc::CLOCK_REALTIME, &now) };
     }

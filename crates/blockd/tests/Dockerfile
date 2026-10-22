@@ -17,3 +17,5 @@ RUN arch=$(uname -m) && curl -fsSL "https://ziglang.org/download/${ZIG}/zig-${ar
  && cargo install --locked cargo-zigbuild \
  && rustup target add x86_64-unknown-linux-musl aarch64-unknown-linux-musl \
  && rustup component add clippy
+# Commands' own networks: a bridge, veth pairs, NAT and egress rules.
+RUN apt-get update -qq && apt-get install -y -qq --no-install-recommends iproute2 iptables && rm -rf /var/lib/apt/lists/*

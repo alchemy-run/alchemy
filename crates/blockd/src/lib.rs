@@ -33,6 +33,8 @@ pub mod mount;
 #[cfg(target_os = "linux")]
 pub mod nbd;
 #[cfg(target_os = "linux")]
+pub mod net;
+#[cfg(target_os = "linux")]
 pub mod patch;
 #[cfg(target_os = "linux")]
 pub mod sendstream;

@@ -53,9 +53,16 @@ pub struct Isolation {
     pub image_block: Option<PathBuf>,
     /// Where the workspace appears inside.
     pub path: String,
-    /// Share the host's network (a container's own network is egress work, later).
+    /// Share the host's network. Otherwise the container gets a namespace of
+    /// its own on `networks` (or none at all, without them).
     #[serde(default = "yes")]
     pub host_network: bool,
+    /// The host's networks: the bridge and its egress policy.
+    #[serde(skip)]
+    pub networks: Option<std::sync::Arc<crate::net::Networks>>,
+    /// CIDRs the container's egress is narrowed to (empty: what the host allows).
+    #[serde(default)]
+    pub egress: Vec<String>,
     /// Environment every command gets (the image's `ENV`).
     #[serde(default)]
     pub env: Vec<(String, String)>,
@@ -76,6 +83,9 @@ pub struct Container {
     env: Vec<(String, String)>,
     /// The container's init, as the host sees it (runc), or 1 (runsc).
     init: u32,
+    host_network: bool,
+    /// Its network namespace, released with it.
+    lease: Option<crate::net::Lease>,
 }
 
 const PATH: &str = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin";
@@ -135,7 +145,16 @@ impl Container {
             let _ = force_unmount(&bundle.join("tmpfs"));
             bail!("mounting the image {} as an overlay failed", isolation.rootfs.display());
         }
-        let config = config(isolation, workspace, &rootfs, init);
+        let lease = match &isolation.networks {
+            Some(networks) if !isolation.host_network => {
+                let lease = networks.lease(&isolation.egress)?;
+                std::fs::write(bundle.join("resolv.conf"), lease.resolv_conf())?;
+                std::fs::write(bundle.join("hosts"), "127.0.0.1 localhost\n::1 localhost\n")?;
+                Some(lease)
+            }
+            _ => None,
+        };
+        let config = config(isolation, workspace, &rootfs, init, lease.as_ref(), &bundle);
         std::fs::write(bundle.join("config.json"), serde_json::to_vec_pretty(&config)?)?;
         let root = state.join(format!("{}-root", isolation.runtime.program()));
         std::fs::create_dir_all(&root)?;
@@ -148,6 +167,8 @@ impl Container {
             path: isolation.path.clone(),
             env: isolation.env.clone(),
             init: 0,
+            host_network: isolation.host_network,
+            lease,
         };
         let _ = container.runtime_command(&["delete", "--force", id]).output();
         let pid_file = container.bundle.join("init.pid");
@@ -181,12 +202,21 @@ impl Container {
         &self.id
     }
 
+    /// Its address on the host's bridge, with a network of its own.
+    pub fn address(&self) -> Option<std::net::Ipv4Addr> {
+        self.lease.as_ref().map(|lease| lease.address)
+    }
+
     fn runtime_command(&self, args: &[&str]) -> Command {
         let mut command = Command::new(self.runtime.program());
         command.arg("--root").arg(&self.root);
         if self.runtime == Runtime::Gvisor {
             // The container's cgroups are the host's business, not gVisor's.
-            command.args(["--ignore-cgroups", "--overlay2=none", "--network=host"]);
+            command.args(["--ignore-cgroups", "--overlay2=none"]);
+            // Otherwise its netstack takes over the namespace's interface.
+            if self.host_network {
+                command.arg("--network=host");
+            }
         }
         command.args(args);
         command
@@ -363,15 +393,24 @@ fn command_line(pid: u32) -> String {
 }
 
 /// The OCI config: Docker's defaults where it has them.
-fn config(isolation: &Isolation, workspace: &Path, rootfs: &Path, init: &Path) -> Value {
+fn config(
+    isolation: &Isolation,
+    workspace: &Path,
+    rootfs: &Path,
+    init: &Path,
+    lease: Option<&crate::net::Lease>,
+    bundle: &Path,
+) -> Value {
     let capabilities = [
         "CAP_CHOWN", "CAP_DAC_OVERRIDE", "CAP_FSETID", "CAP_FOWNER", "CAP_MKNOD", "CAP_NET_RAW",
         "CAP_SETGID", "CAP_SETUID", "CAP_SETFCAP", "CAP_SETPCAP", "CAP_NET_BIND_SERVICE",
         "CAP_SYS_CHROOT", "CAP_KILL", "CAP_AUDIT_WRITE",
     ];
     let mut namespaces = vec![json!({"type":"pid"}), json!({"type":"ipc"}), json!({"type":"uts"}), json!({"type":"mount"})];
-    if !isolation.host_network {
-        namespaces.push(json!({"type":"network"}));
+    match lease {
+        Some(lease) => namespaces.push(json!({"type":"network","path":lease.namespace})),
+        None if !isolation.host_network => namespaces.push(json!({"type":"network"})),
+        None => {}
     }
     let mut mounts = vec![
         json!({"destination":"/proc","type":"proc","source":"proc"}),
@@ -383,7 +422,11 @@ fn config(isolation: &Isolation, workspace: &Path, rootfs: &Path, init: &Path) -
         json!({"destination":&isolation.path,"type":"bind","source":workspace,"options":["rbind","rw"]}),
         json!({"destination":"/.blockd/init","type":"bind","source":init,"options":["bind","ro"]}),
     ];
-    if isolation.host_network {
+    if lease.is_some() {
+        for file in ["resolv.conf", "hosts"] {
+            mounts.push(json!({"destination":format!("/etc/{file}"),"type":"bind","source":bundle.join(file),"options":["bind","ro"]}));
+        }
+    } else if isolation.host_network {
         for file in ["/etc/resolv.conf", "/etc/hosts"] {
             if Path::new(file).exists() {
                 mounts.push(json!({"destination":file,"type":"bind","source":file,"options":["bind","ro"]}));

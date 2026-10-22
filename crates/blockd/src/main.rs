@@ -33,6 +33,8 @@
 //!                [--trace-seconds <n>]    (how long an image's first start is traced; default 90)
 //!                [--firecracker <bin> --kernel <vmlinux> [--vm-vcpus 2] [--vm-memory-mib 1024]]
 //!                                         (calls with isolation "firecracker", on a host with KVM)
+//!                [--egress-deny <cidr,…>] (what commands with networks of their own can't reach,
+//!                                          besides the metadata service)
 //!                (every head, call and cache on this machine, over HTTP: see `daemon.rs`;
 //!                 BLOCKD_DAEMON_TOKEN is the bearer token every request needs)
 //! blockd request --daemon <host:port|socket> --path /v1/… [--body <json>] [--method …]
@@ -585,6 +587,10 @@ fn daemon(flags: &Flags, runtime: &tokio::runtime::Runtime) -> Result<()> {
                 }),
                 _ => None,
             },
+            egress_deny: flags
+                .get("egress-deny")
+                .map(|cidrs| cidrs.split(',').filter(|c| !c.is_empty()).map(String::from).collect())
+                .unwrap_or_default(),
             trace_for: flags
                 .get("trace-seconds")
                 .map(str::parse::<u64>)
