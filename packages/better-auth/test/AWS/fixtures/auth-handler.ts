@@ -1,5 +1,5 @@
+import * as Lambda from "@alchemy.run/aws/Lambda";
 import * as Neon from "@alchemy.run/neon";
-import * as Lambda from "alchemy/AWS/Lambda";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";

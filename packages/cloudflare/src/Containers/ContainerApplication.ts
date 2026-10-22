@@ -1,10 +1,10 @@
+import type { InlineDockerfile } from "@alchemy.run/docker/Dockerfile";
 import * as Containers from "@distilled.cloud/cloudflare/containers";
 import type * as Bundle from "alchemy/Bundle/Bundle";
-import type { InlineDockerfile } from "alchemy/Docker/Dockerfile";
 import * as ProviderLayer from "alchemy/Local/ProviderLayer";
 import { type Main, type PlatformProps, type PlatformServices } from "alchemy/Platform";
 import { Resource } from "alchemy/Resource";
-import type { ProcessServices } from "alchemy/Server/Process";
+import type { ProcessServices } from "alchemy/Runtime/Process";
 import type * as Duration from "effect/Duration";
 import * as Redacted from "effect/Redacted";
 import type { Providers } from "../Providers.ts";
@@ -48,8 +48,31 @@ export namespace ContainerApplication {
   export type Check = NonNullable<
     Containers.CreateContainerApplicationRequest["configuration"]["checks"]
   >[number];
+  export type Region =
+    | "ENAM"
+    | "WNAM"
+    | "EEUR"
+    | "WEUR"
+    | "APAC"
+    | "SAM"
+    | "ME"
+    | "OC"
+    | "AFR"
+    | (string & {});
+  export type Jurisdiction = "eu" | "us" | "fedramp" | (string & {});
   export type Constraints = {
     tier?: number;
+    /**
+     * Geographic regions instances may run in. Limited-capacity regions
+     * (`ME`, `OC`, `AFR`) cannot be used exclusively.
+     */
+    regions?: Region[];
+    /**
+     * Compliance boundary for instances. When `regions` is also set, every
+     * region must belong to the jurisdiction.
+     * @see https://developers.cloudflare.com/containers/concepts/placement/#jurisdictional-constraints
+     */
+    jurisdiction?: Jurisdiction;
   };
   export type Affinities = {
     colocation?: "datacenter";
@@ -600,7 +623,7 @@ export type ContainerShape = Main<ContainerServices>;
  *
  * **Example:** Inline environment Dockerfile (extra build steps)
  * ```typescript
- * import * as Dockerfile from "alchemy/Docker/Dockerfile";
+ * import * as Dockerfile from "@alchemy.run/docker/Dockerfile";
  *
  * export class Transcoder extends Cloudflare.Container<Transcoder>()(
  *   "Transcoder",
@@ -766,6 +789,18 @@ export type ContainerShape = Main<ContainerServices>;
  * `constraints.tier` restricts which capacity tier instances may land on, and
  * `affinities.colocation` keeps related instances in the same datacenter to
  * reduce inter-instance latency.
+ *
+ * **Example:** Keep instances inside the EU for data residency
+ * ```typescript
+ * export class Verifier extends Cloudflare.Container<Verifier>()("Verifier", {
+ *   main: import.meta.url,
+ *   constraints: { jurisdiction: "eu" },
+ * }) {}
+ * ```
+ *
+ * `constraints.jurisdiction` restricts instances to a compliance boundary
+ * (`"eu"` is `EEUR` and `WEUR`), and `constraints.regions` narrows placement to
+ * specific regions within it.
  *
  * ### Rollouts
  * When an update changes the configuration, `rollout` controls how the new

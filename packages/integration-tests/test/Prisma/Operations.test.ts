@@ -3,7 +3,7 @@ import * as Prisma from "@alchemy.run/prisma/Operations";
 import { describe, expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
-import { Credentials } from "../../../prisma/src/Credentials.ts";
+import { Credentials } from "../../../prisma/src/internal/Credentials.ts";
 
 type AssertNever<T extends never> = T;
 type ClientOperation = Exclude<keyof PrismaManagementClient, "request" | "paginate">;

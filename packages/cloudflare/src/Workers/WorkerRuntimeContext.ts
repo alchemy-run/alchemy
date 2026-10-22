@@ -1,8 +1,8 @@
 import type * as cf from "@cloudflare/workers-types";
 import type { HttpEffect } from "alchemy/Http";
 import * as Output from "alchemy/Output";
+import type { FunctionContext, FunctionListener } from "alchemy/Runtime/Function";
 import { packEnvValueKeepRedacted, unpackEnvValue } from "alchemy/RuntimeContext";
-import type * as Serverless from "alchemy/Serverless/index";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
@@ -22,13 +22,13 @@ import {
 
 export type WorkerExport = DurableObjectExport | WorkflowExport | SqlMigrationsExport;
 
-export interface WorkerRuntimeContext extends Serverless.FunctionContext {
+export interface WorkerRuntimeContext extends FunctionContext {
   export(name: string, value: any): Effect.Effect<void>;
   shape: () => Record<string, any>;
 }
 
 export const makeWorkerRuntimeContext = (id: string): WorkerRuntimeContext => {
-  const listeners: Effect.Effect<Serverless.FunctionListener>[] = [];
+  const listeners: Effect.Effect<FunctionListener>[] = [];
   const exports: Record<string, WorkerExport> = {};
   const env: Record<string, any> = {};
   let userShape: Record<string, unknown> | undefined;
@@ -66,12 +66,12 @@ export const makeWorkerRuntimeContext = (id: string): WorkerRuntimeContext => {
       if (options?.shape) userShape = options.shape;
       return ctx.listen(makeRequestHandler(handler));
     },
-    listen: ((handler: Serverless.FunctionListener | Effect.Effect<Serverless.FunctionListener>) =>
+    listen: ((handler: FunctionListener | Effect.Effect<FunctionListener>) =>
       Effect.sync(() =>
         Effect.isEffect(handler)
           ? listeners.push(handler)
           : listeners.push(Effect.succeed(handler)),
-      )) as any as Serverless.FunctionContext["listen"],
+      )) as any as FunctionContext["listen"],
     export: (name: string, value: any) =>
       Effect.sync(() => {
         exports[name] = value;

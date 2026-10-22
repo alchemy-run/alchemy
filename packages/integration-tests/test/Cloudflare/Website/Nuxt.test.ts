@@ -14,7 +14,7 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import * as pathe from "pathe";
 import { cloneFixture } from "../Utils/Fixture.ts";
-import { expectUrlContains } from "../Utils/Http.ts";
+import { expectClientChunkContains, expectUrlContains } from "../Utils/Http.ts";
 import { expectWorkerExists, waitForWorkerToBeDeleted } from "../Utils/Worker.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
@@ -127,7 +127,11 @@ describe.concurrent(
                 const siteKv = yield* Cloudflare.KV.Namespace("SiteKV");
                 const site = yield* Cloudflare.Website.Nuxt("NuxtSite", {
                   ...nuxtProps(rootDir),
-                  env: { TEST_BINDING: bindingMarker, SITE_KV: siteKv },
+                  env: {
+                    TEST_BINDING: bindingMarker,
+                    SITE_KV: siteKv,
+                    VITE_SITE_MARKER: "NUXT_PUBLIC_ENV_MARKER",
+                  },
                 });
                 return { site, siteKv };
               }),
@@ -144,6 +148,18 @@ describe.concurrent(
             timeout: "120 seconds",
             label: "SSR home page",
           });
+
+          // A declared public env value is inlined into the deployed client
+          // bundle at build time.
+          yield* expectClientChunkContains(
+            site1.url!,
+            pathe.join(rootDir, ".output", "public"),
+            "NUXT_PUBLIC_ENV_MARKER",
+            {
+              timeout: "60 seconds",
+              label: "nuxt public env",
+            },
+          );
 
           // The SSR page reads `event.context.cloudflare.env.TEST_BINDING` —
           // proves bindings reach nitro's cloudflare_module runtime contract.
@@ -208,6 +224,11 @@ describe.concurrent(
           yield* expectUrlContains(`${site1.url!}/robots.txt`, "User-agent", {
             timeout: "60 seconds",
             label: "static asset",
+          });
+          // The same file read by a server route through the `ASSETS` binding.
+          yield* expectUrlContains(`${site1.url!}/api/asset`, "User-agent", {
+            timeout: "60 seconds",
+            label: "nuxt ASSETS binding",
           });
 
           // Route-rule prerendered page, served from assets.

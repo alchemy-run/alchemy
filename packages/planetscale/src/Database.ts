@@ -1,4 +1,4 @@
-import type { MigrationsInput } from "alchemy/SQL/Migrations/index";
+import type { MigrationsInput } from "@alchemy.run/sql/Migrations";
 
 /**
  * Region selector for a PlanetScale Database.

@@ -81,7 +81,7 @@ connection URL available at runtime without placing credentials in source.
 
 ```diff lang="typescript"
 // src/Api.ts
-+import * as SQL from "alchemy/SQL/Postgres";
++import * as SQL from "@alchemy.run/sql/Postgres";
 
     const db = yield* Prisma.Connect(Connection);
 +    const sql = yield* SQL.Postgres({ url: db.databaseUrl });

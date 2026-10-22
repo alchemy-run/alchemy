@@ -1,7 +1,7 @@
 /**
  * Process bootstrap for `Prisma.Compute` apps. The generated entry imports
  * this module and the user's `main`, nothing else — see
- * `alchemy/Runtime/Bootstrap/Process` for why.
+ * `alchemy/Runtime/Bootstrap` for why.
  */
 import { BunServices } from "@effect/platform-bun";
 import { BunHttpServer } from "alchemy/Http";
@@ -10,8 +10,7 @@ import {
   resolveProgram,
   runProcess,
   stackConstant,
-} from "alchemy/Runtime/Bootstrap/Process";
-import { Stage } from "alchemy/Stage";
+} from "alchemy/Runtime/Bootstrap";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
@@ -36,10 +35,7 @@ export const bootstrap = (entrypoint: unknown, options: PrismaBootstrapOptions):
     Logger.layer([Logger.consolePretty()]),
   );
 
-  const stack = Layer.mergeAll(
-    stackConstant(options.stack.name, options.stack.stage),
-    Layer.succeed(Stage, options.stack.stage),
-  );
+  const stack = stackConstant(options.stack.name, options.stack.stage);
 
   const program = resolveProgram("default").pipe(
     Effect.provide(

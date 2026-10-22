@@ -2,11 +2,11 @@ import { PrismaApiError } from "@alchemy.run/prisma/Client";
 import { describe, expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
-import { Credentials } from "../../../prisma/src/Credentials.ts";
+import { Credentials } from "../../../prisma/src/internal/Credentials.ts";
 import {
   getBuildLogsRequest,
   getDeploymentLogsRequest,
-} from "../../../prisma/src/Internal/LogsClient.ts";
+} from "../../../prisma/src/internal/LogsClient.ts";
 
 const provideEnv = Effect.provideService(
   Credentials,

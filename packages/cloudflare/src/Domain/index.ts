@@ -1,7 +1,6 @@
-import { makeCallback } from "alchemy/Callback";
-import type * as Aggregate from "alchemy/Domain/Aggregate";
-import { isAfter, mergeCheckpoints } from "alchemy/Domain/InMemory";
-import { captureContext } from "alchemy/Domain/internal";
+import type * as Aggregate from "@alchemy.run/domain/Aggregate";
+import { isAfter, mergeCheckpoints } from "@alchemy.run/domain/InMemory";
+import { captureContext } from "@alchemy.run/domain/internal";
 import {
   type Accepted,
   type AggregateKit,
@@ -23,7 +22,8 @@ import {
   type ViewEntry,
   type ViewKit,
   type ViewSnapshot,
-} from "alchemy/Domain/Platform";
+} from "@alchemy.run/domain/Platform";
+import { makeCallback } from "alchemy/Callback";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";

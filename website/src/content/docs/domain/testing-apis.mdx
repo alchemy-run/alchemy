@@ -12,7 +12,7 @@ Stories check your model. To check what a client can do and see through an Api, 
 ```typescript
 // packages/server/test/access.test.ts
 import { expect, it } from "@effect/vitest";
-import * as Domain from "alchemy/Domain";
+import * as Domain from "@alchemy.run/domain";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
@@ -115,7 +115,7 @@ import { MemoryLedgerStore } from "@bank/domain/Ledger/LedgerStore";
 import { sessionClient } from "@bank/domain/Session.middleware";
 import * as NodeHttpServer from "@effect/platform-node/NodeHttpServer";
 import { expect, it } from "@effect/vitest";
-import * as Domain from "alchemy/Domain";
+import * as Domain from "@alchemy.run/domain";
 import * as Effect from "effect/Effect";
 import * as HttpServer from "effect/http/HttpServer";
 import * as Layer from "effect/Layer";
@@ -165,7 +165,7 @@ The example's integration test deploys the whole bank with `alchemy/Test/Bun` an
 
 ```typescript
 // packages/domain/test/liveClient.ts
-import * as Domain from "alchemy/Domain";
+import * as Domain from "@alchemy.run/domain";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";

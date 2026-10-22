@@ -6,6 +6,7 @@ import type {
   Workflow,
 } from "@alchemy.run/cloudflare-runtime/core";
 import type { BundleOutput } from "alchemy/Bundle/Bundle";
+import type { FoldkitBuildMetadata } from "../Website/FoldkitBuild.ts";
 import type { WorkerAssetsConfig, WorkerSourceDescriptor } from "./Worker.ts";
 import type { WorkerBinding } from "./WorkerBinding.ts";
 
@@ -36,6 +37,8 @@ export interface ViteChildConfig {
     main: string | undefined;
     viteEnvironments: { entry?: string; children?: string[] } | undefined;
     hasAssets: boolean;
+    /** The zone outbound `fetch()`es report in `CF-Worker`. */
+    zone?: string;
     bindingDescriptors: WorkerBinding[];
     /** Binding name → opt-out of local emulation (`Alchemy.remote()`). */
     devRemote: Record<string, boolean>;
@@ -48,6 +51,14 @@ export interface ViteChildConfig {
     hyperdrives: Record<string, Required<HyperdriveOrigin>>;
     queueConsumers: QueueConsumer[];
     crons: RuntimeWorker["crons"];
+    /** Tail consumers by script name, resolved through the dev registry. */
+    tails: RuntimeWorker["tails"];
+    /** Streaming tail consumers by script name. */
+    streamingTails: RuntimeWorker["streamingTails"];
+    /** Cache API opt-out (`dev: { cache: false }`). */
+    cache: RuntimeWorker["cache"];
+    /** `request.cf` override (`dev: { cf: {...} }`). */
+    cf: RuntimeWorker["cf"];
     assets: RuntimeWorker["assets"];
   };
 }
@@ -70,6 +81,7 @@ export interface ViteBuildChildConfig {
    */
   env: Record<string, unknown>;
   main: string | undefined;
+  framework?: "foldkit";
   compatibilityDate: string | undefined;
   compatibilityFlags: string[] | undefined;
   viteEnvironments: { entry?: string; children?: string[] } | undefined;
@@ -80,6 +92,7 @@ export interface ViteBuildChildConfig {
 /** Result the build child writes to `outputPath` (V8-serialized). */
 export interface ViteBuildChildResult {
   clientDirectory: string | undefined;
+  foldkit: FoldkitBuildMetadata | undefined;
   base: string | undefined;
   serverBundle: BundleOutput | undefined;
   externalWorkspaces: string[];

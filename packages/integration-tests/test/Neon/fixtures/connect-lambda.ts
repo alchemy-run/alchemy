@@ -1,4 +1,4 @@
-import { Function } from "alchemy/AWS/Lambda/Function";
+import { Function } from "@alchemy.run/aws/Lambda/Function";
 import { connectHandler } from "./connect-handler.ts";
 
 export default class ConnectLambda extends Function<ConnectLambda>()(

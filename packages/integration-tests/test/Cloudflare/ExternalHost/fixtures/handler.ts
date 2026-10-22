@@ -1,5 +1,5 @@
+import * as Lambda from "@alchemy.run/aws/Lambda";
 import * as Cloudflare from "@alchemy.run/cloudflare";
-import * as Lambda from "alchemy/AWS/Lambda";
 import * as Cause from "effect/Cause";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";

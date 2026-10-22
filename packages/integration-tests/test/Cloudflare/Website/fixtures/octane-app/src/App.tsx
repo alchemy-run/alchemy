@@ -17,6 +17,8 @@ export function App() {
         increment
       </button>
       <p id="count">count:{count}</p>
+      {/* Vite inlines `VITE_*` into the client bundle at build time. */}
+      <p id="public-env">{import.meta.env.VITE_SITE_MARKER}</p>
     </main>
   );
 }

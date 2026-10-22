@@ -91,6 +91,11 @@ describe.concurrent(
             timeout: "60 seconds",
             label: "nuxt dev API route",
           });
+          // A `public/` file read by a server route through the `ASSETS` binding.
+          yield* expectUrlContains(`${site.url!}/api/asset`, "User-agent", {
+            timeout: "60 seconds",
+            label: "nuxt dev ASSETS binding",
+          });
 
           // KV binding round-trip against the local simulator, through the
           // platform-proxy bridge (nitro dev worker thread → host workerd).

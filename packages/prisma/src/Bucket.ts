@@ -14,19 +14,19 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import { desiredBranchId } from "./Internal/Branches.ts";
-import { DEV_TIMESTAMP, attrOrString, devId, devProvider } from "./Internal/DevStub.ts";
-import type { ObservedBucket } from "./Internal/Observed.ts";
-import { PrismaPaginationError } from "./Internal/Pagination.ts";
-import type { Project } from "./Project.ts";
-import type { Providers } from "./Providers.ts";
+import { desiredBranchId } from "./internal/Branches.ts";
+import { DEV_TIMESTAMP, attrOrString, devId, devProvider } from "./internal/DevStub.ts";
+import type { ObservedBucket } from "./internal/Observed.ts";
+import { PrismaPaginationError } from "./internal/Pagination.ts";
 import {
   concreteIdsChanged,
   isInputObject,
   isPrismaDevId,
   resolveProjectId,
   unresolvedProjectIdOf,
-} from "./Refs.ts";
+} from "./internal/Refs.ts";
+import type { Project } from "./Project.ts";
+import type { Providers } from "./Providers.ts";
 
 export interface BucketProps {
   /**

@@ -1,6 +1,4 @@
 import { spawn } from "node:child_process";
-import * as cloudfront from "@distilled.cloud/aws/cloudfront";
-import { expect } from "alchemy-test";
 /**
  * Cross-version upgrade tests for moving AWS framework sites onto Lambda Web
  * Functions.
@@ -11,11 +9,16 @@ import { expect } from "alchemy-test";
  * must move onto Web Functions and keep its CloudFront distribution, and
  * the old functions must be deleted.
  */
-import * as AWS from "alchemy/AWS";
+import * as AWS from "@alchemy.run/aws";
+import { AWSEnvironment } from "@alchemy.run/aws/Environment";
+import * as cloudfront from "@distilled.cloud/aws/cloudfront";
+import { expect } from "alchemy-test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import effectPackage from "effect/package.json" with { type: "json" };
 import * as Path from "effect/Path";
+import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as pathe from "pathe";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
@@ -32,16 +35,26 @@ const workspaceCli = pathe.join(repoRoot, "packages/alchemy/bin/alchemy.js");
 const fixtures = pathe.resolve(import.meta.dirname, "fixtures");
 
 /**
+ * The published alchemy's platform peers, pinned to the workspace's exact
+ * Effect: a newer platform patch calls Effect APIs (e.g. `Path.make`) that an
+ * older `effect` does not export.
+ */
+const platformPeers = {
+  "@effect/platform-node": effectPackage.version,
+  "@effect/platform-bun": effectPackage.version,
+  "@effect/platform-node-shared": effectPackage.version,
+};
+
+/**
  * Run a command to completion without blocking the runner's event loop.
  * Fails with the combined output on a non-zero exit.
  */
-const run = (options: { cmd: string; args: string[]; cwd: string }) =>
+const run = (options: { cmd: string; args: string[]; cwd: string; env: Record<string, string> }) =>
   Effect.callback<string, Error>((resume) => {
     const child = spawn(options.cmd, options.args, {
       cwd: options.cwd,
-      // `CI=1` keeps both CLIs non-interactive; AWS credentials come from
-      // the environment, which every version reads.
-      env: { ...process.env, NO_COLOR: "1", CI: "1" },
+      // `CI=1` keeps both CLIs non-interactive.
+      env: { ...process.env, ...options.env, NO_COLOR: "1", CI: "1" },
       stdio: ["ignore", "pipe", "pipe"],
     });
     let output = "";
@@ -73,8 +86,7 @@ interface UpgradeCase {
   readonly tempRoot: string | undefined;
   readonly install: string[];
   /**
-   * Peers the published alchemy needs when nothing above the temp project
-   * provides them, pinned to the workspace's Effect.
+   * Peers the published alchemy needs, pinned to the workspace's Effect.
    */
   readonly peers?: Record<string, string>;
   readonly marker: string;
@@ -92,6 +104,7 @@ const cases: UpgradeCase[] = [
     tempRoot: pathe.resolve(import.meta.dirname, "../../../.tmp"),
     // Peers (nuxt, astro, ...) resolve from the workspace above.
     install: ["install", "--omit", "peer"],
+    peers: platformPeers,
     marker: "NUXT_AWS_PAGE_MARKER",
     moved: [{ from: "Site__Server", to: "Site__WebServer" }],
   },
@@ -101,12 +114,7 @@ const cases: UpgradeCase[] = [
     entries: [".gitignore", "package.json", "next.config.ts", "tsconfig.json", "app", "public"],
     tempRoot: undefined,
     install: ["install", "--linker=hoisted", "--omit", "peer"],
-    peers: {
-      effect: "4.0.4",
-      // Patch releases of the platform packages track `effect`'s.
-      "@effect/platform-node": "~4.0.0",
-      "@effect/platform-bun": "~4.0.0",
-    },
+    peers: { effect: effectPackage.version, ...platformPeers },
     marker: "NEXTJS_AWS_PAGE_MARKER",
     moved: [{ from: "Site__Server", to: "Site__WebServer" }],
     // Next's standalone server optimizes images and revalidates in-process.
@@ -144,6 +152,19 @@ for (const upgrade of cases) {
         const fs = yield* FileSystem.FileSystem;
         const path = yield* Path.Path;
 
+        // Both CLIs read AWS credentials from the environment; under `CI=1`
+        // the published one does not fall back to an SSO profile.
+        const aws = yield* AWSEnvironment.current;
+        const credentials = yield* aws.credentials;
+        const awsEnv: Record<string, string> = {
+          AWS_ACCESS_KEY_ID: Redacted.value(credentials.accessKeyId),
+          AWS_SECRET_ACCESS_KEY: Redacted.value(credentials.secretAccessKey),
+          ...(credentials.sessionToken
+            ? { AWS_SESSION_TOKEN: Redacted.value(credentials.sessionToken) }
+            : {}),
+          AWS_REGION: aws.region,
+        };
+
         const dir = yield* cloneFixture(path.join(fixtures, upgrade.fixture), {
           prefix: `alchemy-wf-upgrade-${upgrade.fixture}-`,
           tempRoot: upgrade.tempRoot,
@@ -162,12 +183,14 @@ for (const upgrade of cases) {
           cmd: "bun",
           args: [workspaceCli, "destroy", "./alchemy.current.run.ts", "--stage", STAGE, "--yes"],
           cwd: dir,
+          env: awsEnv,
         }).pipe(
           Effect.catch(() =>
             run({
               cmd: "bun",
               args: ["node_modules/alchemy/bin/cli.js", "destroy", "--stage", STAGE, "--yes"],
               cwd: dir,
+              env: awsEnv,
             }),
           ),
         );
@@ -197,7 +220,8 @@ for (const upgrade of cases) {
                   alchemy: PUBLISHED,
                   "@alchemy.run/frontend-frameworks": PUBLISHED,
                 },
-                ...(upgrade.peers?.effect ? { overrides: { effect: upgrade.peers.effect } } : {}),
+                // Transitive platform packages must not float past them either.
+                ...(upgrade.peers ? { overrides: upgrade.peers } : {}),
               },
               null,
               2,
@@ -213,7 +237,7 @@ for (const upgrade of cases) {
             stackProgram(
               upgrade.framework,
               pathe.join(repoRoot, "packages/alchemy/src/index.ts"),
-              pathe.join(repoRoot, "packages/alchemy/src/AWS/index.ts"),
+              pathe.join(repoRoot, "packages/aws/src/index.ts"),
             ),
           );
 
@@ -232,11 +256,12 @@ for (const upgrade of cases) {
           }
 
           // ── Phase 1: deploy with the published version ────────────────────
-          yield* run({ cmd: "bun", args: upgrade.install, cwd: dir });
+          yield* run({ cmd: "bun", args: upgrade.install, cwd: dir, env: awsEnv });
           yield* run({
             cmd: "bun",
             args: ["node_modules/alchemy/bin/cli.js", "deploy", "--stage", STAGE, "--yes"],
             cwd: dir,
+            env: awsEnv,
           });
 
           for (const { from } of upgrade.moved) {
@@ -262,6 +287,7 @@ for (const upgrade of cases) {
             cmd: "bun",
             args: [workspaceCli, "deploy", "./alchemy.current.run.ts", "--stage", STAGE, "--yes"],
             cwd: dir,
+            env: awsEnv,
           });
 
           // Each server moved onto a Web Function and the old function is gone.

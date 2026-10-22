@@ -162,13 +162,15 @@ export default class GitHost extends Cloudflare.Worker<GitHost>()(
       GitLive.pipe(Layer.provide(Http.Platform)),
     );
     return { fetch };
-  }),
+  }).pipe(Effect.provide(Cloudflare.R2.ReadWriteBucketBinding)),
 ) {}
 ```
 
 `HttpRouter.toHttpEffect` turns the route layer into the Worker's `fetch` handler.
 `Http.Platform` provides its HTTP platform dependencies. `GIT_WORKER_OPTIONS`
 sets the Worker compatibility flags and CPU limit used by Git.
+`Cloudflare.R2.ReadWriteBucketBinding` binds the bucket to the Worker so
+`BlobStoreR2` can read and write it.
 
 ## Declare the stack
 

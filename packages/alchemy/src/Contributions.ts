@@ -60,6 +60,14 @@ export interface Contributions {
    * set, e.g. a local emulator for the provider's SDK clients.
    */
   readonly testServices?: Lazy<TestServices>;
+  /**
+   * Environment variables `alchemy dev` sets on itself before it starts, so
+   * its sidecars and the processes they launch inherit them, e.g. a local
+   * emulator's CA bundle. A variable that is already set wins.
+   */
+  readonly devEnv?: Lazy<
+    Effect.Effect<Readonly<Record<string, string>>, never, FileSystem.FileSystem | Path.Path>
+  >;
 }
 
 /**
@@ -469,6 +477,17 @@ export const load = Effect.fn("Contributions.load")(function* (cwd?: string) {
     loaded.set(dir, cached);
   }
   return yield* cached;
+});
+
+/** The environment every provider contributes to `alchemy dev` (see {@link Contributions.devEnv}). */
+export const devEnv = Effect.fn("Contributions.devEnv")(function* () {
+  const env: Record<string, string> = {};
+  for (const provider of yield* load()) {
+    if (provider.devEnv === undefined) continue;
+    const contribute = yield* resolve(provider, "devEnv", provider.devEnv);
+    Object.assign(env, yield* contribute);
+  }
+  return env;
 });
 
 /** Every provider's state stores, by `--backend` name, with their provider. */

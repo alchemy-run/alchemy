@@ -1,14 +1,21 @@
+import * as GCP from "@alchemy.run/gcp";
 import { expect } from "alchemy-test";
-import * as GCP from "alchemy/GCP";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
 import { expectUrlContains } from "../../Cloudflare/Utils/Http.ts";
+import {
+  foldkitFixture,
+  foldkitMemo,
+  verifyFoldkitBrowser,
+  verifyFoldkitRendering,
+} from "../../Website/Foldkit.ts";
 import { dockerAvailable } from "../bindingHost.ts";
 import {
   assertSiteGone,
   cloudRunUrl,
   cloudflareFixture,
+  type DeployedService,
   liveOptions,
   logLevel,
   serviceIdentity,
@@ -62,4 +69,31 @@ test.provider.skipIf(!dockerAvailable)(
       yield* assertSiteGone(service);
     }).pipe(logLevel),
   liveOptions(900_000),
+);
+
+// One Cloud Run service walked through every server-rendered mode: each
+// redeploy replaces the build, and every route must answer for the new mode.
+test.provider.skipIf(!dockerAvailable || !!process.env.FAST)(
+  "Foldkit: ssg, ssr and hybrid render every route across redeploys",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      let service: DeployedService | undefined;
+      for (const mode of ["ssg", "ssr", "hybrid"] as const) {
+        const rootDir = yield* foldkitFixture(mode);
+        const site = yield* stack.deploy(
+          GCP.Website.Foldkit("Web", { rootDir, memo: foldkitMemo }),
+        );
+        expect(site.url).toMatch(cloudRunUrl);
+        expect(site.service).toBeDefined();
+        service = serviceIdentity(site.service!);
+        yield* verifyFoldkitRendering(site.url as string, mode);
+        yield* verifyFoldkitBrowser(site.url as string, mode);
+      }
+
+      yield* stack.destroy();
+      yield* assertSiteGone(service!);
+    }).pipe(logLevel),
+  liveOptions(1_800_000),
 );

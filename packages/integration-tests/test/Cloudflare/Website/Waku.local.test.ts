@@ -138,6 +138,11 @@ describe.concurrent(
             timeout: "60 seconds",
             label: "waku dev static asset",
           });
+          // The same file read by a server route through the `ASSETS` binding.
+          yield* expectUrlContains(`${site.url!}/asset`, "hello from public/", {
+            timeout: "60 seconds",
+            label: "waku ASSETS binding",
+          });
 
           // The KV binding round-trips through the `/api/kv` route against the
           // local simulator.

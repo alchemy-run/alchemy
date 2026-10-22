@@ -12,7 +12,7 @@ const WorkflowsWrappedBindingWorker = {
     loadInternalWorker("#cloudflare-runtime-core-worker/bindings/workflows/wrapped-binding.worker"),
 };
 import * as Storage from "../../globals/Storage.ts";
-import { DEFAULT_COMPATIBILITY_DATE, SERVICE_USER_WORKER } from "../../internal/constants.ts";
+import { SERVICE_USER_WORKER } from "../../internal/constants.ts";
 import {
   formatExtensionModule,
   formatInternalWorkerModules,
@@ -82,6 +82,7 @@ export const WorkflowsLive = Layer.effect(
             services.push(
               makeEngineService({
                 workflow,
+                compatibilityDate: ctx.worker.compatibilityDate,
                 compatibilityFlags: ctx.worker.compatibilityFlags,
                 modules: bindingModules,
               }),
@@ -118,19 +119,50 @@ export const WorkflowsLive = Layer.effect(
   }),
 );
 
+const WORKFLOWS_ENGINE_COMPATIBILITY_DATE = "2024-10-22";
+
+/**
+ * Engine behavior that workerd ties to the user Worker's compatibility date.
+ * The engine runs on an older date, so a flag the user's date enables is
+ * passed explicitly, unless the user opted out with its off flag.
+ */
+const WORKFLOWS_ENGINE_DATED_FLAGS = [
+  {
+    flag: "workflows_preserve_non_retryable_error_message",
+    off: "workflows_replace_non_retryable_error_message",
+    date: "2026-05-14",
+  },
+];
+
 const makeEngineService = ({
   workflow,
+  compatibilityDate,
   compatibilityFlags,
   modules,
 }: {
   workflow: Workflow;
+  compatibilityDate: string | undefined;
   compatibilityFlags: ReadonlyArray<string> | undefined;
   modules: Array<WorkerdConfig.Worker_Module>;
 }): WorkerdConfig.Service => ({
   name: `workflows:${workflow.workflowName}`,
   worker: {
-    compatibilityDate: DEFAULT_COMPATIBILITY_DATE,
-    compatibilityFlags: ["experimental", ...(compatibilityFlags ?? [])],
+    // Miniflare's engine date. The user Worker's flags are passed through, so
+    // this must predate every flag a user may set: on the internal default
+    // date, `nodejs_compat` is on by default and workerd rejects it.
+    compatibilityDate: WORKFLOWS_ENGINE_COMPATIBILITY_DATE,
+    compatibilityFlags: [
+      ...new Set([
+        "experimental",
+        ...(compatibilityFlags ?? []),
+        ...WORKFLOWS_ENGINE_DATED_FLAGS.filter(
+          ({ off, date }) =>
+            compatibilityDate !== undefined &&
+            compatibilityDate >= date &&
+            !compatibilityFlags?.includes(off),
+        ).map(({ flag }) => flag),
+      ]),
+    ],
     modules,
     durableObjectNamespaces: [
       {

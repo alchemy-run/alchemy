@@ -1,6 +1,6 @@
 node_modules/
 dist/
-/lib/
+lib/
 /alchemy/lib/
 .out/
 .test/
@@ -79,7 +79,7 @@ examples/cloudflare-worker/src/scratch.ts
 !/packages/alchemy/bin/register-oxc.js
 .tmp
 # the lockfile-pinning test fixture is a checked-in lockfile, not a generated one
-!packages/alchemy/test/AWS/Lambda/fixtures/lockfile-pinning/pnpm/pnpm-lock.yaml
+!packages/integration-tests/test/AWS/Lambda/fixtures/lockfile-pinning/pnpm/pnpm-lock.yaml
 
 .ai-workspace/
 /processes/
@@ -87,6 +87,9 @@ examples/cloudflare-worker/src/scratch.ts
 !packages/cloudflare/src/Workers/worker-module.d.ts
 !packages/git/src/worker-module.d.ts
 !packages/cloudflare/src/globals.d.ts
+!packages/gcp/src/globals.d.ts
+!packages/aws/src/globals.d.ts
+!packages/kubernetes/src/globals.d.ts
 !packages/fly/src/globals.d.ts
 !packages/github/src/globals.d.ts
 !packages/stripe/src/globals.d.ts

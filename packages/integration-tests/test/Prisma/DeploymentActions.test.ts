@@ -4,7 +4,7 @@ import * as Effect from "effect/Effect";
 import {
   startDeploymentIdempotent,
   stopDeploymentIdempotent,
-} from "../../../prisma/src/Internal/DeploymentActions.ts";
+} from "../../../prisma/src/internal/DeploymentActions.ts";
 import {
   type Captured,
   dispatchTo,

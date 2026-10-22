@@ -112,6 +112,10 @@ alchemy state bootstrap --backend cloudflare --profile <your-ci-profile>
 use, except in CI, where `alchemy state bootstrap --backend aws`
 provisions it.
 
+`GCP.state()` does the same with a Cloud Storage bucket in your project,
+`alchemy-state-<project>`. In CI, provision it with
+`alchemy state bootstrap --backend gcp`.
+
 ### Where credentials live
 
 After the bootstrap, Alchemy writes the state-store URL and bearer
@@ -140,14 +144,15 @@ alchemy state list --backend cloudflare --name team-a
 
 `AWS.state({ name })` does the same with a separate S3 bucket
 (`alchemy-state-<name>-<account>-<region>-an`). Pass `bucketName` to
-choose the full bucket name yourself.
+choose the full bucket name yourself. `GCP.state({ name })` uses
+`alchemy-state-<name>-<project>`.
 
 ## Postgres state store
 
 `postgresState()` persists state in a Postgres database you already run, and it locks: each `(stack, stage)` holds a session advisory lock for the duration of a run, so two concurrent deploys of the same stage cannot interleave.
 
 ```typescript
-import { postgresState } from "alchemy/State/PostgresState";
+import { postgresState } from "@alchemy.run/sql/PostgresState";
 import * as Config from "effect/Config";
 
 Alchemy.Stack(
@@ -162,7 +167,7 @@ Alchemy.Stack(
 );
 ```
 
-It is imported from `alchemy/State/PostgresState` rather than the `State` barrel because it depends on the optional `pg` driver, which must stay out of bundled worker code. Install `pg` and `@effect/sql-pg` to use it.
+It is imported from `@alchemy.run/sql/PostgresState` rather than the `State` barrel because it depends on the optional `pg` driver, which must stay out of bundled worker code. Install `pg` and `@effect/sql-pg` to use it.
 
 ## State and lifecycle
 

@@ -1,7 +1,7 @@
 import { fileURLToPath } from "node:url";
+import * as AWS from "@alchemy.run/aws";
 import * as cloudfront from "@distilled.cloud/aws/cloudfront";
 import { describe, expect } from "alchemy-test";
-import * as AWS from "alchemy/AWS";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -21,9 +21,7 @@ const runLive = !process.env.FAST;
 // in both modes; only the URL-shape assertions differ.
 const runEmulated = process.env.ALCHEMY_TEST_DEV === "1";
 
-const fixtureDir = fileURLToPath(
-  new URL("../../../../alchemy/test/AWS/Website/fixtures/static-site", import.meta.url),
-);
+const fixtureDir = fileURLToPath(new URL("../Website/fixtures/static-site", import.meta.url));
 
 const INDEX_MARKER = "alchemy-aws-staticsite-index-marker";
 const ABOUT_MARKER = "alchemy-aws-staticsite-about-marker";

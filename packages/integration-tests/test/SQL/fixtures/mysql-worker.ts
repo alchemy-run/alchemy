@@ -1,6 +1,6 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Planetscale from "@alchemy.run/planetscale";
-import * as SQL from "alchemy/SQL/MySQL";
+import * as SQL from "@alchemy.run/sql/MySQL";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as HttpServerRequest from "effect/http/HttpServerRequest";

@@ -29,70 +29,109 @@
   "sideEffects": false,
   "exports": {
     ".": "./src/index.ts",
-    "./Contributions": "./src/Contributions.ts",
-    "./Bridge": "./src/Bridge.ts",
-    "./RpcWebSocketClient": "./src/Workers/RpcWebSocketClient.ts",
     "./Bootstrap/*": "./src/Bootstrap/*.ts",
-    "./*": "./src/*/index.ts",
-    "./Workers/*": "./src/Workers/*.ts",
-    "./R2/*": "./src/R2/*.ts",
-    "./AI/LanguageModel": "./src/AI/LanguageModel.ts",
-    "./Alchemist/StateStore": "./src/Alchemist/StateStore.ts",
-    "./ApiShield/Operation": "./src/ApiShield/Operation.ts",
-    "./Artifacts/ReadWriteNamespace": "./src/Artifacts/ReadWriteNamespace.ts",
-    "./Auth/AuthConfig": "./src/Auth/AuthConfig.ts",
-    "./Auth/OAuthClient": "./src/Auth/OAuthClient.ts",
-    "./Auth/OAuthScopes": "./src/Auth/OAuthScopes.ts",
-    "./Auth/TokenPolicy": "./src/Auth/TokenPolicy.ts",
-    "./CloudflareEnvironment": "./src/CloudflareEnvironment.ts",
-    "./CloudflareEnvironmentService": "./src/CloudflareEnvironmentService.ts",
-    "./Containers/ContainerBundle": "./src/Containers/ContainerBundle.ts",
-    "./Containers/ContainerImagePreparation": "./src/Containers/ContainerImagePreparation.ts",
-    "./Containers/ContainerPlatform": "./src/Containers/ContainerPlatform.ts",
-    "./Containers/ContainerPublication": "./src/Containers/ContainerPublication.ts",
-    "./Containers/DurableObjectApplication": "./src/Containers/DurableObjectApplication.ts",
-    "./Credentials": "./src/Credentials.ts",
-    "./D1/Database": "./src/D1/Database.ts",
-    "./D1/QueryDatabase": "./src/D1/QueryDatabase.ts",
-    "./EdgeSession": "./src/EdgeSession.ts",
-    "./Email/Rule": "./src/Email/Rule.ts",
-    "./Email/retry": "./src/Email/retry.ts",
-    "./Fetcher": "./src/Fetcher.ts",
-    "./Gateway/Certificate": "./src/Gateway/Certificate.ts",
-    "./Hyperdrive/Connection": "./src/Hyperdrive/Connection.ts",
-    "./Images/Images": "./src/Images/Images.ts",
-    "./K2/K2Codec": "./src/K2/K2Codec.ts",
-    "./K2/K2Http": "./src/K2/K2Http.ts",
-    "./K2/K2Types": "./src/K2/K2Types.ts",
-    "./K2/ReadSubscriptionHttp": "./src/K2/ReadSubscriptionHttp.ts",
-    "./K2/StreamSinkBatch": "./src/K2/StreamSinkBatch.ts",
-    "./K2/WriteStream": "./src/K2/WriteStream.ts",
-    "./K2/WriteStreamBinding": "./src/K2/WriteStreamBinding.ts",
-    "./K2/WriteStreamClient": "./src/K2/WriteStreamClient.ts",
-    "./KV/Namespace": "./src/KV/Namespace.ts",
-    "./KV/ReadNamespace": "./src/KV/ReadNamespace.ts",
-    "./KV/WriteNamespace": "./src/KV/WriteNamespace.ts",
-    "./LocalAccount": "./src/LocalAccount.ts",
-    "./LocalRuntime": "./src/LocalRuntime.ts",
-    "./Providers": "./src/Providers.ts",
-    "./Queues/EventSource": "./src/Queues/EventSource.ts",
-    "./Queues/Queue": "./src/Queues/Queue.ts",
-    "./Queues/QueueSinkBatch": "./src/Queues/QueueSinkBatch.ts",
-    "./Queues/QueueTypes": "./src/Queues/QueueTypes.ts",
-    "./Queues/Subscription": "./src/Queues/Subscription.ts",
-    "./Queues/WriteQueue": "./src/Queues/WriteQueue.ts",
-    "./SecretsStore/ReadSecret": "./src/SecretsStore/ReadSecret.ts",
-    "./Speed/TestSchedule": "./src/Speed/TestSchedule.ts",
-    "./StateStore/Api": "./src/StateStore/Api.ts",
-    "./StateStore/CredentialsFile": "./src/StateStore/CredentialsFile.ts",
-    "./StateStore/State": "./src/StateStore/State.ts",
-    "./TokenValidation/Configuration": "./src/TokenValidation/Configuration.ts",
-    "./Vectorize/VectorizeIndex": "./src/Vectorize/VectorizeIndex.ts",
-    "./Workflows/Workflow": "./src/Workflows/Workflow.ts",
-    "./Workflows/WorkflowBridge": "./src/Workflows/WorkflowBridge.ts",
-    "./Workflows/WorkflowName": "./src/Workflows/WorkflowName.ts",
-    "./Workflows/WorkflowRuntime": "./src/Workflows/WorkflowRuntime.ts",
-    "./Zone/lookup": "./src/Zone/lookup.ts",
+    "./Access": "./src/Access/index.ts",
+    "./Account": "./src/Account/index.ts",
+    "./Acm": "./src/Acm/index.ts",
+    "./Addressing": "./src/Addressing/index.ts",
+    "./AI": "./src/AI/index.ts",
+    "./Alchemist": "./src/Alchemist/index.ts",
+    "./Alerting": "./src/Alerting/index.ts",
+    "./AnalyticsEngine": "./src/AnalyticsEngine/index.ts",
+    "./ApiShield": "./src/ApiShield/index.ts",
+    "./ApiToken": "./src/ApiToken/index.ts",
+    "./Argo": "./src/Argo/index.ts",
+    "./Artifacts": "./src/Artifacts/index.ts",
+    "./Basin": "./src/Basin/index.ts",
+    "./BotManagement": "./src/BotManagement/index.ts",
+    "./Cache": "./src/Cache/index.ts",
+    "./Calls": "./src/Calls/index.ts",
+    "./CertificateAuthorities": "./src/CertificateAuthorities/index.ts",
+    "./ClientCertificate": "./src/ClientCertificate/index.ts",
+    "./CloudConnector": "./src/CloudConnector/index.ts",
+    "./CloudforceOne": "./src/CloudforceOne/index.ts",
+    "./Connectivity": "./src/Connectivity/index.ts",
+    "./Containers": "./src/Containers/index.ts",
+    "./ContentScanning": "./src/ContentScanning/index.ts",
+    "./CustomCertificate": "./src/CustomCertificate/index.ts",
+    "./CustomHostname": "./src/CustomHostname/index.ts",
+    "./CustomNameserver": "./src/CustomNameserver/index.ts",
+    "./D1": "./src/D1/index.ts",
+    "./DdosProtection": "./src/DdosProtection/index.ts",
+    "./Devices": "./src/Devices/index.ts",
+    "./Diagnostics": "./src/Diagnostics/index.ts",
+    "./Dlp": "./src/Dlp/index.ts",
+    "./DNS": "./src/DNS/index.ts",
+    "./Domain": "./src/Domain/index.ts",
+    "./Email": "./src/Email/index.ts",
+    "./Firewall": "./src/Firewall/index.ts",
+    "./Flagship": "./src/Flagship/index.ts",
+    "./Fraud": "./src/Fraud/index.ts",
+    "./Gateway": "./src/Gateway/index.ts",
+    "./GoogleTagGateway": "./src/GoogleTagGateway/index.ts",
+    "./Healthcheck": "./src/Healthcheck/index.ts",
+    "./HostnameTlsSetting": "./src/HostnameTlsSetting/index.ts",
+    "./Hyperdrive": "./src/Hyperdrive/index.ts",
+    "./Iam": "./src/Iam/index.ts",
+    "./Images": "./src/Images/index.ts",
+    "./Intel": "./src/Intel/index.ts",
+    "./K2": "./src/K2/index.ts",
+    "./KeylessCertificate": "./src/KeylessCertificate/index.ts",
+    "./KV": "./src/KV/index.ts",
+    "./LeakedCredentialCheck": "./src/LeakedCredentialCheck/index.ts",
+    "./LoadBalancer": "./src/LoadBalancer/index.ts",
+    "./Logpush": "./src/Logpush/index.ts",
+    "./LogsControl": "./src/LogsControl/index.ts",
+    "./MagicCloudNetworking": "./src/MagicCloudNetworking/index.ts",
+    "./MagicNetworkMonitoring": "./src/MagicNetworkMonitoring/index.ts",
+    "./MagicTransit": "./src/MagicTransit/index.ts",
+    "./ManagedTransforms": "./src/ManagedTransforms/index.ts",
+    "./MtlsCertificate": "./src/MtlsCertificate/index.ts",
+    "./NetworkInterconnects": "./src/NetworkInterconnects/index.ts",
+    "./Organization": "./src/Organization/index.ts",
+    "./OriginCaCertificate": "./src/OriginCaCertificate/index.ts",
+    "./OriginPostQuantumEncryption": "./src/OriginPostQuantumEncryption/index.ts",
+    "./OriginTlsClientAuth": "./src/OriginTlsClientAuth/index.ts",
+    "./PageRule": "./src/PageRule/index.ts",
+    "./Pages": "./src/Pages/index.ts",
+    "./PageShield": "./src/PageShield/index.ts",
+    "./Pipelines": "./src/Pipelines/index.ts",
+    "./Queues": "./src/Queues/index.ts",
+    "./R2": "./src/R2/index.ts",
+    "./RealtimeKit": "./src/RealtimeKit/index.ts",
+    "./RegionalHostname": "./src/RegionalHostname/index.ts",
+    "./Registrar": "./src/Registrar/index.ts",
+    "./ResourceSharing": "./src/ResourceSharing/index.ts",
+    "./RiskScoring": "./src/RiskScoring/index.ts",
+    "./Rules": "./src/Rules/index.ts",
+    "./Ruleset": "./src/Ruleset/index.ts",
+    "./Rum": "./src/Rum/index.ts",
+    "./SchemaValidation": "./src/SchemaValidation/index.ts",
+    "./SecretsStore": "./src/SecretsStore/index.ts",
+    "./SecurityTxt": "./src/SecurityTxt/index.ts",
+    "./Snippets": "./src/Snippets/index.ts",
+    "./Spectrum": "./src/Spectrum/index.ts",
+    "./Speed": "./src/Speed/index.ts",
+    "./Ssl": "./src/Ssl/index.ts",
+    "./StateStore": "./src/StateStore/index.ts",
+    "./Stream": "./src/Stream/index.ts",
+    "./Tags": "./src/Tags/index.ts",
+    "./TokenValidation": "./src/TokenValidation/index.ts",
+    "./Tunnel": "./src/Tunnel/index.ts",
+    "./Turnstile": "./src/Turnstile/index.ts",
+    "./UrlNormalization": "./src/UrlNormalization/index.ts",
+    "./Vectorize": "./src/Vectorize/index.ts",
+    "./VpcService": "./src/VpcService/index.ts",
+    "./VulnerabilityScanner": "./src/VulnerabilityScanner/index.ts",
+    "./WaitingRoom": "./src/WaitingRoom/index.ts",
+    "./Web3": "./src/Web3/index.ts",
+    "./Website": "./src/Website/index.ts",
+    "./Workers": "./src/Workers/index.ts",
+    "./WorkersForPlatforms": "./src/WorkersForPlatforms/index.ts",
+    "./Workflows": "./src/Workflows/index.ts",
+    "./Zaraz": "./src/Zaraz/index.ts",
+    "./Zone": "./src/Zone/index.ts",
+    "./*": "./src/*.ts",
     "./package.json": "./package.json"
   },
   "publishConfig": {
@@ -103,388 +142,624 @@
         "worker": "./src/index.ts",
         "default": "./lib/index.js"
       },
-      "./Contributions": {
-        "types": "./lib/Contributions.d.ts",
-        "bun": "./src/Contributions.ts",
-        "worker": "./src/Contributions.ts",
-        "default": "./lib/Contributions.js"
-      },
-      "./Bridge": {
-        "types": "./lib/Bridge.d.ts",
-        "bun": "./src/Bridge.ts",
-        "worker": "./src/Bridge.ts",
-        "default": "./lib/Bridge.js"
-      },
-      "./RpcWebSocketClient": {
-        "types": "./lib/Workers/RpcWebSocketClient.d.ts",
-        "bun": "./src/Workers/RpcWebSocketClient.ts",
-        "worker": "./src/Workers/RpcWebSocketClient.ts",
-        "default": "./lib/Workers/RpcWebSocketClient.js"
-      },
       "./Bootstrap/*": {
         "types": "./src/Bootstrap/*.ts",
         "bun": "./src/Bootstrap/*.ts",
         "default": "./src/Bootstrap/*.ts"
       },
+      "./Access": {
+        "types": "./lib/Access/index.d.ts",
+        "bun": "./src/Access/index.ts",
+        "worker": "./src/Access/index.ts",
+        "default": "./lib/Access/index.js"
+      },
+      "./Account": {
+        "types": "./lib/Account/index.d.ts",
+        "bun": "./src/Account/index.ts",
+        "worker": "./src/Account/index.ts",
+        "default": "./lib/Account/index.js"
+      },
+      "./Acm": {
+        "types": "./lib/Acm/index.d.ts",
+        "bun": "./src/Acm/index.ts",
+        "worker": "./src/Acm/index.ts",
+        "default": "./lib/Acm/index.js"
+      },
+      "./Addressing": {
+        "types": "./lib/Addressing/index.d.ts",
+        "bun": "./src/Addressing/index.ts",
+        "worker": "./src/Addressing/index.ts",
+        "default": "./lib/Addressing/index.js"
+      },
+      "./AI": {
+        "types": "./lib/AI/index.d.ts",
+        "bun": "./src/AI/index.ts",
+        "worker": "./src/AI/index.ts",
+        "default": "./lib/AI/index.js"
+      },
+      "./Alchemist": {
+        "types": "./lib/Alchemist/index.d.ts",
+        "bun": "./src/Alchemist/index.ts",
+        "worker": "./src/Alchemist/index.ts",
+        "default": "./lib/Alchemist/index.js"
+      },
+      "./Alerting": {
+        "types": "./lib/Alerting/index.d.ts",
+        "bun": "./src/Alerting/index.ts",
+        "worker": "./src/Alerting/index.ts",
+        "default": "./lib/Alerting/index.js"
+      },
+      "./AnalyticsEngine": {
+        "types": "./lib/AnalyticsEngine/index.d.ts",
+        "bun": "./src/AnalyticsEngine/index.ts",
+        "worker": "./src/AnalyticsEngine/index.ts",
+        "default": "./lib/AnalyticsEngine/index.js"
+      },
+      "./ApiShield": {
+        "types": "./lib/ApiShield/index.d.ts",
+        "bun": "./src/ApiShield/index.ts",
+        "worker": "./src/ApiShield/index.ts",
+        "default": "./lib/ApiShield/index.js"
+      },
+      "./ApiToken": {
+        "types": "./lib/ApiToken/index.d.ts",
+        "bun": "./src/ApiToken/index.ts",
+        "worker": "./src/ApiToken/index.ts",
+        "default": "./lib/ApiToken/index.js"
+      },
+      "./Argo": {
+        "types": "./lib/Argo/index.d.ts",
+        "bun": "./src/Argo/index.ts",
+        "worker": "./src/Argo/index.ts",
+        "default": "./lib/Argo/index.js"
+      },
+      "./Artifacts": {
+        "types": "./lib/Artifacts/index.d.ts",
+        "bun": "./src/Artifacts/index.ts",
+        "worker": "./src/Artifacts/index.ts",
+        "default": "./lib/Artifacts/index.js"
+      },
+      "./Basin": {
+        "types": "./lib/Basin/index.d.ts",
+        "bun": "./src/Basin/index.ts",
+        "worker": "./src/Basin/index.ts",
+        "default": "./lib/Basin/index.js"
+      },
+      "./BotManagement": {
+        "types": "./lib/BotManagement/index.d.ts",
+        "bun": "./src/BotManagement/index.ts",
+        "worker": "./src/BotManagement/index.ts",
+        "default": "./lib/BotManagement/index.js"
+      },
+      "./Cache": {
+        "types": "./lib/Cache/index.d.ts",
+        "bun": "./src/Cache/index.ts",
+        "worker": "./src/Cache/index.ts",
+        "default": "./lib/Cache/index.js"
+      },
+      "./Calls": {
+        "types": "./lib/Calls/index.d.ts",
+        "bun": "./src/Calls/index.ts",
+        "worker": "./src/Calls/index.ts",
+        "default": "./lib/Calls/index.js"
+      },
+      "./CertificateAuthorities": {
+        "types": "./lib/CertificateAuthorities/index.d.ts",
+        "bun": "./src/CertificateAuthorities/index.ts",
+        "worker": "./src/CertificateAuthorities/index.ts",
+        "default": "./lib/CertificateAuthorities/index.js"
+      },
+      "./ClientCertificate": {
+        "types": "./lib/ClientCertificate/index.d.ts",
+        "bun": "./src/ClientCertificate/index.ts",
+        "worker": "./src/ClientCertificate/index.ts",
+        "default": "./lib/ClientCertificate/index.js"
+      },
+      "./CloudConnector": {
+        "types": "./lib/CloudConnector/index.d.ts",
+        "bun": "./src/CloudConnector/index.ts",
+        "worker": "./src/CloudConnector/index.ts",
+        "default": "./lib/CloudConnector/index.js"
+      },
+      "./CloudforceOne": {
+        "types": "./lib/CloudforceOne/index.d.ts",
+        "bun": "./src/CloudforceOne/index.ts",
+        "worker": "./src/CloudforceOne/index.ts",
+        "default": "./lib/CloudforceOne/index.js"
+      },
+      "./Connectivity": {
+        "types": "./lib/Connectivity/index.d.ts",
+        "bun": "./src/Connectivity/index.ts",
+        "worker": "./src/Connectivity/index.ts",
+        "default": "./lib/Connectivity/index.js"
+      },
+      "./Containers": {
+        "types": "./lib/Containers/index.d.ts",
+        "bun": "./src/Containers/index.ts",
+        "worker": "./src/Containers/index.ts",
+        "default": "./lib/Containers/index.js"
+      },
+      "./ContentScanning": {
+        "types": "./lib/ContentScanning/index.d.ts",
+        "bun": "./src/ContentScanning/index.ts",
+        "worker": "./src/ContentScanning/index.ts",
+        "default": "./lib/ContentScanning/index.js"
+      },
+      "./CustomCertificate": {
+        "types": "./lib/CustomCertificate/index.d.ts",
+        "bun": "./src/CustomCertificate/index.ts",
+        "worker": "./src/CustomCertificate/index.ts",
+        "default": "./lib/CustomCertificate/index.js"
+      },
+      "./CustomHostname": {
+        "types": "./lib/CustomHostname/index.d.ts",
+        "bun": "./src/CustomHostname/index.ts",
+        "worker": "./src/CustomHostname/index.ts",
+        "default": "./lib/CustomHostname/index.js"
+      },
+      "./CustomNameserver": {
+        "types": "./lib/CustomNameserver/index.d.ts",
+        "bun": "./src/CustomNameserver/index.ts",
+        "worker": "./src/CustomNameserver/index.ts",
+        "default": "./lib/CustomNameserver/index.js"
+      },
+      "./D1": {
+        "types": "./lib/D1/index.d.ts",
+        "bun": "./src/D1/index.ts",
+        "worker": "./src/D1/index.ts",
+        "default": "./lib/D1/index.js"
+      },
+      "./DdosProtection": {
+        "types": "./lib/DdosProtection/index.d.ts",
+        "bun": "./src/DdosProtection/index.ts",
+        "worker": "./src/DdosProtection/index.ts",
+        "default": "./lib/DdosProtection/index.js"
+      },
+      "./Devices": {
+        "types": "./lib/Devices/index.d.ts",
+        "bun": "./src/Devices/index.ts",
+        "worker": "./src/Devices/index.ts",
+        "default": "./lib/Devices/index.js"
+      },
+      "./Diagnostics": {
+        "types": "./lib/Diagnostics/index.d.ts",
+        "bun": "./src/Diagnostics/index.ts",
+        "worker": "./src/Diagnostics/index.ts",
+        "default": "./lib/Diagnostics/index.js"
+      },
+      "./Dlp": {
+        "types": "./lib/Dlp/index.d.ts",
+        "bun": "./src/Dlp/index.ts",
+        "worker": "./src/Dlp/index.ts",
+        "default": "./lib/Dlp/index.js"
+      },
+      "./DNS": {
+        "types": "./lib/DNS/index.d.ts",
+        "bun": "./src/DNS/index.ts",
+        "worker": "./src/DNS/index.ts",
+        "default": "./lib/DNS/index.js"
+      },
+      "./Domain": {
+        "types": "./lib/Domain/index.d.ts",
+        "bun": "./src/Domain/index.ts",
+        "worker": "./src/Domain/index.ts",
+        "default": "./lib/Domain/index.js"
+      },
+      "./Email": {
+        "types": "./lib/Email/index.d.ts",
+        "bun": "./src/Email/index.ts",
+        "worker": "./src/Email/index.ts",
+        "default": "./lib/Email/index.js"
+      },
+      "./Firewall": {
+        "types": "./lib/Firewall/index.d.ts",
+        "bun": "./src/Firewall/index.ts",
+        "worker": "./src/Firewall/index.ts",
+        "default": "./lib/Firewall/index.js"
+      },
+      "./Flagship": {
+        "types": "./lib/Flagship/index.d.ts",
+        "bun": "./src/Flagship/index.ts",
+        "worker": "./src/Flagship/index.ts",
+        "default": "./lib/Flagship/index.js"
+      },
+      "./Fraud": {
+        "types": "./lib/Fraud/index.d.ts",
+        "bun": "./src/Fraud/index.ts",
+        "worker": "./src/Fraud/index.ts",
+        "default": "./lib/Fraud/index.js"
+      },
+      "./Gateway": {
+        "types": "./lib/Gateway/index.d.ts",
+        "bun": "./src/Gateway/index.ts",
+        "worker": "./src/Gateway/index.ts",
+        "default": "./lib/Gateway/index.js"
+      },
+      "./GoogleTagGateway": {
+        "types": "./lib/GoogleTagGateway/index.d.ts",
+        "bun": "./src/GoogleTagGateway/index.ts",
+        "worker": "./src/GoogleTagGateway/index.ts",
+        "default": "./lib/GoogleTagGateway/index.js"
+      },
+      "./Healthcheck": {
+        "types": "./lib/Healthcheck/index.d.ts",
+        "bun": "./src/Healthcheck/index.ts",
+        "worker": "./src/Healthcheck/index.ts",
+        "default": "./lib/Healthcheck/index.js"
+      },
+      "./HostnameTlsSetting": {
+        "types": "./lib/HostnameTlsSetting/index.d.ts",
+        "bun": "./src/HostnameTlsSetting/index.ts",
+        "worker": "./src/HostnameTlsSetting/index.ts",
+        "default": "./lib/HostnameTlsSetting/index.js"
+      },
+      "./Hyperdrive": {
+        "types": "./lib/Hyperdrive/index.d.ts",
+        "bun": "./src/Hyperdrive/index.ts",
+        "worker": "./src/Hyperdrive/index.ts",
+        "default": "./lib/Hyperdrive/index.js"
+      },
+      "./Iam": {
+        "types": "./lib/Iam/index.d.ts",
+        "bun": "./src/Iam/index.ts",
+        "worker": "./src/Iam/index.ts",
+        "default": "./lib/Iam/index.js"
+      },
+      "./Images": {
+        "types": "./lib/Images/index.d.ts",
+        "bun": "./src/Images/index.ts",
+        "worker": "./src/Images/index.ts",
+        "default": "./lib/Images/index.js"
+      },
+      "./Intel": {
+        "types": "./lib/Intel/index.d.ts",
+        "bun": "./src/Intel/index.ts",
+        "worker": "./src/Intel/index.ts",
+        "default": "./lib/Intel/index.js"
+      },
+      "./K2": {
+        "types": "./lib/K2/index.d.ts",
+        "bun": "./src/K2/index.ts",
+        "worker": "./src/K2/index.ts",
+        "default": "./lib/K2/index.js"
+      },
+      "./KeylessCertificate": {
+        "types": "./lib/KeylessCertificate/index.d.ts",
+        "bun": "./src/KeylessCertificate/index.ts",
+        "worker": "./src/KeylessCertificate/index.ts",
+        "default": "./lib/KeylessCertificate/index.js"
+      },
+      "./KV": {
+        "types": "./lib/KV/index.d.ts",
+        "bun": "./src/KV/index.ts",
+        "worker": "./src/KV/index.ts",
+        "default": "./lib/KV/index.js"
+      },
+      "./LeakedCredentialCheck": {
+        "types": "./lib/LeakedCredentialCheck/index.d.ts",
+        "bun": "./src/LeakedCredentialCheck/index.ts",
+        "worker": "./src/LeakedCredentialCheck/index.ts",
+        "default": "./lib/LeakedCredentialCheck/index.js"
+      },
+      "./LoadBalancer": {
+        "types": "./lib/LoadBalancer/index.d.ts",
+        "bun": "./src/LoadBalancer/index.ts",
+        "worker": "./src/LoadBalancer/index.ts",
+        "default": "./lib/LoadBalancer/index.js"
+      },
+      "./Logpush": {
+        "types": "./lib/Logpush/index.d.ts",
+        "bun": "./src/Logpush/index.ts",
+        "worker": "./src/Logpush/index.ts",
+        "default": "./lib/Logpush/index.js"
+      },
+      "./LogsControl": {
+        "types": "./lib/LogsControl/index.d.ts",
+        "bun": "./src/LogsControl/index.ts",
+        "worker": "./src/LogsControl/index.ts",
+        "default": "./lib/LogsControl/index.js"
+      },
+      "./MagicCloudNetworking": {
+        "types": "./lib/MagicCloudNetworking/index.d.ts",
+        "bun": "./src/MagicCloudNetworking/index.ts",
+        "worker": "./src/MagicCloudNetworking/index.ts",
+        "default": "./lib/MagicCloudNetworking/index.js"
+      },
+      "./MagicNetworkMonitoring": {
+        "types": "./lib/MagicNetworkMonitoring/index.d.ts",
+        "bun": "./src/MagicNetworkMonitoring/index.ts",
+        "worker": "./src/MagicNetworkMonitoring/index.ts",
+        "default": "./lib/MagicNetworkMonitoring/index.js"
+      },
+      "./MagicTransit": {
+        "types": "./lib/MagicTransit/index.d.ts",
+        "bun": "./src/MagicTransit/index.ts",
+        "worker": "./src/MagicTransit/index.ts",
+        "default": "./lib/MagicTransit/index.js"
+      },
+      "./ManagedTransforms": {
+        "types": "./lib/ManagedTransforms/index.d.ts",
+        "bun": "./src/ManagedTransforms/index.ts",
+        "worker": "./src/ManagedTransforms/index.ts",
+        "default": "./lib/ManagedTransforms/index.js"
+      },
+      "./MtlsCertificate": {
+        "types": "./lib/MtlsCertificate/index.d.ts",
+        "bun": "./src/MtlsCertificate/index.ts",
+        "worker": "./src/MtlsCertificate/index.ts",
+        "default": "./lib/MtlsCertificate/index.js"
+      },
+      "./NetworkInterconnects": {
+        "types": "./lib/NetworkInterconnects/index.d.ts",
+        "bun": "./src/NetworkInterconnects/index.ts",
+        "worker": "./src/NetworkInterconnects/index.ts",
+        "default": "./lib/NetworkInterconnects/index.js"
+      },
+      "./Organization": {
+        "types": "./lib/Organization/index.d.ts",
+        "bun": "./src/Organization/index.ts",
+        "worker": "./src/Organization/index.ts",
+        "default": "./lib/Organization/index.js"
+      },
+      "./OriginCaCertificate": {
+        "types": "./lib/OriginCaCertificate/index.d.ts",
+        "bun": "./src/OriginCaCertificate/index.ts",
+        "worker": "./src/OriginCaCertificate/index.ts",
+        "default": "./lib/OriginCaCertificate/index.js"
+      },
+      "./OriginPostQuantumEncryption": {
+        "types": "./lib/OriginPostQuantumEncryption/index.d.ts",
+        "bun": "./src/OriginPostQuantumEncryption/index.ts",
+        "worker": "./src/OriginPostQuantumEncryption/index.ts",
+        "default": "./lib/OriginPostQuantumEncryption/index.js"
+      },
+      "./OriginTlsClientAuth": {
+        "types": "./lib/OriginTlsClientAuth/index.d.ts",
+        "bun": "./src/OriginTlsClientAuth/index.ts",
+        "worker": "./src/OriginTlsClientAuth/index.ts",
+        "default": "./lib/OriginTlsClientAuth/index.js"
+      },
+      "./PageRule": {
+        "types": "./lib/PageRule/index.d.ts",
+        "bun": "./src/PageRule/index.ts",
+        "worker": "./src/PageRule/index.ts",
+        "default": "./lib/PageRule/index.js"
+      },
+      "./Pages": {
+        "types": "./lib/Pages/index.d.ts",
+        "bun": "./src/Pages/index.ts",
+        "worker": "./src/Pages/index.ts",
+        "default": "./lib/Pages/index.js"
+      },
+      "./PageShield": {
+        "types": "./lib/PageShield/index.d.ts",
+        "bun": "./src/PageShield/index.ts",
+        "worker": "./src/PageShield/index.ts",
+        "default": "./lib/PageShield/index.js"
+      },
+      "./Pipelines": {
+        "types": "./lib/Pipelines/index.d.ts",
+        "bun": "./src/Pipelines/index.ts",
+        "worker": "./src/Pipelines/index.ts",
+        "default": "./lib/Pipelines/index.js"
+      },
+      "./Queues": {
+        "types": "./lib/Queues/index.d.ts",
+        "bun": "./src/Queues/index.ts",
+        "worker": "./src/Queues/index.ts",
+        "default": "./lib/Queues/index.js"
+      },
+      "./R2": {
+        "types": "./lib/R2/index.d.ts",
+        "bun": "./src/R2/index.ts",
+        "worker": "./src/R2/index.ts",
+        "default": "./lib/R2/index.js"
+      },
+      "./RealtimeKit": {
+        "types": "./lib/RealtimeKit/index.d.ts",
+        "bun": "./src/RealtimeKit/index.ts",
+        "worker": "./src/RealtimeKit/index.ts",
+        "default": "./lib/RealtimeKit/index.js"
+      },
+      "./RegionalHostname": {
+        "types": "./lib/RegionalHostname/index.d.ts",
+        "bun": "./src/RegionalHostname/index.ts",
+        "worker": "./src/RegionalHostname/index.ts",
+        "default": "./lib/RegionalHostname/index.js"
+      },
+      "./Registrar": {
+        "types": "./lib/Registrar/index.d.ts",
+        "bun": "./src/Registrar/index.ts",
+        "worker": "./src/Registrar/index.ts",
+        "default": "./lib/Registrar/index.js"
+      },
+      "./ResourceSharing": {
+        "types": "./lib/ResourceSharing/index.d.ts",
+        "bun": "./src/ResourceSharing/index.ts",
+        "worker": "./src/ResourceSharing/index.ts",
+        "default": "./lib/ResourceSharing/index.js"
+      },
+      "./RiskScoring": {
+        "types": "./lib/RiskScoring/index.d.ts",
+        "bun": "./src/RiskScoring/index.ts",
+        "worker": "./src/RiskScoring/index.ts",
+        "default": "./lib/RiskScoring/index.js"
+      },
+      "./Rules": {
+        "types": "./lib/Rules/index.d.ts",
+        "bun": "./src/Rules/index.ts",
+        "worker": "./src/Rules/index.ts",
+        "default": "./lib/Rules/index.js"
+      },
+      "./Ruleset": {
+        "types": "./lib/Ruleset/index.d.ts",
+        "bun": "./src/Ruleset/index.ts",
+        "worker": "./src/Ruleset/index.ts",
+        "default": "./lib/Ruleset/index.js"
+      },
+      "./Rum": {
+        "types": "./lib/Rum/index.d.ts",
+        "bun": "./src/Rum/index.ts",
+        "worker": "./src/Rum/index.ts",
+        "default": "./lib/Rum/index.js"
+      },
+      "./SchemaValidation": {
+        "types": "./lib/SchemaValidation/index.d.ts",
+        "bun": "./src/SchemaValidation/index.ts",
+        "worker": "./src/SchemaValidation/index.ts",
+        "default": "./lib/SchemaValidation/index.js"
+      },
+      "./SecretsStore": {
+        "types": "./lib/SecretsStore/index.d.ts",
+        "bun": "./src/SecretsStore/index.ts",
+        "worker": "./src/SecretsStore/index.ts",
+        "default": "./lib/SecretsStore/index.js"
+      },
+      "./SecurityTxt": {
+        "types": "./lib/SecurityTxt/index.d.ts",
+        "bun": "./src/SecurityTxt/index.ts",
+        "worker": "./src/SecurityTxt/index.ts",
+        "default": "./lib/SecurityTxt/index.js"
+      },
+      "./Snippets": {
+        "types": "./lib/Snippets/index.d.ts",
+        "bun": "./src/Snippets/index.ts",
+        "worker": "./src/Snippets/index.ts",
+        "default": "./lib/Snippets/index.js"
+      },
+      "./Spectrum": {
+        "types": "./lib/Spectrum/index.d.ts",
+        "bun": "./src/Spectrum/index.ts",
+        "worker": "./src/Spectrum/index.ts",
+        "default": "./lib/Spectrum/index.js"
+      },
+      "./Speed": {
+        "types": "./lib/Speed/index.d.ts",
+        "bun": "./src/Speed/index.ts",
+        "worker": "./src/Speed/index.ts",
+        "default": "./lib/Speed/index.js"
+      },
+      "./Ssl": {
+        "types": "./lib/Ssl/index.d.ts",
+        "bun": "./src/Ssl/index.ts",
+        "worker": "./src/Ssl/index.ts",
+        "default": "./lib/Ssl/index.js"
+      },
+      "./StateStore": {
+        "types": "./lib/StateStore/index.d.ts",
+        "bun": "./src/StateStore/index.ts",
+        "worker": "./src/StateStore/index.ts",
+        "default": "./lib/StateStore/index.js"
+      },
+      "./Stream": {
+        "types": "./lib/Stream/index.d.ts",
+        "bun": "./src/Stream/index.ts",
+        "worker": "./src/Stream/index.ts",
+        "default": "./lib/Stream/index.js"
+      },
+      "./Tags": {
+        "types": "./lib/Tags/index.d.ts",
+        "bun": "./src/Tags/index.ts",
+        "worker": "./src/Tags/index.ts",
+        "default": "./lib/Tags/index.js"
+      },
+      "./TokenValidation": {
+        "types": "./lib/TokenValidation/index.d.ts",
+        "bun": "./src/TokenValidation/index.ts",
+        "worker": "./src/TokenValidation/index.ts",
+        "default": "./lib/TokenValidation/index.js"
+      },
+      "./Tunnel": {
+        "types": "./lib/Tunnel/index.d.ts",
+        "bun": "./src/Tunnel/index.ts",
+        "worker": "./src/Tunnel/index.ts",
+        "default": "./lib/Tunnel/index.js"
+      },
+      "./Turnstile": {
+        "types": "./lib/Turnstile/index.d.ts",
+        "bun": "./src/Turnstile/index.ts",
+        "worker": "./src/Turnstile/index.ts",
+        "default": "./lib/Turnstile/index.js"
+      },
+      "./UrlNormalization": {
+        "types": "./lib/UrlNormalization/index.d.ts",
+        "bun": "./src/UrlNormalization/index.ts",
+        "worker": "./src/UrlNormalization/index.ts",
+        "default": "./lib/UrlNormalization/index.js"
+      },
+      "./Vectorize": {
+        "types": "./lib/Vectorize/index.d.ts",
+        "bun": "./src/Vectorize/index.ts",
+        "worker": "./src/Vectorize/index.ts",
+        "default": "./lib/Vectorize/index.js"
+      },
+      "./VpcService": {
+        "types": "./lib/VpcService/index.d.ts",
+        "bun": "./src/VpcService/index.ts",
+        "worker": "./src/VpcService/index.ts",
+        "default": "./lib/VpcService/index.js"
+      },
+      "./VulnerabilityScanner": {
+        "types": "./lib/VulnerabilityScanner/index.d.ts",
+        "bun": "./src/VulnerabilityScanner/index.ts",
+        "worker": "./src/VulnerabilityScanner/index.ts",
+        "default": "./lib/VulnerabilityScanner/index.js"
+      },
+      "./WaitingRoom": {
+        "types": "./lib/WaitingRoom/index.d.ts",
+        "bun": "./src/WaitingRoom/index.ts",
+        "worker": "./src/WaitingRoom/index.ts",
+        "default": "./lib/WaitingRoom/index.js"
+      },
+      "./Web3": {
+        "types": "./lib/Web3/index.d.ts",
+        "bun": "./src/Web3/index.ts",
+        "worker": "./src/Web3/index.ts",
+        "default": "./lib/Web3/index.js"
+      },
+      "./Website": {
+        "types": "./lib/Website/index.d.ts",
+        "bun": "./src/Website/index.ts",
+        "worker": "./src/Website/index.ts",
+        "default": "./lib/Website/index.js"
+      },
+      "./Workers": {
+        "types": "./lib/Workers/index.d.ts",
+        "bun": "./src/Workers/index.ts",
+        "worker": "./src/Workers/index.ts",
+        "default": "./lib/Workers/index.js"
+      },
+      "./WorkersForPlatforms": {
+        "types": "./lib/WorkersForPlatforms/index.d.ts",
+        "bun": "./src/WorkersForPlatforms/index.ts",
+        "worker": "./src/WorkersForPlatforms/index.ts",
+        "default": "./lib/WorkersForPlatforms/index.js"
+      },
+      "./Workflows": {
+        "types": "./lib/Workflows/index.d.ts",
+        "bun": "./src/Workflows/index.ts",
+        "worker": "./src/Workflows/index.ts",
+        "default": "./lib/Workflows/index.js"
+      },
+      "./Zaraz": {
+        "types": "./lib/Zaraz/index.d.ts",
+        "bun": "./src/Zaraz/index.ts",
+        "worker": "./src/Zaraz/index.ts",
+        "default": "./lib/Zaraz/index.js"
+      },
+      "./Zone": {
+        "types": "./lib/Zone/index.d.ts",
+        "bun": "./src/Zone/index.ts",
+        "worker": "./src/Zone/index.ts",
+        "default": "./lib/Zone/index.js"
+      },
+      "./Basin/internal/*": null,
+      "./*/internal": null,
       "./*": {
-        "types": "./lib/*/index.d.ts",
-        "bun": "./src/*/index.ts",
-        "worker": "./src/*/index.ts",
-        "default": "./lib/*/index.js"
-      },
-      "./Workers/*": {
-        "types": "./lib/Workers/*.d.ts",
-        "bun": "./src/Workers/*.ts",
-        "worker": "./src/Workers/*.ts",
-        "default": "./lib/Workers/*.js"
-      },
-      "./R2/*": {
-        "types": "./lib/R2/*.d.ts",
-        "bun": "./src/R2/*.ts",
-        "worker": "./src/R2/*.ts",
-        "default": "./lib/R2/*.js"
-      },
-      "./AI/LanguageModel": {
-        "types": "./lib/AI/LanguageModel.d.ts",
-        "bun": "./src/AI/LanguageModel.ts",
-        "worker": "./src/AI/LanguageModel.ts",
-        "default": "./lib/AI/LanguageModel.js"
-      },
-      "./Alchemist/StateStore": {
-        "types": "./lib/Alchemist/StateStore.d.ts",
-        "bun": "./src/Alchemist/StateStore.ts",
-        "worker": "./src/Alchemist/StateStore.ts",
-        "default": "./lib/Alchemist/StateStore.js"
-      },
-      "./ApiShield/Operation": {
-        "types": "./lib/ApiShield/Operation.d.ts",
-        "bun": "./src/ApiShield/Operation.ts",
-        "worker": "./src/ApiShield/Operation.ts",
-        "default": "./lib/ApiShield/Operation.js"
-      },
-      "./Artifacts/ReadWriteNamespace": {
-        "types": "./lib/Artifacts/ReadWriteNamespace.d.ts",
-        "bun": "./src/Artifacts/ReadWriteNamespace.ts",
-        "worker": "./src/Artifacts/ReadWriteNamespace.ts",
-        "default": "./lib/Artifacts/ReadWriteNamespace.js"
-      },
-      "./Auth/AuthConfig": {
-        "types": "./lib/Auth/AuthConfig.d.ts",
-        "bun": "./src/Auth/AuthConfig.ts",
-        "worker": "./src/Auth/AuthConfig.ts",
-        "default": "./lib/Auth/AuthConfig.js"
-      },
-      "./Auth/OAuthClient": {
-        "types": "./lib/Auth/OAuthClient.d.ts",
-        "bun": "./src/Auth/OAuthClient.ts",
-        "worker": "./src/Auth/OAuthClient.ts",
-        "default": "./lib/Auth/OAuthClient.js"
-      },
-      "./Auth/OAuthScopes": {
-        "types": "./lib/Auth/OAuthScopes.d.ts",
-        "bun": "./src/Auth/OAuthScopes.ts",
-        "worker": "./src/Auth/OAuthScopes.ts",
-        "default": "./lib/Auth/OAuthScopes.js"
-      },
-      "./Auth/TokenPolicy": {
-        "types": "./lib/Auth/TokenPolicy.d.ts",
-        "bun": "./src/Auth/TokenPolicy.ts",
-        "worker": "./src/Auth/TokenPolicy.ts",
-        "default": "./lib/Auth/TokenPolicy.js"
-      },
-      "./CloudflareEnvironment": {
-        "types": "./lib/CloudflareEnvironment.d.ts",
-        "bun": "./src/CloudflareEnvironment.ts",
-        "worker": "./src/CloudflareEnvironment.ts",
-        "default": "./lib/CloudflareEnvironment.js"
-      },
-      "./CloudflareEnvironmentService": {
-        "types": "./lib/CloudflareEnvironmentService.d.ts",
-        "bun": "./src/CloudflareEnvironmentService.ts",
-        "worker": "./src/CloudflareEnvironmentService.ts",
-        "default": "./lib/CloudflareEnvironmentService.js"
-      },
-      "./Containers/ContainerBundle": {
-        "types": "./lib/Containers/ContainerBundle.d.ts",
-        "bun": "./src/Containers/ContainerBundle.ts",
-        "worker": "./src/Containers/ContainerBundle.ts",
-        "default": "./lib/Containers/ContainerBundle.js"
-      },
-      "./Containers/ContainerImagePreparation": {
-        "types": "./lib/Containers/ContainerImagePreparation.d.ts",
-        "bun": "./src/Containers/ContainerImagePreparation.ts",
-        "worker": "./src/Containers/ContainerImagePreparation.ts",
-        "default": "./lib/Containers/ContainerImagePreparation.js"
-      },
-      "./Containers/ContainerPlatform": {
-        "types": "./lib/Containers/ContainerPlatform.d.ts",
-        "bun": "./src/Containers/ContainerPlatform.ts",
-        "worker": "./src/Containers/ContainerPlatform.ts",
-        "default": "./lib/Containers/ContainerPlatform.js"
-      },
-      "./Containers/ContainerPublication": {
-        "types": "./lib/Containers/ContainerPublication.d.ts",
-        "bun": "./src/Containers/ContainerPublication.ts",
-        "worker": "./src/Containers/ContainerPublication.ts",
-        "default": "./lib/Containers/ContainerPublication.js"
-      },
-      "./Containers/DurableObjectApplication": {
-        "types": "./lib/Containers/DurableObjectApplication.d.ts",
-        "bun": "./src/Containers/DurableObjectApplication.ts",
-        "worker": "./src/Containers/DurableObjectApplication.ts",
-        "default": "./lib/Containers/DurableObjectApplication.js"
-      },
-      "./Credentials": {
-        "types": "./lib/Credentials.d.ts",
-        "bun": "./src/Credentials.ts",
-        "worker": "./src/Credentials.ts",
-        "default": "./lib/Credentials.js"
-      },
-      "./D1/Database": {
-        "types": "./lib/D1/Database.d.ts",
-        "bun": "./src/D1/Database.ts",
-        "worker": "./src/D1/Database.ts",
-        "default": "./lib/D1/Database.js"
-      },
-      "./D1/QueryDatabase": {
-        "types": "./lib/D1/QueryDatabase.d.ts",
-        "bun": "./src/D1/QueryDatabase.ts",
-        "worker": "./src/D1/QueryDatabase.ts",
-        "default": "./lib/D1/QueryDatabase.js"
-      },
-      "./EdgeSession": {
-        "types": "./lib/EdgeSession.d.ts",
-        "bun": "./src/EdgeSession.ts",
-        "worker": "./src/EdgeSession.ts",
-        "default": "./lib/EdgeSession.js"
-      },
-      "./Email/Rule": {
-        "types": "./lib/Email/Rule.d.ts",
-        "bun": "./src/Email/Rule.ts",
-        "worker": "./src/Email/Rule.ts",
-        "default": "./lib/Email/Rule.js"
-      },
-      "./Email/retry": {
-        "types": "./lib/Email/retry.d.ts",
-        "bun": "./src/Email/retry.ts",
-        "worker": "./src/Email/retry.ts",
-        "default": "./lib/Email/retry.js"
-      },
-      "./Fetcher": {
-        "types": "./lib/Fetcher.d.ts",
-        "bun": "./src/Fetcher.ts",
-        "worker": "./src/Fetcher.ts",
-        "default": "./lib/Fetcher.js"
-      },
-      "./Gateway/Certificate": {
-        "types": "./lib/Gateway/Certificate.d.ts",
-        "bun": "./src/Gateway/Certificate.ts",
-        "worker": "./src/Gateway/Certificate.ts",
-        "default": "./lib/Gateway/Certificate.js"
-      },
-      "./Hyperdrive/Connection": {
-        "types": "./lib/Hyperdrive/Connection.d.ts",
-        "bun": "./src/Hyperdrive/Connection.ts",
-        "worker": "./src/Hyperdrive/Connection.ts",
-        "default": "./lib/Hyperdrive/Connection.js"
-      },
-      "./Images/Images": {
-        "types": "./lib/Images/Images.d.ts",
-        "bun": "./src/Images/Images.ts",
-        "worker": "./src/Images/Images.ts",
-        "default": "./lib/Images/Images.js"
-      },
-      "./K2/K2Codec": {
-        "types": "./lib/K2/K2Codec.d.ts",
-        "bun": "./src/K2/K2Codec.ts",
-        "worker": "./src/K2/K2Codec.ts",
-        "default": "./lib/K2/K2Codec.js"
-      },
-      "./K2/K2Http": {
-        "types": "./lib/K2/K2Http.d.ts",
-        "bun": "./src/K2/K2Http.ts",
-        "worker": "./src/K2/K2Http.ts",
-        "default": "./lib/K2/K2Http.js"
-      },
-      "./K2/K2Types": {
-        "types": "./lib/K2/K2Types.d.ts",
-        "bun": "./src/K2/K2Types.ts",
-        "worker": "./src/K2/K2Types.ts",
-        "default": "./lib/K2/K2Types.js"
-      },
-      "./K2/ReadSubscriptionHttp": {
-        "types": "./lib/K2/ReadSubscriptionHttp.d.ts",
-        "bun": "./src/K2/ReadSubscriptionHttp.ts",
-        "worker": "./src/K2/ReadSubscriptionHttp.ts",
-        "default": "./lib/K2/ReadSubscriptionHttp.js"
-      },
-      "./K2/StreamSinkBatch": {
-        "types": "./lib/K2/StreamSinkBatch.d.ts",
-        "bun": "./src/K2/StreamSinkBatch.ts",
-        "worker": "./src/K2/StreamSinkBatch.ts",
-        "default": "./lib/K2/StreamSinkBatch.js"
-      },
-      "./K2/WriteStream": {
-        "types": "./lib/K2/WriteStream.d.ts",
-        "bun": "./src/K2/WriteStream.ts",
-        "worker": "./src/K2/WriteStream.ts",
-        "default": "./lib/K2/WriteStream.js"
-      },
-      "./K2/WriteStreamBinding": {
-        "types": "./lib/K2/WriteStreamBinding.d.ts",
-        "bun": "./src/K2/WriteStreamBinding.ts",
-        "worker": "./src/K2/WriteStreamBinding.ts",
-        "default": "./lib/K2/WriteStreamBinding.js"
-      },
-      "./K2/WriteStreamClient": {
-        "types": "./lib/K2/WriteStreamClient.d.ts",
-        "bun": "./src/K2/WriteStreamClient.ts",
-        "worker": "./src/K2/WriteStreamClient.ts",
-        "default": "./lib/K2/WriteStreamClient.js"
-      },
-      "./KV/Namespace": {
-        "types": "./lib/KV/Namespace.d.ts",
-        "bun": "./src/KV/Namespace.ts",
-        "worker": "./src/KV/Namespace.ts",
-        "default": "./lib/KV/Namespace.js"
-      },
-      "./KV/ReadNamespace": {
-        "types": "./lib/KV/ReadNamespace.d.ts",
-        "bun": "./src/KV/ReadNamespace.ts",
-        "worker": "./src/KV/ReadNamespace.ts",
-        "default": "./lib/KV/ReadNamespace.js"
-      },
-      "./KV/WriteNamespace": {
-        "types": "./lib/KV/WriteNamespace.d.ts",
-        "bun": "./src/KV/WriteNamespace.ts",
-        "worker": "./src/KV/WriteNamespace.ts",
-        "default": "./lib/KV/WriteNamespace.js"
-      },
-      "./LocalAccount": {
-        "types": "./lib/LocalAccount.d.ts",
-        "bun": "./src/LocalAccount.ts",
-        "worker": "./src/LocalAccount.ts",
-        "default": "./lib/LocalAccount.js"
-      },
-      "./LocalRuntime": {
-        "types": "./lib/LocalRuntime.d.ts",
-        "bun": "./src/LocalRuntime.ts",
-        "worker": "./src/LocalRuntime.ts",
-        "default": "./lib/LocalRuntime.js"
-      },
-      "./Providers": {
-        "types": "./lib/Providers.d.ts",
-        "bun": "./src/Providers.ts",
-        "worker": "./src/Providers.ts",
-        "default": "./lib/Providers.js"
-      },
-      "./Queues/EventSource": {
-        "types": "./lib/Queues/EventSource.d.ts",
-        "bun": "./src/Queues/EventSource.ts",
-        "worker": "./src/Queues/EventSource.ts",
-        "default": "./lib/Queues/EventSource.js"
-      },
-      "./Queues/Queue": {
-        "types": "./lib/Queues/Queue.d.ts",
-        "bun": "./src/Queues/Queue.ts",
-        "worker": "./src/Queues/Queue.ts",
-        "default": "./lib/Queues/Queue.js"
-      },
-      "./Queues/QueueSinkBatch": {
-        "types": "./lib/Queues/QueueSinkBatch.d.ts",
-        "bun": "./src/Queues/QueueSinkBatch.ts",
-        "worker": "./src/Queues/QueueSinkBatch.ts",
-        "default": "./lib/Queues/QueueSinkBatch.js"
-      },
-      "./Queues/QueueTypes": {
-        "types": "./lib/Queues/QueueTypes.d.ts",
-        "bun": "./src/Queues/QueueTypes.ts",
-        "worker": "./src/Queues/QueueTypes.ts",
-        "default": "./lib/Queues/QueueTypes.js"
-      },
-      "./Queues/Subscription": {
-        "types": "./lib/Queues/Subscription.d.ts",
-        "bun": "./src/Queues/Subscription.ts",
-        "worker": "./src/Queues/Subscription.ts",
-        "default": "./lib/Queues/Subscription.js"
-      },
-      "./Queues/WriteQueue": {
-        "types": "./lib/Queues/WriteQueue.d.ts",
-        "bun": "./src/Queues/WriteQueue.ts",
-        "worker": "./src/Queues/WriteQueue.ts",
-        "default": "./lib/Queues/WriteQueue.js"
-      },
-      "./SecretsStore/ReadSecret": {
-        "types": "./lib/SecretsStore/ReadSecret.d.ts",
-        "bun": "./src/SecretsStore/ReadSecret.ts",
-        "worker": "./src/SecretsStore/ReadSecret.ts",
-        "default": "./lib/SecretsStore/ReadSecret.js"
-      },
-      "./Speed/TestSchedule": {
-        "types": "./lib/Speed/TestSchedule.d.ts",
-        "bun": "./src/Speed/TestSchedule.ts",
-        "worker": "./src/Speed/TestSchedule.ts",
-        "default": "./lib/Speed/TestSchedule.js"
-      },
-      "./StateStore/Api": {
-        "types": "./lib/StateStore/Api.d.ts",
-        "bun": "./src/StateStore/Api.ts",
-        "worker": "./src/StateStore/Api.ts",
-        "default": "./lib/StateStore/Api.js"
-      },
-      "./StateStore/CredentialsFile": {
-        "types": "./lib/StateStore/CredentialsFile.d.ts",
-        "bun": "./src/StateStore/CredentialsFile.ts",
-        "worker": "./src/StateStore/CredentialsFile.ts",
-        "default": "./lib/StateStore/CredentialsFile.js"
-      },
-      "./StateStore/State": {
-        "types": "./lib/StateStore/State.d.ts",
-        "bun": "./src/StateStore/State.ts",
-        "worker": "./src/StateStore/State.ts",
-        "default": "./lib/StateStore/State.js"
-      },
-      "./TokenValidation/Configuration": {
-        "types": "./lib/TokenValidation/Configuration.d.ts",
-        "bun": "./src/TokenValidation/Configuration.ts",
-        "worker": "./src/TokenValidation/Configuration.ts",
-        "default": "./lib/TokenValidation/Configuration.js"
-      },
-      "./Vectorize/VectorizeIndex": {
-        "types": "./lib/Vectorize/VectorizeIndex.d.ts",
-        "bun": "./src/Vectorize/VectorizeIndex.ts",
-        "worker": "./src/Vectorize/VectorizeIndex.ts",
-        "default": "./lib/Vectorize/VectorizeIndex.js"
-      },
-      "./Workflows/Workflow": {
-        "types": "./lib/Workflows/Workflow.d.ts",
-        "bun": "./src/Workflows/Workflow.ts",
-        "worker": "./src/Workflows/Workflow.ts",
-        "default": "./lib/Workflows/Workflow.js"
-      },
-      "./Workflows/WorkflowBridge": {
-        "types": "./lib/Workflows/WorkflowBridge.d.ts",
-        "bun": "./src/Workflows/WorkflowBridge.ts",
-        "worker": "./src/Workflows/WorkflowBridge.ts",
-        "default": "./lib/Workflows/WorkflowBridge.js"
-      },
-      "./Workflows/WorkflowName": {
-        "types": "./lib/Workflows/WorkflowName.d.ts",
-        "bun": "./src/Workflows/WorkflowName.ts",
-        "worker": "./src/Workflows/WorkflowName.ts",
-        "default": "./lib/Workflows/WorkflowName.js"
-      },
-      "./Workflows/WorkflowRuntime": {
-        "types": "./lib/Workflows/WorkflowRuntime.d.ts",
-        "bun": "./src/Workflows/WorkflowRuntime.ts",
-        "worker": "./src/Workflows/WorkflowRuntime.ts",
-        "default": "./lib/Workflows/WorkflowRuntime.js"
-      },
-      "./Zone/lookup": {
-        "types": "./lib/Zone/lookup.d.ts",
-        "bun": "./src/Zone/lookup.ts",
-        "worker": "./src/Zone/lookup.ts",
-        "default": "./lib/Zone/lookup.js"
+        "types": "./lib/*.d.ts",
+        "bun": "./src/*.ts",
+        "worker": "./src/*.ts",
+        "default": "./lib/*.js"
       },
       "./package.json": "./package.json"
     },
@@ -497,15 +772,19 @@
   "dependencies": {
     "@alchemy.run/acme": "workspace:*",
     "@alchemy.run/cloudflare-runtime": "workspace:*",
-    "@distilled.cloud/aws": "workspace:*",
+    "@alchemy.run/docker": "workspace:*",
+    "@alchemy.run/sql": "workspace:*",
+    "@distilled.cloud/aws4signer": "workspace:*",
     "@distilled.cloud/cloudflare": "workspace:*",
     "@distilled.cloud/core": "workspace:*",
     "@distilled.cloud/iceberg": "workspace:*",
+    "@effect/sql-d1": "catalog:",
     "pathe": "catalog:",
     "rolldown": "catalog:",
     "tinyglobby": "catalog:"
   },
   "devDependencies": {
+    "@alchemy.run/domain": "workspace:*",
     "@alchemy.run/frontend-frameworks": "workspace:*",
     "@cloudflare/workers-types": "catalog:",
     "@effect/platform-bun": "catalog:",
@@ -518,6 +797,7 @@
     "vite": "catalog:"
   },
   "peerDependencies": {
+    "@alchemy.run/domain": "workspace:*",
     "@alchemy.run/frontend-frameworks": "workspace:*",
     "@effect/platform-bun": "catalog:",
     "@effect/platform-node": "catalog:",
@@ -526,6 +806,9 @@
     "vite": "catalog:"
   },
   "peerDependenciesMeta": {
+    "@alchemy.run/domain": {
+      "optional": true
+    },
     "@alchemy.run/frontend-frameworks": {
       "optional": true
     },

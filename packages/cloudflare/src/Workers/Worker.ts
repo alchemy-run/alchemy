@@ -790,6 +790,11 @@ export interface WorkerProps<
    * In Effect-native Workers you can alternatively `yield*` a
    * `Config` in the Init phase to register the binding implicitly;
    * `env` is the only option for async (non-Effect) Workers.
+   *
+   * Alchemy also binds its runtime variables to every Worker:
+   * `ALCHEMY_PHASE`, `ALCHEMY_WORKER_NAME`, `ALCHEMY_STACK_NAME`,
+   * `ALCHEMY_STAGE` and `ALCHEMY_CLOUDFLARE_ACCOUNT_ID`. They appear in
+   * `env` and, when `process.env` is populated, in `process.env`.
    */
   env?: Bindings;
   /**
@@ -1057,9 +1062,18 @@ export interface WorkerSourceDescriptor {
 
 export interface ViteOptions {
   /**
+   * Framework-specific build metadata interpreted after Vite completes.
+   * Set by `Website.Foldkit` to derive asset routing from its manifest.
+   * @internal
+   */
+  framework?: "foldkit";
+
+  /**
    * Overrides the module that becomes the deployed Worker entry, forwarded
    * to the Cloudflare Vite plugin's `main` option. Relative paths resolve
-   * from the Vite root (`rootDir`).
+   * from the Vite root (`rootDir`). A package export
+   * (`"my-package/worker"`) or a virtual module id (`"virtual:entry"`)
+   * resolves through Vite.
    *
    * By default the entry environment's own entry (the server bundle the
    * framework produces) is deployed. Point `main` at a custom module when
@@ -1253,10 +1267,11 @@ export type Worker<Bindings = any> = Resource<
      */
     previewDoClasses?: string[] | undefined;
     /**
-     * The id of the version uploaded by the most recent deploy. Only set
-     * when versioning is in play: always for a version worker
-     * (`version.parent`), and for a self-owned Worker when a gradual
-     * rollout (`version.traffic` < 100) deployed via the versions API.
+     * The id of the version uploaded by the most recent deploy. Set for
+     * every Worker outside a dispatch namespace: a full deploy records the
+     * version serving 100% of traffic, a gradual rollout
+     * (`version.traffic` < 100) and a version worker (`version.parent`)
+     * record the version they uploaded.
      */
     versionId?: string | undefined;
     /**
@@ -1268,10 +1283,11 @@ export type Worker<Bindings = any> = Resource<
      */
     versionAlias?: string | undefined;
     /**
-     * The id of the deployment created by the most recent deploy, when the
-     * deploy created one through the deployments API (a version with
-     * `traffic > 0`). Preview-only versions (`traffic: 0`) have no
-     * deployment.
+     * The id of the deployment created by the most recent deploy. A full
+     * deploy records the active deployment; a version with `traffic > 0`
+     * records the deployment it created through the deployments API.
+     * Preview-only versions (`traffic: 0`) and Workers in a dispatch
+     * namespace have no deployment.
      */
     deploymentId?: string | undefined;
     /**

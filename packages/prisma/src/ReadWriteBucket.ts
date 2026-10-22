@@ -4,7 +4,7 @@ import * as Layer from "effect/Layer";
 import type { Bucket } from "./Bucket.ts";
 import { makeBucketBinding } from "./BucketBinding.ts";
 import type { BucketCredentials } from "./BucketTypes.ts";
-import { makeBucketAccess } from "./Internal/BucketClient.ts";
+import { makeBucketAccess } from "./internal/BucketClient.ts";
 import { readBucketOperations, type ReadBucketClient } from "./ReadBucket.ts";
 import { writeBucketOperations, type WriteBucketClient } from "./WriteBucket.ts";
 

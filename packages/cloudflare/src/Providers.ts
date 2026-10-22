@@ -1,7 +1,7 @@
+import { DockerLive } from "@alchemy.run/docker/Docker";
 import { CredentialsStoreLive } from "alchemy/Auth/Credentials";
 import { ProfileStoreLive } from "alchemy/Auth/Profile";
 import * as Command from "alchemy/Command";
-import { DockerLive } from "alchemy/Docker/Docker";
 import { KeyPair, KeyPairProvider } from "alchemy/KeyPair";
 import * as Provider from "alchemy/Provider";
 import { Random, RandomProvider } from "alchemy/Random";
@@ -668,7 +668,7 @@ export const providers = () =>
     ),
     // Plan-executable data-source capabilities (`Binding.Service.execute`).
     Layer.provideMerge(GetIdentityProviderHttp),
-    Layer.provide(DockerLive),
+    Layer.provideMerge(DockerLive),
     // Note: `localRuntimeServices()` is no longer provided globally — each
     // local provider composes it into its `ProviderLayer.dual` local thunk,
     // so workerd machinery only builds when a local variant is actually

@@ -1,7 +1,7 @@
 import * as Neon from "@alchemy.run/neon";
 import * as Prisma from "@alchemy.run/prisma";
+import * as SQL from "@alchemy.run/sql/Postgres";
 import { expect } from "alchemy-test";
-import * as SQL from "alchemy/SQL/Postgres";
 import * as Stack from "alchemy/Stack";
 import { State } from "alchemy/State";
 import * as Test from "alchemy/Test/Alchemy";

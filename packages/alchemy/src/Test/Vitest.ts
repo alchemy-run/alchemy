@@ -205,15 +205,23 @@ export const make = <ROut = any>(options: MakeOptions<ROut>): TestApi => {
 
   // Fallback cleanup: if the user never calls `destroy(Stack)` (e.g.
   // `NO_DESTROY=1`), nothing else closes the shared scope and the sidecar
-  // child process leaks past the test process. Register an `afterAll` that
-  // closes it (and the RPC sidecar, which lives in its own scope so that
-  // mid-file `destroy(Stack)` calls can't kill it for later tests). We defer
-  // registration to a microtask so it runs AFTER any user-registered
-  // `afterAll` (including `destroy(Stack)`); vitest runs afterAll hooks in
-  // registration order.
+  // child process leaks past the test process. The RPC sidecar lives in its
+  // own scope so that mid-file `destroy(Stack)` calls can't kill it for later
+  // tests.
+  //
+  // The cleanup must run after every user `afterAll` (including
+  // `destroy(Stack)`, which needs the sidecar). Vitest's default
+  // `sequence.hooks: "stack"` runs `afterAll` hooks in reverse registration
+  // order and `"list"` runs them in registration order, so register the
+  // cleanup both before (now) and after (next microtask) the file's
+  // `afterAll` calls, and only close on the second invocation: whichever
+  // order is configured, that one runs last.
   const closeAll = sidecar ? Effect.andThen(closeScope, sidecar.close) : closeScope;
+  let cleanupCalls = 0;
+  const cleanup = () => (++cleanupCalls === 2 ? Effect.runPromise(closeAll) : undefined);
+  vitestAfterAll(cleanup, DEFAULT_TIMEOUT);
   queueMicrotask(() => {
-    vitestAfterAll(() => Effect.runPromise(closeAll), DEFAULT_TIMEOUT);
+    vitestAfterAll(cleanup, DEFAULT_TIMEOUT);
   });
 
   return {

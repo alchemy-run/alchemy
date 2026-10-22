@@ -17,18 +17,18 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
-import { DEV_TIMESTAMP, attrOrString, devId, devProvider } from "./Internal/DevStub.ts";
-import type { ObservedBranch } from "./Internal/Observed.ts";
-import { PrismaPaginationError } from "./Internal/Pagination.ts";
-import type { Project } from "./Project.ts";
-import type { Providers } from "./Providers.ts";
+import { DEV_TIMESTAMP, attrOrString, devId, devProvider } from "./internal/DevStub.ts";
+import type { ObservedBranch } from "./internal/Observed.ts";
+import { PrismaPaginationError } from "./internal/Pagination.ts";
 import {
   concreteIdsChanged,
   isInputObject,
   isPrismaDevId,
   resolveProjectId,
   unresolvedProjectIdOf,
-} from "./Refs.ts";
+} from "./internal/Refs.ts";
+import type { Project } from "./Project.ts";
+import type { Providers } from "./Providers.ts";
 
 export interface BranchProps {
   /**
