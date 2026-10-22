@@ -587,6 +587,8 @@ const makeOutputCollector = (entryEnvironment: string) => {
             }
           }
         }
+        // Vite's build metadata (`.vite/manifest.json`), not a Worker module.
+        if (file.fileName.startsWith(".vite/")) continue;
         const name = fileName(file.fileName, this.environment);
         const content = file.type === "chunk" ? (file.code ?? "") : (file.source ?? "");
         serverChunks.set(name, { content });

@@ -37,6 +37,8 @@ export interface ViteChildConfig {
     main: string | undefined;
     viteEnvironments: { entry?: string; children?: string[] } | undefined;
     hasAssets: boolean;
+    /** The zone outbound `fetch()`es report in `CF-Worker`. */
+    zone?: string;
     bindingDescriptors: WorkerBinding[];
     /** Binding name → opt-out of local emulation (`Alchemy.remote()`). */
     devRemote: Record<string, boolean>;

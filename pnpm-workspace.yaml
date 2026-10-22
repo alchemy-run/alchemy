@@ -8,6 +8,13 @@ allowBuilds:
   "@parcel/watcher": true
   core-js: false
   es5-ext: false
+  # Prisma 7 (prisma playground fixture): `generate` needs no downloaded engines.
+  "@prisma/engines": false
+  prisma: false
+  # Flue's model clients: postinstall banners and version checks only.
+  "@google/genai": false
+  core-js-pure: false
+  protobufjs: false
   esbuild: true
   sharp: true
   vue-demi: false
@@ -96,7 +103,33 @@ catalog:
   "@playwright/test": "^1.64.0"
   "@prisma/orm-family-sql": "^8.0.0-rc.11"
   "@prisma/orm-postgres": "^8.0.0-rc.11"
+  partyserver: "^0.5.10"
+  cross-fetch: "^4.0.0"
+  # Kept in the C3 React Router template's Vite config, which alchemy neutralizes.
+  "@cloudflare/vite-plugin": "^1.64.0"
+  "@flue/runtime": "^2.3.0"
+  "@flue/sdk": "^2.3.0"
+  "@flue/vite": "^2.3.0"
+  # examples/cloudflare-agents; the MCP SDK is an exact peer of `agents`.
+  agents: "^0.29.0"
+  "@modelcontextprotocol/sdk": "1.32.1"
+  # `agents/vite` compiles decorators with these, resolved from the project.
+  "@babel/plugin-proposal-decorators": "^8.0.2"
+  "@rolldown/plugin-babel": "^0.2.3"
+  # create-cloudflare's RedwoodSDK template.
+  rwsdk: "1.7.4"
+  # create-cloudflare's Vike template.
+  vike: "^0.4.268"
+  vike-react: "^0.6.29"
+  "@vitejs/plugin-basic-ssl": "^2.3.0"
+  debug: "^4.4.1"
   prisma: "^8.0.0-rc.15"
+  # `@cloudflare/vite-plugin`'s prisma playground (Prisma 7 + D1 adapter).
+  prisma7: "npm:prisma@7.10.1"
+  # Prisma 7 brings pglite 0.4; drizzle-orm's pglite peer must match packages/drizzle's.
+  "@electric-sql/pglite": "0.3.15"
+  "@prisma/client": "7.10.1"
+  "@prisma/adapter-d1": "7.10.1"
   arktype: "2.2.8"
   "@prisma/dev": "^0.20.0"
   "@puppeteer/browsers": "^3.2.4"

@@ -13,7 +13,6 @@ import * as Option from "effect/Option";
 import * as Scope from "effect/Scope";
 import type * as vite from "vite";
 import * as DurableObjectNamespace from "../core/bindings/DurableObjectNamespace.ts";
-import * as Json from "../core/bindings/Json.ts";
 import * as Loopback from "../core/bindings/Loopback.ts";
 import * as UnsafeEval from "../core/bindings/UnsafeEval.ts";
 import type { BindingHooks, Module } from "../core/index.ts";
@@ -35,7 +34,10 @@ const WrapperWorker = {
 import * as ViteAssets from "./assets/ViteAssets.ts";
 import { renderExportWrappers } from "./export-types.ts";
 import type { EntryEnvironment } from "./module-runner/constants.shared.ts";
-import { ENVIRONMENT_NAME_HEADER } from "./module-runner/constants.shared.ts";
+import {
+  ENTRY_ENVIRONMENT_KEY,
+  ENVIRONMENT_NAME_HEADER,
+} from "./module-runner/constants.shared.ts";
 import type { CloudflareVitePluginOptions } from "./plugin.ts";
 
 export type ServerHandle = Awaited<ReturnType<typeof startServer>>;
@@ -194,8 +196,21 @@ const serve = Effect.fn(function* <B extends BindingHooks = BindingHooks>(
   return yield* runtime.start({
     name,
     proxySharedSecret,
+    // The stable proxy in front relays TLS as-is, so a dev server on HTTPS
+    // is public on HTTPS.
+    publicUrl:
+      options.worker?.publicUrl && server.config.server.https
+        ? options.worker.publicUrl.replace(/^http:/, "https:")
+        : options.worker?.publicUrl,
+    zone: options.worker?.zone,
+    access: options.worker?.access,
     onRestart,
-    modules: yield* Effect.promise(() => makeWorkerModules(exportTypes)),
+    modules: yield* Effect.promise(() =>
+      makeWorkerModules(exportTypes, {
+        ...entryEnvironment,
+        exportTypesId: EXPORT_TYPES_MODULE_ID,
+      }),
+    ),
     compatibilityDate: options.compatibilityDate ?? DEFAULT_COMPATIBILITY_DATE,
     compatibilityFlags: options.compatibilityFlags ?? [],
     bindings: [
@@ -204,10 +219,6 @@ const serve = Effect.fn(function* <B extends BindingHooks = BindingHooks>(
         binding: "__DISTILLED_MODULE_RUNNER__",
         className: "ModuleRunnerDO",
       }),
-      Json.local("__DISTILLED_ENVIRONMENT__", {
-        ...entryEnvironment,
-        exportTypesId: EXPORT_TYPES_MODULE_ID,
-      } satisfies EntryEnvironment),
       Loopback.local({
         binding: "__DISTILLED_INVOKE_MODULE__",
         name: `vite:invoke-module:${name}`,
@@ -294,7 +305,10 @@ const parseModuleFallbackRequest = async (
   }
 };
 
-async function makeWorkerModules(exportTypes: ExportTypes): Promise<Array<Module>> {
+async function makeWorkerModules(
+  exportTypes: ExportTypes,
+  entryEnvironment: EntryEnvironment,
+): Promise<Array<Module>> {
   const [moduleRunnerWorker, wrapperWorker] = await Promise.all([
     ModuleRunnerWorker.worker(),
     WrapperWorker.worker(),
@@ -303,6 +317,7 @@ async function makeWorkerModules(exportTypes: ExportTypes): Promise<Array<Module
     "index.worker.mjs": [
       `import { createWorkerEntrypointWrapper, createDurableObjectWrapper, createWorkflowEntrypointWrapper } from "./module-runner/wrapper.worker.mjs";`,
       'export { ModuleRunnerDO } from "./module-runner/module-runner.worker.mjs";',
+      `globalThis[Symbol.for(${JSON.stringify(ENTRY_ENVIRONMENT_KEY)})] = ${JSON.stringify(entryEnvironment)};`,
       'export default createWorkerEntrypointWrapper("default");',
       ...renderExportWrappers(exportTypes),
     ].join("\n"),

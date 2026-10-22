@@ -26,14 +26,19 @@ const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
 const stack = beforeAll(
   destroy(Stack).pipe(
     Effect.andThen(deploy(Stack)),
+    // The Worker reaches the edge before its assets do: wait for both the
+    // hydrating home page and a second prerendered route.
     Effect.tap(({ url }) =>
-      request(url!).pipe(
-        Effect.flatMap((response) =>
-          response.status === 200 && response.body.includes("Statically generated home")
+      Effect.all([request(url!), request(url!.replace(/\/+$/, "") + "/about")]).pipe(
+        Effect.flatMap(([home, about]) =>
+          home.status === 200 &&
+          home.body.includes("Statically generated home") &&
+          home.body.includes("<script") &&
+          about.status === 200
             ? Effect.void
             : Effect.fail(new Error("The example has not reached the edge yet")),
         ),
-        Effect.retry({ schedule: Schedule.spaced("1 second"), times: 8 }),
+        Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 25 }),
         Effect.timeout("60 seconds"),
       ),
     ),

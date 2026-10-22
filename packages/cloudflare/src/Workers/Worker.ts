@@ -790,6 +790,11 @@ export interface WorkerProps<
    * In Effect-native Workers you can alternatively `yield*` a
    * `Config` in the Init phase to register the binding implicitly;
    * `env` is the only option for async (non-Effect) Workers.
+   *
+   * Alchemy also binds its runtime variables to every Worker:
+   * `ALCHEMY_PHASE`, `ALCHEMY_WORKER_NAME`, `ALCHEMY_STACK_NAME`,
+   * `ALCHEMY_STAGE` and `ALCHEMY_CLOUDFLARE_ACCOUNT_ID`. They appear in
+   * `env` and, when `process.env` is populated, in `process.env`.
    */
   env?: Bindings;
   /**
@@ -1066,7 +1071,9 @@ export interface ViteOptions {
   /**
    * Overrides the module that becomes the deployed Worker entry, forwarded
    * to the Cloudflare Vite plugin's `main` option. Relative paths resolve
-   * from the Vite root (`rootDir`).
+   * from the Vite root (`rootDir`). A package export
+   * (`"my-package/worker"`) or a virtual module id (`"virtual:entry"`)
+   * resolves through Vite.
    *
    * By default the entry environment's own entry (the server bundle the
    * framework produces) is deployed. Point `main` at a custom module when

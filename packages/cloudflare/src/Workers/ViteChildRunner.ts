@@ -149,8 +149,17 @@ const program = Effect.scoped(
               compatibilityDate: compatibility.date,
               compatibilityFlags: compatibility.flags,
               viteEnvironments,
-              worker: { ...runtimeWorker, bindings },
+              // `dev.access` populates the Worker's native `ctx.access`.
+              worker: {
+                ...runtimeWorker,
+                bindings,
+                publicUrl: config.publicUrl,
+                access: devAccess,
+              },
               context: runtimeContext,
+              entrypoints: bindingDescriptors.flatMap((binding) =>
+                binding.type === "self_service" && binding.entrypoint ? [binding.entrypoint] : [],
+              ),
             },
             { host: viteHost, port: vitePort, strictPort: false },
           ).pipe(Effect.map((server) => server.resolvedUrls?.local[0]));

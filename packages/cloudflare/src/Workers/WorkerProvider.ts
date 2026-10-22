@@ -19,6 +19,7 @@ import { sha256Object } from "alchemy/Util/sha256";
 import * as Config from "effect/Config";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
 import { isHttpClientError } from "effect/http/HttpClientError";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
@@ -3240,8 +3241,11 @@ export const LiveWorkerProvider = () =>
                 ...(item.props !== undefined && { props: item.props }),
               };
             }
-            if (item.type === "durable_object_namespace" && item.transferredFrom !== undefined) {
-              const { transferredFrom: _, ...rest } = item;
+            if (
+              item.type === "durable_object_namespace" &&
+              (item.transferredFrom !== undefined || item.storage !== undefined)
+            ) {
+              const { transferredFrom: _, storage: __, ...rest } = item;
               return rest;
             }
             // `queueId` (mode discrimination) and `shim` (dev-mode remote
@@ -3676,6 +3680,11 @@ export const LiveWorkerProvider = () =>
           scriptName: name,
           observedNamespaces,
           hostedClasses: currentDoBindings.map((binding) => binding.className),
+          declaredStorage: new Map(
+            currentDoBindings.flatMap((binding) =>
+              binding.storage === undefined ? [] : [[binding.className, binding.storage] as const],
+            ),
+          ),
           renamedClasses,
           deletedClasses,
           transferredClasses,
@@ -4812,13 +4821,17 @@ export const LiveWorkerProvider = () =>
                 compatibilityDate: compatibility.date,
                 compatibilityFlags: compatibility.flags,
                 containers,
-                // A fresh script: every hosted class is new and SQLite-backed.
+                // A fresh script: every hosted class is new, with the storage
+                // its binding declares (SQLite unless stated).
                 exports:
-                  doClasses.length > 0
+                  durableObjects.length > 0
                     ? Object.fromEntries(
-                        doClasses.map((className) => [
-                          className,
-                          { type: "durable-object", storage: "sqlite" },
+                        durableObjects.map((binding) => [
+                          binding.className,
+                          {
+                            type: "durable-object",
+                            storage: binding.storage ?? "sqlite",
+                          },
                         ]),
                       )
                     : undefined,
@@ -5464,16 +5477,22 @@ type ObservedDurableObjectNamespace = {
   useSqlite?: boolean;
 };
 
-/** The storage backend Cloudflare reports for a script's class. */
+/**
+ * The storage backend Cloudflare reports for a script's class, else the
+ * backend the class declares (`storage` on its binding), else SQLite.
+ */
 const observedStorage = (
   observedNamespaces: readonly ObservedDurableObjectNamespace[],
   scriptName: string,
   className: string,
-): "sqlite" | "legacy-kv" =>
-  observedNamespaces.find((ns) => ns.script === scriptName && ns.class === className)?.useSqlite ===
-  false
-    ? "legacy-kv"
-    : "sqlite";
+  declared?: "sqlite" | "legacy-kv",
+): "sqlite" | "legacy-kv" => {
+  const observed = observedNamespaces.find(
+    (ns) => ns.script === scriptName && ns.class === className,
+  );
+  if (observed === undefined) return declared ?? "sqlite";
+  return observed.useSqlite === false ? "legacy-kv" : "sqlite";
+};
 
 /**
  * Build a script's declarative `exports` map: every namespace Cloudflare
@@ -5488,6 +5507,8 @@ const buildDurableObjectExports = (params: {
   scriptName: string;
   observedNamespaces: readonly ObservedDurableObjectNamespace[];
   hostedClasses: readonly string[];
+  /** Storage declared by a hosted class's binding, for a class not yet observed. */
+  declaredStorage?: ReadonlyMap<string, "sqlite" | "legacy-kv">;
   renamedClasses: readonly { from: string; to: string }[];
   deletedClasses: readonly string[];
   transferredClasses: readonly { from: string; fromScript: string; to: string }[];
@@ -5497,7 +5518,12 @@ const buildDurableObjectExports = (params: {
   const live = (className: string, storageOf = className) => {
     exports[className] = {
       type: "durable-object",
-      storage: observedStorage(observedNamespaces, scriptName, storageOf),
+      storage: observedStorage(
+        observedNamespaces,
+        scriptName,
+        storageOf,
+        params.declaredStorage?.get(className),
+      ),
     };
   };
   for (const ns of observedNamespaces) {
@@ -5747,11 +5773,13 @@ function mergeDurableObjectClasses(
     logicalId: string;
     className: string;
     transferredFrom?: string | string[];
+    storage?: "sqlite" | "legacy-kv";
   }>,
   bindingDerived: ReadonlyArray<{
     logicalId: string;
     className: string;
     transferredFrom?: string | string[];
+    storage?: "sqlite" | "legacy-kv";
   }>,
 ) {
   return Array.from(
@@ -5794,6 +5822,7 @@ function getDurableObjectBindings(bindings: ReadonlyArray<ResourceBinding>, work
             Array.isArray(item.transferredFrom) && item.transferredFrom.length === 0
               ? undefined
               : item.transferredFrom,
+          storage: item.storage,
         },
       ];
     }),
