@@ -92,23 +92,20 @@ interface ResourceTracker {
 }
 
 /**
- * A live `fqn -> output` view over `tracker` for `Output.evaluate`. Lookups
- * read through to the tracker, so callers never copy the whole map: rebuilding
- * it per resource made apply quadratic in resource count (#2400).
+ * Record a resource's result in `tracker` and its output in `outputs`, the
+ * `fqn -> output` record `Output.evaluate` reads. Keeping `outputs` up to date
+ * here means callers never rebuild it from `tracker`, which made apply
+ * quadratic in resource count (#2400).
  */
-const trackedOutputs = (tracker: Record<string, ResourceTracker>): Record<string, any> =>
-  new Proxy(
-    {},
-    {
-      get: (_, fqn) => (typeof fqn === "string" ? tracker[fqn]?.output : undefined),
-      has: (_, fqn) => typeof fqn === "string" && Object.hasOwn(tracker, fqn),
-      ownKeys: () => Object.keys(tracker),
-      getOwnPropertyDescriptor: (_, fqn) =>
-        typeof fqn === "string" && Object.hasOwn(tracker, fqn)
-          ? { value: tracker[fqn]!.output, writable: false, enumerable: true, configurable: true }
-          : undefined,
-    },
-  );
+const track = (
+  tracker: Record<string, ResourceTracker>,
+  outputs: Record<string, any>,
+  fqn: string,
+  entry: ResourceTracker,
+) => {
+  tracker[fqn] = entry;
+  outputs[fqn] = entry.output;
+};
 
 const provideLifecycleScope =
   (resource: ResourceContext["Service"]) =>
@@ -209,6 +206,7 @@ export const apply = <P extends Plan>(
       const stackName = stack.name;
 
       const tracker: Record<string, ResourceTracker> = {};
+      const outputs: Record<string, any> = {};
       const terminalStatuses = new Map<
         string,
         {
@@ -257,7 +255,16 @@ export const apply = <P extends Plan>(
         { concurrency: "unbounded" },
       );
 
-      yield* executePlan(plan, tracker, terminalStatuses, session, state, stackName, stage);
+      yield* executePlan(
+        plan,
+        tracker,
+        outputs,
+        terminalStatuses,
+        session,
+        state,
+        stackName,
+        stage,
+      );
 
       // TODO(sam): support roll back to previous state if errors occur during expansion
       // -> RISK: some UPDATEs may not be reversible (i.e. trigger replacements)
@@ -265,7 +272,7 @@ export const apply = <P extends Plan>(
 
       yield* collectGarbage(plan, session);
 
-      yield* converge(plan, tracker, terminalStatuses, session, state, stackName, stage);
+      yield* converge(plan, tracker, outputs, terminalStatuses, session, state, stackName, stage);
 
       yield* Effect.forEach(
         Array.from(terminalStatuses.values()),
@@ -303,7 +310,7 @@ export const apply = <P extends Plan>(
         return undefined;
       }
 
-      const resolved = yield* Output.evaluate(plan.output, trackedOutputs(tracker));
+      const resolved = yield* Output.evaluate(plan.output, outputs);
 
       // Persist the stack's evaluated outputs so cross-stack references
       // (`yield* OtherStack` / `OtherStack.stage.<name>` / `Output.stackRef`)
@@ -332,6 +339,7 @@ export const apply = <P extends Plan>(
 const executePlan = Effect.fn(function* (
   plan: Plan,
   tracker: Record<string, ResourceTracker>,
+  outputs: Record<string, any>,
   terminalStatuses: Map<
     string,
     {
@@ -379,9 +387,6 @@ const executePlan = Effect.fn(function* (
     ),
   ) as Record<string, Deferred.Deferred<void>>;
 
-  const outputs = trackedOutputs(tracker);
-  const getOutputs = (): Record<string, any> => outputs;
-
   const waitForDeps = (downstreamFqn: string, fqns: string[]) =>
     Effect.all(
       fqns
@@ -424,6 +429,7 @@ const executePlan = Effect.fn(function* (
             fqn,
             node as ActionApply,
             tracker,
+            outputs,
             ready,
             readyStable,
             terminalStatuses,
@@ -431,7 +437,6 @@ const executePlan = Effect.fn(function* (
             state,
             stackName,
             stage,
-            getOutputs,
             waitForStableDeps,
             failures,
           )
@@ -439,6 +444,7 @@ const executePlan = Effect.fn(function* (
             fqn,
             node as Apply,
             tracker,
+            outputs,
             ready,
             readyStable,
             terminalStatuses as any,
@@ -446,7 +452,6 @@ const executePlan = Effect.fn(function* (
             state,
             stackName,
             stage,
-            getOutputs,
             (fqns) => waitForDeps(fqn, fqns),
             failures,
             plan.cycleMembers.has(fqn),
@@ -504,6 +509,7 @@ const executeNode = (
   fqn: string,
   node: Apply,
   tracker: Record<string, ResourceTracker>,
+  outputs: Record<string, any>,
   ready: Record<string, Deferred.Deferred<void>>,
   readyStable: Record<string, Deferred.Deferred<void>>,
   terminalStatuses: Map<
@@ -527,7 +533,6 @@ const executeNode = (
   },
   stackName: string,
   stage: string,
-  getOutputs: () => Record<string, any>,
   waitForDeps: (fqns: string[]) => Effect.Effect<void[], never, never>,
   failures: LifecycleFailure[],
   inCycle: boolean,
@@ -646,7 +651,7 @@ const executeNode = (
 
     const storeAndSignal = (t: ResourceTracker) =>
       Effect.gen(function* () {
-        tracker[fqn] = t;
+        track(tracker, outputs, fqn, t);
         yield* signalReady;
       });
 
@@ -842,7 +847,6 @@ const executeNode = (
       yield* waitForDeps(allUpstreamFqns());
 
       yield* report("creating");
-      const outputs = getOutputs();
 
       const news = (yield* Output.evaluate(node.props, outputs)) as Record<string, any>;
 
@@ -923,7 +927,12 @@ const executeNode = (
         providerMode: node.mode,
       });
 
-      tracker[fqn] = { output: attr, props: news, bindings: bindingOutputs, instanceId };
+      track(tracker, outputs, fqn, {
+        output: attr,
+        props: news,
+        bindings: bindingOutputs,
+        instanceId,
+      });
       yield* signalReady;
       yield* signalReadyStable;
 
@@ -958,7 +967,6 @@ const executeNode = (
       // this resource isn't actually updating yet.
       yield* report("pending");
       yield* waitForDeps(allUpstreamFqns());
-      const outputs = getOutputs();
 
       const news = (yield* Output.evaluate(node.props, outputs)) as Record<string, any>;
       const adopting =
@@ -1049,7 +1057,12 @@ const executeNode = (
         });
       }
 
-      tracker[fqn] = { output: attr, props: news, bindings: bindingOutputs, instanceId };
+      track(tracker, outputs, fqn, {
+        output: attr,
+        props: news,
+        bindings: bindingOutputs,
+        instanceId,
+      });
       // Signal here for the linear (non-cycle) path. For in-cycle updates
       // the deferred has already been resolved by the early `storeAndSignal`
       // above and `signalReady` is a no-op the second time.
@@ -1076,12 +1089,12 @@ const executeNode = (
       if (node.state.status === "replaced" && !node.restart) {
         // The replacement already exists; this pass only needs GC to clean up
         // older generations, so expose the current replacement and stop here.
-        tracker[fqn] = {
+        track(tracker, outputs, fqn, {
           output: node.state.attr,
           props: node.state.props,
           bindings: node.state.bindings ?? [],
           instanceId,
-        };
+        });
         yield* signalReady;
         yield* signalReadyStable;
         yield* markTerminal("created");
@@ -1215,7 +1228,6 @@ const executeNode = (
       yield* waitForDeps(allUpstreamFqns());
 
       yield* report("creating replacement");
-      const outputs = getOutputs();
 
       const news = (yield* Output.evaluate(node.props, outputs)) as Record<string, any>;
 
@@ -1277,7 +1289,12 @@ const executeNode = (
         });
       }
 
-      tracker[fqn] = { output: attr, props: news, bindings: bindingOutputs, instanceId };
+      track(tracker, outputs, fqn, {
+        output: attr,
+        props: news,
+        bindings: bindingOutputs,
+        instanceId,
+      });
       yield* signalReady;
       yield* signalReadyStable;
 
@@ -1350,6 +1367,7 @@ const executeActionNode = (
   fqn: string,
   node: ActionApply,
   tracker: Record<string, ResourceTracker>,
+  outputs: Record<string, any>,
   ready: Record<string, Deferred.Deferred<void>>,
   readyStable: Record<string, Deferred.Deferred<void>>,
   terminalStatuses: Map<
@@ -1373,7 +1391,6 @@ const executeActionNode = (
   },
   stackName: string,
   stage: string,
-  getOutputs: () => Record<string, any>,
   waitForDeps: (fqns: string[]) => Effect.Effect<void[], never, never>,
   failures: LifecycleFailure[],
 ): Effect.Effect<void, never, any> =>
@@ -1396,12 +1413,12 @@ const executeActionNode = (
         if (!sameSet(state.downstream ?? [], node.downstream)) {
           yield* commit<RanActionState>({ ...state, downstream: node.downstream });
         }
-        tracker[fqn] = {
+        track(tracker, outputs, fqn, {
           output: state.output,
           props: { __input: state.input },
           bindings: [],
           instanceId: fqn,
-        };
+        });
         yield* signalReady;
         yield* signalReadyStable;
         terminalStatuses.set(fqn, { fqn, id: logicalId, type: task.Type, status: "skipped" });
@@ -1427,7 +1444,6 @@ const executeActionNode = (
       ].filter((f) => f in readyStable),
     );
 
-    const outputs = getOutputs();
     const resolvedInput = (yield* Output.evaluate(node.input, outputs)) as any;
     const inputHashValue = yield* hashInput(resolvedInput);
 
@@ -1462,12 +1478,12 @@ const executeActionNode = (
       downstream: node.downstream,
     });
 
-    tracker[fqn] = {
+    track(tracker, outputs, fqn, {
       output: result,
       props: { __input: resolvedInput },
       bindings: [],
       instanceId: fqn,
-    };
+    });
     yield* signalReady;
     yield* signalReadyStable;
     terminalStatuses.set(fqn, { fqn, id: logicalId, type: task.Type, status: "ran" });
@@ -1510,6 +1526,7 @@ const executeActionNode = (
 const converge = Effect.fn(function* (
   plan: Plan,
   tracker: Record<string, ResourceTracker>,
+  outputs: Record<string, any>,
   terminalStatuses: Map<
     string,
     {
@@ -1532,14 +1549,12 @@ const converge = Effect.fn(function* (
   stackName: string,
   stage: string,
 ) {
-  const outputs = trackedOutputs(tracker);
   for (;;) {
     let anyUpdated = false;
 
     for (const [fqn, node] of Object.entries(plan.resources)) {
       if (node.action === "noop") continue;
       if (!tracker[fqn]) continue;
-
 
       const newProps = (yield* Output.evaluate(node.props, outputs)) as Record<string, any>;
 
@@ -1584,7 +1599,12 @@ const converge = Effect.fn(function* (
         })
         .pipe(instrumentLifecycle("update", fqn, node.resource.Type, logicalId, instanceId));
 
-      tracker[fqn] = { output: attr, props: newProps, bindings: newBindings, instanceId };
+      track(tracker, outputs, fqn, {
+        output: attr,
+        props: newProps,
+        bindings: newBindings,
+        instanceId,
+      });
 
       yield* state.set({
         stack: stackName,
@@ -1677,12 +1697,12 @@ const converge = Effect.fn(function* (
         } satisfies RanActionState,
       });
 
-      tracker[fqn] = {
+      track(tracker, outputs, fqn, {
         output: result,
         props: { __input: newInput },
         bindings: [],
         instanceId: fqn,
-      };
+      });
       terminalStatuses.set(fqn, {
         fqn,
         id: node.def.LogicalId,
