@@ -72,7 +72,7 @@ const tokenAccountIdFlag = Flag.String("account-id").pipe(
 );
 
 /**
- * `alchemy provider cloudflare create-token` — mint a Cloudflare API token
+ * `alchemy provider cloudflare token` — mint a Cloudflare API token
  * (`POST /user/tokens`).
  *
  * This command is **standalone**: it does not use an Alchemy auth profile.

@@ -1,3 +1,4 @@
+import { Unowned } from "alchemy/AdoptPolicy";
 import { deepEqual, isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
@@ -138,6 +139,17 @@ export interface RulesetProps {
        * Required review thread resolution.
        */
       requiredReviewThreadResolution?: boolean;
+
+      /**
+       * Merge methods allowed for pull requests. GitHub allows all three when omitted.
+       */
+      allowedMergeMethods?: Array<"merge" | "squash" | "rebase">;
+
+      /**
+       * Require another approval for changes pushed by someone other than the commit author.
+       * @default true
+       */
+      requireExtraApprovalForUnattributedChanges?: boolean;
     };
 
     /**
@@ -309,6 +321,29 @@ export interface Ruleset extends Resource<
  * })
  * ```
  *
+ * ### Adopting an Existing Ruleset
+ * Ruleset names are unique per repository. A ruleset that already exists
+ * with the same name is foreign until you opt in with `adopt(true)` or
+ * `--adopt`; adoption then converges it to the declared props in place.
+ *
+ * **Example:** Take over a ruleset created in the GitHub UI
+ * ```typescript
+ * import { adopt } from "alchemy/AdoptPolicy";
+ *
+ * yield* GitHub.Ruleset("main-protection", {
+ *   owner: "my-org",
+ *   repository: "my-repo",
+ *   name: "main protection",
+ *   conditions: {
+ *     include: ["~DEFAULT_BRANCH"],
+ *   },
+ *   rules: {
+ *     deletion: true,
+ *     nonFastForward: true,
+ *   },
+ * }).pipe(adopt(true))
+ * ```
+ *
  * @resource
  * @product Repository
  */
@@ -363,19 +398,24 @@ export const RulesetProvider = () =>
         rules.push({ type: "required_signatures" });
       }
       if (news.rules?.pullRequest) {
-        rules.push({
-          type: "pull_request",
-          parameters: {
-            required_approving_review_count:
-              news.rules.pullRequest.requiredApprovingReviewCount ?? 0,
-            dismiss_stale_reviews_on_push:
-              news.rules.pullRequest.dismissStaleReviewsOnPush ?? false,
-            require_code_owner_review: news.rules.pullRequest.requireCodeOwnerReview ?? false,
-            require_last_push_approval: news.rules.pullRequest.requireLastPushApproval ?? false,
-            required_review_thread_resolution:
-              news.rules.pullRequest.requiredReviewThreadResolution ?? false,
-          },
-        });
+        const pullRequest = news.rules.pullRequest;
+        // `require_extra_approval_for_unattributed_changes` is accepted by the API but missing
+        // from its OpenAPI description, so it is added outside the typed literal.
+        const parameters = {
+          required_approving_review_count: pullRequest.requiredApprovingReviewCount ?? 0,
+          dismiss_stale_reviews_on_push: pullRequest.dismissStaleReviewsOnPush ?? false,
+          require_code_owner_review: pullRequest.requireCodeOwnerReview ?? false,
+          require_last_push_approval: pullRequest.requireLastPushApproval ?? false,
+          required_review_thread_resolution: pullRequest.requiredReviewThreadResolution ?? false,
+          ...(pullRequest.allowedMergeMethods !== undefined && {
+            allowed_merge_methods: pullRequest.allowedMergeMethods,
+          }),
+          ...(pullRequest.requireExtraApprovalForUnattributedChanges !== undefined && {
+            require_extra_approval_for_unattributed_changes:
+              pullRequest.requireExtraApprovalForUnattributedChanges,
+          }),
+        };
+        rules.push({ type: "pull_request", parameters });
       }
       if (news.rules?.requiredStatusChecks) {
         rules.push({
@@ -459,9 +499,30 @@ export const RulesetProvider = () =>
     }),
 
     read: Effect.fn(function* ({ olds, output }) {
-      if (output === undefined) return undefined;
-      const observed = yield* getRuleset(olds, output.rulesetId);
-      return observed === undefined ? undefined : attrsOf(observed);
+      if (output !== undefined) {
+        const observed = yield* getRuleset(olds, output.rulesetId);
+        return observed === undefined ? undefined : attrsOf(observed);
+      }
+      const octokit = yield* octokitFor(olds.baseUrl);
+      const rulesets = yield* Effect.tryPromise({
+        try: () =>
+          octokit.paginate(octokit.rest.repos.getRepoRulesets, {
+            owner: olds.owner,
+            repo: olds.repository,
+            includes_parents: false,
+            per_page: 100,
+          }),
+        catch: (e) => e as Error & { status?: number },
+      }).pipe(
+        Effect.catchIf(
+          (error) => error.status === 404,
+          () => Effect.succeed([]),
+        ),
+      );
+      const match = rulesets.find((ruleset) => ruleset.name === olds.name);
+      if (match === undefined) return undefined;
+      const observed = yield* getRuleset(olds, match.id);
+      return observed === undefined ? undefined : Unowned(attrsOf(observed));
     }),
 
     list: Effect.fn(function* () {

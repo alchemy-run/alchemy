@@ -1,5 +1,5 @@
 import type * as runtime from "@cloudflare/workers-types";
-import type * as SigV4 from "@distilled.cloud/aws/SigV4";
+import type * as SigV4 from "@distilled.cloud/aws4signer";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";

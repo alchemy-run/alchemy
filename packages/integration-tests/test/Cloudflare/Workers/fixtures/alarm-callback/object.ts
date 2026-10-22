@@ -50,6 +50,11 @@ export interface Snapshot {
   }[];
 }
 
+export interface BoundedSnapshot {
+  status: Alchemy.CallbackStatus | null;
+  snapshot: Snapshot;
+}
+
 export interface RegistrationResult {
   failure: {
     tag: "CallbackError";
@@ -159,7 +164,9 @@ export class AlarmObject extends Cloudflare.DurableObject<AlarmObject>()(
         yield* record("archive", payload.value);
       });
 
-      const onArchive = yield* Alchemy.makeCallback("archive", archive);
+      const onArchive = yield* Alchemy.makeCallback("archive", archive, {
+        retry: { delay: "1 second" },
+      });
       const onTransactionalRegistration = yield* storage
         .transaction(
           Alchemy.makeCallback(
@@ -195,6 +202,20 @@ export class AlarmObject extends Cloudflare.DurableObject<AlarmObject>()(
           yield* record("retry", payload.value);
         }),
         { retry: { delay: "1 second" } },
+      );
+      const boundedRetry = {
+        retry: { delay: "1 second", maxAttempts: 2 },
+      } as const;
+      const onBoundedFailure = yield* Alchemy.makeCallback(
+        "bounded-failure",
+        (_payload: null) => Effect.fail(new RetryArchive()),
+        boundedRetry,
+      );
+      const onBoundedLoop: Alchemy.Callback<null> = yield* Alchemy.makeCallback(
+        "bounded-loop",
+        (_payload: null): Effect.Effect<void, Alchemy.CallbackError, RuntimeContext> =>
+          onBoundedLoop.schedule("bounded", { after: 0, payload: null }),
+        boundedRetry,
       );
       const onCrash = yield* Alchemy.makeCallback(
         "crash",
@@ -797,6 +818,24 @@ export class AlarmObject extends Cloudflare.DurableObject<AlarmObject>()(
             }),
           );
         }),
+        bounded: Effect.fn(function* (
+          mode: string,
+          action: "start" | "status" | "resume" | "cancel",
+        ) {
+          const callback = mode === "self-rearm" ? onBoundedLoop : onBoundedFailure;
+          if (action === "start" || action === "resume") {
+            yield* callback.schedule("bounded", {
+              after: action === "start" ? "1 second" : "1 minute",
+              payload: null,
+            });
+          } else if (action === "cancel") {
+            yield* callback.cancel("bounded");
+          }
+          return {
+            status: (yield* callback.getStatus("bounded")) ?? null,
+            snapshot: yield* snapshot(),
+          } satisfies BoundedSnapshot;
+        }),
         retry: Effect.fn(function* () {
           yield* onRetry.schedule("retry", {
             after: "1 second",
@@ -842,7 +881,11 @@ export class AlarmObject extends Cloudflare.DurableObject<AlarmObject>()(
           const at = yield* Effect.sync(() => Date.now() + 1_000);
           yield* storage.transaction(
             Effect.gen(function* () {
-              yield* storage.sql.exec("UPDATE alchemy_alarm_callbacks SET run_at = ?", at);
+              yield* storage.sql.exec(
+                "UPDATE alchemy_alarm_callbacks SET run_at = ?, scheduled_at = ?",
+                at,
+                at,
+              );
               yield* storage.setAlarm(at);
             }),
           );

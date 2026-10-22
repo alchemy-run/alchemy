@@ -17,6 +17,16 @@ const AssetsWorker = {
 const RouterWorker = {
   worker: () => loadInternalWorker("#cloudflare-runtime-vite-worker/assets/router.worker"),
 };
+const ViteProxyWorker = {
+  worker: () => loadInternalWorker("#cloudflare-runtime-vite-worker/assets/vite-proxy.worker"),
+};
+/** Must match `VITE_MISS_HEADER` in `vite-proxy.worker.ts`. */
+const VITE_MISS_HEADER = "x-alchemy-vite-asset-miss";
+/**
+ * Marks a request the dev `ASSETS` binding sent through Vite's middleware, so
+ * the proxy middleware passes it on instead of sending it back to the Worker.
+ */
+export const VITE_ASSET_REQUEST = Symbol.for("alchemy.cloudflare-runtime.vite-asset-request");
 /**
  * Marker prefix used by the vite-aware asset worker to indicate that a
  * path lives inside Vite's `publicDir` (and so should be served verbatim,
@@ -38,7 +48,13 @@ const PUBLIC_DIR_PREFIX = "/__vite_public_dir__";
  * Mirrors the dev-mode asset wiring in
  * `upstream/workers-sdk/packages/vite-plugin-cloudflare/src/miniflare-options.ts`.
  */
-export const ViteAssetsLive = (viteDevServer: vite.ViteDevServer) =>
+export const ViteAssetsLive = (
+  viteDevServer: vite.ViteDevServer,
+  options: {
+    /** `false` for an assets-only site: requests no asset serves get a 404 instead of the Worker. */
+    readonly hasUserWorker: boolean;
+  },
+) =>
   Layer.effect(
     Assets.Assets,
     Effect.gen(function* () {
@@ -62,8 +78,12 @@ export const ViteAssetsLive = (viteDevServer: vite.ViteDevServer) =>
             `${prefix}:fetch-html`,
             viteFetchHtmlHandler(viteDevServer),
           );
-          const [assetsWorker, routerWorker] = yield* Effect.forEach(
-            [AssetsWorker, RouterWorker],
+          const viteMiddlewareService = yield* loopback.api.route(
+            `${prefix}:vite-middleware`,
+            viteMiddlewareHandler(viteDevServer),
+          );
+          const [assetsWorker, routerWorker, viteProxyWorker] = yield* Effect.forEach(
+            [AssetsWorker, RouterWorker, ViteProxyWorker],
             (worker) =>
               Effect.map(Effect.promise(worker.worker), ({ modules }) => modulesToWorkerd(modules)),
             { concurrency: "unbounded" },
@@ -72,7 +92,20 @@ export const ViteAssetsLive = (viteDevServer: vite.ViteDevServer) =>
           return {
             services: [
               {
+                // What a Worker's `ASSETS` binding calls (see
+                // `vite-proxy.worker.ts`).
                 name: "assets:worker",
+                worker: {
+                  compatibilityDate: DEFAULT_COMPATIBILITY_DATE,
+                  bindings: [
+                    { name: "__VITE_MIDDLEWARE__", service: viteMiddlewareService },
+                    { name: "ASSET_WORKER", service: { name: "assets:vite" } },
+                  ],
+                  modules: viteProxyWorker,
+                },
+              },
+              {
+                name: "assets:vite",
                 worker: {
                   compatibilityDate: DEFAULT_COMPATIBILITY_DATE,
                   // Node.js compatibility is supplied by the 2026-08-31
@@ -110,11 +143,14 @@ export const ViteAssetsLive = (viteDevServer: vite.ViteDevServer) =>
                   bindings: [
                     {
                       name: "ASSET_WORKER",
-                      service: { name: "assets:worker" },
+                      service: { name: "assets:vite" },
                     },
                     {
                       name: "CONFIG",
-                      json: JSON.stringify(routerConfig),
+                      json: JSON.stringify({
+                        ...routerConfig,
+                        has_user_worker: options.hasUserWorker,
+                      }),
                     },
                   ],
                   modules: routerWorker,
@@ -199,6 +235,15 @@ const viteFetchHtmlHandler =
         res.end(body);
         return;
       }
+      // Vite's bundled dev mode (`experimental.bundledDev`) serves HTML from
+      // its in-memory bundle, as `@cloudflare/vite-plugin` reads it.
+      const bundledDev = isInPublicDir ? undefined : bundledDevOf(viteDevServer);
+      if (bundledDev) {
+        const source = await readBundledFile(bundledDev, pathname.slice(1));
+        res.writeHead(200, { "content-type": "text/html" });
+        res.end(typeof source === "string" ? source : Buffer.from(source));
+        return;
+      }
       let html = await NodeFs.readFile(resolved, "utf-8");
       if (!isInPublicDir) {
         html = await viteDevServer.transformIndexHtml(resolved, html);
@@ -209,6 +254,44 @@ const viteFetchHtmlHandler =
       res.writeHead(500, { "content-type": "text/plain" });
       res.end(`Unexpected error. Failed to load "${pathname}".`);
     }
+  };
+
+interface BundledDev {
+  triggerBundleRegenerationIfStale(): Promise<unknown>;
+  memoryFiles: { get(key: string): { source: string | Uint8Array } | undefined };
+}
+
+const bundledDevOf = (viteDevServer: vite.ViteDevServer): BundledDev | undefined =>
+  (viteDevServer.environments.client as { bundledDev?: BundledDev } | undefined)?.bundledDev;
+
+/** A bundled file, once a regeneration the request triggered has written it. */
+const readBundledFile = async (bundledDev: BundledDev, key: string) => {
+  await bundledDev.triggerBundleRegenerationIfStale();
+  const deadline = Date.now() + 10_000;
+  let file = bundledDev.memoryFiles.get(key);
+  while (!file && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    file = bundledDev.memoryFiles.get(key);
+  }
+  if (!file) {
+    throw new Error(`No bundled file for "/${key}" after waiting for bundle regeneration.`);
+  }
+  return file.source;
+};
+
+/**
+ * Runs a dev `ASSETS` request through Vite's middleware, as
+ * `@cloudflare/vite-plugin` binds `ASSETS` in dev. A request no middleware
+ * serves answers with {@link VITE_MISS_HEADER} so the proxy worker falls back
+ * to the asset worker.
+ */
+const viteMiddlewareHandler =
+  (viteDevServer: vite.ViteDevServer) => (req: IncomingMessage, res: ServerResponse) => {
+    (req as IncomingMessage & { [VITE_ASSET_REQUEST]?: true })[VITE_ASSET_REQUEST] = true;
+    viteDevServer.middlewares(req, res, () => {
+      res.writeHead(404, { [VITE_MISS_HEADER]: "1" });
+      res.end();
+    });
   };
 
 const withTrailingSlash = (s: string) => (s.endsWith("/") ? s : `${s}/`);

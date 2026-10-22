@@ -295,6 +295,8 @@ export interface StaticSiteAssetsProps {
   purge?: boolean;
   /**
    * Additional route prefixes that should be served directly from the bucket.
+   * On a site with a server, only GET and HEAD requests are served from the
+   * bucket; other methods go to the server.
    */
   routes?: string[];
   /**
