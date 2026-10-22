@@ -114,6 +114,16 @@ const program = Effect.scoped(
                 hyperdrives: config.worker.hyperdrives,
                 queueConsumers: Effect.succeed(config.worker.queueConsumers),
                 assets: config.worker.assets,
+                options: {
+                  workflows: runtimeWorker.workflows,
+                  crons: runtimeWorker.crons,
+                  tails: runtimeWorker.tails,
+                  streamingTails: runtimeWorker.streamingTails,
+                  cache: runtimeWorker.cache,
+                  cf: runtimeWorker.cf,
+                  zone: runtimeWorker.zone,
+                  access: devAccess,
+                },
               },
               runtimeContext,
             })

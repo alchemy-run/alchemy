@@ -194,6 +194,10 @@ const serve = Effect.fn(function* <B extends BindingHooks = BindingHooks>(
 
   const name = options.worker?.name ?? `vite-dev-${crypto.randomUUID()}`;
   return yield* runtime.start({
+    // Everything the caller configured on the Worker (crons, tail consumers,
+    // Cache API, request.cf, ...) reaches workerd; the fields below are the
+    // ones the dev server owns or extends.
+    ...options.worker,
     name,
     proxySharedSecret,
     // The stable proxy in front relays TLS as-is, so a dev server on HTTPS
@@ -202,8 +206,6 @@ const serve = Effect.fn(function* <B extends BindingHooks = BindingHooks>(
       options.worker?.publicUrl && server.config.server.https
         ? options.worker.publicUrl.replace(/^http:/, "https:")
         : options.worker?.publicUrl,
-    zone: options.worker?.zone,
-    access: options.worker?.access,
     onRestart,
     modules: yield* Effect.promise(() =>
       makeWorkerModules(exportTypes, {
@@ -241,15 +243,6 @@ const serve = Effect.fn(function* <B extends BindingHooks = BindingHooks>(
       { className: "ModuleRunnerDO", sql: false, ephemeralLocal: true },
       ...(options.worker?.durableObjectNamespaces ?? []),
     ],
-    workflows: options.worker?.workflows,
-    hyperdrives: options.worker?.hyperdrives,
-    // Without this the worker starts with no consumers, so a producer
-    // binding for a queue this worker consumes resolves to the dev-registry
-    // proxy instead of a local broker — and that accepts-and-drops every
-    // message, with `send()` never settling.
-    queueConsumers: options.worker?.queueConsumers,
-    crons: options.worker?.crons,
-    assets: options.worker?.assets,
     unsafe: { moduleFallback, ...options.worker?.unsafe },
   });
 });

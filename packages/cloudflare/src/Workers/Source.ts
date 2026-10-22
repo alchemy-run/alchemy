@@ -6,6 +6,7 @@ import type {
   DurableObjectNamespace as RuntimeDurableObject,
   QueueConsumer as RuntimeQueueConsumer,
   RuntimeServices,
+  RuntimeWorker,
 } from "@alchemy.run/cloudflare-runtime/core";
 import type { Artifacts } from "alchemy/Artifacts";
 import type * as Bundle from "alchemy/Bundle/Bundle";
@@ -118,6 +119,16 @@ export interface SourceContext {
 }
 
 /**
+ * Runtime settings of a Worker beyond its bindings, Durable Objects,
+ * Hyperdrives, queue consumers and assets: cron triggers, Workflows, tail
+ * consumers, the Cache API, `request.cf`, the zone and Access.
+ */
+export type DevWorkerOptions = Pick<
+  RuntimeWorker,
+  "workflows" | "crons" | "tails" | "streamingTails" | "cache" | "cf" | "zone" | "access"
+>;
+
+/**
  * Runtime wiring for local dev, derived by the LocalWorkerProvider.
  * Server-mode sources that embed their own workerd (the vite plugin)
  * consume `worker` + `runtimeContext`; bundle-mode sources ignore both.
@@ -132,6 +143,12 @@ export interface DevContext extends SourceContext {
     /** Re-read on each (re)start so late-registered consumers are observed. */
     readonly queueConsumers: Effect.Effect<RuntimeQueueConsumer[]>;
     readonly assets: RuntimeAssets | undefined;
+    /**
+     * The Worker's other runtime settings. A source that runs the Worker in
+     * workerd spreads them whole into its runtime Worker, so a setting added
+     * here reaches every source.
+     */
+    readonly options: DevWorkerOptions;
   };
   /** RuntimeServices context for providers that embed cloudflare-runtime. */
   readonly runtimeContext: Context.Context<RuntimeServices>;
