@@ -452,7 +452,10 @@ export const durableObjectSettingsPatch = (
     (previous?.observability !== undefined ? { logs: { enabled: false } } : undefined);
   const configurationChanged = Object.entries(configuration).some(
     ([key, value]) =>
-      !deepEqual(value, normalizeNulls(observed.configuration[key as keyof typeof configuration])),
+      !deepEqual(
+        value,
+        normalizeNulls(observed.configuration?.[key as keyof typeof configuration]),
+      ),
   );
   return {
     ...(configurationChanged ? { configuration } : {}),
