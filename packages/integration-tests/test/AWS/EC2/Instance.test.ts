@@ -7,6 +7,7 @@ import * as Output from "alchemy/Output";
 import * as Provider from "alchemy/Provider";
 import { State } from "alchemy/State/State";
 import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
 import { assertInstanceTerminated, assertVpcGone } from "./Gone.ts";
 import * as Test from "./VpcTest.ts";
@@ -188,6 +189,53 @@ echo ${queue.queueUrl}
         yield* assertVpcGone(second.vpc.vpcId);
       }).pipe(logLevel),
     { timeout: 600_000 },
+  );
+
+  // A Redacted userData is revealed only for RunInstances and compared by
+  // value: the copy decoded from state is a new object, which must not
+  // replace the instance on every deploy.
+  test.provider(
+    "accepts Redacted userData and compares it by value",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+
+        const program = (token: string) =>
+          Effect.gen(function* () {
+            const vpc = yield* Vpc("RedactedUserDataVpc", { cidrBlock: "10.0.0.0/16" });
+            const subnet = yield* Subnet("RedactedUserDataSubnet", {
+              vpcId: vpc.vpcId,
+              cidrBlock: "10.0.1.0/24",
+            });
+            const instance = yield* Instance("RedactedUserDataInstance", {
+              imageId: amazonLinux2023(),
+              instanceType: "t3.micro",
+              subnetId: subnet.subnetId,
+              userData: Redacted.make(`#!/bin/bash\necho TOKEN=${token}\n`),
+            });
+            return { vpc, instance };
+          });
+
+        const first = yield* stack.deploy(program("one"));
+        const userData = yield* ec2.describeInstanceAttribute({
+          InstanceId: first.instance.instanceId,
+          Attribute: "userData",
+        });
+        const script = yield* Effect.sync(() =>
+          Buffer.from(userData.UserData?.Value ?? "", "base64").toString("utf8"),
+        );
+        expect(script).toContain("TOKEN=one");
+
+        const unchanged = yield* stack.plan(program("one"));
+        expect(unchanged.resources.RedactedUserDataInstance?.action).toBe("noop");
+        const changed = yield* stack.plan(program("two"));
+        expect(changed.resources.RedactedUserDataInstance?.action).toBe("replace");
+
+        yield* stack.destroy();
+        yield* assertInstanceTerminated(first.instance.instanceId);
+        yield* assertVpcGone(first.vpc.vpcId);
+      }).pipe(logLevel),
+    { timeout: 300_000 },
   );
 
   const fixedIpProgram = (props: Partial<InstanceProps> = {}) =>
