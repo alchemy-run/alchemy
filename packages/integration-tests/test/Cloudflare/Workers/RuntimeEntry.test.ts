@@ -220,7 +220,7 @@ layer(NodeServices.layer)("@alchemy.run/cloudflare/Bridge (runtime-only entry)",
     { tags: ["unit", "provider:cloudflare", "provider:cloudflare:worker", "local"] },
   );
 
-  for (const fixture of ["worker.ts", "bindings-worker.ts"]) {
+  for (const fixture of ["barrel-worker.ts", "bindings-worker.ts"]) {
     it.effect(
       `keeps the Cloudflare API client out of a bundled Worker (${fixture})`,
       () =>
@@ -260,7 +260,8 @@ layer(NodeServices.layer)("@alchemy.run/cloudflare/Bridge (runtime-only entry)",
             true,
           );
           // Deploy-only provider helpers (e.g. `findQueueByName`) reach the
-          // distilled client; the runtime defines must prune them (#2371).
+          // distilled client. `purePlugin` prunes them behind async bindings;
+          // the runtime defines alone suffice for the hello-world (#2371).
           expect(
             rendered.filter((id) => /@distilled\.cloud|submodules\/distilled\//.test(id)),
           ).toEqual([]);
