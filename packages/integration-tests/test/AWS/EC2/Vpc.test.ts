@@ -3,6 +3,7 @@ import { Vpc } from "@alchemy.run/aws/EC2";
 import * as EC2 from "@distilled.cloud/aws/ec2";
 import { expect } from "alchemy-test";
 import * as Provider from "alchemy/Provider";
+import { State } from "alchemy/State/State";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
@@ -100,6 +101,50 @@ test.provider(
       yield* stack.destroy();
 
       yield* assertVpcDeleted(deployed.vpcId);
+    }).pipe(logLevel),
+  { tags: ["provider:aws", "provider:aws:ec2", "live"], timeout: 15 * 60_000 },
+);
+
+test.provider(
+  "recovers a created vpc whose output was not persisted",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const program = Effect.gen(function* () {
+        return yield* Vpc("RecoveredVpc", {
+          cidrBlock: "10.41.0.0/16",
+        });
+      });
+
+      const first = yield* stack.deploy(program);
+
+      // Simulate a deploy killed after CreateVpc returned: the row is left in
+      // `creating` with no attributes, but the VPC (and its tags) exist.
+      const state = yield* yield* State;
+      const key = { stack: stack.name, stage: stack.stage, fqn: "RecoveredVpc" };
+      const row = yield* state.get(key);
+      if (row?.status !== "created") {
+        return yield* Effect.die(new Error("Expected a created VPC row"));
+      }
+      const { attr: _attr, ...rest } = row;
+      yield* state.set({ ...key, value: { ...rest, status: "creating" } });
+
+      const recovered = yield* stack.deploy(program);
+      expect(recovered.vpcId).toBe(first.vpcId);
+
+      const owned = yield* EC2.describeVpcs({
+        Filters: [
+          { Name: "tag:alchemy::stack", Values: [stack.name] },
+          { Name: "tag:alchemy::stage", Values: [stack.stage] },
+          { Name: "tag:alchemy::id", Values: ["RecoveredVpc"] },
+        ],
+      });
+      expect(owned.Vpcs?.map((vpc) => vpc.VpcId)).toEqual([first.vpcId]);
+
+      yield* stack.destroy();
+
+      yield* assertVpcDeleted(first.vpcId);
     }).pipe(logLevel),
   { tags: ["provider:aws", "provider:aws:ec2", "live"], timeout: 15 * 60_000 },
 );

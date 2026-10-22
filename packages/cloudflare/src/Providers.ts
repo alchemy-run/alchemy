@@ -668,7 +668,7 @@ export const providers = () =>
     ),
     // Plan-executable data-source capabilities (`Binding.Service.execute`).
     Layer.provideMerge(GetIdentityProviderHttp),
-    Layer.provide(DockerLive),
+    Layer.provideMerge(DockerLive),
     // Note: `localRuntimeServices()` is no longer provided globally — each
     // local provider composes it into its `ProviderLayer.dual` local thunk,
     // so workerd machinery only builds when a local variant is actually

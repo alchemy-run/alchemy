@@ -1738,23 +1738,31 @@ const toAttributes = (
     | Containers.UpdateContainerApplicationResponse
     | Containers.GetContainerApplicationResponse
     | Containers.ListContainerApplicationsResponse[number],
-): ContainerApplication["Attributes"] => ({
-  applicationId: application.id,
-  applicationName: application.name,
-  accountId: application.accountId,
-  schedulingPolicy: application.schedulingPolicy,
-  instances: application.instances ?? undefined,
-  maxInstances: application.maxInstances ?? undefined,
-  constraints: normalizeNulls(
-    application.constraints as ContainerApplication.Constraints | undefined,
-  ),
-  affinities: normalizeNulls(application.affinities as ContainerApplication.Affinities | undefined),
-  configuration: normalizeNulls(
-    application.configuration,
-  ) as Partial<ContainerApplication.Configuration>,
-  observability: normalizeNulls(application.observability ?? undefined),
-  durableObjects: normalizeNulls(application.durableObjects) as { namespaceId: string } | undefined,
-  createdAt: application.createdAt,
-  version: application.version ?? undefined,
-  dev: undefined,
-});
+): ContainerApplication["Attributes"] => {
+  // Durable Object applications have no scaling, affinities or versions.
+  const scheduled = "version" in application ? application : undefined;
+  return {
+    applicationId: application.id,
+    applicationName: application.name,
+    accountId: application.accountId,
+    schedulingPolicy: application.schedulingPolicy,
+    instances: scheduled?.instances ?? undefined,
+    maxInstances: scheduled?.maxInstances ?? undefined,
+    constraints: normalizeNulls(
+      application.constraints as ContainerApplication.Constraints | undefined,
+    ),
+    affinities: normalizeNulls(
+      scheduled?.affinities as ContainerApplication.Affinities | undefined,
+    ),
+    configuration: normalizeNulls(
+      application.configuration,
+    ) as Partial<ContainerApplication.Configuration>,
+    observability: normalizeNulls(application.observability ?? undefined),
+    durableObjects: normalizeNulls(application.durableObjects) as
+      | { namespaceId: string }
+      | undefined,
+    createdAt: application.createdAt,
+    version: scheduled?.version ?? undefined,
+    dev: undefined,
+  };
+};

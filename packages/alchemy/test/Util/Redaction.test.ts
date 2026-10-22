@@ -48,6 +48,34 @@ describe("collectRedactedSecrets", () => {
     },
     { tags },
   );
+
+  test(
+    "skips empty strings, plain numbers and non-plain objects, and de-duplicates",
+    () => {
+      expect(collectRedactedSecrets(Redacted.make(""))).toEqual([]);
+      expect(collectRedactedSecrets({ port: 8080, token: Redacted.make("s3cr3t") })).toEqual([
+        "s3cr3t",
+      ]);
+      expect(collectRedactedSecrets(Redacted.make(new Date(0)))).toEqual([]);
+      expect(collectRedactedSecrets([Redacted.make("s3cr3t"), Redacted.make("s3cr3t")])).toEqual([
+        "s3cr3t",
+      ]);
+    },
+    { tags },
+  );
+
+  test(
+    "parses a redacted JSON array and keeps a string that only looks like JSON",
+    () => {
+      expect(collectRedactedSecrets(Redacted.make('["a1b2","c3d4"]'))).toEqual([
+        '["a1b2","c3d4"]',
+        "a1b2",
+        "c3d4",
+      ]);
+      expect(collectRedactedSecrets(Redacted.make("{not json"))).toEqual(["{not json"]);
+    },
+    { tags },
+  );
 });
 
 describe("redactText", () => {
@@ -87,6 +115,31 @@ describe("redactText", () => {
     },
     { tags },
   );
+
+  test(
+    "matches a short secret literally, not as a regex",
+    () => {
+      expect(redactText("1x2 and 1.2", ["1.2"])).toBe("1x2 and <redacted>");
+    },
+    { tags },
+  );
+
+  test(
+    "matches a form anywhere when any secret producing it is long",
+    () => {
+      // "NDI=" is both a long secret and the base64 form of the short "42".
+      expect(redactText("xNDI=x", ["NDI=", "42"])).toBe("x<redacted>x");
+    },
+    { tags },
+  );
+
+  test(
+    "returns the text unchanged without secrets",
+    () => {
+      expect(redactText("s3cr3t", [])).toBe("s3cr3t");
+    },
+    { tags },
+  );
 });
 
 describe("redactJson", () => {
@@ -114,10 +167,29 @@ describe("redactJson", () => {
     },
     { tags },
   );
+
+  test(
+    "redacts a number leaf equal to a secret and keeps other leaves",
+    () => {
+      expect(JSON.parse(redactJson('{"n":42,"list":["42",null,true,7]}', ["42"]))).toEqual({
+        n: "<redacted>",
+        list: ["<redacted>", null, true, 7],
+      });
+    },
+    { tags },
+  );
+
+  test(
+    "returns the text unchanged without secrets",
+    () => {
+      expect(redactJson('{ "a": 1 }', [])).toBe('{ "a": 1 }');
+    },
+    { tags },
+  );
 });
 
 describe("redactStream", () => {
-  test(
+  test.effect(
     "redacts a secret split across chunks, including its base64 form",
     () =>
       Effect.gen(function* () {
@@ -131,6 +203,102 @@ describe("redactStream", () => {
       }),
     { tags },
   );
+
+  test.effect(
+    "output does not depend on chunking when one secret overlaps another",
+    () =>
+      Effect.gen(function* () {
+        const cases = [
+          // A shorter secret is a prefix of a longer one (#2399).
+          {
+            secrets: ["hunter2", "hunter2-admin-token"],
+            text: "token=hunter2-admin-token\n",
+            expected: "token=<redacted>\n",
+          },
+          { secrets: ["aa\\\\", 'aa\\\\"'], text: 'aa\\\\"', expected: "<redacted>" },
+          // A shorter secret sits inside a longer one that starts earlier.
+          {
+            secrets: ["mid-secret", "outer-mid-secret-tail"],
+            text: "x outer-mid-secret-tail y",
+            expected: "x <redacted> y",
+          },
+        ];
+        for (const { secrets, text, expected } of cases) {
+          const whole = yield* Stream.make(text).pipe(
+            (stream) => redactStream(stream, secrets),
+            Stream.mkString,
+          );
+          expect(whole).toBe(expected);
+          for (let split = 1; split < text.length; split++) {
+            const out = yield* Stream.make(text.slice(0, split), text.slice(split)).pipe(
+              (stream) => redactStream(stream, secrets),
+              Stream.mkString,
+            );
+            expect(out).toBe(expected);
+          }
+        }
+      }),
+    { tags },
+  );
+
+  const streamed = (
+    chunks: ReadonlyArray<string>,
+    secrets: ReadonlyArray<string>,
+    marker?: string,
+  ) =>
+    Stream.fromIterable(chunks).pipe(
+      (stream) => redactStream(stream, secrets, marker),
+      Stream.mkString,
+    );
+
+  test.effect(
+    "flushes a held-back match when the stream ends",
+    () =>
+      Effect.gen(function* () {
+        const secrets = ["hunter2", "hunter2-admin-token"];
+        expect(yield* streamed(["token=hunter2"], secrets)).toBe("token=<redacted>");
+        expect(yield* streamed(["hunter2-adm", "in"], secrets)).toBe("<redacted>-admin");
+        expect(yield* streamed(["key=s3c"], ["s3cr3t"])).toBe("key=s3c");
+      }),
+    { tags },
+  );
+
+  test.effect(
+    "redacts several matches in one chunk and a JSON-escaped form split across chunks",
+    () =>
+      Effect.gen(function* () {
+        expect(yield* streamed(["s3cr3t and s3cr3t"], ["s3cr3t"])).toBe(
+          "<redacted> and <redacted>",
+        );
+        expect(yield* streamed(["msg pa\\", '"ss end'], ['pa"ss'])).toBe("msg <redacted> end");
+      }),
+    { tags },
+  );
+
+  test.effect(
+    "matches short secrets anywhere, unlike redactText",
+    () =>
+      Effect.gen(function* () {
+        expect(yield* streamed(["code 14293"], ["42"])).toBe("code 1<redacted>93");
+      }),
+    { tags },
+  );
+
+  test.effect(
+    "uses the caller's marker and passes chunks through without secrets",
+    () =>
+      Effect.gen(function* () {
+        expect(yield* streamed(["token s3cr3t"], ["s3cr3t"], "[REDACTED]")).toBe(
+          "token [REDACTED]",
+        );
+        const chunks = yield* Stream.fromIterable(["a", "b"]).pipe(
+          (stream) => redactStream(stream, []),
+          Stream.runCollect,
+        );
+        expect([...chunks]).toEqual(["a", "b"]);
+      }),
+    { tags },
+  );
 });
 
 describe("redactionMarker", () => {
@@ -141,6 +309,23 @@ describe("redactionMarker", () => {
       const marker = redactionMarker(["[REDACTED]"], "[REDACTED]");
       expect(marker).not.toBe("[REDACTED]");
       expect("[REDACTED]".includes(marker)).toBe(false);
+    },
+    { tags },
+  );
+
+  test(
+    "falls back to a supplementary private-use character, then to an empty marker",
+    () => {
+      const range = (from: number, to: number) => {
+        let out = "";
+        for (let codePoint = from; codePoint <= to; codePoint++) {
+          out += String.fromCodePoint(codePoint);
+        }
+        return out;
+      };
+      const basic = range(0xe000, 0xf8ff);
+      expect(redactionMarker(["redacted", basic])).toBe(String.fromCodePoint(0xf0000));
+      expect(redactionMarker(["redacted", basic, range(0xf0000, 0xffffd)])).toBe("");
     },
     { tags },
   );
