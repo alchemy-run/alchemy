@@ -190,7 +190,7 @@ export const Workspace = <const D extends SandboxWorkspace.Workspace.Decl.Any>(
             fromPort: PORT,
             toPort: PORT,
             cidrIpv4: cidrBlock,
-            description: "the other hosts (requests forwarded to a session's host)",
+            description: "the other hosts: requests forwarded to the host of a session",
           },
         ],
         egress: [{ ipProtocol: "-1", cidrIpv4: "0.0.0.0/0", description: "all outbound" }],

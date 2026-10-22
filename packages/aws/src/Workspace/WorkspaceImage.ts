@@ -192,8 +192,17 @@ export const WorkspaceImageProvider = () =>
       return {
         stables: ["hash"],
         reconcile: Effect.fn(function* ({ news, output, session }) {
+          // A new blockd is a new build: the hosts install what the store has.
+          const binaries = yield* blockdBinaries;
+          const builds: Record<string, string> = {};
+          for (const file of (yield* fs.readDirectory(binaries)).sort()) {
+            if (file.startsWith("blockd-")) {
+              builds[file] = yield* sha256(yield* fs.readFile(path.join(binaries, file)));
+            }
+          }
           const hash = yield* sha256(
             JSON.stringify({
+              builds,
               FORMAT,
               dockerfile: news.dockerfile,
               path: news.path ?? "/workspace",
