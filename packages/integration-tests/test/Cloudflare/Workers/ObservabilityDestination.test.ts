@@ -208,7 +208,8 @@ test.provider(
       expect(live?.slug).toEqual(initial.dest.slug);
       expect(live?.enabled).toBe(false);
       expect(live?.configuration.url).toEqual(updated.worker.url);
-      expect(live?.configuration.headers["x-alchemy-test"]).toEqual("1");
+      // Cloudflare masks header values (`null`); only the names are observable.
+      expect(Object.keys(live?.configuration.headers ?? {})).toContain("x-alchemy-test");
 
       // Redeploying identical props is a no-op (and must not re-preflight).
       const noop = yield* stack.deploy(
@@ -232,6 +233,46 @@ test.provider(
       yield* stack.destroy();
 
       yield* expectGone(accountId, NAME_UPDATE);
+    }).pipe(logLevel),
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
+    timeout: 300_000,
+  },
+);
+
+test.provider(
+  "create and update with unchanged headers do not PATCH despite masked values",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+
+      yield* stack.destroy();
+
+      // Cloudflare masks header values (`null`) on read. The endpoint
+      // rejects POSTs, so a PATCH — which always re-runs the preflight —
+      // fails the deploy: create and the update below only succeed if
+      // reconcile sees the unchanged headers as converged and skips it.
+      const program = (skipPreflightCheck: boolean) =>
+        Cloudflare.Workers.ObservabilityDestination("MaskedDest", {
+          url: NAME_DEFAULT_URL,
+          headers: { "x-alchemy-test": "1" },
+          logpushDataset: "opentelemetry-logs",
+          skipPreflightCheck,
+        });
+
+      const initial = yield* stack.deploy(program(true));
+      const live = yield* findByName(accountId, initial.name);
+      expect(live?.configuration.headers["x-alchemy-test"]).toBeNull();
+
+      // `skipPreflightCheck` only applies to create, so flipping it runs
+      // reconcile with nothing to sync.
+      expect(actionOf(yield* stack.plan(program(false)), "MaskedDest")).toBe("update");
+      const updated = yield* stack.deploy(program(false));
+      expect(updated.slug).toEqual(initial.slug);
+
+      yield* stack.destroy();
+
+      yield* expectGone(accountId, initial.name);
     }).pipe(logLevel),
   {
     tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
@@ -326,7 +367,8 @@ test.provider(
       expect(found?.name).toEqual(NAME_LIST);
       expect(found?.url).toEqual(NAME_DEFAULT_URL);
       expect(found?.logpushDataset).toEqual("opentelemetry-logs");
-      expect(Redacted.isRedacted(found?.destinationConf)).toBe(true);
+      // Cloudflare may omit `destinationConf`; when present it is redacted.
+      expect(typeof found?.destinationConf).not.toBe("string");
 
       yield* stack.destroy();
 
@@ -369,12 +411,15 @@ test.provider(
 
       const initial = yield* stack.deploy(program("alchemy-test-token-v1"));
 
-      expect(Redacted.isRedacted(initial.dest.destinationConf)).toBe(true);
+      expect(typeof initial.dest.destinationConf).not.toBe("string");
       expect(JSON.stringify(initial.dest)).not.toContain("alchemy-test-token-v1");
 
+      // Cloudflare masks header values (`null`); only the names are observable.
       const live = yield* findByName(accountId, initial.dest.name);
-      expect(live?.configuration.headers.authorization).toEqual("Bearer alchemy-test-token-v1");
-      expect(live?.configuration.headers["x-alchemy-test"]).toEqual("1");
+      expect(Object.keys(live?.configuration.headers ?? {})).toEqual(
+        expect.arrayContaining(["authorization", "x-alchemy-test"]),
+      );
+      expect(JSON.stringify(live)).not.toContain("alchemy-test-token-v1");
 
       // A fresh `Redacted` wrapper around the same secret is not a change.
       expect(actionOf(yield* stack.plan(program("alchemy-test-token-v1")), "RedactedDest")).toBe(
@@ -386,14 +431,16 @@ test.provider(
       const warm = yield* warmSink(initial.worker.url!);
       expect(warm.status).toBe(200);
 
+      expect(actionOf(yield* stack.plan(program("alchemy-test-token-v2")), "RedactedDest")).toBe(
+        "update",
+      );
       const rotated = yield* stack.deploy(program("alchemy-test-token-v2"));
       expect(rotated.dest.slug).toEqual(initial.dest.slug);
-      expect(Redacted.isRedacted(rotated.dest.destinationConf)).toBe(true);
+      expect(typeof rotated.dest.destinationConf).not.toBe("string");
       expect(JSON.stringify(rotated.dest)).not.toContain("alchemy-test-token-v2");
-
-      const liveRotated = yield* findByName(accountId, initial.dest.name);
-      expect(liveRotated?.configuration.headers.authorization).toEqual(
-        "Bearer alchemy-test-token-v2",
+      // The masked header value must not make the next deploy perpetually dirty.
+      expect(actionOf(yield* stack.plan(program("alchemy-test-token-v2")), "RedactedDest")).toBe(
+        "noop",
       );
 
       // State written by earlier versions holds `destinationConf` as a
@@ -415,7 +462,7 @@ test.provider(
             ...stored,
             attr: {
               ...stored.attr,
-              destinationConf: Redacted.value(stored.attr.destinationConf),
+              destinationConf: "legacy-plain-destination-conf",
             },
           },
         });
@@ -426,7 +473,7 @@ test.provider(
       );
       const migrated = yield* stack.deploy(program("alchemy-test-token-v2"));
       expect(migrated.dest.slug).toEqual(initial.dest.slug);
-      expect(Redacted.isRedacted(migrated.dest.destinationConf)).toBe(true);
+      expect(typeof migrated.dest.destinationConf).not.toBe("string");
       expect(actionOf(yield* stack.plan(program("alchemy-test-token-v2")), "RedactedDest")).toBe(
         "noop",
       );

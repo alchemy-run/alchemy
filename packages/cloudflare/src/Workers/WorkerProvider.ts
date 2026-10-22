@@ -5130,6 +5130,11 @@ export const LiveWorkerProvider = () =>
               // cleanup list forward like any other stable cache.
               affinityZoneIds: output?.affinityZoneIds,
               versionId: uploadedVersionId,
+              // The deployment that put the recorded version live, carried
+              // forward while that version still exists — re-listing
+              // deployments on every read only to echo state back would
+              // cost a request per Worker per plan.
+              deploymentId: uploadedVersionId ? output?.deploymentId : undefined,
             } satisfies Worker["Attributes"];
 
             // Centralized ownership decision: the engine routes `read`'s
