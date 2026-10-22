@@ -23,6 +23,8 @@ export interface ActivityDependency {
   activity: string;
   /** Outcomes that satisfy the dependency, e.g. `["Succeeded"]`. */
   dependencyConditions: Array<"Succeeded" | "Failed" | "Skipped" | "Completed">;
+  /** Additional properties the Data Factory API accepts on a dependency. */
+  [key: string]: unknown;
 }
 
 /** A pipeline activity. */
@@ -54,6 +56,8 @@ export interface PipelineActivity {
   inputs?: Array<Record<string, unknown>>;
   /** Output dataset references (data movement activities). */
   outputs?: Array<Record<string, unknown>>;
+  /** Additional properties the Data Factory API accepts on an activity. */
+  [key: string]: unknown;
 }
 
 /** A pipeline variable declaration. */
