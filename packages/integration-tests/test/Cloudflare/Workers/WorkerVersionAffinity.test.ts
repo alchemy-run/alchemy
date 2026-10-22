@@ -49,7 +49,7 @@ const resolveZone = Effect.gen(function* () {
 const listAffinityRules = Effect.fn(function* (zoneId: string, scriptName: string) {
   const entrypoint = yield* rulesets
     .getPhasForZone({ zoneId, rulesetPhase: "http_request_late_transform" })
-    .pipe(Effect.catch(() => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("RulesetNotFound", () => Effect.succeed(undefined)));
   return (entrypoint?.rules ?? [])
     .flatMap((rule) => {
       if (!(rule.description ?? "").startsWith(`alchemy:worker:${scriptName}:affinity`)) {
