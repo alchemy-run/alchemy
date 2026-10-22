@@ -26,6 +26,15 @@ Cost is not a scoping reason: expensive resources are implemented like any
 other (see step 6 for running their tests). The user narrows scope; the
 agent does not.
 
+**Coverage is 1:1 with the API, operation by operation.** Every
+operation in every in-scope service ends up as exactly one of: part of a
+resource's lifecycle, a binding, an event source, or an `internal` row
+with a reason. A service with resources but no bindings is half done.
+AWS is the bar: 2,846 binding services across 205 of its 212 services.
+GCP reached 57 of 161 services and Azure 4 of 160; both were reported as
+done. Every call goes through distilled. When distilled is missing an
+operation, patch distilled (step 1); never work around it in alchemy.
+
 The whole provider also means its non-resource deliverables: bindings for
 every capability (step 5), a host runtime and event sources when the cloud
 runs code, framework websites on the cloud's CDN and functions (step 7, when the
@@ -213,7 +222,23 @@ lifecycle-to-operation mapping, bindings, testability, and priority.
 `processes/` is gitignored, so the catalog is the local order book; the
 committed record of scope is the overview page below.
 
-`processes/<Provider>/catalog/INDEX.md` has one row per resource with a
+Each catalog file also lists **every operation** in the service module,
+classified the way `scripts/audit-service.ts` classifies AWS:
+
+| Category | Meaning | Becomes |
+| --- | --- | --- |
+| `resource-lifecycle` | create/get/update/delete/list of the resource itself | a resource's `reconcile`/`read`/`delete`/`list` |
+| `binding` | data-plane work on or inside a resource (put an object, send a message, query a table, read a secret, invoke a function) | a `Binding.Service` + `<Op>Http.ts` |
+| `event-source` | the resource triggers runtimes (notifications, streams, subscriptions) | an event source |
+| `internal` | not useful from user code (long-running-operation polling, deprecated aliases) | nothing, with a reason |
+
+Read operations a user calls at runtime (get an item, list objects,
+describe a queue's depth) are bindings even when a lifecycle uses them
+too. Port `scripts/audit-service.ts` to the provider before the first
+wave (it reads the distilled module and the package and prints the gaps),
+and run it per service at every wave boundary.
+
+`processes/<Provider>/catalog/INDEX.md` has one row per resource and one per binding with a
 status of `missing`, `implemented`, `tested`, `blocked` (with the exact
 error), or `out-of-scope` (with the reason). Build waves from it and repeat
 until no row is `missing` or `implemented`. Every progress report and the
@@ -377,6 +402,29 @@ obvious from the code:
 | #2347 | `Bind` / `withCredentials` effectful constructors, identity from real resources, `__ALCHEMY_HOST_IDENTITY__` bundle fold (`packages/gcp/src/GCPBindings.ts`) |
 | #2267 | deploy-only services read behind the runtime guard; `*Http` bindings on local resources fail with a typed error (`packages/cloudflare/src/HttpBindingDev.ts`) |
 | #2244, #2315 | no branching on another provider's host type; reach the host through `RuntimeContext` and core host services (`alchemy/WebhookHost`) |
+
+**Cover every `binding` operation** in the catalog. Follow the AWS
+shape: one `Binding.Service` per operation (`SQS.SendMessage`,
+`DynamoDB.GetItem`), each with an `<Op>Http.ts` layer built on the
+distilled operation, which injects the bound resource's identifier and
+grants only that operation on that resource. Where the API has clear
+access levels (object storage, key-value stores), also ship the
+Read/Write/ReadWrite services from `AGENTS.md` on top of the per-operation ones.
+
+Least privilege depends on the cloud's permission model:
+
+- **Per-action permissions** (AWS IAM): grant the operation's actions on
+  the resource ARN, as `scripts/audit-service.ts` checks.
+- **Role-based** (GCP IAM, Azure RBAC): grant the smallest predefined
+  role that covers the operation, on the resource, never the project or
+  subscription. If the smallest predefined role covers much more than the
+  operation, create a custom role with exactly the permissions or data
+  actions it needs, and reuse it across hosts.
+
+Every binding is a distilled call: the `<Op>Http.ts` layer wraps
+`<service>.<operation>` from `@distilled.cloud/<pkg>`. If the operation
+isn't in distilled (the data plane is missing, or the operation isn't
+modelled), patch distilled first (step 1).
 
 **Declare** each capability as an interface plus factory:
 

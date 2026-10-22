@@ -26,7 +26,10 @@ Run this first; the other sections only judge the code that exists.
 | Nothing left unbuilt | count statuses in `processes/<P>/catalog/INDEX.md` | no `missing` or `implemented` rows; every `out-of-scope` and `blocked` row has a reason or exact error |
 | Index matches the code | every `tested` row has a `Resource<...>("<P>.<Service>.<Name>")` in `src/<P>` and a registered provider in `Providers.ts` | yes |
 | One test file per resource | every `tested` row has `test/<P>/<Service>/<Name>.test.ts` | yes |
-| Non-resource deliverables | index rows for bindings, runtime, event sources, websites, examples | none `missing`; `rg -l 'Binding.Service' src/<P>` is non-zero when the cloud has data-plane capabilities |
+| Operations classified | every operation in each distilled service module appears in its catalog file as `resource-lifecycle`, `binding`, `event-source`, or `internal` with a reason | yes; the provider's port of `scripts/audit-service.ts` prints no unclassified operations |
+| Binding coverage | the audit's `missingBindings` per service, and `rg -l 'Binding\.Service<' src/<P> \| xargs -n1 dirname \| sort -u \| wc -l` against the services with `binding` operations | no missing bindings; every service with data-plane operations has bindings (AWS: 205 of 212) |
+| Bindings through distilled | read each `*Http.ts` | wraps a `@distilled.cloud/<pkg>` operation; no `HttpClientRequest` |
+| Non-resource deliverables | index rows for runtime, event sources, websites, examples | none `missing` |
 | Skill freshness | `git log -1 --format=%H -- .agents/skills/alchemy-provider` vs the `Skill: <sha>` line at the top of `INDEX.md` | equal; a newer skill commit means re-read it and add rows for its new deliverables |
 | Framework examples | `ls examples \| grep '^<p>-website-'` vs `ls examples \| grep '^hetzner-website-'` | one per framework the provider hosts (skip when it can't host websites) |
 | Workload examples | `ls examples \| grep '^<p>-'` against the workload table in Step 10 | one per workload the cloud supports; each registered in `tsconfig.json` and `scripts/test-examples.ts`, with a passing `test/integ.test.ts` |
