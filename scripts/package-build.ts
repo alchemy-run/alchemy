@@ -95,6 +95,18 @@ export const exec = (command: string, ...args: Array<string>): Step => ({
   }),
 });
 
+/**
+ * Run the TypeScript compiler: tsrs where it ships a native binary, `tsc`
+ * elsewhere (Windows, Intel macOS).
+ */
+export const typescript = (...args: Array<string>): Step =>
+  exec(
+    ["darwin-arm64", "linux-x64", "linux-arm64"].includes(`${process.platform}-${process.arch}`)
+      ? "tsrs"
+      : "tsc",
+    ...args,
+  );
+
 /** Copy a file, paths relative to the package directory. */
 export const copy = (from: string, to: string): Step => ({
   name: `copy ${from} → ${to}`,

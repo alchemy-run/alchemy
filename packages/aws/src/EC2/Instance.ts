@@ -25,6 +25,7 @@ import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 import {
   type Ec2HostedProps,
+  type InstanceMetadataOptions,
   createEc2HostRuntimeContext,
   createEc2HostedSupport,
   type Ec2HostRuntimeContext,
@@ -32,6 +33,8 @@ import {
 import type { SecurityGroupId } from "./SecurityGroup.ts";
 import type { SubnetId } from "./Subnet.ts";
 import type { VpcId } from "./Vpc.ts";
+
+export type { InstanceMetadataOptions };
 
 export type InstanceId<ID extends string = string> = `i-${ID}`;
 export const InstanceId = <ID extends string>(id: ID): ID & InstanceId<ID> =>
@@ -99,6 +102,12 @@ export interface InstanceProps extends PlatformProps {
    * @default true
    */
   sourceDestCheck?: boolean;
+  /**
+   * Instance Metadata Service (IMDS) options, e.g. requiring IMDSv2 and
+   * limiting the hop count. Applied at launch and updated in place. Unset
+   * fields keep the AMI / account defaults.
+   */
+  metadataOptions?: InstanceMetadataOptions;
   /**
    * User-defined tags to apply to the instance.
    */
@@ -226,6 +235,10 @@ export interface Instance extends Resource<
      */
     sourceDestCheck?: boolean;
     /**
+     * The Instance Metadata Service options in effect on the instance.
+     */
+    metadataOptions?: InstanceMetadataOptions;
+    /**
      * When the instance was launched.
      */
     launchTime?: string;
@@ -289,6 +302,20 @@ export type InstanceRuntimeContext = Ec2HostRuntimeContext;
  *   imageId: AWS.EC2.amazonLinux2023(),
  *   instanceType: "t3.micro",
  *   subnetId: subnet.subnetId,
+ * });
+ * ```
+ *
+ * **Example:** Require IMDSv2
+ * A hop limit of 1 keeps containers on the host from reaching the
+ * instance role's credentials. Changes apply in place.
+ * ```typescript
+ * const instance = yield* AWS.EC2.Instance("AppInstance", {
+ *   imageId: AWS.EC2.amazonLinux2023(),
+ *   instanceType: "t3.micro",
+ *   metadataOptions: {
+ *     httpTokens: "required",
+ *     httpPutResponseHopLimit: 1,
+ *   },
  * });
  * ```
  *
@@ -456,6 +483,23 @@ export const InstanceProvider = () =>
           instanceProfileId: instance.IamInstanceProfile?.Id,
           instanceProfileName: undefined,
           sourceDestCheck: instance.SourceDestCheck,
+          metadataOptions: instance.MetadataOptions
+            ? {
+                httpTokens: instance.MetadataOptions.HttpTokens as
+                  | InstanceMetadataOptions["httpTokens"]
+                  | undefined,
+                httpPutResponseHopLimit: instance.MetadataOptions.HttpPutResponseHopLimit,
+                httpEndpoint: instance.MetadataOptions.HttpEndpoint as
+                  | InstanceMetadataOptions["httpEndpoint"]
+                  | undefined,
+                httpProtocolIpv6: instance.MetadataOptions.HttpProtocolIpv6 as
+                  | InstanceMetadataOptions["httpProtocolIpv6"]
+                  | undefined,
+                instanceMetadataTags: instance.MetadataOptions.InstanceMetadataTags as
+                  | InstanceMetadataOptions["instanceMetadataTags"]
+                  | undefined,
+              }
+            : undefined,
           launchTime:
             instance.LaunchTime instanceof Date
               ? instance.LaunchTime.toISOString()
@@ -612,6 +656,7 @@ export const InstanceProvider = () =>
             associatePublicIpAddress: news.associatePublicIpAddress,
             privateIpAddress: news.privateIpAddress,
             availabilityZone: news.availabilityZone,
+            metadataOptions: news.metadataOptions,
             tags,
           },
           runtime,
@@ -713,6 +758,7 @@ export const InstanceProvider = () =>
           if (
             olds.instanceType !== news.instanceType ||
             olds.sourceDestCheck !== news.sourceDestCheck ||
+            !deepEqual(olds.metadataOptions ?? {}, news.metadataOptions ?? {}) ||
             olds.main !== news.main ||
             olds.handler !== news.handler ||
             olds.port !== news.port ||
@@ -862,6 +908,40 @@ export const InstanceProvider = () =>
               InstanceId: instanceId,
               SourceDestCheck: { Value: desiredSourceDestCheck },
             });
+          }
+
+          // Sync metadata options — only the fields the user set, against
+          // the observed IMDS config. Unset fields keep whatever is live.
+          const desiredMetadata = news.metadataOptions ?? {};
+          const metadataMatches = (observed: ec2.InstanceMetadataOptionsResponse = {}) =>
+            (desiredMetadata.httpTokens ?? observed.HttpTokens) === observed.HttpTokens &&
+            (desiredMetadata.httpPutResponseHopLimit ?? observed.HttpPutResponseHopLimit) ===
+              observed.HttpPutResponseHopLimit &&
+            (desiredMetadata.httpEndpoint ?? observed.HttpEndpoint) === observed.HttpEndpoint &&
+            (desiredMetadata.httpProtocolIpv6 ?? observed.HttpProtocolIpv6) ===
+              observed.HttpProtocolIpv6 &&
+            (desiredMetadata.instanceMetadataTags ?? observed.InstanceMetadataTags) ===
+              observed.InstanceMetadataTags;
+          if (!metadataMatches(instance.MetadataOptions)) {
+            yield* ec2.modifyInstanceMetadataOptions({
+              InstanceId: instanceId,
+              HttpTokens: desiredMetadata.httpTokens,
+              HttpPutResponseHopLimit: desiredMetadata.httpPutResponseHopLimit,
+              HttpEndpoint: desiredMetadata.httpEndpoint,
+              HttpProtocolIpv6: desiredMetadata.httpProtocolIpv6,
+              InstanceMetadataTags: desiredMetadata.instanceMetadataTags,
+            });
+            // DescribeInstances lags the modify; wait for the new options so
+            // the returned attributes reflect them.
+            yield* describeInstance(instanceId).pipe(
+              Effect.repeat({
+                until: (observed) =>
+                  observed.MetadataOptions?.State === "applied" &&
+                  metadataMatches(observed.MetadataOptions),
+                schedule: Schedule.spaced("2 seconds"),
+                times: 15,
+              }),
+            );
           }
 
           // Sync instance type — observed type vs desired. Type changes need

@@ -4,6 +4,7 @@ import * as ProviderLayer from "alchemy/Local/ProviderLayer";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { isResourceOfType, Resource } from "alchemy/Resource";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
@@ -242,6 +243,18 @@ export type BucketProps = {
    */
   locks?: BucketLockRule[];
   /**
+   * Whether R2 Local Uploads is enabled. Uploads from clients far from the
+   * bucket's region are written near the client first and replicated to the
+   * bucket asynchronously. Toggling it updates the bucket in place.
+   *
+   * Not available for jurisdiction-restricted buckets: enabling it on a
+   * bucket whose `jurisdiction` is not `"default"` fails the deploy.
+   *
+   * A bucket that never declared `localUploads` keeps whatever setting it
+   * has. Drop `localUploads` after declaring it to disable it.
+   */
+  localUploads?: boolean;
+  /**
    * Allow alchemy to delete every object in the bucket when the bucket
    * itself is deleted.
    *
@@ -277,6 +290,11 @@ export type Bucket = Resource<
      * (omitted from the props).
      */
     locks: Bucket.LockRule[] | undefined;
+    /**
+     * Whether Local Uploads is enabled. `undefined` while `localUploads` is
+     * unmanaged (omitted from the props).
+     */
+    localUploads: boolean | undefined;
     /**
      * Hostname of the bucket's Cloudflare-managed `r2.dev` domain.
      * Set only while `publicAccess` is enabled; `undefined` when
@@ -544,6 +562,22 @@ export type Bucket = Resource<
  *       condition: { type: "Age", maxAgeSeconds: 60 * 60 * 24 * 90 },
  *     },
  *   ],
+ * });
+ * ```
+ *
+ * ### Local Uploads
+ *
+ * Local Uploads writes uploaded objects near the client and replicates them
+ * to the bucket's region asynchronously, cutting upload latency for clients
+ * far from the bucket. It is not available for jurisdiction-restricted
+ * buckets. See the
+ * [Cloudflare R2 docs](https://developers.cloudflare.com/r2/buckets/local-uploads/)
+ * for details.
+ *
+ * **Example:** Enable Local Uploads
+ * ```typescript
+ * const uploads = yield* Cloudflare.R2.Bucket("Uploads", {
+ *   localUploads: true,
  * });
  * ```
  *
@@ -1097,6 +1131,33 @@ export const ProviderLive = () =>
           return desiredRules;
         });
 
+      const reconcileLocalUploads = Effect.fn(function* (
+        bucketName: string,
+        jurisdiction: Bucket.Jurisdiction,
+        desired: boolean,
+      ) {
+        // Local Uploads has no jurisdiction-scoped endpoint: Cloudflare does
+        // not offer it on jurisdiction-restricted buckets, so such a bucket
+        // is always disabled (reconcile refuses `true` up front).
+        if (jurisdiction !== "default") return false;
+        const { accountId } = yield* yield* CloudflareEnvironment;
+        const observed = yield* r2.getBucketLocalUploads({ accountId, bucketName }).pipe(
+          Effect.retry({
+            while: (e) => e._tag === "NoSuchBucket",
+            schedule: r2BucketEndpointConsistencySchedule,
+          }),
+        );
+        if (observed.enabled === desired) return desired;
+        // The PUT response omits `enabled`; a successful PUT applied `desired`.
+        yield* r2.putBucketLocalUploads({ accountId, bucketName, enabled: desired }).pipe(
+          Effect.retry({
+            while: (e) => e._tag === "NoSuchBucket",
+            schedule: r2BucketEndpointConsistencySchedule,
+          }),
+        );
+        return desired;
+      });
+
       return {
         stables: ["bucketName", "accountId"],
         list: () =>
@@ -1176,6 +1237,7 @@ export const ProviderLive = () =>
                     lifecycleRules,
                     cors,
                     locks: undefined,
+                    localUploads: undefined,
                     publicDomain,
                   };
                 }).pipe(
@@ -1199,6 +1261,7 @@ export const ProviderLive = () =>
                       lifecycleRules: [] as Bucket.LifecycleRule[],
                       cors: [] as Bucket.CorsRule[],
                       locks: undefined,
+                      localUploads: undefined,
                       publicDomain: undefined,
                     }),
                   ),
@@ -1249,6 +1312,9 @@ export const ProviderLive = () =>
           if ((olds.publicAccess ?? false) !== (news.publicAccess ?? false)) {
             return { action: "update" } as const;
           }
+          if (olds.localUploads !== news.localUploads) {
+            return { action: "update" } as const;
+          }
         }),
         reconcile: Effect.fn(function* ({ id, news = {}, olds, output }) {
           const { accountId } = yield* yield* CloudflareEnvironment;
@@ -1257,6 +1323,16 @@ export const ProviderLive = () =>
           const name = output?.bucketName ?? (yield* createBucketName(id, news.name));
           const acct = output?.accountId ?? accountId;
           const jurisdiction = output?.jurisdiction ?? news.jurisdiction ?? "default";
+
+          // Refuse before creating anything, so a rejected deploy leaves no
+          // bucket behind.
+          if (news.localUploads === true && jurisdiction !== "default") {
+            return yield* new LocalUploadsUnsupported({
+              bucketName: name,
+              jurisdiction,
+              message: `R2 Local Uploads is not available for jurisdiction-restricted bucket "${name}" (jurisdiction "${jurisdiction}")`,
+            });
+          }
 
           // Observe — fetch the bucket. R2 reports a deleted bucket as
           // `NoSuchBucket`; tolerate that so the reconciler falls
@@ -1365,6 +1441,16 @@ export const ProviderLive = () =>
               ? yield* reconcileLockRules(attrs.bucketName, attrs.jurisdiction, news.locks ?? [])
               : undefined;
 
+          // Like locks, Local Uploads is managed only once the props name it.
+          const localUploads =
+            news.localUploads !== undefined || olds?.localUploads !== undefined
+              ? yield* reconcileLocalUploads(
+                  attrs.bucketName,
+                  attrs.jurisdiction,
+                  news.localUploads ?? false,
+                )
+              : undefined;
+
           const publicDomain = yield* reconcileManagedDomain(
             attrs.bucketName,
             attrs.jurisdiction,
@@ -1377,6 +1463,7 @@ export const ProviderLive = () =>
             lifecycleRules,
             cors,
             locks,
+            localUploads,
             publicDomain,
           };
         }),
@@ -1461,6 +1548,7 @@ export const ProviderLive = () =>
                 lifecycleRules: output?.lifecycleRules ?? [],
                 cors: output?.cors ?? [],
                 locks: output?.locks,
+                localUploads: output?.localUploads,
                 publicDomain: output?.publicDomain,
               })),
               Effect.catchTag("NoSuchBucket", () => Effect.succeed(undefined)),
@@ -1510,6 +1598,7 @@ export const ProviderLocal = () =>
         lifecycleRules: [],
         cors: [],
         locks: undefined,
+        localUploads: undefined,
         publicDomain: undefined,
       };
     }),
@@ -1529,6 +1618,16 @@ export const BucketProvider = () =>
 // sub-resource endpoints (custom domains, lifecycle) accept it. Retry only
 // that narrow `NoSuchBucket` lag here; not-found sub-resources are still
 // treated as terminal for idempotent deletes.
+/**
+ * Local Uploads was requested on a jurisdiction-restricted bucket, which
+ * Cloudflare does not support.
+ */
+export class LocalUploadsUnsupported extends Data.TaggedError("LocalUploadsUnsupported")<{
+  bucketName: string;
+  jurisdiction: Bucket.Jurisdiction;
+  message: string;
+}> {}
+
 const r2BucketEndpointConsistencySchedule = Schedule.max([
   Schedule.exponential(100),
   Schedule.recurs(5),

@@ -55,3 +55,59 @@ test.provider(
     }),
   { tags: ["provider:aws", "provider:aws:autoscaling", "provider:aws:ec2", "live"] },
 );
+
+// Metadata options land in the template data; a change publishes a new
+// default version carrying the new options.
+test.provider(
+  "metadataOptions land in the default template version",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const imageId = amazonLinux2023();
+
+      const program = (httpPutResponseHopLimit: number) =>
+        Effect.gen(function* () {
+          return yield* LaunchTemplate("MetadataLaunchTemplate", {
+            imageId,
+            instanceType: "t3.micro",
+            metadataOptions: { httpTokens: "required", httpPutResponseHopLimit },
+          });
+        });
+
+      const observeMetadata = (launchTemplateId: string) =>
+        ec2
+          .describeLaunchTemplateVersions({
+            LaunchTemplateId: launchTemplateId,
+            Versions: ["$Default"],
+          })
+          .pipe(
+            Effect.map((r) => r.LaunchTemplateVersions?.[0]?.LaunchTemplateData?.MetadataOptions),
+          );
+
+      const first = yield* stack.deploy(program(1));
+      expect(yield* observeMetadata(first.launchTemplateId)).toMatchObject({
+        HttpTokens: "required",
+        HttpPutResponseHopLimit: 1,
+      });
+
+      const second = yield* stack.deploy(program(2));
+      expect(second.launchTemplateId).toBe(first.launchTemplateId);
+      expect(second.defaultVersionNumber).toBeGreaterThan(first.defaultVersionNumber);
+      expect(yield* observeMetadata(second.launchTemplateId)).toMatchObject({
+        HttpTokens: "required",
+        HttpPutResponseHopLimit: 2,
+      });
+
+      yield* stack.destroy();
+
+      const remaining = yield* ec2
+        .describeLaunchTemplates({ LaunchTemplateIds: [second.launchTemplateId] })
+        .pipe(
+          Effect.map((r) => (r.LaunchTemplates ?? []).length),
+          Effect.catchTag("InvalidLaunchTemplateId.NotFound", () => Effect.succeed(0)),
+        );
+      expect(remaining).toBe(0);
+    }),
+  { tags: ["provider:aws", "provider:aws:autoscaling", "provider:aws:ec2", "live"] },
+);
