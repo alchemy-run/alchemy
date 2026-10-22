@@ -168,6 +168,44 @@ describe.skipIf(!!process.env.FAST).sequential("AWS.Workspace: hosts on EC2, fro
   );
 
   test(
+    "a command has a network of its own: out to the internet, not to the host's credentials, the hosts or the VPC",
+    Effect.gen(function* () {
+      // Both hosts' addresses, from the registry.
+      const { TableNames } = yield* dynamodb.listTables({});
+      const table = TableNames!.find((name) =>
+        name.toLowerCase().includes("serviceworkspaceregistry"),
+      )!;
+      const { Items } = yield* dynamodb.scan({ TableName: table });
+      const hosts = (Items ?? [])
+        .filter((item) => item.pk?.S?.startsWith("host#"))
+        .map((item) => item.address!.S!);
+      expect(hosts.length).toBe(2);
+      const urls = [
+        "https://example.com/",
+        "http://169.254.169.254/latest/meta-data/",
+        "http://10.200.0.1:8080/health",
+        ...hosts.map((address) => `http://${address}/health`),
+      ];
+      const probe = urls
+        .map(
+          (url) =>
+            `fetch('${url}', { signal: AbortSignal.timeout(3000) }).then((r) => 'reached ' + r.status, () => 'unreachable')`,
+        )
+        .join(", ");
+      const result = yield* call<Result>("exec", {
+        session: "s6",
+        command: `node -e "Promise.all([${probe}]).then((all) => console.log(all.join('\\n')))"`,
+      });
+      expect(result.exitCode, result.stderr).toBe(0);
+      expect(result.stdout.trim().split("\n")).toEqual([
+        "reached 200",
+        ...urls.slice(1).map(() => "unreachable"),
+      ]);
+    }).pipe(Effect.provide(Layer.mergeAll(Credentials.fromChain(), Region.fromEnv()))),
+    options,
+  );
+
+  test(
     "when the host that has a session dies, another host takes it over, with its files",
     Effect.gen(function* () {
       yield* call("delete", { session: "s5" }).pipe(Effect.ignore);

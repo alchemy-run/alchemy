@@ -27,8 +27,8 @@ export const hostUserData = (isolation: HostConfig["isolation"]) => `#!/bin/bash
 export DEBIAN_FRONTEND=noninteractive
 arch=$(uname -m)
 apt-get update -y
-apt-get install -y e2fsprogs btrfs-progs fuse3 runc gnupg curl "linux-modules-extra-$(uname -r)" \\
-  || apt-get install -y e2fsprogs btrfs-progs fuse3 runc gnupg curl
+apt-get install -y e2fsprogs btrfs-progs fuse3 runc gnupg curl iproute2 iptables "linux-modules-extra-$(uname -r)" \\
+  || apt-get install -y e2fsprogs btrfs-progs fuse3 runc gnupg curl iproute2 iptables
 ${
   isolation === "gvisor"
     ? `curl -fsSL https://gvisor.dev/archive.key | gpg --dearmor -o /usr/share/keyrings/gvisor-archive-keyring.gpg

@@ -75,6 +75,14 @@ export interface WorkspaceProps {
   /** The VPC's CIDR block. @default "10.90.0.0/16" */
   cidrBlock?: string;
   /**
+   * CIDRs commands may reach. Commands have a network of their own: out
+   * through NAT, but never to the instance's metadata service (the host's
+   * credentials), the host, other commands, or the VPC (the other hosts).
+   * With `egress`, they reach only these.
+   * @default anywhere else
+   */
+  egress?: ReadonlyArray<string>;
+  /**
    * An ACM certificate for HTTPS on the load balancer. Without one the
    * service is served over HTTP on the load balancer's own name.
    */
@@ -226,6 +234,8 @@ export const Workspace = <const D extends SandboxWorkspace.Workspace.Decl.Any>(
           idleMs: Duration.toMillis(Duration.fromInputUnsafe(props.idle ?? "2 minutes")),
           binaries,
           port: PORT,
+          egress: props.egress ?? [],
+          deny: [props.cidrBlock ?? "10.90.0.0/16"],
           ...(registryName ? { registry: registryName as string } : {}),
         })),
       );
@@ -244,6 +254,8 @@ export const Workspace = <const D extends SandboxWorkspace.Workspace.Decl.Any>(
           idleMs: 0,
           binaries,
           port: PORT,
+          egress: [],
+          deny: [],
         },
         {
           config,

@@ -60,6 +60,10 @@ export interface HostConfig {
   readonly port: number;
   /** The table of hosts and their sessions, when there's more than one host. */
   readonly registry?: string;
+  /** CIDRs commands may reach (empty: anywhere the host allows). */
+  readonly egress: ReadonlyArray<string>;
+  /** CIDRs commands never reach, besides the metadata service and the host: its VPC. */
+  readonly deny: ReadonlyArray<string>;
 }
 
 export const HOST_CONFIG = "ALCHEMY_WORKSPACE_HOST";
@@ -199,6 +203,8 @@ interface Session {
    */
   readonly points: Array<string>;
   readonly merged: Map<string, string>;
+  /** The mounted head's address: where its processes' ports are. */
+  address?: string;
 }
 
 interface Pending {
@@ -262,7 +268,14 @@ export const serveWorkspace = (config: HostConfig) =>
     const isolation =
       config.isolation === "none" || !config.image
         ? undefined
-        : { runtime: config.isolation, image: config.image, path: config.path };
+        : {
+            runtime: config.isolation,
+            image: config.image,
+            path: config.path,
+            // A network of its own: not the host's credentials or its VPC.
+            hostNetwork: false,
+            ...(config.egress.length > 0 ? { egress: config.egress } : {}),
+          };
     // A microVM has its own copy of the workspace, so commands never run on
     // a mounted head: the head is the host's view, and calls fork it.
     const microVMs = config.isolation === "firecracker";
@@ -321,7 +334,8 @@ export const serveWorkspace = (config: HostConfig) =>
         "ExecStart=/usr/local/bin/blockd daemon --listen 127.0.0.1:7681 --pidfile /run/blockd/daemon.pid --state /var/cache/blockd --run /run/blockd --init /usr/local/lib/blockd/init" +
           (config.isolation === "firecracker"
             ? " --firecracker /usr/local/bin/firecracker --kernel /usr/local/lib/blockd/vmlinux"
-            : ""),
+            : "") +
+          (config.deny.length > 0 ? ` --egress-deny ${config.deny.join(",")}` : ""),
         "Restart=always",
         "UNIT",
         "systemctl daemon-reload",
@@ -391,7 +405,7 @@ export const serveWorkspace = (config: HostConfig) =>
     const mount = Effect.fn(function* (s: Session) {
       if (s.mounted) return;
       yield* ensureHead(s);
-      yield* daemon.post("/v1/heads", {
+      const mounted = yield* daemon.post<{ readonly address?: string }>("/v1/heads", {
         ...store,
         head: s.name,
         dir: `${HEADS}/${s.name}`,
@@ -400,6 +414,7 @@ export const serveWorkspace = (config: HostConfig) =>
         ...(headIsolation ? { isolation: headIsolation } : {}),
       });
       s.mounted = true;
+      s.address = mounted.address;
       // A head mounted from the store has nothing unlanded.
       s.snapshotSeq = s.seq;
       s.dirty = false;
@@ -461,6 +476,7 @@ export const serveWorkspace = (config: HostConfig) =>
       // Its last snapshot holds changes nothing has snapshotted yet.
       if (changed || s.dirty) s.points.push(detached.snapshot);
       s.mounted = false;
+      s.address = undefined;
       s.dirty = false;
       s.snapshotSeq = s.seq;
     });
@@ -1273,7 +1289,7 @@ export const serveWorkspace = (config: HostConfig) =>
         if (!held) return yield* respond(404, { error: `no open ${segments[2]}` });
         return yield* proxy(
           request,
-          `http://127.0.0.1:${Number(segments[4])}/${segments.slice(5).join("/")}${url.search}`,
+          `http://${held.s.address ?? "127.0.0.1"}:${Number(segments[4])}/${segments.slice(5).join("/")}${url.search}`,
           false,
         );
       }
