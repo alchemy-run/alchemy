@@ -27,7 +27,7 @@ spot), with the cache on NVMe or on EBS alike.
 ```text
 Worker / Lambda / anything ──HTTPS──▶ front door ──▶ any host ──VPC──▶ the session's host
                                                                       ├─ blockd daemon: disks, forks, caches
-                                                                      ├─ a sandbox per session or call (gVisor)
+                                                                      ├─ a container, gVisor sandbox or microVM per session or call
                                                                       └─ the session: its head, its commit log
 store: S3 (snapshots, patches, journal)   registry: DynamoDB (hosts, sessions, leases)
 ```
@@ -47,29 +47,29 @@ store: S3 (snapshots, patches, journal)   registry: DynamoDB (hosts, sessions, l
   engine uses), so a host that dies loses its sessions to another host and
   can't write after it.
 
-## Isolation: gVisor, or a microVM where there's KVM
+## Isolation: containers, gVisor or microVMs
 
-Hosts run on any CPU (Graviton, AMD, Intel) at any size, so the default
-isolation needs no hardware virtualization.
+Every host offers all three; a host chooses with `isolation`, and a
+workspace doesn't change when its hosts do.
 
-- **gVisor** (the default). Each session or forked call runs in a gVisor
-  sandbox (Systrap): its system calls are handled by a kernel in user space,
-  so it needs no `/dev/kvm` and runs on every instance type. Its root is the
-  session's disk as blockd mounts it on the host, so everything that works
-  on files stays on the host as it is today: overlay and `btrfs send`
-  patches, forks of a mounted head, process hosts. System-call-heavy work
-  runs slower; for coding agents (builds, git, grep, many small files) that
-  is what to measure.
-- **Firecracker**, where KVM exists: bare-metal instances of any CPU, or
-  Intel C8i, M8i and R8i with nested virtualization. A hardware boundary
-  and memory snapshots, for tenants that need them. A filesystem mounted
-  in a VM can't also be mounted on the host, so with Firecracker the file
-  work (running commands, making and applying patches) moves into a small
-  agent in the guest, and blockd hands the VM the session's block device.
+| `isolation` | Boundary | File operations | Runs on | Default for |
+|---|---|---|---|---|
+| `"container"` | Linux namespaces, seccomp, user namespaces | Native | Any CPU, any size | Self-hosting through Alchemy: the user's own agents in their own account |
+| `"gvisor"` | A kernel in user space | 5–50 times slower (below) | Any CPU, any size | Untrusted code where KVM isn't available |
+| `"firecracker"` | Hardware virtualization | The guest's own kernel on the block device | Bare metal of any CPU; Intel C8i, M8i, R8i | Our managed service: other people's code on shared hosts |
 
-Both sit under the same daemon API: a workspace doesn't change when its
-hosts do. A call that leaves processes running keeps its sandbox for them:
-the process host of `DESIGN.md`, already on the session's host.
+- **Containers and gVisor are one path.** Both run an OCI bundle: the image
+  as a read-only root, the session's disk, as blockd mounts it on the host,
+  bind-mounted at the workspace's path. Only the runtime differs (`runc` or
+  `runsc`). Everything that works on files stays on the host as it is today:
+  overlay and `btrfs send` patches, forks of a mounted head, process hosts.
+- **Firecracker is the other.** A filesystem mounted in a VM can't also be
+  mounted on the host, so blockd hands the VM the session's block device and
+  the file work (running commands, making and applying patches) moves into a
+  small agent in the guest. Memory snapshots come with it.
+
+A call that leaves processes running keeps its container or VM for them: the
+process host of `DESIGN.md`, already on the session's host.
 
 ### What gVisor costs (measured)
 
@@ -97,16 +97,10 @@ do most. `fsync` passes through, so durability holds. (`runsc do` looks
 faster, but its writes go to an overlay of its own and never reach the
 volume.)
 
-So gVisor isn't a good default here. What's left:
-
-- **A microVM where there's KVM.** The guest's own kernel runs the
-  filesystem on the block device, so file operations stay inside the VM.
-- **Plain containers** (namespaces, seccomp, user namespaces): native speed
-  on any CPU, a weaker boundary. A fit when the hosts run in the user's own
-  account for their own agents.
-- **gVisor over a disk it reads itself** (an EROFS image for the read-only
-  part, an overlay inside the sandbox for writes) instead of host files.
-  Untested: what it makes of patches is the question.
+So gVisor is the option for untrusted code without KVM, not a default.
+gVisor reading the disk itself (an EROFS image for the read-only part, an
+overlay inside the sandbox for writes) instead of host files might close
+the gap; untested, and what it makes of patches is the question.
 
 ## Images: fast container loading
 
@@ -148,7 +142,8 @@ common layers line up, later.
 - a VPC with public subnets, an S3 bucket for the store, a DynamoDB table for
   the registry;
 - a launch template and an Auto Scaling group of hosts (AMI from Ubuntu with
-  blockd and gVisor installed at boot), with their
+  blockd, runc, gVisor and, where there's KVM, Firecracker installed at
+  boot), with their
   instance role;
 - the front door: an Application Load Balancer with a certificate, or a
   Lambda function URL that only places and redirects;
@@ -160,22 +155,23 @@ deploy comes later.
 
 ## Building it
 
-1. **One host.** blockd's daemon runs each call and each open's commands in
-   a gVisor sandbox over the mounted fork. Measure on a small Graviton spot
-   instance what gVisor costs coding workloads against the bare host.
+1. **One host, containers and gVisor.** blockd's daemon runs each call and
+   each open's commands in an OCI bundle over the mounted fork, with `runc`
+   or `runsc`.
 2. **The service, one host behind the front door.** `AWS.Workspace`, the
    session on its host with the commit log, a live test from a Worker.
 3. **Fast paths.** Forks of a mounted head without an attach, the snapshot
    after the answer, prefetch traces, the shared block cache.
 4. **Many hosts.** Placement by cache, forwarding, leases, draining for
    scale-in and spot interruptions.
-5. **Egress, ports; Firecracker hosts, and memory snapshots on them.**
+5. **Firecracker hosts**: the guest agent, memory snapshots; measured on
+   metal and under nested virtualization.
+6. **Egress, ports.**
 
 ## Open
 
 | Question | Decides |
 |---|---|
 | What a microVM's file operations cost on its own block device, under nested virtualization and on metal | Whether microVMs are the default where there's KVM |
-| Whether plain containers are enough for one account's own agents | The default on every other host |
 | Firecracker's I/O under nested virtualization on C8i | What the hardware-isolated option costs |
 | How long a session stays on its host when idle, and what an idle host costs | The pool's floor |
