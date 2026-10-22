@@ -10,7 +10,6 @@ import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import type { PlatformError } from "effect/PlatformError";
-import * as Predicate from "effect/Predicate";
 import type { Providers } from "./Providers.ts";
 
 export type Dialect = "postgres" | "mysql" | "sqlite";
@@ -48,23 +47,30 @@ type Hint =
   | { type: "rename"; kind: string; from: ReadonlyArray<string>; to: ReadonlyArray<string> }
   | { type: "create"; kind: string; entity: ReadonlyArray<string> };
 
+type GenerateOptions = {
+  dialect: string;
+  schema: string;
+  out: string;
+  explain?: boolean;
+  hints?: Array<Hint>;
+};
+
+type UpOptions = { dialect: string; out: string };
+
 type GenerateResult =
-  | { status: "ok"; statements?: ReadonlyArray<unknown> }
+  | { status: "ok" }
   | { status: "no_changes" }
-  | { status: "missing_hints"; unresolved: ReadonlyArray<MissingHint> }
-  | { status: "error"; error: unknown };
+  | { status: "missing_hints"; unresolved: ReadonlyArray<MissingHint> };
+
+type UpResult = { status: "ok"; upgraded: ReadonlyArray<string> };
+
+type CommandFailed = { status: "error"; error: unknown };
 
 // `drizzle-kit/cli`: the `drizzle-kit` commands as functions. They never
 // prompt and report results (including unanswered questions) as values.
 type DrizzleKitCli = {
-  generate: (options: {
-    dialect: string;
-    schema: string;
-    out: string;
-    explain?: boolean;
-    hints?: Array<Hint>;
-  }) => Promise<GenerateResult>;
-  up: (options: { dialect: string; out: string }) => Promise<GenerateResult>;
+  generate: (options: GenerateOptions) => Promise<GenerateResult | CommandFailed>;
+  up: (options: UpOptions) => Promise<UpResult | CommandFailed>;
 };
 
 // `drizzle-kit/payload/*`: snapshot builders. Only postgres has `reconstruct`.
@@ -96,22 +102,11 @@ class DrizzleKitFailed extends Data.TaggedError("DrizzleKitFailed")<{
   readonly cause: unknown;
 }> {
   override get message() {
+    // Thrown errors carry their own message; reported ones (`{ status:
+    // "error", error }`) are plain objects like `{ code, kind, snapshot }`.
     const { cause } = this;
-    const detail = Predicate.hasProperty(cause, "humanMessage")
-      ? cause.humanMessage
-      : cause instanceof Error
-        ? cause.message
-        : JSON.stringify(cause);
+    const detail = cause instanceof Error ? cause.message : JSON.stringify(cause);
     return `drizzle-kit ${this.command} failed: ${detail}`;
-  }
-}
-
-/** A legacy postgres snapshot chain that could not be converted faithfully. */
-class SnapshotConversionFailed extends Data.TaggedError("SnapshotConversionFailed")<{
-  readonly folder: string;
-}> {
-  override get message() {
-    return `Could not convert ${this.folder}/snapshot.json to drizzle-kit's incremental snapshot format. Regenerate the migrations folder with drizzle-kit.`;
   }
 }
 
@@ -218,8 +213,6 @@ export type Schema = Resource<
  */
 export const Schema = Resource<Schema>("Drizzle.Schema");
 
-const ORIGIN = "00000000-0000-0000-0000-000000000000";
-
 const cliDialect = (props: SchemaProps) =>
   props.dialect === undefined || props.dialect === "postgres" ? "postgresql" : props.dialect;
 
@@ -230,6 +223,40 @@ const importModule = <A>(module: string) =>
     try: () => import(/* @vite-ignore */ module) as Promise<A>,
     catch: (cause) => new DrizzleKitLoadFailed({ module, cause }),
   });
+
+const isCommandFailed = (result: { status: string }): result is CommandFailed =>
+  result.status === "error";
+
+// Run a `drizzle-kit/cli` command, failing on a thrown or reported error.
+const runCommand = <A extends { status: string }>(
+  command: keyof DrizzleKitCli,
+  run: (cli: DrizzleKitCli) => Promise<A | CommandFailed>,
+) =>
+  importModule<DrizzleKitCli>("drizzle-kit/cli").pipe(
+    Effect.flatMap((cli) =>
+      Effect.tryPromise({
+        try: () => run(cli),
+        catch: (cause) => new DrizzleKitFailed({ command, cause }),
+      }),
+    ),
+    Effect.flatMap((result) =>
+      isCommandFailed(result)
+        ? Effect.fail(new DrizzleKitFailed({ command, cause: result.error }))
+        : Effect.succeed(result),
+    ),
+  );
+
+/** The `drizzle-kit` commands Drizzle.Schema runs. */
+const drizzleKit = {
+  /** `drizzle-kit generate`; with `explain` a dry run that writes nothing. */
+  generate: Effect.fn("drizzleKit.generate")(function* (options: GenerateOptions) {
+    return yield* runCommand("generate", (cli) => cli.generate(options));
+  }),
+  /** `drizzle-kit up`: upgrade snapshots to the current format. */
+  up: Effect.fn("drizzleKit.up")(function* (options: UpOptions) {
+    return yield* runCommand("up", (cli) => cli.up(options));
+  }),
+};
 
 export const SchemaProvider = () =>
   Provider.effect(
@@ -297,111 +324,30 @@ export const SchemaProvider = () =>
           }
         });
 
-      const drizzleKit = Effect.fn("Drizzle.kit")(function* (
-        command: "generate" | "up",
-        options: Parameters<DrizzleKitCli["generate"]>[0],
-      ) {
-        const cli = yield* importModule<DrizzleKitCli>("drizzle-kit/cli");
-        const result = yield* Effect.tryPromise({
-          try: () => cli[command](options),
-          catch: (cause) => new DrizzleKitFailed({ command, cause }),
-        });
-        if (result.status === "error") {
-          return yield* new DrizzleKitFailed({ command, cause: result.error });
-        }
-        return result;
-      });
-
       /**
-       * Bring a migrations folder up to drizzle-kit's current snapshot format:
-       * `drizzle-kit up` for older format versions, then
-       * {@link convertLegacyPostgres}. Returns whether anything changed.
+       * Bring a migrations folder up to drizzle-kit's current snapshot format
+       * with `drizzle-kit up`. Returns whether anything changed.
+       *
+       * Earlier Alchemy versions wrote every postgres snapshot as a full
+       * version-9 snapshot without a `type`. That is the version-8 shape, which
+       * `up` turns into drizzle-kit's base/diff chain, so relabel them first.
        */
       const upgradeFolder = Effect.fn("Drizzle.upgradeFolder")(function* (
         props: SchemaProps,
         out: string,
       ) {
         if (!(yield* fs.exists(out))) return false;
-        const upped = yield* drizzleKit("up", {
-          dialect: cliDialect(props),
-          schema: resolveSchema(props),
-          out,
-        });
-        const converted = cliDialect(props) === "postgresql" && (yield* convertLegacyPostgres(out));
-        return (
-          converted ||
-          (Predicate.hasProperty(upped, "upgraded") &&
-            Array.isArray(upped.upgraded) &&
-            upped.upgraded.length > 0)
-        );
-      });
-
-      /**
-       * Alchemy used to write every postgres snapshot as a full,
-       * untyped version-9 snapshot. drizzle-kit now expects one `base`
-       * snapshot followed by `diff` snapshots, and rejects the old files as
-       * malformed. Rewrite them as base/diff, verify drizzle-kit reconstructs
-       * every converted snapshot to exactly its original schema, and only
-       * then write the files.
-       */
-      const convertLegacyPostgres = Effect.fn("Drizzle.convertLegacyPostgres")(function* (
-        out: string,
-      ) {
-        const snapshots = yield* readSnapshots(out);
-        const isLegacy = (snapshot: Snapshot) =>
-          snapshot.type === undefined && snapshot.version === "9" && snapshot.ddl !== undefined;
-        const legacy = Object.keys(snapshots).filter((dir) => isLegacy(snapshots[dir]!.snapshot));
-        if (legacy.length === 0) return false;
-
-        const { reconstruct } = yield* importModule<DrizzleKitPayload>(
-          "drizzle-kit/payload/postgres",
-        );
-        const files: Record<string, Snapshot> = {};
-        const ddlById = new Map<string, ReadonlyArray<DdlEntry>>();
-        for (const [dir, { snapshot }] of Object.entries(snapshots)) {
-          if (!isLegacy(snapshot)) files[dir] = snapshot;
-          else if (snapshot.id !== undefined) ddlById.set(snapshot.id, snapshot.ddl ?? []);
-        }
-        let hasBase = Object.values(files).some((snapshot) => snapshot.type === "base");
-
-        const reconstructDdl = (id: string) =>
-          Effect.tryPromise({
-            try: () => reconstruct!({ ...files }, id),
-            catch: (cause) => new DrizzleKitFailed({ command: "reconstruct", cause }),
-          }).pipe(Effect.map((state) => state.ddl ?? []));
-
-        for (const dir of legacy) {
-          const { ddl = [], ...snapshot } = snapshots[dir]!.snapshot;
-          const parent = snapshot.prevIds?.[0] ?? ORIGIN;
-          if (parent === ORIGIN && !hasBase) {
-            files[dir] = { type: "base", ...snapshot, ddl, footprints: [] } as Snapshot;
-            hasBase = true;
-            continue;
-          }
-          const parentDdl =
-            parent === ORIGIN ? [] : (ddlById.get(parent) ?? (yield* reconstructDdl(parent)));
-          files[dir] = {
-            type: "diff",
-            ...snapshot,
-            footprints: [],
-            deltas: ddlDeltas(parentDdl, ddl),
-          } as Snapshot;
-        }
-
-        for (const dir of legacy) {
-          const original = snapshots[dir]!.snapshot;
-          const rebuilt = yield* reconstructDdl(original.id ?? "");
-          if (!sameDdl(rebuilt, original.ddl ?? [])) {
-            return yield* new SnapshotConversionFailed({ folder: path.join(out, dir) });
+        if (cliDialect(props) === "postgresql") {
+          for (const [dir, { snapshot }] of Object.entries(yield* readSnapshots(out))) {
+            if (snapshot.type !== undefined || snapshot.version !== "9") continue;
+            yield* fs.writeFileString(
+              path.join(out, dir, "snapshot.json"),
+              JSON.stringify({ ...snapshot, version: "8", renames: [] }, null, 2),
+            );
           }
         }
-        for (const dir of legacy) {
-          yield* fs.writeFileString(
-            path.join(out, dir, "snapshot.json"),
-            JSON.stringify(files[dir], null, 2),
-          );
-        }
-        return true;
+        const { upgraded } = yield* drizzleKit.up({ dialect: cliDialect(props), out });
+        return upgraded.length > 0;
       });
 
       /**
@@ -455,7 +401,10 @@ export const SchemaProvider = () =>
         const hints: Array<Hint> = [];
         let context: { prev: ReadonlyArray<DdlEntry>; cur: ReadonlyArray<DdlEntry> } | undefined;
         while (true) {
-          const result = yield* drizzleKit("generate", {
+          // `explain` dry-runs generate: it reports the pending migration
+          // (`ok`), `no_changes`, or the questions it still needs answered
+          // (`missing_hints`) without writing anything.
+          const result = yield* drizzleKit.generate({
             dialect: cliDialect(props),
             schema: resolveSchema(props),
             out,
@@ -463,8 +412,7 @@ export const SchemaProvider = () =>
             hints,
           });
           if (result.status !== "missing_hints") {
-            const changed = result.status === "ok" && (result.statements?.length ?? 1) > 0;
-            return { hints, changed };
+            return { hints, changed: result.status === "ok" };
           }
           context ??= yield* loadRenameContext(props, out);
           for (const hint of result.unresolved) {
@@ -502,7 +450,7 @@ export const SchemaProvider = () =>
         if (upgraded) yield* upgradeFolder(props, out);
         if (changed) {
           yield* fs.makeDirectory(out, { recursive: true });
-          const result = yield* drizzleKit("generate", {
+          const result = yield* drizzleKit.generate({
             dialect: cliDialect(props),
             schema: resolveSchema(props),
             out,
@@ -571,60 +519,6 @@ export const SchemaProvider = () =>
       };
     }),
   );
-
-// An entity's identity: whichever of schema/table/name its type has.
-const identity = (row: DdlEntry) =>
-  (["schema", "table", "name"] as const).filter((field) => field in row).map((field) => row[field]);
-
-// drizzle-kit's entity key: the entity type plus its identity.
-const entityKey = (row: DdlEntry) => `${row.entityType}\0${JSON.stringify(identity(row))}`;
-
-// Fields sorted and nulls dropped, so two rows compare equal when drizzle-kit
-// would treat them as the same state.
-const normalizedRow = (row: DdlEntry) =>
-  JSON.stringify(
-    Object.keys(row)
-      .filter((field) => row[field] !== null && row[field] !== undefined)
-      .sort()
-      .map((field) => [field, row[field]]),
-  );
-
-const sameDdl = (a: ReadonlyArray<DdlEntry>, b: ReadonlyArray<DdlEntry>) => {
-  const left = a.map(normalizedRow).sort();
-  const right = b.map(normalizedRow).sort();
-  return left.length === right.length && left.every((row, i) => row === right[i]);
-};
-
-// Children (columns, indexes, …) are dropped before and created after their
-// parents (tables, schemas).
-const depth = (row: DdlEntry) => identity(row).length;
-
-/** The `deltas` of a postgres `diff` snapshot taking `from` to `to`. */
-const ddlDeltas = (from: ReadonlyArray<DdlEntry>, to: ReadonlyArray<DdlEntry>) => {
-  const before = new Map(from.map((row) => [entityKey(row), row]));
-  const after = new Map(to.map((row) => [entityKey(row), row]));
-  const drops = [...before.values()]
-    .filter((row) => !after.has(entityKey(row)))
-    .sort((a, b) => depth(b) - depth(a))
-    .map((row) => ({ op: "drop", key: entityKey(row) }));
-  const alters = [...after.values()].flatMap((row) => {
-    const old = before.get(entityKey(row));
-    if (old === undefined || normalizedRow(old) === normalizedRow(row)) return [];
-    const set = Object.fromEntries(
-      Object.keys({ ...old, ...row })
-        .filter(
-          (field) => JSON.stringify(old[field] ?? null) !== JSON.stringify(row[field] ?? null),
-        )
-        .map((field) => [field, row[field] ?? null]),
-    );
-    return [{ op: "alter", key: entityKey(row), set }];
-  });
-  const creates = [...after.values()]
-    .filter((row) => !before.has(entityKey(row)))
-    .sort((a, b) => depth(a) - depth(b))
-    .map((row) => ({ op: "create", row }));
-  return [...drops, ...alters, ...creates];
-};
 
 // drizzle-kit hint kinds → snapshot `ddl` entity types.
 const ddlEntityTypes: Record<string, string> = {
