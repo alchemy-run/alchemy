@@ -1,6 +1,6 @@
 # @alchemy.run/domain
 
-A domain-driven design framework for [Effect](https://effect.website), part of [Alchemy](https://alchemy.run). Model your business as commands, aggregates, events, views, and policies. Test it in memory, then run it on Cloudflare Durable Objects without changing the model.
+A domain-driven design framework for [Effect](https://effect.website), part of [Alchemy](https://alchemy.run). Model your business as commands, aggregates, events, views, and policies. Test it in memory, then run it on Cloudflare Durable Objects or on your own database (Postgres, MySQL, SQLite) without changing the model.
 
 ```sh
 npm install @alchemy.run/domain effect

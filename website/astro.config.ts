@@ -1614,6 +1614,7 @@ export default defineConfig({
               label: "Hosting",
               items: [
                 { label: "Cloudflare Durable Objects", link: "/domain/cloudflare" },
+                { label: "Any database", link: "/domain/database" },
                 { label: "In memory", link: "/domain/in-memory" },
                 { label: "Observability", link: "/domain/observability" },
               ],

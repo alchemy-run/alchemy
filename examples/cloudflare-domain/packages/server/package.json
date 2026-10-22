@@ -28,6 +28,9 @@
     "effect": "catalog:"
   },
   "devDependencies": {
+    "@effect/sql-libsql": "catalog:",
+    "@effect/sql-mysql2": "catalog:",
+    "@effect/sql-pg": "catalog:",
     "@effect/vitest": "catalog:",
     "vitest": "catalog:"
   }

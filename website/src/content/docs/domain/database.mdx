@@ -1,0 +1,128 @@
+---
+title: Any database
+description: Host a domain model on Postgres, MySQL, SQLite or your own storage, in a long-running server.
+---
+
+`Domain.StoragePlatform` hosts your model on a database instead of Durable Objects. Give it `Domain.SqlStorage` and any Effect `SqlClient`, for Postgres, MySQL or SQLite, and nothing else in the model changes.
+
+## Host the model on Postgres
+
+Provide the platform, the storage and the SQL client under the model's Layer, then serve your Apis from any HTTP server.
+
+```typescript
+// packages/server/src/BankServer.ts
+import * as Domain from "@alchemy.run/domain";
+import { Bank, BankHandlers } from "@bank/domain/Bank.model";
+import { CustomerApi } from "@bank/domain/CustomerApi.api";
+import * as NodeHttpServer from "@effect/platform-node/NodeHttpServer";
+import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
+import { PgClient } from "@effect/sql-pg";
+import * as Config from "effect/Config";
+import * as Effect from "effect/Effect";
+import * as HttpServer from "effect/http/HttpServer";
+import * as Layer from "effect/Layer";
+import { createServer } from "node:http";
+import { SiftFraudCheck } from "./Fraud/SiftFraudCheck.ts";
+import { PgLedgerStore } from "./Ledger/PgLedgerStore.ts";
+import { MfaChallengeLive } from "./MfaChallenge.ts";
+import { SessionLive } from "./Session.ts";
+import { StripePayments } from "./Settlement/StripePayments.ts";
+
+// The bank on Postgres: every aggregate, view, policy, projection, stream and saga.
+const BankLive = Layer.mergeAll(SessionLive, MfaChallengeLive).pipe(
+  Layer.provideMerge(Bank.layer(BankHandlers)),
+  Layer.provide(
+    Layer.mergeAll(SiftFraudCheck, StripePayments, PgLedgerStore, Domain.StoragePlatform),
+  ),
+  Layer.provide(Domain.SqlStorage),
+  Layer.provide(PgClient.layerConfig({ url: Config.Redacted("DATABASE_URL") })),
+);
+
+// Serve the CustomerApi on port 3000.
+const Server = Layer.unwrap(Effect.map(CustomerApi, (api) => HttpServer.serve()(api.fetch))).pipe(
+  Layer.provide(BankLive),
+  Layer.provide(NodeHttpServer.layer(createServer, { port: 3000 })),
+);
+
+NodeRuntime.runMain(Layer.launch(Server));
+```
+
+Run as many copies of this server as you like against one database. Any of them can take any command or read, and any of them picks up work another one left unfinished.
+
+`Domain.StoragePlatform` runs background work (deliveries, timers, sagas), so host it in a long-running process like a server or container. On Cloudflare, use [Durable Objects](/domain/cloudflare).
+
+## Use SQLite or MySQL
+
+Swap the client Layer. Everything else stays the same.
+
+```diff lang="typescript"
+-  Layer.provide(PgClient.layerConfig({ url: Config.Redacted("DATABASE_URL") })),
++  Layer.provide(LibsqlClient.layer({ url: "file:bank.db" })),
+```
+
+`LibsqlClient` comes from `@effect/sql-libsql`, and it opens a local SQLite file or a Turso database. For MySQL, use `MysqlClient` from `@effect/sql-mysql2`.
+
+## Know what is stored where
+
+Everything lives in three tables, created on first use.
+
+| Table | Holds |
+| --- | --- |
+| `domain_kv` | Events, state, receipts, view snapshots and entries, input logs, outboxes, saga steps |
+| `domain_partition` | One row per aggregate instance, view key, policy key, projection key, stream key and saga run, locked by each write to it |
+| `domain_timer` | Scheduled commands, saga clocks, projection batches, and retries of unfinished work |
+
+To keep two domains in one database, give each its own prefix.
+
+```typescript
+import * as SqlStorage from "@alchemy.run/domain/SqlStorage";
+
+const BankStorage = SqlStorage.layer({ tablePrefix: "bank" });
+```
+
+## Count on these guarantees
+
+Commands to one aggregate instance run one at a time, across every server. Its events, new state, reply and outgoing deliveries commit in one transaction, or not at all.
+
+Every event reaches the views, projections and policies that consume it, at least once and in order for each source. When a server stops in the middle of that work, another server picks it up. A server that stops cleanly hands its work over at once. One that crashes hands it over after about 30 seconds. Scheduled commands and saga clocks fire when they're due, from whichever server sees them first.
+
+## Watch without WebSockets
+
+Live reads are streamed responses, so use `Domain.protocolHttp` in clients. A change committed by the server you're connected to arrives at once. A change committed by another server arrives on the next poll, every 500 milliseconds by default.
+
+## Tune polling
+
+`StoragePlatform.layer` takes how often each server looks for due timers, and how often a live read polls for other servers' changes.
+
+```typescript
+import * as StoragePlatform from "@alchemy.run/domain/StoragePlatform";
+
+const Platform = StoragePlatform.layer({ pollMillis: 5_000, watchMillis: 1_000 });
+```
+
+## Bring your own storage
+
+To host a domain on a database `SqlStorage` doesn't cover, implement `Domain.Storage`. It's an ordered key-value store split into partitions, with durable timers.
+
+```typescript
+import * as Domain from "@alchemy.run/domain";
+import * as Layer from "effect/Layer";
+
+const MyStorage = Layer.succeed(
+  Domain.Storage,
+  Domain.Storage.of({
+    // Run `f` with exclusive, atomic access to one partition, across every process.
+    transact: (partition, f) => myDb.transaction(partition, (tx) => f(toTransaction(tx))),
+    // Read a partition without taking its lock.
+    read: (partition, f) => f(toReader(myDb, partition)),
+    // Timers due at or before `now`, across partitions, earliest first.
+    due: (now, limit) => myDb.dueTimers(now, limit),
+  }),
+);
+```
+
+A transaction gets and lists JSON values by key (`get`, `list` by prefix in key order), writes them (`put`, `delete`), and sets the partition's named timers (`timer`, `setTimer`, `deleteTimer`). Two rules keep the model correct. A second `transact` on a partition waits until the first one ends, even when it comes from another process. And when `f` fails, none of its writes are kept.
+
+:::note
+Tests usually run on [in memory](/domain/in-memory), which needs no database. Run the same Api tests once on `Domain.StoragePlatform` over a SQLite file to check the database setup.
+:::

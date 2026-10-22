@@ -5,7 +5,7 @@ description: Build backends with @alchemy.run/domain (domain-driven design on Ef
 
 # Building with @alchemy.run/domain
 
-`@alchemy.run/domain` models a backend as typed messages and pure state transitions. Commands are decided by aggregates, which record events. Views fold events into read models. Policies react to events. Sagas run long processes. Projections write outside the model. The same model runs in memory for tests and on Cloudflare Durable Objects in production.
+`@alchemy.run/domain` models a backend as typed messages and pure state transitions. Commands are decided by aggregates, which record events. Views fold events into read models. Policies react to events. Sagas run long processes. Projections write outside the model. The same model runs in memory for tests, and in production on Cloudflare Durable Objects or on a database (`Domain.StoragePlatform`).
 
 Docs: https://alchemy.run/domain. A complete reference project: `examples/cloudflare-domain` in the alchemy repo (a bank with a foldkit app).
 
@@ -17,7 +17,7 @@ Work in this order. Each step has a reference file with templates.
 2. **Lay out the monorepo**: a domain package, a server package, a web package, with one kind-suffixed file per block. See [references/layout.md](references/layout.md).
 3. **Write each block** from its template. See [references/building-blocks.md](references/building-blocks.md).
 4. **Specify behavior with stories** before and while you implement it. See [references/testing.md](references/testing.md).
-5. **Host the model** on Cloudflare from the server package, export its traces, and deploy with one alchemy stack. See [references/hosting.md](references/hosting.md).
+5. **Host the model** on Cloudflare (or on a database) from the server package, export its traces, and deploy with one alchemy stack. See [references/hosting.md](references/hosting.md).
 6. **Drive it from foldkit** in the web package. See [references/frontend.md](references/frontend.md).
 
 ## From requirements to building blocks
