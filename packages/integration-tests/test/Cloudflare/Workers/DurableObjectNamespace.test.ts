@@ -352,43 +352,49 @@ test(
 // The DO exposes `tick(n): Stream<number>` and the Worker forwards it to the
 // HTTP response with `HttpServerResponse.stream`. The client reads the body as
 // newline-delimited integers. With `/tick/5` we expect ["0","1","2","3","4"].
-test(
-  "tick streams sequential values from a durable object (tutorial repro)",
-  Effect.gen(function* () {
-    const { url } = yield* stack;
-    const client = freshConn(yield* HttpClient.HttpClient);
+// `pubsub` and `callback` push their values after the RPC method has
+// returned; they ended after the first element while the stream's source
+// scope closed with the call (#2273).
+for (const source of ["tick", "pubsub", "callback"] as const)
+  test(
+    source === "tick"
+      ? "tick streams sequential values from a durable object (tutorial repro)"
+      : `${source}-backed stream delivers every value from a durable object`,
+    Effect.gen(function* () {
+      const { url } = yield* stack;
+      const client = freshConn(yield* HttpClient.HttpClient);
 
-    const lines = yield* client.get(`${url}/tick/5`).pipe(
-      Effect.flatMap((res) =>
-        res.status === 200
-          ? res.stream.pipe(
-              Stream.decodeText,
-              Stream.splitLines,
-              Stream.filter((line) => line.length > 0),
-              Stream.runCollect,
-              Effect.map((chunk) => [...chunk]),
-              // A cold edge can answer 200 with an empty/placeholder body
-              // (the script isn't serving yet), which collects to `[]`
-              // instead of failing — fail so the readiness retry rides it out
-              // rather than asserting against an empty stream.
-              Effect.flatMap((rows) =>
-                rows.length > 0
-                  ? Effect.succeed(rows)
-                  : Effect.fail(new Error("Worker not ready: empty stream")),
-              ),
-            )
-          : Effect.fail(new Error(`Worker not ready: ${res.status}`)),
-      ),
-      Effect.retry({ schedule: readinessSchedule, times: readinessRetries }),
-    );
+      const lines = yield* client.get(`${url}/${source}/5`).pipe(
+        Effect.flatMap((res) =>
+          res.status === 200
+            ? res.stream.pipe(
+                Stream.decodeText,
+                Stream.splitLines,
+                Stream.filter((line) => line.length > 0),
+                Stream.runCollect,
+                Effect.map((chunk) => [...chunk]),
+                // A cold edge can answer 200 with an empty/placeholder body
+                // (the script isn't serving yet), which collects to `[]`
+                // instead of failing — fail so the readiness retry rides it out
+                // rather than asserting against an empty stream.
+                Effect.flatMap((rows) =>
+                  rows.length > 0
+                    ? Effect.succeed(rows)
+                    : Effect.fail(new Error("Worker not ready: empty stream")),
+                ),
+              )
+            : Effect.fail(new Error(`Worker not ready: ${res.status}`)),
+        ),
+        Effect.retry({ schedule: readinessSchedule, times: readinessRetries }),
+      );
 
-    expect(lines).toEqual(["0", "1", "2", "3", "4"]);
-  }).pipe(logLevel),
-  {
-    tags: ["provider:cloudflare", "provider:cloudflare:kv", "provider:cloudflare:worker", "live"],
-    timeout: 60_000,
-  },
-);
+      expect(lines).toEqual(["0", "1", "2", "3", "4"]);
+    }).pipe(logLevel),
+    {
+      tags: ["provider:cloudflare", "provider:cloudflare:kv", "provider:cloudflare:worker", "live"],
+      timeout: 60_000,
+    },
+  );
 
 // While a freshly pre-created worker is propagating, Cloudflare's edge
 // serves Alchemy's pre-create stub, which responds 200 with this plain-text

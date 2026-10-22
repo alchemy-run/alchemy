@@ -1,6 +1,8 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as PubSub from "effect/PubSub";
+import * as Queue from "effect/Queue";
 import * as Schedule from "effect/Schedule";
 import type * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
@@ -108,6 +110,33 @@ export class WorkerEnvironmentKVObject extends Cloudflare.DurableObject<WorkerEn
           Stream.iterate(0, (i) => i + 1).pipe(
             Stream.take(n),
             Stream.schedule(Schedule.spaced("100 millis")),
+          ),
+        // Pushed sources: values arrive after the RPC method has returned,
+        // so the stream's source scope must outlive the call (#2273).
+        pubsub: (n: number) =>
+          Stream.unwrap(
+            Effect.gen(function* () {
+              const pubsub = yield* PubSub.unbounded<number>();
+              yield* Effect.forkDetach(
+                Effect.gen(function* () {
+                  for (let i = 0; i < n; i++) {
+                    yield* Effect.sleep("100 millis");
+                    yield* PubSub.publish(pubsub, i);
+                  }
+                }),
+              );
+              return Stream.fromPubSub(pubsub).pipe(Stream.take(n));
+            }),
+          ),
+        callback: (n: number) =>
+          Stream.callback<number>((queue) =>
+            Effect.gen(function* () {
+              for (let i = 0; i < n; i++) {
+                yield* Effect.sleep("100 millis");
+                yield* Queue.offer(queue, i);
+              }
+              yield* Queue.end(queue);
+            }).pipe(Effect.forkScoped),
           ),
       };
     });
