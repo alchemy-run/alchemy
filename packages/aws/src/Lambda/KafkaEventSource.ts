@@ -83,7 +83,8 @@ export const KafkaEventSource = Layer.effect(
                   // The poller reaches the cluster through ENIs in its VPC;
                   // Lambda validates these on the execution role when the
                   // mapping is created. EC2 Describe* actions do not support
-                  // resource-level permissions.
+                  // resource-level permissions, so scope them to the
+                  // cluster's region instead.
                   Effect: "Allow",
                   Action: [
                     "ec2:DescribeNetworkInterfaces",
@@ -92,6 +93,13 @@ export const KafkaEventSource = Layer.effect(
                     "ec2:DescribeVpcs",
                   ],
                   Resource: ["*"],
+                  Condition: {
+                    StringEquals: {
+                      "aws:RequestedRegion": cluster.clusterArn.pipe(
+                        Output.map((arn) => arn.split(":")[3]!),
+                      ),
+                    },
+                  },
                 },
                 {
                   // ENIs may only be created in the cluster's subnets with
