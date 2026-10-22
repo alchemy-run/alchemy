@@ -23,7 +23,8 @@ name="blockd-bench-$(date +%s)"
 filesystems=("$@")
 [ ${#filesystems[@]} -eq 0 ] && filesystems=(ext4 btrfs)
 work="$(mktemp -d)"
-aws() { command aws --region "$region" "$@"; }
+# AWS_CLI: a newer CLI than the one on PATH (nested virtualization needs one from 2026).
+aws() { "${AWS_CLI:-aws}" --region "$region" "$@"; }
 
 # build.sh's binaries: the daemon (glibc, ublk) and a static one (an init).
 [ -x "$repo/target/blockd/blockd-host-$arch" ] || "$repo/crates/blockd/build.sh" "$arch"

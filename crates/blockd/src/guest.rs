@@ -32,6 +32,18 @@ use std::time::{Duration, Instant};
 /// The vsock port the agent listens on.
 pub const PORT: u32 = 1024;
 
+/// The commands the agent is waiting on: the reaper leaves them alone.
+static TRACKED: std::sync::LazyLock<Mutex<std::collections::HashSet<i32>>> =
+    std::sync::LazyLock::new(|| Mutex::new(std::collections::HashSet::new()));
+
+struct Untrack(i32);
+
+impl Drop for Untrack {
+    fn drop(&mut self) {
+        TRACKED.lock().unwrap().remove(&self.0);
+    }
+}
+
 const ROOT: &str = "/newroot";
 const IMAGE: &str = "/image";
 const BASE: &str = "/base";
@@ -183,8 +195,15 @@ fn exec(request: &Value, path: &str) -> Result<Value> {
             Ok(())
         });
     }
-    let mut child = child.spawn().context("starting the command")?;
+    // Tracked before the reaper can see it exit: its exit code is ours to read.
+    let mut child = {
+        let mut tracked = TRACKED.lock().unwrap();
+        let child = child.spawn().context("starting the command")?;
+        tracked.insert(child.id() as i32);
+        child
+    };
     let pid = child.id() as i32;
+    let _untrack = Untrack(pid);
     let (mut stdout, mut stderr) = (child.stdout.take().unwrap(), child.stderr.take().unwrap());
     let out = std::thread::spawn(move || {
         let mut bytes = Vec::new();
@@ -310,12 +329,26 @@ pub fn run() -> ! {
         eprintln!("blockd guest: {e:#}");
         unsafe { libc::reboot(libc::RB_POWER_OFF) };
     }
-    // Orphans are reaped, so a stopped process doesn't linger as a zombie.
+    // Orphans are reaped, so a stopped process doesn't linger as a zombie. A
+    // command the agent is waiting on is left to it: the reaper only peeks.
     std::thread::spawn(|| loop {
-        let mut status = 0;
-        if unsafe { libc::waitpid(-1, &mut status, libc::__WALL) } < 0 {
+        let mut info: libc::siginfo_t = unsafe { std::mem::zeroed() };
+        let found = unsafe {
+            libc::waitid(libc::P_ALL, 0, &mut info, libc::WEXITED | libc::WNOWAIT | libc::WNOHANG)
+        };
+        let pid = if found == 0 { unsafe { info.si_pid() } } else { 0 };
+        if pid == 0 {
             std::thread::sleep(Duration::from_millis(20));
+            continue;
         }
+        let tracked = TRACKED.lock().unwrap();
+        if tracked.contains(&pid) {
+            drop(tracked);
+            std::thread::sleep(Duration::from_millis(5));
+            continue;
+        }
+        let mut status = 0;
+        unsafe { libc::waitpid(pid, &mut status, libc::WNOHANG) };
     });
     let fd = match listen(PORT) {
         Ok(fd) => fd,
