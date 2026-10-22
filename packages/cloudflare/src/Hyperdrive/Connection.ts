@@ -1,7 +1,6 @@
 import * as hyperdrive from "@distilled.cloud/cloudflare/hyperdrive";
 import { isResolved } from "alchemy/Diff";
 import * as ProviderLayer from "alchemy/Local/ProviderLayer";
-import * as Output from "alchemy/Output";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { isResourceOfType, Resource } from "alchemy/Resource";
@@ -259,12 +258,13 @@ export const ProviderLive = () =>
       }
       // Each replace-forcing field is checked on its own: an unresolved
       // origin (e.g. another resource's output) must not hide a rename.
-      if (isResolved(news.name)) {
+      const newName = "name" in news ? news.name : undefined;
+      if (isResolved(newName)) {
         const oldName = output?.name ?? (yield* createConfigName(id, olds.name));
         // Auto-generated names are engine-owned: the deployed name stays
         // authoritative even if the generator would name this id differently
         // today. Only an explicit user-provided name can force a replace.
-        const name = news.name ?? oldName;
+        const name = newName ?? oldName;
         if (oldName !== name) {
           return { action: "replace" } as const;
         }
@@ -274,12 +274,12 @@ export const ProviderLive = () =>
       // creating a fresh config. An explicit name is unique per account, so
       // the old config must go first.
       const oldMtls = output?.mtls ?? olds?.mtls;
-      const mtls = news.mtls;
-      if (!Output.isExpr(mtls)) {
+      const mtls = "mtls" in news ? news.mtls : undefined;
+      if (isResolved(mtls)) {
         const dropped = (key: "caCertificateId" | "mtlsCertificateId") =>
           oldMtls?.[key] !== undefined && mtls?.[key] === undefined;
         if (dropped("caCertificateId") || dropped("mtlsCertificateId")) {
-          return { action: "replace", deleteFirst: news.name !== undefined } as const;
+          return { action: "replace", deleteFirst: newName !== undefined } as const;
         }
       }
     }),
