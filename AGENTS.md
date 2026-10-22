@@ -617,6 +617,56 @@ After implementing, re-export the contract and implementation layers from the se
 - **At layer build / Worker init (instance scope)** a layer MAY resolve services and env/config, register listeners and `bind` declarations, assemble `Effect.fn` clients, and perform one-shot I/O that produces a plain cached value (e.g. fetch a secret and cache it for a client). It MUST NOT acquire **disposable** resources — connections, pools, streams, anything with a finalizer (`Layer.scoped` / `Effect.acquireRelease` / init-level `Effect.addFinalizer`) — or retain I/O-backed *objects* or promises across events (workerd pins them to the creating request's IoContext). The runtime bridges (Worker event, Durable Object call, Workflow run, Lambda invoke) build the layer stack **once per instance** on the first event. Instance finalizers run at instance shutdown at best: **never on workerd** (no teardown hook), and in a **best-effort 500 ms SIGTERM window on Lambda** (the generated entry registers an internal extension to obtain it and closes the instance scope on SIGTERM; not delivered on hard failures). Server processes (Containers, ECS Tasks) close their root scope on graceful exit.
 - **At request scope**, anything needing I/O or cleanup is an effect requiring `Scope.Scope`, acquired lazily per call. Every bridge provides a fresh `Scope` per event; `Effect.addFinalizer` in a handler attaches to it and runs after the response (registered with `ctx.waitUntil` on workerd; settled inline on Lambda). Per-request memoization keys on the scope object (`yield* Effect.scope`) — see [Drizzle/Postgres.ts](./packages/drizzle/src/Postgres.ts) for the canonical WeakMap pattern. One pool/socket per event is the law on workerd (sockets are IoContext-pinned); Hyperdrive is the cross-request pooler.
 
+### Effect workflow engines
+
+Users write durable workflows once with `effect/workflow` and core's `alchemy/Workflows`, and run them on each cloud's native durable runtime. A provider whose cloud has a durable execution engine (Cloudflare Workflows and Durable Objects, Lambda durable functions, Azure Durable Functions on the Durable Task Scheduler, …) ships an **engine**: a plain `Layer` that implements Effect's `WorkflowEngine` on that runtime. The workflow code doesn't change between clouds; only the engine Layer does.
+
+The DX every engine must keep:
+
+```ts
+// workflows.ts — cloud-agnostic
+export const Greet = Workflow.make("Greet", {
+  payload: { id: Schema.String, name: Schema.String },
+  success: Schema.String,
+  idempotencyKey: ({ id }) => id,
+});
+
+export const GreetLive = Workflows.layer(
+  Greet,
+  Effect.gen(function* () {
+    const receipts = yield* Cloudflare.R2.WriteBucket(Receipts); // bindings resolve once, at Layer build
+    return Effect.fn(function* ({ name }) {
+      return yield* Activity.make({ name: "greet", success: Schema.String, execute: Effect.succeed(`hello ${name}`) });
+    });
+  }),
+);
+
+// a runtime — start and read runs through the engine the runtime provides
+const greet = yield* Workflows.RunWorkflow(Greet);
+const run = yield* greet.start({ id: "g-1", name: "sam" });
+yield* run.status;                       // NotStarted | Running | Completed | Failed | Interrupted | Died
+yield* run.signal(Approval, "agent-7");
+yield* run.interrupt;
+```
+
+`Workflows.layer` marks a workflow `Implemented`, and `RunWorkflow` requires it, so running a workflow nothing implements is a type error. Keep that property in every engine.
+
+There are two engine shapes; pick the one the cloud's runtime forces:
+
+- **In-process engine** — the durable construct is hosted by the same runtime that starts runs. The engine is a Layer the user provides next to the workflow Layers: `GreetLive.pipe(Layer.provideMerge(Cloudflare.Workflows.NativeEngine))`. References: [NativeEngine.ts](./packages/cloudflare/src/Workflows/NativeEngine.ts) (one Cloudflare Workflow class hosts every workflow; steps are `step.do`, sleeps `step.sleep`, signals Workflow events) and [DurableObjectEngine.ts](./packages/cloudflare/src/Workflows/DurableObjectEngine.ts) (one Durable Object per run, journal in SQLite, wake-ups are alarms).
+- **Host + remote engine** — runs execute in a dedicated durable runtime resource. The provider ships a `<Runtime>WorkflowFunction`-style resource that lists the workflows it hosts (`.make(props, layer)` is a type error when the Layer leaves one out), and a `<Runtime>Engine(...hosts)` Layer other runtimes provide to start and read runs there; it also grants the caller access to each host. Reference: [AWS.Lambda.WorkflowFunction](./packages/aws/src/Lambda/WorkflowFunction.ts) + `AWS.Lambda.DurableFunctionEngine`.
+
+Build an engine from the shared pieces, never a private copy:
+
+- `alchemy/WorkflowEncoding` — payload/result/exit codecs and `CurrentActivity`; results are cached by schema identity.
+- `Workflows.Implemented` — the marker a remote engine provides for the workflows its hosts list.
+- The cloud's own primitives map onto Effect's: activities → durable steps (replayed, not re-run, once finished), `DurableClock.sleep` → the runtime's durable wait (no compute billed while waiting), `DurableDeferred` → the runtime's external-event/callback mechanism, interrupt → fail the pending wait so compensations run, child workflows → runs on the same engine.
+- Respect platform limits in the engine (instance-id length and charset, max wait, propagation after deploy) and retry only the typed transient errors.
+
+Every engine passes the same conformance cases, each driven over HTTP against a deployed fixture: runs a workflow and returns its result; starting the same execution twice runs it once; sleeps durably between activities; waits for a signal from outside; a typed failure runs compensations; a successful workflow keeps its steps; interrupting a waiting workflow finishes it; runs a child workflow. Copy the fixtures in `packages/integration-tests/test/Cloudflare/Workers/fixtures/durable-workflow/` (`workflows.ts`, `app.ts`) and the suites [WorkflowEngines.test.ts](./packages/integration-tests/test/Cloudflare/Workers/WorkflowEngines.test.ts) and [WorkflowFunction.test.ts](./packages/integration-tests/test/AWS/Lambda/WorkflowFunction.test.ts). An engine with a local provider runs the cases in dev too.
+
+Each engine gets a docs page at `website/src/content/docs/{cloud}/compute/effect-workflows.mdx` with the same headings as the AWS and Cloudflare pages (define a workflow, implement its steps, run it on the engine, start and read a run, sleep durably, wait for a signal, undo a step, use bindings in a step), and an `examples/{cloud}-effect-workflows` example.
+
 :::tip
 If you need to know what AWS region or account ID the resource is being created/updated in, you can use this inside any of the lifecycle operations.
 

@@ -503,6 +503,41 @@ Every runtime needs:
   `async-worker.ts` in `test/Cloudflare/Images/` are the pattern), each
   deployed and called over HTTP.
 
+### Workflow engine
+
+If the cloud has a durable execution engine, the provider ships an Effect
+workflow engine on it, so `alchemy/Workflows` code runs there unchanged.
+Follow **Effect workflow engines** in `AGENTS.md`: it covers the DX to
+keep, the two engine shapes, the shared encoding module, and the eight
+conformance cases.
+
+| Cloud | Engine | Status |
+| --- | --- | --- |
+| Cloudflare | `Cloudflare.Workflows.NativeEngine` (Cloudflare Workflows), `DurableObjectEngine` | done, in-process |
+| AWS | `AWS.Lambda.WorkflowFunction` + `DurableFunctionEngine` (Lambda durable functions) | done, host + remote |
+| Azure | Durable Functions on the Durable Task Scheduler (`Azure.DurableTask.Scheduler` exists) | missing |
+| GCP | no code-first durable runtime; Cloud Workflows is a YAML orchestrator | decide and record in the catalog before building |
+
+Research the cloud's engine in step 2 and record it in the catalog: its
+durable step, durable sleep, external-event or callback primitive, how a
+run is interrupted, and its limits. Then decide the shape:
+
+- **In-process** when the runtime that starts runs can also host the
+  durable construct (Cloudflare). The engine is a Layer provided next to
+  the workflow Layers.
+- **Host + remote** when runs need a dedicated durable runtime (Lambda
+  durable functions, and most likely Azure Durable Functions). Ship a
+  `<Runtime>.WorkflowFunction`-style host that lists its workflows, and a
+  `<Runtime>Engine(...hosts)` Layer that routes to it and grants access.
+
+If the cloud has no durable engine, or only one that can't run code
+steps, write `out-of-scope` with the reason on the engine's index row.
+Don't build a database-backed engine of your own.
+
+The engine counts as a runtime: it gets its own index row, the
+conformance suite, an `examples/<provider>-effect-workflows` example, and
+a `compute/effect-workflows.mdx` page in the docs hub.
+
 ## Step 6 — live tests
 
 Tests live in `packages/integration-tests/test/<Provider>/` (paths below
@@ -767,7 +802,7 @@ and add an example for every row the provider has, and skip the rest:
 | Queue | a producer and a consumer through an event source | `gcp-pubsub-worker`, `gcp-pubsub-fanout` |
 | Scheduled job | a cron trigger | `gcp-cron`, `gcp-scheduled-job` |
 | Storage events | a function triggered by an upload | `gcp-storage-uploads`, `gcp-eventarc-firestore` |
-| Durable workflows | the cloud's workflow engine, if it has one | no example yet; copy the Cloudflare Workflow fixture in `packages/integration-tests/test/Cloudflare/Workers/fixtures/workflow/` |
+| Durable workflows | `alchemy/Workflows` on the provider's engine (Step 5): start, signal, read a run | no example yet; copy the conformance fixtures in `packages/integration-tests/test/Cloudflare/Workers/fixtures/durable-workflow/` |
 | Containers | a container service | `aws-ecs`, `fly-service` |
 | Kubernetes | a Deployment on the cloud's managed cluster | `aws-eks`, `gcp-gke` |
 | VMs | a VM running a program | `aws-ec2`, `hetzner-server` |

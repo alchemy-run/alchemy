@@ -114,6 +114,7 @@ reason the platform forces. References:
 | Both forms | for each runtime: `Platform(` in its file, and an `### Async` JSDoc section | effectful class and async `main` form both ship and are documented |
 | InferEnv | `rg -n 'export type InferEnv' src/<P>` | exported, and used in every async example |
 | Both forms tested | `ls test/<P>/**/fixtures` | an effectful and an async fixture per runtime, each deployed and called |
+| Workflow engine | the catalog's engine row, and `rg -ln 'WorkflowEngine' src/<P>` | the cloud's durable engine has an Effect engine Layer passing the eight conformance cases from `AGENTS.md`, or the row is `out-of-scope` with the reason |
 | Runtime coloring | read each runtime callable | requires `RuntimeContext`; no `WorkerEnvironment`-style leaks |
 | Event sources | compare with AWS `SQS.QueueEventSource` / Cloudflare cron | contract in the source service, per-host implementation layers |
 | User-facing config | read setup docs and examples | region/account from profile or a `<P>.Region("...")` layer, matching `AWS.Region`; no new env vars |
