@@ -1,5 +1,6 @@
 import * as Namespace from "alchemy/Namespace";
 import * as Output from "alchemy/Output";
+import { Random } from "alchemy/Random";
 import { WebhookHost } from "alchemy/WebhookHost";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -19,8 +20,9 @@ import { Webhook } from "./Webhook.ts";
  *
  * Deploy-time: provisions a {@link Webhook} on the repository whose delivery
  * URL points at the host (at a deterministic per-repo path). The webhook
- * secret is bound onto the host via an `Output` accessor so the runtime can
- * verify delivery signatures.
+ * secret (the caller's `secret`, or a generated random one when omitted) is
+ * bound onto the host via an `Output` accessor so the runtime can verify
+ * delivery signatures.
  *
  * Runtime: claims requests on the repository's delivery path, verifies the
  * `HMAC-SHA256` signature against the bound secret, and forwards each
@@ -49,6 +51,15 @@ export const RepositoryEventSourceLive = Layer.effect(
     ) {
       const path = webhookPath(props);
 
+      // Every delivery is verified: without a caller-supplied secret, mint a
+      // stable random one shared by the webhook and the host.
+      const webhookSecret =
+        props.secret ??
+        (yield* Namespace.push(
+          ctx.LogicalId,
+          Random(`${props.owner}/${props.repository}WebhookSecret`),
+        )).text;
+
       // Deploy-time: provision the repository webhook pointing at the host.
       // Skipped once running inside the deployed host (the global guard).
       // Namespaced under the host so the webhook's logical identity matches the
@@ -62,7 +73,7 @@ export const RepositoryEventSourceLive = Layer.effect(
               repository: props.repository,
               url: Output.interpolate`${ctx.url}${path}`,
               events: [...(props.events ?? ["push"])],
-              secret: props.secret,
+              secret: webhookSecret,
               contentType: "json",
             }),
           ),
@@ -73,9 +84,10 @@ export const RepositoryEventSourceLive = Layer.effect(
       // This single `yield*` does both halves: at plan time it registers the
       // secret on the host, and it returns an Effect that reads the value
       // back at runtime, reconstructing the `Redacted` wrapper.
-      const secret = props.secret
-        ? yield* Output.named(Output.asOutput(props.secret), webhookSecretEnvName(props))
-        : undefined;
+      const secret = yield* Output.named(
+        Output.asOutput(webhookSecret),
+        webhookSecretEnvName(props),
+      );
 
       yield* ctx.route(path, (request) => handleDelivery(request, secret, process));
     }) as RepositoryEventSourceService;
@@ -84,10 +96,8 @@ export const RepositoryEventSourceLive = Layer.effect(
 
 const handleDelivery = <Req>(
   request: Request,
-  // The bound secret accessor (see `Output.named` above). `undefined` when
-  // no secret was configured, in which case deliveries are accepted
-  // unverified.
-  secret: Effect.Effect<Redacted.Redacted<string> | undefined> | undefined,
+  // The bound secret accessor (see `Output.named` above).
+  secret: Effect.Effect<Redacted.Redacted<string> | undefined>,
   process: (event: WebhookEvent<any>) => Effect.Effect<void, never, Req>,
 ): Effect.Effect<Response, never, Req> =>
   Effect.gen(function* () {
@@ -97,17 +107,15 @@ const handleDelivery = <Req>(
 
     const body = yield* Effect.promise(() => request.text());
 
-    if (secret !== undefined) {
-      const resolved = yield* secret;
-      const signature = request.headers.get("x-hub-signature-256") ?? undefined;
-      const valid = yield* verifySignature(
-        resolved ? Redacted.value(resolved) : undefined,
-        body,
-        signature,
-      );
-      if (!valid) {
-        return new Response("invalid signature", { status: 401 });
-      }
+    const resolved = yield* secret;
+    const signature = request.headers.get("x-hub-signature-256") ?? undefined;
+    const valid = yield* verifySignature(
+      resolved ? Redacted.value(resolved) : undefined,
+      body,
+      signature,
+    );
+    if (!valid) {
+      return new Response("invalid signature", { status: 401 });
     }
 
     const name = request.headers.get("x-github-event") ?? "unknown";

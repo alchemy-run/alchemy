@@ -140,9 +140,9 @@ Alchemy resource coverage is produced as a **software factory**: fleets of agent
 
 ## Resource budget: one type-checker for the whole factory
 
-`tsc -b` over the workspace is expensive; dozens of agents running it concurrently thrashes the machine (and concurrent `tsbuildinfo` writes race). Instead:
+`tsrs -b` over the workspace is expensive; dozens of agents running it concurrently thrashes the machine (and concurrent `tsbuildinfo` writes race). Instead:
 
-- **Agents are banned** from running `tsc` or `pnpm build` (root or distilled) in any form. The coordinator owns type-checking and runs a one-shot `pnpm exec tsc -b` at wave boundaries.
+- **Agents are banned** from running `tsrs`/`tsc` or `pnpm build` (root or distilled) in any form. The coordinator owns type-checking and runs a one-shot `pnpm exec tsrs -b` at wave boundaries.
 - **The test runner resolves distilled from `src/*.ts` directly, NOT the built `lib/`** (`alchemy-test` runs in plain bun, which resolves the `bun` export condition natively). So a regenerated service is **immediately test-visible** the moment `bun scripts/generate.ts --resource {service}` (+ oxfmt) finishes — there is nothing to rebuild and **nothing to wait for**. Do NOT sleep and do NOT gate a test re-run on a build after regenerating. This applies to response-schema patches as well as error-tag-only patches.
 
 ## Speed doctrine: never wait on a hang
@@ -198,7 +198,7 @@ pnpm docs:gen   # -> website/src/content/docs/providers/{Cloud}/{Resource}.md
 This is the only doc generator that produces user-facing output. ([scripts/generate-api-reference.ts](./scripts/generate-api-reference.ts)) does the following:
 
 1. Discovers documented files across its configured source roots — `packages/{cloud}/src/{Service}/` plus flat single-provider packages like `packages/better-auth/src/` (mapped onto a synthetic provider directory, e.g. `BetterAuth/`)
-2. Parses TypeScript with the native TypeScript API (`typescript-api` tooling alias)
+2. Parses TypeScript with the TypeScript 7 API shipped by `tsrs` (`tsrs/unstable/*`)
 3. Extracts the page-level summary plus Markdown section/example blocks from JSDoc on the export tagged `@resource`, `@binding`, `@layer`, or `@primitive` (a building block exported as its module's `make`, e.g. `Domain.Event`; its page is named after the file)
 4. Writes one markdown file per page at `website/src/content/docs/providers/{Provider}/{Name}.md`
 
@@ -839,7 +839,7 @@ Engine semantics (never re-implement these per provider):
 
 - **Register both variants with `ProviderLayer.dual(cls, { live: () => ..., local: () => ... })`** — never select one at layer build. The run-default variant builds eagerly; the other is lazy and memoized, so mode-specific dependency layers (workerd, Docker) MUST compose *inside* the `local` thunk (e.g. `LocalWorkerProvider().pipe(Layer.provide(localRuntimeServices()))`), never globally — a plain deploy must not construct local machinery unless a local-mode row needs deleting. Dep layers shared across several local providers must be **module-memoized layer references** so the build MemoMap dedupes them to one instance.
 - **Every state commit stamps `providerMode`.** A persisted mode that differs from the resolved mode plans a REPLACEMENT (the provider diff is not consulted), and every delete — replacement old generations, GC chain draining, orphans, `destroy`, `sync`/`tail`/`logs` — resolves the provider variant of the row's *stamped* mode via `findProviderByType(type, mode)`. Legacy rows without a stamp are assumed **live** (pre-mode engines and mode-agnostic providers only ever acted on the real cloud), so a dev run replaces them like any stamped live row — assuming the run's mode instead would silently adopt a deployed live resource as a local instance and leak it untracked. The exception is an unstamped row whose attrs carry the local identity marker (`dev:`-prefixed ids, see `stampedMode` in `ProviderMode.ts`): it was reconciled by a pre-stamping `alchemy dev` run and is treated as **local**, so a plain destroy/deploy never hands its `dev:` identity to the live cloud API.
-- **`Alchemy.remote()`** opts a resource or scope OUT of local emulation during dev (captured at registration like `adopt()`; a no-op during deploy). There is deliberately no `local()` — dev mode IS the local default; tests simulate a dev run by overriding `AlchemyContext.dev` (`inDev` in [test.resources.ts](./packages/alchemy/test/test.resources.ts)) or `Test.make({ dev: true })`. Conflicting decorations on one FQN die with `ConflictingProviderModeError`. Single-implementation providers are **mode-agnostic**: they satisfy any requested mode, never stamp, never replace on a switch — dev runs over constructs mixing emulatable and live-only resources (R2) just work.
+- **`Alchemy.remote()`** opts a resource or scope OUT of local emulation during dev (captured at registration like `adopt()`; a no-op during deploy). There is deliberately no `local()` — dev mode IS the local default; tests simulate a dev run by overriding `AlchemyContext.dev` (`inDev` in [test.resources.ts](./packages/alchemy/test/test.resources.ts)) or `Test.make({ dev: true })`. Conflicting decorations on one FQN die with `ConflictingProviderModeError`. Single-implementation providers are **mode-agnostic**: they satisfy any requested mode, never stamp, never replace on a switch — dev runs over constructs mixing emulatable and live-only resources (DNS records) just work.
 
 ## `LocalProvider.make` — long-running local providers
 
@@ -1022,13 +1022,15 @@ When a canonical resource needs mutable event-source configuration and there is 
 Always run type checking before committing changes:
 
 ```bash
-pnpm exec tsc -b
+pnpm exec tsrs -b
 ```
+
+[`tsrs`](https://www.npmjs.com/package/tsrs) is a Rust port of the TypeScript 7 compiler, taking the same flags as `tsc` and running several times faster. `typescript` stays installed for compatibility: `pnpm exec tsc -b` is the reference check if you suspect a tsrs conformance bug.
 
 This runs the TypeScript compiler in build mode, which checks all projects in the workspace (including the distilled packages, which are project references). This is critical because CI will fail if there are type errors.
 
 ```bash
-pnpm typecheck      # rebuild stale dist packages, then tsc -b
+pnpm typecheck      # rebuild stale dist packages, then tsrs -b
 pnpm ensure:built   # rebuild cloudflare-runtime / frontend-frameworks if stale
 pnpm build          # in a package: builds it and its workspace dependencies
 ```
@@ -1117,17 +1119,17 @@ Each iteration:
 1. **Full suite, bounded** — `pnpm test:integration test/AWS --profile testing`. The runner defaults to `--concurrency 32`; NEVER override it to `unbounded` on a full-suite run: all ~775 files' `beforeAll` deploys start at once, the event loop saturates, and hundreds of fake 0ms `beforeAll TimeoutError` failures drown the real signal (heap is ~8.5 GB regardless of N — the constraint is CPU, not memory). Target ≤10 min wall-clock, hard cap 128; measured 32 → ~21 min clean. The saturation tell is `beforeAll` failures at 0ms; real failures fail slow. If the cap can't reach 10 min, the residual is individual slow files — skipIf-gate them per the speed doctrine.
 2. **Leak census** — `pnpm nuke --dry-run` after the suite; diff against the pre-suite baseline. Worklist = **failed services ∪ leaking services** (a service can pass green and still leak). Leave the leaked resources LIVE as forensic evidence for the fix agents; carry-over holdouts that survive repeated nuke passes (stuck deletes) go on the worklist too — their delete path is the bug.
 3. **Fix-fleet workflow** — one agent per service on the worklist (account-singleton services — CloudTrail, Config, SecurityHub, GuardDuty, ControlTower, IdentityCenter — run as a sequential chain; everything else fans out). Each agent gets its exact failures, its leak inventory, and this root-cause priority: **provider bug > distilled patch > test fix** — never paper over a provider leak in the test. Each agent runs ONLY its own suite (`timeout 240 pnpm test:integration test/AWS/{Service} --profile testing`), audits its tests for non-deterministic names (rely on PhysicalName auto-naming; random data in message payloads/idempotency tokens is fine), verifies zero orphans from its service via out-of-band distilled list/describe calls, and reports a structured result. Agents never run tsc/build and never run the account-wide nuke.
-4. **Gate** — the coordinator runs the one-shot `pnpm exec tsc -b`, fixes cross-cutting fallout, commits the iteration (+ distilled submodule bump when patches were made), and loops back to 0. Terminate on two consecutive iterations of green-suite + census reduced to documented-undeletable residue (e.g. BackupSearch terminal records, Contributor-Insights rules with no delete API, keys in scheduled deletion).
+4. **Gate** — the coordinator runs the one-shot `pnpm exec tsrs -b`, fixes cross-cutting fallout, commits the iteration (+ distilled submodule bump when patches were made), and loops back to 0. Terminate on two consecutive iterations of green-suite + census reduced to documented-undeletable residue (e.g. BackupSearch terminal records, Contributor-Insights rules with no delete API, keys in scheduled deletion).
 
 ## Multi-agent sessions: the coordinator owns type-checking
 
-When many agents work concurrently (see **The Resource Factory Process**), do NOT let each agent run `pnpm exec tsc -b` — concurrent runs thrash the machine and race on `tsbuildinfo`. Agents never invoke the compiler; the coordinator runs a one-shot `pnpm exec tsc -b` at wave boundaries as the authoritative type check.
+When many agents work concurrently (see **The Resource Factory Process**), do NOT let each agent run `pnpm exec tsrs -b` — concurrent runs thrash the machine and race on `tsbuildinfo`. Agents never invoke the compiler; the coordinator runs a one-shot `pnpm exec tsrs -b` at wave boundaries as the authoritative type check.
 
 ## Build Commands
 
 | Command           | Description                                                                                  |
 | ----------------- | -------------------------------------------------------------------------------------------- |
-| `pnpm exec tsc -b`      | Type check all projects (always run before committing)                                       |
+| `pnpm exec tsrs -b`      | Type check all projects (always run before committing)                                       |
 | `pnpm build`   | Clean, type check, and build the alchemy package                                             |
 | `pnpm build:clean` | Full clean rebuild: cleans all artifacts, reinstalls dependencies, builds, and downloads env |
 

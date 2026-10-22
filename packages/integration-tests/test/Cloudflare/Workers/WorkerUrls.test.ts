@@ -95,7 +95,7 @@ const expectRedirect = Effect.fn(function* (from: string, expectedLocation: stri
 const listWorkerRedirectRules = Effect.fn(function* (zoneId: string, scriptName: string) {
   const entrypoint = yield* rulesets
     .getPhasForZone({ zoneId, rulesetPhase: "http_request_dynamic_redirect" })
-    .pipe(Effect.catch(() => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("RulesetNotFound", () => Effect.succeed(undefined)));
   return (entrypoint?.rules ?? []).flatMap((rule) =>
     (rule.description ?? "").startsWith(`alchemy:worker:${scriptName}:redirect:`)
       ? [rule.description as string]

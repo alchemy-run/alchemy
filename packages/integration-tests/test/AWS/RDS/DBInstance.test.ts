@@ -3,6 +3,7 @@ import { Network } from "@alchemy.run/aws/EC2/Network";
 import { SecurityGroup } from "@alchemy.run/aws/EC2/SecurityGroup";
 import { AWSEnvironment } from "@alchemy.run/aws/Environment";
 import { normalizePolicyDocument, type PolicyDocument } from "@alchemy.run/aws/IAM/Policy";
+import { Key } from "@alchemy.run/aws/KMS/Key";
 import { DBCluster, DBInstance, MigrationRunner, type DBInstanceProps } from "@alchemy.run/aws/RDS";
 import { Aurora, type AuroraProps } from "@alchemy.run/aws/RDS/Aurora";
 import { DBParameterGroup } from "@alchemy.run/aws/RDS/DBParameterGroup";
@@ -15,6 +16,7 @@ import * as rdsdata from "@distilled.cloud/aws/rds-data";
 import * as secretsmanager from "@distilled.cloud/aws/secrets-manager";
 import { describe, expect } from "alchemy-test";
 import * as Drift from "alchemy/Drift";
+import * as Output from "alchemy/Output";
 import * as Provider from "alchemy/Provider";
 import { State } from "alchemy/State";
 import * as Test from "alchemy/Test/Alchemy";
@@ -2540,13 +2542,20 @@ for (const { lane, engine, cidrBlock } of [
               vpcId: net.vpcId,
               description: "alchemy Aurora migrations test",
             });
+            const key = yield* Key("MigrationsDbKey", {
+              description: "alchemy Aurora migrations test",
+            });
+            // `kmsKeyId` and `migrations` take Outputs (#2363).
             const db = yield* Aurora("MigrationsDb", {
               engine,
               subnetIds: net.privateSubnetIds,
               securityGroupIds: [securityGroup.groupId],
-              migrations: migrationsDir,
+              storageEncrypted: true,
+              kmsKeyId: key.keyArn,
+              migrations: Output.asOutput(migrationsDir),
             });
             return {
+              keyArn: key.keyArn,
               clusterArn: db.cluster.dbClusterArn,
               secretArn: db.secret.secretArn,
               writer: db.writer,
@@ -2571,6 +2580,11 @@ for (const { lane, engine, cidrBlock } of [
           "0001_users.sql",
           "0002_posts.sql",
         ]);
+
+        const cluster = (yield* rds.describeDBClusters({
+          DBClusterIdentifier: created.clusterArn,
+        })).DBClusters?.[0];
+        expect(cluster?.KmsKeyId).toEqual(created.keyArn);
 
         // Out-of-band: the bookkeeping rows via the Data API.
         const applied = yield* rdsdata.executeStatement({

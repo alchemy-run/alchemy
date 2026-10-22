@@ -1571,7 +1571,10 @@ export const LiveWorkerProvider = () =>
         for (const zoneId of zoneIds) {
           const entrypoint = yield* rulesets
             .getPhasForZone({ zoneId, rulesetPhase: "http_request_dynamic_redirect" })
-            .pipe(Effect.orElseSucceed(() => undefined));
+            // Only a missing entrypoint means no rules yet. Any other failure must
+            // stop here: the PUT below replaces the whole phase, so reading it as
+            // empty would delete every other rule in the zone.
+            .pipe(Effect.catchTag("RulesetNotFound", () => Effect.succeed(undefined)));
           const existingRules = entrypoint?.rules ?? [];
           const ourDesired = desired
             .filter((hostname) => params.zoneIdByHostname.get(hostname) === zoneId)
@@ -1661,7 +1664,10 @@ export const LiveWorkerProvider = () =>
               : [];
           const entrypoint = yield* rulesets
             .getPhasForZone({ zoneId, rulesetPhase: "http_request_late_transform" })
-            .pipe(Effect.orElseSucceed(() => undefined));
+            // Only a missing entrypoint means no rules yet. Any other failure must
+            // stop here: the PUT below replaces the whole phase, so reading it as
+            // empty would delete every other rule in the zone.
+            .pipe(Effect.catchTag("RulesetNotFound", () => Effect.succeed(undefined)));
           const existingRules = entrypoint?.rules ?? [];
           const isOurs = (rule: { description?: string | null }) =>
             (rule.description ?? "").startsWith(prefix);

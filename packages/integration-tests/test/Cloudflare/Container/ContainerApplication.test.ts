@@ -1,7 +1,7 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
 import { ContainerPlatform } from "@alchemy.run/cloudflare/Containers/ContainerPlatform";
-import { Docker, DockerLive } from "@alchemy.run/docker/Docker";
+import { Docker } from "@alchemy.run/docker/Docker";
 import * as Containers from "@distilled.cloud/cloudflare/containers";
 import { assert, describe, expect } from "alchemy-test";
 import * as Deploy from "alchemy/Deploy";
@@ -43,10 +43,16 @@ import {
 } from "./fixtures/publication/applications.ts";
 import { EnvBucket, RemoteContainer } from "./fixtures/remote/object.ts";
 import RemoteContainerWorker from "./fixtures/remote/worker.ts";
-const { test } = Test.make({ providers: Layer.mergeAll(Cloudflare.providers(), DockerLive) });
+
+/** Narrows a Containers application to the scheduler-placed shape. */
+const scheduledApplication = (app: Containers.ContainerApplicationItem) => {
+  assert("version" in app, `${app.name} is a Durable Object application`);
+  return app;
+};
+const { test } = Test.make({ providers: Cloudflare.providers() });
 const { test: registryCacheTest } = Test.make({
   // Each deployment must consult the registry, not a previous provider's map.
-  providers: Layer.fresh(Layer.mergeAll(Cloudflare.providers(), DockerLive)),
+  providers: Layer.fresh(Cloudflare.providers()),
 });
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
@@ -64,6 +70,7 @@ const deployImage = (scratch: Scratch, image: string) =>
 /** The live (active) image reference + version of an application. */
 const live = (accountId: string, applicationId: string) =>
   Containers.getContainerApplication({ accountId, applicationId }).pipe(
+    Effect.map(scheduledApplication),
     Effect.map((app) => ({
       version: app.version,
       image: app.configuration.image,
@@ -125,7 +132,7 @@ describe.concurrent(
           const observed = yield* Containers.getContainerApplication({
             accountId: first.owned.accountId,
             applicationId: first.owned.applicationId,
-          });
+          }).pipe(Effect.map(scheduledApplication));
           expect(observed.maxInstances).toBe(4);
           const interrupted = { ...row, status: "creating" as const, attr: undefined };
           yield* Effect.gen(function* () {
@@ -188,7 +195,7 @@ describe.concurrent(
             const live = yield* Containers.getContainerApplication({
               accountId: first.owned.accountId,
               applicationId: first.owned.applicationId,
-            });
+            }).pipe(Effect.map(scheduledApplication));
             expect(live.maxInstances).toBe(5);
           }).pipe(
             Effect.ensuring(
@@ -487,7 +494,7 @@ describe.concurrent(
               const observed = yield* Containers.getContainerApplication({
                 accountId: app.accountId,
                 applicationId: app.applicationId,
-              });
+              }).pipe(Effect.map(scheduledApplication));
               expect(observed.configuration.image).toBe(shared.first.configuration.image);
             }
             yield* stack.destroy();
@@ -556,7 +563,7 @@ describe.concurrent(
             const observed = yield* Containers.getContainerApplication({
               accountId: app.accountId,
               applicationId: app.applicationId,
-            });
+            }).pipe(Effect.map(scheduledApplication));
             expect(observed.configuration.image).toBe(first.first.configuration.image);
             expect(observed.configuration.environmentVariables).toContainEqual({
               name: "SLOT",
@@ -1083,7 +1090,7 @@ describe.concurrent(
             const observed = yield* Containers.getContainerApplication({
               accountId,
               applicationId,
-            });
+            }).pipe(Effect.map(scheduledApplication));
             expect(observed.configuration.image).toBe(deployed.app.configuration.image);
 
             const response = yield* Effect.gen(function* () {
@@ -1137,7 +1144,10 @@ describe.concurrent(
               const first = yield* stack.deploy(applications());
               const { accountId } = first.owned;
               const observed = yield* Effect.forEach([first.owned, first.other], (app) =>
-                Containers.getContainerApplication({ accountId, applicationId: app.applicationId }),
+                Containers.getContainerApplication({
+                  accountId,
+                  applicationId: app.applicationId,
+                }).pipe(Effect.map(scheduledApplication)),
               );
               const state = yield* yield* State;
               const key = { stack: stack.name, stage: stack.stage, fqn: "CachedIdentity" };
@@ -1229,7 +1239,7 @@ describe.concurrent(
           const before = yield* Containers.getContainerApplication({
             accountId: first.owned.accountId,
             applicationId: first.owned.applicationId,
-          });
+          }).pipe(Effect.map(scheduledApplication));
           expect(before.name).toBe(first.owned.applicationName);
           expect(before.maxInstances).toBe(2);
 
@@ -1273,7 +1283,7 @@ describe.concurrent(
           const live = yield* Containers.getContainerApplication({
             accountId: app.accountId,
             applicationId: app.applicationId,
-          });
+          }).pipe(Effect.map(scheduledApplication));
           expect(live.configuration.memoryMib).toBe(4096);
           expect(live.configuration.instanceType).not.toBe("lite");
 
