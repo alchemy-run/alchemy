@@ -2,12 +2,13 @@ import * as web from "@distilled.cloud/azure/web";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
 import { ensureRegistered, ignoreNotFound, orUndefinedIfNotFound, waitUntilGone } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { lower, reveal, sameLocation } from "./common.ts";
 
 export interface StaticSiteDatabaseConnectionProps {
@@ -78,7 +79,6 @@ export interface StaticSiteDatabaseConnection extends Resource<
  * **Example:** Azure SQL database with a connection string
  * ```typescript
  * yield* Azure.Web.StaticSiteDatabaseConnection("db", {
- *   resourceGroup: group.resourceGroupName,
  *   staticSiteName: site.staticSiteName,
  *   resourceId: database.databaseId,
  *   region: "centralus",
@@ -89,7 +89,6 @@ export interface StaticSiteDatabaseConnection extends Resource<
  * **Example:** Cosmos DB account through the site's managed identity
  * ```typescript
  * yield* Azure.Web.StaticSiteDatabaseConnection("db", {
- *   resourceGroup: group.resourceGroupName,
  *   staticSiteName: site.staticSiteName,
  *   resourceId: account.accountId,
  *   region: account.location,
@@ -99,7 +98,7 @@ export interface StaticSiteDatabaseConnection extends Resource<
  *
  * @resource
  */
-export const StaticSiteDatabaseConnection = Resource<StaticSiteDatabaseConnection>(
+export const StaticSiteDatabaseConnection = GroupedResource<StaticSiteDatabaseConnection>(
   "Azure.Web.StaticSiteDatabaseConnection",
 );
 

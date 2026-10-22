@@ -1,8 +1,9 @@
 import * as network from "@distilled.cloud/azure/network";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import { orUndefinedIfNotFound } from "../Arm.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import type { AdminRuleAddress } from "./AdminRule.ts";
 import { networkProvider } from "./generic.ts";
 import { networkManagerChildName, networkManagerTags } from "./networkManagerShared.ts";
@@ -76,7 +77,6 @@ export interface SecurityUserRule extends Resource<
  * **Example:** Allow HTTPS inbound
  * ```typescript
  * yield* Azure.Network.SecurityUserRule("https", {
- *   resourceGroup: group.resourceGroupName,
  *   networkManager: manager.networkManagerName,
  *   securityUserConfiguration: users.configurationName,
  *   ruleCollection: rules.ruleCollectionName,
@@ -88,7 +88,7 @@ export interface SecurityUserRule extends Resource<
  *
  * @resource
  */
-export const SecurityUserRule = Resource<SecurityUserRule>("Azure.Network.SecurityUserRule");
+export const SecurityUserRule = GroupedResource<SecurityUserRule>("Azure.Network.SecurityUserRule");
 
 const anyAddress = [{ addressPrefix: "*", addressPrefixType: "IPPrefix" }];
 

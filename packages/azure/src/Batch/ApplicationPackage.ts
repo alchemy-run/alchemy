@@ -3,7 +3,7 @@ import * as batch from "@distilled.cloud/azure/batch";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
@@ -17,6 +17,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { accountOwnedByStage } from "./Common.ts";
 
 export interface ApplicationPackageProps {
@@ -85,7 +86,6 @@ export interface ApplicationPackage extends Resource<
  * ```typescript
  * const zip = yield* fs.readFile("dist/renderer.zip");
  * const pkg = yield* Azure.Batch.ApplicationPackage("renderer-1", {
- *   resourceGroup: group.resourceGroupName,
  *   account: account.accountName,
  *   application: app.applicationName,
  *   version: "1.0.0",
@@ -96,7 +96,6 @@ export interface ApplicationPackage extends Resource<
  * **Example:** Pending package uploaded out of band
  * ```typescript
  * const pkg = yield* Azure.Batch.ApplicationPackage("renderer-2", {
- *   resourceGroup: group.resourceGroupName,
  *   account: account.accountName,
  *   application: app.applicationName,
  *   version: "2.0.0",
@@ -105,7 +104,9 @@ export interface ApplicationPackage extends Resource<
  *
  * @resource
  */
-export const ApplicationPackage = Resource<ApplicationPackage>("Azure.Batch.ApplicationPackage");
+export const ApplicationPackage = GroupedResource<ApplicationPackage>(
+  "Azure.Batch.ApplicationPackage",
+);
 
 export class ApplicationPackageUploadFailed extends Data.TaggedError(
   "Azure.Batch.ApplicationPackageUploadFailed",

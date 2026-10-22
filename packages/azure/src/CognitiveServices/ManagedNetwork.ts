@@ -2,7 +2,7 @@ import * as cognitiveservices from "@distilled.cloud/azure/cognitiveservices";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -14,6 +14,7 @@ import {
 import type { WaitBudget } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { getAccount, isAccountOwnedByStack, usesMicrosoftManagedNetwork } from "./Account.ts";
 import { sameArm, whileAccountBusy } from "./Common.ts";
 
@@ -96,13 +97,11 @@ export interface ManagedNetwork extends Resource<
  * **Example:** Managed network that allows internet egress
  * ```typescript
  * const account = yield* Azure.CognitiveServices.Account("foundry", {
- *   resourceGroup: group.resourceGroupName,
  *   allowProjectManagement: true,
  *   identity: { type: "SystemAssigned" },
  *   networkInjections: [{ scenario: "agent", useMicrosoftManagedNetwork: true }],
  * });
  * const network = yield* Azure.CognitiveServices.ManagedNetwork("network", {
- *   resourceGroup: group.resourceGroupName,
  *   account: account.accountName,
  *   isolationMode: "AllowInternetOutbound",
  * });
@@ -110,7 +109,9 @@ export interface ManagedNetwork extends Resource<
  *
  * @resource
  */
-export const ManagedNetwork = Resource<ManagedNetwork>("Azure.CognitiveServices.ManagedNetwork");
+export const ManagedNetwork = GroupedResource<ManagedNetwork>(
+  "Azure.CognitiveServices.ManagedNetwork",
+);
 
 export const getManagedNetwork = (
   subscriptionId: string,

@@ -2,7 +2,7 @@ import * as cognitiveservices from "@distilled.cloud/azure/cognitiveservices";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -17,6 +17,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { CHILD_BUDGET, sameArm, sameValue, whileAccountBusy } from "./Common.ts";
 
 export interface RaiToolLabelProjectScope {
@@ -83,7 +84,6 @@ export interface RaiToolLabel extends Resource<
  * **Example:** Mark a web-search tool as handling non-confidential data
  * ```typescript
  * yield* Azure.CognitiveServices.RaiToolLabel("web-search", {
- *   resourceGroup: group.resourceGroupName,
  *   account: account.accountName,
  *   toolConnectionName: "Web_Search",
  *   accountLabels: { DataConfidentiality: "Non-confidential" },
@@ -92,7 +92,7 @@ export interface RaiToolLabel extends Resource<
  *
  * @resource
  */
-export const RaiToolLabel = Resource<RaiToolLabel>("Azure.CognitiveServices.RaiToolLabel");
+export const RaiToolLabel = GroupedResource<RaiToolLabel>("Azure.CognitiveServices.RaiToolLabel");
 
 const getLabel = (
   subscriptionId: string,

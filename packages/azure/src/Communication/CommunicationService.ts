@@ -2,7 +2,7 @@ import * as communication from "@distilled.cloud/azure/communication";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import {
@@ -21,6 +21,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createCommunicationName,
   DEFAULT_DATA_LOCATION,
@@ -148,25 +149,18 @@ export interface CommunicationService extends Resource<
  * ### Creating a Communication Service
  * **Example:** Communication service with data in the United States
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("app");
- * const acs = yield* Azure.Communication.CommunicationService("acs", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const acs = yield* Azure.Communication.CommunicationService("acs");
  * // acs.primaryConnectionString → Redacted connection string
  * ```
  *
  * ### Sending Email
  * **Example:** Link an Azure-managed email domain
  * ```typescript
- * const email = yield* Azure.Communication.EmailService("email", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const email = yield* Azure.Communication.EmailService("email");
  * const domain = yield* Azure.Communication.EmailDomain("domain", {
- *   resourceGroup: group.resourceGroupName,
  *   emailService: email.emailServiceName,
  * });
  * const acs = yield* Azure.Communication.CommunicationService("acs", {
- *   resourceGroup: group.resourceGroupName,
  *   linkedDomains: [domain.domainId],
  * });
  * ```
@@ -175,7 +169,6 @@ export interface CommunicationService extends Resource<
  * **Example:** Disable access keys and add a managed identity
  * ```typescript
  * const acs = yield* Azure.Communication.CommunicationService("acs", {
- *   resourceGroup: group.resourceGroupName,
  *   disableLocalAuth: true,
  *   identity: { type: "SystemAssigned" },
  * });
@@ -183,7 +176,7 @@ export interface CommunicationService extends Resource<
  *
  * @resource
  */
-export const CommunicationService = Resource<CommunicationService>(
+export const CommunicationService = GroupedResource<CommunicationService>(
   "Azure.Communication.CommunicationService",
 );
 

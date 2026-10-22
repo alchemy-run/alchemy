@@ -2,7 +2,7 @@ import * as network from "@distilled.cloud/azure/network";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -18,6 +18,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   canonical,
   createNetworkName,
@@ -156,16 +157,12 @@ export interface AzureFirewall extends Resource<
  * **Example:** Standard firewall with a policy
  * ```typescript
  * const subnet = yield* Azure.Network.Subnet("firewall-subnet", {
- *   resourceGroup: group.resourceGroupName,
  *   virtualNetwork: vnet.virtualNetworkName,
  *   name: "AzureFirewallSubnet",
  *   addressPrefix: "10.0.0.0/26",
  * });
- * const ip = yield* Azure.Network.PublicIpAddress("firewall-ip", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const ip = yield* Azure.Network.PublicIpAddress("firewall-ip");
  * const firewall = yield* Azure.Network.AzureFirewall("firewall", {
- *   resourceGroup: group.resourceGroupName,
  *   firewallPolicyId: policyId,
  *   ipConfigurations: [
  *     { subnetId: subnet.subnetId, publicIpAddressId: ip.publicIpAddressId },
@@ -176,7 +173,6 @@ export interface AzureFirewall extends Resource<
  * **Example:** Basic firewall with a management configuration
  * ```typescript
  * const firewall = yield* Azure.Network.AzureFirewall("firewall", {
- *   resourceGroup: group.resourceGroupName,
  *   skuTier: "Basic",
  *   firewallPolicyId: basicPolicyId,
  *   ipConfigurations: [
@@ -193,7 +189,6 @@ export interface AzureFirewall extends Resource<
  * **Example:** Default route via the firewall
  * ```typescript
  * yield* Azure.Network.Route("via-firewall", {
- *   resourceGroup: group.resourceGroupName,
  *   routeTable: table.routeTableName,
  *   addressPrefix: "0.0.0.0/0",
  *   nextHopType: "VirtualAppliance",
@@ -203,7 +198,7 @@ export interface AzureFirewall extends Resource<
  *
  * @resource
  */
-export const AzureFirewall = Resource<AzureFirewall>("Azure.Network.AzureFirewall");
+export const AzureFirewall = GroupedResource<AzureFirewall>("Azure.Network.AzureFirewall");
 
 type Observed = network.GetAzureFirewallResponse;
 

@@ -1,8 +1,9 @@
 import * as network from "@distilled.cloud/azure/network";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import { orUndefinedIfNotFound } from "../Arm.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { canonical, ref } from "./common.ts";
 import { idsOf, networkProvider } from "./generic.ts";
 import { loadBalancerTags } from "./loadBalancerShared.ts";
@@ -70,7 +71,6 @@ export interface LoadBalancerBackendAddressPool extends Resource<
  * **Example:** IP-based backend pool
  * ```typescript
  * yield* Azure.Network.LoadBalancerBackendAddressPool("web", {
- *   resourceGroup: group.resourceGroupName,
  *   loadBalancer: lb.loadBalancerName,
  *   virtualNetworkId: vnet.virtualNetworkId,
  *   addresses: [{ name: "web1", ipAddress: "10.0.1.4" }],
@@ -79,7 +79,7 @@ export interface LoadBalancerBackendAddressPool extends Resource<
  *
  * @resource
  */
-export const LoadBalancerBackendAddressPool = Resource<LoadBalancerBackendAddressPool>(
+export const LoadBalancerBackendAddressPool = GroupedResource<LoadBalancerBackendAddressPool>(
   "Azure.Network.LoadBalancerBackendAddressPool",
 );
 

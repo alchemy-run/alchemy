@@ -2,11 +2,12 @@ import * as logic from "@distilled.cloud/azure/logic";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { ensureRegistered, ignoreNotFound, orUndefinedIfNotFound, waitUntilGone } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   artifactDiffers,
   artifactMetadata,
@@ -95,7 +96,6 @@ export interface IntegrationAccountBatchConfiguration extends Resource<
  * **Example:** Release every 10 messages
  * ```typescript
  * const orders = yield* Azure.Logic.IntegrationAccountBatchConfiguration("orders", {
- *   resourceGroup: group.resourceGroupName,
  *   integrationAccount: account.integrationAccountName,
  *   batchGroupName: "orders",
  *   releaseCriteria: { messageCount: 10 },
@@ -105,7 +105,6 @@ export interface IntegrationAccountBatchConfiguration extends Resource<
  * **Example:** Release hourly or at 1 MB
  * ```typescript
  * const hourly = yield* Azure.Logic.IntegrationAccountBatchConfiguration("hourly", {
- *   resourceGroup: group.resourceGroupName,
  *   integrationAccount: account.integrationAccountName,
  *   batchGroupName: "hourly",
  *   releaseCriteria: {
@@ -117,9 +116,10 @@ export interface IntegrationAccountBatchConfiguration extends Resource<
  *
  * @resource
  */
-export const IntegrationAccountBatchConfiguration = Resource<IntegrationAccountBatchConfiguration>(
-  "Azure.Logic.IntegrationAccountBatchConfiguration",
-);
+export const IntegrationAccountBatchConfiguration =
+  GroupedResource<IntegrationAccountBatchConfiguration>(
+    "Azure.Logic.IntegrationAccountBatchConfiguration",
+  );
 
 const getBatchConfiguration = (
   subscriptionId: string,

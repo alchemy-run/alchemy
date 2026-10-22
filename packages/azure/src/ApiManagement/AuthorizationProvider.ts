@@ -2,12 +2,13 @@ import * as apim from "@distilled.cloud/azure/apimanagement";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { ensureRegistered, ignoreNotFound, orUndefinedIfNotFound, waitUntilGone } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createEntityName, isParentOwned, sameName } from "./Common.ts";
 
 /** Grant parameters; values such as `clientSecret` may be redacted. */
@@ -92,7 +93,6 @@ export interface AuthorizationProvider extends Resource<
  * **Example:** Microsoft Entra ID with the client-credentials grant
  * ```typescript
  * const entra = yield* Azure.ApiManagement.AuthorizationProvider("entra", {
- *   resourceGroup: group.resourceGroupName,
  *   serviceName: apim.serviceName,
  *   identityProvider: "aad",
  *   grantTypes: {
@@ -109,7 +109,6 @@ export interface AuthorizationProvider extends Resource<
  * **Example:** GitHub with the authorization-code grant
  * ```typescript
  * const github = yield* Azure.ApiManagement.AuthorizationProvider("github", {
- *   resourceGroup: group.resourceGroupName,
  *   serviceName: apim.serviceName,
  *   identityProvider: "github",
  *   grantTypes: {
@@ -124,7 +123,7 @@ export interface AuthorizationProvider extends Resource<
  *
  * @resource
  */
-export const AuthorizationProvider = Resource<AuthorizationProvider>(
+export const AuthorizationProvider = GroupedResource<AuthorizationProvider>(
   "Azure.ApiManagement.AuthorizationProvider",
 );
 

@@ -2,7 +2,7 @@ import * as fileshares from "@distilled.cloud/azure/fileshares";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import { createInternalTags, hasAlchemyTags, tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import {
@@ -15,6 +15,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createFileShareName } from "./FileShareNames.ts";
 
 export interface FileShareSnapshotProps {
@@ -79,11 +80,8 @@ export interface FileShareSnapshot extends Resource<
  * ### Taking a Snapshot
  * **Example:** Snapshot a file share
  * ```typescript
- * const share = yield* Azure.FileShares.FileShare("data", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const share = yield* Azure.FileShares.FileShare("data");
  * const snapshot = yield* Azure.FileShares.FileShareSnapshot("before-migration", {
- *   resourceGroup: group.resourceGroupName,
  *   fileShare: share.fileShareName,
  * });
  * ```
@@ -91,7 +89,6 @@ export interface FileShareSnapshot extends Resource<
  * **Example:** Snapshot with metadata
  * ```typescript
  * const snapshot = yield* Azure.FileShares.FileShareSnapshot("nightly", {
- *   resourceGroup: group.resourceGroupName,
  *   fileShare: share.fileShareName,
  *   initiatorId: "release-pipeline",
  *   metadata: { reason: "release" },
@@ -100,7 +97,9 @@ export interface FileShareSnapshot extends Resource<
  *
  * @resource
  */
-export const FileShareSnapshot = Resource<FileShareSnapshot>("Azure.FileShares.FileShareSnapshot");
+export const FileShareSnapshot = GroupedResource<FileShareSnapshot>(
+  "Azure.FileShares.FileShareSnapshot",
+);
 
 /** Metadata keys must be identifiers, so `alchemy::x` becomes `alchemy_x`. */
 const ownershipMetadata = Effect.fn(function* (id: string) {

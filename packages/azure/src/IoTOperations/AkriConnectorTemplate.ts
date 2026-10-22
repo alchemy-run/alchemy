@@ -1,7 +1,8 @@
 import * as iot from "@distilled.cloud/azure/iotoperations";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { childLifecycle, childStatus, type InstanceScope } from "./Common.ts";
 
 export interface AkriConnectorTemplateProps {
@@ -67,7 +68,6 @@ export interface AkriConnectorTemplate extends Resource<
  * **Example:** REST connector from Microsoft Container Registry
  * ```typescript
  * const template = yield* Azure.IoTOperations.AkriConnectorTemplate("rest", {
- *   resourceGroup: group.resourceGroupName,
  *   instanceName: instance.instanceName,
  *   deviceInboundEndpointTypes: [{ endpointType: "Microsoft.Rest" }],
  *   runtimeConfiguration: {
@@ -89,7 +89,7 @@ export interface AkriConnectorTemplate extends Resource<
  *
  * @resource
  */
-export const AkriConnectorTemplate = Resource<AkriConnectorTemplate>(
+export const AkriConnectorTemplate = GroupedResource<AkriConnectorTemplate>(
   "Azure.IoTOperations.AkriConnectorTemplate",
 );
 

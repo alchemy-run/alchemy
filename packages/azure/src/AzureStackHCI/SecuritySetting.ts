@@ -2,7 +2,7 @@ import * as hci from "@distilled.cloud/azure/azurestackhci";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { getHciCluster } from "./Cluster.ts";
 import { HCI_NAMESPACE, isStackOwnedTags, sameId } from "./Common.ts";
 
@@ -79,11 +80,8 @@ export interface SecuritySetting extends Resource<
  * ### Configuring the Security Baseline
  * **Example:** Enforce WDAC and SMB encryption
  * ```typescript
- * const cluster = yield* Azure.AzureStackHCI.Cluster("site-a", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const cluster = yield* Azure.AzureStackHCI.Cluster("site-a");
  * yield* Azure.AzureStackHCI.SecuritySetting("security", {
- *   resourceGroup: group.resourceGroupName,
  *   cluster: cluster.clusterName,
  *   wdacComplianceAssignment: "ApplyAndAutoCorrect",
  *   smbEncryptionForIntraClusterTrafficComplianceAssignment:
@@ -93,7 +91,9 @@ export interface SecuritySetting extends Resource<
  *
  * @resource
  */
-export const SecuritySetting = Resource<SecuritySetting>("Azure.AzureStackHCI.SecuritySetting");
+export const SecuritySetting = GroupedResource<SecuritySetting>(
+  "Azure.AzureStackHCI.SecuritySetting",
+);
 
 const SETTING_NAME = "default";
 

@@ -2,12 +2,13 @@ import * as sql from "@distilled.cloud/azure/sql";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { ensureRegistered, ignoreNotFound, orUndefinedIfNotFound } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { fieldsMatch, isServerOwnedByStack, lower, sameSecret } from "./common.ts";
 import {
   databasePath,
@@ -118,7 +119,6 @@ export interface ExtendedDatabaseBlobAuditingPolicy extends Resource<
  * **Example:** Audit to Azure Monitor, skipping health probes
  * ```typescript
  * yield* Azure.Sql.ExtendedDatabaseBlobAuditingPolicy("audit", {
- *   resourceGroup: group.resourceGroupName,
  *   server: server.serverName,
  *   database: database.databaseName,
  *   state: "Enabled",
@@ -129,9 +129,10 @@ export interface ExtendedDatabaseBlobAuditingPolicy extends Resource<
  *
  * @resource
  */
-export const ExtendedDatabaseBlobAuditingPolicy = Resource<ExtendedDatabaseBlobAuditingPolicy>(
-  "Azure.Sql.ExtendedDatabaseBlobAuditingPolicy",
-);
+export const ExtendedDatabaseBlobAuditingPolicy =
+  GroupedResource<ExtendedDatabaseBlobAuditingPolicy>(
+    "Azure.Sql.ExtendedDatabaseBlobAuditingPolicy",
+  );
 
 type Observed = sql.GetExtendedDatabaseBlobAuditingPolicyResponse;
 

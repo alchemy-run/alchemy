@@ -2,7 +2,7 @@ import * as web from "@distilled.cloud/azure/web";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { lower, matchesDesired, siteWhere } from "./common.ts";
 
 export interface SourceControlProps {
@@ -95,7 +96,6 @@ export interface SourceControl extends Resource<
  * **Example:** Public GitHub repository
  * ```typescript
  * const source = yield* Azure.Web.SourceControl("source", {
- *   resourceGroup: group.resourceGroupName,
  *   siteName: app.siteName,
  *   repoUrl: "https://github.com/Azure-Samples/nodejs-docs-hello-world",
  *   branch: "main",
@@ -104,7 +104,7 @@ export interface SourceControl extends Resource<
  *
  * @resource
  */
-export const SourceControl = Resource<SourceControl>("Azure.Web.SourceControl");
+export const SourceControl = GroupedResource<SourceControl>("Azure.Web.SourceControl");
 
 const getSourceControl = (
   subscriptionId: string,

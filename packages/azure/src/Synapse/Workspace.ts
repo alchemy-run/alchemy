@@ -2,7 +2,7 @@ import * as synapse from "@distilled.cloud/azure/synapse";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
 import {
@@ -20,6 +20,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createDnsName,
   fieldsMatch,
@@ -256,17 +257,13 @@ export interface Workspace extends Resource<
  * ### Creating a Workspace
  * **Example:** Workspace on a Data Lake file system
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("analytics");
  * const lake = yield* Azure.Storage.StorageAccount("lake", {
- *   resourceGroup: group.resourceGroupName,
  *   isHnsEnabled: true,
  * });
  * const fs = yield* Azure.Storage.BlobContainer("fs", {
- *   resourceGroup: group.resourceGroupName,
  *   storageAccount: lake.storageAccountName,
  * });
  * const workspace = yield* Azure.Synapse.Workspace("ws", {
- *   resourceGroup: group.resourceGroupName,
  *   defaultDataLakeStorage: {
  *     accountUrl: lake.primaryEndpoints.dfs.as<string>(),
  *     filesystem: fs.containerName,
@@ -280,7 +277,6 @@ export interface Workspace extends Resource<
  * **Example:** Managed virtual network with exfiltration protection
  * ```typescript
  * const workspace = yield* Azure.Synapse.Workspace("ws", {
- *   resourceGroup: group.resourceGroupName,
  *   defaultDataLakeStorage: {
  *     accountUrl: lake.primaryEndpoints.dfs.as<string>(),
  *     filesystem: fs.containerName,
@@ -293,7 +289,7 @@ export interface Workspace extends Resource<
  *
  * @resource
  */
-export const Workspace = Resource<Workspace>("Azure.Synapse.Workspace");
+export const Workspace = GroupedResource<Workspace>("Azure.Synapse.Workspace");
 
 type ObservedWorkspace = synapse.GetWorkspaceResponse;
 

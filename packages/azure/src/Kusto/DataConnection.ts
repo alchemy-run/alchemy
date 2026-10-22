@@ -2,7 +2,7 @@ import * as kusto from "@distilled.cloud/azure/azure_kusto";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   clusterLocation,
   createKustoChildName,
@@ -141,13 +142,11 @@ export interface DataConnection extends Resource<
  * **Example:** Event Hub data connection
  * ```typescript
  * const schema = yield* Azure.Kusto.Script("schema", {
- *   resourceGroup: group.resourceGroupName,
  *   cluster: cluster.clusterName,
  *   database: db.databaseName,
  *   content: ".create-merge table Events (Name: string)",
  * });
  * const connection = yield* Azure.Kusto.DataConnection("events", {
- *   resourceGroup: group.resourceGroupName,
  *   cluster: cluster.clusterName,
  *   database: db.databaseName,
  *   kind: "EventHub",
@@ -160,7 +159,7 @@ export interface DataConnection extends Resource<
  *
  * @resource
  */
-export const DataConnection = Resource<DataConnection>("Azure.Kusto.DataConnection");
+export const DataConnection = GroupedResource<DataConnection>("Azure.Kusto.DataConnection");
 
 const getConnection = (
   subscriptionId: string,

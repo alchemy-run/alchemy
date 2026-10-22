@@ -1,7 +1,7 @@
 import * as edge from "@distilled.cloud/azure/edge";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -12,6 +12,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { EDGE_WAIT, edgeState, sameId, sameJson } from "./EdgeShared.ts";
 
 /** Hierarchy entities of one level that a config template applies to. */
@@ -83,7 +84,6 @@ export interface ConfigTemplateMetadata extends Resource<
  * **Example:** Apply a config template to a site
  * ```typescript
  * yield* Azure.Edge.ConfigTemplateMetadata("common-links", {
- *   resourceGroup: group.resourceGroupName,
  *   configTemplate: template.configTemplateName,
  *   contextId: context.contextId,
  *   linkedHierarchies: [{ level: "country", hierarchyIds: [site.siteId] }],
@@ -92,7 +92,7 @@ export interface ConfigTemplateMetadata extends Resource<
  *
  * @resource
  */
-export const ConfigTemplateMetadata = Resource<ConfigTemplateMetadata>(
+export const ConfigTemplateMetadata = GroupedResource<ConfigTemplateMetadata>(
   "Azure.Edge.ConfigTemplateMetadata",
 );
 

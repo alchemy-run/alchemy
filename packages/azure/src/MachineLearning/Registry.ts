@@ -2,7 +2,7 @@ import * as ml from "@distilled.cloud/azure/machinelearningservices";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -20,6 +20,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createWorkspaceName,
   identityDiffers,
@@ -127,15 +128,12 @@ export interface Registry extends Resource<
  * ### Creating a Registry
  * **Example:** Single-region registry
  * ```typescript
- * const registry = yield* Azure.MachineLearning.Registry("shared", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const registry = yield* Azure.MachineLearning.Registry("shared");
  * ```
  *
  * **Example:** Registry replicated to two regions
  * ```typescript
  * const registry = yield* Azure.MachineLearning.Registry("shared", {
- *   resourceGroup: group.resourceGroupName,
  *   location: "eastus",
  *   regions: [{ location: "eastus" }, { location: "westus2" }],
  * });
@@ -143,7 +141,7 @@ export interface Registry extends Resource<
  *
  * @resource
  */
-export const Registry = Resource<Registry>("Azure.MachineLearning.Registry");
+export const Registry = GroupedResource<Registry>("Azure.MachineLearning.Registry");
 
 type ObservedRegistry = ml.Registry;
 

@@ -2,7 +2,7 @@ import * as sql from "@distilled.cloud/azure/sql";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createChildName, isServerOwnedByStack, lower } from "./common.ts";
 import { jobAgentPath, type JobAgentScope, retryWhileAgentBusy } from "./setting.ts";
 
@@ -77,7 +78,6 @@ export interface JobPrivateEndpoint extends Resource<
  * **Example:** Private endpoint to a target server
  * ```typescript
  * yield* Azure.Sql.JobPrivateEndpoint("to-orders", {
- *   resourceGroup: group.resourceGroupName,
  *   server: server.serverName,
  *   jobAgent: agent.jobAgentName,
  *   targetServerId: ordersServer.serverId,
@@ -86,7 +86,9 @@ export interface JobPrivateEndpoint extends Resource<
  *
  * @resource
  */
-export const JobPrivateEndpoint = Resource<JobPrivateEndpoint>("Azure.Sql.JobPrivateEndpoint");
+export const JobPrivateEndpoint = GroupedResource<JobPrivateEndpoint>(
+  "Azure.Sql.JobPrivateEndpoint",
+);
 
 type Observed = sql.GetJobPrivateEndpointResponse;
 

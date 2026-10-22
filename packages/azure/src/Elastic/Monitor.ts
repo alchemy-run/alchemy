@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import {
@@ -21,6 +21,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { canonicalJson, getMonitor, sameName } from "./common.ts";
 
 /** Company details Elastic uses to provision the Elastic Cloud organization. */
@@ -207,7 +208,6 @@ export interface Monitor extends Resource<
  *   location: "westus2",
  * });
  * const monitor = yield* Azure.Elastic.Monitor("elastic", {
- *   resourceGroup: group.resourceGroupName,
  *   location: "westus2",
  *   userInfo: {
  *     emailAddress: "platform@example.com",
@@ -221,7 +221,6 @@ export interface Monitor extends Resource<
  * **Example:** Serverless observability project
  * ```typescript
  * const monitor = yield* Azure.Elastic.Monitor("elastic", {
- *   resourceGroup: group.resourceGroupName,
  *   location: "westus2",
  *   userInfo: { emailAddress: "platform@example.com" },
  *   hostingType: "Serverless",
@@ -240,7 +239,7 @@ export interface Monitor extends Resource<
  *
  * @resource
  */
-export const Monitor = Resource<Monitor>("Azure.Elastic.Monitor");
+export const Monitor = GroupedResource<Monitor>("Azure.Elastic.Monitor");
 
 type ObservedMonitor = elastic.GetMonitorResponse;
 

@@ -2,7 +2,7 @@ import * as sql from "@distilled.cloud/azure/sql";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { isServerOwnedByStack, lower } from "./common.ts";
 
 /** The policy is a singleton named `default`. */
@@ -98,7 +99,6 @@ export interface LongTermRetentionPolicy extends Resource<
  * **Example:** Keep weekly backups for 4 weeks
  * ```typescript
  * yield* Azure.Sql.LongTermRetentionPolicy("ltr", {
- *   resourceGroup: group.resourceGroupName,
  *   server: server.serverName,
  *   database: database.databaseName,
  *   weeklyRetention: "P4W",
@@ -108,7 +108,6 @@ export interface LongTermRetentionPolicy extends Resource<
  * **Example:** Weekly, monthly, and yearly retention
  * ```typescript
  * yield* Azure.Sql.LongTermRetentionPolicy("ltr", {
- *   resourceGroup: group.resourceGroupName,
  *   server: server.serverName,
  *   database: database.databaseName,
  *   weeklyRetention: "P12W",
@@ -120,7 +119,7 @@ export interface LongTermRetentionPolicy extends Resource<
  *
  * @resource
  */
-export const LongTermRetentionPolicy = Resource<LongTermRetentionPolicy>(
+export const LongTermRetentionPolicy = GroupedResource<LongTermRetentionPolicy>(
   "Azure.Sql.LongTermRetentionPolicy",
 );
 

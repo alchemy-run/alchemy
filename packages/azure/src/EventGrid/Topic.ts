@@ -2,7 +2,7 @@ import * as eventgrid from "@distilled.cloud/azure/eventgrid";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
 import {
@@ -21,6 +21,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createEventGridName,
   identityDiffers,
@@ -168,16 +169,12 @@ export interface Topic extends Resource<
  * ### Creating a Topic
  * **Example:** Topic with the Event Grid schema
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("app");
- * const topic = yield* Azure.EventGrid.Topic("orders", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const topic = yield* Azure.EventGrid.Topic("orders");
  * ```
  *
  * **Example:** CloudEvents topic that requires Entra ID
  * ```typescript
  * const topic = yield* Azure.EventGrid.Topic("orders", {
- *   resourceGroup: group.resourceGroupName,
  *   inputSchema: "CloudEventSchemaV1_0",
  *   disableLocalAuth: true,
  * });
@@ -187,14 +184,13 @@ export interface Topic extends Resource<
  * **Example:** Allow publishing from one range only
  * ```typescript
  * const topic = yield* Azure.EventGrid.Topic("orders", {
- *   resourceGroup: group.resourceGroupName,
  *   inboundIpRules: [{ ipMask: "203.0.113.0/24" }],
  * });
  * ```
  *
  * @resource
  */
-export const Topic = Resource<Topic>("Azure.EventGrid.Topic");
+export const Topic = GroupedResource<Topic>("Azure.EventGrid.Topic");
 
 const getTopic = (subscriptionId: string, resourceGroupName: string, topicName: string) =>
   orUndefinedIfNotFound(eventgrid.GetTopic({ subscriptionId, resourceGroupName, topicName }));

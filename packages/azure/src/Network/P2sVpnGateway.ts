@@ -1,8 +1,9 @@
 import * as network from "@distilled.cloud/azure/network";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import { orUndefinedIfNotFound, userTags } from "../Arm.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { sameId } from "./common.ts";
 import { networkProvider } from "./generic.ts";
 import { routingConfigurationInput, type HubRoutingConfiguration } from "./virtualHubShared.ts";
@@ -104,7 +105,6 @@ export interface P2sVpnGateway extends Resource<
  * **Example:** One address pool
  * ```typescript
  * const gateway = yield* Azure.Network.P2sVpnGateway("users", {
- *   resourceGroup: group.resourceGroupName,
  *   virtualHubId: hub.virtualHubId,
  *   vpnServerConfigurationId: config.vpnServerConfigurationId,
  *   connectionConfigurations: [
@@ -115,7 +115,7 @@ export interface P2sVpnGateway extends Resource<
  *
  * @resource
  */
-export const P2sVpnGateway = Resource<P2sVpnGateway>("Azure.Network.P2sVpnGateway");
+export const P2sVpnGateway = GroupedResource<P2sVpnGateway>("Azure.Network.P2sVpnGateway");
 
 export const P2sVpnGatewayProvider = () =>
   Provider.succeed(

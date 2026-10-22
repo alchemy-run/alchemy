@@ -2,11 +2,12 @@ import * as logic from "@distilled.cloud/azure/logic";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { ensureRegistered, ignoreNotFound, orUndefinedIfNotFound, waitUntilGone } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   artifactDiffers,
   artifactMetadata,
@@ -93,11 +94,8 @@ export interface IntegrationAccountSchema extends Resource<
  * ### Adding a Schema
  * **Example:** Order schema
  * ```typescript
- * const account = yield* Azure.Logic.IntegrationAccount("b2b", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const account = yield* Azure.Logic.IntegrationAccount("b2b");
  * const order = yield* Azure.Logic.IntegrationAccountSchema("order", {
- *   resourceGroup: group.resourceGroupName,
  *   integrationAccount: account.integrationAccountName,
  *   content: `<?xml version="1.0" encoding="utf-8"?>
  * <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="http://contoso/order">
@@ -108,7 +106,7 @@ export interface IntegrationAccountSchema extends Resource<
  *
  * @resource
  */
-export const IntegrationAccountSchema = Resource<IntegrationAccountSchema>(
+export const IntegrationAccountSchema = GroupedResource<IntegrationAccountSchema>(
   "Azure.Logic.IntegrationAccountSchema",
 );
 

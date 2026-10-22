@@ -1,8 +1,9 @@
 import * as network from "@distilled.cloud/azure/network";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import { orUndefinedIfNotFound, userTags } from "../Arm.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { sameSet } from "./common.ts";
 import { networkProvider } from "./generic.ts";
 
@@ -64,14 +65,13 @@ export interface IpGroup extends Resource<
  * **Example:** On-premises ranges
  * ```typescript
  * const onPrem = yield* Azure.Network.IpGroup("on-prem", {
- *   resourceGroup: group.resourceGroupName,
  *   ipAddresses: ["10.10.0.0/16", "192.168.1.0/24"],
  * });
  * ```
  *
  * @resource
  */
-export const IpGroup = Resource<IpGroup>("Azure.Network.IpGroup");
+export const IpGroup = GroupedResource<IpGroup>("Azure.Network.IpGroup");
 
 const ids = (items: ReadonlyArray<{ id?: string }> | undefined) =>
   (items ?? []).flatMap((item) => (item.id === undefined ? [] : [item.id]));

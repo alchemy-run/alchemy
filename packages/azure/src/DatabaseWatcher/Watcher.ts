@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import {
@@ -22,6 +22,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 
 export type WatcherIdentityType =
   | "None"
@@ -154,17 +155,13 @@ export interface Watcher extends Resource<
  * ### Creating a Watcher
  * **Example:** Watcher with a system-assigned identity
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("monitoring");
- * const watcher = yield* Azure.DatabaseWatcher.Watcher("sql-watcher", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const watcher = yield* Azure.DatabaseWatcher.Watcher("sql-watcher");
  * ```
  *
  * ### Collecting Data
  * **Example:** Watcher writing to an Azure Data Explorer database
  * ```typescript
  * const watcher = yield* Azure.DatabaseWatcher.Watcher("sql-watcher", {
- *   resourceGroup: group.resourceGroupName,
  *   datastore: {
  *     adxClusterResourceId: cluster.clusterId,
  *     kustoClusterUri: cluster.uri,
@@ -179,7 +176,7 @@ export interface Watcher extends Resource<
  *
  * @resource
  */
-export const Watcher = Resource<Watcher>("Azure.DatabaseWatcher.Watcher");
+export const Watcher = GroupedResource<Watcher>("Azure.DatabaseWatcher.Watcher");
 
 type ObservedWatcher = databasewatcher.GetWatcherResponse;
 

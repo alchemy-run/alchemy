@@ -2,11 +2,12 @@ import * as network from "@distilled.cloud/azure/network";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { ensureRegistered, ignoreNotFound, orUndefinedIfNotFound, stackAndStage } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   convergeChild,
   createNetworkName,
@@ -124,11 +125,8 @@ export interface SecurityRule extends Resource<
  * ### Creating a Security Rule
  * **Example:** Allow HTTPS from the internet
  * ```typescript
- * const nsg = yield* Azure.Network.NetworkSecurityGroup("web", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const nsg = yield* Azure.Network.NetworkSecurityGroup("web");
  * yield* Azure.Network.SecurityRule("allow-https", {
- *   resourceGroup: group.resourceGroupName,
  *   networkSecurityGroup: nsg.networkSecurityGroupName,
  *   priority: 100,
  *   direction: "Inbound",
@@ -143,7 +141,6 @@ export interface SecurityRule extends Resource<
  * **Example:** Allow the app tier to reach the database tier
  * ```typescript
  * yield* Azure.Network.SecurityRule("app-to-db", {
- *   resourceGroup: group.resourceGroupName,
  *   networkSecurityGroup: nsg.networkSecurityGroupName,
  *   priority: 200,
  *   direction: "Inbound",
@@ -157,7 +154,7 @@ export interface SecurityRule extends Resource<
  *
  * @resource
  */
-export const SecurityRule = Resource<SecurityRule>("Azure.Network.SecurityRule");
+export const SecurityRule = GroupedResource<SecurityRule>("Azure.Network.SecurityRule");
 
 type Observed = network.GetSecurityRuleResponse;
 

@@ -2,7 +2,7 @@ import * as relay from "@distilled.cloud/azure/relay";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
 import {
@@ -14,6 +14,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   type AccessRight,
   createEntityName,
@@ -89,11 +90,8 @@ export interface NamespaceAuthorizationRule extends Resource<
  * ### Creating a Rule
  * **Example:** Listen-only rule for on-premises listeners
  * ```typescript
- * const ns = yield* Azure.Relay.Namespace("relay", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const ns = yield* Azure.Relay.Namespace("relay");
  * const listener = yield* Azure.Relay.NamespaceAuthorizationRule("listener", {
- *   resourceGroup: group.resourceGroupName,
  *   namespace: ns.namespaceName,
  *   rights: ["Listen"],
  * });
@@ -103,7 +101,6 @@ export interface NamespaceAuthorizationRule extends Resource<
  * **Example:** Listen and send
  * ```typescript
  * const app = yield* Azure.Relay.NamespaceAuthorizationRule("app", {
- *   resourceGroup: group.resourceGroupName,
  *   namespace: ns.namespaceName,
  *   rights: ["Listen", "Send"],
  * });
@@ -111,7 +108,7 @@ export interface NamespaceAuthorizationRule extends Resource<
  *
  * @resource
  */
-export const NamespaceAuthorizationRule = Resource<NamespaceAuthorizationRule>(
+export const NamespaceAuthorizationRule = GroupedResource<NamespaceAuthorizationRule>(
   "Azure.Relay.NamespaceAuthorizationRule",
 );
 

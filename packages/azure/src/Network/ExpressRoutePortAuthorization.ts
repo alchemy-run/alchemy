@@ -1,10 +1,11 @@
 import * as network from "@distilled.cloud/azure/network";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { orUndefinedIfNotFound } from "../Arm.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { waitNetworkProvisionedSlow } from "./common.ts";
 import { type NetworkPath, networkProvider } from "./generic.ts";
 
@@ -57,7 +58,6 @@ export interface ExpressRoutePortAuthorization extends Resource<
  * **Example:** Share a port with another subscription
  * ```typescript
  * const auth = yield* Azure.Network.ExpressRoutePortAuthorization("spoke", {
- *   resourceGroup: group.resourceGroupName,
  *   expressRoutePort: port.expressRoutePortName,
  * });
  * // Hand auth.authorizationKey to the connecting subscription.
@@ -65,7 +65,7 @@ export interface ExpressRoutePortAuthorization extends Resource<
  *
  * @resource
  */
-export const ExpressRoutePortAuthorization = Resource<ExpressRoutePortAuthorization>(
+export const ExpressRoutePortAuthorization = GroupedResource<ExpressRoutePortAuthorization>(
   "Azure.Network.ExpressRoutePortAuthorization",
 );
 

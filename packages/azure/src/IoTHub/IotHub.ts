@@ -2,7 +2,7 @@ import * as iothub from "@distilled.cloud/azure/iothub";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import {
@@ -20,6 +20,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createIotHubName, getIotHub, matchesObserved } from "./Common.ts";
 
 export type IotHubSkuName = "F1" | "B1" | "B2" | "B3" | "S1" | "S2" | "S3";
@@ -208,16 +209,12 @@ export interface IotHub extends Resource<
  * ### Creating a Hub
  * **Example:** Standard hub
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("app");
- * const hub = yield* Azure.IoTHub.IotHub("devices", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const hub = yield* Azure.IoTHub.IotHub("devices");
  * ```
  *
  * **Example:** Free hub (one per subscription)
  * ```typescript
  * const hub = yield* Azure.IoTHub.IotHub("devices", {
- *   resourceGroup: group.resourceGroupName,
  *   sku: "F1",
  *   partitionCount: 2,
  * });
@@ -227,7 +224,6 @@ export interface IotHub extends Resource<
  * **Example:** Cloud-to-device settings and retention
  * ```typescript
  * const hub = yield* Azure.IoTHub.IotHub("devices", {
- *   resourceGroup: group.resourceGroupName,
  *   sku: "S1",
  *   retentionTimeInDays: 3,
  *   cloudToDevice: {
@@ -240,11 +236,8 @@ export interface IotHub extends Resource<
  * ### Reading Telemetry
  * **Example:** Pass the Event Hub-compatible endpoint to a consumer
  * ```typescript
- * const hub = yield* Azure.IoTHub.IotHub("devices", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const hub = yield* Azure.IoTHub.IotHub("devices");
  * const consumers = yield* Azure.IoTHub.ConsumerGroup("analytics", {
- *   resourceGroup: group.resourceGroupName,
  *   iotHub: hub.iotHubName,
  * });
  * // hub.eventHubConnectionString + consumers.consumerGroupName
@@ -252,7 +245,7 @@ export interface IotHub extends Resource<
  *
  * @resource
  */
-export const IotHub = Resource<IotHub>("Azure.IoTHub.IotHub");
+export const IotHub = GroupedResource<IotHub>("Azure.IoTHub.IotHub");
 
 type ObservedHub = iothub.GetIotHubResourceResponse;
 

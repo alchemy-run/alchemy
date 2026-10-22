@@ -2,7 +2,7 @@ import * as ml from "@distilled.cloud/azure/machinelearningservices";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import {
@@ -21,6 +21,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   containsValue,
   createWorkspaceName,
@@ -176,12 +177,8 @@ export interface Workspace extends Resource<
  * ### Creating a Workspace
  * **Example:** Workspace with a storage account and Key Vault
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("ml");
- * const storage = yield* Azure.Storage.StorageAccount("artifacts", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const storage = yield* Azure.Storage.StorageAccount("artifacts");
  * const workspace = yield* Azure.MachineLearning.Workspace("ws", {
- *   resourceGroup: group.resourceGroupName,
  *   storageAccount: storage.storageAccountId,
  *   keyVault: vaultId,
  *   friendlyName: "Research",
@@ -192,7 +189,6 @@ export interface Workspace extends Resource<
  * **Example:** Managed virtual network that allows internet outbound
  * ```typescript
  * const workspace = yield* Azure.MachineLearning.Workspace("ws", {
- *   resourceGroup: group.resourceGroupName,
  *   storageAccount: storage.storageAccountId,
  *   keyVault: vaultId,
  *   isolationMode: "AllowInternetOutbound",
@@ -201,7 +197,7 @@ export interface Workspace extends Resource<
  *
  * @resource
  */
-export const Workspace = Resource<Workspace>("Azure.MachineLearning.Workspace");
+export const Workspace = GroupedResource<Workspace>("Azure.MachineLearning.Workspace");
 
 type ObservedWorkspace = ml.Workspace;
 

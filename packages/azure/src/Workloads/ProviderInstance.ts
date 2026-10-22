@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import {
@@ -15,6 +15,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   identityBlock,
   identityIds,
@@ -211,7 +212,6 @@ export interface ProviderInstance extends Resource<
  * **Example:** Prometheus node exporter on a SAP host
  * ```typescript
  * const os = yield* Azure.Workloads.ProviderInstance("os", {
- *   resourceGroup: group.resourceGroupName,
  *   monitor: monitor.monitorName,
  *   providerSettings: {
  *     providerType: "PrometheusOS",
@@ -225,7 +225,6 @@ export interface ProviderInstance extends Resource<
  * **Example:** SAP HANA with a Key Vault password
  * ```typescript
  * const hana = yield* Azure.Workloads.ProviderInstance("hana", {
- *   resourceGroup: group.resourceGroupName,
  *   monitor: monitor.monitorName,
  *   providerSettings: {
  *     providerType: "SapHana",
@@ -243,7 +242,9 @@ export interface ProviderInstance extends Resource<
  *
  * @resource
  */
-export const ProviderInstance = Resource<ProviderInstance>("Azure.Workloads.ProviderInstance");
+export const ProviderInstance = GroupedResource<ProviderInstance>(
+  "Azure.Workloads.ProviderInstance",
+);
 
 type ObservedInstance = workloads.GetProviderInstanceResponse;
 

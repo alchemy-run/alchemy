@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
 import {
@@ -22,6 +22,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { lower, reveal, sameLocation } from "./common.ts";
 
 export interface CertificateProps {
@@ -124,7 +125,6 @@ export interface Certificate extends Resource<
  * **Example:** PFX upload
  * ```typescript
  * const cert = yield* Azure.Web.Certificate("tls", {
- *   resourceGroup: group.resourceGroupName,
  *   pfxBlob: Redacted.make(pfxBase64),
  *   password: Redacted.make(pfxPassword),
  * });
@@ -135,7 +135,6 @@ export interface Certificate extends Resource<
  * **Example:** Free managed certificate for a bound host name
  * ```typescript
  * const cert = yield* Azure.Web.Certificate("www", {
- *   resourceGroup: group.resourceGroupName,
  *   canonicalName: "www.example.com",
  *   serverFarmId: plan.appServicePlanId,
  * });
@@ -143,7 +142,7 @@ export interface Certificate extends Resource<
  *
  * @resource
  */
-export const Certificate = Resource<Certificate>("Azure.Web.Certificate");
+export const Certificate = GroupedResource<Certificate>("Azure.Web.Certificate");
 
 type ObservedCertificate = web.GetCertificateResponse;
 

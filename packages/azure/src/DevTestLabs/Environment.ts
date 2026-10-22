@@ -2,7 +2,7 @@ import * as devtestlabs from "@distilled.cloud/azure/devtestlabs";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -17,6 +17,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createLabResourceName, DEVTESTLAB_NAMESPACE, labLocation } from "./Common.ts";
 
 export interface EnvironmentProps {
@@ -87,7 +88,6 @@ export interface Environment extends Resource<
  * **Example:** Environment from a repository template
  * ```typescript
  * const env = yield* Azure.DevTestLabs.Environment("web", {
- *   resourceGroup: group.resourceGroupName,
  *   lab: lab.labName,
  *   user: user.userName,
  *   armTemplateId: `${source.artifactSourceId}/armtemplates/WebApp`,
@@ -97,7 +97,7 @@ export interface Environment extends Resource<
  *
  * @resource
  */
-export const Environment = Resource<Environment>("Azure.DevTestLabs.Environment");
+export const Environment = GroupedResource<Environment>("Azure.DevTestLabs.Environment");
 
 const getEnvironment = (
   subscriptionId: string,

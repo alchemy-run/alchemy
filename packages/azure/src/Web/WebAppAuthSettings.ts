@@ -2,11 +2,12 @@ import * as web from "@distilled.cloud/azure/web";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { ensureRegistered, orUndefinedIfNotFound } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { lower, matchesDesired, siteWhere } from "./common.ts";
 
 export interface WebAppAuthSettingsProps {
@@ -75,7 +76,6 @@ export interface WebAppAuthSettings extends Resource<
  * **Example:** Reject anonymous requests with 401
  * ```typescript
  * yield* Azure.Web.WebAppAuthSettings("auth", {
- *   resourceGroup: group.resourceGroupName,
  *   siteName: app.siteName,
  *   globalValidation: {
  *     requireAuthentication: true,
@@ -88,7 +88,6 @@ export interface WebAppAuthSettings extends Resource<
  * **Example:** Microsoft Entra ID sign-in
  * ```typescript
  * yield* Azure.Web.WebAppAuthSettings("auth", {
- *   resourceGroup: group.resourceGroupName,
  *   siteName: app.siteName,
  *   globalValidation: {
  *     requireAuthentication: true,
@@ -111,7 +110,9 @@ export interface WebAppAuthSettings extends Resource<
  *
  * @resource
  */
-export const WebAppAuthSettings = Resource<WebAppAuthSettings>("Azure.Web.WebAppAuthSettings");
+export const WebAppAuthSettings = GroupedResource<WebAppAuthSettings>(
+  "Azure.Web.WebAppAuthSettings",
+);
 
 const getAuthSettings = (
   subscriptionId: string,

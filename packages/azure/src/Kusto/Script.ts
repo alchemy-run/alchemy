@@ -3,7 +3,7 @@ import * as kusto from "@distilled.cloud/azure/azure_kusto";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -14,6 +14,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createKustoChildName,
   isClusterOwnedByStack,
@@ -108,7 +109,6 @@ export interface Script extends Resource<
  * **Example:** Create a table and a JSON ingestion mapping
  * ```typescript
  * const schema = yield* Azure.Kusto.Script("schema", {
- *   resourceGroup: group.resourceGroupName,
  *   cluster: cluster.clusterName,
  *   database: db.databaseName,
  *   content: [
@@ -120,7 +120,7 @@ export interface Script extends Resource<
  *
  * @resource
  */
-export const Script = Resource<Script>("Azure.Kusto.Script");
+export const Script = GroupedResource<Script>("Azure.Kusto.Script");
 
 const getScript = (
   subscriptionId: string,

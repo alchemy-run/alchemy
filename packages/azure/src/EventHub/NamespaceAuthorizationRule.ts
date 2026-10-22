@@ -2,7 +2,7 @@ import * as eventhub from "@distilled.cloud/azure/eventhub";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   type AccessRight,
   type AuthorizationRuleKeys,
@@ -76,7 +77,6 @@ export interface NamespaceAuthorizationRule extends Resource<
  * **Example:** Send-only policy for producers
  * ```typescript
  * const producers = yield* Azure.EventHub.NamespaceAuthorizationRule("producers", {
- *   resourceGroup: group.resourceGroupName,
  *   namespace: namespace.namespaceName,
  *   rights: ["Send"],
  * });
@@ -86,7 +86,6 @@ export interface NamespaceAuthorizationRule extends Resource<
  * **Example:** Full management policy
  * ```typescript
  * const admin = yield* Azure.EventHub.NamespaceAuthorizationRule("admin", {
- *   resourceGroup: group.resourceGroupName,
  *   namespace: namespace.namespaceName,
  *   rights: ["Manage", "Send", "Listen"],
  * });
@@ -94,7 +93,7 @@ export interface NamespaceAuthorizationRule extends Resource<
  *
  * @resource
  */
-export const NamespaceAuthorizationRule = Resource<NamespaceAuthorizationRule>(
+export const NamespaceAuthorizationRule = GroupedResource<NamespaceAuthorizationRule>(
   "Azure.EventHub.NamespaceAuthorizationRule",
 );
 

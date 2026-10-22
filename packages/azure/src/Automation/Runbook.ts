@@ -2,7 +2,7 @@ import * as automation from "@distilled.cloud/azure/automation";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import {
@@ -19,6 +19,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { childNuke, createChildName, getAccount, sameName, sameText } from "./Common.ts";
 
 export type RunbookType =
@@ -122,7 +123,6 @@ export interface Runbook extends Resource<
  * **Example:** PowerShell 7.2 runbook
  * ```typescript
  * const cleanup = yield* Azure.Automation.Runbook("cleanup", {
- *   resourceGroup: group.resourceGroupName,
  *   automationAccount: account.automationAccountName,
  *   runbookType: "PowerShell72",
  *   content: 'Write-Output "cleaning up"',
@@ -132,7 +132,6 @@ export interface Runbook extends Resource<
  * **Example:** Python 3 runbook
  * ```typescript
  * const report = yield* Azure.Automation.Runbook("report", {
- *   resourceGroup: group.resourceGroupName,
  *   automationAccount: account.automationAccountName,
  *   runbookType: "Python3",
  *   content: 'print("report")',
@@ -142,7 +141,7 @@ export interface Runbook extends Resource<
  *
  * @resource
  */
-export const Runbook = Resource<Runbook>("Azure.Automation.Runbook");
+export const Runbook = GroupedResource<Runbook>("Azure.Automation.Runbook");
 
 export const getRunbook = (
   subscriptionId: string,

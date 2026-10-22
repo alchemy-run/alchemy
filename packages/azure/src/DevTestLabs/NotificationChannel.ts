@@ -2,7 +2,7 @@ import * as devtestlabs from "@distilled.cloud/azure/devtestlabs";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -16,6 +16,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createLabResourceName, DEVTESTLAB_NAMESPACE, diverges, labLocation } from "./Common.ts";
 
 export interface NotificationChannelProps {
@@ -79,7 +80,6 @@ export interface NotificationChannel extends Resource<
  * **Example:** Email the team before auto-shutdown
  * ```typescript
  * const channel = yield* Azure.DevTestLabs.NotificationChannel("ops", {
- *   resourceGroup: group.resourceGroupName,
  *   lab: lab.labName,
  *   events: ["AutoShutdown"],
  *   emailRecipient: "ops@example.com",
@@ -91,7 +91,6 @@ export interface NotificationChannel extends Resource<
  * **Example:** Post cost alerts to a webhook
  * ```typescript
  * const channel = yield* Azure.DevTestLabs.NotificationChannel("cost", {
- *   resourceGroup: group.resourceGroupName,
  *   lab: lab.labName,
  *   events: ["Cost"],
  *   webHookUrl: "https://example.com/hooks/lab-cost",
@@ -100,7 +99,7 @@ export interface NotificationChannel extends Resource<
  *
  * @resource
  */
-export const NotificationChannel = Resource<NotificationChannel>(
+export const NotificationChannel = GroupedResource<NotificationChannel>(
   "Azure.DevTestLabs.NotificationChannel",
 );
 

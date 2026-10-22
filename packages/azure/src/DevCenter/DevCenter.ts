@@ -2,7 +2,7 @@ import * as devcenter from "@distilled.cloud/azure/devcenter";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import {
@@ -20,6 +20,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   containsValue,
   createDevCenterName,
@@ -122,9 +123,7 @@ export interface DevCenter extends Resource<
  * ### Creating a Dev Center
  * **Example:** Dev center with a system-assigned identity
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("platform");
  * const center = yield* Azure.DevCenter.DevCenter("center", {
- *   resourceGroup: group.resourceGroupName,
  *   identity: { type: "SystemAssigned" },
  *   displayName: "Platform Dev Center",
  * });
@@ -134,7 +133,6 @@ export interface DevCenter extends Resource<
  * **Example:** Let projects bring their own catalogs
  * ```typescript
  * const center = yield* Azure.DevCenter.DevCenter("center", {
- *   resourceGroup: group.resourceGroupName,
  *   projectCatalogItemSyncEnableStatus: "Enabled",
  *   installAzureMonitorAgentEnableStatus: "Enabled",
  * });
@@ -142,7 +140,7 @@ export interface DevCenter extends Resource<
  *
  * @resource
  */
-export const DevCenter = Resource<DevCenter>("Azure.DevCenter.DevCenter");
+export const DevCenter = GroupedResource<DevCenter>("Azure.DevCenter.DevCenter");
 
 type ObservedDevCenter = devcenter.GetDevCenterResponse;
 

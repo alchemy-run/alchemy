@@ -2,7 +2,7 @@ import * as servicebus from "@distilled.cloud/azure/servicebus";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
 import {
@@ -14,6 +14,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   type AccessRight,
   createEntityName,
@@ -88,11 +89,9 @@ export interface QueueAuthorizationRule extends Resource<
  * **Example:** Send-only connection string for one queue
  * ```typescript
  * const orders = yield* Azure.ServiceBus.Queue("orders", {
- *   resourceGroup: group.resourceGroupName,
  *   namespace: bus.namespaceName,
  * });
  * const producer = yield* Azure.ServiceBus.QueueAuthorizationRule("producer", {
- *   resourceGroup: group.resourceGroupName,
  *   namespace: bus.namespaceName,
  *   queue: orders.queueName,
  *   rights: ["Send"],
@@ -103,7 +102,6 @@ export interface QueueAuthorizationRule extends Resource<
  * **Example:** Listen-only rule for a consumer
  * ```typescript
  * const consumer = yield* Azure.ServiceBus.QueueAuthorizationRule("consumer", {
- *   resourceGroup: group.resourceGroupName,
  *   namespace: bus.namespaceName,
  *   queue: orders.queueName,
  *   rights: ["Listen"],
@@ -112,7 +110,7 @@ export interface QueueAuthorizationRule extends Resource<
  *
  * @resource
  */
-export const QueueAuthorizationRule = Resource<QueueAuthorizationRule>(
+export const QueueAuthorizationRule = GroupedResource<QueueAuthorizationRule>(
   "Azure.ServiceBus.QueueAuthorizationRule",
 );
 

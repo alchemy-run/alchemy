@@ -3,11 +3,12 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { ensureRegistered, ignoreNotFound, orUndefinedIfNotFound, waitUntilGone } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createOptions,
   hasDedicatedThroughput,
@@ -70,11 +71,9 @@ export interface SqlDatabase extends Resource<
  * **Example:** Database on a serverless account
  * ```typescript
  * const account = yield* Azure.CosmosDB.DatabaseAccount("db", {
- *   resourceGroup: group.resourceGroupName,
  *   capabilities: ["EnableServerless"],
  * });
  * const database = yield* Azure.CosmosDB.SqlDatabase("app", {
- *   resourceGroup: group.resourceGroupName,
  *   account: account.accountName,
  * });
  * ```
@@ -83,7 +82,6 @@ export interface SqlDatabase extends Resource<
  * **Example:** Autoscale throughput shared by every container
  * ```typescript
  * const database = yield* Azure.CosmosDB.SqlDatabase("app", {
- *   resourceGroup: group.resourceGroupName,
  *   account: account.accountName,
  *   autoscaleMaxThroughput: 1000,
  * });
@@ -91,7 +89,7 @@ export interface SqlDatabase extends Resource<
  *
  * @resource
  */
-export const SqlDatabase = Resource<SqlDatabase>("Azure.CosmosDB.SqlDatabase");
+export const SqlDatabase = GroupedResource<SqlDatabase>("Azure.CosmosDB.SqlDatabase");
 
 const createDatabaseName = (id: string) => createPhysicalName({ id, maxLength: 255 });
 

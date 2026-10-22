@@ -2,7 +2,7 @@ import * as app from "@distilled.cloud/azure/app";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
 import {
@@ -18,6 +18,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createContainerAppsName, getEnvironment, lower, reveal, sameLocation } from "./common.ts";
 
 export interface CertificateProps {
@@ -115,7 +116,6 @@ export interface Certificate extends Resource<
  * **Example:** PFX certificate
  * ```typescript
  * const cert = yield* Azure.ContainerApps.Certificate("tls", {
- *   resourceGroup: group.resourceGroupName,
  *   environment: env.environmentName,
  *   value: Redacted.make(pfxBase64),
  *   password: Redacted.make(pfxPassword),
@@ -126,7 +126,6 @@ export interface Certificate extends Resource<
  * **Example:** Reference a Key Vault secret with the environment's identity
  * ```typescript
  * const cert = yield* Azure.ContainerApps.Certificate("tls", {
- *   resourceGroup: group.resourceGroupName,
  *   environment: env.environmentName,
  *   keyVaultUrl: "https://my-vault.vault.azure.net/secrets/tls",
  *   keyVaultIdentity: "system",
@@ -135,7 +134,7 @@ export interface Certificate extends Resource<
  *
  * @resource
  */
-export const Certificate = Resource<Certificate>("Azure.ContainerApps.Certificate");
+export const Certificate = GroupedResource<Certificate>("Azure.ContainerApps.Certificate");
 
 const createCertificateName = (id: string) => createContainerAppsName(id, 60);
 

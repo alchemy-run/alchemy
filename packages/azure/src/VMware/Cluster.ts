@@ -2,7 +2,7 @@ import * as vmware from "@distilled.cloud/azure/vmware";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   AVS_NAMESPACE,
   CLUSTER_BUDGET,
@@ -88,7 +89,6 @@ export interface Cluster extends Resource<
  * **Example:** Three-host cluster
  * ```typescript
  * const cluster = yield* Azure.VMware.Cluster("workload", {
- *   resourceGroup: group.resourceGroupName,
  *   privateCloud: cloud.privateCloudName,
  *   sku: "av36p",
  *   clusterSize: 3,
@@ -99,7 +99,6 @@ export interface Cluster extends Resource<
  * **Example:** Grow the cluster to four hosts
  * ```typescript
  * const cluster = yield* Azure.VMware.Cluster("workload", {
- *   resourceGroup: group.resourceGroupName,
  *   privateCloud: cloud.privateCloudName,
  *   clusterSize: 4,
  * });
@@ -107,7 +106,7 @@ export interface Cluster extends Resource<
  *
  * @resource
  */
-export const Cluster = Resource<Cluster>("Azure.VMware.Cluster");
+export const Cluster = GroupedResource<Cluster>("Azure.VMware.Cluster");
 
 const createName = (id: string) => createAvsName(id, 32);
 

@@ -2,7 +2,7 @@ import * as discovery from "@distilled.cloud/azure/discovery";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -20,6 +20,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createDiscoveryName, DISCOVERY_NAMESPACE, lower, sameLocation } from "./common.ts";
 
 /** The storage that backs a Discovery storage container. */
@@ -113,12 +114,8 @@ export interface StorageContainer extends Resource<
  * ### Creating a Storage Container
  * **Example:** Blob storage account as a data source
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("science");
- * const account = yield* Azure.Storage.StorageAccount("data", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const account = yield* Azure.Storage.StorageAccount("data");
  * const container = yield* Azure.Discovery.StorageContainer("data", {
- *   resourceGroup: group.resourceGroupName,
  *   storageStore: {
  *     kind: "AzureStorageBlob",
  *     storageAccountId: account.storageAccountId,
@@ -129,14 +126,15 @@ export interface StorageContainer extends Resource<
  * **Example:** Azure NetApp Files volume
  * ```typescript
  * const container = yield* Azure.Discovery.StorageContainer("hpc", {
- *   resourceGroup: group.resourceGroupName,
  *   storageStore: { kind: "AzureNetAppFiles", netAppVolumeId: volumeId },
  * });
  * ```
  *
  * @resource
  */
-export const StorageContainer = Resource<StorageContainer>("Azure.Discovery.StorageContainer");
+export const StorageContainer = GroupedResource<StorageContainer>(
+  "Azure.Discovery.StorageContainer",
+);
 
 /**
  * Without the Discovery preview ARM rejects the type itself

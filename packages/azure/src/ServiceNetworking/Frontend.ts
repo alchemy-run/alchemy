@@ -2,7 +2,7 @@ import * as servicenetworking from "@distilled.cloud/azure/servicenetworking";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -20,6 +20,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { AGC_BUDGET, childLocation, createAgcName, ensureProvisioned, sameArm } from "./Common.ts";
 
 export interface FrontendSecurityPolicyConfigurations {
@@ -127,7 +128,6 @@ export interface Frontend extends Resource<
  * **Example:** Public frontend
  * ```typescript
  * const frontend = yield* Azure.ServiceNetworking.Frontend("web", {
- *   resourceGroup: group.resourceGroupName,
  *   trafficController: controller.trafficControllerName,
  * });
  * // point a CNAME at frontend.fqdn
@@ -137,7 +137,6 @@ export interface Frontend extends Resource<
  * **Example:** Frontend with IP access rules
  * ```typescript
  * const frontend = yield* Azure.ServiceNetworking.Frontend("web", {
- *   resourceGroup: group.resourceGroupName,
  *   trafficController: controller.trafficControllerName,
  *   securityPolicyConfigurations: {
  *     ipAccessRulesSecurityPolicyId: policy.securityPolicyId,
@@ -147,7 +146,7 @@ export interface Frontend extends Resource<
  *
  * @resource
  */
-export const Frontend = Resource<Frontend>("Azure.ServiceNetworking.Frontend");
+export const Frontend = GroupedResource<Frontend>("Azure.ServiceNetworking.Frontend");
 
 type Observed = servicenetworking.GetFrontendsInterfaceResponse | servicenetworking.Frontend;
 

@@ -2,7 +2,7 @@ import * as hybridnetwork from "@distilled.cloud/azure/hybridnetwork";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import {
@@ -21,6 +21,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createHybridNetworkName,
   FAST_BUDGET,
@@ -107,7 +108,6 @@ export interface Publisher extends Resource<
  *   location: "eastus",
  * });
  * const publisher = yield* Azure.HybridNetwork.Publisher("publisher", {
- *   resourceGroup: group.resourceGroupName,
  *   location: "eastus",
  * });
  * ```
@@ -115,7 +115,6 @@ export interface Publisher extends Resource<
  * **Example:** Publisher with a system-assigned identity
  * ```typescript
  * const publisher = yield* Azure.HybridNetwork.Publisher("publisher", {
- *   resourceGroup: group.resourceGroupName,
  *   identity: { type: "SystemAssigned" },
  *   tags: { team: "network" },
  * });
@@ -123,7 +122,7 @@ export interface Publisher extends Resource<
  *
  * @resource
  */
-export const Publisher = Resource<Publisher>("Azure.HybridNetwork.Publisher");
+export const Publisher = GroupedResource<Publisher>("Azure.HybridNetwork.Publisher");
 
 type Observed = hybridnetwork.GetPublisherResponse;
 

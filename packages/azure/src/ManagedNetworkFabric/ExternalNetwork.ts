@@ -2,11 +2,12 @@ import * as mnf from "@distilled.cloud/azure/managednetworkfabric";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { ensureRegistered, ignoreNotFound, orUndefinedIfNotFound, waitUntilGone } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   annotationMarker,
   createFabricName,
@@ -87,7 +88,6 @@ export interface ExternalNetwork extends Resource<
  * **Example:** Option B peering
  * ```typescript
  * const external = yield* Azure.ManagedNetworkFabric.ExternalNetwork("pe", {
- *   resourceGroup: group.resourceGroupName,
  *   l3IsolationDomain: l3.l3IsolationDomainName,
  *   peeringOption: "OptionB",
  *   optionBProperties: {
@@ -101,7 +101,7 @@ export interface ExternalNetwork extends Resource<
  *
  * @resource
  */
-export const ExternalNetwork = Resource<ExternalNetwork>(
+export const ExternalNetwork = GroupedResource<ExternalNetwork>(
   "Azure.ManagedNetworkFabric.ExternalNetwork",
 );
 

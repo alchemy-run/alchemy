@@ -2,7 +2,7 @@ import * as webpubsub from "@distilled.cloud/azure/webpubsub";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import {
@@ -14,6 +14,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createWebPubSubName,
   lower,
@@ -90,7 +91,6 @@ export interface CustomCertificate extends Resource<
  * **Example:** Certificate read with the service's system identity
  * ```typescript
  * const webPubSub = yield* Azure.WebPubSub.WebPubSub("realtime", {
- *   resourceGroup: group.resourceGroupName,
  *   sku: "Premium_P1",
  *   identity: { type: "SystemAssigned" },
  * });
@@ -101,7 +101,6 @@ export interface CustomCertificate extends Resource<
  *   principalType: "ServicePrincipal",
  * });
  * const certificate = yield* Azure.WebPubSub.CustomCertificate("tls", {
- *   resourceGroup: group.resourceGroupName,
  *   webPubSub: webPubSub.webPubSubName,
  *   keyVaultBaseUri: vault.vaultUri,
  *   keyVaultSecretName: "realtime-example-com",
@@ -110,7 +109,9 @@ export interface CustomCertificate extends Resource<
  *
  * @resource
  */
-export const CustomCertificate = Resource<CustomCertificate>("Azure.WebPubSub.CustomCertificate");
+export const CustomCertificate = GroupedResource<CustomCertificate>(
+  "Azure.WebPubSub.CustomCertificate",
+);
 
 const getCertificate = (
   subscriptionId: string,

@@ -2,7 +2,7 @@ import * as automation from "@distilled.cloud/azure/automation";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import {
@@ -14,6 +14,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   accountOwnedByStage,
   childNuke,
@@ -75,7 +76,6 @@ export interface Credential extends Resource<
  * **Example:** Service login
  * ```typescript
  * const login = yield* Azure.Automation.Credential("sql-login", {
- *   resourceGroup: group.resourceGroupName,
  *   automationAccount: account.automationAccountName,
  *   userName: "ops",
  *   password: Redacted.make(process.env.SQL_PASSWORD!),
@@ -84,7 +84,7 @@ export interface Credential extends Resource<
  *
  * @resource
  */
-export const Credential = Resource<Credential>("Azure.Automation.Credential");
+export const Credential = GroupedResource<Credential>("Azure.Automation.Credential");
 
 const getCredential = (
   subscriptionId: string,

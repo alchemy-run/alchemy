@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -21,6 +21,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { changedKeys, lower, sameLocation } from "./common.ts";
 
 /** Which endpoints of the environment sit behind an internal load balancer. */
@@ -123,13 +124,11 @@ export interface AppServiceEnvironment extends Resource<
  * **Example:** External ASEv3 in a delegated subnet
  * ```typescript
  * const subnet = yield* Azure.Network.Subnet("ase", {
- *   resourceGroup: group.resourceGroupName,
  *   virtualNetwork: vnet.virtualNetworkName,
  *   addressPrefix: "10.0.0.0/24",
  *   delegations: [{ serviceName: "Microsoft.Web/hostingEnvironments" }],
  * });
  * const ase = yield* Azure.Web.AppServiceEnvironment("ase", {
- *   resourceGroup: group.resourceGroupName,
  *   subnetId: subnet.subnetId,
  * });
  * ```
@@ -137,7 +136,6 @@ export interface AppServiceEnvironment extends Resource<
  * **Example:** Internal environment
  * ```typescript
  * const ase = yield* Azure.Web.AppServiceEnvironment("ase", {
- *   resourceGroup: group.resourceGroupName,
  *   subnetId: subnet.subnetId,
  *   internalLoadBalancingMode: "Web, Publishing",
  * });
@@ -145,7 +143,7 @@ export interface AppServiceEnvironment extends Resource<
  *
  * @resource
  */
-export const AppServiceEnvironment = Resource<AppServiceEnvironment>(
+export const AppServiceEnvironment = GroupedResource<AppServiceEnvironment>(
   "Azure.Web.AppServiceEnvironment",
 );
 

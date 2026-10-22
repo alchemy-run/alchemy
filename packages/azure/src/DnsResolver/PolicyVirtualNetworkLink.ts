@@ -2,7 +2,7 @@ import * as dnsresolver from "@distilled.cloud/azure/dnsresolver";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -20,6 +20,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createDnsResolverName, FAST_BUDGET, sameArm } from "./Common.ts";
 
 export interface PolicyVirtualNetworkLinkProps {
@@ -93,11 +94,8 @@ export interface PolicyVirtualNetworkLink extends Resource<
  * ### Linking a Virtual Network
  * **Example:** Apply a DNS security policy to a network
  * ```typescript
- * const policy = yield* Azure.DnsResolver.Policy("dns-security", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const policy = yield* Azure.DnsResolver.Policy("dns-security");
  * const link = yield* Azure.DnsResolver.PolicyVirtualNetworkLink("app-vnet", {
- *   resourceGroup: group.resourceGroupName,
  *   dnsResolverPolicy: policy.policyName,
  *   virtualNetworkId: vnetId,
  * });
@@ -106,7 +104,6 @@ export interface PolicyVirtualNetworkLink extends Resource<
  * **Example:** Link with tags
  * ```typescript
  * const link = yield* Azure.DnsResolver.PolicyVirtualNetworkLink("app-vnet", {
- *   resourceGroup: group.resourceGroupName,
  *   dnsResolverPolicy: policy.policyName,
  *   virtualNetworkId: vnetId,
  *   tags: { team: "security" },
@@ -115,7 +112,7 @@ export interface PolicyVirtualNetworkLink extends Resource<
  *
  * @resource
  */
-export const PolicyVirtualNetworkLink = Resource<PolicyVirtualNetworkLink>(
+export const PolicyVirtualNetworkLink = GroupedResource<PolicyVirtualNetworkLink>(
   "Azure.DnsResolver.PolicyVirtualNetworkLink",
 );
 

@@ -1,8 +1,9 @@
 import * as network from "@distilled.cloud/azure/network";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import { orUndefinedIfNotFound, userTags } from "../Arm.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { idsOf, networkProvider } from "./generic.ts";
 
 export interface WebApplicationFirewallPolicyProps {
@@ -75,7 +76,6 @@ export interface WebApplicationFirewallPolicy extends Resource<
  * **Example:** OWASP 3.2 in prevention mode
  * ```typescript
  * const waf = yield* Azure.Network.WebApplicationFirewallPolicy("waf", {
- *   resourceGroup: group.resourceGroupName,
  *   policySettings: { state: "Enabled", mode: "Prevention" },
  * });
  * ```
@@ -83,7 +83,6 @@ export interface WebApplicationFirewallPolicy extends Resource<
  * **Example:** Block a country with a custom rule
  * ```typescript
  * yield* Azure.Network.WebApplicationFirewallPolicy("geo", {
- *   resourceGroup: group.resourceGroupName,
  *   customRules: [
  *     {
  *       name: "blockgeo",
@@ -104,7 +103,7 @@ export interface WebApplicationFirewallPolicy extends Resource<
  *
  * @resource
  */
-export const WebApplicationFirewallPolicy = Resource<WebApplicationFirewallPolicy>(
+export const WebApplicationFirewallPolicy = GroupedResource<WebApplicationFirewallPolicy>(
   "Azure.Network.WebApplicationFirewallPolicy",
 );
 

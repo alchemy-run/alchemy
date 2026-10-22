@@ -2,12 +2,13 @@ import * as sql from "@distilled.cloud/azure/sql";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { ensureRegistered, ignoreNotFound, orUndefinedIfNotFound } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { fieldsMatch, isServerOwnedByStack, lower, sameSecret } from "./common.ts";
 import {
   sameList,
@@ -116,7 +117,6 @@ export interface ExtendedServerBlobAuditingPolicy extends Resource<
  * **Example:** Audit to Azure Monitor, skipping health probes
  * ```typescript
  * yield* Azure.Sql.ExtendedServerBlobAuditingPolicy("audit", {
- *   resourceGroup: group.resourceGroupName,
  *   server: server.serverName,
  *   state: "Enabled",
  *   isAzureMonitorTargetEnabled: true,
@@ -126,7 +126,7 @@ export interface ExtendedServerBlobAuditingPolicy extends Resource<
  *
  * @resource
  */
-export const ExtendedServerBlobAuditingPolicy = Resource<ExtendedServerBlobAuditingPolicy>(
+export const ExtendedServerBlobAuditingPolicy = GroupedResource<ExtendedServerBlobAuditingPolicy>(
   "Azure.Sql.ExtendedServerBlobAuditingPolicy",
 );
 

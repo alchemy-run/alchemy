@@ -2,11 +2,12 @@ import * as logic from "@distilled.cloud/azure/logic";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { ensureRegistered, ignoreNotFound, orUndefinedIfNotFound, waitUntilGone } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   artifactDiffers,
   artifactMetadata,
@@ -88,7 +89,6 @@ export interface IntegrationAccountMap extends Resource<
  * **Example:** Liquid JSON-to-JSON map
  * ```typescript
  * const map = yield* Azure.Logic.IntegrationAccountMap("greeting", {
- *   resourceGroup: group.resourceGroupName,
  *   integrationAccount: account.integrationAccountName,
  *   mapType: "Liquid",
  *   content: '{ "greeting": "Hello {{ content.name }}" }',
@@ -98,7 +98,6 @@ export interface IntegrationAccountMap extends Resource<
  * **Example:** XSLT map
  * ```typescript
  * const map = yield* Azure.Logic.IntegrationAccountMap("order-to-invoice", {
- *   resourceGroup: group.resourceGroupName,
  *   integrationAccount: account.integrationAccountName,
  *   mapType: "Xslt",
  *   content: xsltStylesheet,
@@ -107,7 +106,7 @@ export interface IntegrationAccountMap extends Resource<
  *
  * @resource
  */
-export const IntegrationAccountMap = Resource<IntegrationAccountMap>(
+export const IntegrationAccountMap = GroupedResource<IntegrationAccountMap>(
   "Azure.Logic.IntegrationAccountMap",
 );
 

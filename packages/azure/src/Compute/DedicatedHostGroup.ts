@@ -2,7 +2,7 @@ import * as compute from "@distilled.cloud/azure/compute";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import {
@@ -19,6 +19,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createComputeName, idsOf, sameId, sameSet, waitComputeGone } from "./common.ts";
 
 export interface DedicatedHostGroupProps {
@@ -106,7 +107,6 @@ export interface DedicatedHostGroup extends Resource<
  * **Example:** Two fault domains in zone 1
  * ```typescript
  * const hostGroup = yield* Azure.Compute.DedicatedHostGroup("isolated", {
- *   resourceGroup: group.resourceGroupName,
  *   zones: ["1"],
  *   platformFaultDomainCount: 2,
  * });
@@ -116,11 +116,9 @@ export interface DedicatedHostGroup extends Resource<
  * **Example:** VMs placed on any host in the group
  * ```typescript
  * const hostGroup = yield* Azure.Compute.DedicatedHostGroup("isolated", {
- *   resourceGroup: group.resourceGroupName,
  *   supportAutomaticPlacement: true,
  * });
  * yield* Azure.Compute.DedicatedHost("host-1", {
- *   resourceGroup: group.resourceGroupName,
  *   hostGroup: hostGroup.hostGroupName,
  *   sku: "DSv3-Type4",
  * });
@@ -128,7 +126,9 @@ export interface DedicatedHostGroup extends Resource<
  *
  * @resource
  */
-export const DedicatedHostGroup = Resource<DedicatedHostGroup>("Azure.Compute.DedicatedHostGroup");
+export const DedicatedHostGroup = GroupedResource<DedicatedHostGroup>(
+  "Azure.Compute.DedicatedHostGroup",
+);
 
 type Observed = compute.GetDedicatedHostGroupResponse;
 

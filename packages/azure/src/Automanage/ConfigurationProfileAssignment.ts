@@ -3,7 +3,7 @@ import * as compute from "@distilled.cloud/azure/compute";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import {
@@ -18,6 +18,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 
 /** Azure only supports one assignment per machine, named `default`. */
 const ASSIGNMENT_NAME = "default";
@@ -84,11 +85,9 @@ export interface ConfigurationProfileAssignment extends Resource<
  * **Example:** Assign a custom profile to a VM
  * ```typescript
  * const profile = yield* Azure.Automanage.ConfigurationProfile("baseline", {
- *   resourceGroup: group.resourceGroupName,
  *   configuration: { "AzureSecurityBaseline/Enable": true },
  * });
  * yield* Azure.Automanage.ConfigurationProfileAssignment("vm-profile", {
- *   resourceGroup: group.resourceGroupName,
  *   virtualMachine: vm.virtualMachineName,
  *   configurationProfile: profile.configurationProfileId,
  * });
@@ -97,7 +96,6 @@ export interface ConfigurationProfileAssignment extends Resource<
  * **Example:** Assign the built-in dev/test best practices
  * ```typescript
  * yield* Azure.Automanage.ConfigurationProfileAssignment("vm-devtest", {
- *   resourceGroup: group.resourceGroupName,
  *   virtualMachine: vm.virtualMachineName,
  *   configurationProfile:
  *     "/providers/Microsoft.Automanage/bestPractices/AzureBestPracticesDevTest",
@@ -106,7 +104,7 @@ export interface ConfigurationProfileAssignment extends Resource<
  *
  * @resource
  */
-export const ConfigurationProfileAssignment = Resource<ConfigurationProfileAssignment>(
+export const ConfigurationProfileAssignment = GroupedResource<ConfigurationProfileAssignment>(
   "Azure.Automanage.ConfigurationProfileAssignment",
 );
 

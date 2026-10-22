@@ -3,7 +3,7 @@ import * as operationalinsights from "@distilled.cloud/azure/operationalinsights
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import {
@@ -18,6 +18,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createLogAnalyticsName, sameText } from "./Common.ts";
 
 export interface StorageInsightConfigProps {
@@ -92,7 +93,6 @@ export interface StorageInsightConfig extends Resource<
  * **Example:** Read Windows event logs and IIS logs
  * ```typescript
  * yield* Azure.LogAnalytics.StorageInsightConfig("diagnostics", {
- *   resourceGroup: group.resourceGroupName,
  *   workspace: logs.workspaceName,
  *   storageAccountId: account.storageAccountId,
  *   storageAccountKey: Redacted.make(accountKey),
@@ -103,7 +103,7 @@ export interface StorageInsightConfig extends Resource<
  *
  * @resource
  */
-export const StorageInsightConfig = Resource<StorageInsightConfig>(
+export const StorageInsightConfig = GroupedResource<StorageInsightConfig>(
   "Azure.LogAnalytics.StorageInsightConfig",
 );
 

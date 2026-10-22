@@ -2,7 +2,7 @@ import * as healthcareapis from "@distilled.cloud/azure/healthcareapis";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -15,6 +15,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createHealthcareName,
   WORKSPACE_NAME_LENGTH,
@@ -91,16 +92,12 @@ export interface Workspace extends Resource<
  * ### Creating a Workspace
  * **Example:** Workspace in a resource group
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("health");
- * const workspace = yield* Azure.HealthcareApis.Workspace("workspace", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const workspace = yield* Azure.HealthcareApis.Workspace("workspace");
  * ```
  *
  * **Example:** Workspace with a fixed name and tags
  * ```typescript
  * const workspace = yield* Azure.HealthcareApis.Workspace("workspace", {
- *   resourceGroup: group.resourceGroupName,
  *   name: "contosohealth",
  *   location: "westus2",
  *   tags: { team: "clinical" },
@@ -111,14 +108,13 @@ export interface Workspace extends Resource<
  * **Example:** Workspace with a FHIR R4 service
  * ```typescript
  * const fhir = yield* Azure.HealthcareApis.FhirService("fhir", {
- *   resourceGroup: group.resourceGroupName,
  *   workspace: workspace.workspaceName,
  * });
  * ```
  *
  * @resource
  */
-export const Workspace = Resource<Workspace>("Azure.HealthcareApis.Workspace");
+export const Workspace = GroupedResource<Workspace>("Azure.HealthcareApis.Workspace");
 
 type ObservedWorkspace = healthcareapis.GetWorkspaceResponse | healthcareapis.Workspace;
 

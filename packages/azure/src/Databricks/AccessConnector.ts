@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -21,6 +21,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 
 /** Managed identity of an access connector. */
 export interface AccessConnectorIdentity {
@@ -112,19 +113,13 @@ export interface AccessConnector extends Resource<
  * ### Creating an Access Connector
  * **Example:** Connector with a system-assigned identity
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("analytics");
- * const connector = yield* Azure.Databricks.AccessConnector("uc", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const connector = yield* Azure.Databricks.AccessConnector("uc");
  * ```
  *
  * **Example:** Connector with a user-assigned identity
  * ```typescript
- * const identity = yield* Azure.ManagedIdentity.UserAssignedIdentity("uc-id", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const identity = yield* Azure.ManagedIdentity.UserAssignedIdentity("uc-id");
  * const connector = yield* Azure.Databricks.AccessConnector("uc", {
- *   resourceGroup: group.resourceGroupName,
  *   identity: {
  *     type: "UserAssigned",
  *     userAssignedIdentityIds: [identity.identityId],
@@ -146,7 +141,7 @@ export interface AccessConnector extends Resource<
  *
  * @resource
  */
-export const AccessConnector = Resource<AccessConnector>("Azure.Databricks.AccessConnector");
+export const AccessConnector = GroupedResource<AccessConnector>("Azure.Databricks.AccessConnector");
 
 type Observed = databricks.GetAccessConnectorResponse;
 

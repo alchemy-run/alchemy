@@ -2,11 +2,12 @@ import * as cosmos from "@distilled.cloud/azure/cosmos_db";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { ensureRegistered, ignoreNotFound, orUndefinedIfNotFound, waitUntilGone } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   accountIdOf,
   canonical,
@@ -84,7 +85,6 @@ export interface MongoMIRoleDefinition extends Resource<
  * **Example:** Read-only role over documents
  * ```typescript
  * const reader = yield* Azure.CosmosDB.MongoMIRoleDefinition("data-reader", {
- *   resourceGroup: group.resourceGroupName,
  *   account: account.accountName,
  *   permissions: [
  *     {
@@ -101,7 +101,6 @@ export interface MongoMIRoleDefinition extends Resource<
  * **Example:** Role assignable only on one database
  * ```typescript
  * const writer = yield* Azure.CosmosDB.MongoMIRoleDefinition("orders-writer", {
- *   resourceGroup: group.resourceGroupName,
  *   account: account.accountName,
  *   assignableScopes: ["/dbs/orders"],
  *   permissions: [
@@ -117,7 +116,7 @@ export interface MongoMIRoleDefinition extends Resource<
  *
  * @resource
  */
-export const MongoMIRoleDefinition = Resource<MongoMIRoleDefinition>(
+export const MongoMIRoleDefinition = GroupedResource<MongoMIRoleDefinition>(
   "Azure.CosmosDB.MongoMIRoleDefinition",
 );
 

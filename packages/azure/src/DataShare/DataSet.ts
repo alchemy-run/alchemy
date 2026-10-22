@@ -2,11 +2,12 @@ import * as datashare from "@distilled.cloud/azure/datashare";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { ensureRegistered, ignoreNotFound, orUndefinedIfNotFound, waitUntilGone } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   accountOwnedByStack,
   createChildName,
@@ -167,13 +168,11 @@ export interface DataSet extends Resource<
  *   principalType: "ServicePrincipal",
  * });
  * const dataSet = yield* Azure.DataShare.DataSet("exports", {
- *   resourceGroup: group.resourceGroupName,
  *   account: account.accountName,
  *   share: share.shareName,
  *   kind: "Container",
  *   source: {
  *     subscriptionId,
- *     resourceGroup: group.resourceGroupName,
  *     storageAccountName: storage.storageAccountName,
  *     containerName: container.containerName,
  *   },
@@ -183,13 +182,11 @@ export interface DataSet extends Resource<
  * **Example:** Share a folder of a blob container
  * ```typescript
  * yield* Azure.DataShare.DataSet("daily", {
- *   resourceGroup: group.resourceGroupName,
  *   account: account.accountName,
  *   share: share.shareName,
  *   kind: "BlobFolder",
  *   source: {
  *     subscriptionId,
- *     resourceGroup: group.resourceGroupName,
  *     storageAccountName: storage.storageAccountName,
  *     containerName: container.containerName,
  *     prefix: "daily/",
@@ -199,7 +196,7 @@ export interface DataSet extends Resource<
  *
  * @resource
  */
-export const DataSet = Resource<DataSet>("Azure.DataShare.DataSet");
+export const DataSet = GroupedResource<DataSet>("Azure.DataShare.DataSet");
 
 type ObservedDataSet = datashare.GetDataSetResponse | datashare.CreateDataSetResponse;
 

@@ -2,11 +2,12 @@ import * as operationalinsights from "@distilled.cloud/azure/operationalinsights
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { ensureRegistered, ignoreNotFound, orUndefinedIfNotFound, waitUntilGone } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { isWorkspaceOwnedByStack, sameText } from "./Common.ts";
 
 export type LinkedStorageDataSourceType =
@@ -68,11 +69,8 @@ export interface LinkedStorageAccount extends Resource<
  * ### Linking Storage
  * **Example:** Keep saved queries in your own storage account
  * ```typescript
- * const queries = yield* Azure.Storage.StorageAccount("queries", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const queries = yield* Azure.Storage.StorageAccount("queries");
  * yield* Azure.LogAnalytics.LinkedStorageAccount("queries", {
- *   resourceGroup: group.resourceGroupName,
  *   workspace: logs.workspaceName,
  *   dataSourceType: "Query",
  *   storageAccountIds: [queries.storageAccountId],
@@ -81,7 +79,7 @@ export interface LinkedStorageAccount extends Resource<
  *
  * @resource
  */
-export const LinkedStorageAccount = Resource<LinkedStorageAccount>(
+export const LinkedStorageAccount = GroupedResource<LinkedStorageAccount>(
   "Azure.LogAnalytics.LinkedStorageAccount",
 );
 

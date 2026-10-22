@@ -2,7 +2,7 @@ import * as sql from "@distilled.cloud/azure/sql";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createChildName, fieldsMatch, isServerOwnedByStack, lower } from "./common.ts";
 import { jobPath, type JobScope, retryWhileAgentBusy } from "./setting.ts";
 
@@ -111,7 +112,6 @@ export interface JobStep extends Resource<
  * **Example:** Run a script against a target group
  * ```typescript
  * yield* Azure.Sql.JobStep("update-stats", {
- *   resourceGroup: group.resourceGroupName,
  *   server: server.serverName,
  *   jobAgent: agent.jobAgentName,
  *   job: job.jobName,
@@ -124,7 +124,7 @@ export interface JobStep extends Resource<
  *
  * @resource
  */
-export const JobStep = Resource<JobStep>("Azure.Sql.JobStep");
+export const JobStep = GroupedResource<JobStep>("Azure.Sql.JobStep");
 
 type Observed = sql.GetJobStepResponse;
 

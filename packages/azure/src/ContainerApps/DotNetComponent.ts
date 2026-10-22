@@ -2,7 +2,7 @@ import * as app from "@distilled.cloud/azure/app";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createContainerAppsName,
   fingerprint,
@@ -94,7 +95,6 @@ export interface DotNetComponent extends Resource<
  * **Example:** Enable the Aspire dashboard
  * ```typescript
  * const dashboard = yield* Azure.ContainerApps.DotNetComponent("aspire", {
- *   resourceGroup: group.resourceGroupName,
  *   environment: env.environmentName,
  *   componentType: "AspireDashboard",
  * });
@@ -102,7 +102,9 @@ export interface DotNetComponent extends Resource<
  *
  * @resource
  */
-export const DotNetComponent = Resource<DotNetComponent>("Azure.ContainerApps.DotNetComponent");
+export const DotNetComponent = GroupedResource<DotNetComponent>(
+  "Azure.ContainerApps.DotNetComponent",
+);
 
 const createComponentName = (id: string) => createContainerAppsName(id, 32);
 

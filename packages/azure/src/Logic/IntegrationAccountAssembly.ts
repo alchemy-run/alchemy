@@ -2,11 +2,12 @@ import * as logic from "@distilled.cloud/azure/logic";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { ensureRegistered, ignoreNotFound, orUndefinedIfNotFound, waitUntilGone } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   artifactDiffers,
   artifactMetadata,
@@ -92,7 +93,6 @@ export interface IntegrationAccountAssembly extends Resource<
  * **Example:** Assembly from a base64-encoded DLL
  * ```typescript
  * const helpers = yield* Azure.Logic.IntegrationAccountAssembly("helpers", {
- *   resourceGroup: group.resourceGroupName,
  *   integrationAccount: account.integrationAccountName,
  *   assemblyName: "Contoso.MapHelpers",
  *   assemblyVersion: "1.0.0.0",
@@ -103,7 +103,7 @@ export interface IntegrationAccountAssembly extends Resource<
  *
  * @resource
  */
-export const IntegrationAccountAssembly = Resource<IntegrationAccountAssembly>(
+export const IntegrationAccountAssembly = GroupedResource<IntegrationAccountAssembly>(
   "Azure.Logic.IntegrationAccountAssembly",
 );
 

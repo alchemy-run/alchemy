@@ -2,11 +2,12 @@ import * as sql from "@distilled.cloud/azure/sql";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { ensureRegistered, ignoreNotFound, orUndefinedIfNotFound } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { fieldsMatch, isManagedInstanceOwnedByStack, lower } from "./common.ts";
 import { instancePath, type InstanceScope, syncSetting } from "./setting.ts";
 
@@ -63,12 +64,10 @@ export interface ManagedInstanceEncryptionProtector extends Resource<
  * **Example:** Protect TDE with a Key Vault key
  * ```typescript
  * const key = yield* Azure.Sql.ManagedInstanceKey("tde-key", {
- *   resourceGroup: group.resourceGroupName,
  *   managedInstance: instance.managedInstanceName,
  *   uri: keyUriWithVersion,
  * });
  * yield* Azure.Sql.ManagedInstanceEncryptionProtector("protector", {
- *   resourceGroup: group.resourceGroupName,
  *   managedInstance: instance.managedInstanceName,
  *   serverKeyType: "AzureKeyVault",
  *   serverKeyName: key.keyName,
@@ -77,9 +76,10 @@ export interface ManagedInstanceEncryptionProtector extends Resource<
  *
  * @resource
  */
-export const ManagedInstanceEncryptionProtector = Resource<ManagedInstanceEncryptionProtector>(
-  "Azure.Sql.ManagedInstanceEncryptionProtector",
-);
+export const ManagedInstanceEncryptionProtector =
+  GroupedResource<ManagedInstanceEncryptionProtector>(
+    "Azure.Sql.ManagedInstanceEncryptionProtector",
+  );
 
 type Observed = sql.GetManagedInstanceEncryptionProtectorResponse;
 

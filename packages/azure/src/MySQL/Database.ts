@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import {
@@ -15,6 +15,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { MYSQL_NAMESPACE, serverOwnedByStack, type ServerRef, whileServerBusy } from "./common.ts";
 
 export interface DatabaseProps {
@@ -74,11 +75,8 @@ export interface Database extends Resource<
  * ### Creating a Database
  * **Example:** Database with the default charset and collation
  * ```typescript
- * const server = yield* Azure.MySQL.FlexibleServer("db", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const server = yield* Azure.MySQL.FlexibleServer("db");
  * const app = yield* Azure.MySQL.Database("app", {
- *   resourceGroup: group.resourceGroupName,
  *   server: server.serverName,
  *   name: "app",
  * });
@@ -87,7 +85,6 @@ export interface Database extends Resource<
  * **Example:** Custom collation
  * ```typescript
  * const reports = yield* Azure.MySQL.Database("reports", {
- *   resourceGroup: group.resourceGroupName,
  *   server: server.serverName,
  *   charset: "utf8mb4",
  *   collation: "utf8mb4_unicode_ci",
@@ -96,7 +93,7 @@ export interface Database extends Resource<
  *
  * @resource
  */
-export const Database = Resource<Database>("Azure.MySQL.Database");
+export const Database = GroupedResource<Database>("Azure.MySQL.Database");
 
 export class ReservedDatabaseName extends Data.TaggedError("Azure.MySQL.ReservedDatabaseName")<{
   readonly name: string;

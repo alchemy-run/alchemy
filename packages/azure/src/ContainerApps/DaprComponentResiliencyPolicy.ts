@@ -2,11 +2,12 @@ import * as app from "@distilled.cloud/azure/app";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { ensureRegistered, ignoreNotFound, orUndefinedIfNotFound, waitUntilGone } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createContainerAppsName,
   fingerprint,
@@ -97,7 +98,6 @@ export interface DaprComponentResiliencyPolicy extends Resource<
  * **Example:** Outbound timeout and retries
  * ```typescript
  * yield* Azure.ContainerApps.DaprComponentResiliencyPolicy("statePolicy", {
- *   resourceGroup: group.resourceGroupName,
  *   environment: env.environmentName,
  *   component: state.componentName,
  *   outboundPolicy: {
@@ -115,7 +115,7 @@ export interface DaprComponentResiliencyPolicy extends Resource<
  *
  * @resource
  */
-export const DaprComponentResiliencyPolicy = Resource<DaprComponentResiliencyPolicy>(
+export const DaprComponentResiliencyPolicy = GroupedResource<DaprComponentResiliencyPolicy>(
   "Azure.ContainerApps.DaprComponentResiliencyPolicy",
 );
 

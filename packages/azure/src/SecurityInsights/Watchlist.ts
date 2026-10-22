@@ -3,12 +3,13 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { ensureRegistered, ignoreNotFound, orUndefinedIfNotFound, waitUntilGone } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   compact,
   hasOwnMarker,
@@ -119,7 +120,6 @@ export interface Watchlist extends Resource<
  * **Example:** Watchlist from inline CSV
  * ```typescript
  * const sentinel = yield* Azure.SecurityInsights.OnboardingState("sentinel", {
- *   resourceGroup: group.resourceGroupName,
  *   workspace: logs.workspaceName,
  * });
  * const servers = yield* Azure.SecurityInsights.Watchlist("servers", {
@@ -148,7 +148,7 @@ export interface Watchlist extends Resource<
  *
  * @resource
  */
-export const Watchlist = Resource<Watchlist>("Azure.SecurityInsights.Watchlist");
+export const Watchlist = GroupedResource<Watchlist>("Azure.SecurityInsights.Watchlist");
 
 const createAlias = (id: string) =>
   createPhysicalName({ id, maxLength: 64, delimiter: "_" }).pipe(

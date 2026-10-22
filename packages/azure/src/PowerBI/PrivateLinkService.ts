@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -19,6 +19,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 
 export interface PrivateLinkServiceProps {
   /**
@@ -89,17 +90,13 @@ export interface PrivateLinkService extends Resource<
  * ### Creating a Private Link Service
  * **Example:** Private link service for the current tenant
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("powerbi");
- * const service = yield* Azure.PowerBI.PrivateLinkService("tenant", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const service = yield* Azure.PowerBI.PrivateLinkService("tenant");
  * ```
  *
  * ### Connecting a Virtual Network
  * **Example:** Private endpoint into the Power BI tenant
  * ```typescript
  * const endpoint = yield* Azure.Network.PrivateEndpoint("powerbi", {
- *   resourceGroup: group.resourceGroupName,
  *   subnetId: subnet.subnetId,
  *   privateLinkServiceConnections: [
  *     { privateLinkServiceId: service.privateLinkServiceId, groupIds: ["tenant"] },
@@ -109,7 +106,9 @@ export interface PrivateLinkService extends Resource<
  *
  * @resource
  */
-export const PrivateLinkService = Resource<PrivateLinkService>("Azure.PowerBI.PrivateLinkService");
+export const PrivateLinkService = GroupedResource<PrivateLinkService>(
+  "Azure.PowerBI.PrivateLinkService",
+);
 
 type Observed = powerbi.TenantResource;
 

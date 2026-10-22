@@ -1,8 +1,9 @@
 import * as network from "@distilled.cloud/azure/network";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import { orUndefinedIfNotFound } from "../Arm.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { sameSet } from "./common.ts";
 import { networkProvider } from "./generic.ts";
 import { networkManagerChildName, networkManagerTags } from "./networkManagerShared.ts";
@@ -64,7 +65,6 @@ export interface RoutingRuleCollection extends Resource<
  * **Example:** Routes for the spokes
  * ```typescript
  * const routes = yield* Azure.Network.RoutingRuleCollection("spokes", {
- *   resourceGroup: group.resourceGroupName,
  *   networkManager: manager.networkManagerName,
  *   routingConfiguration: routing.configurationName,
  *   networkGroupIds: [spokes.networkGroupId],
@@ -73,7 +73,7 @@ export interface RoutingRuleCollection extends Resource<
  *
  * @resource
  */
-export const RoutingRuleCollection = Resource<RoutingRuleCollection>(
+export const RoutingRuleCollection = GroupedResource<RoutingRuleCollection>(
   "Azure.Network.RoutingRuleCollection",
 );
 

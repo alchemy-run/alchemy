@@ -2,7 +2,7 @@ import * as netapp from "@distilled.cloud/azure/netapp";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -19,6 +19,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createNetAppName,
   getVolume,
@@ -191,17 +192,14 @@ export interface Volume extends Resource<
  * **Example:** NFSv3 volume
  * ```typescript
  * const vnet = yield* Azure.Network.VirtualNetwork("vnet", {
- *   resourceGroup: group.resourceGroupName,
  *   addressPrefixes: ["10.0.0.0/16"],
  * });
  * const subnet = yield* Azure.Network.Subnet("anf", {
- *   resourceGroup: group.resourceGroupName,
  *   virtualNetwork: vnet.virtualNetworkName,
  *   addressPrefix: "10.0.1.0/24",
  *   delegations: [{ serviceName: "Microsoft.NetApp/volumes" }],
  * });
  * const volume = yield* Azure.NetApp.Volume("data", {
- *   resourceGroup: group.resourceGroupName,
  *   account: account.accountName,
  *   pool: pool.poolName,
  *   subnetId: subnet.subnetId,
@@ -213,7 +211,6 @@ export interface Volume extends Resource<
  * **Example:** Read-only export for one subnet
  * ```typescript
  * const volume = yield* Azure.NetApp.Volume("data", {
- *   resourceGroup: group.resourceGroupName,
  *   account: account.accountName,
  *   pool: pool.poolName,
  *   subnetId: subnet.subnetId,
@@ -233,12 +230,10 @@ export interface Volume extends Resource<
  * **Example:** Attach a snapshot policy
  * ```typescript
  * const policy = yield* Azure.NetApp.SnapshotPolicy("nightly", {
- *   resourceGroup: group.resourceGroupName,
  *   account: account.accountName,
  *   dailySchedule: { snapshotsToKeep: 7, hour: 2, minute: 0 },
  * });
  * const volume = yield* Azure.NetApp.Volume("data", {
- *   resourceGroup: group.resourceGroupName,
  *   account: account.accountName,
  *   pool: pool.poolName,
  *   subnetId: subnet.subnetId,
@@ -248,7 +243,7 @@ export interface Volume extends Resource<
  *
  * @resource
  */
-export const Volume = Resource<Volume>("Azure.NetApp.Volume");
+export const Volume = GroupedResource<Volume>("Azure.NetApp.Volume");
 
 type ObservedVolume = netapp.GetVolumeResponse | netapp.Volume;
 

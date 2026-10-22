@@ -2,7 +2,7 @@ import * as network from "@distilled.cloud/azure/network";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -18,6 +18,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createNetworkName,
   sameId,
@@ -95,11 +96,8 @@ export interface RouteTable extends Resource<
  * ### Creating a Route Table
  * **Example:** Route table associated with a subnet
  * ```typescript
- * const routes = yield* Azure.Network.RouteTable("egress", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const routes = yield* Azure.Network.RouteTable("egress");
  * const subnet = yield* Azure.Network.Subnet("app", {
- *   resourceGroup: group.resourceGroupName,
  *   virtualNetwork: vnet.virtualNetworkName,
  *   addressPrefix: "10.0.1.0/24",
  *   routeTableId: routes.routeTableId,
@@ -109,14 +107,13 @@ export interface RouteTable extends Resource<
  * **Example:** Route table without BGP propagation
  * ```typescript
  * const routes = yield* Azure.Network.RouteTable("egress", {
- *   resourceGroup: group.resourceGroupName,
  *   disableBgpRoutePropagation: true,
  * });
  * ```
  *
  * @resource
  */
-export const RouteTable = Resource<RouteTable>("Azure.Network.RouteTable");
+export const RouteTable = GroupedResource<RouteTable>("Azure.Network.RouteTable");
 
 type Observed = network.GetRouteTableResponse;
 

@@ -2,7 +2,7 @@ import * as deviceregistry from "@distilled.cloud/azure/deviceregistry";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -17,6 +17,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   DEVICE_REGISTRY_RP,
   DEVICE_REGISTRY_WAIT,
@@ -102,7 +103,6 @@ export interface Schema extends Resource<
  * **Example:** JSON Schema message schema
  * ```typescript
  * const schema = yield* Azure.DeviceRegistry.Schema("telemetry", {
- *   resourceGroup: group.resourceGroupName,
  *   schemaRegistry: registry.schemaRegistryName,
  *   format: "JsonSchema/draft-07",
  *   displayName: "Telemetry",
@@ -112,7 +112,7 @@ export interface Schema extends Resource<
  *
  * @resource
  */
-export const Schema = Resource<Schema>("Azure.DeviceRegistry.Schema");
+export const Schema = GroupedResource<Schema>("Azure.DeviceRegistry.Schema");
 
 const getSchema = (
   subscriptionId: string,

@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -21,6 +21,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 
 export interface CertificateOrderCertificateProps {
   /**
@@ -108,17 +109,13 @@ export interface CertificateOrderCertificate extends Resource<
  * **Example:** Store the issued certificate in a vault
  * ```typescript
  * const order = yield* Azure.CertificateRegistration.CertificateOrder("www", {
- *   resourceGroup: group.resourceGroupName,
  *   productType: "StandardDomainValidatedSsl",
  *   distinguishedName: "CN=www.example.com",
  * });
- * const vault = yield* Azure.KeyVault.Vault("certs", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const vault = yield* Azure.KeyVault.Vault("certs");
  * const certificate = yield* Azure.CertificateRegistration.CertificateOrderCertificate(
  *   "www-cert",
  *   {
- *     resourceGroup: group.resourceGroupName,
  *     certificateOrder: order.certificateOrderName,
  *     keyVaultId: vault.vaultId,
  *     keyVaultSecretName: "www-example-com",
@@ -128,7 +125,7 @@ export interface CertificateOrderCertificate extends Resource<
  *
  * @resource
  */
-export const CertificateOrderCertificate = Resource<CertificateOrderCertificate>(
+export const CertificateOrderCertificate = GroupedResource<CertificateOrderCertificate>(
   "Azure.CertificateRegistration.CertificateOrderCertificate",
 );
 

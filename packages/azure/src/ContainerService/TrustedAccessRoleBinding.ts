@@ -2,7 +2,7 @@ import * as cs from "@distilled.cloud/azure/containerservice";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createChildName, isClusterOwned, sameName, whileClusterBusy } from "./Common.ts";
 
 export interface TrustedAccessRoleBindingProps {
@@ -72,7 +73,6 @@ export interface TrustedAccessRoleBinding extends Resource<
  * **Example:** Let a Backup vault back up the cluster
  * ```typescript
  * yield* Azure.ContainerService.TrustedAccessRoleBinding("backup", {
- *   resourceGroup: group.resourceGroupName,
  *   cluster: cluster.clusterName,
  *   sourceResourceId: vaultId,
  *   roles: ["Microsoft.DataProtection/backupVaults/backup-operator"],
@@ -81,7 +81,7 @@ export interface TrustedAccessRoleBinding extends Resource<
  *
  * @resource
  */
-export const TrustedAccessRoleBinding = Resource<TrustedAccessRoleBinding>(
+export const TrustedAccessRoleBinding = GroupedResource<TrustedAccessRoleBinding>(
   "Azure.ContainerService.TrustedAccessRoleBinding",
 );
 

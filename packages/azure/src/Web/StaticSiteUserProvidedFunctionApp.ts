@@ -2,7 +2,7 @@ import * as web from "@distilled.cloud/azure/web";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { lower, nameOf, sameLocation } from "./common.ts";
 
 export interface StaticSiteUserProvidedFunctionAppProps {
@@ -72,7 +73,6 @@ export interface StaticSiteUserProvidedFunctionApp extends Resource<
  * **Example:** Function app behind `/api`
  * ```typescript
  * yield* Azure.Web.StaticSiteUserProvidedFunctionApp("api", {
- *   resourceGroup: group.resourceGroupName,
  *   staticSiteName: site.staticSiteName,
  *   functionAppResourceId: functionApp.siteId,
  *   functionAppRegion: functionApp.location,
@@ -81,7 +81,7 @@ export interface StaticSiteUserProvidedFunctionApp extends Resource<
  *
  * @resource
  */
-export const StaticSiteUserProvidedFunctionApp = Resource<StaticSiteUserProvidedFunctionApp>(
+export const StaticSiteUserProvidedFunctionApp = GroupedResource<StaticSiteUserProvidedFunctionApp>(
   "Azure.Web.StaticSiteUserProvidedFunctionApp",
 );
 

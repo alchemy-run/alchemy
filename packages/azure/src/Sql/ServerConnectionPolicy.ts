@@ -2,11 +2,12 @@ import * as sql from "@distilled.cloud/azure/sql";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { ensureRegistered, ignoreNotFound, orUndefinedIfNotFound } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { isServerOwnedByStack, lower } from "./common.ts";
 import { syncSetting } from "./setting.ts";
 
@@ -57,7 +58,6 @@ export interface ServerConnectionPolicy extends Resource<
  * **Example:** Proxy every connection through the gateway
  * ```typescript
  * yield* Azure.Sql.ServerConnectionPolicy("connection", {
- *   resourceGroup: group.resourceGroupName,
  *   server: server.serverName,
  *   connectionType: "Proxy",
  * });
@@ -66,7 +66,6 @@ export interface ServerConnectionPolicy extends Resource<
  * **Example:** Redirect for lower latency
  * ```typescript
  * yield* Azure.Sql.ServerConnectionPolicy("connection", {
- *   resourceGroup: group.resourceGroupName,
  *   server: server.serverName,
  *   connectionType: "Redirect",
  * });
@@ -74,7 +73,7 @@ export interface ServerConnectionPolicy extends Resource<
  *
  * @resource
  */
-export const ServerConnectionPolicy = Resource<ServerConnectionPolicy>(
+export const ServerConnectionPolicy = GroupedResource<ServerConnectionPolicy>(
   "Azure.Sql.ServerConnectionPolicy",
 );
 

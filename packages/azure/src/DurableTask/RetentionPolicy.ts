@@ -2,7 +2,7 @@ import * as durabletask from "@distilled.cloud/azure/durabletask";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import {
@@ -15,6 +15,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { getScheduler } from "./Scheduler.ts";
 
 export type PurgeableOrchestrationState = "Completed" | "Failed" | "Terminated" | "Canceled";
@@ -69,11 +70,8 @@ export interface RetentionPolicy extends Resource<
  * ### Configuring Retention
  * **Example:** Keep everything 7 days, failures 30 days
  * ```typescript
- * const scheduler = yield* Azure.DurableTask.Scheduler("orchestrations", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const scheduler = yield* Azure.DurableTask.Scheduler("orchestrations");
  * yield* Azure.DurableTask.RetentionPolicy("retention", {
- *   resourceGroup: group.resourceGroupName,
  *   scheduler: scheduler.schedulerName,
  *   retentionPolicies: [
  *     { retentionPeriodInDays: 7 },
@@ -84,7 +82,9 @@ export interface RetentionPolicy extends Resource<
  *
  * @resource
  */
-export const RetentionPolicy = Resource<RetentionPolicy>("Azure.DurableTask.RetentionPolicy");
+export const RetentionPolicy = GroupedResource<RetentionPolicy>(
+  "Azure.DurableTask.RetentionPolicy",
+);
 
 const getPolicy = (subscriptionId: string, resourceGroupName: string, schedulerName: string) =>
   orUndefinedIfNotFound(

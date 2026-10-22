@@ -2,7 +2,7 @@ import * as cognitiveservices from "@distilled.cloud/azure/cognitiveservices";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { isAccountOwnedByStack } from "./Account.ts";
 import { ACCOUNT_BUDGET, createChildName, sameArm, sameValue, whileAccountBusy } from "./Common.ts";
 
@@ -87,7 +88,6 @@ export interface CapabilityHost extends Resource<
  * **Example:** Basic setup for a Foundry account
  * ```typescript
  * const host = yield* Azure.CognitiveServices.CapabilityHost("agents", {
- *   resourceGroup: group.resourceGroupName,
  *   account: account.accountName,
  * });
  * ```
@@ -95,7 +95,6 @@ export interface CapabilityHost extends Resource<
  * **Example:** Standard setup with customer-owned resources
  * ```typescript
  * const host = yield* Azure.CognitiveServices.CapabilityHost("agents", {
- *   resourceGroup: group.resourceGroupName,
  *   account: account.accountName,
  *   storageConnections: [storageConnection.connectionName],
  *   threadStorageConnections: [cosmosConnection.connectionName],
@@ -105,7 +104,9 @@ export interface CapabilityHost extends Resource<
  *
  * @resource
  */
-export const CapabilityHost = Resource<CapabilityHost>("Azure.CognitiveServices.CapabilityHost");
+export const CapabilityHost = GroupedResource<CapabilityHost>(
+  "Azure.CognitiveServices.CapabilityHost",
+);
 
 const getHost = (
   subscriptionId: string,

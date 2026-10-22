@@ -1,8 +1,9 @@
 import * as network from "@distilled.cloud/azure/network";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import { orUndefinedIfNotFound } from "../Arm.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { networkProvider } from "./generic.ts";
 import { networkManagerChildName, networkManagerTags } from "./networkManagerShared.ts";
 
@@ -58,14 +59,13 @@ export interface RoutingConfiguration extends Resource<
  * **Example:** Routing configuration
  * ```typescript
  * const routing = yield* Azure.Network.RoutingConfiguration("egress", {
- *   resourceGroup: group.resourceGroupName,
  *   networkManager: manager.networkManagerName,
  * });
  * ```
  *
  * @resource
  */
-export const RoutingConfiguration = Resource<RoutingConfiguration>(
+export const RoutingConfiguration = GroupedResource<RoutingConfiguration>(
   "Azure.Network.RoutingConfiguration",
 );
 

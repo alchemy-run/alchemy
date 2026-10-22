@@ -2,7 +2,7 @@ import * as deviceregistry from "@distilled.cloud/azure/deviceregistry";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -20,6 +20,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   DEVICE_REGISTRY_RP,
   DEVICE_REGISTRY_WAIT,
@@ -106,16 +107,12 @@ export interface Namespace extends Resource<
  * ### Creating a Namespace
  * **Example:** Basic namespace
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("iot");
- * const ns = yield* Azure.DeviceRegistry.Namespace("devices", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const ns = yield* Azure.DeviceRegistry.Namespace("devices");
  * ```
  *
  * **Example:** Namespace with a managed identity
  * ```typescript
  * const ns = yield* Azure.DeviceRegistry.Namespace("devices", {
- *   resourceGroup: group.resourceGroupName,
  *   systemAssignedIdentity: true,
  *   tags: { env: "prod" },
  * });
@@ -123,7 +120,7 @@ export interface Namespace extends Resource<
  *
  * @resource
  */
-export const Namespace = Resource<Namespace>("Azure.DeviceRegistry.Namespace");
+export const Namespace = GroupedResource<Namespace>("Azure.DeviceRegistry.Namespace");
 
 const getNamespace = (subscriptionId: string, resourceGroupName: string, namespaceName: string) =>
   orUndefinedIfNotFound(

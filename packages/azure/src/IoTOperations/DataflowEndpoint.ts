@@ -1,7 +1,8 @@
 import * as iot from "@distilled.cloud/azure/iotoperations";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { childLifecycle, childStatus, type InstanceScope } from "./Common.ts";
 
 export interface DataflowEndpointProps {
@@ -78,7 +79,6 @@ export interface DataflowEndpoint extends Resource<
  * **Example:** Local MQTT broker
  * ```typescript
  * const local = yield* Azure.IoTOperations.DataflowEndpoint("local", {
- *   resourceGroup: group.resourceGroupName,
  *   instanceName: instance.instanceName,
  *   endpointType: "Mqtt",
  *   hostType: "LocalBroker",
@@ -96,7 +96,6 @@ export interface DataflowEndpoint extends Resource<
  * **Example:** Azure Data Lake Storage with the instance's managed identity
  * ```typescript
  * const lake = yield* Azure.IoTOperations.DataflowEndpoint("lake", {
- *   resourceGroup: group.resourceGroupName,
  *   instanceName: instance.instanceName,
  *   endpointType: "DataLakeStorage",
  *   dataLakeStorageSettings: {
@@ -111,7 +110,9 @@ export interface DataflowEndpoint extends Resource<
  *
  * @resource
  */
-export const DataflowEndpoint = Resource<DataflowEndpoint>("Azure.IoTOperations.DataflowEndpoint");
+export const DataflowEndpoint = GroupedResource<DataflowEndpoint>(
+  "Azure.IoTOperations.DataflowEndpoint",
+);
 
 export const DataflowEndpointProvider = () =>
   Provider.succeed(DataflowEndpoint, {

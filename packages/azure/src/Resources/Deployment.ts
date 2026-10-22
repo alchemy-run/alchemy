@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import {
@@ -21,6 +21,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { fromParameterValues, sameId, sameJson, toParameterValues } from "./Shared.ts";
 
 /** Reference to a template stored outside the deployment request. */
@@ -108,7 +109,6 @@ export interface Deployment extends Resource<
  * **Example:** Template with a parameter and an output
  * ```typescript
  * const deployment = yield* Azure.Resources.Deployment("greeting", {
- *   resourceGroup: group.resourceGroupName,
  *   template: {
  *     $schema: "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
  *     contentVersion: "1.0.0.0",
@@ -127,14 +127,13 @@ export interface Deployment extends Resource<
  * **Example:** Deploy a template spec version
  * ```typescript
  * yield* Azure.Resources.Deployment("app", {
- *   resourceGroup: group.resourceGroupName,
  *   templateLink: { id: version.templateSpecVersionId },
  * });
  * ```
  *
  * @resource
  */
-export const Deployment = Resource<Deployment>("Azure.Resources.Deployment");
+export const Deployment = GroupedResource<Deployment>("Azure.Resources.Deployment");
 
 export class DeploymentFailed extends Data.TaggedError("Azure.Resources.DeploymentFailed")<{
   readonly deployment: string;

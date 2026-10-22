@@ -2,7 +2,7 @@ import * as sql from "@distilled.cloud/azure/sql";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createChildName, fieldsMatch, isServerOwnedByStack, lower } from "./common.ts";
 import { databasePath, type DatabaseScope } from "./setting.ts";
 
@@ -87,7 +88,6 @@ export interface WorkloadGroup extends Resource<
  * **Example:** Reserve 20% for data loads
  * ```typescript
  * const loads = yield* Azure.Sql.WorkloadGroup("loads", {
- *   resourceGroup: group.resourceGroupName,
  *   server: server.serverName,
  *   database: warehouse.databaseName,
  *   minResourcePercent: 20,
@@ -99,7 +99,7 @@ export interface WorkloadGroup extends Resource<
  *
  * @resource
  */
-export const WorkloadGroup = Resource<WorkloadGroup>("Azure.Sql.WorkloadGroup");
+export const WorkloadGroup = GroupedResource<WorkloadGroup>("Azure.Sql.WorkloadGroup");
 
 type Observed = sql.GetWorkloadGroupResponse;
 

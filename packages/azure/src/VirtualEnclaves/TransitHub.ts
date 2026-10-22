@@ -2,7 +2,7 @@ import * as mission from "@distilled.cloud/azure/mission";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import {
@@ -21,6 +21,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   changedProperties,
   createMissionName,
@@ -106,7 +107,6 @@ export interface TransitHub extends Resource<
  * **Example:** Peer the community with an external virtual network
  * ```typescript
  * const transit = yield* Azure.VirtualEnclaves.TransitHub("transit", {
- *   resourceGroup: group.resourceGroupName,
  *   community: community.communityName,
  *   transitOption: {
  *     type: "Peering",
@@ -117,7 +117,7 @@ export interface TransitHub extends Resource<
  *
  * @resource
  */
-export const TransitHub = Resource<TransitHub>("Azure.VirtualEnclaves.TransitHub");
+export const TransitHub = GroupedResource<TransitHub>("Azure.VirtualEnclaves.TransitHub");
 
 type Observed = mission.GetTransitHubResponse | mission.TransitHubResource;
 

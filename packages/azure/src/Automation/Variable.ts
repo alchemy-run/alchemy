@@ -2,7 +2,7 @@ import * as automation from "@distilled.cloud/azure/automation";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   accountOwnedByStage,
   childNuke,
@@ -82,7 +83,6 @@ export interface Variable extends Resource<
  * **Example:** Plain variable
  * ```typescript
  * const region = yield* Azure.Automation.Variable("region", {
- *   resourceGroup: group.resourceGroupName,
  *   automationAccount: account.automationAccountName,
  *   value: "eastus",
  * });
@@ -91,7 +91,6 @@ export interface Variable extends Resource<
  * **Example:** Encrypted variable
  * ```typescript
  * const apiKey = yield* Azure.Automation.Variable("api-key", {
- *   resourceGroup: group.resourceGroupName,
  *   automationAccount: account.automationAccountName,
  *   value: Redacted.make("s3cr3t"),
  *   isEncrypted: true,
@@ -100,7 +99,7 @@ export interface Variable extends Resource<
  *
  * @resource
  */
-export const Variable = Resource<Variable>("Azure.Automation.Variable");
+export const Variable = GroupedResource<Variable>("Azure.Automation.Variable");
 
 /** Serialize a variable value the way Automation stores it. */
 const serialize = (value: unknown) =>

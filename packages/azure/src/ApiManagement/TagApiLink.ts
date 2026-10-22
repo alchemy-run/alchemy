@@ -1,8 +1,9 @@
 import * as apim from "@distilled.cloud/azure/apimanagement";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createEntityName } from "./Common.ts";
 import { entityLifecycle, serviceEntityId } from "./Entity.ts";
 
@@ -55,7 +56,6 @@ export interface TagApiLink extends Resource<
  * **Example:** Tag the orders API as public
  * ```typescript
  * yield* Azure.ApiManagement.TagApiLink("public-orders", {
- *   resourceGroup: group.resourceGroupName,
  *   serviceName: apim.serviceName,
  *   tagName: publicTag.tagName,
  *   apiName: orders.apiName,
@@ -64,7 +64,7 @@ export interface TagApiLink extends Resource<
  *
  * @resource
  */
-export const TagApiLink = Resource<TagApiLink>("Azure.ApiManagement.TagApiLink");
+export const TagApiLink = GroupedResource<TagApiLink>("Azure.ApiManagement.TagApiLink");
 
 interface Key {
   resourceGroup: string;

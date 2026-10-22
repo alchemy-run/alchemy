@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import {
@@ -22,6 +22,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { changedKeys, lower, sameLocation } from "./common.ts";
 
 /** Operating system of the workers in an App Service plan. */
@@ -138,9 +139,7 @@ export interface AppServicePlan extends Resource<
  * ### Creating a Plan
  * **Example:** Free Linux plan
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("app");
  * const plan = yield* Azure.Web.AppServicePlan("plan", {
- *   resourceGroup: group.resourceGroupName,
  *   sku: "F1",
  * });
  * ```
@@ -148,7 +147,6 @@ export interface AppServicePlan extends Resource<
  * **Example:** Basic Windows plan with two workers
  * ```typescript
  * const plan = yield* Azure.Web.AppServicePlan("plan", {
- *   resourceGroup: group.resourceGroupName,
  *   sku: "B1",
  *   os: "windows",
  *   capacity: 2,
@@ -159,14 +157,13 @@ export interface AppServicePlan extends Resource<
  * **Example:** Flex Consumption plan for function apps
  * ```typescript
  * const plan = yield* Azure.Web.AppServicePlan("functions", {
- *   resourceGroup: group.resourceGroupName,
  *   sku: "FC1",
  * });
  * ```
  *
  * @resource
  */
-export const AppServicePlan = Resource<AppServicePlan>("Azure.Web.AppServicePlan");
+export const AppServicePlan = GroupedResource<AppServicePlan>("Azure.Web.AppServicePlan");
 
 type ObservedPlan = web.GetAppServicePlanResponse;
 

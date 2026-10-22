@@ -2,11 +2,12 @@ import * as cdn from "@distilled.cloud/azure/cdn";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { ensureRegistered, ignoreNotFound, orUndefinedIfNotFound, waitUntilGone } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   AFD_DELETE_BUDGET,
   changedFields,
@@ -105,7 +106,6 @@ export interface Route extends Resource<
  * **Example:** Route all traffic to an origin group
  * ```typescript
  * const route = yield* Azure.Cdn.Route("default", {
- *   resourceGroup: group.resourceGroupName,
  *   profile: profile.profileName,
  *   endpoint: endpoint.endpointName,
  *   originGroupId: origins.originGroupId,
@@ -115,7 +115,6 @@ export interface Route extends Resource<
  * **Example:** Cached static assets over HTTPS only
  * ```typescript
  * const assets = yield* Azure.Cdn.Route("assets", {
- *   resourceGroup: group.resourceGroupName,
  *   profile: profile.profileName,
  *   endpoint: endpoint.endpointName,
  *   originGroupId: origins.originGroupId,
@@ -133,7 +132,7 @@ export interface Route extends Resource<
  *
  * @resource
  */
-export const Route = Resource<Route>("Azure.Cdn.Route");
+export const Route = GroupedResource<Route>("Azure.Cdn.Route");
 
 const createRouteName = (id: string) => createAfdName(id, 50);
 

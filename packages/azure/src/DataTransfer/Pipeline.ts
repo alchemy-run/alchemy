@@ -2,7 +2,7 @@ import * as adt from "@distilled.cloud/azure/azuredatatransfer";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -20,6 +20,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createDataTransferName,
   type DataTransferIdentity,
@@ -130,9 +131,7 @@ export interface Pipeline extends Resource<
  * ### Creating a Pipeline
  * **Example:** Pipeline to the public cloud
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("transfer");
  * const pipeline = yield* Azure.DataTransfer.Pipeline("pipeline", {
- *   resourceGroup: group.resourceGroupName,
  *   remoteCloud: "Public",
  *   displayName: "Mission data",
  *   subscribers: [{ email: "ops@example.com", notifications: 1 }],
@@ -143,7 +142,6 @@ export interface Pipeline extends Resource<
  * **Example:** Stop accepting transfers
  * ```typescript
  * const pipeline = yield* Azure.DataTransfer.Pipeline("pipeline", {
- *   resourceGroup: group.resourceGroupName,
  *   remoteCloud: "Public",
  *   status: "Disabled",
  * });
@@ -151,7 +149,7 @@ export interface Pipeline extends Resource<
  *
  * @resource
  */
-export const Pipeline = Resource<Pipeline>("Azure.DataTransfer.Pipeline");
+export const Pipeline = GroupedResource<Pipeline>("Azure.DataTransfer.Pipeline");
 
 type ObservedPipeline = adt.GetPipelineResponse;
 

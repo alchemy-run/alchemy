@@ -1,8 +1,9 @@
 import * as network from "@distilled.cloud/azure/network";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import { orUndefinedIfNotFound, userTags } from "../Arm.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { lower, ref, sameId } from "./common.ts";
 import { networkProvider } from "./generic.ts";
 
@@ -74,7 +75,6 @@ export interface SecurityPartnerProvider extends Resource<
  * **Example:** Zscaler on a secured hub
  * ```typescript
  * const partner = yield* Azure.Network.SecurityPartnerProvider("zscaler", {
- *   resourceGroup: group.resourceGroupName,
  *   securityProviderName: "ZScaler",
  *   virtualHubId: hub.virtualHubId,
  * });
@@ -82,7 +82,7 @@ export interface SecurityPartnerProvider extends Resource<
  *
  * @resource
  */
-export const SecurityPartnerProvider = Resource<SecurityPartnerProvider>(
+export const SecurityPartnerProvider = GroupedResource<SecurityPartnerProvider>(
   "Azure.Network.SecurityPartnerProvider",
 );
 

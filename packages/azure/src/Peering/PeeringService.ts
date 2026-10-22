@@ -2,7 +2,7 @@ import * as peering from "@distilled.cloud/azure/peering";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -19,6 +19,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createPeeringName, getPeeringService } from "./Common.ts";
 
 export interface PeeringServiceProps {
@@ -106,9 +107,7 @@ export interface PeeringService extends Resource<
  * ### Creating a Peering Service
  * **Example:** Peering service through a partner provider
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("network");
  * const service = yield* Azure.Peering.PeeringService("office", {
- *   resourceGroup: group.resourceGroupName,
  *   peeringServiceLocation: "Washington",
  *   peeringServiceProvider: "T-Mobile USA",
  *   providerPrimaryPeeringLocation: "San Jose",
@@ -118,7 +117,6 @@ export interface PeeringService extends Resource<
  * **Example:** Primary and backup peering locations
  * ```typescript
  * const service = yield* Azure.Peering.PeeringService("office", {
- *   resourceGroup: group.resourceGroupName,
  *   peeringServiceLocation: "Washington",
  *   peeringServiceProvider: "T-Mobile USA",
  *   providerPrimaryPeeringLocation: "San Jose",
@@ -129,7 +127,7 @@ export interface PeeringService extends Resource<
  *
  * @resource
  */
-export const PeeringService = Resource<PeeringService>("Azure.Peering.PeeringService");
+export const PeeringService = GroupedResource<PeeringService>("Azure.Peering.PeeringService");
 
 const toAttrs = (
   resourceGroup: string,

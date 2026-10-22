@@ -2,11 +2,12 @@ import * as apim from "@distilled.cloud/azure/apimanagement";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { ensureRegistered, ignoreNotFound, orUndefinedIfNotFound, waitUntilGone } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { isParentOwned, sameName } from "./Common.ts";
 
 export interface ProductApiProps {
@@ -53,7 +54,6 @@ export interface ProductApi extends Resource<
  * **Example:** Publish an API through a product
  * ```typescript
  * yield* Azure.ApiManagement.ProductApi("starter-hello", {
- *   resourceGroup: group.resourceGroupName,
  *   serviceName: apim.serviceName,
  *   productName: product.productName,
  *   apiName: api.apiName,
@@ -62,7 +62,7 @@ export interface ProductApi extends Resource<
  *
  * @resource
  */
-export const ProductApi = Resource<ProductApi>("Azure.ApiManagement.ProductApi");
+export const ProductApi = GroupedResource<ProductApi>("Azure.ApiManagement.ProductApi");
 
 /**
  * Find the API among the product's APIs. There is no GET for a single

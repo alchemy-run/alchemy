@@ -2,7 +2,7 @@ import * as devtestlabs from "@distilled.cloud/azure/devtestlabs";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -16,6 +16,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   DEVTESTLAB_NAMESPACE,
   diverges,
@@ -73,7 +74,6 @@ export interface LabSchedule extends Resource<
  * **Example:** Shut lab VMs down at 19:00 UTC
  * ```typescript
  * const shutdown = yield* Azure.DevTestLabs.LabSchedule("shutdown", {
- *   resourceGroup: group.resourceGroupName,
  *   lab: lab.labName,
  *   dailyRecurrence: { time: "1900" },
  * });
@@ -83,7 +83,6 @@ export interface LabSchedule extends Resource<
  * **Example:** Start lab VMs on weekday mornings
  * ```typescript
  * const start = yield* Azure.DevTestLabs.LabSchedule("start", {
- *   resourceGroup: group.resourceGroupName,
  *   lab: lab.labName,
  *   taskType: "LabVmsStartupTask",
  *   weeklyRecurrence: {
@@ -95,7 +94,7 @@ export interface LabSchedule extends Resource<
  *
  * @resource
  */
-export const LabSchedule = Resource<LabSchedule>("Azure.DevTestLabs.LabSchedule");
+export const LabSchedule = GroupedResource<LabSchedule>("Azure.DevTestLabs.LabSchedule");
 
 const defaultName = (taskType: LabScheduleTaskType) =>
   taskType === "LabVmsStartupTask" ? "LabVmAutoStart" : "LabVmsShutdown";

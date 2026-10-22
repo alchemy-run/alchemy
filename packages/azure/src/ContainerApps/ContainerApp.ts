@@ -4,7 +4,7 @@ import * as authorization from "@distilled.cloud/azure/authorization";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource, type ResourceBinding } from "alchemy/Resource";
+import type { Resource, ResourceBinding } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import {
@@ -30,6 +30,7 @@ import { roleDefinitionIdOf } from "../Authorization/RoleAssignment.ts";
 import type { AzureBindingContract } from "../Binding.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createContainerAppsName,
   fingerprint,
@@ -154,11 +155,8 @@ export interface ContainerApp extends Resource<
  * ### Creating a Container App
  * **Example:** Public HTTP app that scales to zero
  * ```typescript
- * const env = yield* Azure.ContainerApps.ManagedEnvironment("env", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const env = yield* Azure.ContainerApps.ManagedEnvironment("env");
  * const api = yield* Azure.ContainerApps.ContainerApp("api", {
- *   resourceGroup: group.resourceGroupName,
  *   environmentId: env.environmentId,
  *   configuration: { ingress: { external: true, targetPort: 80 } },
  *   template: {
@@ -178,7 +176,6 @@ export interface ContainerApp extends Resource<
  * **Example:** Reference a secret from an env var
  * ```typescript
  * const api = yield* Azure.ContainerApps.ContainerApp("api", {
- *   resourceGroup: group.resourceGroupName,
  *   environmentId: env.environmentId,
  *   secrets: [{ name: "db-password", value: Redacted.make(password) }],
  *   template: {
@@ -200,7 +197,6 @@ export interface ContainerApp extends Resource<
  * **Example:** System-assigned identity
  * ```typescript
  * const api = yield* Azure.ContainerApps.ContainerApp("api", {
- *   resourceGroup: group.resourceGroupName,
  *   environmentId: env.environmentId,
  *   identity: { type: "SystemAssigned" },
  *   template: { containers: [{ name: "api", image }] },
@@ -210,7 +206,7 @@ export interface ContainerApp extends Resource<
  *
  * @resource
  */
-export const ContainerApp = Resource<ContainerApp>("Azure.ContainerApps.ContainerApp");
+export const ContainerApp = GroupedResource<ContainerApp>("Azure.ContainerApps.ContainerApp");
 
 const createAppName = (id: string) => createContainerAppsName(id, 32);
 

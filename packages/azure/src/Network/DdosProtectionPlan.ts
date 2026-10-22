@@ -1,8 +1,9 @@
 import * as network from "@distilled.cloud/azure/network";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import { orUndefinedIfNotFound, userTags } from "../Arm.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { idsOf, networkProvider } from "./generic.ts";
 
 export interface DdosProtectionPlanProps {
@@ -59,14 +60,14 @@ export interface DdosProtectionPlan extends Resource<
  * ### Creating a Plan
  * **Example:** One plan for the tenant's virtual networks
  * ```typescript
- * const plan = yield* Azure.Network.DdosProtectionPlan("ddos", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const plan = yield* Azure.Network.DdosProtectionPlan("ddos");
  * ```
  *
  * @resource
  */
-export const DdosProtectionPlan = Resource<DdosProtectionPlan>("Azure.Network.DdosProtectionPlan");
+export const DdosProtectionPlan = GroupedResource<DdosProtectionPlan>(
+  "Azure.Network.DdosProtectionPlan",
+);
 
 export const DdosProtectionPlanProvider = () =>
   Provider.succeed(

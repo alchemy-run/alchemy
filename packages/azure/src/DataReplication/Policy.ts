@@ -1,7 +1,7 @@
 import * as dr from "@distilled.cloud/azure/recoveryservicesdatareplication";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -12,6 +12,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createDataReplicationName,
   DATA_REPLICATION_NAMESPACE,
@@ -78,11 +79,8 @@ export interface Policy extends Resource<
  * ### Creating a Policy
  * **Example:** VMware to Azure Local policy
  * ```typescript
- * const vault = yield* Azure.DataReplication.Vault("vault", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const vault = yield* Azure.DataReplication.Vault("vault");
  * const policy = yield* Azure.DataReplication.Policy("policy", {
- *   resourceGroup: group.resourceGroupName,
  *   vault: vault.vaultName,
  *   customProperties: {
  *     instanceType: "VMwareToAzStackHCI",
@@ -95,7 +93,7 @@ export interface Policy extends Resource<
  *
  * @resource
  */
-export const Policy = Resource<Policy>("Azure.DataReplication.Policy");
+export const Policy = GroupedResource<Policy>("Azure.DataReplication.Policy");
 
 type Observed = dr.GetPolicyResponse;
 

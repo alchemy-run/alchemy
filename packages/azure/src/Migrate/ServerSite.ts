@@ -2,7 +2,7 @@ import * as migrate from "@distilled.cloud/azure/migrate";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -20,6 +20,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { migrateName, settingsDiffer } from "./Common.ts";
 import type { SiteAgentKeyVault, SiteServicePrincipal } from "./Types.ts";
 
@@ -91,7 +92,6 @@ export interface ServerSite extends Resource<
  * **Example:** Discovery site
  * ```typescript
  * const site = yield* Azure.Migrate.ServerSite("servers", {
- *   resourceGroup: group.resourceGroupName,
  *   location: "centralus",
  * });
  * ```
@@ -100,7 +100,6 @@ export interface ServerSite extends Resource<
  * **Example:** Site with an appliance and its service principal
  * ```typescript
  * const site = yield* Azure.Migrate.ServerSite("servers", {
- *   resourceGroup: group.resourceGroupName,
  *   location: "centralus",
  *   applianceName: "onprem-appliance",
  *   servicePrincipalIdentityDetails: {
@@ -115,7 +114,7 @@ export interface ServerSite extends Resource<
  *
  * @resource
  */
-export const ServerSite = Resource<ServerSite>("Azure.Migrate.ServerSite");
+export const ServerSite = GroupedResource<ServerSite>("Azure.Migrate.ServerSite");
 
 type ObservedServerSite = migrate.GetServerSitesControllerResponse;
 

@@ -1,8 +1,9 @@
 import * as apicenter from "@distilled.cloud/azure/apicenter";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createApiCenterName,
   DEFAULT_WORKSPACE,
@@ -121,7 +122,6 @@ export interface Api extends Resource<
  * **Example:** REST API
  * ```typescript
  * const api = yield* Azure.ApiCenter.Api("orders", {
- *   resourceGroup: group.resourceGroupName,
  *   serviceName: center.serviceName,
  *   title: "Orders API",
  *   kind: "rest",
@@ -131,7 +131,6 @@ export interface Api extends Resource<
  * **Example:** API with contacts and custom metadata
  * ```typescript
  * const api = yield* Azure.ApiCenter.Api("orders", {
- *   resourceGroup: group.resourceGroupName,
  *   serviceName: center.serviceName,
  *   title: "Orders API",
  *   kind: "rest",
@@ -143,7 +142,7 @@ export interface Api extends Resource<
  *
  * @resource
  */
-export const Api = Resource<Api>("Azure.ApiCenter.Api");
+export const Api = GroupedResource<Api>("Azure.ApiCenter.Api");
 
 interface Key {
   resourceGroup: string;

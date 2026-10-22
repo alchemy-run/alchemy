@@ -2,7 +2,7 @@ import * as synapse from "@distilled.cloud/azure/synapse";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -17,6 +17,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createAlnumName, fieldsMatch, lower, workspaceLocation } from "./common.ts";
 
 export type SparkNodeSize = "Small" | "Medium" | "Large" | "XLarge" | "XXLarge" | "XXXLarge";
@@ -169,7 +170,6 @@ export interface BigDataPool extends Resource<
  * **Example:** Small autoscaling pool with auto-pause
  * ```typescript
  * const spark = yield* Azure.Synapse.BigDataPool("spark", {
- *   resourceGroup: group.resourceGroupName,
  *   workspace: workspace.workspaceName,
  *   nodeSize: "Small",
  *   autoScale: { enabled: true, minNodeCount: 3, maxNodeCount: 10 },
@@ -181,7 +181,6 @@ export interface BigDataPool extends Resource<
  * **Example:** Install Python packages into every session
  * ```typescript
  * yield* Azure.Synapse.BigDataPool("spark", {
- *   resourceGroup: group.resourceGroupName,
  *   workspace: workspace.workspaceName,
  *   libraryRequirements: {
  *     filename: "requirements.txt",
@@ -192,7 +191,7 @@ export interface BigDataPool extends Resource<
  *
  * @resource
  */
-export const BigDataPool = Resource<BigDataPool>("Azure.Synapse.BigDataPool");
+export const BigDataPool = GroupedResource<BigDataPool>("Azure.Synapse.BigDataPool");
 
 type ObservedPool = synapse.GetBigDataPoolResponse;
 

@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -14,6 +14,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { ownershipMarker, sameText, stripMarker, withMarker } from "./Common.ts";
 
 export type TablePlan = "Analytics" | "Basic" | "Auxiliary";
@@ -126,11 +127,8 @@ export interface Table extends Resource<
  * ### Creating a Table
  * **Example:** Custom table
  * ```typescript
- * const logs = yield* Azure.LogAnalytics.Workspace("logs", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const logs = yield* Azure.LogAnalytics.Workspace("logs");
  * const events = yield* Azure.LogAnalytics.Table("events", {
- *   resourceGroup: group.resourceGroupName,
  *   workspace: logs.workspaceName,
  *   name: "AppEvents_CL",
  *   columns: [
@@ -144,7 +142,6 @@ export interface Table extends Resource<
  * **Example:** Basic-plan table with long-term retention
  * ```typescript
  * const audit = yield* Azure.LogAnalytics.Table("audit", {
- *   resourceGroup: group.resourceGroupName,
  *   workspace: logs.workspaceName,
  *   name: "Audit_CL",
  *   plan: "Basic",
@@ -159,7 +156,7 @@ export interface Table extends Resource<
  *
  * @resource
  */
-export const Table = Resource<Table>("Azure.LogAnalytics.Table");
+export const Table = GroupedResource<Table>("Azure.LogAnalytics.Table");
 
 type ObservedTable = operationalinsights.GetTableResponse;
 

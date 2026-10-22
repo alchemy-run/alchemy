@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
@@ -23,6 +23,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 
 export type GrafanaSkuName = "Standard" | "Essential";
 export type GrafanaSkuSize = "X1" | "X2";
@@ -221,9 +222,7 @@ export interface Workspace extends Resource<
  * ### Creating a Workspace
  * **Example:** Standard workspace with a system-assigned identity
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("observability");
  * const grafana = yield* Azure.Grafana.Workspace("grafana", {
- *   resourceGroup: group.resourceGroupName,
  *   identity: { type: "SystemAssigned" },
  * });
  * // grafana.endpoint is the Grafana URL
@@ -232,11 +231,8 @@ export interface Workspace extends Resource<
  * ### Connecting Data Sources
  * **Example:** Workspace wired to an Azure Monitor workspace (Prometheus)
  * ```typescript
- * const metrics = yield* Azure.Monitor.Workspace("metrics", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const metrics = yield* Azure.Monitor.Workspace("metrics");
  * const grafana = yield* Azure.Grafana.Workspace("grafana", {
- *   resourceGroup: group.resourceGroupName,
  *   identity: { type: "SystemAssigned" },
  *   azureMonitorWorkspaceIntegrations: [metrics.workspaceId],
  * });
@@ -246,7 +242,6 @@ export interface Workspace extends Resource<
  * **Example:** API keys, SMTP, and extra plugins
  * ```typescript
  * const grafana = yield* Azure.Grafana.Workspace("grafana", {
- *   resourceGroup: group.resourceGroupName,
  *   apiKey: "Enabled",
  *   grafanaConfigurations: {
  *     smtp: {
@@ -263,7 +258,7 @@ export interface Workspace extends Resource<
  *
  * @resource
  */
-export const Workspace = Resource<Workspace>("Azure.Grafana.Workspace");
+export const Workspace = GroupedResource<Workspace>("Azure.Grafana.Workspace");
 
 type ObservedGrafana = dashboard.GetGrafanaResponse;
 

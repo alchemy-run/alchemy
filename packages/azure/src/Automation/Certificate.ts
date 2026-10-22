@@ -2,7 +2,7 @@ import * as automation from "@distilled.cloud/azure/automation";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
 import {
@@ -14,6 +14,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   accountOwnedByStage,
   childNuke,
@@ -88,7 +89,6 @@ export interface Certificate extends Resource<
  * **Example:** Public certificate
  * ```typescript
  * const cert = yield* Azure.Automation.Certificate("partner-ca", {
- *   resourceGroup: group.resourceGroupName,
  *   automationAccount: account.automationAccountName,
  *   base64Value: Redacted.make(partnerCaBase64),
  *   description: "Partner CA",
@@ -97,7 +97,7 @@ export interface Certificate extends Resource<
  *
  * @resource
  */
-export const Certificate = Resource<Certificate>("Azure.Automation.Certificate");
+export const Certificate = GroupedResource<Certificate>("Azure.Automation.Certificate");
 
 const getCertificate = (
   subscriptionId: string,

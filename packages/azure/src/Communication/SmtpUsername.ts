@@ -2,11 +2,12 @@ import * as communication from "@distilled.cloud/azure/communication";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { ensureRegistered, ignoreNotFound, orUndefinedIfNotFound, waitUntilGone } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createCommunicationName,
   isCommunicationServiceOwnedByStack,
@@ -86,7 +87,6 @@ export interface SmtpUsername extends Resource<
  * **Example:** SMTP login backed by an Entra ID app
  * ```typescript
  * const smtp = yield* Azure.Communication.SmtpUsername("smtp", {
- *   resourceGroup: group.resourceGroupName,
  *   communicationService: acs.communicationServiceName,
  *   username: "mailer@contoso.com",
  *   entraApplicationId: "00000000-0000-0000-0000-000000000000",
@@ -95,7 +95,7 @@ export interface SmtpUsername extends Resource<
  *
  * @resource
  */
-export const SmtpUsername = Resource<SmtpUsername>("Azure.Communication.SmtpUsername");
+export const SmtpUsername = GroupedResource<SmtpUsername>("Azure.Communication.SmtpUsername");
 
 const getSmtp = (
   subscriptionId: string,

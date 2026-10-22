@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -21,6 +21,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { sameJson } from "./Shared.ts";
 
 export interface TemplateSpecProps {
@@ -86,7 +87,6 @@ export interface TemplateSpec extends Resource<
  * **Example:** Template spec in a resource group
  * ```typescript
  * const spec = yield* Azure.Resources.TemplateSpec("network", {
- *   resourceGroup: group.resourceGroupName,
  *   displayName: "Network baseline",
  *   description: "VNet + NSG baseline",
  * });
@@ -96,7 +96,6 @@ export interface TemplateSpec extends Resource<
  * **Example:** Version with an inline template
  * ```typescript
  * const version = yield* Azure.Resources.TemplateSpecVersion("network-v1", {
- *   resourceGroup: group.resourceGroupName,
  *   templateSpecName: spec.templateSpecName,
  *   name: "1.0.0",
  *   mainTemplate: {
@@ -109,7 +108,7 @@ export interface TemplateSpec extends Resource<
  *
  * @resource
  */
-export const TemplateSpec = Resource<TemplateSpec>("Azure.Resources.TemplateSpec");
+export const TemplateSpec = GroupedResource<TemplateSpec>("Azure.Resources.TemplateSpec");
 
 const specName = (id: string, name: string | undefined) =>
   name !== undefined ? Effect.succeed(name) : createPhysicalName({ id, maxLength: 90 });

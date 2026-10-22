@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import {
@@ -19,6 +19,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { getVault, isSubset, NAMESPACE, sameText } from "./Common.ts";
 
 /** The data source (or data source set) a backup instance protects. */
@@ -156,9 +157,7 @@ export interface BackupInstance extends Resource<
  * ### Protecting Blobs
  * **Example:** Operational backup of a storage account's blobs
  * ```typescript
- * const vault = yield* Azure.DataProtection.BackupVault("vault", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const vault = yield* Azure.DataProtection.BackupVault("vault");
  * const access = yield* Azure.Authorization.RoleAssignment("vault-access", {
  *   scope: account.storageAccountId,
  *   roleDefinitionId: "e5e2a7ff-d759-4cd2-bb51-3152d37e2eb1", // Storage Account Backup Contributor
@@ -166,7 +165,6 @@ export interface BackupInstance extends Resource<
  *   principalType: "ServicePrincipal",
  * });
  * const policy = yield* Azure.DataProtection.BackupPolicy("blobs", {
- *   resourceGroup: group.resourceGroupName,
  *   backupVault: vault.backupVaultName,
  *   datasourceTypes: ["Microsoft.Storage/storageAccounts/blobServices"],
  *   policyRules: [
@@ -184,7 +182,6 @@ export interface BackupInstance extends Resource<
  *   ],
  * });
  * const instance = yield* Azure.DataProtection.BackupInstance("blobs", {
- *   resourceGroup: group.resourceGroupName,
  *   backupVault: vault.backupVaultName,
  *   policyId: policy.backupPolicyId,
  *   dataSource: {
@@ -196,7 +193,9 @@ export interface BackupInstance extends Resource<
  *
  * @resource
  */
-export const BackupInstance = Resource<BackupInstance>("Azure.DataProtection.BackupInstance");
+export const BackupInstance = GroupedResource<BackupInstance>(
+  "Azure.DataProtection.BackupInstance",
+);
 
 export class BackupProtectionFailed extends Data.TaggedError(
   "Azure.DataProtection.BackupProtectionFailed",

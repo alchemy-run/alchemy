@@ -2,11 +2,12 @@ import * as securityinsights from "@distilled.cloud/azure/securityinsights";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { ensureRegistered, ignoreNotFound, orUndefinedIfNotFound, waitUntilGone } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   deterministicGuid,
   isWorkspaceOwnedByStack,
@@ -90,7 +91,6 @@ export interface DataConnector extends Resource<
  * **Example:** Enable the threat intelligence platforms connector
  * ```typescript
  * const sentinel = yield* Azure.SecurityInsights.OnboardingState("sentinel", {
- *   resourceGroup: group.resourceGroupName,
  *   workspace: logs.workspaceName,
  * });
  * yield* Azure.SecurityInsights.DataConnector("ti", {
@@ -117,7 +117,7 @@ export interface DataConnector extends Resource<
  *
  * @resource
  */
-export const DataConnector = Resource<DataConnector>("Azure.SecurityInsights.DataConnector");
+export const DataConnector = GroupedResource<DataConnector>("Azure.SecurityInsights.DataConnector");
 
 /** Kinds whose properties carry the Entra tenant ID. */
 const TENANT_KINDS = new Set(

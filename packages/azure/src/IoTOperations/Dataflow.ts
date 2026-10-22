@@ -1,7 +1,8 @@
 import * as iot from "@distilled.cloud/azure/iotoperations";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { childLifecycle, childStatus, type InstanceScope } from "./Common.ts";
 
 type ProfileScope = InstanceScope & { readonly dataflowProfileName: string };
@@ -71,7 +72,6 @@ export interface Dataflow extends Resource<
  * **Example:** Forward broker telemetry to Event Hubs
  * ```typescript
  * const dataflow = yield* Azure.IoTOperations.Dataflow("telemetry", {
- *   resourceGroup: group.resourceGroupName,
  *   instanceName: instance.instanceName,
  *   operations: [
  *     {
@@ -91,7 +91,7 @@ export interface Dataflow extends Resource<
  *
  * @resource
  */
-export const Dataflow = Resource<Dataflow>("Azure.IoTOperations.Dataflow");
+export const Dataflow = GroupedResource<Dataflow>("Azure.IoTOperations.Dataflow");
 
 export const DataflowProvider = () =>
   Provider.succeed(Dataflow, {

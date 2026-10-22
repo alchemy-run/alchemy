@@ -2,7 +2,7 @@ import * as compute from "@distilled.cloud/azure/compute";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import {
@@ -19,6 +19,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createComputeName, idsOf, ref, sameId, waitComputeGone } from "./common.ts";
 
 export interface AvailabilitySetProps {
@@ -109,7 +110,6 @@ export interface AvailabilitySet extends Resource<
  * **Example:** Two fault domains, five update domains
  * ```typescript
  * const set = yield* Azure.Compute.AvailabilitySet("web", {
- *   resourceGroup: group.resourceGroupName,
  *   platformFaultDomainCount: 2,
  *   platformUpdateDomainCount: 5,
  * });
@@ -119,7 +119,6 @@ export interface AvailabilitySet extends Resource<
  * **Example:** VM in an availability set
  * ```typescript
  * const vm = yield* Azure.Compute.VirtualMachine("web-1", {
- *   resourceGroup: group.resourceGroupName,
  *   availabilitySetId: set.availabilitySetId,
  *   vmSize: "Standard_B1s",
  *   networkInterfaceIds: [nic.networkInterfaceId],
@@ -130,7 +129,7 @@ export interface AvailabilitySet extends Resource<
  *
  * @resource
  */
-export const AvailabilitySet = Resource<AvailabilitySet>("Azure.Compute.AvailabilitySet");
+export const AvailabilitySet = GroupedResource<AvailabilitySet>("Azure.Compute.AvailabilitySet");
 
 type Observed = compute.GetAvailabilitySetResponse;
 

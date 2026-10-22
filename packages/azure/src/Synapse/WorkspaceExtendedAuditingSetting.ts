@@ -2,12 +2,13 @@ import * as synapse from "@distilled.cloud/azure/synapse";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
 import { ensureRegistered, orUndefinedIfNotFound } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   type AuditingSettingFields,
   auditingProperties,
@@ -78,7 +79,6 @@ export interface WorkspaceExtendedAuditingSetting extends Resource<
  * **Example:** Audit to Azure Monitor
  * ```typescript
  * yield* Azure.Synapse.WorkspaceExtendedAuditingSetting("audit", {
- *   resourceGroup: group.resourceGroupName,
  *   workspace: workspace.workspaceName,
  *   isAzureMonitorTargetEnabled: true,
  * });
@@ -87,7 +87,6 @@ export interface WorkspaceExtendedAuditingSetting extends Resource<
  * **Example:** Filter out health probes
  * ```typescript
  * yield* Azure.Synapse.WorkspaceExtendedAuditingSetting("audit", {
- *   resourceGroup: group.resourceGroupName,
  *   workspace: workspace.workspaceName,
  *   isAzureMonitorTargetEnabled: true,
  *   predicateExpression: "statement <> 'select 1'",
@@ -96,7 +95,7 @@ export interface WorkspaceExtendedAuditingSetting extends Resource<
  *
  * @resource
  */
-export const WorkspaceExtendedAuditingSetting = Resource<WorkspaceExtendedAuditingSetting>(
+export const WorkspaceExtendedAuditingSetting = GroupedResource<WorkspaceExtendedAuditingSetting>(
   "Azure.Synapse.WorkspaceExtendedAuditingSetting",
 );
 

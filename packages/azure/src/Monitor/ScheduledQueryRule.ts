@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -21,6 +21,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 
 export type ScheduledQueryRuleKind = "LogAlert" | "SimpleLogAlert" | "LogToMetric";
 
@@ -219,12 +220,8 @@ export interface ScheduledQueryRule extends Resource<
  * ### Creating a Log Alert
  * **Example:** Alert when a workspace receives no heartbeats
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("app");
- * const logs = yield* Azure.LogAnalytics.Workspace("logs", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const logs = yield* Azure.LogAnalytics.Workspace("logs");
  * const rule = yield* Azure.Monitor.ScheduledQueryRule("no-heartbeat", {
- *   resourceGroup: group.resourceGroupName,
  *   scopes: [logs.workspaceId],
  *   severity: 2,
  *   evaluationFrequency: "PT5M",
@@ -244,7 +241,6 @@ export interface ScheduledQueryRule extends Resource<
  * **Example:** Notify an action group, split by computer
  * ```typescript
  * const rule = yield* Azure.Monitor.ScheduledQueryRule("errors", {
- *   resourceGroup: group.resourceGroupName,
  *   scopes: [logs.workspaceId],
  *   severity: 1,
  *   evaluationFrequency: "PT5M",
@@ -265,7 +261,9 @@ export interface ScheduledQueryRule extends Resource<
  *
  * @resource
  */
-export const ScheduledQueryRule = Resource<ScheduledQueryRule>("Azure.Monitor.ScheduledQueryRule");
+export const ScheduledQueryRule = GroupedResource<ScheduledQueryRule>(
+  "Azure.Monitor.ScheduledQueryRule",
+);
 
 const sameText = (a: string | undefined, b: string | undefined) =>
   (a ?? "").toLowerCase() === (b ?? "").toLowerCase();

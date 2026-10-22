@@ -2,11 +2,12 @@ import * as datafactory from "@distilled.cloud/azure/datafactory";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { ensureRegistered, ignoreNotFound, orUndefinedIfNotFound, waitUntilGone } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   annotationsWithOwnership,
   createChildName,
@@ -102,7 +103,6 @@ export interface Dataset extends Resource<
  * **Example:** CSV files in a blob container
  * ```typescript
  * const csv = yield* Azure.DataFactory.Dataset("orders", {
- *   resourceGroup: group.resourceGroupName,
  *   factoryName: factory.factoryName,
  *   type: "DelimitedText",
  *   linkedServiceName: { referenceName: blob.linkedServiceName },
@@ -121,7 +121,7 @@ export interface Dataset extends Resource<
  *
  * @resource
  */
-export const Dataset = Resource<Dataset>("Azure.DataFactory.Dataset");
+export const Dataset = GroupedResource<Dataset>("Azure.DataFactory.Dataset");
 
 const getDataset = (
   subscriptionId: string,

@@ -2,7 +2,7 @@ import * as domainregistration from "@distilled.cloud/azure/domainregistration";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import {
@@ -21,6 +21,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 
 /** Mailing address of a domain contact. */
 export interface DomainContactAddress {
@@ -210,13 +211,10 @@ export interface Domain extends Resource<
  * ### Buying a Domain
  * **Example:** Register a domain hosted in Azure DNS
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("domains");
  * const zone = yield* Azure.Dns.Zone("example", {
- *   resourceGroup: group.resourceGroupName,
  *   zoneName: "example.com",
  * });
  * const domain = yield* Azure.DomainRegistration.Domain("example", {
- *   resourceGroup: group.resourceGroupName,
  *   domainName: "example.com",
  *   dnsZoneId: zone.zoneId,
  *   contactRegistrant: {
@@ -240,7 +238,6 @@ export interface Domain extends Resource<
  * **Example:** Disable auto-renew and WHOIS privacy
  * ```typescript
  * const domain = yield* Azure.DomainRegistration.Domain("example", {
- *   resourceGroup: group.resourceGroupName,
  *   domainName: "example.com",
  *   contactRegistrant: registrant,
  *   consent: { agreedBy: "203.0.113.10" },
@@ -251,7 +248,7 @@ export interface Domain extends Resource<
  *
  * @resource
  */
-export const Domain = Resource<Domain>("Azure.DomainRegistration.Domain");
+export const Domain = GroupedResource<Domain>("Azure.DomainRegistration.Domain");
 
 type ObservedDomain = domainregistration.GetDomainResponse;
 type ContactInput = domainregistration.Contact;

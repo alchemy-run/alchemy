@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -14,6 +14,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 
 export interface ResourceManagementPrivateLinkProps {
   /** Resource group of the private link. Changing it replaces it. */
@@ -68,16 +69,14 @@ export interface ResourceManagementPrivateLink extends Resource<
  * ### Creating a Private Link
  * **Example:** Private link for Azure Resource Manager
  * ```typescript
- * const rmpl = yield* Azure.Resources.ResourceManagementPrivateLink("arm", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const rmpl = yield* Azure.Resources.ResourceManagementPrivateLink("arm");
  * // point a private endpoint (group "ResourceManagement") at
  * // rmpl.resourceManagementPrivateLinkId
  * ```
  *
  * @resource
  */
-export const ResourceManagementPrivateLink = Resource<ResourceManagementPrivateLink>(
+export const ResourceManagementPrivateLink = GroupedResource<ResourceManagementPrivateLink>(
   "Azure.Resources.ResourceManagementPrivateLink",
 );
 

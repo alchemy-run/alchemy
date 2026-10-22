@@ -2,7 +2,7 @@ import * as cognitiveservices from "@distilled.cloud/azure/cognitiveservices";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -18,6 +18,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { CHILD_BUDGET, createChildName, sameArm, whileAccountBusy } from "./Common.ts";
 
 export interface RaiBlocklistItemProps {
@@ -81,13 +82,11 @@ export interface RaiBlocklistItem extends Resource<
  * **Example:** Exact term and regular expression
  * ```typescript
  * yield* Azure.CognitiveServices.RaiBlocklistItem("secret", {
- *   resourceGroup: group.resourceGroupName,
  *   account: account.accountName,
  *   raiBlocklist: blocklist.raiBlocklistName,
  *   pattern: "top secret",
  * });
  * yield* Azure.CognitiveServices.RaiBlocklistItem("codename", {
- *   resourceGroup: group.resourceGroupName,
  *   account: account.accountName,
  *   raiBlocklist: blocklist.raiBlocklistName,
  *   pattern: "project-[a-z]+",
@@ -97,7 +96,7 @@ export interface RaiBlocklistItem extends Resource<
  *
  * @resource
  */
-export const RaiBlocklistItem = Resource<RaiBlocklistItem>(
+export const RaiBlocklistItem = GroupedResource<RaiBlocklistItem>(
   "Azure.CognitiveServices.RaiBlocklistItem",
 );
 

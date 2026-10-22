@@ -2,7 +2,7 @@ import * as apim from "@distilled.cloud/azure/apimanagement";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -12,6 +12,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { isParentOwned, sameName } from "./Common.ts";
 
 export type PolicyFormat = apim.PolicyContractPropertiesFormat;
@@ -60,7 +61,6 @@ export interface ServicePolicy extends Resource<
  * **Example:** Add a response header to every API
  * ```typescript
  * yield* Azure.ApiManagement.ServicePolicy("global", {
- *   resourceGroup: group.resourceGroupName,
  *   serviceName: apim.serviceName,
  *   value: `<policies>
  *   <inbound />
@@ -77,7 +77,7 @@ export interface ServicePolicy extends Resource<
  *
  * @resource
  */
-export const ServicePolicy = Resource<ServicePolicy>("Azure.ApiManagement.ServicePolicy");
+export const ServicePolicy = GroupedResource<ServicePolicy>("Azure.ApiManagement.ServicePolicy");
 
 const POLICY_ID = "policy";
 

@@ -3,11 +3,12 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { ensureRegistered, ignoreNotFound, orUndefinedIfNotFound, waitUntilGone } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createOptions,
   hasDedicatedThroughput,
@@ -73,13 +74,11 @@ export interface MongoDatabase extends Resource<
  * **Example:** Database on a serverless MongoDB account
  * ```typescript
  * const account = yield* Azure.CosmosDB.DatabaseAccount("mongo", {
- *   resourceGroup: group.resourceGroupName,
  *   kind: "MongoDB",
  *   capabilities: ["EnableServerless", "EnableMongo"],
  *   serverVersion: "4.2",
  * });
  * const database = yield* Azure.CosmosDB.MongoDatabase("app", {
- *   resourceGroup: group.resourceGroupName,
  *   account: account.accountName,
  * });
  * ```
@@ -88,7 +87,6 @@ export interface MongoDatabase extends Resource<
  * **Example:** Manual throughput shared by every collection
  * ```typescript
  * const database = yield* Azure.CosmosDB.MongoDatabase("app", {
- *   resourceGroup: group.resourceGroupName,
  *   account: account.accountName,
  *   throughput: 400,
  * });
@@ -96,7 +94,7 @@ export interface MongoDatabase extends Resource<
  *
  * @resource
  */
-export const MongoDatabase = Resource<MongoDatabase>("Azure.CosmosDB.MongoDatabase");
+export const MongoDatabase = GroupedResource<MongoDatabase>("Azure.CosmosDB.MongoDatabase");
 
 const createDatabaseName = Effect.fn(function* (id: string) {
   return (yield* createPhysicalName({ id, maxLength: 40 })).replace(/[^A-Za-z0-9_-]/g, "-");

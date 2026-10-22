@@ -2,12 +2,13 @@ import * as synapse from "@distilled.cloud/azure/synapse";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
 import { ensureRegistered, orUndefinedIfNotFound } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   auditingProperties,
   type AuditingSettingFields,
@@ -64,7 +65,6 @@ export interface SqlPoolAuditingSetting extends Resource<
  * **Example:** Audit to Azure Monitor
  * ```typescript
  * yield* Azure.Synapse.SqlPoolAuditingSetting("audit", {
- *   resourceGroup: group.resourceGroupName,
  *   workspace: workspace.workspaceName,
  *   sqlPool: pool.sqlPoolName,
  *   isAzureMonitorTargetEnabled: true,
@@ -73,7 +73,7 @@ export interface SqlPoolAuditingSetting extends Resource<
  *
  * @resource
  */
-export const SqlPoolAuditingSetting = Resource<SqlPoolAuditingSetting>(
+export const SqlPoolAuditingSetting = GroupedResource<SqlPoolAuditingSetting>(
   "Azure.Synapse.SqlPoolAuditingSetting",
 );
 

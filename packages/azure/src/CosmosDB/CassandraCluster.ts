@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
 import {
@@ -22,6 +22,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 
 export interface CassandraClusterProps {
   /** Resource group the cluster is created in. Changing it replaces the cluster. */
@@ -131,11 +132,9 @@ export interface CassandraCluster extends Resource<
  * **Example:** Cluster on a dedicated subnet
  * ```typescript
  * const vnet = yield* Azure.Network.VirtualNetwork("cassandra", {
- *   resourceGroup: group.resourceGroupName,
  *   addressPrefixes: ["10.20.0.0/16"],
  * });
  * const subnet = yield* Azure.Network.Subnet("nodes", {
- *   resourceGroup: group.resourceGroupName,
  *   virtualNetwork: vnet.virtualNetworkName,
  *   addressPrefix: "10.20.1.0/24",
  * });
@@ -146,7 +145,6 @@ export interface CassandraCluster extends Resource<
  *   principalType: "ServicePrincipal",
  * });
  * const cluster = yield* Azure.CosmosDB.CassandraCluster("cassandra", {
- *   resourceGroup: group.resourceGroupName,
  *   delegatedManagementSubnetId: subnet.subnetId,
  *   cassandraVersion: "4.0",
  *   initialCassandraAdminPassword: yield* Config.redacted("CASSANDRA_PASSWORD"),
@@ -157,7 +155,6 @@ export interface CassandraCluster extends Resource<
  * **Example:** Join existing on-premises data centers
  * ```typescript
  * const cluster = yield* Azure.CosmosDB.CassandraCluster("hybrid", {
- *   resourceGroup: group.resourceGroupName,
  *   delegatedManagementSubnetId: subnet.subnetId,
  *   externalSeedNodes: ["10.0.0.4", "10.0.0.5"],
  *   repairEnabled: false,
@@ -166,7 +163,9 @@ export interface CassandraCluster extends Resource<
  *
  * @resource
  */
-export const CassandraCluster = Resource<CassandraCluster>("Azure.CosmosDB.CassandraCluster");
+export const CassandraCluster = GroupedResource<CassandraCluster>(
+  "Azure.CosmosDB.CassandraCluster",
+);
 
 type ObservedCluster = cosmos.GetCassandraClusterResponse;
 

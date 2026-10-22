@@ -2,7 +2,7 @@ import * as apim from "@distilled.cloud/azure/apimanagement";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createEntityName, isParentOwned, sameName, subsetMatches } from "./Common.ts";
 
 export type ApiType = apim.ApiCreateOrUpdatePropertiesInputType;
@@ -123,7 +124,6 @@ export interface Api extends Resource<
  * **Example:** HTTP API proxying a backend
  * ```typescript
  * const api = yield* Azure.ApiManagement.Api("orders", {
- *   resourceGroup: group.resourceGroupName,
  *   serviceName: apim.serviceName,
  *   path: "orders",
  *   serviceUrl: "https://orders.example.com",
@@ -134,7 +134,6 @@ export interface Api extends Resource<
  * **Example:** Import an inline OpenAPI document
  * ```typescript
  * const api = yield* Azure.ApiManagement.Api("petstore", {
- *   resourceGroup: group.resourceGroupName,
  *   serviceName: apim.serviceName,
  *   path: "pets",
  *   format: "openapi+json",
@@ -145,7 +144,6 @@ export interface Api extends Resource<
  * **Example:** Import from a URL
  * ```typescript
  * const api = yield* Azure.ApiManagement.Api("petstore", {
- *   resourceGroup: group.resourceGroupName,
  *   serviceName: apim.serviceName,
  *   path: "pets",
  *   format: "openapi-link",
@@ -155,7 +153,7 @@ export interface Api extends Resource<
  *
  * @resource
  */
-export const Api = Resource<Api>("Azure.ApiManagement.Api");
+export const Api = GroupedResource<Api>("Azure.ApiManagement.Api");
 
 const getApi = (
   subscriptionId: string,

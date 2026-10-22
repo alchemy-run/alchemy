@@ -1,8 +1,9 @@
 import * as network from "@distilled.cloud/azure/network";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import { orUndefinedIfNotFound, userTags } from "../Arm.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { idsOf, networkProvider } from "./generic.ts";
 
 export interface VirtualWanProps {
@@ -79,15 +80,12 @@ export interface VirtualWan extends Resource<
  * ### Creating a Virtual WAN
  * **Example:** Standard WAN
  * ```typescript
- * const wan = yield* Azure.Network.VirtualWan("wan", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const wan = yield* Azure.Network.VirtualWan("wan");
  * ```
  *
  * **Example:** Basic WAN without branch-to-branch traffic
  * ```typescript
  * const wan = yield* Azure.Network.VirtualWan("wan", {
- *   resourceGroup: group.resourceGroupName,
  *   type: "Basic",
  *   allowBranchToBranchTraffic: false,
  * });
@@ -95,7 +93,7 @@ export interface VirtualWan extends Resource<
  *
  * @resource
  */
-export const VirtualWan = Resource<VirtualWan>("Azure.Network.VirtualWan");
+export const VirtualWan = GroupedResource<VirtualWan>("Azure.Network.VirtualWan");
 
 export const VirtualWanProvider = () =>
   Provider.succeed(

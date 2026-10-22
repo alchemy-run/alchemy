@@ -2,7 +2,7 @@ import * as app from "@distilled.cloud/azure/app";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
 import {
@@ -21,6 +21,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createContainerAppsName,
   fingerprint,
@@ -201,9 +202,7 @@ export interface ManagedEnvironment extends Resource<
  * ### Creating an Environment
  * **Example:** Workload profiles environment with a Consumption profile
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("app");
  * const env = yield* Azure.ContainerApps.ManagedEnvironment("env", {
- *   resourceGroup: group.resourceGroupName,
  *   workloadProfiles: [
  *     { name: "Consumption", workloadProfileType: "Consumption" },
  *   ],
@@ -213,7 +212,6 @@ export interface ManagedEnvironment extends Resource<
  * **Example:** Express environment for HTTP apps
  * ```typescript
  * const env = yield* Azure.ContainerApps.ManagedEnvironment("env", {
- *   resourceGroup: group.resourceGroupName,
  *   environmentMode: "Express",
  * });
  * ```
@@ -222,7 +220,6 @@ export interface ManagedEnvironment extends Resource<
  * **Example:** Stream logs to a Log Analytics workspace
  * ```typescript
  * const env = yield* Azure.ContainerApps.ManagedEnvironment("env", {
- *   resourceGroup: group.resourceGroupName,
  *   appLogsConfiguration: {
  *     destination: "log-analytics",
  *     logAnalyticsConfiguration: {
@@ -237,14 +234,13 @@ export interface ManagedEnvironment extends Resource<
  * **Example:** Mutual TLS between apps
  * ```typescript
  * const env = yield* Azure.ContainerApps.ManagedEnvironment("env", {
- *   resourceGroup: group.resourceGroupName,
  *   mtlsEnabled: true,
  * });
  * ```
  *
  * @resource
  */
-export const ManagedEnvironment = Resource<ManagedEnvironment>(
+export const ManagedEnvironment = GroupedResource<ManagedEnvironment>(
   "Azure.ContainerApps.ManagedEnvironment",
 );
 

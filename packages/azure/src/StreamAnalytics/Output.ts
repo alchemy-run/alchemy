@@ -2,7 +2,7 @@ import * as streamanalytics from "@distilled.cloud/azure/streamanalytics";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   canonical,
   createStreamAnalyticsName,
@@ -94,7 +95,6 @@ export interface Output extends Resource<
  * **Example:** JSON lines to Blob storage with the job's managed identity
  * ```typescript
  * const archive = yield* Azure.StreamAnalytics.Output("archive", {
- *   resourceGroup: group.resourceGroupName,
  *   streamingJob: job.jobName,
  *   name: "archive",
  *   datasource: {
@@ -118,7 +118,6 @@ export interface Output extends Resource<
  * **Example:** Event Hubs sink
  * ```typescript
  * const alerts = yield* Azure.StreamAnalytics.Output("alerts", {
- *   resourceGroup: group.resourceGroupName,
  *   streamingJob: job.jobName,
  *   datasource: {
  *     type: "Microsoft.ServiceBus/EventHub",
@@ -134,7 +133,7 @@ export interface Output extends Resource<
  *
  * @resource
  */
-export const Output = Resource<Output>("Azure.StreamAnalytics.Output");
+export const Output = GroupedResource<Output>("Azure.StreamAnalytics.Output");
 
 const getOutput = (
   subscriptionId: string,

@@ -52,16 +52,10 @@ export interface ViteProps extends FrameworkSiteProps {
  * });
  * ```
  *
- * **Example:** Existing Resource Group and Storage Account
+ * **Example:** Existing Storage Account
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("Group");
- * const storageAccount = yield* Azure.Storage.StorageAccount("Files", {
- *   resourceGroup: group.resourceGroupName,
- * });
- * const site = yield* Azure.Website.Vite("Web", {
- *   resourceGroup: group,
- *   storageAccount,
- * });
+ * const storageAccount = yield* Azure.Storage.StorageAccount("Files");
+ * const site = yield* Azure.Website.Vite("Web", { storageAccount });
  * ```
  *
  * ### Multi-Page Sites

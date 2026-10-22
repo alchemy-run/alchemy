@@ -2,7 +2,7 @@ import * as streamanalytics from "@distilled.cloud/azure/streamanalytics";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   clusterOwnedByStage,
   createStreamAnalyticsName,
@@ -86,13 +87,10 @@ export interface ClusterPrivateEndpoint extends Resource<
  * ### Connecting a Cluster to a Private Resource
  * **Example:** Private endpoint to an Event Hubs namespace
  * ```typescript
- * const cluster = yield* Azure.StreamAnalytics.Cluster("dedicated", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const cluster = yield* Azure.StreamAnalytics.Cluster("dedicated");
  * const endpoint = yield* Azure.StreamAnalytics.ClusterPrivateEndpoint(
  *   "events",
  *   {
- *     resourceGroup: group.resourceGroupName,
  *     cluster: cluster.clusterName,
  *     privateLinkServiceId: namespace.namespaceId,
  *     groupIds: ["namespace"],
@@ -102,7 +100,7 @@ export interface ClusterPrivateEndpoint extends Resource<
  *
  * @resource
  */
-export const ClusterPrivateEndpoint = Resource<ClusterPrivateEndpoint>(
+export const ClusterPrivateEndpoint = GroupedResource<ClusterPrivateEndpoint>(
   "Azure.StreamAnalytics.ClusterPrivateEndpoint",
 );
 

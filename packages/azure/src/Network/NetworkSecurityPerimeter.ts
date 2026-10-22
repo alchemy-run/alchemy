@@ -1,8 +1,9 @@
 import * as network from "@distilled.cloud/azure/network";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import { orUndefinedIfNotFound, userTags } from "../Arm.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { networkProvider } from "./generic.ts";
 
 export interface NetworkSecurityPerimeterProps {
@@ -56,18 +57,15 @@ export interface NetworkSecurityPerimeter extends Resource<
  * ### Creating a Perimeter
  * **Example:** Perimeter with a profile
  * ```typescript
- * const perimeter = yield* Azure.Network.NetworkSecurityPerimeter("data", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const perimeter = yield* Azure.Network.NetworkSecurityPerimeter("data");
  * const profile = yield* Azure.Network.NetworkSecurityPerimeterProfile("default", {
- *   resourceGroup: group.resourceGroupName,
  *   networkSecurityPerimeter: perimeter.networkSecurityPerimeterName,
  * });
  * ```
  *
  * @resource
  */
-export const NetworkSecurityPerimeter = Resource<NetworkSecurityPerimeter>(
+export const NetworkSecurityPerimeter = GroupedResource<NetworkSecurityPerimeter>(
   "Azure.Network.NetworkSecurityPerimeter",
 );
 

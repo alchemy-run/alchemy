@@ -2,11 +2,12 @@ import * as network from "@distilled.cloud/azure/network";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { ensureRegistered, ignoreNotFound, orUndefinedIfNotFound } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   canonical,
   createNetworkName,
@@ -98,14 +99,12 @@ export interface PrivateDnsZoneGroup extends Resource<
  * **Example:** Blob endpoint with a private DNS zone
  * ```typescript
  * const endpoint = yield* Azure.Network.PrivateEndpoint("files-blob", {
- *   resourceGroup: group.resourceGroupName,
  *   subnetId: subnet.subnetId,
  *   privateLinkServiceConnections: [
  *     { privateLinkServiceId: account.storageAccountId, groupIds: ["blob"] },
  *   ],
  * });
  * yield* Azure.Network.PrivateDnsZoneGroup("files-blob-dns", {
- *   resourceGroup: group.resourceGroupName,
  *   privateEndpoint: endpoint.privateEndpointName,
  *   privateDnsZoneConfigs: [{ privateDnsZoneId: blobZoneId }],
  * });
@@ -113,7 +112,7 @@ export interface PrivateDnsZoneGroup extends Resource<
  *
  * @resource
  */
-export const PrivateDnsZoneGroup = Resource<PrivateDnsZoneGroup>(
+export const PrivateDnsZoneGroup = GroupedResource<PrivateDnsZoneGroup>(
   "Azure.Network.PrivateDnsZoneGroup",
 );
 

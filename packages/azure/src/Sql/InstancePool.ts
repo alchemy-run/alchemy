@@ -2,7 +2,7 @@ import * as sql from "@distilled.cloud/azure/sql";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -20,6 +20,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createDnsName, lower, sameId, skuMatches, type SqlSku } from "./common.ts";
 
 export interface InstancePoolProps {
@@ -102,7 +103,6 @@ export interface InstancePool extends Resource<
  * **Example:** 8 vCore General Purpose pool
  * ```typescript
  * const pool = yield* Azure.Sql.InstancePool("pool", {
- *   resourceGroup: group.resourceGroupName,
  *   subnetId: miSubnetId,
  *   vCores: 8,
  * });
@@ -111,7 +111,6 @@ export interface InstancePool extends Resource<
  * **Example:** Pool with Azure Hybrid Benefit and tags
  * ```typescript
  * const pool = yield* Azure.Sql.InstancePool("pool", {
- *   resourceGroup: group.resourceGroupName,
  *   subnetId: miSubnetId,
  *   vCores: 16,
  *   licenseType: "BasePrice",
@@ -121,7 +120,7 @@ export interface InstancePool extends Resource<
  *
  * @resource
  */
-export const InstancePool = Resource<InstancePool>("Azure.Sql.InstancePool");
+export const InstancePool = GroupedResource<InstancePool>("Azure.Sql.InstancePool");
 
 type ObservedPool = sql.GetInstancePoolResponse;
 

@@ -1,8 +1,9 @@
 import * as network from "@distilled.cloud/azure/network";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import { orUndefinedIfNotFound } from "../Arm.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { networkProvider } from "./generic.ts";
 import { hubOwnerTags } from "./virtualHubShared.ts";
 
@@ -86,7 +87,6 @@ export interface RouteMap extends Resource<
  * **Example:** Drop a prefix and tag everything else
  * ```typescript
  * const map = yield* Azure.Network.RouteMap("filter", {
- *   resourceGroup: group.resourceGroupName,
  *   virtualHub: hub.virtualHubName,
  *   rules: [
  *     {
@@ -101,7 +101,7 @@ export interface RouteMap extends Resource<
  *
  * @resource
  */
-export const RouteMap = Resource<RouteMap>("Azure.Network.RouteMap");
+export const RouteMap = GroupedResource<RouteMap>("Azure.Network.RouteMap");
 
 export const RouteMapProvider = () =>
   Provider.succeed(

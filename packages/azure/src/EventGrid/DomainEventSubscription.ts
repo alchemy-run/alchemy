@@ -2,11 +2,12 @@ import * as eventgrid from "@distilled.cloud/azure/eventgrid";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { ensureRegistered, ignoreNotFound, orUndefinedIfNotFound, waitUntilGone } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createEventGridName, sameName } from "./common.ts";
 import {
   desiredSubscription,
@@ -52,11 +53,8 @@ export interface DomainEventSubscription extends Resource<
  * ### Subscribing to a Domain
  * **Example:** Deliver all domain events to a Storage queue
  * ```typescript
- * const domain = yield* Azure.EventGrid.Domain("tenants", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const domain = yield* Azure.EventGrid.Domain("tenants");
  * const audit = yield* Azure.EventGrid.DomainEventSubscription("audit", {
- *   resourceGroup: group.resourceGroupName,
  *   domain: domain.domainName,
  *   destination: {
  *     endpointType: "StorageQueue",
@@ -69,7 +67,6 @@ export interface DomainEventSubscription extends Resource<
  * **Example:** Only events of one domain topic
  * ```typescript
  * const tenantA = yield* Azure.EventGrid.DomainEventSubscription("tenant-a", {
- *   resourceGroup: group.resourceGroupName,
  *   domain: domain.domainName,
  *   destination: {
  *     endpointType: "StorageQueue",
@@ -82,7 +79,7 @@ export interface DomainEventSubscription extends Resource<
  *
  * @resource
  */
-export const DomainEventSubscription = Resource<DomainEventSubscription>(
+export const DomainEventSubscription = GroupedResource<DomainEventSubscription>(
   "Azure.EventGrid.DomainEventSubscription",
 );
 

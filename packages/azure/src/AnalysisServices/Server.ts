@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -20,6 +20,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 
 /**
  * Analysis Services SKU: `D1` (Development), `B1`/`B2` (Basic), or
@@ -183,9 +184,7 @@ export interface Server extends Resource<
  * ### Creating a Server
  * **Example:** Development server with a service-principal admin
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("analytics");
  * const server = yield* Azure.AnalysisServices.Server("models", {
- *   resourceGroup: group.resourceGroupName,
  *   sku: "D1",
  *   administrators: ["app:00000000-0000-0000-0000-000000000000@contoso.com"],
  * });
@@ -195,7 +194,6 @@ export interface Server extends Resource<
  * **Example:** Firewall that allows one office range and Power BI
  * ```typescript
  * const server = yield* Azure.AnalysisServices.Server("models", {
- *   resourceGroup: group.resourceGroupName,
  *   firewall: {
  *     enablePowerBIService: true,
  *     rules: [
@@ -209,14 +207,13 @@ export interface Server extends Resource<
  * **Example:** Suspend a server while it is not needed
  * ```typescript
  * const server = yield* Azure.AnalysisServices.Server("models", {
- *   resourceGroup: group.resourceGroupName,
  *   paused: true,
  * });
  * ```
  *
  * @resource
  */
-export const Server = Resource<Server>("Azure.AnalysisServices.Server");
+export const Server = GroupedResource<Server>("Azure.AnalysisServices.Server");
 
 type ObservedServer = analysisservices.GetServerDetailsResponse;
 

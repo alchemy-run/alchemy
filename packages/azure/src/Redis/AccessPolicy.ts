@@ -2,7 +2,7 @@ import * as redis from "@distilled.cloud/azure/redis";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { cacheOwnedByStage, createAlphanumericName, lower, whileCacheBusy } from "./Common.ts";
 
 export interface AccessPolicyProps {
@@ -67,11 +68,9 @@ export interface AccessPolicy extends Resource<
  * **Example:** Read-only access to every key
  * ```typescript
  * const cache = yield* Azure.Redis.Cache("cache", {
- *   resourceGroup: group.resourceGroupName,
  *   redisConfiguration: { aadEnabled: true },
  * });
  * const reader = yield* Azure.Redis.AccessPolicy("reader", {
- *   resourceGroup: group.resourceGroupName,
  *   cache: cache.cacheName,
  *   permissions: "+@read +@connection ~*",
  * });
@@ -80,7 +79,6 @@ export interface AccessPolicy extends Resource<
  * **Example:** Scope writes to a key prefix
  * ```typescript
  * yield* Azure.Redis.AccessPolicy("sessions", {
- *   resourceGroup: group.resourceGroupName,
  *   cache: cache.cacheName,
  *   name: "sessionswriter",
  *   permissions: "+@read +@write +@connection ~session:*",
@@ -89,7 +87,7 @@ export interface AccessPolicy extends Resource<
  *
  * @resource
  */
-export const AccessPolicy = Resource<AccessPolicy>("Azure.Redis.AccessPolicy");
+export const AccessPolicy = GroupedResource<AccessPolicy>("Azure.Redis.AccessPolicy");
 
 const getPolicy = (
   subscriptionId: string,

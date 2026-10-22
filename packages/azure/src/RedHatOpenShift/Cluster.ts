@@ -4,7 +4,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import {
@@ -23,6 +23,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 
 export type ClusterVisibility = "Public" | "Private";
 
@@ -280,21 +281,17 @@ export interface Cluster extends Resource<
  *   location: "eastus",
  * });
  * const vnet = yield* Azure.Network.VirtualNetwork("aro-vnet", {
- *   resourceGroup: group.resourceGroupName,
  *   addressPrefixes: ["10.0.0.0/22"],
  * });
  * const master = yield* Azure.Network.Subnet("master", {
- *   resourceGroup: group.resourceGroupName,
  *   virtualNetwork: vnet.virtualNetworkName,
  *   addressPrefix: "10.0.0.0/23",
  * });
  * const worker = yield* Azure.Network.Subnet("worker", {
- *   resourceGroup: group.resourceGroupName,
  *   virtualNetwork: vnet.virtualNetworkName,
  *   addressPrefix: "10.0.2.0/23",
  * });
  * const cluster = yield* Azure.RedHatOpenShift.Cluster("aro", {
- *   resourceGroup: group.resourceGroupName,
  *   servicePrincipal: {
  *     clientId: process.env.ARO_CLIENT_ID!,
  *     clientSecret: Redacted.make(process.env.ARO_CLIENT_SECRET!),
@@ -309,7 +306,6 @@ export interface Cluster extends Resource<
  * **Example:** Private cluster with user-defined routing
  * ```typescript
  * const cluster = yield* Azure.RedHatOpenShift.Cluster("aro", {
- *   resourceGroup: group.resourceGroupName,
  *   servicePrincipal,
  *   master: { subnetId: master.subnetId },
  *   worker: { subnetId: worker.subnetId, count: 3 },
@@ -323,7 +319,6 @@ export interface Cluster extends Resource<
  * **Example:** Cluster with platform workload identities
  * ```typescript
  * const cluster = yield* Azure.RedHatOpenShift.Cluster("aro", {
- *   resourceGroup: group.resourceGroupName,
  *   version: "4.15.35",
  *   clusterIdentityId: clusterIdentity.identityId,
  *   platformWorkloadIdentities: {
@@ -338,7 +333,7 @@ export interface Cluster extends Resource<
  *
  * @resource
  */
-export const Cluster = Resource<Cluster>("Azure.RedHatOpenShift.Cluster");
+export const Cluster = GroupedResource<Cluster>("Azure.RedHatOpenShift.Cluster");
 
 type ObservedCluster = aro.GetOpenShiftClusterResponse;
 

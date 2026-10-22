@@ -2,7 +2,7 @@ import * as mnf from "@distilled.cloud/azure/managednetworkfabric";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -19,6 +19,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createFabricName, FABRIC_NAMESPACE, sameArm, waitFabricProvisioned } from "./Common.ts";
 
 export interface NetworkPacketBrokerProps {
@@ -130,7 +131,7 @@ export interface NetworkPacketBroker extends Resource<
  *
  * @resource
  */
-export const NetworkPacketBroker = Resource<NetworkPacketBroker>(
+export const NetworkPacketBroker = GroupedResource<NetworkPacketBroker>(
   "Azure.ManagedNetworkFabric.NetworkPacketBroker",
 );
 

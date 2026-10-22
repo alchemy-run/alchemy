@@ -2,7 +2,7 @@ import * as hybridnetwork from "@distilled.cloud/azure/hybridnetwork";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -20,6 +20,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createHybridNetworkName,
   type HybridNetworkIdentity,
@@ -136,7 +137,6 @@ export interface SiteNetworkService extends Resource<
  * **Example:** Site network service
  * ```typescript
  * const sns = yield* Azure.HybridNetwork.SiteNetworkService("service", {
- *   resourceGroup: group.resourceGroupName,
  *   siteId: site.siteId,
  *   networkServiceDesignVersionId: nsdv.networkServiceDesignVersionId,
  *   configurationGroupValues: {
@@ -149,7 +149,6 @@ export interface SiteNetworkService extends Resource<
  * **Example:** Roll out a new design version
  * ```typescript
  * const sns = yield* Azure.HybridNetwork.SiteNetworkService("service", {
- *   resourceGroup: group.resourceGroupName,
  *   siteId: site.siteId,
  *   networkServiceDesignVersionId: nsdv2.networkServiceDesignVersionId,
  *   configurationGroupValues: { config: values2.configurationGroupValueId },
@@ -158,7 +157,7 @@ export interface SiteNetworkService extends Resource<
  *
  * @resource
  */
-export const SiteNetworkService = Resource<SiteNetworkService>(
+export const SiteNetworkService = GroupedResource<SiteNetworkService>(
   "Azure.HybridNetwork.SiteNetworkService",
 );
 

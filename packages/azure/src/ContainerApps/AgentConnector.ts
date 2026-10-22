@@ -2,7 +2,7 @@ import * as app from "@distilled.cloud/azure/app";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createContainerAppsName,
   fingerprint,
@@ -74,7 +75,6 @@ export interface AgentConnector extends Resource<
  * **Example:** Kusto cluster connector
  * ```typescript
  * yield* Azure.ContainerApps.AgentConnector("kusto", {
- *   resourceGroup: group.resourceGroupName,
  *   agent: agent.agentName,
  *   dataConnectorType: "Kusto",
  *   dataSource: "https://mycluster.westus2.kusto.windows.net",
@@ -84,7 +84,7 @@ export interface AgentConnector extends Resource<
  *
  * @resource
  */
-export const AgentConnector = Resource<AgentConnector>("Azure.ContainerApps.AgentConnector");
+export const AgentConnector = GroupedResource<AgentConnector>("Azure.ContainerApps.AgentConnector");
 
 const createConnectorName = (id: string) => createContainerAppsName(id, 32);
 

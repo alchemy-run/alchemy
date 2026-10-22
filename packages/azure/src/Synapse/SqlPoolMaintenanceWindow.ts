@@ -2,11 +2,12 @@ import * as synapse from "@distilled.cloud/azure/synapse";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { ensureRegistered, orUndefinedIfNotFound } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   fieldsMatch,
   isWorkspaceOwnedByStack,
@@ -66,7 +67,6 @@ export interface SqlPoolMaintenanceWindow extends Resource<
  * **Example:** Weekend and mid-week windows
  * ```typescript
  * yield* Azure.Synapse.SqlPoolMaintenanceWindow("maintenance", {
- *   resourceGroup: group.resourceGroupName,
  *   workspace: workspace.workspaceName,
  *   sqlPool: pool.sqlPoolName,
  *   timeRanges: [
@@ -78,7 +78,7 @@ export interface SqlPoolMaintenanceWindow extends Resource<
  *
  * @resource
  */
-export const SqlPoolMaintenanceWindow = Resource<SqlPoolMaintenanceWindow>(
+export const SqlPoolMaintenanceWindow = GroupedResource<SqlPoolMaintenanceWindow>(
   "Azure.Synapse.SqlPoolMaintenanceWindow",
 );
 

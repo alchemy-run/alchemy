@@ -2,7 +2,7 @@ import * as vmware from "@distilled.cloud/azure/vmware";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   AVS_NAMESPACE,
   WORKLOAD_BUDGET,
@@ -73,7 +74,6 @@ export interface WorkloadNetworkDnsZone extends Resource<
  * **Example:** Forward a corporate domain
  * ```typescript
  * yield* Azure.VMware.WorkloadNetworkDnsZone("corp", {
- *   resourceGroup: group.resourceGroupName,
  *   privateCloud: cloud.privateCloudName,
  *   domain: ["corp.example.com"],
  *   dnsServerIps: ["10.0.0.4"],
@@ -82,7 +82,7 @@ export interface WorkloadNetworkDnsZone extends Resource<
  *
  * @resource
  */
-export const WorkloadNetworkDnsZone = Resource<WorkloadNetworkDnsZone>(
+export const WorkloadNetworkDnsZone = GroupedResource<WorkloadNetworkDnsZone>(
   "Azure.VMware.WorkloadNetworkDnsZone",
 );
 

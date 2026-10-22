@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -21,6 +21,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 
 /**
  * Pricing tier of a Health Bot. `F0` is the free tier (limited monthly
@@ -141,16 +142,13 @@ export interface Bot extends Resource<
  * const group = yield* Azure.Resources.ResourceGroup("health", {
  *   location: "eastus",
  * });
- * const bot = yield* Azure.HealthBot.Bot("assistant", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const bot = yield* Azure.HealthBot.Bot("assistant");
  * // bot.botManagementPortalLink -> "https://us.healthbot.microsoft.com/..."
  * ```
  *
  * **Example:** Standard-tier bot with tags
  * ```typescript
  * const bot = yield* Azure.HealthBot.Bot("assistant", {
- *   resourceGroup: group.resourceGroupName,
  *   sku: "C0",
  *   tags: { team: "care" },
  * });
@@ -160,7 +158,6 @@ export interface Bot extends Resource<
  * **Example:** Encrypt with a Key Vault key via a user-assigned identity
  * ```typescript
  * const bot = yield* Azure.HealthBot.Bot("assistant", {
- *   resourceGroup: group.resourceGroupName,
  *   sku: "C0",
  *   identity: {
  *     type: "UserAssigned",
@@ -176,7 +173,7 @@ export interface Bot extends Resource<
  *
  * @resource
  */
-export const Bot = Resource<Bot>("Azure.HealthBot.Bot");
+export const Bot = GroupedResource<Bot>("Azure.HealthBot.Bot");
 
 type ObservedBot = healthbot.GetBotResponse;
 

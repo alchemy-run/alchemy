@@ -2,7 +2,7 @@ import * as elasticsan from "@distilled.cloud/azure/elasticsan";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -19,6 +19,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createSanName, getElasticSan, lower } from "./Common.ts";
 
 export type ElasticSanSkuName = "Premium_LRS" | "Premium_ZRS";
@@ -140,16 +141,12 @@ export interface ElasticSan extends Resource<
  * ### Creating an Elastic SAN
  * **Example:** Minimal SAN (1 TiB base capacity)
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("storage");
- * const san = yield* Azure.ElasticSan.ElasticSan("san", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const san = yield* Azure.ElasticSan.ElasticSan("san");
  * ```
  *
  * **Example:** Zone-redundant SAN with extra capacity
  * ```typescript
  * const san = yield* Azure.ElasticSan.ElasticSan("san", {
- *   resourceGroup: group.resourceGroupName,
  *   sku: "Premium_ZRS",
  *   baseSizeTiB: 2,
  *   extendedCapacitySizeTiB: 4,
@@ -161,7 +158,6 @@ export interface ElasticSan extends Resource<
  * **Example:** Grow capacity automatically
  * ```typescript
  * const san = yield* Azure.ElasticSan.ElasticSan("san", {
- *   resourceGroup: group.resourceGroupName,
  *   autoScaleProperties: {
  *     scaleUpProperties: {
  *       autoScalePolicyEnforcement: "Enabled",
@@ -175,7 +171,7 @@ export interface ElasticSan extends Resource<
  *
  * @resource
  */
-export const ElasticSan = Resource<ElasticSan>("Azure.ElasticSan.ElasticSan");
+export const ElasticSan = GroupedResource<ElasticSan>("Azure.ElasticSan.ElasticSan");
 
 type ObservedSan = elasticsan.GetElasticSanResponse;
 

@@ -2,7 +2,7 @@ import * as dr from "@distilled.cloud/azure/recoveryservicesdatareplication";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createDataReplicationName,
   DATA_REPLICATION_NAMESPACE,
@@ -123,7 +124,6 @@ export interface FabricAgent extends Resource<
  *   aadAuthority: `https://login.microsoftonline.com/${tenantId}`,
  * };
  * const agent = yield* Azure.DataReplication.FabricAgent("agent", {
- *   resourceGroup: group.resourceGroupName,
  *   fabric: fabric.fabricName,
  *   machineId: "appliance-machine-id",
  *   machineName: "appliance01",
@@ -139,7 +139,7 @@ export interface FabricAgent extends Resource<
  *
  * @resource
  */
-export const FabricAgent = Resource<FabricAgent>("Azure.DataReplication.FabricAgent");
+export const FabricAgent = GroupedResource<FabricAgent>("Azure.DataReplication.FabricAgent");
 
 type Observed = dr.GetFabricAgentResponse;
 

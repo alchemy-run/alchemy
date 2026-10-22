@@ -3,11 +3,12 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { ensureRegistered, ignoreNotFound, orUndefinedIfNotFound, waitUntilGone } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   canonical,
   createOptions,
@@ -142,7 +143,6 @@ export interface SqlContainer extends Resource<
  * **Example:** Container partitioned by tenant
  * ```typescript
  * const orders = yield* Azure.CosmosDB.SqlContainer("orders", {
- *   resourceGroup: group.resourceGroupName,
  *   account: account.accountName,
  *   database: database.databaseName,
  *   partitionKey: { paths: ["/tenantId"] },
@@ -152,7 +152,6 @@ export interface SqlContainer extends Resource<
  * **Example:** Hierarchical partition key
  * ```typescript
  * const events = yield* Azure.CosmosDB.SqlContainer("events", {
- *   resourceGroup: group.resourceGroupName,
  *   account: account.accountName,
  *   database: database.databaseName,
  *   partitionKey: { paths: ["/tenantId", "/userId"], kind: "MultiHash" },
@@ -163,7 +162,6 @@ export interface SqlContainer extends Resource<
  * **Example:** Expire items after a day and index only one path
  * ```typescript
  * const sessions = yield* Azure.CosmosDB.SqlContainer("sessions", {
- *   resourceGroup: group.resourceGroupName,
  *   account: account.accountName,
  *   database: database.databaseName,
  *   partitionKey: { paths: ["/userId"] },
@@ -180,7 +178,6 @@ export interface SqlContainer extends Resource<
  * **Example:** Autoscale container on a provisioned account
  * ```typescript
  * const hot = yield* Azure.CosmosDB.SqlContainer("hot", {
- *   resourceGroup: group.resourceGroupName,
  *   account: account.accountName,
  *   database: database.databaseName,
  *   partitionKey: { paths: ["/id"] },
@@ -190,7 +187,7 @@ export interface SqlContainer extends Resource<
  *
  * @resource
  */
-export const SqlContainer = Resource<SqlContainer>("Azure.CosmosDB.SqlContainer");
+export const SqlContainer = GroupedResource<SqlContainer>("Azure.CosmosDB.SqlContainer");
 
 type ObservedContainer = cosmos.GetSqlResourceSqlContainerResponse;
 

@@ -2,7 +2,7 @@ import * as peering from "@distilled.cloud/azure/peering";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createPeeringName, peeringOwnedByStage } from "./Common.ts";
 
 export interface RegisteredAsnProps {
@@ -69,7 +70,6 @@ export interface RegisteredAsn extends Resource<
  * **Example:** Register a customer's ASN on a peering
  * ```typescript
  * const customer = yield* Azure.Peering.RegisteredAsn("customer-a", {
- *   resourceGroup: group.resourceGroupName,
  *   peering: exchange.peeringName,
  *   asn: 65010,
  * });
@@ -77,7 +77,7 @@ export interface RegisteredAsn extends Resource<
  *
  * @resource
  */
-export const RegisteredAsn = Resource<RegisteredAsn>("Azure.Peering.RegisteredAsn");
+export const RegisteredAsn = GroupedResource<RegisteredAsn>("Azure.Peering.RegisteredAsn");
 
 const getRegisteredAsn = (
   subscriptionId: string,

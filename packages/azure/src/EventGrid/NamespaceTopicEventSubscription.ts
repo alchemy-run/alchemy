@@ -1,7 +1,7 @@
 import * as eventgrid from "@distilled.cloud/azure/eventgrid";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -12,6 +12,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createEventGridName, sameName } from "./common.ts";
 import {
   destinationDiffers,
@@ -127,17 +128,13 @@ export interface NamespaceTopicEventSubscription extends Resource<
  * ### Pull Delivery
  * **Example:** Queue subscription for order events
  * ```typescript
- * const namespace = yield* Azure.EventGrid.Namespace("events", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const namespace = yield* Azure.EventGrid.Namespace("events");
  * const orders = yield* Azure.EventGrid.NamespaceTopic("orders", {
- *   resourceGroup: group.resourceGroupName,
  *   namespace: namespace.namespaceName,
  * });
  * const workers = yield* Azure.EventGrid.NamespaceTopicEventSubscription(
  *   "workers",
  *   {
- *     resourceGroup: group.resourceGroupName,
  *     namespace: namespace.namespaceName,
  *     topic: orders.namespaceTopicName,
  *     queue: { maxDeliveryCount: 5, receiveLockDurationInSeconds: 120 },
@@ -152,7 +149,6 @@ export interface NamespaceTopicEventSubscription extends Resource<
  * const toHub = yield* Azure.EventGrid.NamespaceTopicEventSubscription(
  *   "to-hub",
  *   {
- *     resourceGroup: group.resourceGroupName,
  *     namespace: namespace.namespaceName,
  *     topic: orders.namespaceTopicName,
  *     push: {
@@ -165,7 +161,7 @@ export interface NamespaceTopicEventSubscription extends Resource<
  *
  * @resource
  */
-export const NamespaceTopicEventSubscription = Resource<NamespaceTopicEventSubscription>(
+export const NamespaceTopicEventSubscription = GroupedResource<NamespaceTopicEventSubscription>(
   "Azure.EventGrid.NamespaceTopicEventSubscription",
 );
 

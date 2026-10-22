@@ -2,11 +2,12 @@ import * as storage from "@distilled.cloud/azure/storage";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { ensureRegistered, ignoreNotFound, orUndefinedIfNotFound, waitUntilGone } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { isAccountOwnedByStack } from "./StorageOwnership.ts";
 
 export interface ImmutabilityPolicyProps {
@@ -78,11 +79,9 @@ export interface ImmutabilityPolicy extends Resource<
  * **Example:** Seven-day retention
  * ```typescript
  * const archive = yield* Azure.Storage.BlobContainer("archive", {
- *   resourceGroup: group.resourceGroupName,
  *   storageAccount: account.storageAccountName,
  * });
  * yield* Azure.Storage.ImmutabilityPolicy("archive-retention", {
- *   resourceGroup: group.resourceGroupName,
  *   storageAccount: account.storageAccountName,
  *   container: archive.containerName,
  *   immutabilityPeriodSinceCreationInDays: 7,
@@ -92,7 +91,6 @@ export interface ImmutabilityPolicy extends Resource<
  * **Example:** Retention that still allows appends
  * ```typescript
  * yield* Azure.Storage.ImmutabilityPolicy("logs-retention", {
- *   resourceGroup: group.resourceGroupName,
  *   storageAccount: account.storageAccountName,
  *   container: logs.containerName,
  *   immutabilityPeriodSinceCreationInDays: 30,
@@ -102,7 +100,9 @@ export interface ImmutabilityPolicy extends Resource<
  *
  * @resource
  */
-export const ImmutabilityPolicy = Resource<ImmutabilityPolicy>("Azure.Storage.ImmutabilityPolicy");
+export const ImmutabilityPolicy = GroupedResource<ImmutabilityPolicy>(
+  "Azure.Storage.ImmutabilityPolicy",
+);
 
 /**
  * Observe the container's policy. A container without a policy reports an

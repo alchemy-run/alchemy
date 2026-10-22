@@ -2,11 +2,12 @@ import * as datafactory from "@distilled.cloud/azure/datafactory";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { ensureRegistered, orUndefinedIfNotFound } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { factoryOwnedByStack } from "./FactoryChild.ts";
 
 export interface ManagedVirtualNetworkProps {
@@ -59,11 +60,8 @@ export interface ManagedVirtualNetwork extends Resource<
  * ### Creating a Managed Virtual Network
  * **Example:** Enable the managed virtual network on a factory
  * ```typescript
- * const factory = yield* Azure.DataFactory.Factory("etl", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const factory = yield* Azure.DataFactory.Factory("etl");
  * const vnet = yield* Azure.DataFactory.ManagedVirtualNetwork("vnet", {
- *   resourceGroup: group.resourceGroupName,
  *   factoryName: factory.factoryName,
  * });
  * ```
@@ -72,7 +70,6 @@ export interface ManagedVirtualNetwork extends Resource<
  * **Example:** Managed private endpoint to a storage account
  * ```typescript
  * yield* Azure.DataFactory.ManagedPrivateEndpoint("blob", {
- *   resourceGroup: group.resourceGroupName,
  *   factoryName: factory.factoryName,
  *   managedVirtualNetworkName: vnet.managedVirtualNetworkName,
  *   privateLinkResourceId: account.storageAccountId,
@@ -82,7 +79,7 @@ export interface ManagedVirtualNetwork extends Resource<
  *
  * @resource
  */
-export const ManagedVirtualNetwork = Resource<ManagedVirtualNetwork>(
+export const ManagedVirtualNetwork = GroupedResource<ManagedVirtualNetwork>(
   "Azure.DataFactory.ManagedVirtualNetwork",
 );
 

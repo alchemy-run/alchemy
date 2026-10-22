@@ -2,7 +2,7 @@ import * as devtestlabs from "@distilled.cloud/azure/devtestlabs";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -17,6 +17,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createLabResourceName, DEVTESTLAB_NAMESPACE, labLocation } from "./Common.ts";
 
 export interface DiskProps {
@@ -99,7 +100,6 @@ export interface Disk extends Resource<
  * **Example:** 32 GiB standard data disk
  * ```typescript
  * const disk = yield* Azure.DevTestLabs.Disk("data", {
- *   resourceGroup: group.resourceGroupName,
  *   lab: lab.labName,
  *   user: user.userName,
  *   diskType: "Standard",
@@ -111,7 +111,6 @@ export interface Disk extends Resource<
  * **Example:** Attach the disk to a lab VM
  * ```typescript
  * const disk = yield* Azure.DevTestLabs.Disk("data", {
- *   resourceGroup: group.resourceGroupName,
  *   lab: lab.labName,
  *   user: user.userName,
  *   diskType: "Standard",
@@ -122,7 +121,7 @@ export interface Disk extends Resource<
  *
  * @resource
  */
-export const Disk = Resource<Disk>("Azure.DevTestLabs.Disk");
+export const Disk = GroupedResource<Disk>("Azure.DevTestLabs.Disk");
 
 const getDisk = (
   subscriptionId: string,

@@ -2,7 +2,7 @@ import * as eventhub from "@distilled.cloud/azure/eventhub";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import {
@@ -21,6 +21,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createNamespaceName } from "./Common.ts";
 
 export interface ClusterProps {
@@ -105,12 +106,10 @@ export interface Cluster extends Resource<
  * **Example:** One-CU scalable cluster hosting a namespace
  * ```typescript
  * const cluster = yield* Azure.EventHub.Cluster("dedicated", {
- *   resourceGroup: group.resourceGroupName,
  *   capacity: 1,
  *   supportsScaling: true,
  * });
  * const namespace = yield* Azure.EventHub.Namespace("events", {
- *   resourceGroup: group.resourceGroupName,
  *   sku: "Premium",
  *   clusterArmId: cluster.clusterId,
  * });
@@ -118,7 +117,7 @@ export interface Cluster extends Resource<
  *
  * @resource
  */
-export const Cluster = Resource<Cluster>("Azure.EventHub.Cluster");
+export const Cluster = GroupedResource<Cluster>("Azure.EventHub.Cluster");
 
 type ObservedCluster = eventhub.GetClusterResponse;
 

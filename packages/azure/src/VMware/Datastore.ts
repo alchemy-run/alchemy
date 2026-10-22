@@ -2,7 +2,7 @@ import * as vmware from "@distilled.cloud/azure/vmware";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   AVS_NAMESPACE,
   CHILD_BUDGET,
@@ -102,7 +103,6 @@ export interface Datastore extends Resource<
  * **Example:** Azure NetApp Files datastore
  * ```typescript
  * const datastore = yield* Azure.VMware.Datastore("anf", {
- *   resourceGroup: group.resourceGroupName,
  *   privateCloud: cloud.privateCloudName,
  *   cluster: "Cluster-1",
  *   netAppVolumeId: volumeId,
@@ -112,7 +112,6 @@ export interface Datastore extends Resource<
  * **Example:** Elastic SAN datastore
  * ```typescript
  * const datastore = yield* Azure.VMware.Datastore("esan", {
- *   resourceGroup: group.resourceGroupName,
  *   privateCloud: cloud.privateCloudName,
  *   cluster: "Cluster-1",
  *   elasticSanVolumeId: elasticSanVolumeId,
@@ -121,7 +120,7 @@ export interface Datastore extends Resource<
  *
  * @resource
  */
-export const Datastore = Resource<Datastore>("Azure.VMware.Datastore");
+export const Datastore = GroupedResource<Datastore>("Azure.VMware.Datastore");
 
 const createName = (id: string) => createAvsName(id, 32);
 

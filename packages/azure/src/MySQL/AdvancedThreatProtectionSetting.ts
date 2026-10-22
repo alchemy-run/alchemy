@@ -1,7 +1,7 @@
 import * as mysql from "@distilled.cloud/azure/mysql";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -11,6 +11,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { MYSQL_NAMESPACE, type ServerRef, whileServerBusy } from "./common.ts";
 
 export interface AdvancedThreatProtectionSettingProps {
@@ -59,7 +60,6 @@ export interface AdvancedThreatProtectionSetting extends Resource<
  * const protection = yield* Azure.MySQL.AdvancedThreatProtectionSetting(
  *   "protection",
  *   {
- *     resourceGroup: group.resourceGroupName,
  *     server: server.serverName,
  *   },
  * );
@@ -67,7 +67,7 @@ export interface AdvancedThreatProtectionSetting extends Resource<
  *
  * @resource
  */
-export const AdvancedThreatProtectionSetting = Resource<AdvancedThreatProtectionSetting>(
+export const AdvancedThreatProtectionSetting = GroupedResource<AdvancedThreatProtectionSetting>(
   "Azure.MySQL.AdvancedThreatProtectionSetting",
 );
 

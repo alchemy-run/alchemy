@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -21,6 +21,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { EDGE_WAIT, edgeState, sameJson } from "./EdgeShared.ts";
 
 /** One billing period of a disconnected operation. */
@@ -129,7 +130,6 @@ export interface DisconnectedOperation extends Resource<
  * **Example:** Disconnected operation with trial billing
  * ```typescript
  * const appliance = yield* Azure.Edge.DisconnectedOperation("appliance", {
- *   resourceGroup: group.resourceGroupName,
  *   connectionIntent: "Disconnected",
  *   billingConfiguration: {
  *     autoRenew: "Disabled",
@@ -142,7 +142,6 @@ export interface DisconnectedOperation extends Resource<
  * **Example:** Enable Azure Hybrid Benefit for Windows Server
  * ```typescript
  * const appliance = yield* Azure.Edge.DisconnectedOperation("appliance", {
- *   resourceGroup: group.resourceGroupName,
  *   connectionIntent: "Connected",
  *   benefitPlans: {
  *     azureHybridWindowsServerBenefit: "Enabled",
@@ -153,7 +152,7 @@ export interface DisconnectedOperation extends Resource<
  *
  * @resource
  */
-export const DisconnectedOperation = Resource<DisconnectedOperation>(
+export const DisconnectedOperation = GroupedResource<DisconnectedOperation>(
   "Azure.Edge.DisconnectedOperation",
 );
 

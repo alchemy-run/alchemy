@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -21,6 +21,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { EDGE_WAIT, edgeState } from "./EdgeShared.ts";
 
 export interface DiagnosticProps {
@@ -84,7 +85,6 @@ export interface Diagnostic extends Resource<
  * **Example:** Diagnostic for a custom location
  * ```typescript
  * const diagnostic = yield* Azure.Edge.Diagnostic("diag", {
- *   resourceGroup: group.resourceGroupName,
  *   customLocationId:
  *     "/subscriptions/.../resourceGroups/arc/providers/Microsoft.ExtendedLocation/customLocations/plant",
  * });
@@ -92,7 +92,7 @@ export interface Diagnostic extends Resource<
  *
  * @resource
  */
-export const Diagnostic = Resource<Diagnostic>("Azure.Edge.Diagnostic");
+export const Diagnostic = GroupedResource<Diagnostic>("Azure.Edge.Diagnostic");
 
 const getDiagnostic = (subscriptionId: string, resourceGroupName: string, diagnosticName: string) =>
   orUndefinedIfNotFound(edge.GetDiagnostic({ subscriptionId, resourceGroupName, diagnosticName }));

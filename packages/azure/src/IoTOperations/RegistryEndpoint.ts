@@ -1,7 +1,8 @@
 import * as iot from "@distilled.cloud/azure/iotoperations";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { childLifecycle, childStatus, type InstanceScope } from "./Common.ts";
 
 export interface RegistryEndpointProps {
@@ -66,7 +67,6 @@ export interface RegistryEndpoint extends Resource<
  * **Example:** Azure Container Registry with the instance's managed identity
  * ```typescript
  * const registry = yield* Azure.IoTOperations.RegistryEndpoint("acr", {
- *   resourceGroup: group.resourceGroupName,
  *   instanceName: instance.instanceName,
  *   host: `${acr.registryName}.azurecr.io`,
  *   authentication: {
@@ -79,7 +79,6 @@ export interface RegistryEndpoint extends Resource<
  * **Example:** Public registry
  * ```typescript
  * const registry = yield* Azure.IoTOperations.RegistryEndpoint("public", {
- *   resourceGroup: group.resourceGroupName,
  *   instanceName: instance.instanceName,
  *   host: "ghcr.io",
  *   authentication: { method: "Anonymous", anonymousSettings: {} },
@@ -88,7 +87,9 @@ export interface RegistryEndpoint extends Resource<
  *
  * @resource
  */
-export const RegistryEndpoint = Resource<RegistryEndpoint>("Azure.IoTOperations.RegistryEndpoint");
+export const RegistryEndpoint = GroupedResource<RegistryEndpoint>(
+  "Azure.IoTOperations.RegistryEndpoint",
+);
 
 export const RegistryEndpointProvider = () =>
   Provider.succeed(RegistryEndpoint, {

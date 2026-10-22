@@ -2,7 +2,7 @@ import * as dnsresolver from "@distilled.cloud/azure/dnsresolver";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -20,6 +20,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createDnsResolverName,
   ENDPOINT_BUDGET,
@@ -96,9 +97,7 @@ export interface DnsResolver extends Resource<
  * ### Creating a Resolver
  * **Example:** Resolver for a virtual network
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("network");
  * const resolver = yield* Azure.DnsResolver.DnsResolver("resolver", {
- *   resourceGroup: group.resourceGroupName,
  *   virtualNetworkId: vnetId,
  * });
  * ```
@@ -106,7 +105,6 @@ export interface DnsResolver extends Resource<
  * **Example:** Resolver with tags
  * ```typescript
  * const resolver = yield* Azure.DnsResolver.DnsResolver("resolver", {
- *   resourceGroup: group.resourceGroupName,
  *   virtualNetworkId: vnetId,
  *   tags: { team: "platform" },
  * });
@@ -114,7 +112,7 @@ export interface DnsResolver extends Resource<
  *
  * @resource
  */
-export const DnsResolver = Resource<DnsResolver>("Azure.DnsResolver.DnsResolver");
+export const DnsResolver = GroupedResource<DnsResolver>("Azure.DnsResolver.DnsResolver");
 
 type Observed = dnsresolver.GetDnsResolverResponse;
 

@@ -2,7 +2,7 @@ import * as hybridnetwork from "@distilled.cloud/azure/hybridnetwork";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import {
@@ -21,6 +21,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createHybridNetworkName,
   NAMESPACE,
@@ -132,7 +133,6 @@ export interface ArtifactStore extends Resource<
  * **Example:** Container registry artifact store
  * ```typescript
  * const store = yield* Azure.HybridNetwork.ArtifactStore("store", {
- *   resourceGroup: group.resourceGroupName,
  *   publisher: publisher.publisherName,
  * });
  * ```
@@ -140,7 +140,6 @@ export interface ArtifactStore extends Resource<
  * **Example:** Storage account store for VHD images
  * ```typescript
  * const store = yield* Azure.HybridNetwork.ArtifactStore("vhds", {
- *   resourceGroup: group.resourceGroupName,
  *   publisher: publisher.publisherName,
  *   storeType: "AzureStorageAccount",
  *   managedResourceGroupConfiguration: {
@@ -152,7 +151,7 @@ export interface ArtifactStore extends Resource<
  *
  * @resource
  */
-export const ArtifactStore = Resource<ArtifactStore>("Azure.HybridNetwork.ArtifactStore");
+export const ArtifactStore = GroupedResource<ArtifactStore>("Azure.HybridNetwork.ArtifactStore");
 
 const getStore = (
   subscriptionId: string,

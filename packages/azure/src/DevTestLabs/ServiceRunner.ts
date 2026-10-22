@@ -2,7 +2,7 @@ import * as devtestlabs from "@distilled.cloud/azure/devtestlabs";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -16,6 +16,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createLabResourceName, DEVTESTLAB_NAMESPACE, labLocation } from "./Common.ts";
 
 export interface ServiceRunnerProps {
@@ -85,11 +86,8 @@ export interface ServiceRunner extends Resource<
  * ### Lab Identity
  * **Example:** Run lab services as a user-assigned identity
  * ```typescript
- * const identity = yield* Azure.ManagedIdentity.UserAssignedIdentity("lab", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const identity = yield* Azure.ManagedIdentity.UserAssignedIdentity("lab");
  * const runner = yield* Azure.DevTestLabs.ServiceRunner("runner", {
- *   resourceGroup: group.resourceGroupName,
  *   lab: lab.labName,
  *   identityId: identity.identityId,
  * });
@@ -97,7 +95,7 @@ export interface ServiceRunner extends Resource<
  *
  * @resource
  */
-export const ServiceRunner = Resource<ServiceRunner>("Azure.DevTestLabs.ServiceRunner");
+export const ServiceRunner = GroupedResource<ServiceRunner>("Azure.DevTestLabs.ServiceRunner");
 
 const getRunner = (
   subscriptionId: string,

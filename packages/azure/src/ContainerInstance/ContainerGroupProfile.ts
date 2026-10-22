@@ -2,7 +2,7 @@ import * as aci from "@distilled.cloud/azure/containerinstance";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -19,6 +19,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   comparable,
   createContainerInstanceName,
@@ -129,9 +130,7 @@ export interface ContainerGroupProfile extends Resource<
  * ### Creating a Profile
  * **Example:** Web server template
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("app");
  * const profile = yield* Azure.ContainerInstance.ContainerGroupProfile("web", {
- *   resourceGroup: group.resourceGroupName,
  *   containers: [
  *     {
  *       name: "web",
@@ -149,7 +148,6 @@ export interface ContainerGroupProfile extends Resource<
  * **Example:** Scale a profile with an NGroup
  * ```typescript
  * const fleet = yield* Azure.ContainerInstance.NGroup("fleet", {
- *   resourceGroup: group.resourceGroupName,
  *   desiredCount: 2,
  *   containerGroupProfiles: [
  *     { id: profile.containerGroupProfileId, revision: profile.revision },
@@ -159,7 +157,7 @@ export interface ContainerGroupProfile extends Resource<
  *
  * @resource
  */
-export const ContainerGroupProfile = Resource<ContainerGroupProfile>(
+export const ContainerGroupProfile = GroupedResource<ContainerGroupProfile>(
   "Azure.ContainerInstance.ContainerGroupProfile",
 );
 

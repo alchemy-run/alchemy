@@ -2,7 +2,7 @@ import * as databasewatcher from "@distilled.cloud/azure/databasewatcher";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createWatcherChildName } from "./common.ts";
 
 export type TargetType = "SqlDb" | "SqlEp" | "SqlMi";
@@ -124,7 +125,6 @@ export interface Target extends Resource<
  * **Example:** Watch a single Azure SQL database with Entra authentication
  * ```typescript
  * const target = yield* Azure.DatabaseWatcher.Target("orders-db", {
- *   resourceGroup: group.resourceGroupName,
  *   watcher: watcher.watcherName,
  *   targetType: "SqlDb",
  *   sqlDbResourceId: database.databaseId,
@@ -136,7 +136,6 @@ export interface Target extends Resource<
  * **Example:** Watch an elastic pool through an anchor database
  * ```typescript
  * const target = yield* Azure.DatabaseWatcher.Target("pool", {
- *   resourceGroup: group.resourceGroupName,
  *   watcher: watcher.watcherName,
  *   targetType: "SqlEp",
  *   sqlEpResourceId: pool.elasticPoolId,
@@ -147,7 +146,7 @@ export interface Target extends Resource<
  *
  * @resource
  */
-export const Target = Resource<Target>("Azure.DatabaseWatcher.Target");
+export const Target = GroupedResource<Target>("Azure.DatabaseWatcher.Target");
 
 const getTarget = (
   subscriptionId: string,

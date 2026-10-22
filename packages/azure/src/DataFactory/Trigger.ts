@@ -2,13 +2,14 @@ import * as datafactory from "@distilled.cloud/azure/datafactory";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { ensureRegistered, ignoreNotFound, orUndefinedIfNotFound, waitUntilGone } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   annotationsWithOwnership,
   createChildName,
@@ -109,7 +110,6 @@ export interface Trigger extends Resource<
  * **Example:** Run a pipeline every day at 02:00 UTC
  * ```typescript
  * const nightly = yield* Azure.DataFactory.Trigger("nightly", {
- *   resourceGroup: group.resourceGroupName,
  *   factoryName: factory.factoryName,
  *   type: "ScheduleTrigger",
  *   typeProperties: {
@@ -127,7 +127,6 @@ export interface Trigger extends Resource<
  * **Example:** Defined but stopped
  * ```typescript
  * const paused = yield* Azure.DataFactory.Trigger("paused", {
- *   resourceGroup: group.resourceGroupName,
  *   factoryName: factory.factoryName,
  *   type: "ScheduleTrigger",
  *   typeProperties: {
@@ -140,7 +139,7 @@ export interface Trigger extends Resource<
  *
  * @resource
  */
-export const Trigger = Resource<Trigger>("Azure.DataFactory.Trigger");
+export const Trigger = GroupedResource<Trigger>("Azure.DataFactory.Trigger");
 
 export class TriggerStateTimedOut extends Data.TaggedError(
   "Azure.DataFactory.TriggerStateTimedOut",

@@ -40,14 +40,8 @@ Unknown paths return `index.html` (SPA) with a `404` status. Add
 ## Share infrastructure
 
 ```typescript
-const group = yield* Azure.Resources.ResourceGroup("Group");
-const storageAccount = yield* Azure.Storage.StorageAccount("Files", {
-  resourceGroup: group.resourceGroupName,
-});
-const web = yield* Azure.Website.Vite("Web", {
-  resourceGroup: group,
-  storageAccount,
-});
+const storageAccount = yield* Azure.Storage.StorageAccount("Files");
+const web = yield* Azure.Website.Vite("Web", { storageAccount });
 ```
 
 See the [`azure-website-vite`](https://github.com/alchemy-run/alchemy/tree/main/examples/azure-website-vite)

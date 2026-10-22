@@ -1,8 +1,9 @@
 import * as network from "@distilled.cloud/azure/network";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import { orUndefinedIfNotFound, userTags } from "../Arm.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { sameSet } from "./common.ts";
 import { idsOf, networkProvider } from "./generic.ts";
 
@@ -66,11 +67,8 @@ export interface ServiceEndpointPolicy extends Resource<
  * ### Creating a Policy
  * **Example:** Allow one storage account
  * ```typescript
- * const policy = yield* Azure.Network.ServiceEndpointPolicy("storage", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const policy = yield* Azure.Network.ServiceEndpointPolicy("storage");
  * yield* Azure.Network.ServiceEndpointPolicyDefinition("account", {
- *   resourceGroup: group.resourceGroupName,
  *   serviceEndpointPolicy: policy.serviceEndpointPolicyName,
  *   service: "Microsoft.Storage",
  *   serviceResources: [account.storageAccountId],
@@ -79,7 +77,7 @@ export interface ServiceEndpointPolicy extends Resource<
  *
  * @resource
  */
-export const ServiceEndpointPolicy = Resource<ServiceEndpointPolicy>(
+export const ServiceEndpointPolicy = GroupedResource<ServiceEndpointPolicy>(
   "Azure.Network.ServiceEndpointPolicy",
 );
 

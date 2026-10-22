@@ -1,7 +1,7 @@
 import * as dr from "@distilled.cloud/azure/recoveryservicesdatareplication";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -11,6 +11,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { DATA_REPLICATION_NAMESPACE, ownedByVaultOrUnowned, sameName } from "./Shared.ts";
 
 /** Name of the email configuration every vault uses. */
@@ -81,11 +82,8 @@ export interface AlertSetting extends Resource<
  * ### Notifications
  * **Example:** Email the owners and an on-call alias
  * ```typescript
- * const vault = yield* Azure.DataReplication.Vault("vault", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const vault = yield* Azure.DataReplication.Vault("vault");
  * yield* Azure.DataReplication.AlertSetting("alerts", {
- *   resourceGroup: group.resourceGroupName,
  *   vault: vault.vaultName,
  *   sendToOwners: true,
  *   customEmailAddresses: ["oncall@example.com"],
@@ -95,7 +93,7 @@ export interface AlertSetting extends Resource<
  *
  * @resource
  */
-export const AlertSetting = Resource<AlertSetting>("Azure.DataReplication.AlertSetting");
+export const AlertSetting = GroupedResource<AlertSetting>("Azure.DataReplication.AlertSetting");
 
 type Observed = dr.GetEmailConfigurationResponse;
 

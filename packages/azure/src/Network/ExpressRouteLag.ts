@@ -1,8 +1,9 @@
 import * as network from "@distilled.cloud/azure/network";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import { orUndefinedIfNotFound, userTags } from "../Arm.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { lower, sameSet } from "./common.ts";
 import {
   type ExpressRouteLinkConfig,
@@ -125,7 +126,6 @@ export interface ExpressRouteLag extends Resource<
  * **Example:** Four 10 Gbps ports
  * ```typescript
  * const lag = yield* Azure.Network.ExpressRouteLag("direct", {
- *   resourceGroup: group.resourceGroupName,
  *   peeringLocation: "Equinix-Ashburn-DC2",
  *   bandwidthInGbps: 10,
  *   numberOfPorts: 4,
@@ -136,7 +136,7 @@ export interface ExpressRouteLag extends Resource<
  *
  * @resource
  */
-export const ExpressRouteLag = Resource<ExpressRouteLag>("Azure.Network.ExpressRouteLag");
+export const ExpressRouteLag = GroupedResource<ExpressRouteLag>("Azure.Network.ExpressRouteLag");
 
 export const ExpressRouteLagProvider = () =>
   Provider.succeed(

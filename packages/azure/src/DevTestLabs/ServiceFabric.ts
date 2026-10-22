@@ -2,7 +2,7 @@ import * as devtestlabs from "@distilled.cloud/azure/devtestlabs";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -17,6 +17,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createLabResourceName, DEVTESTLAB_NAMESPACE, labLocation } from "./Common.ts";
 
 export interface ServiceFabricProps {
@@ -83,7 +84,6 @@ export interface ServiceFabric extends Resource<
  * **Example:** Lab-managed Service Fabric cluster
  * ```typescript
  * const fabric = yield* Azure.DevTestLabs.ServiceFabric("cluster", {
- *   resourceGroup: group.resourceGroupName,
  *   lab: lab.labName,
  *   user: user.userName,
  *   externalServiceFabricId: clusterId,
@@ -92,7 +92,7 @@ export interface ServiceFabric extends Resource<
  *
  * @resource
  */
-export const ServiceFabric = Resource<ServiceFabric>("Azure.DevTestLabs.ServiceFabric");
+export const ServiceFabric = GroupedResource<ServiceFabric>("Azure.DevTestLabs.ServiceFabric");
 
 const getFabric = (
   subscriptionId: string,

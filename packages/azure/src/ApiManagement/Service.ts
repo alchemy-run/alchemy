@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import {
@@ -23,6 +23,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { getService, sameName } from "./Common.ts";
 
 export type ServiceSkuName = apim.ApiManagementServiceSkuPropertiesName;
@@ -149,9 +150,7 @@ export interface Service extends Resource<
  * ### Creating a Service
  * **Example:** Consumption (serverless) service
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("app");
  * const apim = yield* Azure.ApiManagement.Service("gateway", {
- *   resourceGroup: group.resourceGroupName,
  *   publisherEmail: "ops@example.com",
  *   publisherName: "Example Inc",
  * });
@@ -160,7 +159,6 @@ export interface Service extends Resource<
  * **Example:** BasicV2 service with a system-assigned identity
  * ```typescript
  * const apim = yield* Azure.ApiManagement.Service("gateway", {
- *   resourceGroup: group.resourceGroupName,
  *   sku: { name: "BasicV2", capacity: 1 },
  *   publisherEmail: "ops@example.com",
  *   publisherName: "Example Inc",
@@ -170,7 +168,7 @@ export interface Service extends Resource<
  *
  * @resource
  */
-export const Service = Resource<Service>("Azure.ApiManagement.Service");
+export const Service = GroupedResource<Service>("Azure.ApiManagement.Service");
 
 type ObservedService = apim.GetApiManagementServiceResponse;
 

@@ -2,7 +2,7 @@ import * as automation from "@distilled.cloud/azure/automation";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { accountOwnedByStage, childNuke, createChildName, sameName } from "./Common.ts";
 
 export interface HybridRunbookWorkerGroupProps {
@@ -65,13 +66,11 @@ export interface HybridRunbookWorkerGroup extends Resource<
  * **Example:** Group that runs jobs as a credential
  * ```typescript
  * const runAs = yield* Azure.Automation.Credential("run-as", {
- *   resourceGroup: group.resourceGroupName,
  *   automationAccount: account.automationAccountName,
  *   userName: "svc-runbooks",
  *   password: Redacted.make(password),
  * });
  * const workers = yield* Azure.Automation.HybridRunbookWorkerGroup("onprem", {
- *   resourceGroup: group.resourceGroupName,
  *   automationAccount: account.automationAccountName,
  *   credential: runAs.credentialName,
  * });
@@ -79,7 +78,7 @@ export interface HybridRunbookWorkerGroup extends Resource<
  *
  * @resource
  */
-export const HybridRunbookWorkerGroup = Resource<HybridRunbookWorkerGroup>(
+export const HybridRunbookWorkerGroup = GroupedResource<HybridRunbookWorkerGroup>(
   "Azure.Automation.HybridRunbookWorkerGroup",
 );
 

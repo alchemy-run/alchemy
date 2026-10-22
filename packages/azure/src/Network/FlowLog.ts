@@ -1,8 +1,9 @@
 import * as network from "@distilled.cloud/azure/network";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import { orUndefinedIfNotFound, userTags } from "../Arm.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { sameId } from "./common.ts";
 import { networkProvider } from "./generic.ts";
 
@@ -100,7 +101,7 @@ export interface FlowLog extends Resource<
  *
  * @resource
  */
-export const FlowLog = Resource<FlowLog>("Azure.Network.FlowLog");
+export const FlowLog = GroupedResource<FlowLog>("Azure.Network.FlowLog");
 
 export const FlowLogProvider = () =>
   Provider.succeed(

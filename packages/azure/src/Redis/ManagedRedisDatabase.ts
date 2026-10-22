@@ -2,12 +2,13 @@ import * as redisenterprise from "@distilled.cloud/azure/redisenterprise";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { ensureRegistered, ignoreNotFound, waitForProvisioned, waitUntilGone } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { clusterOwnedByStage, getCluster, getDatabase, lower, readiness } from "./Common.ts";
 
 export type ManagedRedisEvictionPolicy =
@@ -139,11 +140,8 @@ export interface ManagedRedisDatabase extends Resource<
  * ### Creating a Database
  * **Example:** Database with Entra ID authentication only
  * ```typescript
- * const redis = yield* Azure.Redis.ManagedRedis("cache", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const redis = yield* Azure.Redis.ManagedRedis("cache");
  * const db = yield* Azure.Redis.ManagedRedisDatabase("db", {
- *   resourceGroup: group.resourceGroupName,
  *   cluster: redis.clusterName,
  * });
  * ```
@@ -151,7 +149,6 @@ export interface ManagedRedisDatabase extends Resource<
  * **Example:** Cache with access keys and LRU eviction
  * ```typescript
  * const db = yield* Azure.Redis.ManagedRedisDatabase("db", {
- *   resourceGroup: group.resourceGroupName,
  *   cluster: redis.clusterName,
  *   evictionPolicy: "AllKeysLRU",
  *   accessKeysAuthentication: "Enabled",
@@ -163,7 +160,6 @@ export interface ManagedRedisDatabase extends Resource<
  * **Example:** JSON and search with snapshot persistence
  * ```typescript
  * const db = yield* Azure.Redis.ManagedRedisDatabase("db", {
- *   resourceGroup: group.resourceGroupName,
  *   cluster: redis.clusterName,
  *   clusteringPolicy: "EnterpriseCluster",
  *   evictionPolicy: "NoEviction",
@@ -174,7 +170,7 @@ export interface ManagedRedisDatabase extends Resource<
  *
  * @resource
  */
-export const ManagedRedisDatabase = Resource<ManagedRedisDatabase>(
+export const ManagedRedisDatabase = GroupedResource<ManagedRedisDatabase>(
   "Azure.Redis.ManagedRedisDatabase",
 );
 

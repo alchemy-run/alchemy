@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import {
@@ -20,6 +20,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 
 /** What a maintenance configuration controls. */
 export type MaintenanceScope =
@@ -181,9 +182,7 @@ export interface MaintenanceConfiguration extends Resource<
  * ### Scheduled Guest Patching
  * **Example:** Patch Linux VMs daily in a four-hour window
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("ops");
  * const patching = yield* Azure.Maintenance.MaintenanceConfiguration("patching", {
- *   resourceGroup: group.resourceGroupName,
  *   maintenanceScope: "InGuestPatch",
  *   extensionProperties: { InGuestPatchMode: "User" },
  *   maintenanceWindow: {
@@ -203,7 +202,6 @@ export interface MaintenanceConfiguration extends Resource<
  * **Example:** Weekend window for platform updates
  * ```typescript
  * yield* Azure.Maintenance.MaintenanceConfiguration("platform", {
- *   resourceGroup: group.resourceGroupName,
  *   maintenanceScope: "Host",
  *   maintenanceWindow: {
  *     startDateTime: "2030-01-05 00:00",
@@ -216,7 +214,7 @@ export interface MaintenanceConfiguration extends Resource<
  *
  * @resource
  */
-export const MaintenanceConfiguration = Resource<MaintenanceConfiguration>(
+export const MaintenanceConfiguration = GroupedResource<MaintenanceConfiguration>(
   "Azure.Maintenance.MaintenanceConfiguration",
 );
 

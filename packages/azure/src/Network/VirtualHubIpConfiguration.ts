@@ -1,8 +1,9 @@
 import * as network from "@distilled.cloud/azure/network";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import { orUndefinedIfNotFound } from "../Arm.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { ref, sameId } from "./common.ts";
 import { networkProvider } from "./generic.ts";
 import { hubOwnerTags } from "./virtualHubShared.ts";
@@ -68,7 +69,6 @@ export interface VirtualHubIpConfiguration extends Resource<
  * **Example:** Route Server router in a RouteServerSubnet
  * ```typescript
  * yield* Azure.Network.VirtualHubIpConfiguration("router", {
- *   resourceGroup: group.resourceGroupName,
  *   virtualHub: hub.virtualHubName,
  *   subnetId: routeServerSubnet.subnetId,
  *   publicIpAddressId: ip.publicIpAddressId,
@@ -77,7 +77,7 @@ export interface VirtualHubIpConfiguration extends Resource<
  *
  * @resource
  */
-export const VirtualHubIpConfiguration = Resource<VirtualHubIpConfiguration>(
+export const VirtualHubIpConfiguration = GroupedResource<VirtualHubIpConfiguration>(
   "Azure.Network.VirtualHubIpConfiguration",
 );
 

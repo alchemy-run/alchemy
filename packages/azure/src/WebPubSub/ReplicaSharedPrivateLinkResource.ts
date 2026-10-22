@@ -2,11 +2,12 @@ import * as webpubsub from "@distilled.cloud/azure/webpubsub";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { ensureRegistered, orUndefinedIfNotFound, waitForProvisioned } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   lower,
   WAIT,
@@ -97,13 +98,11 @@ export interface ReplicaSharedPrivateLinkResource extends Resource<
  * **Example:** Primary link and its copy on a replica
  * ```typescript
  * const link = yield* Azure.WebPubSub.SharedPrivateLinkResource("vault", {
- *   resourceGroup: group.resourceGroupName,
  *   webPubSub: webPubSub.webPubSubName,
  *   groupId: "vault",
  *   privateLinkResourceId: vault.vaultId,
  * });
  * const westLink = yield* Azure.WebPubSub.ReplicaSharedPrivateLinkResource("vault-west", {
- *   resourceGroup: group.resourceGroupName,
  *   webPubSub: webPubSub.webPubSubName,
  *   replica: replica.replicaName,
  *   sharedPrivateLinkResource: link.sharedPrivateLinkResourceName,
@@ -114,7 +113,7 @@ export interface ReplicaSharedPrivateLinkResource extends Resource<
  *
  * @resource
  */
-export const ReplicaSharedPrivateLinkResource = Resource<ReplicaSharedPrivateLinkResource>(
+export const ReplicaSharedPrivateLinkResource = GroupedResource<ReplicaSharedPrivateLinkResource>(
   "Azure.WebPubSub.ReplicaSharedPrivateLinkResource",
 );
 

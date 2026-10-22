@@ -2,7 +2,7 @@ import * as app from "@distilled.cloud/azure/app";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -20,6 +20,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createContainerAppsName,
   fingerprint,
@@ -112,7 +113,6 @@ export interface Agent extends Resource<
  * **Example:** Agent with a system-assigned identity
  * ```typescript
  * const agent = yield* Azure.ContainerApps.Agent("sre", {
- *   resourceGroup: group.resourceGroupName,
  *   location: "swedencentral",
  *   upgradeChannel: "Stable",
  * });
@@ -121,7 +121,7 @@ export interface Agent extends Resource<
  *
  * @resource
  */
-export const Agent = Resource<Agent>("Azure.ContainerApps.Agent");
+export const Agent = GroupedResource<Agent>("Azure.ContainerApps.Agent");
 
 const createAgentName = (id: string) => createContainerAppsName(id, 32);
 

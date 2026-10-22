@@ -2,7 +2,7 @@ import * as elasticsan from "@distilled.cloud/azure/elasticsan";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createSanName, isParentOwned, lower } from "./Common.ts";
 
 export type VolumeGroupEncryption =
@@ -134,11 +135,8 @@ export interface VolumeGroup extends Resource<
  * ### Creating a Volume Group
  * **Example:** iSCSI volume group with platform-managed keys
  * ```typescript
- * const san = yield* Azure.ElasticSan.ElasticSan("san", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const san = yield* Azure.ElasticSan.ElasticSan("san");
  * const volumes = yield* Azure.ElasticSan.VolumeGroup("volumes", {
- *   resourceGroup: group.resourceGroupName,
  *   elasticSan: san.elasticSanName,
  * });
  * ```
@@ -147,7 +145,6 @@ export interface VolumeGroup extends Resource<
  * **Example:** Allow a subnet with a storage service endpoint
  * ```typescript
  * const volumes = yield* Azure.ElasticSan.VolumeGroup("volumes", {
- *   resourceGroup: group.resourceGroupName,
  *   elasticSan: san.elasticSanName,
  *   virtualNetworkRules: [{ id: subnet.subnetId }],
  * });
@@ -155,7 +152,7 @@ export interface VolumeGroup extends Resource<
  *
  * @resource
  */
-export const VolumeGroup = Resource<VolumeGroup>("Azure.ElasticSan.VolumeGroup");
+export const VolumeGroup = GroupedResource<VolumeGroup>("Azure.ElasticSan.VolumeGroup");
 
 type ObservedGroup = elasticsan.GetVolumeGroupResponse;
 

@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -20,6 +20,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { getVault, NAMESPACE, sameText } from "./Common.ts";
 
 export type BackupDatastoreType = "VaultStore" | "OperationalStore" | "ArchiveStore";
@@ -169,16 +170,12 @@ export interface BackupVault extends Resource<
  * ### Creating a Backup Vault
  * **Example:** Locally redundant vault
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("backup");
- * const vault = yield* Azure.DataProtection.BackupVault("vault", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const vault = yield* Azure.DataProtection.BackupVault("vault");
  * ```
  *
  * **Example:** Geo-redundant vault with cross-region restore
  * ```typescript
  * const vault = yield* Azure.DataProtection.BackupVault("vault", {
- *   resourceGroup: group.resourceGroupName,
  *   storageSettings: [{ datastoreType: "VaultStore", type: "GeoRedundant" }],
  *   crossRegionRestoreState: "Enabled",
  *   softDelete: { state: "AlwaysOn", retentionDurationInDays: 30 },
@@ -198,7 +195,7 @@ export interface BackupVault extends Resource<
  *
  * @resource
  */
-export const BackupVault = Resource<BackupVault>("Azure.DataProtection.BackupVault");
+export const BackupVault = GroupedResource<BackupVault>("Azure.DataProtection.BackupVault");
 
 type ObservedVault = dataprotection.GetBackupVaultResponse;
 

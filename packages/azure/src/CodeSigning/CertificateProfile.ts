@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -15,6 +15,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { getCodeSigningAccount } from "./Account.ts";
 
 /** Kind of certificate a profile issues. */
@@ -143,11 +144,8 @@ export interface CertificateProfile extends Resource<
  * ### Creating a Profile
  * **Example:** Public-trust profile
  * ```typescript
- * const account = yield* Azure.CodeSigning.Account("signing", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const account = yield* Azure.CodeSigning.Account("signing");
  * const profile = yield* Azure.CodeSigning.CertificateProfile("release", {
- *   resourceGroup: group.resourceGroupName,
  *   account: account.accountName,
  *   profileType: "PublicTrust",
  *   identityValidationId: "00000000-0000-0000-0000-000000000000",
@@ -157,7 +155,6 @@ export interface CertificateProfile extends Resource<
  * **Example:** Private-trust profile for App Control policies
  * ```typescript
  * const profile = yield* Azure.CodeSigning.CertificateProfile("ci-policy", {
- *   resourceGroup: group.resourceGroupName,
  *   account: account.accountName,
  *   profileType: "PrivateTrustCIPolicy",
  *   identityValidationId: validationId,
@@ -168,7 +165,7 @@ export interface CertificateProfile extends Resource<
  *
  * @resource
  */
-export const CertificateProfile = Resource<CertificateProfile>(
+export const CertificateProfile = GroupedResource<CertificateProfile>(
   "Azure.CodeSigning.CertificateProfile",
 );
 

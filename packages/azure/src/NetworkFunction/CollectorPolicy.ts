@@ -2,7 +2,7 @@ import * as networkfunction from "@distilled.cloud/azure/networkfunction";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -20,6 +20,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { COLLECTOR_BUDGET, createNetworkFunctionName, sameArm } from "./Common.ts";
 
 /** Destination a collector policy emits flow records to. */
@@ -106,7 +107,6 @@ export interface CollectorPolicy extends Resource<
  * **Example:** Emit a circuit's flows to Azure Monitor
  * ```typescript
  * const policy = yield* Azure.NetworkFunction.CollectorPolicy("circuit", {
- *   resourceGroup: group.resourceGroupName,
  *   azureTrafficCollector: collector.azureTrafficCollectorName,
  *   location: collector.location,
  *   ingestionSourceIds: [circuit.circuitId],
@@ -117,7 +117,6 @@ export interface CollectorPolicy extends Resource<
  * **Example:** One policy for two circuits
  * ```typescript
  * yield* Azure.NetworkFunction.CollectorPolicy("circuits", {
- *   resourceGroup: group.resourceGroupName,
  *   azureTrafficCollector: collector.azureTrafficCollectorName,
  *   location: collector.location,
  *   ingestionSourceIds: [primary.circuitId, secondary.circuitId],
@@ -128,7 +127,9 @@ export interface CollectorPolicy extends Resource<
  *
  * @resource
  */
-export const CollectorPolicy = Resource<CollectorPolicy>("Azure.NetworkFunction.CollectorPolicy");
+export const CollectorPolicy = GroupedResource<CollectorPolicy>(
+  "Azure.NetworkFunction.CollectorPolicy",
+);
 
 const getPolicy = (
   subscriptionId: string,

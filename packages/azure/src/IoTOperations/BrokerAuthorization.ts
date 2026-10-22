@@ -1,7 +1,8 @@
 import * as iot from "@distilled.cloud/azure/iotoperations";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { childLifecycle, childStatus, type InstanceScope } from "./Common.ts";
 
 type BrokerScope = InstanceScope & { readonly brokerName: string };
@@ -64,7 +65,6 @@ export interface BrokerAuthorization extends Resource<
  * **Example:** Allow sensors to publish telemetry
  * ```typescript
  * const authz = yield* Azure.IoTOperations.BrokerAuthorization("sensors", {
- *   resourceGroup: group.resourceGroupName,
  *   instanceName: instance.instanceName,
  *   authorizationPolicies: {
  *     cache: "Enabled",
@@ -83,7 +83,7 @@ export interface BrokerAuthorization extends Resource<
  *
  * @resource
  */
-export const BrokerAuthorization = Resource<BrokerAuthorization>(
+export const BrokerAuthorization = GroupedResource<BrokerAuthorization>(
   "Azure.IoTOperations.BrokerAuthorization",
 );
 

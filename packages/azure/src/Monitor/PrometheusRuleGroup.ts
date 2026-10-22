@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -21,6 +21,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 
 export interface PrometheusRuleAction {
   /** ARM resource ID of the action group to notify. */
@@ -146,12 +147,8 @@ export interface PrometheusRuleGroup extends Resource<
  * ### Recording Rules
  * **Example:** Precompute a per-namespace CPU rate
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("app");
- * const metrics = yield* Azure.Monitor.Workspace("metrics", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const metrics = yield* Azure.Monitor.Workspace("metrics");
  * const rules = yield* Azure.Monitor.PrometheusRuleGroup("recording", {
- *   resourceGroup: group.resourceGroupName,
  *   scopes: [metrics.workspaceId],
  *   interval: "PT1M",
  *   rules: [
@@ -168,7 +165,6 @@ export interface PrometheusRuleGroup extends Resource<
  * **Example:** Alert on a down scrape target and notify an action group
  * ```typescript
  * const alerts = yield* Azure.Monitor.PrometheusRuleGroup("alerts", {
- *   resourceGroup: group.resourceGroupName,
  *   scopes: [metrics.workspaceId],
  *   clusterName: "prod-aks",
  *   rules: [
@@ -187,7 +183,7 @@ export interface PrometheusRuleGroup extends Resource<
  *
  * @resource
  */
-export const PrometheusRuleGroup = Resource<PrometheusRuleGroup>(
+export const PrometheusRuleGroup = GroupedResource<PrometheusRuleGroup>(
   "Azure.Monitor.PrometheusRuleGroup",
 );
 

@@ -2,7 +2,7 @@ import * as web from "@distilled.cloud/azure/web";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import {
@@ -14,6 +14,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { lower } from "./common.ts";
 
 /** How Azure validates ownership of a static site's custom domain. */
@@ -84,11 +85,8 @@ export interface StaticSiteCustomDomain extends Resource<
  * ### Adding a Custom Domain
  * **Example:** Subdomain validated by CNAME
  * ```typescript
- * const site = yield* Azure.Web.StaticSite("site", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const site = yield* Azure.Web.StaticSite("site");
  * yield* Azure.Web.StaticSiteCustomDomain("www", {
- *   resourceGroup: group.resourceGroupName,
  *   staticSiteName: site.staticSiteName,
  *   domainName: "www.example.com",
  * });
@@ -97,7 +95,6 @@ export interface StaticSiteCustomDomain extends Resource<
  * **Example:** Apex domain validated by TXT token
  * ```typescript
  * const domain = yield* Azure.Web.StaticSiteCustomDomain("apex", {
- *   resourceGroup: group.resourceGroupName,
  *   staticSiteName: site.staticSiteName,
  *   domainName: "example.com",
  *   validationMethod: "dns-txt-token",
@@ -107,7 +104,7 @@ export interface StaticSiteCustomDomain extends Resource<
  *
  * @resource
  */
-export const StaticSiteCustomDomain = Resource<StaticSiteCustomDomain>(
+export const StaticSiteCustomDomain = GroupedResource<StaticSiteCustomDomain>(
   "Azure.Web.StaticSiteCustomDomain",
 );
 

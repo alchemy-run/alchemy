@@ -2,7 +2,7 @@ import * as mnf from "@distilled.cloud/azure/managednetworkfabric";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -19,6 +19,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createFabricName,
   differs,
@@ -116,9 +117,7 @@ export interface NetworkTapRule extends Resource<
  * ### Creating a Network Tap Rule
  * **Example:** Inline rule that counts IPv4 traffic
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("fabric");
  * const rule = yield* Azure.ManagedNetworkFabric.NetworkTapRule("count", {
- *   resourceGroup: group.resourceGroupName,
  *   configurationType: "Inline",
  *   matchConfigurations: [
  *     {
@@ -134,7 +133,9 @@ export interface NetworkTapRule extends Resource<
  *
  * @resource
  */
-export const NetworkTapRule = Resource<NetworkTapRule>("Azure.ManagedNetworkFabric.NetworkTapRule");
+export const NetworkTapRule = GroupedResource<NetworkTapRule>(
+  "Azure.ManagedNetworkFabric.NetworkTapRule",
+);
 
 type Observed = mnf.GetNetworkTapRuleResponse;
 

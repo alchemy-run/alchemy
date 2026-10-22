@@ -1,8 +1,9 @@
 import * as network from "@distilled.cloud/azure/network";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import { orUndefinedIfNotFound, userTags } from "../Arm.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { sameId, sameSet } from "./common.ts";
 import { networkProvider } from "./generic.ts";
 import { networkManagerChildName } from "./networkManagerShared.ts";
@@ -80,12 +81,10 @@ export interface IpamPool extends Resource<
  * **Example:** A root pool and a child pool
  * ```typescript
  * const root = yield* Azure.Network.IpamPool("root", {
- *   resourceGroup: group.resourceGroupName,
  *   networkManager: manager.networkManagerName,
  *   addressPrefixes: ["10.0.0.0/8"],
  * });
  * yield* Azure.Network.IpamPool("prod", {
- *   resourceGroup: group.resourceGroupName,
  *   networkManager: manager.networkManagerName,
  *   parentPoolName: root.ipamPoolName,
  *   addressPrefixes: ["10.1.0.0/16"],
@@ -94,7 +93,7 @@ export interface IpamPool extends Resource<
  *
  * @resource
  */
-export const IpamPool = Resource<IpamPool>("Azure.Network.IpamPool");
+export const IpamPool = GroupedResource<IpamPool>("Azure.Network.IpamPool");
 
 export const IpamPoolProvider = () =>
   Provider.succeed(

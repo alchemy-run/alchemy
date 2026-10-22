@@ -1,9 +1,10 @@
 import * as network from "@distilled.cloud/azure/network";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { orUndefinedIfNotFound } from "../Arm.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { connectionApprovalProvider } from "./connectionApprovalShared.ts";
 
 export interface ApplicationGatewayConnectionApprovalProps {
@@ -64,7 +65,6 @@ export interface ApplicationGatewayConnectionApproval extends Resource<
  * **Example:** Approve a consumer's manual request
  * ```typescript
  * yield* Azure.Network.ApplicationGatewayConnectionApproval("consumer", {
- *   resourceGroup: group.resourceGroupName,
  *   applicationGateway: gateway.applicationGatewayName,
  *   privateEndpointId: endpoint.privateEndpointId,
  * });
@@ -72,9 +72,10 @@ export interface ApplicationGatewayConnectionApproval extends Resource<
  *
  * @resource
  */
-export const ApplicationGatewayConnectionApproval = Resource<ApplicationGatewayConnectionApproval>(
-  "Azure.Network.ApplicationGatewayConnectionApproval",
-);
+export const ApplicationGatewayConnectionApproval =
+  GroupedResource<ApplicationGatewayConnectionApproval>(
+    "Azure.Network.ApplicationGatewayConnectionApproval",
+  );
 
 export const ApplicationGatewayConnectionApprovalProvider = () =>
   Provider.succeed(

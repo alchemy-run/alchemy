@@ -2,7 +2,7 @@ import * as mnf from "@distilled.cloud/azure/managednetworkfabric";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -19,6 +19,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createFabricName,
   differs,
@@ -97,16 +98,14 @@ export interface InternetGatewayRule extends Resource<
  * ### Creating an Internet Gateway Rule
  * **Example:** Allow one address range
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("fabric");
  * const rule = yield* Azure.ManagedNetworkFabric.InternetGatewayRule("egress", {
- *   resourceGroup: group.resourceGroupName,
  *   ruleProperties: { action: "Allow", addressList: ["10.0.0.1", "*.example.com"] },
  * });
  * ```
  *
  * @resource
  */
-export const InternetGatewayRule = Resource<InternetGatewayRule>(
+export const InternetGatewayRule = GroupedResource<InternetGatewayRule>(
   "Azure.ManagedNetworkFabric.InternetGatewayRule",
 );
 

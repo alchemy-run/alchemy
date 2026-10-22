@@ -2,7 +2,7 @@ import * as cognitiveservices from "@distilled.cloud/azure/cognitiveservices";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { isAccountOwnedByStack } from "./Account.ts";
 import { ACCOUNT_BUDGET, createChildName, sameArm, sameValue, whileAccountBusy } from "./Common.ts";
 
@@ -80,11 +81,9 @@ export interface ProjectCapabilityHost extends Resource<
  * **Example:** Basic setup
  * ```typescript
  * const accountHost = yield* Azure.CognitiveServices.CapabilityHost("agents", {
- *   resourceGroup: group.resourceGroupName,
  *   account: account.accountName,
  * });
  * yield* Azure.CognitiveServices.ProjectCapabilityHost("agents", {
- *   resourceGroup: group.resourceGroupName,
  *   account: accountHost.account,
  *   project: project.projectName,
  * });
@@ -93,7 +92,6 @@ export interface ProjectCapabilityHost extends Resource<
  * **Example:** Standard setup with project connections
  * ```typescript
  * yield* Azure.CognitiveServices.ProjectCapabilityHost("agents", {
- *   resourceGroup: group.resourceGroupName,
  *   account: accountHost.account,
  *   project: project.projectName,
  *   storageConnections: [storage.connectionName],
@@ -104,7 +102,7 @@ export interface ProjectCapabilityHost extends Resource<
  *
  * @resource
  */
-export const ProjectCapabilityHost = Resource<ProjectCapabilityHost>(
+export const ProjectCapabilityHost = GroupedResource<ProjectCapabilityHost>(
   "Azure.CognitiveServices.ProjectCapabilityHost",
 );
 

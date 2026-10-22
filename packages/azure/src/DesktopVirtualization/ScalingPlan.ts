@@ -2,7 +2,7 @@ import * as desktopvirtualization from "@distilled.cloud/azure/desktopvirtualiza
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -19,6 +19,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createAvdName, deltaOf } from "./Common.ts";
 
 /** A host pool the scaling plan applies to. */
@@ -112,7 +113,6 @@ export interface ScalingPlan extends Resource<
  * **Example:** Pooled scaling plan
  * ```typescript
  * const plan = yield* Azure.DesktopVirtualization.ScalingPlan("autoscale", {
- *   resourceGroup: group.resourceGroupName,
  *   timeZone: "UTC",
  *   exclusionTag: "excludeFromScaling",
  * });
@@ -122,7 +122,6 @@ export interface ScalingPlan extends Resource<
  * **Example:** Assign a host pool without enabling scaling yet
  * ```typescript
  * const plan = yield* Azure.DesktopVirtualization.ScalingPlan("autoscale", {
- *   resourceGroup: group.resourceGroupName,
  *   timeZone: "UTC",
  *   hostPoolReferences: [
  *     { hostPoolId: pool.hostPoolId, scalingPlanEnabled: false },
@@ -132,7 +131,7 @@ export interface ScalingPlan extends Resource<
  *
  * @resource
  */
-export const ScalingPlan = Resource<ScalingPlan>("Azure.DesktopVirtualization.ScalingPlan");
+export const ScalingPlan = GroupedResource<ScalingPlan>("Azure.DesktopVirtualization.ScalingPlan");
 
 type ObservedScalingPlan = desktopvirtualization.GetScalingPlanResponse;
 

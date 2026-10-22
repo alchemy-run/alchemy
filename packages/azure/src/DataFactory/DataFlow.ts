@@ -2,11 +2,12 @@ import * as datafactory from "@distilled.cloud/azure/datafactory";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { ensureRegistered, ignoreNotFound, orUndefinedIfNotFound, waitUntilGone } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   annotationsWithOwnership,
   createChildName,
@@ -85,7 +86,6 @@ export interface DataFlow extends Resource<
  * **Example:** Copy rows from one dataset to another
  * ```typescript
  * const flow = yield* Azure.DataFactory.DataFlow("orders", {
- *   resourceGroup: group.resourceGroupName,
  *   factoryName: factory.factoryName,
  *   typeProperties: {
  *     sources: [
@@ -104,7 +104,7 @@ export interface DataFlow extends Resource<
  *
  * @resource
  */
-export const DataFlow = Resource<DataFlow>("Azure.DataFactory.DataFlow");
+export const DataFlow = GroupedResource<DataFlow>("Azure.DataFactory.DataFlow");
 
 const getDataFlow = (
   subscriptionId: string,

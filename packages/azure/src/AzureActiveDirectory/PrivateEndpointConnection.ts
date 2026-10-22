@@ -2,7 +2,7 @@ import * as aad from "@distilled.cloud/azure/azureactivedirectory";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import { tagRecord } from "alchemy/Tags";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -18,6 +18,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { getAadPrivateLinkPolicy } from "./PrivateLinkPolicy.ts";
 
 export interface PrivateEndpointConnectionProps {
@@ -94,18 +95,14 @@ export interface PrivateEndpointConnection extends Resource<
  * ### Approving Connections
  * **Example:** Approve a manual private endpoint request
  * ```typescript
- * const policy = yield* Azure.AzureActiveDirectory.PrivateLinkPolicy("entra", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const policy = yield* Azure.AzureActiveDirectory.PrivateLinkPolicy("entra");
  * const endpoint = yield* Azure.Network.PrivateEndpoint("entra", {
- *   resourceGroup: group.resourceGroupName,
  *   subnetId: subnet.subnetId,
  *   manualPrivateLinkServiceConnections: [
  *     { privateLinkServiceId: policy.policyId, groupIds: ["azuread"] },
  *   ],
  * });
  * yield* Azure.AzureActiveDirectory.PrivateEndpointConnection("entra-approval", {
- *   resourceGroup: group.resourceGroupName,
  *   policy: policy.policyName,
  *   privateEndpointId: endpoint.privateEndpointId,
  *   description: "Approved for the corporate VNet",
@@ -115,7 +112,6 @@ export interface PrivateEndpointConnection extends Resource<
  * **Example:** Reject a request
  * ```typescript
  * yield* Azure.AzureActiveDirectory.PrivateEndpointConnection("entra-approval", {
- *   resourceGroup: group.resourceGroupName,
  *   policy: policy.policyName,
  *   privateEndpointId: endpoint.privateEndpointId,
  *   status: "Rejected",
@@ -125,7 +121,7 @@ export interface PrivateEndpointConnection extends Resource<
  *
  * @resource
  */
-export const PrivateEndpointConnection = Resource<PrivateEndpointConnection>(
+export const PrivateEndpointConnection = GroupedResource<PrivateEndpointConnection>(
   "Azure.AzureActiveDirectory.PrivateEndpointConnection",
 );
 

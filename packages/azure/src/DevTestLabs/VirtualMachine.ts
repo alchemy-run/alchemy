@@ -5,7 +5,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import {
@@ -22,6 +22,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { DEVTESTLAB_NAMESPACE, labLocation, vmSettingsInput } from "./Common.ts";
 import type { FormulaVmSettings } from "./Formula.ts";
 
@@ -96,7 +97,6 @@ export interface VirtualMachine extends Resource<
  * **Example:** Ubuntu VM with an SSH key
  * ```typescript
  * const vm = yield* Azure.DevTestLabs.VirtualMachine("dev", {
- *   resourceGroup: group.resourceGroupName,
  *   lab: lab.labName,
  *   size: "Standard_B1s",
  *   galleryImageReference: {
@@ -118,7 +118,6 @@ export interface VirtualMachine extends Resource<
  * **Example:** Pool VM any lab user can claim
  * ```typescript
  * const pooled = yield* Azure.DevTestLabs.VirtualMachine("pool-1", {
- *   resourceGroup: group.resourceGroupName,
  *   lab: lab.labName,
  *   size: "Standard_B2s",
  *   customImageId: image.customImageId,
@@ -130,7 +129,7 @@ export interface VirtualMachine extends Resource<
  *
  * @resource
  */
-export const VirtualMachine = Resource<VirtualMachine>("Azure.DevTestLabs.VirtualMachine");
+export const VirtualMachine = GroupedResource<VirtualMachine>("Azure.DevTestLabs.VirtualMachine");
 
 const createVmName = (id: string) =>
   createPhysicalName({ id, maxLength: 15, suffixLength: 6, lowercase: true });

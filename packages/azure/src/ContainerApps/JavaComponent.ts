@@ -2,7 +2,7 @@ import * as app from "@distilled.cloud/azure/app";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createContainerAppsName,
   fingerprint,
@@ -89,7 +90,6 @@ export interface JavaComponent extends Resource<
  * **Example:** Eureka server
  * ```typescript
  * const eureka = yield* Azure.ContainerApps.JavaComponent("eureka", {
- *   resourceGroup: group.resourceGroupName,
  *   environment: env.environmentName,
  *   componentType: "SpringCloudEureka",
  *   configurations: [
@@ -102,7 +102,6 @@ export interface JavaComponent extends Resource<
  * **Example:** Spring Cloud Config backed by a Git repository
  * ```typescript
  * yield* Azure.ContainerApps.JavaComponent("config", {
- *   resourceGroup: group.resourceGroupName,
  *   environment: env.environmentName,
  *   componentType: "SpringCloudConfig",
  *   configurations: [
@@ -116,7 +115,7 @@ export interface JavaComponent extends Resource<
  *
  * @resource
  */
-export const JavaComponent = Resource<JavaComponent>("Azure.ContainerApps.JavaComponent");
+export const JavaComponent = GroupedResource<JavaComponent>("Azure.ContainerApps.JavaComponent");
 
 const createComponentName = (id: string) => createContainerAppsName(id, 32);
 

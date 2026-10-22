@@ -2,11 +2,12 @@ import * as datafactory from "@distilled.cloud/azure/datafactory";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { ensureRegistered, ignoreNotFound, orUndefinedIfNotFound, waitUntilGone } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createChildName,
   definitionDiffers,
@@ -108,7 +109,6 @@ export interface ChangeDataCapture extends Resource<
  * **Example:** Micro-batch CDC between two linked services
  * ```typescript
  * yield* Azure.DataFactory.ChangeDataCapture("orders", {
- *   resourceGroup: group.resourceGroupName,
  *   factoryName: factory.factoryName,
  *   sourceConnectionsInfo: [{
  *     sourceEntities: [{ name: "dbo.orders" }],
@@ -142,7 +142,6 @@ export interface ChangeDataCapture extends Resource<
  * **Example:** Start the CDC after deployment
  * ```typescript
  * yield* Azure.DataFactory.ChangeDataCapture("orders", {
- *   resourceGroup: group.resourceGroupName,
  *   factoryName: factory.factoryName,
  *   sourceConnectionsInfo,
  *   targetConnectionsInfo,
@@ -153,7 +152,9 @@ export interface ChangeDataCapture extends Resource<
  *
  * @resource
  */
-export const ChangeDataCapture = Resource<ChangeDataCapture>("Azure.DataFactory.ChangeDataCapture");
+export const ChangeDataCapture = GroupedResource<ChangeDataCapture>(
+  "Azure.DataFactory.ChangeDataCapture",
+);
 
 const createCdcName = Effect.fn(function* (id: string) {
   const name = yield* createChildName(id);

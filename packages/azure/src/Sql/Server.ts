@@ -2,7 +2,7 @@ import * as sql from "@distilled.cloud/azure/sql";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
 import {
@@ -20,6 +20,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createDnsName,
   getServer,
@@ -188,9 +189,7 @@ export interface Server extends Resource<
  * ### Creating a Server
  * **Example:** Server with a SQL administrator
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("app");
  * const server = yield* Azure.Sql.Server("db", {
- *   resourceGroup: group.resourceGroupName,
  *   administratorLogin: "sqladmin",
  *   administratorLoginPassword: Redacted.make(password),
  * });
@@ -199,7 +198,6 @@ export interface Server extends Resource<
  * **Example:** Entra-only server
  * ```typescript
  * const server = yield* Azure.Sql.Server("db", {
- *   resourceGroup: group.resourceGroupName,
  *   administrators: {
  *     login: "dba-group",
  *     sid: dbaGroupObjectId,
@@ -213,7 +211,6 @@ export interface Server extends Resource<
  * **Example:** Private-only server
  * ```typescript
  * const server = yield* Azure.Sql.Server("db", {
- *   resourceGroup: group.resourceGroupName,
  *   administratorLogin: "sqladmin",
  *   administratorLoginPassword: Redacted.make(password),
  *   publicNetworkAccess: "Disabled",
@@ -222,7 +219,7 @@ export interface Server extends Resource<
  *
  * @resource
  */
-export const Server = Resource<Server>("Azure.Sql.Server");
+export const Server = GroupedResource<Server>("Azure.Sql.Server");
 
 type ObservedServer = sql.GetServerResponse;
 

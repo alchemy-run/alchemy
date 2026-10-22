@@ -2,7 +2,7 @@ import * as cognitiveservices from "@distilled.cloud/azure/cognitiveservices";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -17,6 +17,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { getAccount } from "./Account.ts";
 import {
   ACCOUNT_BUDGET,
@@ -111,12 +112,10 @@ export interface Project extends Resource<
  * **Example:** Foundry account and project
  * ```typescript
  * const account = yield* Azure.CognitiveServices.Account("foundry", {
- *   resourceGroup: group.resourceGroupName,
  *   allowProjectManagement: true,
  *   identity: { type: "SystemAssigned" },
  * });
  * const project = yield* Azure.CognitiveServices.Project("agents", {
- *   resourceGroup: group.resourceGroupName,
  *   account: account.accountName,
  *   displayName: "Agents",
  * });
@@ -124,7 +123,7 @@ export interface Project extends Resource<
  *
  * @resource
  */
-export const Project = Resource<Project>("Azure.CognitiveServices.Project");
+export const Project = GroupedResource<Project>("Azure.CognitiveServices.Project");
 
 type ObservedProject = cognitiveservices.GetProjectResponse;
 

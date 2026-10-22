@@ -2,7 +2,7 @@ import * as servicebus from "@distilled.cloud/azure/servicebus";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createEntityName,
   hasMarker,
@@ -157,11 +158,8 @@ export interface Queue extends Resource<
  * ### Creating a Queue
  * **Example:** Basic queue
  * ```typescript
- * const bus = yield* Azure.ServiceBus.Namespace("bus", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const bus = yield* Azure.ServiceBus.Namespace("bus");
  * const orders = yield* Azure.ServiceBus.Queue("orders", {
- *   resourceGroup: group.resourceGroupName,
  *   namespace: bus.namespaceName,
  * });
  * ```
@@ -169,7 +167,6 @@ export interface Queue extends Resource<
  * **Example:** Session-enabled queue with a short lock
  * ```typescript
  * const orders = yield* Azure.ServiceBus.Queue("orders", {
- *   resourceGroup: group.resourceGroupName,
  *   namespace: bus.namespaceName,
  *   requiresSession: true,
  *   lockDuration: "PT30S",
@@ -181,11 +178,9 @@ export interface Queue extends Resource<
  * **Example:** Forward dead-lettered messages to another queue
  * ```typescript
  * const poison = yield* Azure.ServiceBus.Queue("poison", {
- *   resourceGroup: group.resourceGroupName,
  *   namespace: bus.namespaceName,
  * });
  * const orders = yield* Azure.ServiceBus.Queue("orders", {
- *   resourceGroup: group.resourceGroupName,
  *   namespace: bus.namespaceName,
  *   forwardDeadLetteredMessagesTo: poison.queueName,
  * });
@@ -193,7 +188,7 @@ export interface Queue extends Resource<
  *
  * @resource
  */
-export const Queue = Resource<Queue>("Azure.ServiceBus.Queue");
+export const Queue = GroupedResource<Queue>("Azure.ServiceBus.Queue");
 
 const MUTABLE_KEYS = [
   "lockDuration",

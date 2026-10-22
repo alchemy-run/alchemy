@@ -2,7 +2,7 @@ import * as sql from "@distilled.cloud/azure/sql";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -17,6 +17,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createDnsName, lower } from "./common.ts";
 
 /** Read-write listener failover behaviour. */
@@ -132,12 +133,10 @@ export interface FailoverGroup extends Resource<
  * ```typescript
  * const primary = yield* Azure.Sql.Server("primary", { ... });
  * const secondary = yield* Azure.Sql.Server("secondary", {
- *   resourceGroup: group.resourceGroupName,
  *   location: "westus2",
  *   ...
  * });
  * const fog = yield* Azure.Sql.FailoverGroup("fog", {
- *   resourceGroup: group.resourceGroupName,
  *   server: primary.serverName,
  *   partnerServers: [secondary.serverId],
  *   databases: [db.databaseId],
@@ -149,7 +148,6 @@ export interface FailoverGroup extends Resource<
  * **Example:** Fail over automatically after one hour
  * ```typescript
  * yield* Azure.Sql.FailoverGroup("fog", {
- *   resourceGroup: group.resourceGroupName,
  *   server: primary.serverName,
  *   partnerServers: [secondary.serverId],
  *   readWriteEndpoint: {
@@ -161,7 +159,7 @@ export interface FailoverGroup extends Resource<
  *
  * @resource
  */
-export const FailoverGroup = Resource<FailoverGroup>("Azure.Sql.FailoverGroup");
+export const FailoverGroup = GroupedResource<FailoverGroup>("Azure.Sql.FailoverGroup");
 
 const getGroup = (
   subscriptionId: string,

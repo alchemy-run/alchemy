@@ -2,7 +2,7 @@ import * as servicefabric from "@distilled.cloud/azure/servicefabric";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -18,6 +18,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createEntityName, listClusters, lower } from "./Common.ts";
 
 export interface ApplicationTypeProps {
@@ -71,7 +72,6 @@ export interface ApplicationType extends Resource<
  * **Example:** Application type matching the manifest name
  * ```typescript
  * const appType = yield* Azure.ServiceFabricClassic.ApplicationType("voting-type", {
- *   resourceGroup: group.resourceGroupName,
  *   cluster: cluster.clusterName,
  *   name: "VotingType",
  * });
@@ -79,7 +79,7 @@ export interface ApplicationType extends Resource<
  *
  * @resource
  */
-export const ApplicationType = Resource<ApplicationType>(
+export const ApplicationType = GroupedResource<ApplicationType>(
   "Azure.ServiceFabricClassic.ApplicationType",
 );
 

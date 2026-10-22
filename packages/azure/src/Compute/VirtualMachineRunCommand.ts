@@ -2,7 +2,7 @@ import * as compute from "@distilled.cloud/azure/compute";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -15,6 +15,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createComputeName,
   runCommandDrifted,
@@ -98,7 +99,6 @@ export interface VirtualMachineRunCommand extends Resource<
  * **Example:** Inline shell script
  * ```typescript
  * const setup = yield* Azure.Compute.VirtualMachineRunCommand("setup", {
- *   resourceGroup: group.resourceGroupName,
  *   virtualMachine: vm.virtualMachineName,
  *   script: "apt-get update && apt-get install -y nginx",
  * });
@@ -108,7 +108,6 @@ export interface VirtualMachineRunCommand extends Resource<
  * **Example:** Script with parameters and a secret
  * ```typescript
  * yield* Azure.Compute.VirtualMachineRunCommand("configure", {
- *   resourceGroup: group.resourceGroupName,
  *   virtualMachine: vm.virtualMachineName,
  *   script: 'echo "$GREETING" > /etc/motd && echo "$TOKEN" > /etc/app-token',
  *   parameters: { GREETING: "hello" },
@@ -120,7 +119,6 @@ export interface VirtualMachineRunCommand extends Resource<
  * **Example:** Long-running script that does not block the deploy
  * ```typescript
  * yield* Azure.Compute.VirtualMachineRunCommand("warmup", {
- *   resourceGroup: group.resourceGroupName,
  *   virtualMachine: vm.virtualMachineName,
  *   script: "/opt/app/warmup.sh",
  *   asyncExecution: true,
@@ -130,7 +128,7 @@ export interface VirtualMachineRunCommand extends Resource<
  *
  * @resource
  */
-export const VirtualMachineRunCommand = Resource<VirtualMachineRunCommand>(
+export const VirtualMachineRunCommand = GroupedResource<VirtualMachineRunCommand>(
   "Azure.Compute.VirtualMachineRunCommand",
 );
 

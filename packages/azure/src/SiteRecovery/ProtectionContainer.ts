@@ -1,7 +1,7 @@
 import * as asr from "@distilled.cloud/azure/recoveryservicessiterecovery";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -12,6 +12,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createSiteRecoveryName,
   ownedOrUnowned,
@@ -88,7 +89,6 @@ export interface ProtectionContainer extends Resource<
  * **Example:** A2A container in a fabric
  * ```typescript
  * const container = yield* Azure.SiteRecovery.ProtectionContainer("primary", {
- *   resourceGroup: group.resourceGroupName,
  *   vault: vault.vaultName,
  *   fabric: primary.fabricName,
  * });
@@ -96,7 +96,7 @@ export interface ProtectionContainer extends Resource<
  *
  * @resource
  */
-export const ProtectionContainer = Resource<ProtectionContainer>(
+export const ProtectionContainer = GroupedResource<ProtectionContainer>(
   "Azure.SiteRecovery.ProtectionContainer",
 );
 

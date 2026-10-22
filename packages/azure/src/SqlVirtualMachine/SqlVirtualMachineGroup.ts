@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
 import {
@@ -22,6 +22,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   canonicalJson,
   getSqlVirtualMachineGroup,
@@ -141,9 +142,7 @@ export interface SqlVirtualMachineGroup extends Resource<
  * ### Creating a Group
  * **Example:** Group for a domain-joined cluster
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("sql");
  * const cluster = yield* Azure.SqlVirtualMachine.SqlVirtualMachineGroup("cluster", {
- *   resourceGroup: group.resourceGroupName,
  *   sqlImageOffer: "SQL2022-WS2022",
  *   sqlImageSku: "Enterprise",
  *   wsfcDomainProfile: {
@@ -162,7 +161,6 @@ export interface SqlVirtualMachineGroup extends Resource<
  * **Example:** Register a SQL VM into the group
  * ```typescript
  * yield* Azure.SqlVirtualMachine.SqlVirtualMachine("sql1", {
- *   resourceGroup: group.resourceGroupName,
  *   virtualMachineId: vm1.virtualMachineId,
  *   sqlServerLicenseType: "PAYG",
  *   sqlVirtualMachineGroupResourceId: cluster.sqlVirtualMachineGroupId,
@@ -176,7 +174,7 @@ export interface SqlVirtualMachineGroup extends Resource<
  *
  * @resource
  */
-export const SqlVirtualMachineGroup = Resource<SqlVirtualMachineGroup>(
+export const SqlVirtualMachineGroup = GroupedResource<SqlVirtualMachineGroup>(
   "Azure.SqlVirtualMachine.SqlVirtualMachineGroup",
 );
 

@@ -2,7 +2,7 @@ import * as monitoringservice from "@distilled.cloud/azure/monitoringservice";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -15,6 +15,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 
 /** Metrics Query Service version used for a workspace's metric queries. */
 export type MetricsContainerVersion = "1.0" | "2.0";
@@ -79,9 +80,7 @@ export interface MetricsContainer extends Resource<
  * ### Configuring the Query Version
  * **Example:** Pin a workspace to Metrics Query Service 1.0
  * ```typescript
- * const metrics = yield* Azure.Monitor.Workspace("metrics", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const metrics = yield* Azure.Monitor.Workspace("metrics");
  * yield* Azure.Monitor.MetricsContainer("metrics-container", {
  *   resourceGroup: metrics.resourceGroup,
  *   workspaceName: metrics.workspaceName,
@@ -91,7 +90,7 @@ export interface MetricsContainer extends Resource<
  *
  * @resource
  */
-export const MetricsContainer = Resource<MetricsContainer>("Azure.Monitor.MetricsContainer");
+export const MetricsContainer = GroupedResource<MetricsContainer>("Azure.Monitor.MetricsContainer");
 
 const sameText = (a: string | undefined, b: string | undefined) =>
   (a ?? "").toLowerCase() === (b ?? "").toLowerCase();

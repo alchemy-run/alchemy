@@ -2,7 +2,7 @@ import * as migrate from "@distilled.cloud/azure/migrate";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -20,6 +20,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { migrateName, settingsDiffer } from "./Common.ts";
 
 export interface MigrateProjectProps {
@@ -89,7 +90,6 @@ export interface MigrateProject extends Resource<
  *   location: "centralus",
  * });
  * const hub = yield* Azure.Migrate.MigrateProject("hub", {
- *   resourceGroup: group.resourceGroupName,
  *   location: "centralus",
  * });
  * ```
@@ -98,7 +98,6 @@ export interface MigrateProject extends Resource<
  * **Example:** Disable the public endpoint
  * ```typescript
  * const hub = yield* Azure.Migrate.MigrateProject("hub", {
- *   resourceGroup: group.resourceGroupName,
  *   location: "centralus",
  *   publicNetworkAccess: "Disabled",
  * });
@@ -106,7 +105,7 @@ export interface MigrateProject extends Resource<
  *
  * @resource
  */
-export const MigrateProject = Resource<MigrateProject>("Azure.Migrate.MigrateProject");
+export const MigrateProject = GroupedResource<MigrateProject>("Azure.Migrate.MigrateProject");
 
 type ObservedProject = migrate.MigrateProject;
 

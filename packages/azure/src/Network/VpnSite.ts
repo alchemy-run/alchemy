@@ -1,8 +1,9 @@
 import * as network from "@distilled.cloud/azure/network";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import { orUndefinedIfNotFound, userTags } from "../Arm.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { sameId } from "./common.ts";
 import { networkProvider } from "./generic.ts";
 
@@ -110,7 +111,6 @@ export interface VpnSite extends Resource<
  * **Example:** Branch with one link
  * ```typescript
  * const site = yield* Azure.Network.VpnSite("branch", {
- *   resourceGroup: group.resourceGroupName,
  *   virtualWanId: wan.virtualWanId,
  *   addressPrefixes: ["10.20.0.0/16"],
  *   links: [
@@ -121,7 +121,7 @@ export interface VpnSite extends Resource<
  *
  * @resource
  */
-export const VpnSite = Resource<VpnSite>("Azure.Network.VpnSite");
+export const VpnSite = GroupedResource<VpnSite>("Azure.Network.VpnSite");
 
 const bgp = (b: VpnSiteBgp | undefined) =>
   b && { asn: b.asn, bgpPeeringAddress: b.bgpPeeringAddress };

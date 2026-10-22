@@ -2,7 +2,7 @@ import * as nc from "@distilled.cloud/azure/networkcloud";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -19,6 +19,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createNexusName,
   customLocation,
@@ -111,7 +112,6 @@ export interface L2Network extends Resource<
  * **Example:** L2 network on an isolation domain
  * ```typescript
  * const net = yield* Azure.NetworkCloud.L2Network("l2", {
- *   resourceGroup: group.resourceGroupName,
  *   customLocationId: cluster.clusterExtendedLocationId,
  *   l2IsolationDomainId: l2Domain.l2IsolationDomainId,
  * });
@@ -119,7 +119,7 @@ export interface L2Network extends Resource<
  *
  * @resource
  */
-export const L2Network = Resource<L2Network>("Azure.NetworkCloud.L2Network");
+export const L2Network = GroupedResource<L2Network>("Azure.NetworkCloud.L2Network");
 
 type Observed = nc.GetL2NetworkResponse;
 

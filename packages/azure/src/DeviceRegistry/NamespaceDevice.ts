@@ -2,7 +2,7 @@ import * as deviceregistry from "@distilled.cloud/azure/deviceregistry";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -19,6 +19,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   DEVICE_REGISTRY_RP,
   DEVICE_REGISTRY_WAIT,
@@ -134,11 +135,8 @@ export interface NamespaceDevice extends Resource<
  * ### Creating a Device
  * **Example:** Cloud-only device
  * ```typescript
- * const ns = yield* Azure.DeviceRegistry.Namespace("devices", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const ns = yield* Azure.DeviceRegistry.Namespace("devices");
  * const device = yield* Azure.DeviceRegistry.NamespaceDevice("thermostat", {
- *   resourceGroup: group.resourceGroupName,
  *   namespace: ns.namespaceName,
  *   manufacturer: "Contoso",
  *   model: "T-1000",
@@ -150,7 +148,6 @@ export interface NamespaceDevice extends Resource<
  * **Example:** Device with an OPC UA endpoint on an IoT Operations cluster
  * ```typescript
  * const device = yield* Azure.DeviceRegistry.NamespaceDevice("plc", {
- *   resourceGroup: group.resourceGroupName,
  *   namespace: ns.namespaceName,
  *   customLocationId: aioCustomLocationId,
  *   endpoints: {
@@ -166,7 +163,9 @@ export interface NamespaceDevice extends Resource<
  *
  * @resource
  */
-export const NamespaceDevice = Resource<NamespaceDevice>("Azure.DeviceRegistry.NamespaceDevice");
+export const NamespaceDevice = GroupedResource<NamespaceDevice>(
+  "Azure.DeviceRegistry.NamespaceDevice",
+);
 
 const getDevice = (
   subscriptionId: string,

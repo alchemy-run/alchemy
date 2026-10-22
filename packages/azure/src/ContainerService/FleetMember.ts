@@ -2,7 +2,7 @@ import * as cs from "@distilled.cloud/azure/containerservice";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -14,6 +14,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createChildName, isFleetOwned, sameName, whileFleetBusy } from "./Common.ts";
 
 export interface FleetMemberProps {
@@ -75,7 +76,6 @@ export interface FleetMember extends Resource<
  * **Example:** Join a cluster to a fleet
  * ```typescript
  * yield* Azure.ContainerService.FleetMember("prod-east", {
- *   resourceGroup: group.resourceGroupName,
  *   fleet: fleet.fleetName,
  *   clusterResourceId: cluster.clusterId,
  *   group: "production",
@@ -85,7 +85,7 @@ export interface FleetMember extends Resource<
  *
  * @resource
  */
-export const FleetMember = Resource<FleetMember>("Azure.ContainerService.FleetMember");
+export const FleetMember = GroupedResource<FleetMember>("Azure.ContainerService.FleetMember");
 
 type ObservedMember = cs.GetFleetMemberResponse;
 

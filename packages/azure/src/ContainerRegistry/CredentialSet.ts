@@ -2,7 +2,7 @@ import * as containerregistry from "@distilled.cloud/azure/containerregistry";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import {
@@ -14,6 +14,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createRegistryName, registryOwnedByStage, sameName } from "./Common.ts";
 
 export interface CredentialSetProps {
@@ -82,14 +83,12 @@ export interface CredentialSet extends Resource<
  * **Example:** Docker Hub credentials for a cache rule
  * ```typescript
  * const dockerHub = yield* Azure.ContainerRegistry.CredentialSet("dockerhub", {
- *   resourceGroup: group.resourceGroupName,
  *   registry: registry.registryName,
  *   loginServer: "docker.io",
  *   usernameSecretIdentifier: "https://myvault.vault.azure.net/secrets/hub-user",
  *   passwordSecretIdentifier: "https://myvault.vault.azure.net/secrets/hub-token",
  * });
  * const nginx = yield* Azure.ContainerRegistry.CacheRule("nginx", {
- *   resourceGroup: group.resourceGroupName,
  *   registry: registry.registryName,
  *   sourceRepository: "docker.io/library/nginx",
  *   targetRepository: "nginx",
@@ -99,7 +98,9 @@ export interface CredentialSet extends Resource<
  *
  * @resource
  */
-export const CredentialSet = Resource<CredentialSet>("Azure.ContainerRegistry.CredentialSet");
+export const CredentialSet = GroupedResource<CredentialSet>(
+  "Azure.ContainerRegistry.CredentialSet",
+);
 
 const getCredentialSet = (
   subscriptionId: string,

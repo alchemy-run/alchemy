@@ -2,7 +2,7 @@ import * as eventhub from "@distilled.cloud/azure/eventhub";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createEntityName, ownershipMarker, stripMarker, withMarker } from "./Common.ts";
 
 export interface ConsumerGroupProps {
@@ -74,11 +75,9 @@ export interface ConsumerGroup extends Resource<
  * **Example:** One consumer group per reading service
  * ```typescript
  * const orders = yield* Azure.EventHub.EventHub("orders", {
- *   resourceGroup: group.resourceGroupName,
  *   namespace: namespace.namespaceName,
  * });
  * const billing = yield* Azure.EventHub.ConsumerGroup("billing", {
- *   resourceGroup: group.resourceGroupName,
  *   namespace: namespace.namespaceName,
  *   eventHub: orders.eventHubName,
  *   userMetadata: "billing service",
@@ -87,7 +86,7 @@ export interface ConsumerGroup extends Resource<
  *
  * @resource
  */
-export const ConsumerGroup = Resource<ConsumerGroup>("Azure.EventHub.ConsumerGroup");
+export const ConsumerGroup = GroupedResource<ConsumerGroup>("Azure.EventHub.ConsumerGroup");
 
 const getConsumerGroup = (
   subscriptionId: string,

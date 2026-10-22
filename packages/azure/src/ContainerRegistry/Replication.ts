@@ -2,7 +2,7 @@ import * as containerregistry from "@distilled.cloud/azure/containerregistry";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -17,6 +17,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { normalizeLocation, sameName } from "./Common.ts";
 
 /** Default replication name: the region, letters and digits only. */
@@ -94,11 +95,9 @@ export interface Replication extends Resource<
  * **Example:** Replicate to West Europe
  * ```typescript
  * const registry = yield* Azure.ContainerRegistry.Registry("images", {
- *   resourceGroup: group.resourceGroupName,
  *   sku: "Premium",
  * });
  * const replica = yield* Azure.ContainerRegistry.Replication("westeurope", {
- *   resourceGroup: group.resourceGroupName,
  *   registry: registry.registryName,
  *   location: "westeurope",
  * });
@@ -106,7 +105,7 @@ export interface Replication extends Resource<
  *
  * @resource
  */
-export const Replication = Resource<Replication>("Azure.ContainerRegistry.Replication");
+export const Replication = GroupedResource<Replication>("Azure.ContainerRegistry.Replication");
 
 const getReplication = (
   subscriptionId: string,

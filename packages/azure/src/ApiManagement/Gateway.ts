@@ -2,12 +2,13 @@ import * as apim from "@distilled.cloud/azure/apimanagement";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { ensureRegistered, ignoreNotFound, orUndefinedIfNotFound, waitUntilGone } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createEntityName, isParentOwned, sameName, subsetMatches } from "./Common.ts";
 
 export interface GatewayLocation {
@@ -70,7 +71,6 @@ export interface Gateway extends Resource<
  * **Example:** Gateway running in an on-premises data center
  * ```typescript
  * const gateway = yield* Azure.ApiManagement.Gateway("dc1", {
- *   resourceGroup: group.resourceGroupName,
  *   serviceName: apim.serviceName,
  *   locationData: { name: "dc1", city: "Seattle", countryOrRegion: "US" },
  *   description: "On-premises gateway",
@@ -79,7 +79,7 @@ export interface Gateway extends Resource<
  *
  * @resource
  */
-export const Gateway = Resource<Gateway>("Azure.ApiManagement.Gateway");
+export const Gateway = GroupedResource<Gateway>("Azure.ApiManagement.Gateway");
 
 const getGateway = (
   subscriptionId: string,

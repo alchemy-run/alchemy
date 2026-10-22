@@ -2,7 +2,7 @@ import * as app from "@distilled.cloud/azure/app";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -20,6 +20,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createContainerAppsName, lower, sameLocation } from "./common.ts";
 
 export interface SandboxGroupProps {
@@ -86,16 +87,13 @@ export interface SandboxGroup extends Resource<
  * ### Creating a Sandbox Group
  * **Example:** Standalone sandbox group
  * ```typescript
- * const sandboxes = yield* Azure.ContainerApps.SandboxGroup("sandboxes", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const sandboxes = yield* Azure.ContainerApps.SandboxGroup("sandboxes");
  * // manage sandboxes through sandboxes.managementEndpoint
  * ```
  *
  * **Example:** Sandbox group linked to an environment
  * ```typescript
  * yield* Azure.ContainerApps.SandboxGroup("sandboxes", {
- *   resourceGroup: group.resourceGroupName,
  *   location: env.location,
  *   environmentId: env.environmentId,
  * });
@@ -103,7 +101,7 @@ export interface SandboxGroup extends Resource<
  *
  * @resource
  */
-export const SandboxGroup = Resource<SandboxGroup>("Azure.ContainerApps.SandboxGroup");
+export const SandboxGroup = GroupedResource<SandboxGroup>("Azure.ContainerApps.SandboxGroup");
 
 const createGroupName = (id: string) => createContainerAppsName(id, 32);
 

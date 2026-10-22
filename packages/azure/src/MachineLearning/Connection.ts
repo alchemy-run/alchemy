@@ -2,7 +2,7 @@ import * as ml from "@distilled.cloud/azure/machinelearningservices";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -17,6 +17,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createChildName, sameArm, sameValue, inputFields } from "./Common.ts";
 
 export type ConnectionAuthType =
@@ -124,7 +125,6 @@ export interface Connection extends Resource<
  * **Example:** API key connection
  * ```typescript
  * const connection = yield* Azure.MachineLearning.Connection("search", {
- *   resourceGroup: group.resourceGroupName,
  *   workspace: workspace.workspaceName,
  *   category: "ApiKey",
  *   authType: "ApiKey",
@@ -136,7 +136,6 @@ export interface Connection extends Resource<
  * **Example:** Custom keys connection
  * ```typescript
  * const connection = yield* Azure.MachineLearning.Connection("vendor", {
- *   resourceGroup: group.resourceGroupName,
  *   workspace: workspace.workspaceName,
  *   category: "CustomKeys",
  *   authType: "CustomKeys",
@@ -147,7 +146,7 @@ export interface Connection extends Resource<
  *
  * @resource
  */
-export const Connection = Resource<Connection>("Azure.MachineLearning.Connection");
+export const Connection = GroupedResource<Connection>("Azure.MachineLearning.Connection");
 
 const getConnection = (
   subscriptionId: string,

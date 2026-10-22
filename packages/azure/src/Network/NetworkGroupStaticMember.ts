@@ -1,8 +1,9 @@
 import * as network from "@distilled.cloud/azure/network";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import { orUndefinedIfNotFound } from "../Arm.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { sameId } from "./common.ts";
 import { networkProvider } from "./generic.ts";
 import { networkManagerChildName, networkManagerTags } from "./networkManagerShared.ts";
@@ -60,7 +61,6 @@ export interface NetworkGroupStaticMember extends Resource<
  * **Example:** Add a VNet to a network group
  * ```typescript
  * yield* Azure.Network.NetworkGroupStaticMember("spoke1", {
- *   resourceGroup: group.resourceGroupName,
  *   networkManager: manager.networkManagerName,
  *   networkGroup: spokes.networkGroupName,
  *   resourceId: vnet.virtualNetworkId,
@@ -69,7 +69,7 @@ export interface NetworkGroupStaticMember extends Resource<
  *
  * @resource
  */
-export const NetworkGroupStaticMember = Resource<NetworkGroupStaticMember>(
+export const NetworkGroupStaticMember = GroupedResource<NetworkGroupStaticMember>(
   "Azure.Network.NetworkGroupStaticMember",
 );
 

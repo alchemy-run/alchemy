@@ -2,7 +2,7 @@ import * as automation from "@distilled.cloud/azure/automation";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
 import {
@@ -14,6 +14,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   accountOwnedByStage,
   childNuke,
@@ -80,12 +81,10 @@ export interface Connection extends Resource<
  * **Example:** Connection of a custom type
  * ```typescript
  * const apiType = yield* Azure.Automation.ConnectionType("api", {
- *   resourceGroup: group.resourceGroupName,
  *   automationAccount: account.automationAccountName,
  *   fieldDefinitions: { Endpoint: { type: "System.String" } },
  * });
  * const api = yield* Azure.Automation.Connection("api", {
- *   resourceGroup: group.resourceGroupName,
  *   automationAccount: account.automationAccountName,
  *   connectionType: apiType.connectionTypeName,
  *   fieldDefinitionValues: { Endpoint: "https://api.example.com" },
@@ -94,7 +93,7 @@ export interface Connection extends Resource<
  *
  * @resource
  */
-export const Connection = Resource<Connection>("Azure.Automation.Connection");
+export const Connection = GroupedResource<Connection>("Azure.Automation.Connection");
 
 const getConnection = (
   subscriptionId: string,

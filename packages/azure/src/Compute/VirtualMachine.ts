@@ -2,7 +2,7 @@ import * as compute from "@distilled.cloud/azure/compute";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
 import {
@@ -19,6 +19,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   canonical,
   createComputeName,
@@ -259,22 +260,17 @@ export interface VirtualMachine extends Resource<
  * ### Creating a Linux VM
  * **Example:** Ubuntu VM with SSH key authentication
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("app");
  * const vnet = yield* Azure.Network.VirtualNetwork("vnet", {
- *   resourceGroup: group.resourceGroupName,
  *   addressPrefixes: ["10.0.0.0/16"],
  * });
  * const subnet = yield* Azure.Network.Subnet("vms", {
- *   resourceGroup: group.resourceGroupName,
  *   virtualNetwork: vnet.virtualNetworkName,
  *   addressPrefix: "10.0.1.0/24",
  * });
  * const nic = yield* Azure.Network.NetworkInterface("web", {
- *   resourceGroup: group.resourceGroupName,
  *   ipConfigurations: [{ subnetId: subnet.subnetId }],
  * });
  * const vm = yield* Azure.Compute.VirtualMachine("web", {
- *   resourceGroup: group.resourceGroupName,
  *   vmSize: "Standard_B1s",
  *   networkInterfaceIds: [nic.networkInterfaceId],
  *   adminUsername: "azureuser",
@@ -286,7 +282,6 @@ export interface VirtualMachine extends Resource<
  * **Example:** Debian 12 on Premium SSD
  * ```typescript
  * const vm = yield* Azure.Compute.VirtualMachine("db", {
- *   resourceGroup: group.resourceGroupName,
  *   vmSize: "Standard_D2s_v5",
  *   image: { publisher: "Debian", offer: "debian-12", sku: "12-gen2" },
  *   osDiskStorageAccountType: "Premium_LRS",
@@ -300,7 +295,6 @@ export interface VirtualMachine extends Resource<
  * **Example:** System-assigned identity with boot diagnostics
  * ```typescript
  * const vm = yield* Azure.Compute.VirtualMachine("worker", {
- *   resourceGroup: group.resourceGroupName,
  *   vmSize: "Standard_B1s",
  *   networkInterfaceIds: [nic.networkInterfaceId],
  *   adminUsername: "azureuser",
@@ -315,7 +309,6 @@ export interface VirtualMachine extends Resource<
  * **Example:** Spot VM that is deallocated on eviction
  * ```typescript
  * const vm = yield* Azure.Compute.VirtualMachine("batch", {
- *   resourceGroup: group.resourceGroupName,
  *   vmSize: "Standard_D2s_v5",
  *   networkInterfaceIds: [nic.networkInterfaceId],
  *   adminUsername: "azureuser",
@@ -328,7 +321,7 @@ export interface VirtualMachine extends Resource<
  *
  * @resource
  */
-export const VirtualMachine = Resource<VirtualMachine>("Azure.Compute.VirtualMachine");
+export const VirtualMachine = GroupedResource<VirtualMachine>("Azure.Compute.VirtualMachine");
 
 type Observed = compute.GetVirtualMachineResponse;
 

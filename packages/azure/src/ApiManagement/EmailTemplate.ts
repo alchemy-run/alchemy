@@ -1,9 +1,10 @@
 import * as apim from "@distilled.cloud/azure/apimanagement";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { entityLifecycle } from "./Entity.ts";
 
 export type EmailTemplateName = apim.EmailTemplateCreateOrUpdateRequestTemplateName;
@@ -62,7 +63,6 @@ export interface EmailTemplate extends Resource<
  * **Example:** Brand the subscription-approved email
  * ```typescript
  * yield* Azure.ApiManagement.EmailTemplate("approved", {
- *   resourceGroup: group.resourceGroupName,
  *   serviceName: apim.serviceName,
  *   templateName: "applicationApprovedNotificationMessage",
  *   subject: "Your $OrganizationName subscription is ready",
@@ -72,7 +72,7 @@ export interface EmailTemplate extends Resource<
  *
  * @resource
  */
-export const EmailTemplate = Resource<EmailTemplate>("Azure.ApiManagement.EmailTemplate");
+export const EmailTemplate = GroupedResource<EmailTemplate>("Azure.ApiManagement.EmailTemplate");
 
 interface Key {
   resourceGroup: string;

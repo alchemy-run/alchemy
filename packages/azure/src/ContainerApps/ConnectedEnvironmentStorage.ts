@@ -2,7 +2,7 @@ import * as app from "@distilled.cloud/azure/app";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createContainerAppsName,
   fingerprint,
@@ -69,7 +70,6 @@ export interface ConnectedEnvironmentStorage extends Resource<
  * **Example:** Share mounted with the account key
  * ```typescript
  * const files = yield* Azure.ContainerApps.ConnectedEnvironmentStorage("files", {
- *   resourceGroup: group.resourceGroupName,
  *   environment: arcEnv.environmentName,
  *   azureFile: {
  *     accountName: account.storageAccountName,
@@ -82,7 +82,7 @@ export interface ConnectedEnvironmentStorage extends Resource<
  *
  * @resource
  */
-export const ConnectedEnvironmentStorage = Resource<ConnectedEnvironmentStorage>(
+export const ConnectedEnvironmentStorage = GroupedResource<ConnectedEnvironmentStorage>(
   "Azure.ContainerApps.ConnectedEnvironmentStorage",
 );
 

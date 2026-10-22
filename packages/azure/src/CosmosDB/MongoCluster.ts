@@ -4,7 +4,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import {
@@ -22,6 +22,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   getMongoCluster,
   type MongoClusterRef,
@@ -234,9 +235,7 @@ export interface MongoCluster extends Resource<
  * ### Creating a Cluster
  * **Example:** Free-tier cluster with a generated administrator password
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("app");
  * const cluster = yield* Azure.CosmosDB.MongoCluster("db", {
- *   resourceGroup: group.resourceGroupName,
  *   computeTier: "Free",
  * });
  * // cluster.connectionString is a Redacted mongodb+srv:// URL
@@ -245,7 +244,6 @@ export interface MongoCluster extends Resource<
  * **Example:** Paid cluster with an explicit password and version
  * ```typescript
  * const cluster = yield* Azure.CosmosDB.MongoCluster("db", {
- *   resourceGroup: group.resourceGroupName,
  *   computeTier: "M30",
  *   storageSizeGb: 128,
  *   serverVersion: "8.0",
@@ -258,7 +256,6 @@ export interface MongoCluster extends Resource<
  * **Example:** Allow Entra ID principals alongside native users
  * ```typescript
  * const cluster = yield* Azure.CosmosDB.MongoCluster("db", {
- *   resourceGroup: group.resourceGroupName,
  *   authModes: ["NativeAuth", "MicrosoftEntraID"],
  * });
  * ```
@@ -267,14 +264,13 @@ export interface MongoCluster extends Resource<
  * **Example:** Private-only cluster
  * ```typescript
  * const cluster = yield* Azure.CosmosDB.MongoCluster("db", {
- *   resourceGroup: group.resourceGroupName,
  *   publicNetworkAccess: "Disabled",
  * });
  * ```
  *
  * @resource
  */
-export const MongoCluster = Resource<MongoCluster>("Azure.CosmosDB.MongoCluster");
+export const MongoCluster = GroupedResource<MongoCluster>("Azure.CosmosDB.MongoCluster");
 
 const DEFAULT_ADMIN = "alchemyadmin";
 const DEFAULT_TIER = "M10";

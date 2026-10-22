@@ -2,11 +2,12 @@ import * as synapse from "@distilled.cloud/azure/synapse";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { ensureRegistered, orUndefinedIfNotFound } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   fieldsMatch,
   isWorkspaceOwnedByStack,
@@ -59,7 +60,6 @@ export interface SqlPoolTransparentDataEncryption extends Resource<
  * **Example:** Enable TDE
  * ```typescript
  * yield* Azure.Synapse.SqlPoolTransparentDataEncryption("tde", {
- *   resourceGroup: group.resourceGroupName,
  *   workspace: workspace.workspaceName,
  *   sqlPool: pool.sqlPoolName,
  *   status: "Enabled",
@@ -69,7 +69,6 @@ export interface SqlPoolTransparentDataEncryption extends Resource<
  * **Example:** Disable TDE
  * ```typescript
  * yield* Azure.Synapse.SqlPoolTransparentDataEncryption("tde", {
- *   resourceGroup: group.resourceGroupName,
  *   workspace: workspace.workspaceName,
  *   sqlPool: pool.sqlPoolName,
  *   status: "Disabled",
@@ -78,7 +77,7 @@ export interface SqlPoolTransparentDataEncryption extends Resource<
  *
  * @resource
  */
-export const SqlPoolTransparentDataEncryption = Resource<SqlPoolTransparentDataEncryption>(
+export const SqlPoolTransparentDataEncryption = GroupedResource<SqlPoolTransparentDataEncryption>(
   "Azure.Synapse.SqlPoolTransparentDataEncryption",
 );
 

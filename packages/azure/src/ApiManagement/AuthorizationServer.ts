@@ -1,9 +1,10 @@
 import * as apim from "@distilled.cloud/azure/apimanagement";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createEntityName, subsetMatches } from "./Common.ts";
 import { entityLifecycle, reveal } from "./Entity.ts";
 
@@ -97,7 +98,6 @@ export interface AuthorizationServer extends Resource<
  * **Example:** A Microsoft Entra authorization server
  * ```typescript
  * yield* Azure.ApiManagement.AuthorizationServer("entra", {
- *   resourceGroup: group.resourceGroupName,
  *   serviceName: apim.serviceName,
  *   displayName: "Entra ID",
  *   clientRegistrationEndpoint: "https://localhost",
@@ -112,7 +112,7 @@ export interface AuthorizationServer extends Resource<
  *
  * @resource
  */
-export const AuthorizationServer = Resource<AuthorizationServer>(
+export const AuthorizationServer = GroupedResource<AuthorizationServer>(
   "Azure.ApiManagement.AuthorizationServer",
 );
 

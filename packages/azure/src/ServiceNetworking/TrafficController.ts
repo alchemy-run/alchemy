@@ -2,7 +2,7 @@ import * as servicenetworking from "@distilled.cloud/azure/servicenetworking";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -19,6 +19,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   AGC_BUDGET,
   createAgcName,
@@ -112,10 +113,7 @@ export interface TrafficController extends Resource<
  * ### Creating a Traffic Controller
  * **Example:** Traffic controller in a resource group
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("agc");
- * const controller = yield* Azure.ServiceNetworking.TrafficController("alb", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const controller = yield* Azure.ServiceNetworking.TrafficController("alb");
  * // configure the ALB controller with controller.trafficControllerId
  * ```
  *
@@ -125,7 +123,6 @@ export interface TrafficController extends Resource<
  * // The policy is a child of the controller, so reference it by ID on a
  * // later deploy, once the policy exists.
  * const controller = yield* Azure.ServiceNetworking.TrafficController("alb", {
- *   resourceGroup: group.resourceGroupName,
  *   name: "alb",
  *   securityPolicyConfigurations: {
  *     wafSecurityPolicyId:
@@ -136,7 +133,7 @@ export interface TrafficController extends Resource<
  *
  * @resource
  */
-export const TrafficController = Resource<TrafficController>(
+export const TrafficController = GroupedResource<TrafficController>(
   "Azure.ServiceNetworking.TrafficController",
 );
 

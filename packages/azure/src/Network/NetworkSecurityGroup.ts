@@ -2,7 +2,7 @@ import * as network from "@distilled.cloud/azure/network";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -18,6 +18,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createNetworkName,
   sameId,
@@ -92,11 +93,8 @@ export interface NetworkSecurityGroup extends Resource<
  * ### Creating a Network Security Group
  * **Example:** NSG associated with a subnet
  * ```typescript
- * const nsg = yield* Azure.Network.NetworkSecurityGroup("web", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const nsg = yield* Azure.Network.NetworkSecurityGroup("web");
  * const subnet = yield* Azure.Network.Subnet("web", {
- *   resourceGroup: group.resourceGroupName,
  *   virtualNetwork: vnet.virtualNetworkName,
  *   addressPrefix: "10.0.1.0/24",
  *   networkSecurityGroupId: nsg.networkSecurityGroupId,
@@ -106,7 +104,6 @@ export interface NetworkSecurityGroup extends Resource<
  * **Example:** NSG that flushes connections on rule changes
  * ```typescript
  * const nsg = yield* Azure.Network.NetworkSecurityGroup("web", {
- *   resourceGroup: group.resourceGroupName,
  *   flushConnection: true,
  *   tags: { tier: "web" },
  * });
@@ -114,7 +111,7 @@ export interface NetworkSecurityGroup extends Resource<
  *
  * @resource
  */
-export const NetworkSecurityGroup = Resource<NetworkSecurityGroup>(
+export const NetworkSecurityGroup = GroupedResource<NetworkSecurityGroup>(
   "Azure.Network.NetworkSecurityGroup",
 );
 

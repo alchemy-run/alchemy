@@ -2,7 +2,7 @@ import * as workloads from "@distilled.cloud/azure/workloads";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -20,6 +20,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { identityBlock, identityIds, lower, withRecordedError } from "./Common.ts";
 
 /** Register an existing SAP system with Azure Center for SAP solutions. */
@@ -158,7 +159,6 @@ export interface SapVirtualInstance extends Resource<
  * **Example:** Discover an SAP system by its central services VM
  * ```typescript
  * const vis = yield* Azure.Workloads.SapVirtualInstance("s4h", {
- *   resourceGroup: group.resourceGroupName,
  *   name: "S4H",
  *   environment: "NonProd",
  *   sapProduct: "S4HANA",
@@ -174,7 +174,6 @@ export interface SapVirtualInstance extends Resource<
  * **Example:** Single-server infrastructure deployment
  * ```typescript
  * const vis = yield* Azure.Workloads.SapVirtualInstance("x01", {
- *   resourceGroup: group.resourceGroupName,
  *   name: "X01",
  *   environment: "NonProd",
  *   sapProduct: "S4HANA",
@@ -193,7 +192,7 @@ export interface SapVirtualInstance extends Resource<
  *
  * @resource
  */
-export const SapVirtualInstance = Resource<SapVirtualInstance>(
+export const SapVirtualInstance = GroupedResource<SapVirtualInstance>(
   "Azure.Workloads.SapVirtualInstance",
 );
 

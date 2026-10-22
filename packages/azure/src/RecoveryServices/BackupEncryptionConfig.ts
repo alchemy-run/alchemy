@@ -2,7 +2,7 @@ import * as backup from "@distilled.cloud/azure/recoveryservicesbackup";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import {
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { isVaultOwnedByStack, RECOVERY_SERVICES_NAMESPACE, sameId } from "./BackupShared.ts";
 
 export interface BackupEncryptionConfigProps {
@@ -80,11 +81,8 @@ export interface BackupEncryptionConfig extends Resource<
  * ### Customer-Managed Keys
  * **Example:** Encrypt backups with a Key Vault key
  * ```typescript
- * const vault = yield* Azure.RecoveryServices.Vault("backup-vault", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const vault = yield* Azure.RecoveryServices.Vault("backup-vault");
  * yield* Azure.RecoveryServices.BackupEncryptionConfig("backup-cmk", {
- *   resourceGroup: group.resourceGroupName,
  *   vault: vault.vaultName,
  *   keyUri: "https://my-kv.vault.azure.net/keys/backup-key",
  *   infrastructureEncryptionState: "Enabled",
@@ -93,7 +91,7 @@ export interface BackupEncryptionConfig extends Resource<
  *
  * @resource
  */
-export const BackupEncryptionConfig = Resource<BackupEncryptionConfig>(
+export const BackupEncryptionConfig = GroupedResource<BackupEncryptionConfig>(
   "Azure.RecoveryServices.BackupEncryptionConfig",
 );
 

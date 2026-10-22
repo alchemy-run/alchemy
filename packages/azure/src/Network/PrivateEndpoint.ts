@@ -2,7 +2,7 @@ import * as network from "@distilled.cloud/azure/network";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -18,6 +18,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   canonical,
   createNetworkName,
@@ -166,11 +167,9 @@ export interface PrivateEndpoint extends Resource<
  * **Example:** Private endpoint for blob storage
  * ```typescript
  * const account = yield* Azure.Storage.StorageAccount("files", {
- *   resourceGroup: group.resourceGroupName,
  *   publicNetworkAccess: "Disabled",
  * });
  * const endpoint = yield* Azure.Network.PrivateEndpoint("files-blob", {
- *   resourceGroup: group.resourceGroupName,
  *   subnetId: subnet.subnetId,
  *   privateLinkServiceConnections: [
  *     { privateLinkServiceId: account.storageAccountId, groupIds: ["blob"] },
@@ -182,7 +181,6 @@ export interface PrivateEndpoint extends Resource<
  * **Example:** Connection the target owner approves
  * ```typescript
  * const endpoint = yield* Azure.Network.PrivateEndpoint("partner", {
- *   resourceGroup: group.resourceGroupName,
  *   subnetId: subnet.subnetId,
  *   manualPrivateLinkServiceConnections: [
  *     {
@@ -195,7 +193,7 @@ export interface PrivateEndpoint extends Resource<
  *
  * @resource
  */
-export const PrivateEndpoint = Resource<PrivateEndpoint>("Azure.Network.PrivateEndpoint");
+export const PrivateEndpoint = GroupedResource<PrivateEndpoint>("Azure.Network.PrivateEndpoint");
 
 type Observed = network.GetPrivateEndpointResponse;
 

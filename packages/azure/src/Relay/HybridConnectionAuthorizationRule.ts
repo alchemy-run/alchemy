@@ -2,7 +2,7 @@ import * as relay from "@distilled.cloud/azure/relay";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
 import {
@@ -14,6 +14,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   type AccessRight,
   createEntityName,
@@ -88,13 +89,11 @@ export interface HybridConnectionAuthorizationRule extends Resource<
  * **Example:** Separate listener and sender credentials
  * ```typescript
  * const hc = yield* Azure.Relay.HybridConnection("onprem-api", {
- *   resourceGroup: group.resourceGroupName,
  *   namespace: ns.namespaceName,
  * });
  * const listener = yield* Azure.Relay.HybridConnectionAuthorizationRule(
  *   "listener",
  *   {
- *     resourceGroup: group.resourceGroupName,
  *     namespace: ns.namespaceName,
  *     hybridConnection: hc.hybridConnectionName,
  *     rights: ["Listen"],
@@ -103,7 +102,6 @@ export interface HybridConnectionAuthorizationRule extends Resource<
  * const sender = yield* Azure.Relay.HybridConnectionAuthorizationRule(
  *   "sender",
  *   {
- *     resourceGroup: group.resourceGroupName,
  *     namespace: ns.namespaceName,
  *     hybridConnection: hc.hybridConnectionName,
  *     rights: ["Send"],
@@ -113,7 +111,7 @@ export interface HybridConnectionAuthorizationRule extends Resource<
  *
  * @resource
  */
-export const HybridConnectionAuthorizationRule = Resource<HybridConnectionAuthorizationRule>(
+export const HybridConnectionAuthorizationRule = GroupedResource<HybridConnectionAuthorizationRule>(
   "Azure.Relay.HybridConnectionAuthorizationRule",
 );
 

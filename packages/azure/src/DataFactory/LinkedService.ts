@@ -2,11 +2,12 @@ import * as datafactory from "@distilled.cloud/azure/datafactory";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { ensureRegistered, ignoreNotFound, orUndefinedIfNotFound, waitUntilGone } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   annotationsWithOwnership,
   createChildName,
@@ -105,11 +106,9 @@ export interface LinkedService extends Resource<
  * **Example:** Blob storage through the factory's managed identity
  * ```typescript
  * const factory = yield* Azure.DataFactory.Factory("etl", {
- *   resourceGroup: group.resourceGroupName,
  *   identity: { type: "SystemAssigned" },
  * });
  * const blob = yield* Azure.DataFactory.LinkedService("blob", {
- *   resourceGroup: group.resourceGroupName,
  *   factoryName: factory.factoryName,
  *   type: "AzureBlobStorage",
  *   typeProperties: {
@@ -123,7 +122,6 @@ export interface LinkedService extends Resource<
  * **Example:** Anonymous REST service
  * ```typescript
  * const api = yield* Azure.DataFactory.LinkedService("api", {
- *   resourceGroup: group.resourceGroupName,
  *   factoryName: factory.factoryName,
  *   type: "RestService",
  *   typeProperties: {
@@ -135,7 +133,7 @@ export interface LinkedService extends Resource<
  *
  * @resource
  */
-export const LinkedService = Resource<LinkedService>("Azure.DataFactory.LinkedService");
+export const LinkedService = GroupedResource<LinkedService>("Azure.DataFactory.LinkedService");
 
 const getLinkedService = (
   subscriptionId: string,

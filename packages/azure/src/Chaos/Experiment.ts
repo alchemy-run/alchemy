@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -21,6 +21,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { canonical } from "./targetPath.ts";
 
 /** A key/value setting of an experiment action. */
@@ -214,7 +215,6 @@ export interface Experiment extends Resource<
  *   capabilityType: "SecurityRule-1.1",
  * });
  * const experiment = yield* Azure.Chaos.Experiment("block-web", {
- *   resourceGroup: group.resourceGroupName,
  *   selectors: [
  *     { type: "List", id: "nsgs", targets: [{ id: target.targetId }] },
  *   ],
@@ -263,7 +263,7 @@ export interface Experiment extends Resource<
  *
  * @resource
  */
-export const Experiment = Resource<Experiment>("Azure.Chaos.Experiment");
+export const Experiment = GroupedResource<Experiment>("Azure.Chaos.Experiment");
 
 type ObservedExperiment = chaos.Experiment;
 

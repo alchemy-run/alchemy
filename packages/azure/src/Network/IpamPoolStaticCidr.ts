@@ -1,8 +1,9 @@
 import * as network from "@distilled.cloud/azure/network";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import { orUndefinedIfNotFound } from "../Arm.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { sameSet } from "./common.ts";
 import { networkProvider } from "./generic.ts";
 import { networkManagerChildName, networkManagerTags } from "./networkManagerShared.ts";
@@ -68,7 +69,6 @@ export interface IpamPoolStaticCidr extends Resource<
  * **Example:** Reserve an on-premises range
  * ```typescript
  * yield* Azure.Network.IpamPoolStaticCidr("on-prem", {
- *   resourceGroup: group.resourceGroupName,
  *   networkManager: manager.networkManagerName,
  *   ipamPool: root.ipamPoolName,
  *   addressPrefixes: ["10.0.5.0/24"],
@@ -77,7 +77,9 @@ export interface IpamPoolStaticCidr extends Resource<
  *
  * @resource
  */
-export const IpamPoolStaticCidr = Resource<IpamPoolStaticCidr>("Azure.Network.IpamPoolStaticCidr");
+export const IpamPoolStaticCidr = GroupedResource<IpamPoolStaticCidr>(
+  "Azure.Network.IpamPoolStaticCidr",
+);
 
 export const IpamPoolStaticCidrProvider = () =>
   Provider.succeed(

@@ -2,11 +2,12 @@ import * as securityinsights from "@distilled.cloud/azure/securityinsights";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { ensureRegistered, ignoreNotFound, orUndefinedIfNotFound, waitUntilGone } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { compact, isWorkspaceOwnedByStack, SENTINEL_NAMESPACE, sameText } from "./Common.ts";
 import type {
   MetadataAuthor,
@@ -114,7 +115,9 @@ export interface ContentPackage extends Resource<
  *
  * @resource
  */
-export const ContentPackage = Resource<ContentPackage>("Azure.SecurityInsights.ContentPackage");
+export const ContentPackage = GroupedResource<ContentPackage>(
+  "Azure.SecurityInsights.ContentPackage",
+);
 
 const getPackage = (
   subscriptionId: string,

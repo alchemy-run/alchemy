@@ -1,7 +1,7 @@
 import * as eventgrid from "@distilled.cloud/azure/eventgrid";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -12,6 +12,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createEventGridName, sameName } from "./common.ts";
 
 export interface DomainTopicProps {
@@ -57,11 +58,8 @@ export interface DomainTopic extends Resource<
  * ### Creating a Domain Topic
  * **Example:** One topic per tenant
  * ```typescript
- * const domain = yield* Azure.EventGrid.Domain("tenants", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const domain = yield* Azure.EventGrid.Domain("tenants");
  * const contoso = yield* Azure.EventGrid.DomainTopic("contoso", {
- *   resourceGroup: group.resourceGroupName,
  *   domain: domain.domainName,
  *   name: "contoso",
  * });
@@ -69,7 +67,7 @@ export interface DomainTopic extends Resource<
  *
  * @resource
  */
-export const DomainTopic = Resource<DomainTopic>("Azure.EventGrid.DomainTopic");
+export const DomainTopic = GroupedResource<DomainTopic>("Azure.EventGrid.DomainTopic");
 
 const getDomainTopic = (
   subscriptionId: string,

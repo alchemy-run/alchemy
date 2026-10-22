@@ -1,7 +1,7 @@
 import * as devtestlabs from "@distilled.cloud/azure/devtestlabs";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import {
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createLabResourceName, DEVTESTLAB_NAMESPACE, labLocation } from "./Common.ts";
 
 export interface SecretProps {
@@ -72,7 +73,6 @@ export interface Secret extends Resource<
  * **Example:** VM password for lab formulas
  * ```typescript
  * const password = yield* Azure.DevTestLabs.Secret("vm-password", {
- *   resourceGroup: group.resourceGroupName,
  *   lab: lab.labName,
  *   user: user.userName,
  *   value: Redacted.make(vmPassword),
@@ -81,7 +81,7 @@ export interface Secret extends Resource<
  *
  * @resource
  */
-export const Secret = Resource<Secret>("Azure.DevTestLabs.Secret");
+export const Secret = GroupedResource<Secret>("Azure.DevTestLabs.Secret");
 
 const getSecret = (
   subscriptionId: string,

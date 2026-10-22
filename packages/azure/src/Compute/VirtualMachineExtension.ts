@@ -2,7 +2,7 @@ import * as compute from "@distilled.cloud/azure/compute";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import {
@@ -16,6 +16,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   canonical,
   createComputeName,
@@ -139,7 +140,6 @@ export interface VirtualMachineExtension extends Resource<
  * **Example:** Custom Script extension on Linux
  * ```typescript
  * const script = yield* Azure.Compute.VirtualMachineExtension("bootstrap", {
- *   resourceGroup: group.resourceGroupName,
  *   virtualMachine: vm.virtualMachineName,
  *   publisher: "Microsoft.Azure.Extensions",
  *   type: "CustomScript",
@@ -151,7 +151,6 @@ export interface VirtualMachineExtension extends Resource<
  * **Example:** Script with secret settings
  * ```typescript
  * const script = yield* Azure.Compute.VirtualMachineExtension("bootstrap", {
- *   resourceGroup: group.resourceGroupName,
  *   virtualMachine: vm.virtualMachineName,
  *   publisher: "Microsoft.Azure.Extensions",
  *   type: "CustomScript",
@@ -166,7 +165,6 @@ export interface VirtualMachineExtension extends Resource<
  * **Example:** Azure Monitor agent
  * ```typescript
  * yield* Azure.Compute.VirtualMachineExtension("monitor", {
- *   resourceGroup: group.resourceGroupName,
  *   virtualMachine: vm.virtualMachineName,
  *   publisher: "Microsoft.Azure.Monitor",
  *   type: "AzureMonitorLinuxAgent",
@@ -177,7 +175,7 @@ export interface VirtualMachineExtension extends Resource<
  *
  * @resource
  */
-export const VirtualMachineExtension = Resource<VirtualMachineExtension>(
+export const VirtualMachineExtension = GroupedResource<VirtualMachineExtension>(
   "Azure.Compute.VirtualMachineExtension",
 );
 

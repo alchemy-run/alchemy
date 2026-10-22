@@ -2,7 +2,7 @@ import * as automanage from "@distilled.cloud/azure/automanage";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -18,6 +18,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { configurationDiffers, configurationOf, createProfileName } from "./Common.ts";
 
 export interface ConfigurationProfileVersionProps {
@@ -87,11 +88,9 @@ export interface ConfigurationProfileVersion extends Resource<
  * **Example:** Snapshot a profile configuration as version 1.0
  * ```typescript
  * const profile = yield* Azure.Automanage.ConfigurationProfile("baseline", {
- *   resourceGroup: group.resourceGroupName,
  *   configuration: { "AzureSecurityBaseline/Enable": true },
  * });
  * const v1 = yield* Azure.Automanage.ConfigurationProfileVersion("v1", {
- *   resourceGroup: group.resourceGroupName,
  *   configurationProfile: profile.configurationProfileName,
  *   name: "1.0",
  *   configuration: { "AzureSecurityBaseline/Enable": true },
@@ -100,7 +99,7 @@ export interface ConfigurationProfileVersion extends Resource<
  *
  * @resource
  */
-export const ConfigurationProfileVersion = Resource<ConfigurationProfileVersion>(
+export const ConfigurationProfileVersion = GroupedResource<ConfigurationProfileVersion>(
   "Azure.Automanage.ConfigurationProfileVersion",
 );
 

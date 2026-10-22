@@ -2,7 +2,7 @@ import * as nc from "@distilled.cloud/azure/networkcloud";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -19,6 +19,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createNexusName,
   customLocation,
@@ -116,7 +117,6 @@ export interface TrunkedNetwork extends Resource<
  * **Example:** Trunk two VLANs
  * ```typescript
  * const trunk = yield* Azure.NetworkCloud.TrunkedNetwork("trunk", {
- *   resourceGroup: group.resourceGroupName,
  *   customLocationId: cluster.clusterExtendedLocationId,
  *   isolationDomainIds: [l2Domain.l2IsolationDomainId],
  *   vlans: [500, 501],
@@ -125,7 +125,7 @@ export interface TrunkedNetwork extends Resource<
  *
  * @resource
  */
-export const TrunkedNetwork = Resource<TrunkedNetwork>("Azure.NetworkCloud.TrunkedNetwork");
+export const TrunkedNetwork = GroupedResource<TrunkedNetwork>("Azure.NetworkCloud.TrunkedNetwork");
 
 type Observed = nc.GetTrunkedNetworkResponse;
 

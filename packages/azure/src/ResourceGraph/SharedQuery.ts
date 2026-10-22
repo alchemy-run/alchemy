@@ -4,7 +4,7 @@ import { isResolved } from "alchemy/Diff";
 import * as Output from "alchemy/Output";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import {
@@ -22,6 +22,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 
 export interface SharedQueryProps {
   /**
@@ -91,9 +92,7 @@ export interface SharedQuery extends Resource<
  * ### Saving a Query
  * **Example:** Inventory of virtual machines
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("ops");
  * const query = yield* Azure.ResourceGraph.SharedQuery("vm-inventory", {
- *   resourceGroup: group.resourceGroupName,
  *   description: "All virtual machines with their location",
  *   query:
  *     "Resources | where type =~ 'microsoft.compute/virtualmachines' | project name, location",
@@ -104,7 +103,6 @@ export interface SharedQuery extends Resource<
  * **Example:** Query with user tags
  * ```typescript
  * const query = yield* Azure.ResourceGraph.SharedQuery("untagged", {
- *   resourceGroup: group.resourceGroupName,
  *   query: "Resources | where isnull(tags) or array_length(bag_keys(tags)) == 0",
  *   tags: { team: "platform" },
  * });
@@ -112,7 +110,7 @@ export interface SharedQuery extends Resource<
  *
  * @resource
  */
-export const SharedQuery = Resource<SharedQuery>("Azure.ResourceGraph.SharedQuery");
+export const SharedQuery = GroupedResource<SharedQuery>("Azure.ResourceGraph.SharedQuery");
 
 /** Shared queries are global resources. */
 const LOCATION = "global";

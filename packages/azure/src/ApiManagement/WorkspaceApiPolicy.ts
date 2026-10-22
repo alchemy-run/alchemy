@@ -1,8 +1,9 @@
 import * as apim from "@distilled.cloud/azure/apimanagement";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import type { ApiPolicy, ApiPolicyProps } from "./ApiPolicy.ts";
 import { entityLifecycle, policyInSync } from "./Entity.ts";
 
@@ -33,7 +34,6 @@ export interface WorkspaceApiPolicy extends Resource<
  * **Example:** Return a fixed response
  * ```typescript
  * yield* Azure.ApiManagement.WorkspaceApiPolicy("hello-policy", {
- *   resourceGroup: group.resourceGroupName,
  *   serviceName: apim.serviceName,
  *   workspaceName: workspace.workspaceName,
  *   apiName: api.apiName,
@@ -48,7 +48,7 @@ export interface WorkspaceApiPolicy extends Resource<
  *
  * @resource
  */
-export const WorkspaceApiPolicy = Resource<WorkspaceApiPolicy>(
+export const WorkspaceApiPolicy = GroupedResource<WorkspaceApiPolicy>(
   "Azure.ApiManagement.WorkspaceApiPolicy",
 );
 

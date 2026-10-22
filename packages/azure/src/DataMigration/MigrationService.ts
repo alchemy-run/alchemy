@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -21,6 +21,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 
 export interface MigrationServiceProps {
   /**
@@ -83,23 +84,21 @@ export interface MigrationService extends Resource<
  * ### Creating a Migration Service
  * **Example:** Service in a resource group
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("migrations");
- * const service = yield* Azure.DataMigration.MigrationService("mongo", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const service = yield* Azure.DataMigration.MigrationService("mongo");
  * ```
  *
  * **Example:** Service with tags
  * ```typescript
  * const service = yield* Azure.DataMigration.MigrationService("mongo", {
- *   resourceGroup: group.resourceGroupName,
  *   tags: { team: "data" },
  * });
  * ```
  *
  * @resource
  */
-export const MigrationService = Resource<MigrationService>("Azure.DataMigration.MigrationService");
+export const MigrationService = GroupedResource<MigrationService>(
+  "Azure.DataMigration.MigrationService",
+);
 
 type ObservedService = datamigration.GetMigrationServiceResponse;
 

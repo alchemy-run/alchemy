@@ -2,7 +2,7 @@ import * as app from "@distilled.cloud/azure/app";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -20,6 +20,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createContainerAppsName,
   fingerprint,
@@ -124,7 +125,6 @@ export interface Job extends Resource<
  * **Example:** Manually triggered job
  * ```typescript
  * const job = yield* Azure.ContainerApps.Job("migrate", {
- *   resourceGroup: group.resourceGroupName,
  *   environmentId: env.environmentId,
  *   configuration: {
  *     triggerType: "Manual",
@@ -147,7 +147,6 @@ export interface Job extends Resource<
  * **Example:** Run every night at 02:00 UTC
  * ```typescript
  * const nightly = yield* Azure.ContainerApps.Job("nightly", {
- *   resourceGroup: group.resourceGroupName,
  *   environmentId: env.environmentId,
  *   configuration: {
  *     triggerType: "Schedule",
@@ -160,7 +159,7 @@ export interface Job extends Resource<
  *
  * @resource
  */
-export const Job = Resource<Job>("Azure.ContainerApps.Job");
+export const Job = GroupedResource<Job>("Azure.ContainerApps.Job");
 
 const createJobName = (id: string) => createContainerAppsName(id, 32);
 

@@ -2,7 +2,7 @@ import * as webpubsub from "@distilled.cloud/azure/webpubsub";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createHubName,
   lower,
@@ -119,11 +120,8 @@ export interface Hub extends Resource<
  * ### Creating a Hub
  * **Example:** Hub with an upstream webhook
  * ```typescript
- * const pubsub = yield* Azure.WebPubSub.WebPubSub("pubsub", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const pubsub = yield* Azure.WebPubSub.WebPubSub("pubsub");
  * const hub = yield* Azure.WebPubSub.Hub("chat", {
- *   resourceGroup: group.resourceGroupName,
  *   webPubSub: pubsub.webPubSubName,
  *   name: "chat",
  *   eventHandlers: [
@@ -140,7 +138,6 @@ export interface Hub extends Resource<
  * **Example:** Event listener with managed identity
  * ```typescript
  * const hub = yield* Azure.WebPubSub.Hub("events", {
- *   resourceGroup: group.resourceGroupName,
  *   webPubSub: pubsub.webPubSubName,
  *   eventListeners: [
  *     {
@@ -155,7 +152,7 @@ export interface Hub extends Resource<
  *
  * @resource
  */
-export const Hub = Resource<Hub>("Azure.WebPubSub.Hub");
+export const Hub = GroupedResource<Hub>("Azure.WebPubSub.Hub");
 
 const getHub = (
   subscriptionId: string,

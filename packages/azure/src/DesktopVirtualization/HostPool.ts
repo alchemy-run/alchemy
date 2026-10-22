@@ -2,7 +2,7 @@ import * as desktopvirtualization from "@distilled.cloud/azure/desktopvirtualiza
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
@@ -21,6 +21,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createAvdName, deltaOf } from "./Common.ts";
 
 export type HostPoolType = "Pooled" | "Personal" | "BYODesktop";
@@ -174,7 +175,6 @@ export interface HostPool extends Resource<
  * **Example:** Pooled host pool
  * ```typescript
  * const pool = yield* Azure.DesktopVirtualization.HostPool("pool", {
- *   resourceGroup: group.resourceGroupName,
  *   hostPoolType: "Pooled",
  *   loadBalancerType: "BreadthFirst",
  *   maxSessionLimit: 10,
@@ -184,7 +184,6 @@ export interface HostPool extends Resource<
  * **Example:** Personal host pool with automatic assignment
  * ```typescript
  * const pool = yield* Azure.DesktopVirtualization.HostPool("personal", {
- *   resourceGroup: group.resourceGroupName,
  *   hostPoolType: "Personal",
  *   personalDesktopAssignmentType: "Automatic",
  *   loadBalancerType: "Persistent",
@@ -195,7 +194,6 @@ export interface HostPool extends Resource<
  * **Example:** Issue a registration token valid for one day
  * ```typescript
  * const pool = yield* Azure.DesktopVirtualization.HostPool("pool", {
- *   resourceGroup: group.resourceGroupName,
  *   hostPoolType: "Pooled",
  *   loadBalancerType: "DepthFirst",
  *   registrationTokenTtlHours: 24,
@@ -205,7 +203,7 @@ export interface HostPool extends Resource<
  *
  * @resource
  */
-export const HostPool = Resource<HostPool>("Azure.DesktopVirtualization.HostPool");
+export const HostPool = GroupedResource<HostPool>("Azure.DesktopVirtualization.HostPool");
 
 type ObservedHostPool = desktopvirtualization.GetHostPoolResponse;
 

@@ -2,7 +2,7 @@ import * as mnf from "@distilled.cloud/azure/managednetworkfabric";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -19,6 +19,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createFabricName,
   differs,
@@ -108,12 +109,10 @@ export interface L2IsolationDomain extends Resource<
  * ### Creating an L2 Isolation Domain
  * **Example:** VLAN 750 on a fabric
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("fabric");
  * // The Network Fabric is provisioned on Operator Nexus racks.
  * const fabricId =
  *   "/subscriptions/.../resourceGroups/nexus/providers/Microsoft.ManagedNetworkFabric/networkFabrics/fab1";
  * const l2 = yield* Azure.ManagedNetworkFabric.L2IsolationDomain("vlan750", {
- *   resourceGroup: group.resourceGroupName,
  *   networkFabricId: fabricId,
  *   vlanId: 750,
  *   mtu: 9000,
@@ -122,7 +121,7 @@ export interface L2IsolationDomain extends Resource<
  *
  * @resource
  */
-export const L2IsolationDomain = Resource<L2IsolationDomain>(
+export const L2IsolationDomain = GroupedResource<L2IsolationDomain>(
   "Azure.ManagedNetworkFabric.L2IsolationDomain",
 );
 

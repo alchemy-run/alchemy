@@ -2,7 +2,7 @@ import * as storage from "@distilled.cloud/azure/storage";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { isAccountOwnedByStack } from "./StorageOwnership.ts";
 
 export interface AdvancedPlatformMetricsProps {
@@ -82,11 +83,8 @@ export interface AdvancedPlatformMetrics extends Resource<
  * ### Container Capacity Metrics
  * **Example:** Metrics for every container
  * ```typescript
- * const account = yield* Azure.Storage.StorageAccount("data", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const account = yield* Azure.Storage.StorageAccount("data");
  * yield* Azure.Storage.AdvancedPlatformMetrics("container-metrics", {
- *   resourceGroup: group.resourceGroupName,
  *   storageAccount: account.storageAccountName,
  * });
  * ```
@@ -94,7 +92,6 @@ export interface AdvancedPlatformMetrics extends Resource<
  * **Example:** Metrics for containers with a prefix
  * ```typescript
  * yield* Azure.Storage.AdvancedPlatformMetrics("container-metrics", {
- *   resourceGroup: group.resourceGroupName,
  *   storageAccount: account.storageAccountName,
  *   filterType: "ContainerPrefixFilter",
  *   filterValues: ["tenant-"],
@@ -103,7 +100,7 @@ export interface AdvancedPlatformMetrics extends Resource<
  *
  * @resource
  */
-export const AdvancedPlatformMetrics = Resource<AdvancedPlatformMetrics>(
+export const AdvancedPlatformMetrics = GroupedResource<AdvancedPlatformMetrics>(
   "Azure.Storage.AdvancedPlatformMetrics",
 );
 

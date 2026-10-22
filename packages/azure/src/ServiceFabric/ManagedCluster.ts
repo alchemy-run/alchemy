@@ -2,7 +2,7 @@ import * as sf from "@distilled.cloud/azure/servicefabricmanagedclusters";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
 import {
@@ -21,6 +21,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { CLUSTER_BUDGET, createClusterName, driftedFields, sameArm } from "./Common.ts";
 
 export type ManagedClusterSkuName = "Basic" | "Standard";
@@ -239,15 +240,12 @@ export interface ManagedCluster extends Resource<
  * ### Creating a Managed Cluster
  * **Example:** Basic cluster managed with a client certificate
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("app");
  * const cluster = yield* Azure.ServiceFabric.ManagedCluster("cluster", {
- *   resourceGroup: group.resourceGroupName,
  *   adminUserName: "sfadmin",
  *   adminPassword: Redacted.make(password),
  *   clients: [{ isAdmin: true, thumbprint: adminCertThumbprint }],
  * });
  * const primary = yield* Azure.ServiceFabric.NodeType("primary", {
- *   resourceGroup: group.resourceGroupName,
  *   cluster: cluster.managedClusterName,
  *   isPrimary: true,
  *   vmInstanceCount: 3,
@@ -258,7 +256,6 @@ export interface ManagedCluster extends Resource<
  * **Example:** Expose an application port through the load balancer
  * ```typescript
  * const cluster = yield* Azure.ServiceFabric.ManagedCluster("cluster", {
- *   resourceGroup: group.resourceGroupName,
  *   adminUserName: "sfadmin",
  *   adminPassword: Redacted.make(password),
  *   clients: [{ isAdmin: true, thumbprint: adminCertThumbprint }],
@@ -276,7 +273,7 @@ export interface ManagedCluster extends Resource<
  *
  * @resource
  */
-export const ManagedCluster = Resource<ManagedCluster>("Azure.ServiceFabric.ManagedCluster");
+export const ManagedCluster = GroupedResource<ManagedCluster>("Azure.ServiceFabric.ManagedCluster");
 
 type ObservedCluster = sf.GetManagedClusterResponse | sf.ManagedCluster;
 

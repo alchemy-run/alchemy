@@ -2,7 +2,7 @@ import * as applicationinsights from "@distilled.cloud/azure/applicationinsights
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -20,6 +20,7 @@ import {
 import { deterministicGuid } from "../Authorization/Ownership.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 
 /** Managed identity used by a workbook to reach bring-your-own storage. */
 export interface WorkbookIdentity {
@@ -140,9 +141,7 @@ export interface Workbook extends Resource<
  * ### Creating a Workbook
  * **Example:** Empty workbook in a resource group
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("monitoring");
  * const workbook = yield* Azure.ApplicationInsights.Workbook("overview", {
- *   resourceGroup: group.resourceGroupName,
  *   displayName: "Service overview",
  * });
  * ```
@@ -150,7 +149,6 @@ export interface Workbook extends Resource<
  * **Example:** Workbook with a query step
  * ```typescript
  * const workbook = yield* Azure.ApplicationInsights.Workbook("errors", {
- *   resourceGroup: group.resourceGroupName,
  *   displayName: "Errors",
  *   serializedData: {
  *     version: "Notebook/1.0",
@@ -169,7 +167,6 @@ export interface Workbook extends Resource<
  * **Example:** Workbook linked to a Log Analytics workspace
  * ```typescript
  * const workbook = yield* Azure.ApplicationInsights.Workbook("logs", {
- *   resourceGroup: group.resourceGroupName,
  *   displayName: "Workspace logs",
  *   sourceId: workspace.workspaceId,
  * });
@@ -177,7 +174,7 @@ export interface Workbook extends Resource<
  *
  * @resource
  */
-export const Workbook = Resource<Workbook>("Azure.ApplicationInsights.Workbook");
+export const Workbook = GroupedResource<Workbook>("Azure.ApplicationInsights.Workbook");
 
 const DEFAULT_DATA = `{"version":"Notebook/1.0","items":[]}`;
 const DEFAULT_SOURCE = "azure monitor";

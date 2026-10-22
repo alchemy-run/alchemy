@@ -1,8 +1,9 @@
 import * as network from "@distilled.cloud/azure/network";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import { orUndefinedIfNotFound } from "../Arm.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { networkProvider } from "./generic.ts";
 import {
   hubOwnerTags,
@@ -61,7 +62,6 @@ export interface VirtualHubConnectionPolicy extends Resource<
  * **Example:** Spokes associated with a custom table
  * ```typescript
  * yield* Azure.Network.VirtualHubConnectionPolicy("spokes", {
- *   resourceGroup: group.resourceGroupName,
  *   virtualHub: hub.virtualHubName,
  *   routing: {
  *     associatedRouteTableId: table.routeTableId,
@@ -72,7 +72,7 @@ export interface VirtualHubConnectionPolicy extends Resource<
  *
  * @resource
  */
-export const VirtualHubConnectionPolicy = Resource<VirtualHubConnectionPolicy>(
+export const VirtualHubConnectionPolicy = GroupedResource<VirtualHubConnectionPolicy>(
   "Azure.Network.VirtualHubConnectionPolicy",
 );
 

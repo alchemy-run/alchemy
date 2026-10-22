@@ -2,7 +2,7 @@ import * as datadog from "@distilled.cloud/azure/datadog";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -12,6 +12,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   DEFAULT_CONFIGURATION,
   isMonitorOwnedByStack,
@@ -70,7 +71,6 @@ export interface SingleSignOnConfiguration extends Resource<
  * **Example:** Enable SAML SSO through an enterprise app
  * ```typescript
  * const sso = yield* Azure.Datadog.SingleSignOnConfiguration("sso", {
- *   resourceGroup: group.resourceGroupName,
  *   monitor: monitor.monitorName,
  *   singleSignOnState: "Enable",
  *   enterpriseAppId: "00000000-0000-0000-0000-000000000000",
@@ -79,7 +79,7 @@ export interface SingleSignOnConfiguration extends Resource<
  *
  * @resource
  */
-export const SingleSignOnConfiguration = Resource<SingleSignOnConfiguration>(
+export const SingleSignOnConfiguration = GroupedResource<SingleSignOnConfiguration>(
   "Azure.Datadog.SingleSignOnConfiguration",
 );
 

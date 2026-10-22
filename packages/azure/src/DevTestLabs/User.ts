@@ -2,7 +2,7 @@ import * as devtestlabs from "@distilled.cloud/azure/devtestlabs";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -17,6 +17,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { DEVTESTLAB_NAMESPACE, diverges, labLocation } from "./Common.ts";
 
 export interface UserProps {
@@ -95,7 +96,6 @@ export interface User extends Resource<
  * **Example:** Lab profile for a user
  * ```typescript
  * const user = yield* Azure.DevTestLabs.User("alice", {
- *   resourceGroup: group.resourceGroupName,
  *   lab: lab.labName,
  *   objectId: "00000000-0000-0000-0000-000000000000", // Entra object ID
  *   principalName: "alice@contoso.com",
@@ -104,7 +104,7 @@ export interface User extends Resource<
  *
  * @resource
  */
-export const User = Resource<User>("Azure.DevTestLabs.User");
+export const User = GroupedResource<User>("Azure.DevTestLabs.User");
 
 const ZERO_GUID = "00000000-0000-0000-0000-000000000000";
 

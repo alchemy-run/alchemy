@@ -2,7 +2,7 @@ import * as operationalinsights from "@distilled.cloud/azure/operationalinsights
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -17,6 +17,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { sameText } from "./Common.ts";
 
 export type LinkedServiceName = "Automation" | "cluster";
@@ -86,7 +87,6 @@ export interface LinkedService extends Resource<
  * **Example:** Link an Automation account
  * ```typescript
  * yield* Azure.LogAnalytics.LinkedService("automation", {
- *   resourceGroup: group.resourceGroupName,
  *   workspace: logs.workspaceName,
  *   name: "Automation",
  *   resourceId: automationAccountId,
@@ -97,7 +97,6 @@ export interface LinkedService extends Resource<
  * **Example:** Move a workspace into a cluster
  * ```typescript
  * yield* Azure.LogAnalytics.LinkedService("cluster", {
- *   resourceGroup: group.resourceGroupName,
  *   workspace: logs.workspaceName,
  *   name: "cluster",
  *   writeAccessResourceId: cluster.clusterId,
@@ -106,7 +105,7 @@ export interface LinkedService extends Resource<
  *
  * @resource
  */
-export const LinkedService = Resource<LinkedService>("Azure.LogAnalytics.LinkedService");
+export const LinkedService = GroupedResource<LinkedService>("Azure.LogAnalytics.LinkedService");
 
 type ObservedLink = operationalinsights.GetLinkedServiceResponse;
 

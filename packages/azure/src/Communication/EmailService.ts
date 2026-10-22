@@ -2,7 +2,7 @@ import * as communication from "@distilled.cloud/azure/communication";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -20,6 +20,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createCommunicationName,
   DEFAULT_DATA_LOCATION,
@@ -89,16 +90,12 @@ export interface EmailService extends Resource<
  * ### Creating an Email Service
  * **Example:** Email service in the United States
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("app");
- * const email = yield* Azure.Communication.EmailService("email", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const email = yield* Azure.Communication.EmailService("email");
  * ```
  *
  * **Example:** Email service with data stored in Europe
  * ```typescript
  * const email = yield* Azure.Communication.EmailService("email", {
- *   resourceGroup: group.resourceGroupName,
  *   dataLocation: "Europe",
  *   tags: { team: "growth" },
  * });
@@ -106,7 +103,7 @@ export interface EmailService extends Resource<
  *
  * @resource
  */
-export const EmailService = Resource<EmailService>("Azure.Communication.EmailService");
+export const EmailService = GroupedResource<EmailService>("Azure.Communication.EmailService");
 
 type ObservedEmailService = communication.GetEmailServiceResponse;
 

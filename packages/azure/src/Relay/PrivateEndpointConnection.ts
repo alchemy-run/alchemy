@@ -1,7 +1,7 @@
 import * as relay from "@distilled.cloud/azure/relay";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -15,6 +15,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { sameName } from "./internal.ts";
 
 export class PrivateEndpointConnectionMissing extends Data.TaggedError(
@@ -92,18 +93,14 @@ export interface PrivateEndpointConnection extends Resource<
  * ### Approving a Private Endpoint
  * **Example:** Manual-approval endpoint, approved by the namespace owner
  * ```typescript
- * const ns = yield* Azure.Relay.Namespace("relay", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const ns = yield* Azure.Relay.Namespace("relay");
  * const endpoint = yield* Azure.Network.PrivateEndpoint("relay-pe", {
- *   resourceGroup: group.resourceGroupName,
  *   subnetId: subnet.subnetId,
  *   manualPrivateLinkServiceConnections: [
  *     { privateLinkServiceId: ns.namespaceId, groupIds: ["namespace"] },
  *   ],
  * });
  * yield* Azure.Relay.PrivateEndpointConnection("relay-pe-approval", {
- *   resourceGroup: group.resourceGroupName,
  *   namespace: ns.namespaceName,
  *   privateEndpointId: endpoint.privateEndpointId,
  *   description: "approved by platform team",
@@ -112,7 +109,7 @@ export interface PrivateEndpointConnection extends Resource<
  *
  * @resource
  */
-export const PrivateEndpointConnection = Resource<PrivateEndpointConnection>(
+export const PrivateEndpointConnection = GroupedResource<PrivateEndpointConnection>(
   "Azure.Relay.PrivateEndpointConnection",
 );
 

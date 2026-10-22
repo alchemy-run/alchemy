@@ -1,11 +1,12 @@
 import * as hybridcompute from "@distilled.cloud/azure/hybridcompute";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { ensureRegistered, ignoreNotFound, orUndefinedIfNotFound } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 
 export interface SettingsProps {
   /**
@@ -70,11 +71,8 @@ export interface Settings extends Resource<
  * ### Associating a Gateway
  * **Example:** Route a machine through an Arc gateway
  * ```typescript
- * const gateway = yield* Azure.HybridCompute.Gateway("arc-gateway", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const gateway = yield* Azure.HybridCompute.Gateway("arc-gateway");
  * yield* Azure.HybridCompute.Settings("web-01-settings", {
- *   resourceGroup: group.resourceGroupName,
  *   machineName: machine.machineName,
  *   gatewayResourceId: gateway.gatewayResourceId,
  * });
@@ -82,7 +80,7 @@ export interface Settings extends Resource<
  *
  * @resource
  */
-export const Settings = Resource<Settings>("Azure.HybridCompute.Settings");
+export const Settings = GroupedResource<Settings>("Azure.HybridCompute.Settings");
 
 const SETTINGS_NAME = "default";
 

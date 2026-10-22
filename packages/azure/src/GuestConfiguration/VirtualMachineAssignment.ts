@@ -3,7 +3,7 @@ import * as guestconfiguration from "@distilled.cloud/azure/guestconfiguration";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -14,6 +14,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   type AssignmentAttributes,
   type AssignmentProps,
@@ -62,7 +63,6 @@ export interface VirtualMachineAssignment extends Resource<
  * **Example:** Audit the Azure Linux security baseline
  * ```typescript
  * const vm = yield* Azure.Compute.VirtualMachine("Vm", {
- *   resourceGroup: group.resourceGroupName,
  *   vmSize: "Standard_B1s",
  *   networkInterfaceIds: [nic.networkInterfaceId],
  *   adminUsername: "azureuser",
@@ -70,7 +70,6 @@ export interface VirtualMachineAssignment extends Resource<
  *   identity: { systemAssigned: true },
  * });
  * yield* Azure.Compute.VirtualMachineExtension("GuestConfig", {
- *   resourceGroup: group.resourceGroupName,
  *   virtualMachine: vm.virtualMachineName,
  *   publisher: "Microsoft.GuestConfiguration",
  *   type: "ConfigurationForLinux",
@@ -80,7 +79,6 @@ export interface VirtualMachineAssignment extends Resource<
  * const baseline = yield* Azure.GuestConfiguration.VirtualMachineAssignment(
  *   "Baseline",
  *   {
- *     resourceGroup: group.resourceGroupName,
  *     virtualMachine: vm.virtualMachineName,
  *     configurationName: "AzureLinuxBaseline",
  *     configurationVersion: "1.*",
@@ -92,7 +90,6 @@ export interface VirtualMachineAssignment extends Resource<
  * **Example:** Audit with configuration parameters
  * ```typescript
  * yield* Azure.GuestConfiguration.VirtualMachineAssignment("Baseline", {
- *   resourceGroup: group.resourceGroupName,
  *   virtualMachine: vm.virtualMachineName,
  *   configurationName: "AzureLinuxBaseline",
  *   configurationVersion: "1.*",
@@ -105,7 +102,6 @@ export interface VirtualMachineAssignment extends Resource<
  * **Example:** Assign a custom package from blob storage
  * ```typescript
  * yield* Azure.GuestConfiguration.VirtualMachineAssignment("Custom", {
- *   resourceGroup: group.resourceGroupName,
  *   virtualMachine: vm.virtualMachineName,
  *   configurationName: "MyConfig",
  *   configurationVersion: "1.0.0",
@@ -117,7 +113,7 @@ export interface VirtualMachineAssignment extends Resource<
  *
  * @resource
  */
-export const VirtualMachineAssignment = Resource<VirtualMachineAssignment>(
+export const VirtualMachineAssignment = GroupedResource<VirtualMachineAssignment>(
   "Azure.GuestConfiguration.VirtualMachineAssignment",
 );
 

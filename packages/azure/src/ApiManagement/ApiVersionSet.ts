@@ -2,11 +2,12 @@ import * as apim from "@distilled.cloud/azure/apimanagement";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { ensureRegistered, ignoreNotFound, orUndefinedIfNotFound, waitUntilGone } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createEntityName, isParentOwned, sameName, subsetMatches } from "./Common.ts";
 
 export type VersioningScheme = apim.ApiVersionSetContractPropertiesVersioningScheme;
@@ -72,7 +73,6 @@ export interface ApiVersionSet extends Resource<
  * **Example:** Path-segment versioning (`/hello/v1/...`)
  * ```typescript
  * const versions = yield* Azure.ApiManagement.ApiVersionSet("hello", {
- *   resourceGroup: group.resourceGroupName,
  *   serviceName: apim.serviceName,
  *   displayName: "Hello",
  *   versioningScheme: "Segment",
@@ -82,7 +82,6 @@ export interface ApiVersionSet extends Resource<
  * **Example:** Header versioning
  * ```typescript
  * const versions = yield* Azure.ApiManagement.ApiVersionSet("hello", {
- *   resourceGroup: group.resourceGroupName,
  *   serviceName: apim.serviceName,
  *   versioningScheme: "Header",
  *   versionHeaderName: "api-version",
@@ -91,7 +90,7 @@ export interface ApiVersionSet extends Resource<
  *
  * @resource
  */
-export const ApiVersionSet = Resource<ApiVersionSet>("Azure.ApiManagement.ApiVersionSet");
+export const ApiVersionSet = GroupedResource<ApiVersionSet>("Azure.ApiManagement.ApiVersionSet");
 
 const getVersionSet = (
   subscriptionId: string,

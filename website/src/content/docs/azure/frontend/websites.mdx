@@ -29,8 +29,9 @@ import * as Azure from "@alchemy.run/azure";
 const site = yield* Azure.Website.Vite("Web", { location: "eastus" });
 ```
 
-Omit `resourceGroup`, `storageAccount`, and `plan` and Alchemy creates them
-under the site's namespace (the plan defaults to `B1`). Pass them to share
+Omit `storageAccount` and `plan` and Alchemy creates them under the site's
+namespace (the plan defaults to `B1`). The site goes into the stack's
+resource group unless you pass `resourceGroup`. Pass them to share
 infrastructure between sites.
 
 ## Front Door

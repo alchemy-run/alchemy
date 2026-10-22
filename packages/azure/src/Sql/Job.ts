@@ -2,7 +2,7 @@ import * as sql from "@distilled.cloud/azure/sql";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createChildName, fieldsMatch, isServerOwnedByStack, lower } from "./common.ts";
 import { jobAgentPath, type JobAgentScope, retryWhileAgentBusy } from "./setting.ts";
 
@@ -85,7 +86,6 @@ export interface Job extends Resource<
  * **Example:** Hourly job
  * ```typescript
  * const job = yield* Azure.Sql.Job("refresh-stats", {
- *   resourceGroup: group.resourceGroupName,
  *   server: server.serverName,
  *   jobAgent: agent.jobAgentName,
  *   description: "Refresh statistics",
@@ -96,7 +96,6 @@ export interface Job extends Resource<
  * **Example:** On-demand job
  * ```typescript
  * yield* Azure.Sql.Job("adhoc", {
- *   resourceGroup: group.resourceGroupName,
  *   server: server.serverName,
  *   jobAgent: agent.jobAgentName,
  *   description: "Run manually",
@@ -105,7 +104,7 @@ export interface Job extends Resource<
  *
  * @resource
  */
-export const Job = Resource<Job>("Azure.Sql.Job");
+export const Job = GroupedResource<Job>("Azure.Sql.Job");
 
 type Observed = sql.GetJobResponse;
 

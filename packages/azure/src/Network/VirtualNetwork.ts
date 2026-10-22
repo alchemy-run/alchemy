@@ -2,7 +2,7 @@ import * as network from "@distilled.cloud/azure/network";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -18,6 +18,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   canonical,
   createNetworkName,
@@ -137,9 +138,7 @@ export interface VirtualNetwork extends Resource<
  * ### Creating a Virtual Network
  * **Example:** VNet with a /16 address space
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("app");
  * const vnet = yield* Azure.Network.VirtualNetwork("vnet", {
- *   resourceGroup: group.resourceGroupName,
  *   addressPrefixes: ["10.0.0.0/16"],
  * });
  * ```
@@ -147,7 +146,6 @@ export interface VirtualNetwork extends Resource<
  * **Example:** VNet with custom DNS servers
  * ```typescript
  * const vnet = yield* Azure.Network.VirtualNetwork("vnet", {
- *   resourceGroup: group.resourceGroupName,
  *   addressPrefixes: ["10.0.0.0/16", "10.1.0.0/16"],
  *   dnsServers: ["10.0.0.4", "10.0.0.5"],
  * });
@@ -157,7 +155,6 @@ export interface VirtualNetwork extends Resource<
  * **Example:** VNet with a subnet
  * ```typescript
  * const subnet = yield* Azure.Network.Subnet("app", {
- *   resourceGroup: group.resourceGroupName,
  *   virtualNetwork: vnet.virtualNetworkName,
  *   addressPrefix: "10.0.1.0/24",
  * });
@@ -165,7 +162,7 @@ export interface VirtualNetwork extends Resource<
  *
  * @resource
  */
-export const VirtualNetwork = Resource<VirtualNetwork>("Azure.Network.VirtualNetwork");
+export const VirtualNetwork = GroupedResource<VirtualNetwork>("Azure.Network.VirtualNetwork");
 
 type Observed = network.GetVirtualNetworkResponse;
 

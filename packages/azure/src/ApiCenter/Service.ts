@@ -2,7 +2,7 @@ import * as apicenter from "@distilled.cloud/azure/apicenter";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -19,6 +19,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createServiceName, getService, sameName } from "./Common.ts";
 
 export type ApiCenterIdentityType =
@@ -106,15 +107,12 @@ export interface Service extends Resource<
  * const group = yield* Azure.Resources.ResourceGroup("apis", {
  *   location: "eastus",
  * });
- * const center = yield* Azure.ApiCenter.Service("catalog", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const center = yield* Azure.ApiCenter.Service("catalog");
  * ```
  *
  * **Example:** Service with a system-assigned identity
  * ```typescript
  * const center = yield* Azure.ApiCenter.Service("catalog", {
- *   resourceGroup: group.resourceGroupName,
  *   identity: { type: "SystemAssigned" },
  *   tags: { team: "platform" },
  * });
@@ -122,7 +120,7 @@ export interface Service extends Resource<
  *
  * @resource
  */
-export const Service = Resource<Service>("Azure.ApiCenter.Service");
+export const Service = GroupedResource<Service>("Azure.ApiCenter.Service");
 
 const toAttrs = (
   resourceGroup: string,

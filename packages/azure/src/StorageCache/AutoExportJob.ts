@@ -2,7 +2,7 @@ import * as storagecache from "@distilled.cloud/azure/storagecache";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -21,6 +21,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { getAmlFilesystem } from "./AmlFilesystem.ts";
 import { AmlFilesystemMissing, createLustreName, JOB_BUDGET, sameList } from "./Common.ts";
 
@@ -105,7 +106,6 @@ export interface AutoExportJob extends Resource<
  * **Example:** Continuously export the whole namespace
  * ```typescript
  * const exportJob = yield* Azure.StorageCache.AutoExportJob("export", {
- *   resourceGroup: group.resourceGroupName,
  *   amlFilesystem: fs.amlFilesystemName,
  * });
  * ```
@@ -113,7 +113,6 @@ export interface AutoExportJob extends Resource<
  * **Example:** Export one directory and pause the job
  * ```typescript
  * const exportJob = yield* Azure.StorageCache.AutoExportJob("export", {
- *   resourceGroup: group.resourceGroupName,
  *   amlFilesystem: fs.amlFilesystemName,
  *   autoExportPrefixes: ["/results"],
  *   adminStatus: "Disable",
@@ -122,7 +121,7 @@ export interface AutoExportJob extends Resource<
  *
  * @resource
  */
-export const AutoExportJob = Resource<AutoExportJob>("Azure.StorageCache.AutoExportJob");
+export const AutoExportJob = GroupedResource<AutoExportJob>("Azure.StorageCache.AutoExportJob");
 
 type ObservedJob = storagecache.GetAutoExportJobResponse;
 

@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import {
@@ -15,6 +15,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { factoryOwnedByStack } from "./FactoryChild.ts";
 
 export interface ManagedPrivateEndpointProps {
@@ -99,11 +100,9 @@ export interface ManagedPrivateEndpoint extends Resource<
  * **Example:** Private endpoint to a storage account's blob service
  * ```typescript
  * const vnet = yield* Azure.DataFactory.ManagedVirtualNetwork("vnet", {
- *   resourceGroup: group.resourceGroupName,
  *   factoryName: factory.factoryName,
  * });
  * const endpoint = yield* Azure.DataFactory.ManagedPrivateEndpoint("blob", {
- *   resourceGroup: group.resourceGroupName,
  *   factoryName: factory.factoryName,
  *   managedVirtualNetworkName: vnet.managedVirtualNetworkName,
  *   privateLinkResourceId: account.storageAccountId,
@@ -115,7 +114,6 @@ export interface ManagedPrivateEndpoint extends Resource<
  * **Example:** Private endpoint to an Azure SQL server
  * ```typescript
  * yield* Azure.DataFactory.ManagedPrivateEndpoint("sql", {
- *   resourceGroup: group.resourceGroupName,
  *   factoryName: factory.factoryName,
  *   managedVirtualNetworkName: vnet.managedVirtualNetworkName,
  *   privateLinkResourceId: server.serverId,
@@ -125,7 +123,7 @@ export interface ManagedPrivateEndpoint extends Resource<
  *
  * @resource
  */
-export const ManagedPrivateEndpoint = Resource<ManagedPrivateEndpoint>(
+export const ManagedPrivateEndpoint = GroupedResource<ManagedPrivateEndpoint>(
   "Azure.DataFactory.ManagedPrivateEndpoint",
 );
 

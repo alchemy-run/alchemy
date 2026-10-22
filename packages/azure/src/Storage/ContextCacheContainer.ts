@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import {
@@ -16,6 +16,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 
 export interface ContextCacheContainerProps {
   /** Resource group of the context cache. Changing it replaces the container. */
@@ -82,11 +83,8 @@ export interface ContextCacheContainer extends Resource<
  * ### Caching a Model's Context
  * **Example:** Container for a model
  * ```typescript
- * const cache = yield* Azure.Storage.ContextCache("prompts", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const cache = yield* Azure.Storage.ContextCache("prompts");
  * yield* Azure.Storage.ContextCacheContainer("gpt4o", {
- *   resourceGroup: group.resourceGroupName,
  *   contextCache: cache.contextCacheName,
  *   modelName: "gpt-4o",
  *   timeToLive: 7,
@@ -95,7 +93,7 @@ export interface ContextCacheContainer extends Resource<
  *
  * @resource
  */
-export const ContextCacheContainer = Resource<ContextCacheContainer>(
+export const ContextCacheContainer = GroupedResource<ContextCacheContainer>(
   "Azure.Storage.ContextCacheContainer",
 );
 

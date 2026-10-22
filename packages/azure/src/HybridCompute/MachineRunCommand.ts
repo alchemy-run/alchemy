@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import {
@@ -19,6 +19,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { machineLocation } from "./MachineCommon.ts";
 
 export interface MachineRunCommandParameter {
@@ -140,7 +141,7 @@ export interface MachineRunCommand extends Resource<
  *
  * @resource
  */
-export const MachineRunCommand = Resource<MachineRunCommand>(
+export const MachineRunCommand = GroupedResource<MachineRunCommand>(
   "Azure.HybridCompute.MachineRunCommand",
 );
 

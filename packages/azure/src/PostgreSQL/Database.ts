@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import {
@@ -15,6 +15,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   POSTGRES_NAMESPACE,
   serverOwnedByStack,
@@ -78,11 +79,8 @@ export interface Database extends Resource<
  * ### Creating a Database
  * **Example:** Database with the default charset and collation
  * ```typescript
- * const server = yield* Azure.PostgreSQL.FlexibleServer("db", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const server = yield* Azure.PostgreSQL.FlexibleServer("db");
  * const app = yield* Azure.PostgreSQL.Database("app", {
- *   resourceGroup: group.resourceGroupName,
  *   server: server.serverName,
  *   name: "app",
  * });
@@ -91,7 +89,6 @@ export interface Database extends Resource<
  * **Example:** Custom collation
  * ```typescript
  * const reports = yield* Azure.PostgreSQL.Database("reports", {
- *   resourceGroup: group.resourceGroupName,
  *   server: server.serverName,
  *   collation: "C",
  * });
@@ -99,7 +96,7 @@ export interface Database extends Resource<
  *
  * @resource
  */
-export const Database = Resource<Database>("Azure.PostgreSQL.Database");
+export const Database = GroupedResource<Database>("Azure.PostgreSQL.Database");
 
 export class ReservedDatabaseName extends Data.TaggedError(
   "Azure.PostgreSQL.ReservedDatabaseName",

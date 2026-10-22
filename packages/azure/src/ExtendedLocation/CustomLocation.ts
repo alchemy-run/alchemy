@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -21,6 +21,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 
 export interface CustomLocationAuthentication {
   /** Type of the credential, e.g. `KubeConfig`. */
@@ -145,9 +146,7 @@ export interface CustomLocation extends Resource<
  * ### Creating a Custom Location
  * **Example:** Custom location over an Arc cluster extension
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("edge");
  * const location = yield* Azure.ExtendedLocation.CustomLocation("site", {
- *   resourceGroup: group.resourceGroupName,
  *   hostResourceId: cluster.clusterId,
  *   namespace: "appservice-ns",
  *   clusterExtensionIds: [extension.extensionId],
@@ -159,7 +158,6 @@ export interface CustomLocation extends Resource<
  * **Example:** Custom location with a system-assigned identity
  * ```typescript
  * const location = yield* Azure.ExtendedLocation.CustomLocation("site", {
- *   resourceGroup: group.resourceGroupName,
  *   hostResourceId: cluster.clusterId,
  *   namespace: "arc-data",
  *   clusterExtensionIds: [extension.extensionId],
@@ -169,7 +167,9 @@ export interface CustomLocation extends Resource<
  *
  * @resource
  */
-export const CustomLocation = Resource<CustomLocation>("Azure.ExtendedLocation.CustomLocation");
+export const CustomLocation = GroupedResource<CustomLocation>(
+  "Azure.ExtendedLocation.CustomLocation",
+);
 
 type ObservedCustomLocation = extendedlocation.GetCustomLocationResponse;
 

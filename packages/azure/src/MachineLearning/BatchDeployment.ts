@@ -2,7 +2,7 @@ import * as ml from "@distilled.cloud/azure/machinelearningservices";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -17,6 +17,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { containsValue, createChildName, sameArm, inputFields } from "./Common.ts";
 
 export interface BatchDeploymentProps {
@@ -115,11 +116,9 @@ export interface BatchDeployment extends Resource<
  * **Example:** MLflow model on a CPU cluster
  * ```typescript
  * const endpoint = yield* Azure.MachineLearning.BatchEndpoint("nightly", {
- *   resourceGroup: group.resourceGroupName,
  *   workspace: workspace.workspaceName,
  * });
  * const v1 = yield* Azure.MachineLearning.BatchDeployment("v1", {
- *   resourceGroup: group.resourceGroupName,
  *   workspace: workspace.workspaceName,
  *   endpoint: endpoint.endpointName,
  *   compute: cluster.computeId,
@@ -133,7 +132,6 @@ export interface BatchDeployment extends Resource<
  * **Example:** Scoring script with retries
  * ```typescript
  * const v2 = yield* Azure.MachineLearning.BatchDeployment("v2", {
- *   resourceGroup: group.resourceGroupName,
  *   workspace: workspace.workspaceName,
  *   endpoint: endpoint.endpointName,
  *   compute: cluster.computeId,
@@ -146,7 +144,9 @@ export interface BatchDeployment extends Resource<
  *
  * @resource
  */
-export const BatchDeployment = Resource<BatchDeployment>("Azure.MachineLearning.BatchDeployment");
+export const BatchDeployment = GroupedResource<BatchDeployment>(
+  "Azure.MachineLearning.BatchDeployment",
+);
 
 const getDeployment = (
   subscriptionId: string,

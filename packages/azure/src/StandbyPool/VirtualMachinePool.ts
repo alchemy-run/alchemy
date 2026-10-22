@@ -2,7 +2,7 @@ import * as standbypool from "@distilled.cloud/azure/standbypool";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -20,6 +20,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createStandbyPoolName, lower, sameLocation } from "./common.ts";
 
 export type StandbyVirtualMachineState = "Running" | "Deallocated" | "Hibernated" | "Mix";
@@ -128,7 +129,6 @@ export interface VirtualMachinePool extends Resource<
  * **Example:** Keep two deallocated VMs ready
  * ```typescript
  * const scaleSet = yield* Azure.Compute.VirtualMachineScaleSet("web", {
- *   resourceGroup: group.resourceGroupName,
  *   vmSize: "Standard_F1als_v7",
  *   capacity: 1,
  *   subnetId: subnet.subnetId,
@@ -136,7 +136,6 @@ export interface VirtualMachinePool extends Resource<
  *   sshPublicKeys: [publicKey],
  * });
  * const pool = yield* Azure.StandbyPool.VirtualMachinePool("web-pool", {
- *   resourceGroup: group.resourceGroupName,
  *   attachedVirtualMachineScaleSetId: scaleSet.virtualMachineScaleSetId,
  *   virtualMachineState: "Deallocated",
  *   maxReadyCapacity: 2,
@@ -147,7 +146,6 @@ export interface VirtualMachinePool extends Resource<
  * **Example:** Half running, half deallocated
  * ```typescript
  * const pool = yield* Azure.StandbyPool.VirtualMachinePool("web-pool", {
- *   resourceGroup: group.resourceGroupName,
  *   attachedVirtualMachineScaleSetId: scaleSet.virtualMachineScaleSetId,
  *   virtualMachineState: "Mix",
  *   vmStateDistribution: { runningPercent: 50, deallocatedPercent: 50 },
@@ -158,7 +156,7 @@ export interface VirtualMachinePool extends Resource<
  *
  * @resource
  */
-export const VirtualMachinePool = Resource<VirtualMachinePool>(
+export const VirtualMachinePool = GroupedResource<VirtualMachinePool>(
   "Azure.StandbyPool.VirtualMachinePool",
 );
 

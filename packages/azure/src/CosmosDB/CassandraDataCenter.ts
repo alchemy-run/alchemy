@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -14,6 +14,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { isOwnedChild } from "./Shared.ts";
 
 export interface CassandraDataCenterProps {
@@ -125,7 +126,6 @@ export interface CassandraDataCenter extends Resource<
  * **Example:** Three-node data center
  * ```typescript
  * const dc = yield* Azure.CosmosDB.CassandraDataCenter("dc1", {
- *   resourceGroup: group.resourceGroupName,
  *   cluster: cluster.clusterName,
  *   delegatedSubnetId: subnet.subnetId,
  *   dataCenterLocation: "eastus",
@@ -138,7 +138,6 @@ export interface CassandraDataCenter extends Resource<
  * **Example:** Scale out to six nodes
  * ```typescript
  * const dc = yield* Azure.CosmosDB.CassandraDataCenter("dc1", {
- *   resourceGroup: group.resourceGroupName,
  *   cluster: cluster.clusterName,
  *   delegatedSubnetId: subnet.subnetId,
  *   sku: "Standard_D8s_v5",
@@ -148,7 +147,7 @@ export interface CassandraDataCenter extends Resource<
  *
  * @resource
  */
-export const CassandraDataCenter = Resource<CassandraDataCenter>(
+export const CassandraDataCenter = GroupedResource<CassandraDataCenter>(
   "Azure.CosmosDB.CassandraDataCenter",
 );
 

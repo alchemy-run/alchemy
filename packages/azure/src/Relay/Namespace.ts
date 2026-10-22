@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
@@ -23,6 +23,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 
 export type RelayTlsVersion = relay.TlsVersion;
 
@@ -116,17 +117,13 @@ export interface Namespace extends Resource<
  * ### Creating a Namespace
  * **Example:** Relay namespace
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("app");
- * const ns = yield* Azure.Relay.Namespace("relay", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const ns = yield* Azure.Relay.Namespace("relay");
  * ```
  *
  * ### Securing a Namespace
  * **Example:** TLS 1.3 only, tagged
  * ```typescript
  * const ns = yield* Azure.Relay.Namespace("relay", {
- *   resourceGroup: group.resourceGroupName,
  *   minimumTlsVersion: "1.3",
  *   tags: { team: "platform" },
  * });
@@ -134,7 +131,7 @@ export interface Namespace extends Resource<
  *
  * @resource
  */
-export const Namespace = Resource<Namespace>("Azure.Relay.Namespace");
+export const Namespace = GroupedResource<Namespace>("Azure.Relay.Namespace");
 
 type ObservedNamespace = relay.GetNamespaceResponse | relay.RelayNamespace;
 

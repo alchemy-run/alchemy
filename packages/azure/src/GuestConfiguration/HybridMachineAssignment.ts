@@ -3,7 +3,7 @@ import * as hybridcompute from "@distilled.cloud/azure/hybridcompute";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -14,6 +14,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   type AssignmentAttributes,
   type AssignmentProps,
@@ -86,7 +87,7 @@ export interface HybridMachineAssignment extends Resource<
  *
  * @resource
  */
-export const HybridMachineAssignment = Resource<HybridMachineAssignment>(
+export const HybridMachineAssignment = GroupedResource<HybridMachineAssignment>(
   "Azure.GuestConfiguration.HybridMachineAssignment",
 );
 

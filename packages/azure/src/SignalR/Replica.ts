@@ -2,7 +2,7 @@ import * as signalr from "@distilled.cloud/azure/signalr";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -16,6 +16,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   boolString,
   createSignalRName,
@@ -117,12 +118,10 @@ export interface Replica extends Resource<
  * **Example:** Premium service with a replica in another region
  * ```typescript
  * const signalR = yield* Azure.SignalR.SignalR("realtime", {
- *   resourceGroup: group.resourceGroupName,
  *   location: "eastus",
  *   sku: "Premium_P1",
  * });
  * const replica = yield* Azure.SignalR.Replica("west", {
- *   resourceGroup: group.resourceGroupName,
  *   signalR: signalR.signalRName,
  *   location: "westus2",
  * });
@@ -132,7 +131,6 @@ export interface Replica extends Resource<
  * **Example:** Stop routing new connections to a replica
  * ```typescript
  * const replica = yield* Azure.SignalR.Replica("west", {
- *   resourceGroup: group.resourceGroupName,
  *   signalR: signalR.signalRName,
  *   location: "westus2",
  *   regionEndpointEnabled: false,
@@ -141,7 +139,7 @@ export interface Replica extends Resource<
  *
  * @resource
  */
-export const Replica = Resource<Replica>("Azure.SignalR.Replica");
+export const Replica = GroupedResource<Replica>("Azure.SignalR.Replica");
 
 type Observed = signalr.GetSignalRReplicasResponse;
 

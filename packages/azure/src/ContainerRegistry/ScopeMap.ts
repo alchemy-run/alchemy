@@ -2,7 +2,7 @@ import * as containerregistry from "@distilled.cloud/azure/containerregistry";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createRegistryName, registryOwnedByStage, sameName, sameSet } from "./Common.ts";
 
 export interface ScopeMapProps {
@@ -73,7 +74,6 @@ export interface ScopeMap extends Resource<
  * **Example:** Read/write access to one repository
  * ```typescript
  * const scope = yield* Azure.ContainerRegistry.ScopeMap("app-push", {
- *   resourceGroup: group.resourceGroupName,
  *   registry: registry.registryName,
  *   actions: [
  *     "repositories/app/content/read",
@@ -84,7 +84,7 @@ export interface ScopeMap extends Resource<
  *
  * @resource
  */
-export const ScopeMap = Resource<ScopeMap>("Azure.ContainerRegistry.ScopeMap");
+export const ScopeMap = GroupedResource<ScopeMap>("Azure.ContainerRegistry.ScopeMap");
 
 const getScopeMap = (
   subscriptionId: string,

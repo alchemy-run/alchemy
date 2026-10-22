@@ -2,7 +2,7 @@ import * as vmware from "@distilled.cloud/azure/vmware";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   AVS_NAMESPACE,
   CHILD_BUDGET,
@@ -76,7 +77,6 @@ export interface PureStoragePolicy extends Resource<
  * **Example:** Pure Storage SPBM policy
  * ```typescript
  * yield* Azure.VMware.PureStoragePolicy("gold", {
- *   resourceGroup: group.resourceGroupName,
  *   privateCloud: cloud.privateCloudName,
  *   storagePolicyDefinition: policyDefinition,
  *   storagePoolId: storagePoolId,
@@ -85,7 +85,9 @@ export interface PureStoragePolicy extends Resource<
  *
  * @resource
  */
-export const PureStoragePolicy = Resource<PureStoragePolicy>("Azure.VMware.PureStoragePolicy");
+export const PureStoragePolicy = GroupedResource<PureStoragePolicy>(
+  "Azure.VMware.PureStoragePolicy",
+);
 
 const createName = (id: string) => createAvsName(id, 64);
 

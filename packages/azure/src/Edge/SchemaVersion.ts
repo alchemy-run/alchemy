@@ -1,7 +1,7 @@
 import * as edge from "@distilled.cloud/azure/edge";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -12,6 +12,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { EDGE_WAIT, edgeState, payloadText } from "./EdgeShared.ts";
 
 export interface SchemaVersionProps {
@@ -64,7 +65,6 @@ export interface SchemaVersion extends Resource<
  * **Example:** Schema rules
  * ```typescript
  * const v1 = yield* Azure.Edge.SchemaVersion("app-v1", {
- *   resourceGroup: group.resourceGroupName,
  *   schema: schema.schemaName,
  *   version: "1.0.0",
  *   value: [
@@ -81,7 +81,7 @@ export interface SchemaVersion extends Resource<
  *
  * @resource
  */
-export const SchemaVersion = Resource<SchemaVersion>("Azure.Edge.SchemaVersion");
+export const SchemaVersion = GroupedResource<SchemaVersion>("Azure.Edge.SchemaVersion");
 
 const getVersion = (
   subscriptionId: string,

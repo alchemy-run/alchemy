@@ -2,7 +2,7 @@ import * as mission from "@distilled.cloud/azure/mission";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -20,6 +20,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   changedProperties,
   createMissionName,
@@ -103,7 +104,6 @@ export interface EnclaveEndpoint extends Resource<
  * **Example:** Expose HTTPS on an enclave subnet
  * ```typescript
  * const endpoint = yield* Azure.VirtualEnclaves.EnclaveEndpoint("ingress", {
- *   resourceGroup: group.resourceGroupName,
  *   virtualEnclave: enclave.virtualEnclaveName,
  *   ruleCollection: [
  *     {
@@ -118,7 +118,9 @@ export interface EnclaveEndpoint extends Resource<
  *
  * @resource
  */
-export const EnclaveEndpoint = Resource<EnclaveEndpoint>("Azure.VirtualEnclaves.EnclaveEndpoint");
+export const EnclaveEndpoint = GroupedResource<EnclaveEndpoint>(
+  "Azure.VirtualEnclaves.EnclaveEndpoint",
+);
 
 type Observed = mission.GetEnclaveEndpointResponse | mission.EnclaveEndpointResource;
 

@@ -1,8 +1,9 @@
 import * as network from "@distilled.cloud/azure/network";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import { orUndefinedIfNotFound, userTags } from "../Arm.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { networkProvider } from "./generic.ts";
 
 export interface NetworkWatcherProps {
@@ -56,14 +57,13 @@ export interface NetworkWatcher extends Resource<
  * **Example:** Watcher for a region
  * ```typescript
  * const watcher = yield* Azure.Network.NetworkWatcher("canada", {
- *   resourceGroup: group.resourceGroupName,
  *   location: "canadacentral",
  * });
  * ```
  *
  * @resource
  */
-export const NetworkWatcher = Resource<NetworkWatcher>("Azure.Network.NetworkWatcher");
+export const NetworkWatcher = GroupedResource<NetworkWatcher>("Azure.Network.NetworkWatcher");
 
 export const NetworkWatcherProvider = () =>
   Provider.succeed(

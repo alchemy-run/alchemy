@@ -2,12 +2,13 @@ import * as web from "@distilled.cloud/azure/web";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
 import { ensureRegistered, ignoreNotFound, orUndefinedIfNotFound, waitUntilGone } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { lower, matchesDesired, reveal, siteWhere } from "./common.ts";
 
 /** How often and how long scheduled backups are kept. */
@@ -101,7 +102,6 @@ export interface WebAppBackupConfiguration extends Resource<
  * **Example:** Daily backups kept for a week
  * ```typescript
  * yield* Azure.Web.WebAppBackupConfiguration("backups", {
- *   resourceGroup: group.resourceGroupName,
  *   siteName: app.siteName,
  *   storageAccountUrl: Redacted.make(containerSasUrl),
  *   backupSchedule: {
@@ -114,7 +114,7 @@ export interface WebAppBackupConfiguration extends Resource<
  *
  * @resource
  */
-export const WebAppBackupConfiguration = Resource<WebAppBackupConfiguration>(
+export const WebAppBackupConfiguration = GroupedResource<WebAppBackupConfiguration>(
   "Azure.Web.WebAppBackupConfiguration",
 );
 

@@ -1,9 +1,10 @@
 import * as network from "@distilled.cloud/azure/network";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { orUndefinedIfNotFound } from "../Arm.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { networkProvider } from "./generic.ts";
 
 /** A member of a policy group: one client attribute value it matches. */
@@ -81,7 +82,6 @@ export interface VpnServerConfigurationPolicyGroup extends Resource<
  * **Example:** Default group for an engineering certificate group
  * ```typescript
  * yield* Azure.Network.VpnServerConfigurationPolicyGroup("engineering", {
- *   resourceGroup: group.resourceGroupName,
  *   vpnServerConfiguration: config.vpnServerConfigurationName,
  *   isDefault: true,
  *   priority: 0,
@@ -93,7 +93,7 @@ export interface VpnServerConfigurationPolicyGroup extends Resource<
  *
  * @resource
  */
-export const VpnServerConfigurationPolicyGroup = Resource<VpnServerConfigurationPolicyGroup>(
+export const VpnServerConfigurationPolicyGroup = GroupedResource<VpnServerConfigurationPolicyGroup>(
   "Azure.Network.VpnServerConfigurationPolicyGroup",
 );
 

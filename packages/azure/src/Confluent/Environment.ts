@@ -3,11 +3,12 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { ensureRegistered, ignoreNotFound, orUndefinedIfNotFound, waitUntilGone } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { isOrganizationOwnedByStack, type OrganizationChildProps, sameName } from "./common.ts";
 
 export type StreamGovernancePackage = "ESSENTIALS" | "ADVANCED";
@@ -71,7 +72,7 @@ export interface Environment extends Resource<
  *
  * @resource
  */
-export const Environment = Resource<Environment>("Azure.Confluent.Environment");
+export const Environment = GroupedResource<Environment>("Azure.Confluent.Environment");
 
 type ObservedEnvironment = confluent.GetOrganizationEnvironmentByIdResponse;
 

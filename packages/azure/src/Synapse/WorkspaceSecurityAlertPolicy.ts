@@ -2,12 +2,13 @@ import * as synapse from "@distilled.cloud/azure/synapse";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
 import { ensureRegistered, orUndefinedIfNotFound } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   fieldsMatch,
   isWorkspaceOwnedByStack,
@@ -65,7 +66,6 @@ export interface WorkspaceSecurityAlertPolicy extends Resource<
  * **Example:** Alert the security team
  * ```typescript
  * yield* Azure.Synapse.WorkspaceSecurityAlertPolicy("threats", {
- *   resourceGroup: group.resourceGroupName,
  *   workspace: workspace.workspaceName,
  *   emailAddresses: ["security@example.com"],
  * });
@@ -74,7 +74,6 @@ export interface WorkspaceSecurityAlertPolicy extends Resource<
  * **Example:** Suppress one alert type
  * ```typescript
  * yield* Azure.Synapse.WorkspaceSecurityAlertPolicy("threats", {
- *   resourceGroup: group.resourceGroupName,
  *   workspace: workspace.workspaceName,
  *   disabledAlerts: ["Access_Anomaly"],
  * });
@@ -82,7 +81,7 @@ export interface WorkspaceSecurityAlertPolicy extends Resource<
  *
  * @resource
  */
-export const WorkspaceSecurityAlertPolicy = Resource<WorkspaceSecurityAlertPolicy>(
+export const WorkspaceSecurityAlertPolicy = GroupedResource<WorkspaceSecurityAlertPolicy>(
   "Azure.Synapse.WorkspaceSecurityAlertPolicy",
 );
 

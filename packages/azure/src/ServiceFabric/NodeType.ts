@@ -2,7 +2,7 @@ import * as sf from "@distilled.cloud/azure/servicefabricmanagedclusters";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -20,6 +20,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { CLUSTER_BUDGET, createNodeTypeName, driftedFields, matches, sameArm } from "./Common.ts";
 
 export type NodeTypeDataDiskType = sf.NodeTypePropertiesInputDataDiskType;
@@ -169,7 +170,6 @@ export interface NodeType extends Resource<
  * **Example:** Primary node type of a Basic cluster
  * ```typescript
  * const primary = yield* Azure.ServiceFabric.NodeType("primary", {
- *   resourceGroup: group.resourceGroupName,
  *   cluster: cluster.managedClusterName,
  *   isPrimary: true,
  *   vmInstanceCount: 3,
@@ -180,7 +180,6 @@ export interface NodeType extends Resource<
  * **Example:** Secondary stateless node type for front-end services
  * ```typescript
  * const web = yield* Azure.ServiceFabric.NodeType("web", {
- *   resourceGroup: group.resourceGroupName,
  *   cluster: cluster.managedClusterName,
  *   isPrimary: false,
  *   isStateless: true,
@@ -191,7 +190,7 @@ export interface NodeType extends Resource<
  *
  * @resource
  */
-export const NodeType = Resource<NodeType>("Azure.ServiceFabric.NodeType");
+export const NodeType = GroupedResource<NodeType>("Azure.ServiceFabric.NodeType");
 
 type ObservedNodeType = sf.GetNodeTypeResponse | sf.NodeType;
 

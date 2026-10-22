@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import {
@@ -22,6 +22,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { sameText } from "./Common.ts";
 
 export type WorkspaceSkuName =
@@ -172,16 +173,12 @@ export interface Workspace extends Resource<
  * ### Creating a Workspace
  * **Example:** Pay-as-you-go workspace
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("app");
- * const logs = yield* Azure.LogAnalytics.Workspace("logs", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const logs = yield* Azure.LogAnalytics.Workspace("logs");
  * ```
  *
  * **Example:** Longer retention and a daily cap
  * ```typescript
  * const logs = yield* Azure.LogAnalytics.Workspace("logs", {
- *   resourceGroup: group.resourceGroupName,
  *   retentionInDays: 90,
  *   dailyQuotaGb: 5,
  *   tags: { team: "platform" },
@@ -192,7 +189,6 @@ export interface Workspace extends Resource<
  * **Example:** Microsoft Entra-only access with resource-context permissions
  * ```typescript
  * const logs = yield* Azure.LogAnalytics.Workspace("logs", {
- *   resourceGroup: group.resourceGroupName,
  *   features: {
  *     disableLocalAuth: true,
  *     enableLogAccessUsingOnlyResourcePermissions: true,
@@ -202,7 +198,7 @@ export interface Workspace extends Resource<
  *
  * @resource
  */
-export const Workspace = Resource<Workspace>("Azure.LogAnalytics.Workspace");
+export const Workspace = GroupedResource<Workspace>("Azure.LogAnalytics.Workspace");
 
 type ObservedWorkspace = operationalinsights.GetWorkspaceResponse;
 

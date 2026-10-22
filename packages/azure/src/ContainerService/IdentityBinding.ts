@@ -2,7 +2,7 @@ import * as cs from "@distilled.cloud/azure/containerservice";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createChildName, isClusterOwned, sameName, whileClusterBusy } from "./Common.ts";
 
 export interface IdentityBindingProps {
@@ -69,11 +70,8 @@ export interface IdentityBinding extends Resource<
  * ### Binding an Identity
  * **Example:** Bind a user-assigned identity to a cluster
  * ```typescript
- * const identity = yield* Azure.ManagedIdentity.UserAssignedIdentity("app", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const identity = yield* Azure.ManagedIdentity.UserAssignedIdentity("app");
  * const binding = yield* Azure.ContainerService.IdentityBinding("app", {
- *   resourceGroup: group.resourceGroupName,
  *   cluster: cluster.clusterName,
  *   managedIdentityId: identity.identityId,
  * });
@@ -81,7 +79,9 @@ export interface IdentityBinding extends Resource<
  *
  * @resource
  */
-export const IdentityBinding = Resource<IdentityBinding>("Azure.ContainerService.IdentityBinding");
+export const IdentityBinding = GroupedResource<IdentityBinding>(
+  "Azure.ContainerService.IdentityBinding",
+);
 
 type ObservedBinding = cs.GetIdentityBindingResponse;
 

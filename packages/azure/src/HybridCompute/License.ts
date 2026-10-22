@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -21,6 +21,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 
 export type LicenseTarget = hybridcompute.LicenseTarget;
 export type LicenseEdition = hybridcompute.LicenseEdition;
@@ -130,9 +131,7 @@ export interface License extends Resource<
  * ### Creating a License
  * **Example:** Deactivated vCore license for Windows Server 2012
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("arc");
  * const license = yield* Azure.HybridCompute.License("esu", {
- *   resourceGroup: group.resourceGroupName,
  *   target: "Windows Server 2012",
  *   edition: "Standard",
  *   coreType: "vCore",
@@ -144,7 +143,6 @@ export interface License extends Resource<
  * **Example:** Activate the license (starts billing)
  * ```typescript
  * const license = yield* Azure.HybridCompute.License("esu", {
- *   resourceGroup: group.resourceGroupName,
  *   target: "Windows Server 2012 R2",
  *   edition: "Datacenter",
  *   coreType: "pCore",
@@ -155,7 +153,7 @@ export interface License extends Resource<
  *
  * @resource
  */
-export const License = Resource<License>("Azure.HybridCompute.License");
+export const License = GroupedResource<License>("Azure.HybridCompute.License");
 
 type ObservedLicense = hybridcompute.GetLicenseResponse;
 

@@ -2,7 +2,7 @@ import * as datafactory from "@distilled.cloud/azure/datafactory";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -20,6 +20,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createHyphenName } from "./FactoryChild.ts";
 
 export type FactoryIdentityType = "SystemAssigned" | "UserAssigned" | "SystemAssigned,UserAssigned";
@@ -143,9 +144,7 @@ export interface Factory extends Resource<
  * ### Creating a Factory
  * **Example:** Factory with a system-assigned identity
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("etl");
  * const factory = yield* Azure.DataFactory.Factory("etl", {
- *   resourceGroup: group.resourceGroupName,
  *   identity: { type: "SystemAssigned" },
  * });
  * ```
@@ -153,7 +152,6 @@ export interface Factory extends Resource<
  * **Example:** Private factory with tags
  * ```typescript
  * const factory = yield* Azure.DataFactory.Factory("etl", {
- *   resourceGroup: group.resourceGroupName,
  *   publicNetworkAccess: "Disabled",
  *   tags: { team: "data" },
  * });
@@ -162,11 +160,8 @@ export interface Factory extends Resource<
  * ### Using User-Assigned Identities
  * **Example:** Attach a user-assigned identity for credentials
  * ```typescript
- * const identity = yield* Azure.ManagedIdentity.UserAssignedIdentity("etl", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const identity = yield* Azure.ManagedIdentity.UserAssignedIdentity("etl");
  * const factory = yield* Azure.DataFactory.Factory("etl", {
- *   resourceGroup: group.resourceGroupName,
  *   identity: {
  *     type: "SystemAssigned,UserAssigned",
  *     userAssignedIdentities: [identity.identityId],
@@ -176,7 +171,7 @@ export interface Factory extends Resource<
  *
  * @resource
  */
-export const Factory = Resource<Factory>("Azure.DataFactory.Factory");
+export const Factory = GroupedResource<Factory>("Azure.DataFactory.Factory");
 
 type ObservedFactory = datafactory.GetFactoryResponse;
 

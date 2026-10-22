@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import {
@@ -22,6 +22,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 
 export interface ConnectedClusterAadProfile {
   /** Use Azure RBAC for Kubernetes authorization. */
@@ -193,9 +194,7 @@ export interface ConnectedCluster extends Resource<
  * ### Registering a Cluster
  * **Example:** Connected cluster for a k3s cluster
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("edge");
  * const cluster = yield* Azure.HybridKubernetes.ConnectedCluster("store-42", {
- *   resourceGroup: group.resourceGroupName,
  *   agentPublicKeyCertificate: agentPublicKey,
  *   distribution: "k3s",
  *   infrastructure: "generic",
@@ -208,7 +207,6 @@ export interface ConnectedCluster extends Resource<
  * **Example:** Azure RBAC with an admin group
  * ```typescript
  * const cluster = yield* Azure.HybridKubernetes.ConnectedCluster("store-42", {
- *   resourceGroup: group.resourceGroupName,
  *   agentPublicKeyCertificate: agentPublicKey,
  *   aadProfile: {
  *     enableAzureRBAC: true,
@@ -221,7 +219,6 @@ export interface ConnectedCluster extends Resource<
  * **Example:** OIDC issuer and workload identity webhook
  * ```typescript
  * const cluster = yield* Azure.HybridKubernetes.ConnectedCluster("store-42", {
- *   resourceGroup: group.resourceGroupName,
  *   agentPublicKeyCertificate: agentPublicKey,
  *   oidcIssuerProfile: { enabled: true },
  *   workloadIdentity: true,
@@ -230,7 +227,7 @@ export interface ConnectedCluster extends Resource<
  *
  * @resource
  */
-export const ConnectedCluster = Resource<ConnectedCluster>(
+export const ConnectedCluster = GroupedResource<ConnectedCluster>(
   "Azure.HybridKubernetes.ConnectedCluster",
 );
 

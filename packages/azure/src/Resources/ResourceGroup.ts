@@ -4,7 +4,9 @@ import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import {
   desiredTags,
   hasAnyAlchemyTag,
@@ -41,7 +43,38 @@ export interface ResourceGroupProps {
    * `alchemy::id`) are merged in automatically.
    */
   tags?: Record<string, string>;
+  /**
+   * Refuse to delete the group while it still holds resources. Destroy then
+   * deletes the group only when it carries this stack's ownership tags and
+   * is empty, and fails with `Azure.ResourceGroupNotEmpty` or
+   * `Azure.ResourceGroupNotOwned` otherwise. The stack's implicit
+   * `<stack>-<stage>` group sets this. `alchemy unsafe nuke` ignores it.
+   * @default false
+   */
+  deleteOnlyIfEmpty?: boolean;
 }
+
+/** Destroy found resources in a `deleteOnlyIfEmpty` group. */
+export class ResourceGroupNotEmpty extends Data.TaggedError("Azure.ResourceGroupNotEmpty")<{
+  readonly resourceGroup: string;
+  /** ARM IDs of the resources still in the group. */
+  readonly resources: readonly string[];
+  readonly message: string;
+}> {}
+
+/** Destroy found a `deleteOnlyIfEmpty` group without this stack's ownership tags. */
+export class ResourceGroupNotOwned extends Data.TaggedError("Azure.ResourceGroupNotOwned")<{
+  readonly resourceGroup: string;
+  readonly message: string;
+}> {}
+
+/** The deploying identity may not create resource groups in the subscription. */
+export class ResourceGroupCreateForbidden extends Data.TaggedError(
+  "Azure.ResourceGroupCreateForbidden",
+)<{
+  readonly resourceGroup: string;
+  readonly message: string;
+}> {}
 
 export interface ResourceGroup extends Resource<
   "Azure.Resources.ResourceGroup",
@@ -64,7 +97,45 @@ export interface ResourceGroup extends Resource<
  * An Azure resource group — the container every other Azure resource is
  * deployed into. Deleting a resource group deletes everything in it.
  *
+ * You rarely declare one. A resource without a `resourceGroup` prop goes
+ * into the stack's resource group: `<stack>-<stage>`, created on first use
+ * and deleted on destroy once it is empty. Declare a group to choose its
+ * name, location, or tags, or to keep shared resources apart.
+ *
  * @see https://learn.microsoft.com/azure/azure-resource-manager/management/manage-resource-groups-portal
+ *
+ * ### Using the Stack's Resource Group
+ * **Example:** Resources go into `<stack>-<stage>` by default
+ * ```typescript
+ * // Created in the resource group "shop-prod" for stack "shop", stage "prod".
+ * const account = yield* Azure.Storage.StorageAccount("files");
+ * ```
+ *
+ * **Example:** Deploy into an existing resource group
+ * ```typescript
+ * // Alchemy references "rg-shop-prod" and never creates or deletes it.
+ * providers: Azure.providers().pipe(
+ *   Layer.provideMerge(Azure.resourceGroup("rg-shop-prod")),
+ * ),
+ * ```
+ *
+ * **Example:** Manage the stack's resource group yourself
+ * ```typescript
+ * const group = yield* Azure.Resources.ResourceGroup("app", {
+ *   name: "shop-prod",
+ *   location: "westeurope",
+ *   tags: { team: "shop" },
+ * });
+ * yield* Effect.gen(function* () {
+ *   yield* Azure.Storage.StorageAccount("files");
+ * }).pipe(Effect.provide(Azure.resourceGroup(group)));
+ * ```
+ *
+ * :::caution
+ * A resource's ARM ID contains its resource group. Moving a resource to
+ * another group, or switching the stack from the default group to a named
+ * one, replaces the resource.
+ * :::
  *
  * ### Creating a Resource Group
  * **Example:** Resource group in the default location
@@ -103,6 +174,33 @@ const createGroupName = (id: string, name: string | undefined) =>
 
 const getGroup = (subscriptionId: string, resourceGroupName: string) =>
   orUndefinedIfNotFound(resources.GetResourceGroup({ subscriptionId, resourceGroupName }));
+
+/**
+ * Fail unless the group holds no resources. ARM's resource list lags the
+ * deletes that destroy just finished, so poll for up to a minute.
+ */
+const requireEmpty = (subscriptionId: string, resourceGroupName: string) =>
+  Effect.gen(function* () {
+    const listIds = orUndefinedIfNotFound(
+      resources.ListResourceByResourceGroup({ subscriptionId, resourceGroupName, _top: 50 }),
+    ).pipe(Effect.map((page) => (page?.value ?? []).flatMap((r) => (r.id ? [r.id] : []))));
+    const remaining = yield* listIds.pipe(
+      Effect.repeat({
+        until: (ids) => ids.length === 0,
+        schedule: Schedule.spaced("5 seconds"),
+        times: 12,
+      }),
+    );
+    if (remaining.length > 0) {
+      return yield* new ResourceGroupNotEmpty({
+        resourceGroup: resourceGroupName,
+        resources: remaining,
+        message:
+          `Resource group '${resourceGroupName}' still holds resources Alchemy did not create, ` +
+          `so Alchemy will not delete it: ${remaining.join(", ")}. Delete or move them, then destroy again.`,
+      });
+    }
+  });
 
 const toAttrs = (
   subscriptionId: string,
@@ -179,12 +277,27 @@ export const ResourceGroupProvider = () =>
 
       // Ensure. The PUT is an upsert, so a concurrent create is harmless.
       if (observed === undefined) {
-        yield* resources.ResourceGroupsCreateOrUpdate({
-          subscriptionId,
-          resourceGroupName: name,
-          location,
-          tags,
-        });
+        yield* resources
+          .ResourceGroupsCreateOrUpdate({
+            subscriptionId,
+            resourceGroupName: name,
+            location,
+            tags,
+          })
+          .pipe(
+            Effect.catchTag("AuthorizationFailed", (error) =>
+              Effect.fail(
+                new ResourceGroupCreateForbidden({
+                  resourceGroup: name,
+                  message:
+                    `The deploying identity may not create resource group '${name}' ` +
+                    `(${error.message ?? "AuthorizationFailed"}). Deploy into an existing ` +
+                    `group instead: provide Azure.resourceGroup("<name>") on the stack's ` +
+                    `providers, or pass resourceGroup on each resource.`,
+                }),
+              ),
+            ),
+          );
       } else if (tagsDiffer(observed.tags, tags)) {
         // Sync tags against the observed cloud tags.
         yield* resources.UpdateResourceGroup({
@@ -202,9 +315,20 @@ export const ResourceGroupProvider = () =>
       return toAttrs(subscriptionId, name, observed);
     }),
 
-    delete: Effect.fn(function* ({ output }) {
+    delete: Effect.fn(function* ({ id, olds, output, force }) {
       const { subscriptionId } = yield* AzureEnvironment.current;
       const name = output.resourceGroupName;
+      if (olds?.deleteOnlyIfEmpty === true && force !== true) {
+        const observed = yield* getGroup(subscriptionId, name);
+        if (observed === undefined) return;
+        if (!(yield* isOwned(id, observed.tags))) {
+          return yield* new ResourceGroupNotOwned({
+            resourceGroup: name,
+            message: `Resource group '${name}' lacks this stack's ownership tags; Alchemy will not delete it.`,
+          });
+        }
+        yield* requireEmpty(subscriptionId, name);
+      }
       yield* ignoreNotFound(
         resources.DeleteResourceGroup({
           subscriptionId,

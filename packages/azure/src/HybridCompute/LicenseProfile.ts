@@ -2,7 +2,7 @@ import * as hybridcompute from "@distilled.cloud/azure/hybridcompute";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -17,6 +17,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { machineLocation } from "./MachineCommon.ts";
 
 export interface LicenseProfileProps {
@@ -123,7 +124,7 @@ export interface LicenseProfile extends Resource<
  *
  * @resource
  */
-export const LicenseProfile = Resource<LicenseProfile>("Azure.HybridCompute.LicenseProfile");
+export const LicenseProfile = GroupedResource<LicenseProfile>("Azure.HybridCompute.LicenseProfile");
 
 type ObservedProfile = hybridcompute.GetLicenseProfileResponse;
 

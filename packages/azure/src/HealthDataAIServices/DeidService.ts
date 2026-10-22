@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -21,6 +21,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 
 export type DeidServiceIdentityType =
   | "None"
@@ -117,9 +118,7 @@ export interface DeidService extends Resource<
  * const group = yield* Azure.Resources.ResourceGroup("health", {
  *   location: "eastus",
  * });
- * const deid = yield* Azure.HealthDataAIServices.DeidService("deid", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const deid = yield* Azure.HealthDataAIServices.DeidService("deid");
  * // deid.serviceUrl is the data-plane endpoint
  * ```
  *
@@ -127,7 +126,6 @@ export interface DeidService extends Resource<
  * **Example:** System-assigned identity for batch jobs on Blob Storage
  * ```typescript
  * const deid = yield* Azure.HealthDataAIServices.DeidService("deid", {
- *   resourceGroup: group.resourceGroupName,
  *   identity: { type: "SystemAssigned" },
  * });
  * // grant deid.principalId "Storage Blob Data Contributor" on the account
@@ -136,14 +134,13 @@ export interface DeidService extends Resource<
  * **Example:** Private-only service
  * ```typescript
  * const deid = yield* Azure.HealthDataAIServices.DeidService("deid", {
- *   resourceGroup: group.resourceGroupName,
  *   publicNetworkAccess: "Disabled",
  * });
  * ```
  *
  * @resource
  */
-export const DeidService = Resource<DeidService>("Azure.HealthDataAIServices.DeidService");
+export const DeidService = GroupedResource<DeidService>("Azure.HealthDataAIServices.DeidService");
 
 type ObservedDeidService = healthdataaiservices.GetDeidServiceResponse;
 

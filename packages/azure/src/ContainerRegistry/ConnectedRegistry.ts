@@ -2,7 +2,7 @@ import * as containerregistry from "@distilled.cloud/azure/containerregistry";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createRegistryName,
   matchesObserved,
@@ -137,12 +138,10 @@ export interface ConnectedRegistry extends Resource<
  * **Example:** Read-only mirror synced with a sync token
  * ```typescript
  * const registry = yield* Azure.ContainerRegistry.Registry("images", {
- *   resourceGroup: group.resourceGroupName,
  *   sku: "Premium",
  *   dataEndpointEnabled: true,
  * });
  * const syncScope = yield* Azure.ContainerRegistry.ScopeMap("edge-sync", {
- *   resourceGroup: group.resourceGroupName,
  *   registry: registry.registryName,
  *   actions: [
  *     "repositories/hello-world/content/read",
@@ -154,12 +153,10 @@ export interface ConnectedRegistry extends Resource<
  *   ],
  * });
  * const syncToken = yield* Azure.ContainerRegistry.Token("edge-sync", {
- *   resourceGroup: group.resourceGroupName,
  *   registry: registry.registryName,
  *   scopeMapId: syncScope.scopeMapId,
  * });
  * const edge = yield* Azure.ContainerRegistry.ConnectedRegistry("edge", {
- *   resourceGroup: group.resourceGroupName,
  *   registry: registry.registryName,
  *   name: "edgegateway",
  *   mode: "ReadOnly",
@@ -169,7 +166,7 @@ export interface ConnectedRegistry extends Resource<
  *
  * @resource
  */
-export const ConnectedRegistry = Resource<ConnectedRegistry>(
+export const ConnectedRegistry = GroupedResource<ConnectedRegistry>(
   "Azure.ContainerRegistry.ConnectedRegistry",
 );
 

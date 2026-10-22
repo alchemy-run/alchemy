@@ -1,8 +1,9 @@
 import * as apim from "@distilled.cloud/azure/apimanagement";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createEntityName, sameName } from "./Common.ts";
 import { entityLifecycle, sameSecrets, reveal } from "./Entity.ts";
 import type { Logger, LoggerProps } from "./Logger.ts";
@@ -34,7 +35,6 @@ export interface WorkspaceLogger extends Resource<
  * **Example:** Application Insights logger
  * ```typescript
  * yield* Azure.ApiManagement.WorkspaceLogger("insights", {
- *   resourceGroup: group.resourceGroupName,
  *   serviceName: apim.serviceName,
  *   workspaceName: workspace.workspaceName,
  *   loggerType: "applicationInsights",
@@ -44,7 +44,9 @@ export interface WorkspaceLogger extends Resource<
  *
  * @resource
  */
-export const WorkspaceLogger = Resource<WorkspaceLogger>("Azure.ApiManagement.WorkspaceLogger");
+export const WorkspaceLogger = GroupedResource<WorkspaceLogger>(
+  "Azure.ApiManagement.WorkspaceLogger",
+);
 
 interface Key {
   resourceGroup: string;

@@ -2,7 +2,7 @@ import * as storage from "@distilled.cloud/azure/storage";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -14,6 +14,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createStorageChildName as createContainerName,
   isOwnedByMetadata as isOwnedContainer,
@@ -81,11 +82,8 @@ export interface BlobContainer extends Resource<
  * ### Creating a Container
  * **Example:** Private container
  * ```typescript
- * const account = yield* Azure.Storage.StorageAccount("files", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const account = yield* Azure.Storage.StorageAccount("files");
  * const uploads = yield* Azure.Storage.BlobContainer("uploads", {
- *   resourceGroup: group.resourceGroupName,
  *   storageAccount: account.storageAccountName,
  * });
  * ```
@@ -93,7 +91,6 @@ export interface BlobContainer extends Resource<
  * **Example:** Container with metadata
  * ```typescript
  * const uploads = yield* Azure.Storage.BlobContainer("uploads", {
- *   resourceGroup: group.resourceGroupName,
  *   storageAccount: account.storageAccountName,
  *   metadata: { purpose: "user_uploads" },
  * });
@@ -101,7 +98,7 @@ export interface BlobContainer extends Resource<
  *
  * @resource
  */
-export const BlobContainer = Resource<BlobContainer>("Azure.Storage.BlobContainer");
+export const BlobContainer = GroupedResource<BlobContainer>("Azure.Storage.BlobContainer");
 
 const getContainer = (
   subscriptionId: string,

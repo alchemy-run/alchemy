@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import {
@@ -22,6 +22,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 
 export type StorageSkuName = storage.SkuName;
 export type StorageKind = storage.Kind;
@@ -156,16 +157,12 @@ export interface StorageAccount extends Resource<
  * ### Creating a Storage Account
  * **Example:** General-purpose v2 account
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("app");
- * const account = yield* Azure.Storage.StorageAccount("files", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const account = yield* Azure.Storage.StorageAccount("files");
  * ```
  *
  * **Example:** Geo-redundant account that requires Entra ID auth
  * ```typescript
  * const account = yield* Azure.Storage.StorageAccount("files", {
- *   resourceGroup: group.resourceGroupName,
  *   sku: "Standard_GRS",
  *   allowSharedKeyAccess: false,
  * });
@@ -175,14 +172,13 @@ export interface StorageAccount extends Resource<
  * **Example:** Account with a hierarchical namespace
  * ```typescript
  * const lake = yield* Azure.Storage.StorageAccount("lake", {
- *   resourceGroup: group.resourceGroupName,
  *   isHnsEnabled: true,
  * });
  * ```
  *
  * @resource
  */
-export const StorageAccount = Resource<StorageAccount>("Azure.Storage.StorageAccount");
+export const StorageAccount = GroupedResource<StorageAccount>("Azure.Storage.StorageAccount");
 
 type ObservedAccount = storage.GetStorageAccountPropertiesResponse;
 

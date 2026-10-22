@@ -1,8 +1,9 @@
 import * as network from "@distilled.cloud/azure/network";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import { orUndefinedIfNotFound, userTags } from "../Arm.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { ref } from "./common.ts";
 import { idsOf, networkProvider } from "./generic.ts";
 
@@ -96,7 +97,6 @@ export interface FirewallPolicy extends Resource<
  * **Example:** Standard policy that denies known-malicious traffic
  * ```typescript
  * const policy = yield* Azure.Network.FirewallPolicy("egress", {
- *   resourceGroup: group.resourceGroupName,
  *   threatIntelMode: "Deny",
  * });
  * ```
@@ -104,14 +104,13 @@ export interface FirewallPolicy extends Resource<
  * **Example:** DNS proxy
  * ```typescript
  * const policy = yield* Azure.Network.FirewallPolicy("dns", {
- *   resourceGroup: group.resourceGroupName,
  *   dnsSettings: { enableProxy: true },
  * });
  * ```
  *
  * @resource
  */
-export const FirewallPolicy = Resource<FirewallPolicy>("Azure.Network.FirewallPolicy");
+export const FirewallPolicy = GroupedResource<FirewallPolicy>("Azure.Network.FirewallPolicy");
 
 export const FirewallPolicyProvider = () =>
   Provider.succeed(

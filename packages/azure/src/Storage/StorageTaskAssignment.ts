@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import {
@@ -15,6 +15,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { isAccountOwnedByStack } from "./StorageOwnership.ts";
 
 /** When a storage task assignment runs. */
@@ -125,11 +126,9 @@ export interface StorageTaskAssignment extends Resource<
  * **Example:** Run a task once
  * ```typescript
  * const reports = yield* Azure.Storage.BlobContainer("reports", {
- *   resourceGroup: group.resourceGroupName,
  *   storageAccount: account.storageAccountName,
  * });
  * yield* Azure.Storage.StorageTaskAssignment("cleanup", {
- *   resourceGroup: group.resourceGroupName,
  *   storageAccount: account.storageAccountName,
  *   taskId: storageTaskId,
  *   reportPrefix: reports.containerName,
@@ -140,7 +139,6 @@ export interface StorageTaskAssignment extends Resource<
  * **Example:** Run a task every week on a prefix
  * ```typescript
  * yield* Azure.Storage.StorageTaskAssignment("weekly-cleanup", {
- *   resourceGroup: group.resourceGroupName,
  *   storageAccount: account.storageAccountName,
  *   taskId: storageTaskId,
  *   reportPrefix: reports.containerName,
@@ -156,7 +154,7 @@ export interface StorageTaskAssignment extends Resource<
  *
  * @resource
  */
-export const StorageTaskAssignment = Resource<StorageTaskAssignment>(
+export const StorageTaskAssignment = GroupedResource<StorageTaskAssignment>(
   "Azure.Storage.StorageTaskAssignment",
 );
 

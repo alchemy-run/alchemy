@@ -2,7 +2,7 @@ import * as storagesync from "@distilled.cloud/azure/storagesync";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -15,6 +15,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createChildName, isServiceOwnedByStack, sameName } from "./internal.ts";
 
 export interface CloudEndpointProps {
@@ -119,15 +120,11 @@ export interface CloudEndpoint extends Resource<
  * ### Creating a Cloud Endpoint
  * **Example:** Sync a file share
  * ```typescript
- * const account = yield* Azure.Storage.StorageAccount("files", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const account = yield* Azure.Storage.StorageAccount("files");
  * const share = yield* Azure.Storage.FileShare("docs", {
- *   resourceGroup: group.resourceGroupName,
  *   storageAccount: account.storageAccountName,
  * });
  * const sync = yield* Azure.StorageSync.StorageSyncService("sync", {
- *   resourceGroup: group.resourceGroupName,
  *   identity: { type: "SystemAssigned" },
  *   useIdentity: true,
  * });
@@ -148,11 +145,9 @@ export interface CloudEndpoint extends Resource<
  *     }),
  * );
  * const syncGroup = yield* Azure.StorageSync.SyncGroup("docs", {
- *   resourceGroup: group.resourceGroupName,
  *   storageSyncService: sync.storageSyncServiceName,
  * });
  * yield* Azure.StorageSync.CloudEndpoint("docs-cloud", {
- *   resourceGroup: group.resourceGroupName,
  *   storageSyncService: sync.storageSyncServiceName,
  *   syncGroup: syncGroup.syncGroupName,
  *   // Wait for the grants before creating the endpoint.
@@ -168,7 +163,6 @@ export interface CloudEndpoint extends Resource<
  * **Example:** Enumerate direct share changes every 3 days
  * ```typescript
  * yield* Azure.StorageSync.CloudEndpoint("docs-cloud", {
- *   resourceGroup: group.resourceGroupName,
  *   storageSyncService: sync.storageSyncServiceName,
  *   syncGroup: syncGroup.syncGroupName,
  *   storageAccountResourceId: account.storageAccountId,
@@ -179,7 +173,7 @@ export interface CloudEndpoint extends Resource<
  *
  * @resource
  */
-export const CloudEndpoint = Resource<CloudEndpoint>("Azure.StorageSync.CloudEndpoint");
+export const CloudEndpoint = GroupedResource<CloudEndpoint>("Azure.StorageSync.CloudEndpoint");
 
 export class CloudEndpointCreateFailed extends Data.TaggedError(
   "Azure.StorageSync.CloudEndpointCreateFailed",

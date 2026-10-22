@@ -2,7 +2,7 @@ import * as keyvault from "@distilled.cloud/azure/keyvault";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -16,6 +16,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { isManagedHsmOwnedByStack, lower, sameId } from "./common.ts";
 
 export interface ManagedHsmPrivateEndpointConnectionProps {
@@ -77,14 +78,12 @@ export interface ManagedHsmPrivateEndpointConnection extends Resource<
  * **Example:** Approve a manual private endpoint request
  * ```typescript
  * const endpoint = yield* Azure.Network.PrivateEndpoint("hsm-pe", {
- *   resourceGroup: group.resourceGroupName,
  *   subnetId: subnet.subnetId,
  *   manualPrivateLinkServiceConnections: [
  *     { privateLinkServiceId: hsm.managedHsmId, groupIds: ["managedhsm"] },
  *   ],
  * });
  * yield* Azure.KeyVault.ManagedHsmPrivateEndpointConnection("hsm-pe-approval", {
- *   resourceGroup: group.resourceGroupName,
  *   managedHsm: hsm.managedHsmName,
  *   privateEndpointId: endpoint.privateEndpointId,
  *   description: "Approved for the app VNet",
@@ -94,7 +93,6 @@ export interface ManagedHsmPrivateEndpointConnection extends Resource<
  * **Example:** Reject a request
  * ```typescript
  * yield* Azure.KeyVault.ManagedHsmPrivateEndpointConnection("hsm-pe-approval", {
- *   resourceGroup: group.resourceGroupName,
  *   managedHsm: hsm.managedHsmName,
  *   privateEndpointId: endpoint.privateEndpointId,
  *   status: "Rejected",
@@ -104,9 +102,10 @@ export interface ManagedHsmPrivateEndpointConnection extends Resource<
  *
  * @resource
  */
-export const ManagedHsmPrivateEndpointConnection = Resource<ManagedHsmPrivateEndpointConnection>(
-  "Azure.KeyVault.ManagedHsmPrivateEndpointConnection",
-);
+export const ManagedHsmPrivateEndpointConnection =
+  GroupedResource<ManagedHsmPrivateEndpointConnection>(
+    "Azure.KeyVault.ManagedHsmPrivateEndpointConnection",
+  );
 
 export class ManagedHsmPrivateEndpointConnectionRequestMissing extends Data.TaggedError(
   "Azure.KeyVault.ManagedHsmPrivateEndpointConnectionRequestMissing",

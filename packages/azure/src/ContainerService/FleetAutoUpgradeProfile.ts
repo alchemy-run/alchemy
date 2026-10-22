@@ -2,7 +2,7 @@ import * as cs from "@distilled.cloud/azure/containerservice";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createChildName, isFleetOwned, sameName, whileFleetBusy } from "./Common.ts";
 
 export type FleetUpgradeChannel = cs.UpgradeChannel_2;
@@ -92,7 +93,6 @@ export interface FleetAutoUpgradeProfile extends Resource<
  * **Example:** Stable channel through a staged strategy
  * ```typescript
  * yield* Azure.ContainerService.FleetAutoUpgradeProfile("stable", {
- *   resourceGroup: group.resourceGroupName,
  *   fleet: fleet.fleetName,
  *   channel: "Stable",
  *   updateStrategyId: strategy.updateStrategyId,
@@ -102,7 +102,6 @@ export interface FleetAutoUpgradeProfile extends Resource<
  * **Example:** Paused node-image profile
  * ```typescript
  * yield* Azure.ContainerService.FleetAutoUpgradeProfile("node-images", {
- *   resourceGroup: group.resourceGroupName,
  *   fleet: fleet.fleetName,
  *   channel: "NodeImage",
  *   disabled: true,
@@ -111,7 +110,7 @@ export interface FleetAutoUpgradeProfile extends Resource<
  *
  * @resource
  */
-export const FleetAutoUpgradeProfile = Resource<FleetAutoUpgradeProfile>(
+export const FleetAutoUpgradeProfile = GroupedResource<FleetAutoUpgradeProfile>(
   "Azure.ContainerService.FleetAutoUpgradeProfile",
 );
 

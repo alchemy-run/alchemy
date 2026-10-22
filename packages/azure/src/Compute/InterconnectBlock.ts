@@ -2,7 +2,7 @@ import * as compute from "@distilled.cloud/azure/compute";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -18,6 +18,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createComputeName,
   idsOf,
@@ -110,7 +111,6 @@ export interface InterconnectBlock extends Resource<
  * **Example:** Block of GPU VMs in an interconnect group
  * ```typescript
  * const block = yield* Azure.Compute.InterconnectBlock("training", {
- *   resourceGroup: group.resourceGroupName,
  *   zones: ["1"],
  *   sku: "Standard_ND96isr_H100_v5",
  *   capacity: 4,
@@ -120,7 +120,9 @@ export interface InterconnectBlock extends Resource<
  *
  * @resource
  */
-export const InterconnectBlock = Resource<InterconnectBlock>("Azure.Compute.InterconnectBlock");
+export const InterconnectBlock = GroupedResource<InterconnectBlock>(
+  "Azure.Compute.InterconnectBlock",
+);
 
 type Observed = compute.GetInterconnectBlockResponse;
 

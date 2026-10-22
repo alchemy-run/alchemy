@@ -2,11 +2,12 @@ import * as eventhub from "@distilled.cloud/azure/eventhub";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { ensureRegistered, ignoreNotFound, orUndefinedIfNotFound } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { namespaceOwnedByStage } from "./Common.ts";
 
 export interface NetworkRuleSetIpRule {
@@ -100,7 +101,6 @@ export interface NetworkRuleSet extends Resource<
  * **Example:** Allow only one office range
  * ```typescript
  * yield* Azure.EventHub.NetworkRuleSet("firewall", {
- *   resourceGroup: group.resourceGroupName,
  *   namespace: namespace.namespaceName,
  *   defaultAction: "Deny",
  *   ipRules: [{ ipMask: "203.0.113.0/24" }],
@@ -110,7 +110,6 @@ export interface NetworkRuleSet extends Resource<
  * **Example:** Allow a subnet and trusted Azure services
  * ```typescript
  * yield* Azure.EventHub.NetworkRuleSet("firewall", {
- *   resourceGroup: group.resourceGroupName,
  *   namespace: namespace.namespaceName,
  *   defaultAction: "Deny",
  *   trustedServiceAccessEnabled: true,
@@ -120,7 +119,7 @@ export interface NetworkRuleSet extends Resource<
  *
  * @resource
  */
-export const NetworkRuleSet = Resource<NetworkRuleSet>("Azure.EventHub.NetworkRuleSet");
+export const NetworkRuleSet = GroupedResource<NetworkRuleSet>("Azure.EventHub.NetworkRuleSet");
 
 const getRuleSet = (subscriptionId: string, resourceGroupName: string, namespaceName: string) =>
   orUndefinedIfNotFound(

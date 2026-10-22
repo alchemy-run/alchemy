@@ -2,7 +2,7 @@ import * as automation from "@distilled.cloud/azure/automation";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { accountOwnedByStage, childNuke, createChildName, sameName } from "./Common.ts";
 
 export interface ConnectionTypeField {
@@ -80,7 +81,6 @@ export interface ConnectionType extends Resource<
  * **Example:** API endpoint with a secret key
  * ```typescript
  * const apiType = yield* Azure.Automation.ConnectionType("api", {
- *   resourceGroup: group.resourceGroupName,
  *   automationAccount: account.automationAccountName,
  *   fieldDefinitions: {
  *     Endpoint: { type: "System.String" },
@@ -91,7 +91,7 @@ export interface ConnectionType extends Resource<
  *
  * @resource
  */
-export const ConnectionType = Resource<ConnectionType>("Azure.Automation.ConnectionType");
+export const ConnectionType = GroupedResource<ConnectionType>("Azure.Automation.ConnectionType");
 
 const getConnectionType = (
   subscriptionId: string,

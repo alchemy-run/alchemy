@@ -2,7 +2,7 @@ import * as ml from "@distilled.cloud/azure/machinelearningservices";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -17,6 +17,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createChildName,
   identityDiffers,
@@ -131,7 +132,6 @@ export interface OnlineEndpoint extends Resource<
  * **Example:** Key-authenticated endpoint
  * ```typescript
  * const endpoint = yield* Azure.MachineLearning.OnlineEndpoint("scoring", {
- *   resourceGroup: group.resourceGroupName,
  *   workspace: workspace.workspaceName,
  *   description: "Real-time scoring",
  * });
@@ -141,7 +141,6 @@ export interface OnlineEndpoint extends Resource<
  * **Example:** Send all traffic to a deployment (after it exists)
  * ```typescript
  * const endpoint = yield* Azure.MachineLearning.OnlineEndpoint("scoring", {
- *   resourceGroup: group.resourceGroupName,
  *   workspace: workspace.workspaceName,
  *   traffic: { blue: 100 },
  * });
@@ -149,7 +148,9 @@ export interface OnlineEndpoint extends Resource<
  *
  * @resource
  */
-export const OnlineEndpoint = Resource<OnlineEndpoint>("Azure.MachineLearning.OnlineEndpoint");
+export const OnlineEndpoint = GroupedResource<OnlineEndpoint>(
+  "Azure.MachineLearning.OnlineEndpoint",
+);
 
 const getEndpoint = (
   subscriptionId: string,

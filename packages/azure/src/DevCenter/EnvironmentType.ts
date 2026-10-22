@@ -2,7 +2,7 @@ import * as devcenter from "@distilled.cloud/azure/devcenter";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -17,6 +17,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createDevCenterName, sameArm } from "./Common.ts";
 
 export interface EnvironmentTypeProps {
@@ -74,7 +75,6 @@ export interface EnvironmentType extends Resource<
  * **Example:** A `dev` environment type
  * ```typescript
  * const dev = yield* Azure.DevCenter.EnvironmentType("dev", {
- *   resourceGroup: group.resourceGroupName,
  *   devCenter: center.devCenterName,
  *   name: "dev",
  *   displayName: "Development",
@@ -83,7 +83,7 @@ export interface EnvironmentType extends Resource<
  *
  * @resource
  */
-export const EnvironmentType = Resource<EnvironmentType>("Azure.DevCenter.EnvironmentType");
+export const EnvironmentType = GroupedResource<EnvironmentType>("Azure.DevCenter.EnvironmentType");
 
 type ObservedEnvironmentType = devcenter.GetEnvironmentTypeResponse;
 

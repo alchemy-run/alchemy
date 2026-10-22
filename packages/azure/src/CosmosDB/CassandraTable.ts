@@ -3,11 +3,12 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { ensureRegistered, ignoreNotFound, orUndefinedIfNotFound, waitUntilGone } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   canonical,
   createOptions,
@@ -124,7 +125,6 @@ export interface CassandraTable extends Resource<
  * **Example:** Table keyed by user with time-ordered rows
  * ```typescript
  * const events = yield* Azure.CosmosDB.CassandraTable("events", {
- *   resourceGroup: group.resourceGroupName,
  *   account: account.accountName,
  *   keyspace: keyspace.keyspaceName,
  *   schema: {
@@ -143,7 +143,6 @@ export interface CassandraTable extends Resource<
  * **Example:** Rows expire after a day
  * ```typescript
  * const sessions = yield* Azure.CosmosDB.CassandraTable("sessions", {
- *   resourceGroup: group.resourceGroupName,
  *   account: account.accountName,
  *   keyspace: keyspace.keyspaceName,
  *   defaultTtl: 86400,
@@ -159,7 +158,7 @@ export interface CassandraTable extends Resource<
  *
  * @resource
  */
-export const CassandraTable = Resource<CassandraTable>("Azure.CosmosDB.CassandraTable");
+export const CassandraTable = GroupedResource<CassandraTable>("Azure.CosmosDB.CassandraTable");
 
 type ObservedTable = cosmos.GetCassandraResourceCassandraTableResponse;
 

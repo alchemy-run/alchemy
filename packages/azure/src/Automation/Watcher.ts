@@ -2,7 +2,7 @@ import * as automation from "@distilled.cloud/azure/automation";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   accountOwnedByStage,
   childNuke,
@@ -88,7 +89,6 @@ export interface Watcher extends Resource<
  * **Example:** Folder watcher on a hybrid worker group
  * ```typescript
  * const watcher = yield* Azure.Automation.Watcher("folder", {
- *   resourceGroup: group.resourceGroupName,
  *   automationAccount: account.automationAccountName,
  *   scriptName: watchRunbook.runbookName,
  *   scriptRunOn: workers.hybridRunbookWorkerGroupName,
@@ -98,7 +98,7 @@ export interface Watcher extends Resource<
  *
  * @resource
  */
-export const Watcher = Resource<Watcher>("Azure.Automation.Watcher");
+export const Watcher = GroupedResource<Watcher>("Azure.Automation.Watcher");
 
 const getWatcher = (
   subscriptionId: string,

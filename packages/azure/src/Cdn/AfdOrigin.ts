@@ -2,11 +2,12 @@ import * as cdn from "@distilled.cloud/azure/cdn";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { ensureRegistered, ignoreNotFound, orUndefinedIfNotFound, waitUntilGone } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   AFD_DELETE_BUDGET,
   changedFields,
@@ -109,7 +110,6 @@ export interface AfdOrigin extends Resource<
  * **Example:** Storage static website origin
  * ```typescript
  * const origin = yield* Azure.Cdn.AfdOrigin("site", {
- *   resourceGroup: group.resourceGroupName,
  *   profile: profile.profileName,
  *   originGroup: origins.originGroupName,
  *   hostName: "mysite.z13.web.core.windows.net",
@@ -119,7 +119,6 @@ export interface AfdOrigin extends Resource<
  * **Example:** Weighted secondary origin
  * ```typescript
  * const backup = yield* Azure.Cdn.AfdOrigin("backup", {
- *   resourceGroup: group.resourceGroupName,
  *   profile: profile.profileName,
  *   originGroup: origins.originGroupName,
  *   hostName: "backup.example.com",
@@ -130,7 +129,7 @@ export interface AfdOrigin extends Resource<
  *
  * @resource
  */
-export const AfdOrigin = Resource<AfdOrigin>("Azure.Cdn.AfdOrigin");
+export const AfdOrigin = GroupedResource<AfdOrigin>("Azure.Cdn.AfdOrigin");
 
 const createOriginName = (id: string) => createAfdName(id, 50);
 

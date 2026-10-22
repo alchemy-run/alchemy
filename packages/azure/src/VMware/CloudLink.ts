@@ -2,7 +2,7 @@ import * as vmware from "@distilled.cloud/azure/vmware";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   AVS_NAMESPACE,
   CHILD_BUDGET,
@@ -72,7 +73,6 @@ export interface CloudLink extends Resource<
  * **Example:** Link two private clouds
  * ```typescript
  * yield* Azure.VMware.CloudLink("link", {
- *   resourceGroup: group.resourceGroupName,
  *   privateCloud: primary.privateCloudName,
  *   linkedCloud: secondary.privateCloudId,
  * });
@@ -80,7 +80,7 @@ export interface CloudLink extends Resource<
  *
  * @resource
  */
-export const CloudLink = Resource<CloudLink>("Azure.VMware.CloudLink");
+export const CloudLink = GroupedResource<CloudLink>("Azure.VMware.CloudLink");
 
 const createName = (id: string) => createAvsName(id, 64);
 

@@ -2,7 +2,7 @@ import * as automation from "@distilled.cloud/azure/automation";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -14,6 +14,7 @@ import {
 import { deterministicGuid } from "../Authorization/Ownership.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { accountOwnedByStage, childNuke, sameName, sameRecord } from "./Common.ts";
 
 export interface JobScheduleProps {
@@ -67,13 +68,11 @@ export interface JobSchedule extends Resource<
  * **Example:** Run a runbook nightly
  * ```typescript
  * const nightly = yield* Azure.Automation.Schedule("nightly", {
- *   resourceGroup: group.resourceGroupName,
  *   automationAccount: account.automationAccountName,
  *   startTime: "2030-01-01T02:00:00Z",
  *   frequency: "Day",
  * });
  * yield* Azure.Automation.JobSchedule("cleanup-nightly", {
- *   resourceGroup: group.resourceGroupName,
  *   automationAccount: account.automationAccountName,
  *   runbook: cleanup.runbookName,
  *   schedule: nightly.scheduleName,
@@ -83,7 +82,7 @@ export interface JobSchedule extends Resource<
  *
  * @resource
  */
-export const JobSchedule = Resource<JobSchedule>("Azure.Automation.JobSchedule");
+export const JobSchedule = GroupedResource<JobSchedule>("Azure.Automation.JobSchedule");
 
 const getJobSchedule = (
   subscriptionId: string,

@@ -3,11 +3,12 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { ensureRegistered, ignoreNotFound, orUndefinedIfNotFound, waitUntilGone } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { canonical, isOwnedChild, waitForChild, whileAccountBusy } from "./Shared.ts";
 
 export interface MongoPrivilege {
@@ -86,13 +87,11 @@ export interface MongoRoleDefinition extends Resource<
  * **Example:** Read-only role on one collection
  * ```typescript
  * const account = yield* Azure.CosmosDB.DatabaseAccount("mongo", {
- *   resourceGroup: group.resourceGroupName,
  *   kind: "MongoDB",
  *   capabilities: ["EnableServerless", "EnableMongo", "EnableMongoRoleBasedAccessControl"],
  *   serverVersion: "4.2",
  * });
  * const reader = yield* Azure.CosmosDB.MongoRoleDefinition("orders-reader", {
- *   resourceGroup: group.resourceGroupName,
  *   account: account.accountName,
  *   databaseName: "shop",
  *   privileges: [
@@ -104,7 +103,6 @@ export interface MongoRoleDefinition extends Resource<
  * **Example:** Role inheriting a built-in role
  * ```typescript
  * yield* Azure.CosmosDB.MongoRoleDefinition("shop-writer", {
- *   resourceGroup: group.resourceGroupName,
  *   account: account.accountName,
  *   databaseName: "shop",
  *   privileges: [{ resource: { db: "shop" }, actions: ["insert", "update"] }],
@@ -114,7 +112,7 @@ export interface MongoRoleDefinition extends Resource<
  *
  * @resource
  */
-export const MongoRoleDefinition = Resource<MongoRoleDefinition>(
+export const MongoRoleDefinition = GroupedResource<MongoRoleDefinition>(
   "Azure.CosmosDB.MongoRoleDefinition",
 );
 

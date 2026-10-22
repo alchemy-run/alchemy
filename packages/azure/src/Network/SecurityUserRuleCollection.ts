@@ -1,8 +1,9 @@
 import * as network from "@distilled.cloud/azure/network";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import { orUndefinedIfNotFound } from "../Arm.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { sameSet } from "./common.ts";
 import { networkProvider } from "./generic.ts";
 import { networkManagerChildName, networkManagerTags } from "./networkManagerShared.ts";
@@ -59,7 +60,6 @@ export interface SecurityUserRuleCollection extends Resource<
  * **Example:** Rules for the app group
  * ```typescript
  * const rules = yield* Azure.Network.SecurityUserRuleCollection("app", {
- *   resourceGroup: group.resourceGroupName,
  *   networkManager: manager.networkManagerName,
  *   securityUserConfiguration: users.configurationName,
  *   networkGroupIds: [app.networkGroupId],
@@ -68,7 +68,7 @@ export interface SecurityUserRuleCollection extends Resource<
  *
  * @resource
  */
-export const SecurityUserRuleCollection = Resource<SecurityUserRuleCollection>(
+export const SecurityUserRuleCollection = GroupedResource<SecurityUserRuleCollection>(
   "Azure.Network.SecurityUserRuleCollection",
 );
 

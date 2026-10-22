@@ -2,7 +2,7 @@ import * as cs from "@distilled.cloud/azure/containerservice";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import {
@@ -18,6 +18,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createChildName, getFleet, sameName, subsetMatches, whileFleetBusy } from "./Common.ts";
 
 export interface FleetManagedNamespaceProps {
@@ -99,7 +100,6 @@ export interface FleetManagedNamespace extends Resource<
  * **Example:** Namespace placed on every member
  * ```typescript
  * yield* Azure.ContainerService.FleetManagedNamespace("team-a", {
- *   resourceGroup: group.resourceGroupName,
  *   fleet: fleet.fleetName,
  *   name: "team-a",
  *   labels: { team: "a" },
@@ -114,7 +114,7 @@ export interface FleetManagedNamespace extends Resource<
  *
  * @resource
  */
-export const FleetManagedNamespace = Resource<FleetManagedNamespace>(
+export const FleetManagedNamespace = GroupedResource<FleetManagedNamespace>(
   "Azure.ContainerService.FleetManagedNamespace",
 );
 

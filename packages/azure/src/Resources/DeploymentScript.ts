@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
@@ -23,6 +23,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { sameId, sameJson } from "./Shared.ts";
 
 export interface DeploymentScriptProps {
@@ -154,7 +155,6 @@ export interface DeploymentScript extends Resource<
  * **Example:** Azure CLI script with an output
  * ```typescript
  * const script = yield* Azure.Resources.DeploymentScript("hello", {
- *   resourceGroup: group.resourceGroupName,
  *   kind: "AzureCLI",
  *   environmentVariables: { NAME: "world" },
  *   scriptContent:
@@ -167,7 +167,6 @@ export interface DeploymentScript extends Resource<
  * **Example:** Run as a user-assigned identity
  * ```typescript
  * yield* Azure.Resources.DeploymentScript("list-groups", {
- *   resourceGroup: group.resourceGroupName,
  *   kind: "AzureCLI",
  *   identity: identity.identityId,
  *   scriptContent: "az group list > $AZ_SCRIPTS_OUTPUT_PATH",
@@ -177,7 +176,9 @@ export interface DeploymentScript extends Resource<
  *
  * @resource
  */
-export const DeploymentScript = Resource<DeploymentScript>("Azure.Resources.DeploymentScript");
+export const DeploymentScript = GroupedResource<DeploymentScript>(
+  "Azure.Resources.DeploymentScript",
+);
 
 export class DeploymentScriptFailed extends Data.TaggedError(
   "Azure.Resources.DeploymentScriptFailed",

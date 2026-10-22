@@ -2,7 +2,7 @@ import * as sql from "@distilled.cloud/azure/sql";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { isServerOwnedByStack, lower } from "./common.ts";
 
 /** The setting is a singleton named `Default`. */
@@ -65,13 +66,11 @@ export interface ServerAzureADOnlyAuthentication extends Resource<
  * **Example:** Disable SQL authentication
  * ```typescript
  * const admin = yield* Azure.Sql.ServerAzureADAdministrator("admin", {
- *   resourceGroup: group.resourceGroupName,
  *   server: server.serverName,
  *   login: identity.identityName,
  *   sid: identity.clientId,
  * });
  * yield* Azure.Sql.ServerAzureADOnlyAuthentication("entra-only", {
- *   resourceGroup: group.resourceGroupName,
  *   server: admin.serverName,
  * });
  * ```
@@ -79,7 +78,6 @@ export interface ServerAzureADOnlyAuthentication extends Resource<
  * **Example:** Explicitly allow SQL authentication
  * ```typescript
  * yield* Azure.Sql.ServerAzureADOnlyAuthentication("entra-only", {
- *   resourceGroup: group.resourceGroupName,
  *   server: admin.serverName,
  *   azureADOnlyAuthentication: false,
  * });
@@ -87,7 +85,7 @@ export interface ServerAzureADOnlyAuthentication extends Resource<
  *
  * @resource
  */
-export const ServerAzureADOnlyAuthentication = Resource<ServerAzureADOnlyAuthentication>(
+export const ServerAzureADOnlyAuthentication = GroupedResource<ServerAzureADOnlyAuthentication>(
   "Azure.Sql.ServerAzureADOnlyAuthentication",
 );
 

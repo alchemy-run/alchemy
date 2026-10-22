@@ -1,8 +1,9 @@
 import * as apim from "@distilled.cloud/azure/apimanagement";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createEntityName } from "./Common.ts";
 import { entityLifecycle, serviceEntityId } from "./Entity.ts";
 
@@ -70,7 +71,6 @@ export interface WorkspaceApiRelease extends Resource<
  * **Example:** Make revision 2 current with release notes
  * ```typescript
  * yield* Azure.ApiManagement.WorkspaceApiRelease("orders-r2", {
- *   resourceGroup: group.resourceGroupName,
  *   serviceName: apim.serviceName,
  *   workspaceName: workspace.workspaceName,
  *   apiName: "orders",
@@ -81,7 +81,7 @@ export interface WorkspaceApiRelease extends Resource<
  *
  * @resource
  */
-export const WorkspaceApiRelease = Resource<WorkspaceApiRelease>(
+export const WorkspaceApiRelease = GroupedResource<WorkspaceApiRelease>(
   "Azure.ApiManagement.WorkspaceApiRelease",
 );
 

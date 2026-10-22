@@ -2,7 +2,7 @@ import * as automation from "@distilled.cloud/azure/automation";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -19,6 +19,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createAccountName, getAccount } from "./Common.ts";
 
 export type AutomationSkuName = "Free" | "Basic";
@@ -144,16 +145,12 @@ export interface AutomationAccount extends Resource<
  * ### Creating an Automation Account
  * **Example:** Basic account
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("ops");
- * const account = yield* Azure.Automation.AutomationAccount("ops", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const account = yield* Azure.Automation.AutomationAccount("ops");
  * ```
  *
  * **Example:** Account with a system-assigned identity
  * ```typescript
  * const account = yield* Azure.Automation.AutomationAccount("ops", {
- *   resourceGroup: group.resourceGroupName,
  *   identity: { type: "SystemAssigned" },
  *   disableLocalAuth: true,
  * });
@@ -161,7 +158,9 @@ export interface AutomationAccount extends Resource<
  *
  * @resource
  */
-export const AutomationAccount = Resource<AutomationAccount>("Azure.Automation.AutomationAccount");
+export const AutomationAccount = GroupedResource<AutomationAccount>(
+  "Azure.Automation.AutomationAccount",
+);
 
 const lower = (value: string | undefined) => value?.toLowerCase();
 

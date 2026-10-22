@@ -2,12 +2,13 @@ import * as securityinsights from "@distilled.cloud/azure/securityinsights";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { ensureRegistered, ignoreNotFound, orUndefinedIfNotFound, waitUntilGone } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   compact,
   deterministicGuid,
@@ -119,7 +120,7 @@ export interface SourceControl extends Resource<
  *
  * @resource
  */
-export const SourceControl = Resource<SourceControl>("Azure.SecurityInsights.SourceControl");
+export const SourceControl = GroupedResource<SourceControl>("Azure.SecurityInsights.SourceControl");
 
 const reveal = (value: string | Redacted.Redacted<string> | undefined) =>
   value === undefined || typeof value === "string" ? value : Redacted.value(value);

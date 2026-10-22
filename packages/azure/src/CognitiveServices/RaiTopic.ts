@@ -2,7 +2,7 @@ import * as cognitiveservices from "@distilled.cloud/azure/cognitiveservices";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -17,6 +17,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { CHILD_BUDGET, createChildName, sameArm, whileAccountBusy } from "./Common.ts";
 
 export interface RaiTopicProps {
@@ -87,7 +88,6 @@ export interface RaiTopic extends Resource<
  * **Example:** Topic trained from a JSONL sample blob
  * ```typescript
  * const topic = yield* Azure.CognitiveServices.RaiTopic("competitors", {
- *   resourceGroup: group.resourceGroupName,
  *   account: account.accountName,
  *   description: "Questions comparing our product with competitors",
  *   sampleBlobUrl: "https://samples.blob.core.windows.net/topics/competitors.jsonl?sv=...",
@@ -96,7 +96,7 @@ export interface RaiTopic extends Resource<
  *
  * @resource
  */
-export const RaiTopic = Resource<RaiTopic>("Azure.CognitiveServices.RaiTopic");
+export const RaiTopic = GroupedResource<RaiTopic>("Azure.CognitiveServices.RaiTopic");
 
 const getTopic = (
   subscriptionId: string,

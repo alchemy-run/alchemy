@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import {
@@ -22,6 +22,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 
 /** The infrastructure an Arc data controller runs on. */
 export type DataControllerInfrastructure =
@@ -172,7 +173,6 @@ export interface DataController extends Resource<
  * ```typescript
  * const group = yield* Azure.Resources.ResourceGroup("arc");
  * const controller = yield* Azure.ArcData.DataController("dc", {
- *   resourceGroup: group.resourceGroupName,
  *   infrastructure: "onpremises",
  *   onPremiseProperty: {
  *     id: "1c2c7f4a-5d55-4a1f-9c55-0e2b6c3b9a10",
@@ -188,7 +188,6 @@ export interface DataController extends Resource<
  * **Example:** Bind to an Arc-enabled Kubernetes custom location
  * ```typescript
  * const controller = yield* Azure.ArcData.DataController("dc", {
- *   resourceGroup: group.resourceGroupName,
  *   infrastructure: "azure",
  *   extendedLocation: { name: customLocationId },
  *   k8sRaw: dataControllerCr,
@@ -205,7 +204,7 @@ export interface DataController extends Resource<
  *
  * @resource
  */
-export const DataController = Resource<DataController>("Azure.ArcData.DataController");
+export const DataController = GroupedResource<DataController>("Azure.ArcData.DataController");
 
 type ObservedController = arcdata.GetDataControllerDataControllerResponse;
 

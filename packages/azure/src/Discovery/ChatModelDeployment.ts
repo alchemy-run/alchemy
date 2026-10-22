@@ -2,7 +2,7 @@ import * as discovery from "@distilled.cloud/azure/discovery";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -17,6 +17,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createDiscoveryName, DISCOVERY_NAMESPACE, lower, sameLocation } from "./common.ts";
 import { getWorkspace } from "./Workspace.ts";
 
@@ -99,7 +100,6 @@ export interface ChatModelDeployment extends Resource<
  * **Example:** GPT-4o deployment
  * ```typescript
  * const chat = yield* Azure.Discovery.ChatModelDeployment("gpt", {
- *   resourceGroup: group.resourceGroupName,
  *   workspace: workspace.workspaceName,
  *   modelFormat: "OpenAI",
  *   modelName: "gpt-4o",
@@ -110,7 +110,7 @@ export interface ChatModelDeployment extends Resource<
  *
  * @resource
  */
-export const ChatModelDeployment = Resource<ChatModelDeployment>(
+export const ChatModelDeployment = GroupedResource<ChatModelDeployment>(
   "Azure.Discovery.ChatModelDeployment",
 );
 

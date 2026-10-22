@@ -2,7 +2,7 @@ import * as netapp from "@distilled.cloud/azure/netapp";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -19,6 +19,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   accountLocation,
   createNetAppName,
@@ -136,7 +137,6 @@ export interface SnapshotPolicy extends Resource<
  * **Example:** Daily and weekly snapshots
  * ```typescript
  * const policy = yield* Azure.NetApp.SnapshotPolicy("nightly", {
- *   resourceGroup: group.resourceGroupName,
  *   account: account.accountName,
  *   dailySchedule: { snapshotsToKeep: 7, hour: 2, minute: 0 },
  *   weeklySchedule: { snapshotsToKeep: 4, day: "Sunday", hour: 3, minute: 0 },
@@ -147,7 +147,6 @@ export interface SnapshotPolicy extends Resource<
  * **Example:** Disable the policy
  * ```typescript
  * const policy = yield* Azure.NetApp.SnapshotPolicy("nightly", {
- *   resourceGroup: group.resourceGroupName,
  *   account: account.accountName,
  *   dailySchedule: { snapshotsToKeep: 7, hour: 2, minute: 0 },
  *   enabled: false,
@@ -156,7 +155,7 @@ export interface SnapshotPolicy extends Resource<
  *
  * @resource
  */
-export const SnapshotPolicy = Resource<SnapshotPolicy>("Azure.NetApp.SnapshotPolicy");
+export const SnapshotPolicy = GroupedResource<SnapshotPolicy>("Azure.NetApp.SnapshotPolicy");
 
 const getSnapshotPolicy = (
   subscriptionId: string,

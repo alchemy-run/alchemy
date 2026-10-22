@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -20,6 +20,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { getAccount, sameName } from "./internal.ts";
 
 export interface AccountProps {
@@ -88,10 +89,7 @@ export interface Account extends Resource<
  * ### Creating an Account
  * **Example:** Account in a resource group
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("data");
- * const account = yield* Azure.DataShare.Account("sharing", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const account = yield* Azure.DataShare.Account("sharing");
  * ```
  *
  * ### Granting the Account Access
@@ -107,7 +105,7 @@ export interface Account extends Resource<
  *
  * @resource
  */
-export const Account = Resource<Account>("Azure.DataShare.Account");
+export const Account = GroupedResource<Account>("Azure.DataShare.Account");
 
 type ObservedAccount =
   | datashare.GetAccountResponse

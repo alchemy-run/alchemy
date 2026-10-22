@@ -2,7 +2,7 @@ import * as sqlvm from "@distilled.cloud/azure/sqlvirtualmachine";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
@@ -23,6 +23,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { canonicalJson, lower, matchesObserved, nameOf, sameId, unredact } from "./common.ts";
 
 /** Domain account passwords used when the SQL VM joins a WSFC group. */
@@ -173,7 +174,6 @@ export interface SqlVirtualMachine extends Resource<
  * **Example:** Register a VM created from a SQL Server image
  * ```typescript
  * const vm = yield* Azure.Compute.VirtualMachine("sql", {
- *   resourceGroup: group.resourceGroupName,
  *   vmSize: "Standard_D2s_v5",
  *   image: {
  *     publisher: "MicrosoftSQLServer",
@@ -186,7 +186,6 @@ export interface SqlVirtualMachine extends Resource<
  *   computerName: "sqlvm",
  * });
  * const sql = yield* Azure.SqlVirtualMachine.SqlVirtualMachine("sql", {
- *   resourceGroup: group.resourceGroupName,
  *   virtualMachineId: vm.virtualMachineId,
  *   sqlServerLicenseType: "PAYG",
  * });
@@ -196,7 +195,6 @@ export interface SqlVirtualMachine extends Resource<
  * **Example:** Patching window and private connectivity
  * ```typescript
  * yield* Azure.SqlVirtualMachine.SqlVirtualMachine("sql", {
- *   resourceGroup: group.resourceGroupName,
  *   virtualMachineId: vm.virtualMachineId,
  *   sqlServerLicenseType: "AHUB",
  *   autoPatchingSettings: {
@@ -213,7 +211,7 @@ export interface SqlVirtualMachine extends Resource<
  *
  * @resource
  */
-export const SqlVirtualMachine = Resource<SqlVirtualMachine>(
+export const SqlVirtualMachine = GroupedResource<SqlVirtualMachine>(
   "Azure.SqlVirtualMachine.SqlVirtualMachine",
 );
 

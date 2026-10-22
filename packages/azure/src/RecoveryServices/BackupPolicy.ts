@@ -2,7 +2,7 @@ import * as backup from "@distilled.cloud/azure/recoveryservicesbackup";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import {
@@ -14,6 +14,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createBackupName,
   isVaultOwnedByStack,
@@ -193,11 +194,8 @@ export interface BackupPolicy extends Resource<
  * ### Azure Files
  * **Example:** Daily Azure Files backup kept for 7 days
  * ```typescript
- * const vault = yield* Azure.RecoveryServices.Vault("backup-vault", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const vault = yield* Azure.RecoveryServices.Vault("backup-vault");
  * const policy = yield* Azure.RecoveryServices.BackupPolicy("files-daily", {
- *   resourceGroup: group.resourceGroupName,
  *   vault: vault.vaultName,
  *   backupManagementType: "AzureStorage",
  *   workLoadType: "AzureFileShare",
@@ -220,7 +218,6 @@ export interface BackupPolicy extends Resource<
  * **Example:** Enhanced (V2) VM policy with a 4-hourly schedule
  * ```typescript
  * const policy = yield* Azure.RecoveryServices.BackupPolicy("vm-hourly", {
- *   resourceGroup: group.resourceGroupName,
  *   vault: vault.vaultName,
  *   backupManagementType: "AzureIaasVM",
  *   policyType: "V2",
@@ -246,7 +243,7 @@ export interface BackupPolicy extends Resource<
  *
  * @resource
  */
-export const BackupPolicy = Resource<BackupPolicy>("Azure.RecoveryServices.BackupPolicy");
+export const BackupPolicy = GroupedResource<BackupPolicy>("Azure.RecoveryServices.BackupPolicy");
 
 type Observed = backup.GetProtectionPolicyResponse;
 

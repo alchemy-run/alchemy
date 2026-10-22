@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -21,6 +21,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 
 export type LoadTestIdentityType =
   | "None"
@@ -132,7 +133,6 @@ export interface LoadTest extends Resource<
  *   location: "eastus",
  * });
  * const load = yield* Azure.LoadTesting.LoadTest("load", {
- *   resourceGroup: group.resourceGroupName,
  *   description: "API load tests",
  * });
  * ```
@@ -141,7 +141,6 @@ export interface LoadTest extends Resource<
  * **Example:** System-assigned identity for Key Vault secrets
  * ```typescript
  * const load = yield* Azure.LoadTesting.LoadTest("load", {
- *   resourceGroup: group.resourceGroupName,
  *   identity: { type: "SystemAssigned" },
  * });
  * ```
@@ -149,7 +148,6 @@ export interface LoadTest extends Resource<
  * **Example:** Customer-managed key with a user-assigned identity
  * ```typescript
  * const load = yield* Azure.LoadTesting.LoadTest("load", {
- *   resourceGroup: group.resourceGroupName,
  *   identity: {
  *     type: "UserAssigned",
  *     userAssignedIdentities: [identity.identityId],
@@ -163,7 +161,7 @@ export interface LoadTest extends Resource<
  *
  * @resource
  */
-export const LoadTest = Resource<LoadTest>("Azure.LoadTesting.LoadTest");
+export const LoadTest = GroupedResource<LoadTest>("Azure.LoadTesting.LoadTest");
 
 type ObservedLoadTest = loadtestservice.GetLoadTestResponse;
 

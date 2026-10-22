@@ -2,7 +2,7 @@ import * as signalr from "@distilled.cloud/azure/signalr";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import {
@@ -20,6 +20,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   boolString,
   createSignalRName,
@@ -299,16 +300,12 @@ export interface SignalR extends Resource<
  * ### Creating a Service
  * **Example:** Free tier service
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("app");
- * const signalR = yield* Azure.SignalR.SignalR("realtime", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const signalR = yield* Azure.SignalR.SignalR("realtime");
  * ```
  *
  * **Example:** Standard tier with two units and CORS
  * ```typescript
  * const signalR = yield* Azure.SignalR.SignalR("realtime", {
- *   resourceGroup: group.resourceGroupName,
  *   sku: "Standard_S1",
  *   capacity: 2,
  *   allowedOrigins: ["https://app.example.com"],
@@ -319,7 +316,6 @@ export interface SignalR extends Resource<
  * **Example:** Serverless service with an upstream to Azure Functions
  * ```typescript
  * const signalR = yield* Azure.SignalR.SignalR("realtime", {
- *   resourceGroup: group.resourceGroupName,
  *   serviceMode: "Serverless",
  *   upstreamTemplates: [
  *     {
@@ -334,7 +330,6 @@ export interface SignalR extends Resource<
  * **Example:** Entra ID only, with a system-assigned identity
  * ```typescript
  * const signalR = yield* Azure.SignalR.SignalR("realtime", {
- *   resourceGroup: group.resourceGroupName,
  *   sku: "Standard_S1",
  *   disableLocalAuth: true,
  *   identity: { type: "SystemAssigned" },
@@ -343,7 +338,7 @@ export interface SignalR extends Resource<
  *
  * @resource
  */
-export const SignalR = Resource<SignalR>("Azure.SignalR.SignalR");
+export const SignalR = GroupedResource<SignalR>("Azure.SignalR.SignalR");
 
 type Observed = signalr.GetSignalRResponse;
 

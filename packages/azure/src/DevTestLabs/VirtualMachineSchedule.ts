@@ -2,7 +2,7 @@ import * as devtestlabs from "@distilled.cloud/azure/devtestlabs";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -16,6 +16,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   DEVTESTLAB_NAMESPACE,
   diverges,
@@ -78,7 +79,6 @@ export interface VirtualMachineSchedule extends Resource<
  * **Example:** Shut one lab VM down at 22:00 UTC
  * ```typescript
  * const shutdown = yield* Azure.DevTestLabs.VirtualMachineSchedule("vm-off", {
- *   resourceGroup: group.resourceGroupName,
  *   lab: lab.labName,
  *   virtualMachine: vm.virtualMachineName,
  *   dailyRecurrence: { time: "2200" },
@@ -87,7 +87,7 @@ export interface VirtualMachineSchedule extends Resource<
  *
  * @resource
  */
-export const VirtualMachineSchedule = Resource<VirtualMachineSchedule>(
+export const VirtualMachineSchedule = GroupedResource<VirtualMachineSchedule>(
   "Azure.DevTestLabs.VirtualMachineSchedule",
 );
 

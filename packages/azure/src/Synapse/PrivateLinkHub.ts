@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -21,6 +21,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { lower } from "./common.ts";
 
 export interface PrivateLinkHubProps {
@@ -73,22 +74,19 @@ export interface PrivateLinkHub extends Resource<
  * ### Creating a Hub
  * **Example:** Private Link Hub
  * ```typescript
- * const hub = yield* Azure.Synapse.PrivateLinkHub("studio", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const hub = yield* Azure.Synapse.PrivateLinkHub("studio");
  * ```
  *
  * **Example:** Hub with tags
  * ```typescript
  * const hub = yield* Azure.Synapse.PrivateLinkHub("studio", {
- *   resourceGroup: group.resourceGroupName,
  *   tags: { team: "data" },
  * });
  * ```
  *
  * @resource
  */
-export const PrivateLinkHub = Resource<PrivateLinkHub>("Azure.Synapse.PrivateLinkHub");
+export const PrivateLinkHub = GroupedResource<PrivateLinkHub>("Azure.Synapse.PrivateLinkHub");
 
 type ObservedHub = synapse.GetPrivateLinkHubResponse;
 

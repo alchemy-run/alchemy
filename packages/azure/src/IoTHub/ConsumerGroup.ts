@@ -2,7 +2,7 @@ import * as iothub from "@distilled.cloud/azure/iothub";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createChildName, iotHubOwnedByStage } from "./Common.ts";
 
 export interface ConsumerGroupProps {
@@ -70,11 +71,8 @@ export interface ConsumerGroup extends Resource<
  * ### Creating a Consumer Group
  * **Example:** One consumer group per reading service
  * ```typescript
- * const hub = yield* Azure.IoTHub.IotHub("devices", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const hub = yield* Azure.IoTHub.IotHub("devices");
  * const analytics = yield* Azure.IoTHub.ConsumerGroup("analytics", {
- *   resourceGroup: group.resourceGroupName,
  *   iotHub: hub.iotHubName,
  * });
  * ```
@@ -82,7 +80,6 @@ export interface ConsumerGroup extends Resource<
  * **Example:** Explicit name
  * ```typescript
  * const alerts = yield* Azure.IoTHub.ConsumerGroup("alerts", {
- *   resourceGroup: group.resourceGroupName,
  *   iotHub: hub.iotHubName,
  *   name: "alerts",
  * });
@@ -90,7 +87,7 @@ export interface ConsumerGroup extends Resource<
  *
  * @resource
  */
-export const ConsumerGroup = Resource<ConsumerGroup>("Azure.IoTHub.ConsumerGroup");
+export const ConsumerGroup = GroupedResource<ConsumerGroup>("Azure.IoTHub.ConsumerGroup");
 
 const getConsumerGroup = (
   subscriptionId: string,

@@ -2,7 +2,7 @@ import * as keyvault from "@distilled.cloud/azure/keyvault";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -19,6 +19,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createVaultName, getDeletedVault, getVault, lower } from "./common.ts";
 
 export type VaultSkuName = "standard" | "premium";
@@ -205,16 +206,12 @@ export interface Vault extends Resource<
  * ### Creating a Vault
  * **Example:** RBAC-authorized vault
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("app");
- * const vault = yield* Azure.KeyVault.Vault("secrets", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const vault = yield* Azure.KeyVault.Vault("secrets");
  * ```
  *
  * **Example:** Premium vault with short soft-delete retention
  * ```typescript
  * const vault = yield* Azure.KeyVault.Vault("hsm-keys", {
- *   resourceGroup: group.resourceGroupName,
  *   sku: "premium",
  *   softDeleteRetentionInDays: 7,
  * });
@@ -224,7 +221,6 @@ export interface Vault extends Resource<
  * **Example:** Vault with inline access policies
  * ```typescript
  * const vault = yield* Azure.KeyVault.Vault("legacy", {
- *   resourceGroup: group.resourceGroupName,
  *   enableRbacAuthorization: false,
  *   accessPolicies: [
  *     { objectId: identity.principalId, permissions: { secrets: ["get", "list"] } },
@@ -236,14 +232,13 @@ export interface Vault extends Resource<
  * **Example:** Deny public traffic except one IP range
  * ```typescript
  * const vault = yield* Azure.KeyVault.Vault("locked", {
- *   resourceGroup: group.resourceGroupName,
  *   networkAcls: { defaultAction: "Deny", ipRules: ["203.0.113.0/24"] },
  * });
  * ```
  *
  * @resource
  */
-export const Vault = Resource<Vault>("Azure.KeyVault.Vault");
+export const Vault = GroupedResource<Vault>("Azure.KeyVault.Vault");
 
 type ObservedVault = keyvault.GetVaultResponse;
 

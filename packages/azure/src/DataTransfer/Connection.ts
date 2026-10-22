@@ -2,7 +2,7 @@ import * as adt from "@distilled.cloud/azure/azuredatatransfer";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -20,6 +20,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createDataTransferName,
   type DataTransferIdentity,
@@ -142,9 +143,7 @@ export interface Connection extends Resource<
  * ### Requesting a Connection
  * **Example:** Send data through a pipeline
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("transfer");
  * const connection = yield* Azure.DataTransfer.Connection("outbound", {
- *   resourceGroup: group.resourceGroupName,
  *   pipeline: "mission-pipeline",
  *   direction: "Send",
  *   justification: "Nightly telemetry export",
@@ -157,7 +156,6 @@ export interface Connection extends Resource<
  * **Example:** Tags are updated in place
  * ```typescript
  * const connection = yield* Azure.DataTransfer.Connection("outbound", {
- *   resourceGroup: group.resourceGroupName,
  *   pipeline: "mission-pipeline",
  *   direction: "Send",
  *   tags: { team: "data" },
@@ -166,7 +164,7 @@ export interface Connection extends Resource<
  *
  * @resource
  */
-export const Connection = Resource<Connection>("Azure.DataTransfer.Connection");
+export const Connection = GroupedResource<Connection>("Azure.DataTransfer.Connection");
 
 type ObservedConnection = adt.GetConnectionResponse;
 

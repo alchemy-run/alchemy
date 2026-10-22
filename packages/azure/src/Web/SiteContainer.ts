@@ -3,12 +3,13 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
 import { ensureRegistered, ignoreNotFound, orUndefinedIfNotFound, waitUntilGone } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { lower, matchesDesired, reveal, siteWhere } from "./common.ts";
 
 /** A volume mounted into a site container. */
@@ -128,12 +129,10 @@ export interface SiteContainer extends Resource<
  * **Example:** Public image as the main container
  * ```typescript
  * const app = yield* Azure.Web.WebApp("site", {
- *   resourceGroup: group.resourceGroupName,
  *   serverFarmId: plan.appServicePlanId,
  *   siteConfig: { linuxFxVersion: "SITECONTAINERS" },
  * });
  * const main = yield* Azure.Web.SiteContainer("main", {
- *   resourceGroup: group.resourceGroupName,
  *   siteName: app.siteName,
  *   image: "mcr.microsoft.com/appsvc/staticsite:latest",
  *   targetPort: "80",
@@ -145,7 +144,6 @@ export interface SiteContainer extends Resource<
  * **Example:** OpenTelemetry collector sidecar
  * ```typescript
  * const collector = yield* Azure.Web.SiteContainer("otel", {
- *   resourceGroup: group.resourceGroupName,
  *   siteName: app.siteName,
  *   image: "otel/opentelemetry-collector:latest",
  *   targetPort: "4317",
@@ -156,7 +154,7 @@ export interface SiteContainer extends Resource<
  *
  * @resource
  */
-export const SiteContainer = Resource<SiteContainer>("Azure.Web.SiteContainer");
+export const SiteContainer = GroupedResource<SiteContainer>("Azure.Web.SiteContainer");
 
 const createContainerName = (id: string) =>
   createPhysicalName({ id, maxLength: 32, lowercase: true });

@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import {
@@ -22,6 +22,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 
 export type ConfigurationStoreSku = "Free" | "Developer" | "Standard" | "Premium";
 
@@ -134,16 +135,12 @@ export interface ConfigurationStore extends Resource<
  * ### Creating a Store
  * **Example:** Free store
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("app");
- * const store = yield* Azure.AppConfiguration.ConfigurationStore("config", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const store = yield* Azure.AppConfiguration.ConfigurationStore("config");
  * ```
  *
  * **Example:** Standard store that only accepts Entra ID
  * ```typescript
  * const store = yield* Azure.AppConfiguration.ConfigurationStore("config", {
- *   resourceGroup: group.resourceGroupName,
  *   sku: "Standard",
  *   disableLocalAuth: true,
  *   dataPlaneProxy: { authenticationMode: "Pass-through" },
@@ -152,7 +149,7 @@ export interface ConfigurationStore extends Resource<
  *
  * @resource
  */
-export const ConfigurationStore = Resource<ConfigurationStore>(
+export const ConfigurationStore = GroupedResource<ConfigurationStore>(
   "Azure.AppConfiguration.ConfigurationStore",
 );
 

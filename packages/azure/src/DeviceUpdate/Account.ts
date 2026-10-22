@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import {
@@ -22,6 +22,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 
 export type DeviceUpdateSku = "Free" | "Standard";
 
@@ -129,16 +130,12 @@ export interface Account extends Resource<
  * ### Creating an Account
  * **Example:** Standard account
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("app");
- * const account = yield* Azure.DeviceUpdate.Account("updates", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const account = yield* Azure.DeviceUpdate.Account("updates");
  * ```
  *
  * **Example:** Free account (one per subscription, 10 devices)
  * ```typescript
  * const account = yield* Azure.DeviceUpdate.Account("updates", {
- *   resourceGroup: group.resourceGroupName,
  *   sku: "Free",
  * });
  * ```
@@ -147,7 +144,6 @@ export interface Account extends Resource<
  * **Example:** Private account with a system-assigned identity
  * ```typescript
  * const account = yield* Azure.DeviceUpdate.Account("updates", {
- *   resourceGroup: group.resourceGroupName,
  *   publicNetworkAccess: "Disabled",
  *   identity: { type: "SystemAssigned" },
  * });
@@ -155,7 +151,7 @@ export interface Account extends Resource<
  *
  * @resource
  */
-export const Account = Resource<Account>("Azure.DeviceUpdate.Account");
+export const Account = GroupedResource<Account>("Azure.DeviceUpdate.Account");
 
 type ObservedAccount = deviceupdate.GetAccountResponse;
 

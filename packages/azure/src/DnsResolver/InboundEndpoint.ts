@@ -2,7 +2,7 @@ import * as dnsresolver from "@distilled.cloud/azure/dnsresolver";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -20,6 +20,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createDnsResolverName, ENDPOINT_BUDGET, sameArm } from "./Common.ts";
 
 export type PrivateIpAllocationMethod = "Static" | "Dynamic";
@@ -126,7 +127,6 @@ export interface InboundEndpoint extends Resource<
  * **Example:** Endpoint with a dynamic private IP
  * ```typescript
  * const inbound = yield* Azure.DnsResolver.InboundEndpoint("inbound", {
- *   resourceGroup: group.resourceGroupName,
  *   dnsResolver: resolver.dnsResolverName,
  *   ipConfigurations: [{ subnetId: inboundSubnetId }],
  * });
@@ -136,7 +136,6 @@ export interface InboundEndpoint extends Resource<
  * **Example:** Endpoint with a static private IP
  * ```typescript
  * const inbound = yield* Azure.DnsResolver.InboundEndpoint("inbound", {
- *   resourceGroup: group.resourceGroupName,
  *   dnsResolver: resolver.dnsResolverName,
  *   ipConfigurations: [
  *     {
@@ -150,7 +149,9 @@ export interface InboundEndpoint extends Resource<
  *
  * @resource
  */
-export const InboundEndpoint = Resource<InboundEndpoint>("Azure.DnsResolver.InboundEndpoint");
+export const InboundEndpoint = GroupedResource<InboundEndpoint>(
+  "Azure.DnsResolver.InboundEndpoint",
+);
 
 const getEndpoint = (
   subscriptionId: string,

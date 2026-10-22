@@ -1,8 +1,9 @@
 import * as network from "@distilled.cloud/azure/network";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import { orUndefinedIfNotFound } from "../Arm.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { networkProvider } from "./generic.ts";
 import { networkManagerChildName, networkManagerTags } from "./networkManagerShared.ts";
 
@@ -82,7 +83,6 @@ export interface RoutingRule extends Resource<
  * **Example:** Default route through a firewall
  * ```typescript
  * yield* Azure.Network.RoutingRule("default", {
- *   resourceGroup: group.resourceGroupName,
  *   networkManager: manager.networkManagerName,
  *   routingConfiguration: routing.configurationName,
  *   ruleCollection: routes.ruleCollectionName,
@@ -93,7 +93,7 @@ export interface RoutingRule extends Resource<
  *
  * @resource
  */
-export const RoutingRule = Resource<RoutingRule>("Azure.Network.RoutingRule");
+export const RoutingRule = GroupedResource<RoutingRule>("Azure.Network.RoutingRule");
 
 export const RoutingRuleProvider = () =>
   Provider.succeed(

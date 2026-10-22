@@ -2,7 +2,7 @@ import * as servicebus from "@distilled.cloud/azure/servicebus";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
 import {
@@ -14,6 +14,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   type AccessRight,
   createEntityName,
@@ -88,11 +89,9 @@ export interface TopicAuthorizationRule extends Resource<
  * **Example:** Send-only connection string for one topic
  * ```typescript
  * const events = yield* Azure.ServiceBus.Topic("events", {
- *   resourceGroup: group.resourceGroupName,
  *   namespace: bus.namespaceName,
  * });
  * const publisher = yield* Azure.ServiceBus.TopicAuthorizationRule("publisher", {
- *   resourceGroup: group.resourceGroupName,
  *   namespace: bus.namespaceName,
  *   topic: events.topicName,
  *   rights: ["Send"],
@@ -103,7 +102,6 @@ export interface TopicAuthorizationRule extends Resource<
  * **Example:** Manage rule (implies Listen and Send)
  * ```typescript
  * const admin = yield* Azure.ServiceBus.TopicAuthorizationRule("admin", {
- *   resourceGroup: group.resourceGroupName,
  *   namespace: bus.namespaceName,
  *   topic: events.topicName,
  *   rights: ["Manage"],
@@ -112,7 +110,7 @@ export interface TopicAuthorizationRule extends Resource<
  *
  * @resource
  */
-export const TopicAuthorizationRule = Resource<TopicAuthorizationRule>(
+export const TopicAuthorizationRule = GroupedResource<TopicAuthorizationRule>(
   "Azure.ServiceBus.TopicAuthorizationRule",
 );
 

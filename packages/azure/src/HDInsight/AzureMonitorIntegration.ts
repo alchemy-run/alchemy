@@ -2,7 +2,7 @@ import * as hdinsight from "@distilled.cloud/azure/hdinsight";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import {
@@ -14,6 +14,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { canonical, clusterOwnedByStage, lower, reveal } from "./Common.ts";
 
 export type AzureMonitorSelectedConfigurations = hdinsight.AzureMonitorSelectedConfigurations;
@@ -69,7 +70,6 @@ export interface AzureMonitorIntegration extends Resource<
  * **Example:** Send cluster logs to a workspace
  * ```typescript
  * const monitor = yield* Azure.HDInsight.AzureMonitorIntegration("monitor", {
- *   resourceGroup: group.resourceGroupName,
  *   cluster: cluster.clusterName,
  *   workspaceId: workspace.customerId,
  *   primaryKey: workspaceKey,
@@ -80,7 +80,6 @@ export interface AzureMonitorIntegration extends Resource<
  * **Example:** Collect only selected tables
  * ```typescript
  * const monitor = yield* Azure.HDInsight.AzureMonitorIntegration("monitor", {
- *   resourceGroup: group.resourceGroupName,
  *   cluster: cluster.clusterName,
  *   workspaceId: workspace.customerId,
  *   primaryKey: workspaceKey,
@@ -93,7 +92,7 @@ export interface AzureMonitorIntegration extends Resource<
  *
  * @resource
  */
-export const AzureMonitorIntegration = Resource<AzureMonitorIntegration>(
+export const AzureMonitorIntegration = GroupedResource<AzureMonitorIntegration>(
   "Azure.HDInsight.AzureMonitorIntegration",
 );
 

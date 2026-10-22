@@ -2,7 +2,7 @@ import * as storage from "@distilled.cloud/azure/storage";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { isAccountOwnedByStack } from "./StorageOwnership.ts";
 
 /** Which blobs or containers an inventory rule reports on. */
@@ -113,15 +114,11 @@ export interface BlobInventoryPolicy extends Resource<
  * ### Inventory Reports
  * **Example:** Daily CSV report of block blobs
  * ```typescript
- * const account = yield* Azure.Storage.StorageAccount("data", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const account = yield* Azure.Storage.StorageAccount("data");
  * const reports = yield* Azure.Storage.BlobContainer("reports", {
- *   resourceGroup: group.resourceGroupName,
  *   storageAccount: account.storageAccountName,
  * });
  * yield* Azure.Storage.BlobInventoryPolicy("inventory", {
- *   resourceGroup: group.resourceGroupName,
  *   storageAccount: account.storageAccountName,
  *   rules: [
  *     {
@@ -137,7 +134,6 @@ export interface BlobInventoryPolicy extends Resource<
  * **Example:** Weekly Parquet report of containers
  * ```typescript
  * yield* Azure.Storage.BlobInventoryPolicy("inventory", {
- *   resourceGroup: group.resourceGroupName,
  *   storageAccount: account.storageAccountName,
  *   rules: [
  *     {
@@ -154,7 +150,7 @@ export interface BlobInventoryPolicy extends Resource<
  *
  * @resource
  */
-export const BlobInventoryPolicy = Resource<BlobInventoryPolicy>(
+export const BlobInventoryPolicy = GroupedResource<BlobInventoryPolicy>(
   "Azure.Storage.BlobInventoryPolicy",
 );
 

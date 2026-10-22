@@ -2,7 +2,7 @@ import * as storagemover from "@distilled.cloud/azure/storagemover";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createMoverName,
   DELETE_BUDGET,
@@ -149,7 +150,6 @@ export interface JobDefinition extends Resource<
  * **Example:** Copy an NFS share into a blob container
  * ```typescript
  * const job = yield* Azure.StorageMover.JobDefinition("copy-data", {
- *   resourceGroup: group.resourceGroupName,
  *   storageMover: mover.storageMoverName,
  *   project: project.projectName,
  *   copyMode: "Additive",
@@ -162,7 +162,6 @@ export interface JobDefinition extends Resource<
  * **Example:** Mirror nightly with checksum validation
  * ```typescript
  * const job = yield* Azure.StorageMover.JobDefinition("nightly", {
- *   resourceGroup: group.resourceGroupName,
  *   storageMover: mover.storageMoverName,
  *   project: project.projectName,
  *   copyMode: "Mirror",
@@ -180,7 +179,7 @@ export interface JobDefinition extends Resource<
  *
  * @resource
  */
-export const JobDefinition = Resource<JobDefinition>("Azure.StorageMover.JobDefinition");
+export const JobDefinition = GroupedResource<JobDefinition>("Azure.StorageMover.JobDefinition");
 
 type ObservedJob = storagemover.GetJobDefinitionResponse;
 

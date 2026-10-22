@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -16,6 +16,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   desiredMetadata,
   GLOBAL,
@@ -104,7 +105,6 @@ export interface VirtualNetworkLink extends Resource<
  * **Example:** Resolution-only link
  * ```typescript
  * const link = yield* Azure.PrivateDns.VirtualNetworkLink("hub", {
- *   resourceGroup: group.resourceGroupName,
  *   privateZoneName: zone.privateZoneName,
  *   virtualNetworkId: vnet.virtualNetworkId,
  * });
@@ -114,7 +114,6 @@ export interface VirtualNetworkLink extends Resource<
  * **Example:** Register VM records in the zone
  * ```typescript
  * yield* Azure.PrivateDns.VirtualNetworkLink("workloads", {
- *   resourceGroup: group.resourceGroupName,
  *   privateZoneName: zone.privateZoneName,
  *   virtualNetworkId: vnet.virtualNetworkId,
  *   registrationEnabled: true,
@@ -125,7 +124,6 @@ export interface VirtualNetworkLink extends Resource<
  * **Example:** Fall back to public DNS for unknown names
  * ```typescript
  * yield* Azure.PrivateDns.VirtualNetworkLink("blob", {
- *   resourceGroup: group.resourceGroupName,
  *   privateZoneName: blobZone.privateZoneName,
  *   virtualNetworkId: vnet.virtualNetworkId,
  *   resolutionPolicy: "NxDomainRedirect",
@@ -134,7 +132,7 @@ export interface VirtualNetworkLink extends Resource<
  *
  * @resource
  */
-export const VirtualNetworkLink = Resource<VirtualNetworkLink>(
+export const VirtualNetworkLink = GroupedResource<VirtualNetworkLink>(
   "Azure.PrivateDns.VirtualNetworkLink",
 );
 

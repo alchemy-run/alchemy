@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -21,6 +21,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   HCI_NAMESPACE,
   type HciExtendedLocation,
@@ -107,7 +108,6 @@ export interface LogicalNetwork extends Resource<
  * **Example:** DHCP network on a virtual switch
  * ```typescript
  * const lnet = yield* Azure.AzureStackHCI.LogicalNetwork("lan", {
- *   resourceGroup: group.resourceGroupName,
  *   extendedLocation: { name: customLocationId },
  *   vmSwitchName: "ConvergedSwitch(management_compute_storage)",
  *   subnets: [{ name: "lan", properties: { ipAllocationMethod: "Dynamic" } }],
@@ -116,7 +116,7 @@ export interface LogicalNetwork extends Resource<
  *
  * @resource
  */
-export const LogicalNetwork = Resource<LogicalNetwork>("Azure.AzureStackHCI.LogicalNetwork");
+export const LogicalNetwork = GroupedResource<LogicalNetwork>("Azure.AzureStackHCI.LogicalNetwork");
 
 const SPEC_KEYS = ["vmSwitchName", "subnets", "dhcpOptions"] as const;
 

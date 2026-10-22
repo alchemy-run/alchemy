@@ -2,7 +2,7 @@ import * as migrate from "@distilled.cloud/azure/migrate";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -20,6 +20,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { migrateName, settingsDiffer } from "./Common.ts";
 
 export interface AssessmentProjectProps {
@@ -103,7 +104,6 @@ export interface AssessmentProject extends Resource<
  *   location: "centralus",
  * });
  * const project = yield* Azure.Migrate.AssessmentProject("assess", {
- *   resourceGroup: group.resourceGroupName,
  *   location: "centralus",
  * });
  * ```
@@ -112,7 +112,6 @@ export interface AssessmentProject extends Resource<
  * **Example:** Project with user tags
  * ```typescript
  * const project = yield* Azure.Migrate.AssessmentProject("assess", {
- *   resourceGroup: group.resourceGroupName,
  *   location: "centralus",
  *   tags: { team: "migration" },
  * });
@@ -120,7 +119,9 @@ export interface AssessmentProject extends Resource<
  *
  * @resource
  */
-export const AssessmentProject = Resource<AssessmentProject>("Azure.Migrate.AssessmentProject");
+export const AssessmentProject = GroupedResource<AssessmentProject>(
+  "Azure.Migrate.AssessmentProject",
+);
 
 // The service answers a PUT with a 500 InternalServerError when the project
 // name is long and the resource group name is too (a 60-char name under a

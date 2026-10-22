@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -21,6 +21,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 
 /** Blob operation a storage task performs on a matching object. */
 export type StorageTaskOperationName =
@@ -176,9 +177,7 @@ export interface StorageTask extends Resource<
  * ### Creating a Storage Task
  * **Example:** Move hot blobs to the cool tier
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("app");
  * const task = yield* Azure.StorageActions.StorageTask("tiering", {
- *   resourceGroup: group.resourceGroupName,
  *   description: "Move hot blobs to cool",
  *   action: {
  *     if: {
@@ -192,7 +191,6 @@ export interface StorageTask extends Resource<
  * **Example:** Delete temporary blobs, tag everything else
  * ```typescript
  * const task = yield* Azure.StorageActions.StorageTask("cleanup", {
- *   resourceGroup: group.resourceGroupName,
  *   action: {
  *     if: {
  *       condition: "[[endsWith(Name, '.tmp')]]",
@@ -220,7 +218,7 @@ export interface StorageTask extends Resource<
  *
  * @resource
  */
-export const StorageTask = Resource<StorageTask>("Azure.StorageActions.StorageTask");
+export const StorageTask = GroupedResource<StorageTask>("Azure.StorageActions.StorageTask");
 
 type ObservedTask = storageactions.GetStorageTaskResponse;
 

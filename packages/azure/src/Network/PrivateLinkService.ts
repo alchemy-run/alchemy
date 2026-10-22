@@ -1,8 +1,9 @@
 import * as network from "@distilled.cloud/azure/network";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import { orUndefinedIfNotFound, userTags } from "../Arm.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { sameId, sameSet } from "./common.ts";
 import { idsOf, networkProvider } from "./generic.ts";
 
@@ -89,7 +90,6 @@ export interface PrivateLinkService extends Resource<
  * **Example:** Expose an internal load balancer
  * ```typescript
  * const service = yield* Azure.Network.PrivateLinkService("api", {
- *   resourceGroup: group.resourceGroupName,
  *   loadBalancerFrontendIpConfigurationIds: [
  *     Output.interpolate`${lb.loadBalancerId}/frontendIPConfigurations/internal`,
  *   ],
@@ -100,7 +100,9 @@ export interface PrivateLinkService extends Resource<
  *
  * @resource
  */
-export const PrivateLinkService = Resource<PrivateLinkService>("Azure.Network.PrivateLinkService");
+export const PrivateLinkService = GroupedResource<PrivateLinkService>(
+  "Azure.Network.PrivateLinkService",
+);
 
 export const PrivateLinkServiceProvider = () =>
   Provider.succeed(

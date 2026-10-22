@@ -2,11 +2,12 @@ import * as datashare from "@distilled.cloud/azure/datashare";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { ensureRegistered, ignoreNotFound, orUndefinedIfNotFound, waitUntilGone } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { accountOwnedByStack, createChildName, immutableChanged } from "./internal.ts";
 
 export interface InvitationProps {
@@ -85,7 +86,6 @@ export interface Invitation extends Resource<
  * **Example:** Invite by email
  * ```typescript
  * yield* Azure.DataShare.Invitation("partner", {
- *   resourceGroup: group.resourceGroupName,
  *   account: account.accountName,
  *   share: share.shareName,
  *   targetEmail: "data@partner.example",
@@ -95,7 +95,6 @@ export interface Invitation extends Resource<
  * **Example:** Invite a service principal without email
  * ```typescript
  * const invitation = yield* Azure.DataShare.Invitation("pipeline", {
- *   resourceGroup: group.resourceGroupName,
  *   account: account.accountName,
  *   share: share.shareName,
  *   targetActiveDirectoryId: tenantId,
@@ -105,7 +104,7 @@ export interface Invitation extends Resource<
  *
  * @resource
  */
-export const Invitation = Resource<Invitation>("Azure.DataShare.Invitation");
+export const Invitation = GroupedResource<Invitation>("Azure.DataShare.Invitation");
 
 type ObservedInvitation = datashare.GetInvitationResponse | datashare.CreateInvitationResponse;
 

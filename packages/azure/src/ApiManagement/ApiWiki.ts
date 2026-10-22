@@ -1,8 +1,9 @@
 import * as apim from "@distilled.cloud/azure/apimanagement";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { entityLifecycle } from "./Entity.ts";
 
 export interface ApiWikiProps {
@@ -50,13 +51,11 @@ export interface ApiWiki extends Resource<
  * **Example:** Show a getting-started page with an API
  * ```typescript
  * const page = yield* Azure.ApiManagement.Documentation("getting-started", {
- *   resourceGroup: group.resourceGroupName,
  *   serviceName: apim.serviceName,
  *   title: "Getting started",
  *   content: "# Getting started\nCall `GET /orders`.",
  * });
  * yield* Azure.ApiManagement.ApiWiki("orders-wiki", {
- *   resourceGroup: group.resourceGroupName,
  *   serviceName: apim.serviceName,
  *   apiName: api.apiName,
  *   documents: [page.documentationName],
@@ -65,7 +64,7 @@ export interface ApiWiki extends Resource<
  *
  * @resource
  */
-export const ApiWiki = Resource<ApiWiki>("Azure.ApiManagement.ApiWiki");
+export const ApiWiki = GroupedResource<ApiWiki>("Azure.ApiManagement.ApiWiki");
 
 interface Key {
   resourceGroup: string;

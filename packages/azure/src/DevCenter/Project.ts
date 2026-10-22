@@ -2,7 +2,7 @@ import * as devcenter from "@distilled.cloud/azure/devcenter";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import {
@@ -20,6 +20,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   containsValue,
   createDevCenterName,
@@ -115,11 +116,8 @@ export interface Project extends Resource<
  * ### Creating a Project
  * **Example:** Project in a dev center
  * ```typescript
- * const center = yield* Azure.DevCenter.DevCenter("center", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const center = yield* Azure.DevCenter.DevCenter("center");
  * const project = yield* Azure.DevCenter.Project("team", {
- *   resourceGroup: group.resourceGroupName,
  *   devCenterId: center.devCenterId,
  *   description: "Team A",
  * });
@@ -129,7 +127,6 @@ export interface Project extends Resource<
  * **Example:** Cap dev boxes per developer
  * ```typescript
  * const project = yield* Azure.DevCenter.Project("team", {
- *   resourceGroup: group.resourceGroupName,
  *   devCenterId: center.devCenterId,
  *   maxDevBoxesPerUser: 2,
  * });
@@ -137,7 +134,7 @@ export interface Project extends Resource<
  *
  * @resource
  */
-export const Project = Resource<Project>("Azure.DevCenter.Project");
+export const Project = GroupedResource<Project>("Azure.DevCenter.Project");
 
 type ObservedProject = devcenter.GetProjectResponse;
 

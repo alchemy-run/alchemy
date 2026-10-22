@@ -2,7 +2,7 @@ import * as storage from "@distilled.cloud/azure/storage";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { isAccountOwnedByStack } from "./StorageOwnership.ts";
 
 export type LifecycleRuleActions = storage.ManagementPolicyAction;
@@ -82,11 +83,8 @@ export interface ManagementPolicy extends Resource<
  * ### Lifecycle Rules
  * **Example:** Delete logs after 30 days
  * ```typescript
- * const account = yield* Azure.Storage.StorageAccount("logs", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const account = yield* Azure.Storage.StorageAccount("logs");
  * yield* Azure.Storage.ManagementPolicy("logs-lifecycle", {
- *   resourceGroup: group.resourceGroupName,
  *   storageAccount: account.storageAccountName,
  *   rules: [
  *     {
@@ -103,7 +101,6 @@ export interface ManagementPolicy extends Resource<
  * **Example:** Tier to cool, then archive
  * ```typescript
  * yield* Azure.Storage.ManagementPolicy("archive-lifecycle", {
- *   resourceGroup: group.resourceGroupName,
  *   storageAccount: account.storageAccountName,
  *   rules: [
  *     {
@@ -122,7 +119,7 @@ export interface ManagementPolicy extends Resource<
  *
  * @resource
  */
-export const ManagementPolicy = Resource<ManagementPolicy>("Azure.Storage.ManagementPolicy");
+export const ManagementPolicy = GroupedResource<ManagementPolicy>("Azure.Storage.ManagementPolicy");
 
 const POLICY_NAME = "default";
 

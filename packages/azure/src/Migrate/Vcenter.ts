@@ -2,7 +2,7 @@ import * as migrate from "@distilled.cloud/azure/migrate";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { migrateName, ownedByStage, settingsDiffer } from "./Common.ts";
 import { getVmwareSite } from "./VmwareSite.ts";
 
@@ -79,7 +80,6 @@ export interface Vcenter extends Resource<
  * **Example:** vCenter discovered by an appliance
  * ```typescript
  * const vcenter = yield* Azure.Migrate.Vcenter("vcenter", {
- *   resourceGroup: group.resourceGroupName,
  *   vmwareSite: site.siteName,
  *   fqdn: "vcenter.contoso.local",
  *   port: "443",
@@ -89,7 +89,7 @@ export interface Vcenter extends Resource<
  *
  * @resource
  */
-export const Vcenter = Resource<Vcenter>("Azure.Migrate.Vcenter");
+export const Vcenter = GroupedResource<Vcenter>("Azure.Migrate.Vcenter");
 
 const getVcenter = (
   subscriptionId: string,

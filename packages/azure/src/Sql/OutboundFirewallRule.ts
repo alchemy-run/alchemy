@@ -2,7 +2,7 @@ import * as sql from "@distilled.cloud/azure/sql";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { isServerOwnedByStack, lower } from "./common.ts";
 import { serverPath, type ServerScope } from "./setting.ts";
 
@@ -63,13 +64,11 @@ export interface OutboundFirewallRule extends Resource<
  * **Example:** Allow a storage account
  * ```typescript
  * const server = yield* Azure.Sql.Server("db", {
- *   resourceGroup: group.resourceGroupName,
  *   administratorLogin: "sqladmin",
  *   administratorLoginPassword: password,
  *   restrictOutboundNetworkAccess: "Enabled",
  * });
  * yield* Azure.Sql.OutboundFirewallRule("audit-storage", {
- *   resourceGroup: group.resourceGroupName,
  *   server: server.serverName,
  *   fqdn: "myauditlogs.blob.core.windows.net",
  * });
@@ -77,7 +76,7 @@ export interface OutboundFirewallRule extends Resource<
  *
  * @resource
  */
-export const OutboundFirewallRule = Resource<OutboundFirewallRule>(
+export const OutboundFirewallRule = GroupedResource<OutboundFirewallRule>(
   "Azure.Sql.OutboundFirewallRule",
 );
 

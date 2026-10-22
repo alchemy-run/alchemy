@@ -2,7 +2,7 @@ import * as hybridnetwork from "@distilled.cloud/azure/hybridnetwork";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -20,6 +20,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createHybridNetworkName,
   FAST_BUDGET,
@@ -92,7 +93,6 @@ export interface NetworkFunctionDefinitionGroup extends Resource<
  * const nfdg = yield* Azure.HybridNetwork.NetworkFunctionDefinitionGroup(
  *   "firewall",
  *   {
- *     resourceGroup: group.resourceGroupName,
  *     publisher: publisher.publisherName,
  *     description: "Virtual firewall network function",
  *   },
@@ -101,7 +101,7 @@ export interface NetworkFunctionDefinitionGroup extends Resource<
  *
  * @resource
  */
-export const NetworkFunctionDefinitionGroup = Resource<NetworkFunctionDefinitionGroup>(
+export const NetworkFunctionDefinitionGroup = GroupedResource<NetworkFunctionDefinitionGroup>(
   "Azure.HybridNetwork.NetworkFunctionDefinitionGroup",
 );
 

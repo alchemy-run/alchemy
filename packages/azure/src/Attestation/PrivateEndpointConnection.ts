@@ -1,7 +1,7 @@
 import * as attestation from "@distilled.cloud/azure/attestation";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -15,6 +15,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 
 export class PrivateEndpointConnectionMissing extends Data.TaggedError(
   "Azure.Attestation.PrivateEndpointConnectionMissing",
@@ -99,18 +100,14 @@ export interface PrivateEndpointConnection extends Resource<
  * ### Approving a Private Endpoint
  * **Example:** Manual-approval endpoint, approved by the provider owner
  * ```typescript
- * const attest = yield* Azure.Attestation.Provider("attest", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const attest = yield* Azure.Attestation.Provider("attest");
  * const endpoint = yield* Azure.Network.PrivateEndpoint("attest-pe", {
- *   resourceGroup: group.resourceGroupName,
  *   subnetId: subnet.subnetId,
  *   manualPrivateLinkServiceConnections: [
  *     { privateLinkServiceId: attest.providerId, groupIds: ["standard"] },
  *   ],
  * });
  * yield* Azure.Attestation.PrivateEndpointConnection("attest-pe-approval", {
- *   resourceGroup: group.resourceGroupName,
  *   provider: attest.providerName,
  *   privateEndpointId: endpoint.privateEndpointId,
  *   description: "approved by platform team",
@@ -119,7 +116,7 @@ export interface PrivateEndpointConnection extends Resource<
  *
  * @resource
  */
-export const PrivateEndpointConnection = Resource<PrivateEndpointConnection>(
+export const PrivateEndpointConnection = GroupedResource<PrivateEndpointConnection>(
   "Azure.Attestation.PrivateEndpointConnection",
 );
 

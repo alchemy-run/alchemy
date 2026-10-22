@@ -2,7 +2,7 @@ import * as peering from "@distilled.cloud/azure/peering";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createPeeringName, peeringServiceOwnedByStage } from "./Common.ts";
 
 export interface PeeringServicePrefixProps {
@@ -76,7 +77,6 @@ export interface PeeringServicePrefix extends Resource<
  * **Example:** Prefix with a provider key
  * ```typescript
  * const prefix = yield* Azure.Peering.PeeringServicePrefix("office-v4", {
- *   resourceGroup: group.resourceGroupName,
  *   peeringService: service.peeringServiceName,
  *   prefix: "203.0.113.0/24",
  *   peeringServicePrefixKey: providerPrefixKey,
@@ -85,7 +85,7 @@ export interface PeeringServicePrefix extends Resource<
  *
  * @resource
  */
-export const PeeringServicePrefix = Resource<PeeringServicePrefix>(
+export const PeeringServicePrefix = GroupedResource<PeeringServicePrefix>(
   "Azure.Peering.PeeringServicePrefix",
 );
 

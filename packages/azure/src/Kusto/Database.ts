@@ -2,7 +2,7 @@ import * as kusto from "@distilled.cloud/azure/azure_kusto";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   clusterLocation,
   createKustoChildName,
@@ -88,11 +89,8 @@ export interface Database extends Resource<
  * ### Creating a Database
  * **Example:** Database with retention and cache policies
  * ```typescript
- * const cluster = yield* Azure.Kusto.Cluster("adx", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const cluster = yield* Azure.Kusto.Cluster("adx");
  * const db = yield* Azure.Kusto.Database("telemetry", {
- *   resourceGroup: group.resourceGroupName,
  *   cluster: cluster.clusterName,
  *   softDeletePeriod: "P365D",
  *   hotCachePeriod: "P31D",
@@ -101,7 +99,7 @@ export interface Database extends Resource<
  *
  * @resource
  */
-export const Database = Resource<Database>("Azure.Kusto.Database");
+export const Database = GroupedResource<Database>("Azure.Kusto.Database");
 
 const getDatabase = (
   subscriptionId: string,

@@ -2,11 +2,12 @@ import * as eventgrid from "@distilled.cloud/azure/eventgrid";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { ensureRegistered, ignoreNotFound, orUndefinedIfNotFound, waitUntilGone } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createEventGridName, sameName } from "./common.ts";
 import {
   desiredSubscription,
@@ -52,14 +53,12 @@ export interface SystemTopicEventSubscription extends Resource<
  * **Example:** Blob-created events to a Storage queue
  * ```typescript
  * const events = yield* Azure.EventGrid.SystemTopic("files-events", {
- *   resourceGroup: group.resourceGroupName,
  *   source: account.storageAccountId,
  *   topicType: "Microsoft.Storage.StorageAccounts",
  * });
  * const uploads = yield* Azure.EventGrid.SystemTopicEventSubscription(
  *   "uploads",
  *   {
- *     resourceGroup: group.resourceGroupName,
  *     systemTopic: events.systemTopicName,
  *     destination: {
  *       endpointType: "StorageQueue",
@@ -76,7 +75,7 @@ export interface SystemTopicEventSubscription extends Resource<
  *
  * @resource
  */
-export const SystemTopicEventSubscription = Resource<SystemTopicEventSubscription>(
+export const SystemTopicEventSubscription = GroupedResource<SystemTopicEventSubscription>(
   "Azure.EventGrid.SystemTopicEventSubscription",
 );
 

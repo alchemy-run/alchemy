@@ -2,7 +2,7 @@ import * as hybridnetwork from "@distilled.cloud/azure/hybridnetwork";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -20,6 +20,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   canonical,
   FAST_BUDGET,
@@ -153,7 +154,6 @@ export interface NetworkServiceDesignVersion extends Resource<
  * const nsdv = yield* Azure.HybridNetwork.NetworkServiceDesignVersion(
  *   "service-1-0-0",
  *   {
- *     resourceGroup: group.resourceGroupName,
  *     publisher: publisher.publisherName,
  *     networkServiceDesignGroup: nsdg.networkServiceDesignGroupName,
  *     version: "1.0.0",
@@ -191,7 +191,7 @@ export interface NetworkServiceDesignVersion extends Resource<
  *
  * @resource
  */
-export const NetworkServiceDesignVersion = Resource<NetworkServiceDesignVersion>(
+export const NetworkServiceDesignVersion = GroupedResource<NetworkServiceDesignVersion>(
   "Azure.HybridNetwork.NetworkServiceDesignVersion",
 );
 

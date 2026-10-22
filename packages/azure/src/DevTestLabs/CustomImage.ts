@@ -2,7 +2,7 @@ import * as devtestlabs from "@distilled.cloud/azure/devtestlabs";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -17,6 +17,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createLabResourceName, DEVTESTLAB_NAMESPACE, labLocation } from "./Common.ts";
 
 export interface CustomImageProps {
@@ -105,7 +106,6 @@ export interface CustomImage extends Resource<
  * **Example:** Image from a deprovisioned Linux lab VM
  * ```typescript
  * const image = yield* Azure.DevTestLabs.CustomImage("golden", {
- *   resourceGroup: group.resourceGroupName,
  *   lab: lab.labName,
  *   vm: {
  *     sourceVmId: vm.virtualMachineId,
@@ -119,7 +119,6 @@ export interface CustomImage extends Resource<
  * **Example:** Import an existing managed image
  * ```typescript
  * const image = yield* Azure.DevTestLabs.CustomImage("golden", {
- *   resourceGroup: group.resourceGroupName,
  *   lab: lab.labName,
  *   managedImageId: managedImage.imageId,
  *   osType: "Linux",
@@ -128,7 +127,7 @@ export interface CustomImage extends Resource<
  *
  * @resource
  */
-export const CustomImage = Resource<CustomImage>("Azure.DevTestLabs.CustomImage");
+export const CustomImage = GroupedResource<CustomImage>("Azure.DevTestLabs.CustomImage");
 
 const getImage = (
   subscriptionId: string,

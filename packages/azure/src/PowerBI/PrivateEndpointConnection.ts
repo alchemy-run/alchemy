@@ -2,7 +2,7 @@ import * as powerbi from "@distilled.cloud/azure/powerbiprivatelinks";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import { tagRecord } from "alchemy/Tags";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -18,6 +18,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { getPowerBIPrivateLinkService } from "./PrivateLinkService.ts";
 
 export interface PrivateEndpointConnectionProps {
@@ -95,18 +96,14 @@ export interface PrivateEndpointConnection extends Resource<
  * ### Approving Connections
  * **Example:** Approve a manual private endpoint request
  * ```typescript
- * const service = yield* Azure.PowerBI.PrivateLinkService("tenant", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const service = yield* Azure.PowerBI.PrivateLinkService("tenant");
  * const endpoint = yield* Azure.Network.PrivateEndpoint("powerbi", {
- *   resourceGroup: group.resourceGroupName,
  *   subnetId: subnet.subnetId,
  *   manualPrivateLinkServiceConnections: [
  *     { privateLinkServiceId: service.privateLinkServiceId, groupIds: ["tenant"] },
  *   ],
  * });
  * yield* Azure.PowerBI.PrivateEndpointConnection("powerbi-approval", {
- *   resourceGroup: group.resourceGroupName,
  *   privateLinkService: service.privateLinkServiceName,
  *   privateEndpointId: endpoint.privateEndpointId,
  *   description: "Approved for the analytics VNet",
@@ -116,7 +113,6 @@ export interface PrivateEndpointConnection extends Resource<
  * **Example:** Reject a request
  * ```typescript
  * yield* Azure.PowerBI.PrivateEndpointConnection("powerbi-approval", {
- *   resourceGroup: group.resourceGroupName,
  *   privateLinkService: service.privateLinkServiceName,
  *   privateEndpointId: endpoint.privateEndpointId,
  *   status: "Rejected",
@@ -126,7 +122,7 @@ export interface PrivateEndpointConnection extends Resource<
  *
  * @resource
  */
-export const PrivateEndpointConnection = Resource<PrivateEndpointConnection>(
+export const PrivateEndpointConnection = GroupedResource<PrivateEndpointConnection>(
   "Azure.PowerBI.PrivateEndpointConnection",
 );
 

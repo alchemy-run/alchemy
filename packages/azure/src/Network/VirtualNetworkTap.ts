@@ -1,8 +1,9 @@
 import * as network from "@distilled.cloud/azure/network";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import { orUndefinedIfNotFound, userTags } from "../Arm.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { ref } from "./common.ts";
 import { idsOf, networkProvider } from "./generic.ts";
 
@@ -66,14 +67,15 @@ export interface VirtualNetworkTap extends Resource<
  * **Example:** Mirror to a collector NIC
  * ```typescript
  * const tap = yield* Azure.Network.VirtualNetworkTap("mirror", {
- *   resourceGroup: group.resourceGroupName,
  *   destinationNetworkInterfaceIpConfigurationId: `${collector.networkInterfaceId}/ipConfigurations/primary`,
  * });
  * ```
  *
  * @resource
  */
-export const VirtualNetworkTap = Resource<VirtualNetworkTap>("Azure.Network.VirtualNetworkTap");
+export const VirtualNetworkTap = GroupedResource<VirtualNetworkTap>(
+  "Azure.Network.VirtualNetworkTap",
+);
 
 export const VirtualNetworkTapProvider = () =>
   Provider.succeed(

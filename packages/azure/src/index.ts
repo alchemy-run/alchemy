@@ -72,6 +72,7 @@ export {
 } from "./Binding.ts";
 export * from "./Credentials.ts";
 export * from "./Environment.ts";
+export * from "./StackResourceGroup.ts";
 export * as Edge from "./Edge/index.ts";
 export * as Elastic from "./Elastic/index.ts";
 export * as ElasticSan from "./ElasticSan/index.ts";

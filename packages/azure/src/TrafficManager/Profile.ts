@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -16,6 +16,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   desiredProfileTags,
   hasAnyProfileMarker,
@@ -170,9 +171,7 @@ export interface Profile extends Resource<
  * ### Creating a Profile
  * **Example:** Priority failover profile with an HTTPS health probe
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("dns");
  * const profile = yield* Azure.TrafficManager.Profile("global", {
- *   resourceGroup: group.resourceGroupName,
  *   trafficRoutingMethod: "Priority",
  *   monitorConfig: { protocol: "HTTPS", port: 443, path: "/health" },
  * });
@@ -182,7 +181,6 @@ export interface Profile extends Resource<
  * **Example:** Weighted profile with a custom DNS label
  * ```typescript
  * const profile = yield* Azure.TrafficManager.Profile("canary", {
- *   resourceGroup: group.resourceGroupName,
  *   relativeName: "my-app-canary",
  *   trafficRoutingMethod: "Weighted",
  *   ttl: 30,
@@ -193,7 +191,6 @@ export interface Profile extends Resource<
  * **Example:** Fail over between two external hosts
  * ```typescript
  * yield* Azure.TrafficManager.Endpoint("primary", {
- *   resourceGroup: group.resourceGroupName,
  *   profile: profile.profileName,
  *   endpointType: "ExternalEndpoints",
  *   target: "primary.example.com",
@@ -203,7 +200,7 @@ export interface Profile extends Resource<
  *
  * @resource
  */
-export const Profile = Resource<Profile>("Azure.TrafficManager.Profile");
+export const Profile = GroupedResource<Profile>("Azure.TrafficManager.Profile");
 
 type ObservedProfile = trafficmanager.GetProfileResponse;
 

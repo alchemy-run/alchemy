@@ -2,7 +2,7 @@ import * as automation from "@distilled.cloud/azure/automation";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -16,6 +16,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   type AutomationContentLink,
   childNuke,
@@ -83,7 +84,6 @@ export interface Python3Package extends Resource<
  * **Example:** Wheel from PyPI
  * ```typescript
  * const six = yield* Azure.Automation.Python3Package("six", {
- *   resourceGroup: group.resourceGroupName,
  *   automationAccount: account.automationAccountName,
  *   name: "six",
  *   contentLink: {
@@ -94,7 +94,7 @@ export interface Python3Package extends Resource<
  *
  * @resource
  */
-export const Python3Package = Resource<Python3Package>("Azure.Automation.Python3Package");
+export const Python3Package = GroupedResource<Python3Package>("Azure.Automation.Python3Package");
 
 const getPackage = (
   subscriptionId: string,

@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import {
@@ -22,6 +22,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { canonical, whileAccountBusy } from "./Shared.ts";
 
 export type DatabaseAccountKind = "GlobalDocumentDB" | "MongoDB";
@@ -234,9 +235,7 @@ export interface DatabaseAccount extends Resource<
  * ### Creating an Account
  * **Example:** Serverless NoSQL account
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("app");
  * const account = yield* Azure.CosmosDB.DatabaseAccount("db", {
- *   resourceGroup: group.resourceGroupName,
  *   capabilities: ["EnableServerless"],
  * });
  * ```
@@ -244,7 +243,6 @@ export interface DatabaseAccount extends Resource<
  * **Example:** Keyless account (Entra ID only)
  * ```typescript
  * const account = yield* Azure.CosmosDB.DatabaseAccount("db", {
- *   resourceGroup: group.resourceGroupName,
  *   capabilities: ["EnableServerless"],
  *   disableLocalAuth: true,
  * });
@@ -254,7 +252,6 @@ export interface DatabaseAccount extends Resource<
  * **Example:** API for MongoDB account
  * ```typescript
  * const mongo = yield* Azure.CosmosDB.DatabaseAccount("mongo", {
- *   resourceGroup: group.resourceGroupName,
  *   kind: "MongoDB",
  *   capabilities: ["EnableServerless", "EnableMongo"],
  *   serverVersion: "4.2",
@@ -264,7 +261,6 @@ export interface DatabaseAccount extends Resource<
  * **Example:** Table API account
  * ```typescript
  * const tables = yield* Azure.CosmosDB.DatabaseAccount("tables", {
- *   resourceGroup: group.resourceGroupName,
  *   capabilities: ["EnableServerless", "EnableTable"],
  * });
  * ```
@@ -273,7 +269,6 @@ export interface DatabaseAccount extends Resource<
  * **Example:** Two regions with automatic failover
  * ```typescript
  * const account = yield* Azure.CosmosDB.DatabaseAccount("db", {
- *   resourceGroup: group.resourceGroupName,
  *   location: "eastus",
  *   locations: [
  *     { locationName: "eastus", failoverPriority: 0 },
@@ -286,7 +281,7 @@ export interface DatabaseAccount extends Resource<
  *
  * @resource
  */
-export const DatabaseAccount = Resource<DatabaseAccount>("Azure.CosmosDB.DatabaseAccount");
+export const DatabaseAccount = GroupedResource<DatabaseAccount>("Azure.CosmosDB.DatabaseAccount");
 
 type ObservedAccount = cosmos.GetDatabaseAccountResponse;
 

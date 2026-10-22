@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -21,6 +21,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 
 export interface FleetProps {
   /** Resource group the fleet is created in. Changing it replaces the fleet. */
@@ -74,16 +75,12 @@ export interface Fleet extends Resource<
  * ### Creating a Fleet
  * **Example:** Fleet in the default location
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("app");
- * const fleet = yield* Azure.CosmosDB.Fleet("tenants", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const fleet = yield* Azure.CosmosDB.Fleet("tenants");
  * ```
  *
  * **Example:** Fleet with tags
  * ```typescript
  * const fleet = yield* Azure.CosmosDB.Fleet("tenants", {
- *   resourceGroup: group.resourceGroupName,
  *   location: "westus2",
  *   tags: { team: "platform" },
  * });
@@ -91,7 +88,7 @@ export interface Fleet extends Resource<
  *
  * @resource
  */
-export const Fleet = Resource<Fleet>("Azure.CosmosDB.Fleet");
+export const Fleet = GroupedResource<Fleet>("Azure.CosmosDB.Fleet");
 
 const normalizeLocation = (location: string | undefined) =>
   (location ?? "").toLowerCase().replace(/\s+/g, "");

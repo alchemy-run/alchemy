@@ -1,8 +1,9 @@
 import * as network from "@distilled.cloud/azure/network";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import { orUndefinedIfNotFound, userTags } from "../Arm.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createNetworkName, lower, ref, sameId, sameSet } from "./common.ts";
 import { identityIds, identityInput } from "./expressRouteDirectShared.ts";
 import { idsOf, networkProvider } from "./generic.ts";
@@ -119,7 +120,6 @@ export interface NetworkVirtualAppliance extends Resource<
  * **Example:** SD-WAN appliance
  * ```typescript
  * const nva = yield* Azure.Network.NetworkVirtualAppliance("sdwan", {
- *   resourceGroup: group.resourceGroupName,
  *   virtualHubId: hub.virtualHubId,
  *   nvaSku: {
  *     vendor: "barracudasdwanrelease",
@@ -132,7 +132,7 @@ export interface NetworkVirtualAppliance extends Resource<
  *
  * @resource
  */
-export const NetworkVirtualAppliance = Resource<NetworkVirtualAppliance>(
+export const NetworkVirtualAppliance = GroupedResource<NetworkVirtualAppliance>(
   "Azure.Network.NetworkVirtualAppliance",
 );
 

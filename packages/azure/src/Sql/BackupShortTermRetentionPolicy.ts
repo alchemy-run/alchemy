@@ -2,7 +2,7 @@ import * as sql from "@distilled.cloud/azure/sql";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { isServerOwnedByStack, lower } from "./common.ts";
 
 /** The policy is a singleton named `default`. */
@@ -76,7 +77,6 @@ export interface BackupShortTermRetentionPolicy extends Resource<
  * **Example:** Keep 14 days of point-in-time restore
  * ```typescript
  * yield* Azure.Sql.BackupShortTermRetentionPolicy("pitr", {
- *   resourceGroup: group.resourceGroupName,
  *   server: server.serverName,
  *   database: database.databaseName,
  *   retentionDays: 14,
@@ -86,7 +86,6 @@ export interface BackupShortTermRetentionPolicy extends Resource<
  * **Example:** Daily differential backups
  * ```typescript
  * yield* Azure.Sql.BackupShortTermRetentionPolicy("pitr", {
- *   resourceGroup: group.resourceGroupName,
  *   server: server.serverName,
  *   database: database.databaseName,
  *   retentionDays: 7,
@@ -96,7 +95,7 @@ export interface BackupShortTermRetentionPolicy extends Resource<
  *
  * @resource
  */
-export const BackupShortTermRetentionPolicy = Resource<BackupShortTermRetentionPolicy>(
+export const BackupShortTermRetentionPolicy = GroupedResource<BackupShortTermRetentionPolicy>(
   "Azure.Sql.BackupShortTermRetentionPolicy",
 );
 

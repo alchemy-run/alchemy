@@ -2,11 +2,12 @@ import * as synapse from "@distilled.cloud/azure/synapse";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { ensureRegistered, ignoreNotFound, orUndefinedIfNotFound, waitUntilGone } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createAlnumName,
   fieldsMatch,
@@ -72,7 +73,6 @@ export interface WorkloadClassifier extends Resource<
  * **Example:** Route the loader user into the loads group
  * ```typescript
  * yield* Azure.Synapse.WorkloadClassifier("loader", {
- *   resourceGroup: group.resourceGroupName,
  *   workspace: workspace.workspaceName,
  *   sqlPool: pool.sqlPoolName,
  *   workloadGroup: loads.workloadGroupName,
@@ -83,7 +83,9 @@ export interface WorkloadClassifier extends Resource<
  *
  * @resource
  */
-export const WorkloadClassifier = Resource<WorkloadClassifier>("Azure.Synapse.WorkloadClassifier");
+export const WorkloadClassifier = GroupedResource<WorkloadClassifier>(
+  "Azure.Synapse.WorkloadClassifier",
+);
 
 type Observed = synapse.GetSqlPoolWorkloadClassifierResponse;
 

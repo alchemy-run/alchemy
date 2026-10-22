@@ -2,7 +2,7 @@ import * as app from "@distilled.cloud/azure/app";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
 import {
@@ -21,6 +21,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createContainerAppsName,
   fingerprint,
@@ -102,7 +103,6 @@ export interface ConnectedEnvironment extends Resource<
  * **Example:** Environment on a custom location
  * ```typescript
  * const env = yield* Azure.ContainerApps.ConnectedEnvironment("arc", {
- *   resourceGroup: group.resourceGroupName,
  *   location: "eastus",
  *   customLocationId: customLocation.id,
  *   staticIp: "20.1.2.3",
@@ -111,7 +111,7 @@ export interface ConnectedEnvironment extends Resource<
  *
  * @resource
  */
-export const ConnectedEnvironment = Resource<ConnectedEnvironment>(
+export const ConnectedEnvironment = GroupedResource<ConnectedEnvironment>(
   "Azure.ContainerApps.ConnectedEnvironment",
 );
 

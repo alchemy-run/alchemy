@@ -2,7 +2,7 @@ import * as domainservices from "@distilled.cloud/azure/domainservices";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
@@ -22,6 +22,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 
 export type DomainServiceSku = "Standard" | "Enterprise" | "Premium";
 export type DomainServiceToggle = "Enabled" | "Disabled";
@@ -251,18 +252,14 @@ export interface DomainService extends Resource<
  * ### Creating a Managed Domain
  * **Example:** Standard managed domain in a dedicated subnet
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("identity");
  * const vnet = yield* Azure.Network.VirtualNetwork("identity", {
- *   resourceGroup: group.resourceGroupName,
  *   addressPrefixes: ["10.0.0.0/16"],
  * });
  * const subnet = yield* Azure.Network.Subnet("aadds", {
- *   resourceGroup: group.resourceGroupName,
  *   virtualNetwork: vnet.virtualNetworkName,
  *   addressPrefix: "10.0.0.0/24",
  * });
  * const domain = yield* Azure.DomainServices.DomainService("domain", {
- *   resourceGroup: group.resourceGroupName,
  *   domainName: "aaddscontoso.com",
  *   replicaSets: [{ subnetId: subnet.subnetId }],
  * });
@@ -272,7 +269,6 @@ export interface DomainService extends Resource<
  * **Example:** Disable legacy protocols and notify admins
  * ```typescript
  * const domain = yield* Azure.DomainServices.DomainService("domain", {
- *   resourceGroup: group.resourceGroupName,
  *   domainName: "aaddscontoso.com",
  *   replicaSets: [{ subnetId: subnet.subnetId }],
  *   domainSecuritySettings: {
@@ -291,7 +287,6 @@ export interface DomainService extends Resource<
  * **Example:** Enable LDAPS with a PFX certificate
  * ```typescript
  * const domain = yield* Azure.DomainServices.DomainService("domain", {
- *   resourceGroup: group.resourceGroupName,
  *   domainName: "aaddscontoso.com",
  *   replicaSets: [{ subnetId: subnet.subnetId }],
  *   ldapsSettings: {
@@ -304,7 +299,7 @@ export interface DomainService extends Resource<
  *
  * @resource
  */
-export const DomainService = Resource<DomainService>("Azure.DomainServices.DomainService");
+export const DomainService = GroupedResource<DomainService>("Azure.DomainServices.DomainService");
 
 type Observed = domainservices.GetDomainServiceResponse;
 

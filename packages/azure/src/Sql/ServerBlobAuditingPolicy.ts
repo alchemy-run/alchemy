@@ -2,7 +2,7 @@ import * as sql from "@distilled.cloud/azure/sql";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import {
@@ -14,6 +14,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   fieldsMatch,
   isServerOwnedByStack,
@@ -118,7 +119,6 @@ export interface ServerBlobAuditingPolicy extends Resource<
  * **Example:** Enable auditing to Azure Monitor
  * ```typescript
  * yield* Azure.Sql.ServerBlobAuditingPolicy("audit", {
- *   resourceGroup: group.resourceGroupName,
  *   server: server.serverName,
  *   state: "Enabled",
  *   isAzureMonitorTargetEnabled: true,
@@ -129,7 +129,6 @@ export interface ServerBlobAuditingPolicy extends Resource<
  * **Example:** Write audit logs to a storage account
  * ```typescript
  * yield* Azure.Sql.ServerBlobAuditingPolicy("audit", {
- *   resourceGroup: group.resourceGroupName,
  *   server: server.serverName,
  *   state: "Enabled",
  *   storageEndpoint: account.primaryEndpoints.blob,
@@ -144,7 +143,7 @@ export interface ServerBlobAuditingPolicy extends Resource<
  *
  * @resource
  */
-export const ServerBlobAuditingPolicy = Resource<ServerBlobAuditingPolicy>(
+export const ServerBlobAuditingPolicy = GroupedResource<ServerBlobAuditingPolicy>(
   "Azure.Sql.ServerBlobAuditingPolicy",
 );
 

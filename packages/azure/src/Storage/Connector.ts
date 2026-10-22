@@ -2,7 +2,7 @@ import * as storage from "@distilled.cloud/azure/storage";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -17,6 +17,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createStorageChildName } from "./StorageOwnership.ts";
 
 export interface ConnectorProps {
@@ -105,11 +106,8 @@ export interface Connector extends Resource<
  * ### Connecting a Data Share
  * **Example:** Connector for a shared data set
  * ```typescript
- * const identity = yield* Azure.ManagedIdentity.UserAssignedIdentity("reader", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const identity = yield* Azure.ManagedIdentity.UserAssignedIdentity("reader");
  * yield* Azure.Storage.Connector("shared-data", {
- *   resourceGroup: group.resourceGroupName,
  *   storageAccount: account.storageAccountName,
  *   dataShareUri: "azds://eastus:partnershare:00000000-0000-0000-0000-000000000000",
  *   identityResourceId: identity.identityId,
@@ -119,7 +117,7 @@ export interface Connector extends Resource<
  *
  * @resource
  */
-export const Connector = Resource<Connector>("Azure.Storage.Connector");
+export const Connector = GroupedResource<Connector>("Azure.Storage.Connector");
 
 const getConnector = (
   subscriptionId: string,

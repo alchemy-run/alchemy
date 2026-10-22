@@ -2,7 +2,7 @@ import * as sql from "@distilled.cloud/azure/sql";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
 import {
@@ -14,6 +14,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createChildName, isServerOwnedByStack, lower, sameSecret } from "./common.ts";
 import {
   jobAgentPath,
@@ -80,7 +81,6 @@ export interface JobCredential extends Resource<
  * **Example:** SQL login for job targets
  * ```typescript
  * const credential = yield* Azure.Sql.JobCredential("job-login", {
- *   resourceGroup: group.resourceGroupName,
  *   server: server.serverName,
  *   jobAgent: agent.jobAgentName,
  *   username: "jobuser",
@@ -90,7 +90,7 @@ export interface JobCredential extends Resource<
  *
  * @resource
  */
-export const JobCredential = Resource<JobCredential>("Azure.Sql.JobCredential");
+export const JobCredential = GroupedResource<JobCredential>("Azure.Sql.JobCredential");
 
 type Observed = sql.GetJobCredentialsResponse;
 

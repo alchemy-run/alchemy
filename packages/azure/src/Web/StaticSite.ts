@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import {
@@ -22,6 +22,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { changedKeys, lower, reveal, sameLocation } from "./common.ts";
 
 /** Static Web Apps pricing plan. */
@@ -136,16 +137,13 @@ export interface StaticSite extends Resource<
  * const group = yield* Azure.Resources.ResourceGroup("web", {
  *   location: "eastus2",
  * });
- * const site = yield* Azure.Web.StaticSite("site", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const site = yield* Azure.Web.StaticSite("site");
  * // site.url, site.deploymentToken
  * ```
  *
  * **Example:** Standard site with app settings
  * ```typescript
  * const site = yield* Azure.Web.StaticSite("site", {
- *   resourceGroup: group.resourceGroupName,
  *   sku: "Standard",
  *   stagingEnvironmentPolicy: "Disabled",
  *   appSettings: { API_BASE: "https://api.example.com" },
@@ -154,7 +152,7 @@ export interface StaticSite extends Resource<
  *
  * @resource
  */
-export const StaticSite = Resource<StaticSite>("Azure.Web.StaticSite");
+export const StaticSite = GroupedResource<StaticSite>("Azure.Web.StaticSite");
 
 type ObservedSite = web.GetStaticSiteStaticSiteResponse;
 

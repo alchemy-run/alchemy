@@ -2,7 +2,7 @@ import * as containerregistry from "@distilled.cloud/azure/containerregistry";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import {
@@ -20,6 +20,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createRegistryName,
   getRegistry,
@@ -157,17 +158,13 @@ export interface Registry extends Resource<
  * ### Creating a Registry
  * **Example:** Basic registry
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("app");
- * const registry = yield* Azure.ContainerRegistry.Registry("images", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const registry = yield* Azure.ContainerRegistry.Registry("images");
  * // registry.loginServer === "<name>.azurecr.io"
  * ```
  *
  * **Example:** Standard registry with the admin user enabled
  * ```typescript
  * const registry = yield* Azure.ContainerRegistry.Registry("images", {
- *   resourceGroup: group.resourceGroupName,
  *   sku: "Standard",
  *   adminUserEnabled: true,
  * });
@@ -178,7 +175,6 @@ export interface Registry extends Resource<
  * **Example:** Premium registry that only accepts one IP range
  * ```typescript
  * const registry = yield* Azure.ContainerRegistry.Registry("images", {
- *   resourceGroup: group.resourceGroupName,
  *   sku: "Premium",
  *   networkRuleSet: {
  *     defaultAction: "Deny",
@@ -189,7 +185,7 @@ export interface Registry extends Resource<
  *
  * @resource
  */
-export const Registry = Resource<Registry>("Azure.ContainerRegistry.Registry");
+export const Registry = GroupedResource<Registry>("Azure.ContainerRegistry.Registry");
 
 type ObservedRegistry = containerregistry.GetRegistryResponse;
 

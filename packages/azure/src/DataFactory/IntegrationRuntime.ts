@@ -2,7 +2,7 @@ import * as datafactory from "@distilled.cloud/azure/datafactory";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
@@ -16,6 +16,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createHyphenName, definitionDiffers } from "./FactoryChild.ts";
 
 export type IntegrationRuntimeType = "Managed" | "SelfHosted";
@@ -112,7 +113,6 @@ export interface IntegrationRuntime extends Resource<
  * **Example:** Azure runtime with a data flow time-to-live
  * ```typescript
  * const runtime = yield* Azure.DataFactory.IntegrationRuntime("flows", {
- *   resourceGroup: group.resourceGroupName,
  *   factoryName: factory.factoryName,
  *   type: "Managed",
  *   typeProperties: {
@@ -128,7 +128,6 @@ export interface IntegrationRuntime extends Resource<
  * **Example:** Self-hosted runtime and its registration key
  * ```typescript
  * const onPrem = yield* Azure.DataFactory.IntegrationRuntime("on-prem", {
- *   resourceGroup: group.resourceGroupName,
  *   factoryName: factory.factoryName,
  *   type: "SelfHosted",
  * });
@@ -137,7 +136,7 @@ export interface IntegrationRuntime extends Resource<
  *
  * @resource
  */
-export const IntegrationRuntime = Resource<IntegrationRuntime>(
+export const IntegrationRuntime = GroupedResource<IntegrationRuntime>(
   "Azure.DataFactory.IntegrationRuntime",
 );
 

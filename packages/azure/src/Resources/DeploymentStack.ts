@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import {
@@ -21,6 +21,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { fromParameterValues, sameId, sameJson, toParameterValues } from "./Shared.ts";
 
 /** Reference to a template stored outside the stack request. */
@@ -147,7 +148,6 @@ export interface DeploymentStack extends Resource<
  * **Example:** Stack that owns a user-assigned identity
  * ```typescript
  * const stack = yield* Azure.Resources.DeploymentStack("identities", {
- *   resourceGroup: group.resourceGroupName,
  *   template: {
  *     $schema: "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
  *     contentVersion: "1.0.0.0",
@@ -168,7 +168,6 @@ export interface DeploymentStack extends Resource<
  * **Example:** Deny deletes outside the stack
  * ```typescript
  * yield* Azure.Resources.DeploymentStack("protected", {
- *   resourceGroup: group.resourceGroupName,
  *   templateLink: { id: version.templateSpecVersionId },
  *   denySettings: { mode: "denyDelete" },
  *   actionOnUnmanage: { resources: "detach" },
@@ -177,7 +176,7 @@ export interface DeploymentStack extends Resource<
  *
  * @resource
  */
-export const DeploymentStack = Resource<DeploymentStack>("Azure.Resources.DeploymentStack");
+export const DeploymentStack = GroupedResource<DeploymentStack>("Azure.Resources.DeploymentStack");
 
 export class DeploymentStackFailed extends Data.TaggedError(
   "Azure.Resources.DeploymentStackFailed",

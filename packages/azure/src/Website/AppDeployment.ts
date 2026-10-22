@@ -5,7 +5,7 @@ import * as Bundle from "alchemy/Bundle/Bundle";
 import { findCwdForBundle, getStableContextDir, resolveMainPath } from "alchemy/Bundle/TempRoot";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import { copyExtraFiles, hashExtraFiles, type ExtraFile } from "alchemy/Util/extraFiles";
 import { sha256Object } from "alchemy/Util/sha256";
 import { zipFiles } from "alchemy/Util/zip";
@@ -20,6 +20,7 @@ import * as Schedule from "effect/Schedule";
 import { orUndefinedIfNotFound } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 
 export interface AppDeploymentProps {
   /** Resource group of the web app. */
@@ -80,16 +81,13 @@ export interface AppDeployment extends Resource<
  * **Example:** Bundle and publish a server to a web app
  * ```typescript
  * const plan = yield* Azure.Web.AppServicePlan("Plan", {
- *   resourceGroup: group.resourceGroupName,
  *   sku: "B1",
  * });
  * const app = yield* Azure.Web.WebApp("App", {
- *   resourceGroup: group.resourceGroupName,
  *   serverFarmId: plan.appServicePlanId,
  *   siteConfig: { linuxFxVersion: "NODE|22-lts", appCommandLine: "node index.mjs" },
  * });
  * yield* Azure.Website.AppDeployment("Code", {
- *   resourceGroup: group.resourceGroupName,
  *   siteName: app.siteName,
  *   main: "dist/server/serve-node.mjs",
  * });
@@ -98,7 +96,7 @@ export interface AppDeployment extends Resource<
  * @resource
  * @product Website
  */
-export const AppDeployment = Resource<AppDeployment>("Azure.Website.AppDeployment");
+export const AppDeployment = GroupedResource<AppDeployment>("Azure.Website.AppDeployment");
 
 export class AppDeploymentFailed extends Data.TaggedError("Azure.Website.AppDeploymentFailed")<{
   readonly siteName: string;

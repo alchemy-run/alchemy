@@ -1,12 +1,13 @@
 import * as cosmos from "@distilled.cloud/azure/cosmos_db";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { ensureRegistered, ignoreNotFound, orUndefinedIfNotFound, waitUntilGone } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   accountIdOf,
   deterministicGuid,
@@ -91,11 +92,8 @@ export interface CassandraRoleAssignment extends Resource<
  * ### Granting Data Access
  * **Example:** Let a managed identity read and write one keyspace
  * ```typescript
- * const identity = yield* Azure.ManagedIdentity.UserAssignedIdentity("api", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const identity = yield* Azure.ManagedIdentity.UserAssignedIdentity("api");
  * yield* Azure.CosmosDB.CassandraRoleAssignment("api-writes-orders", {
- *   resourceGroup: group.resourceGroupName,
  *   account: account.accountName,
  *   roleDefinitionId: Azure.CosmosDB.CassandraBuiltInRole.DataContributor,
  *   principalId: identity.principalId,
@@ -106,7 +104,6 @@ export interface CassandraRoleAssignment extends Resource<
  * **Example:** Assign a custom role on the whole account
  * ```typescript
  * yield* Azure.CosmosDB.CassandraRoleAssignment("api-reads", {
- *   resourceGroup: group.resourceGroupName,
  *   account: account.accountName,
  *   roleDefinitionId: reader.roleDefinitionId,
  *   principalId: identity.principalId,
@@ -115,7 +112,7 @@ export interface CassandraRoleAssignment extends Resource<
  *
  * @resource
  */
-export const CassandraRoleAssignment = Resource<CassandraRoleAssignment>(
+export const CassandraRoleAssignment = GroupedResource<CassandraRoleAssignment>(
   "Azure.CosmosDB.CassandraRoleAssignment",
 );
 

@@ -2,7 +2,7 @@ import * as vmware from "@distilled.cloud/azure/vmware";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
 import {
@@ -14,6 +14,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   AVS_NAMESPACE,
   CHILD_BUDGET,
@@ -69,13 +70,11 @@ export interface HcxEnterpriseSite extends Resource<
  * **Example:** Issue an HCX activation key
  * ```typescript
  * const hcx = yield* Azure.VMware.Addon("hcx", {
- *   resourceGroup: group.resourceGroupName,
  *   privateCloud: cloud.privateCloudName,
  *   addonType: "HCX",
  *   offer: "VMware MaaS Cloud Provider (Enterprise)",
  * });
  * const site = yield* Azure.VMware.HcxEnterpriseSite("onprem", {
- *   resourceGroup: group.resourceGroupName,
  *   privateCloud: cloud.privateCloudName,
  * });
  * // site.activationKey activates the on-premises HCX Connector.
@@ -83,7 +82,9 @@ export interface HcxEnterpriseSite extends Resource<
  *
  * @resource
  */
-export const HcxEnterpriseSite = Resource<HcxEnterpriseSite>("Azure.VMware.HcxEnterpriseSite");
+export const HcxEnterpriseSite = GroupedResource<HcxEnterpriseSite>(
+  "Azure.VMware.HcxEnterpriseSite",
+);
 
 const createName = (id: string) => createAvsName(id, 64);
 

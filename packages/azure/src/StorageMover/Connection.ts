@@ -2,7 +2,7 @@ import * as storagemover from "@distilled.cloud/azure/storagemover";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createMoverName,
   DELETE_BUDGET,
@@ -94,7 +95,6 @@ export interface Connection extends Resource<
  * **Example:** Connect to a private link service
  * ```typescript
  * const connection = yield* Azure.StorageMover.Connection("private", {
- *   resourceGroup: group.resourceGroupName,
  *   storageMover: mover.storageMoverName,
  *   privateLinkServiceId: service.privateLinkServiceId,
  *   description: "Reach the on-premises NAS",
@@ -103,7 +103,7 @@ export interface Connection extends Resource<
  *
  * @resource
  */
-export const Connection = Resource<Connection>("Azure.StorageMover.Connection");
+export const Connection = GroupedResource<Connection>("Azure.StorageMover.Connection");
 
 type ObservedConnection = storagemover.GetConnectionResponse;
 

@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -21,6 +21,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { EDGE_WAIT, edgeState } from "./EdgeShared.ts";
 
 export interface ConfigTemplateProps {
@@ -87,11 +88,9 @@ export interface ConfigTemplate extends Resource<
  *   location: "eastus",
  * });
  * const template = yield* Azure.Edge.ConfigTemplate("common", {
- *   resourceGroup: group.resourceGroupName,
  *   description: "Shared plant configuration",
  * });
  * yield* Azure.Edge.ConfigTemplateVersion("common-v1", {
- *   resourceGroup: group.resourceGroupName,
  *   configTemplate: template.configTemplateName,
  *   version: "1.0.0",
  *   configurations: [
@@ -111,7 +110,7 @@ export interface ConfigTemplate extends Resource<
  *
  * @resource
  */
-export const ConfigTemplate = Resource<ConfigTemplate>("Azure.Edge.ConfigTemplate");
+export const ConfigTemplate = GroupedResource<ConfigTemplate>("Azure.Edge.ConfigTemplate");
 
 const getConfigTemplate = (
   subscriptionId: string,

@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
 import {
@@ -22,6 +22,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   reveal,
   SCVMM_NAMESPACE,
@@ -111,7 +112,6 @@ export interface VmmServer extends Resource<
  * **Example:** Connect a VMM server through a custom location
  * ```typescript
  * const vmm = yield* Azure.ScVmm.VmmServer("vmm", {
- *   resourceGroup: group.resourceGroupName,
  *   extendedLocation: { name: customLocationId },
  *   fqdn: "vmm.contoso.local",
  *   username: "contoso\\vmmadmin",
@@ -121,7 +121,7 @@ export interface VmmServer extends Resource<
  *
  * @resource
  */
-export const VmmServer = Resource<VmmServer>("Azure.ScVmm.VmmServer");
+export const VmmServer = GroupedResource<VmmServer>("Azure.ScVmm.VmmServer");
 
 const getVmmServer = (subscriptionId: string, resourceGroupName: string, vmmServerName: string) =>
   orUndefinedIfNotFound(scvmm.GetVmmServer({ subscriptionId, resourceGroupName, vmmServerName }));

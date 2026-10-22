@@ -2,7 +2,7 @@ import * as nc from "@distilled.cloud/azure/networkcloud";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -19,6 +19,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createNexusName,
   customLocation,
@@ -108,9 +109,7 @@ export interface Volume extends Resource<
  * ### Creating a Volume
  * **Example:** 10 GiB volume
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("nexus");
  * const volume = yield* Azure.NetworkCloud.Volume("data", {
- *   resourceGroup: group.resourceGroupName,
  *   customLocationId: cluster.clusterExtendedLocationId,
  *   sizeMiB: 10240,
  * });
@@ -118,7 +117,7 @@ export interface Volume extends Resource<
  *
  * @resource
  */
-export const Volume = Resource<Volume>("Azure.NetworkCloud.Volume");
+export const Volume = GroupedResource<Volume>("Azure.NetworkCloud.Volume");
 
 type Observed = nc.GetVolumeResponse;
 

@@ -2,7 +2,7 @@ import * as hybridnetwork from "@distilled.cloud/azure/hybridnetwork";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -20,6 +20,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   canonical,
   createHybridNetworkName,
@@ -105,7 +106,6 @@ export interface Site extends Resource<
  * **Example:** Site with an Azure core NFVI
  * ```typescript
  * const site = yield* Azure.HybridNetwork.Site("site", {
- *   resourceGroup: group.resourceGroupName,
  *   nfvis: [{ name: "azure-eastus", nfviType: "AzureCore", location: "eastus" }],
  * });
  * ```
@@ -113,7 +113,6 @@ export interface Site extends Resource<
  * **Example:** Site with an Arc-enabled Kubernetes NFVI
  * ```typescript
  * const site = yield* Azure.HybridNetwork.Site("edge", {
- *   resourceGroup: group.resourceGroupName,
  *   nfvis: [
  *     {
  *       name: "edge-cluster",
@@ -126,7 +125,7 @@ export interface Site extends Resource<
  *
  * @resource
  */
-export const Site = Resource<Site>("Azure.HybridNetwork.Site");
+export const Site = GroupedResource<Site>("Azure.HybridNetwork.Site");
 
 const getSite = (subscriptionId: string, resourceGroupName: string, siteName: string) =>
   orUndefinedIfNotFound(hybridnetwork.GetSite({ subscriptionId, resourceGroupName, siteName }));

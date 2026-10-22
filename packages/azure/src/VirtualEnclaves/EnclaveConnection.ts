@@ -2,7 +2,7 @@ import * as mission from "@distilled.cloud/azure/mission";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -20,6 +20,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createMissionName,
   FAST,
@@ -116,7 +117,6 @@ export interface EnclaveConnection extends Resource<
  * **Example:** Let one enclave reach another enclave's endpoint
  * ```typescript
  * const connection = yield* Azure.VirtualEnclaves.EnclaveConnection("a-to-b", {
- *   resourceGroup: group.resourceGroupName,
  *   communityId: community.communityId,
  *   sourceId: enclaveA.virtualEnclaveId,
  *   destinationEndpointId: endpointB.enclaveEndpointId,
@@ -126,7 +126,7 @@ export interface EnclaveConnection extends Resource<
  *
  * @resource
  */
-export const EnclaveConnection = Resource<EnclaveConnection>(
+export const EnclaveConnection = GroupedResource<EnclaveConnection>(
   "Azure.VirtualEnclaves.EnclaveConnection",
 );
 

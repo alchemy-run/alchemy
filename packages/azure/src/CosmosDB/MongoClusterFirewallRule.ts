@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -14,6 +14,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { whileMongoClusterBusy } from "./MongoShared.ts";
 import { isOwnedChild } from "./Shared.ts";
 
@@ -73,7 +74,6 @@ export interface MongoClusterFirewallRule extends Resource<
  * **Example:** Allow a single address
  * ```typescript
  * const rule = yield* Azure.CosmosDB.MongoClusterFirewallRule("office", {
- *   resourceGroup: group.resourceGroupName,
  *   cluster: cluster.mongoClusterName,
  *   startIpAddress: "203.0.113.7",
  *   endIpAddress: "203.0.113.7",
@@ -83,7 +83,6 @@ export interface MongoClusterFirewallRule extends Resource<
  * **Example:** Allow all Azure services
  * ```typescript
  * const rule = yield* Azure.CosmosDB.MongoClusterFirewallRule("azure", {
- *   resourceGroup: group.resourceGroupName,
  *   cluster: cluster.mongoClusterName,
  *   name: "AllowAllAzureServicesAndResourcesWithinAzureIps_2026",
  *   startIpAddress: "0.0.0.0",
@@ -93,7 +92,7 @@ export interface MongoClusterFirewallRule extends Resource<
  *
  * @resource
  */
-export const MongoClusterFirewallRule = Resource<MongoClusterFirewallRule>(
+export const MongoClusterFirewallRule = GroupedResource<MongoClusterFirewallRule>(
   "Azure.CosmosDB.MongoClusterFirewallRule",
 );
 

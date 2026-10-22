@@ -2,7 +2,7 @@ import * as compute from "@distilled.cloud/azure/compute";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -18,6 +18,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createComputeName, sameId, waitComputeGone, waitComputeProvisioned } from "./common.ts";
 
 export interface RestorePointCollectionProps {
@@ -90,7 +91,6 @@ export interface RestorePointCollection extends Resource<
  * **Example:** Collection for a VM
  * ```typescript
  * const collection = yield* Azure.Compute.RestorePointCollection("backups", {
- *   resourceGroup: group.resourceGroupName,
  *   sourceVirtualMachineId: vm.virtualMachineId,
  * });
  * ```
@@ -99,14 +99,13 @@ export interface RestorePointCollection extends Resource<
  * **Example:** Crash-consistent restore point
  * ```typescript
  * yield* Azure.Compute.RestorePoint("before-upgrade", {
- *   resourceGroup: group.resourceGroupName,
  *   restorePointCollection: collection.restorePointCollectionName,
  * });
  * ```
  *
  * @resource
  */
-export const RestorePointCollection = Resource<RestorePointCollection>(
+export const RestorePointCollection = GroupedResource<RestorePointCollection>(
   "Azure.Compute.RestorePointCollection",
 );
 

@@ -2,7 +2,7 @@ import * as cs from "@distilled.cloud/azure/containerservice";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -17,6 +17,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createChildName, deepMerge, sameName, subsetMatches, whileClusterBusy } from "./Common.ts";
 
 export type AgentPoolMode = cs.AgentPoolMode;
@@ -137,7 +138,6 @@ export interface AgentPool extends Resource<
  * **Example:** User pool with labels and taints
  * ```typescript
  * const pool = yield* Azure.ContainerService.AgentPool("workers", {
- *   resourceGroup: group.resourceGroupName,
  *   cluster: cluster.clusterName,
  *   vmSize: "Standard_D4s_v5",
  *   count: 2,
@@ -149,7 +149,6 @@ export interface AgentPool extends Resource<
  * **Example:** Autoscaling Spot pool
  * ```typescript
  * const spot = yield* Azure.ContainerService.AgentPool("spot", {
- *   resourceGroup: group.resourceGroupName,
  *   cluster: cluster.clusterName,
  *   scaleSetPriority: "Spot",
  *   spotMaxPrice: -1,
@@ -161,7 +160,7 @@ export interface AgentPool extends Resource<
  *
  * @resource
  */
-export const AgentPool = Resource<AgentPool>("Azure.ContainerService.AgentPool");
+export const AgentPool = GroupedResource<AgentPool>("Azure.ContainerService.AgentPool");
 
 type ObservedPool = cs.GetAgentPoolResponse;
 

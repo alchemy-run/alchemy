@@ -2,11 +2,12 @@ import * as eventgrid from "@distilled.cloud/azure/eventgrid";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { ensureRegistered, ignoreNotFound, orUndefinedIfNotFound, waitUntilGone } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createEventGridName, sameName } from "./common.ts";
 import {
   isOwnedDescription,
@@ -78,7 +79,6 @@ export interface CaCertificate extends Resource<
  * **Example:** CA certificate from a PEM file
  * ```typescript
  * const ca = yield* Azure.EventGrid.CaCertificate("devices-ca", {
- *   resourceGroup: group.resourceGroupName,
  *   namespace: namespace.namespaceName,
  *   encodedCertificate: yield* fs.readFileString("ca.pem"),
  *   description: "Device fleet CA",
@@ -87,7 +87,7 @@ export interface CaCertificate extends Resource<
  *
  * @resource
  */
-export const CaCertificate = Resource<CaCertificate>("Azure.EventGrid.CaCertificate");
+export const CaCertificate = GroupedResource<CaCertificate>("Azure.EventGrid.CaCertificate");
 
 type ObservedCaCertificate = Pick<eventgrid.CaCertificate, "id" | "properties">;
 

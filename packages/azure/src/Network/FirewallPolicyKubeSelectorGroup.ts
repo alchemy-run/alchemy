@@ -1,9 +1,10 @@
 import * as network from "@distilled.cloud/azure/network";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { orUndefinedIfNotFound } from "../Arm.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { canonical } from "./common.ts";
 import { networkProvider } from "./generic.ts";
 
@@ -76,7 +77,6 @@ export interface FirewallPolicyKubeSelectorGroup extends Resource<
  * **Example:** Pods labelled `app=web` in the `prod` namespace
  * ```typescript
  * yield* Azure.Network.FirewallPolicyKubeSelectorGroup("web", {
- *   resourceGroup: group.resourceGroupName,
  *   firewallPolicy: policy.firewallPolicyName,
  *   podSelector: { matchLabels: { app: "web" } },
  *   namespaceSelector: {
@@ -89,7 +89,7 @@ export interface FirewallPolicyKubeSelectorGroup extends Resource<
  *
  * @resource
  */
-export const FirewallPolicyKubeSelectorGroup = Resource<FirewallPolicyKubeSelectorGroup>(
+export const FirewallPolicyKubeSelectorGroup = GroupedResource<FirewallPolicyKubeSelectorGroup>(
   "Azure.Network.FirewallPolicyKubeSelectorGroup",
 );
 

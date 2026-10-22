@@ -2,7 +2,7 @@ import * as discovery from "@distilled.cloud/azure/discovery";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -20,6 +20,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   canonicalJson,
   createDiscoveryName,
@@ -92,9 +93,7 @@ export interface Tool extends Resource<
  * ### Creating a Tool
  * **Example:** Tool backed by a container image
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("science");
  * const tool = yield* Azure.Discovery.Tool("docking", {
- *   resourceGroup: group.resourceGroupName,
  *   version: "1.0.0",
  *   definitionContent: {
  *     name: "docking",
@@ -108,7 +107,6 @@ export interface Tool extends Resource<
  * **Example:** Environment variables
  * ```typescript
  * const tool = yield* Azure.Discovery.Tool("docking", {
- *   resourceGroup: group.resourceGroupName,
  *   version: "1.1.0",
  *   definitionContent: { name: "docking" },
  *   environmentVariables: { LOG_LEVEL: "info" },
@@ -117,7 +115,7 @@ export interface Tool extends Resource<
  *
  * @resource
  */
-export const Tool = Resource<Tool>("Azure.Discovery.Tool");
+export const Tool = GroupedResource<Tool>("Azure.Discovery.Tool");
 
 /**
  * Without the Discovery preview ARM rejects the type itself

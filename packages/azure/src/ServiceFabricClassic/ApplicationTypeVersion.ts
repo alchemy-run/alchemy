@@ -2,7 +2,7 @@ import * as servicefabric from "@distilled.cloud/azure/servicefabric";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -18,6 +18,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { listClusters, lower } from "./Common.ts";
 
 export interface ApplicationTypeVersionProps {
@@ -86,7 +87,6 @@ export interface ApplicationTypeVersion extends Resource<
  * **Example:** Version 1.0.0 from a blob SAS URL
  * ```typescript
  * const v1 = yield* Azure.ServiceFabricClassic.ApplicationTypeVersion("voting-v1", {
- *   resourceGroup: group.resourceGroupName,
  *   cluster: cluster.clusterName,
  *   applicationType: appType.applicationTypeName,
  *   version: "1.0.0",
@@ -96,7 +96,7 @@ export interface ApplicationTypeVersion extends Resource<
  *
  * @resource
  */
-export const ApplicationTypeVersion = Resource<ApplicationTypeVersion>(
+export const ApplicationTypeVersion = GroupedResource<ApplicationTypeVersion>(
   "Azure.ServiceFabricClassic.ApplicationTypeVersion",
 );
 

@@ -2,7 +2,7 @@ import * as devcenter from "@distilled.cloud/azure/devcenter";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import {
@@ -18,6 +18,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createDevCenterName, sameArm } from "./Common.ts";
 
 export interface DevBoxDefinitionProps {
@@ -97,7 +98,6 @@ export interface DevBoxDefinition extends Resource<
  * **Example:** Windows 11 Enterprise on 8 vCPU / 32 GB
  * ```typescript
  * const definition = yield* Azure.DevCenter.DevBoxDefinition("win11", {
- *   resourceGroup: group.resourceGroupName,
  *   devCenter: center.devCenterName,
  *   imageReferenceId: Output.interpolate`${center.devCenterId}/galleries/default/images/microsoftwindowsdesktop_windows-ent-cpc_win11-24h2-ent-cpc`,
  *   skuName: "general_i_8c32gb256ssd_v2",
@@ -108,7 +108,9 @@ export interface DevBoxDefinition extends Resource<
  *
  * @resource
  */
-export const DevBoxDefinition = Resource<DevBoxDefinition>("Azure.DevCenter.DevBoxDefinition");
+export const DevBoxDefinition = GroupedResource<DevBoxDefinition>(
+  "Azure.DevCenter.DevBoxDefinition",
+);
 
 type Observed = devcenter.GetDevBoxDefinitionResponse;
 

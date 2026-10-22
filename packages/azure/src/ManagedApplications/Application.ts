@@ -4,7 +4,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import { stableStringify } from "alchemy/Util/stable";
 import * as Effect from "effect/Effect";
 import {
@@ -23,6 +23,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 
 /** A just-in-time access approver. */
 export interface ApplicationJitApprover {
@@ -167,7 +168,6 @@ export interface Application extends Resource<
  *   { resourceGroup: group.resourceGroupName, mainTemplate, createUiDefinition },
  * );
  * const app = yield* Azure.ManagedApplications.Application("customer-a", {
- *   resourceGroup: group.resourceGroupName,
  *   applicationDefinitionId: definition.applicationDefinitionId,
  * });
  * ```
@@ -176,7 +176,6 @@ export interface Application extends Resource<
  * **Example:** Set parameters of the definition's main template
  * ```typescript
  * const app = yield* Azure.ManagedApplications.Application("customer-a", {
- *   resourceGroup: group.resourceGroupName,
  *   applicationDefinitionId: definition.applicationDefinitionId,
  *   managedResourceGroupName: "customer-a-resources",
  *   parameters: { storageSku: "Standard_LRS" },
@@ -185,7 +184,7 @@ export interface Application extends Resource<
  *
  * @resource
  */
-export const Application = Resource<Application>("Azure.ManagedApplications.Application");
+export const Application = GroupedResource<Application>("Azure.ManagedApplications.Application");
 
 type ObservedApplication = solutions.GetApplicationResponse;
 

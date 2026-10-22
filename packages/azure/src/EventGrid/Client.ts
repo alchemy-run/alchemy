@@ -2,11 +2,12 @@ import * as eventgrid from "@distilled.cloud/azure/eventgrid";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { ensureRegistered, ignoreNotFound, orUndefinedIfNotFound, waitUntilGone } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createEventGridName, sameName } from "./common.ts";
 import {
   isOwnedDescription,
@@ -112,11 +113,9 @@ export interface Client extends Resource<
  * **Example:** Client authenticated by certificate thumbprint
  * ```typescript
  * const namespace = yield* Azure.EventGrid.Namespace("iot", {
- *   resourceGroup: group.resourceGroupName,
  *   topicSpacesConfiguration: { state: "Enabled" },
  * });
  * const device = yield* Azure.EventGrid.Client("device-1", {
- *   resourceGroup: group.resourceGroupName,
  *   namespace: namespace.namespaceName,
  *   validationScheme: "ThumbprintMatch",
  *   allowedThumbprints: [deviceCertThumbprint],
@@ -127,7 +126,6 @@ export interface Client extends Resource<
  * **Example:** Client validated by a CA certificate (subject = name)
  * ```typescript
  * const device = yield* Azure.EventGrid.Client("device-2", {
- *   resourceGroup: group.resourceGroupName,
  *   namespace: namespace.namespaceName,
  *   authenticationName: "device-2",
  *   validationScheme: "SubjectMatchesAuthenticationName",
@@ -136,7 +134,7 @@ export interface Client extends Resource<
  *
  * @resource
  */
-export const Client = Resource<Client>("Azure.EventGrid.Client");
+export const Client = GroupedResource<Client>("Azure.EventGrid.Client");
 
 type ObservedClient = Pick<eventgrid.Client, "id" | "properties">;
 

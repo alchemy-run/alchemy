@@ -2,7 +2,7 @@ import * as dps from "@distilled.cloud/azure/deviceprovisioningservices";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import {
@@ -20,6 +20,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createProvisioningServiceName,
   getProvisioningService,
@@ -200,21 +201,15 @@ export interface ProvisioningService extends Resource<
  * ### Creating a Provisioning Service
  * **Example:** Standalone service
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("app");
- * const dps = yield* Azure.IoT.ProvisioningService("dps", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const dps = yield* Azure.IoT.ProvisioningService("dps");
  * // devices register with dps.idScope at dps.deviceProvisioningHostName
  * ```
  *
  * ### Linking IoT Hubs
  * **Example:** Provision devices to a hub
  * ```typescript
- * const hub = yield* Azure.IoTHub.IotHub("devices", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const hub = yield* Azure.IoTHub.IotHub("devices");
  * const dps = yield* Azure.IoT.ProvisioningService("dps", {
- *   resourceGroup: group.resourceGroupName,
  *   allocationPolicy: "Hashed",
  *   iotHubs: [
  *     {
@@ -229,7 +224,6 @@ export interface ProvisioningService extends Resource<
  * **Example:** Only accept device traffic from one range
  * ```typescript
  * const dps = yield* Azure.IoT.ProvisioningService("dps", {
- *   resourceGroup: group.resourceGroupName,
  *   ipFilterRules: [
  *     { filterName: "office", action: "Accept", ipMask: "203.0.113.0/24" },
  *   ],
@@ -238,7 +232,9 @@ export interface ProvisioningService extends Resource<
  *
  * @resource
  */
-export const ProvisioningService = Resource<ProvisioningService>("Azure.IoT.ProvisioningService");
+export const ProvisioningService = GroupedResource<ProvisioningService>(
+  "Azure.IoT.ProvisioningService",
+);
 
 type Observed = dps.GetIotDpsResourceResponse;
 type Rule = dps.SharedAccessSignatureAuthorizationRuleAccessRightsDescription;

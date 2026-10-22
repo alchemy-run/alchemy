@@ -2,11 +2,12 @@ import * as network from "@distilled.cloud/azure/network";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { ensureRegistered, ignoreNotFound, orUndefinedIfNotFound } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   convergeChild,
   createNetworkName,
@@ -125,20 +126,16 @@ export interface VirtualNetworkPeering extends Resource<
  * **Example:** Bidirectional peering
  * ```typescript
  * const hub = yield* Azure.Network.VirtualNetwork("hub", {
- *   resourceGroup: group.resourceGroupName,
  *   addressPrefixes: ["10.0.0.0/16"],
  * });
  * const spoke = yield* Azure.Network.VirtualNetwork("spoke", {
- *   resourceGroup: group.resourceGroupName,
  *   addressPrefixes: ["10.1.0.0/16"],
  * });
  * yield* Azure.Network.VirtualNetworkPeering("hub-to-spoke", {
- *   resourceGroup: group.resourceGroupName,
  *   virtualNetwork: hub.virtualNetworkName,
  *   remoteVirtualNetworkId: spoke.virtualNetworkId,
  * });
  * yield* Azure.Network.VirtualNetworkPeering("spoke-to-hub", {
- *   resourceGroup: group.resourceGroupName,
  *   virtualNetwork: spoke.virtualNetworkName,
  *   remoteVirtualNetworkId: hub.virtualNetworkId,
  *   allowForwardedTraffic: true,
@@ -147,7 +144,7 @@ export interface VirtualNetworkPeering extends Resource<
  *
  * @resource
  */
-export const VirtualNetworkPeering = Resource<VirtualNetworkPeering>(
+export const VirtualNetworkPeering = GroupedResource<VirtualNetworkPeering>(
   "Azure.Network.VirtualNetworkPeering",
 );
 

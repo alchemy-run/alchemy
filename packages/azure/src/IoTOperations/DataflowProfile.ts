@@ -1,7 +1,8 @@
 import * as iot from "@distilled.cloud/azure/iotoperations";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { childLifecycle, childStatus, type InstanceScope } from "./Common.ts";
 
 export interface DataflowProfileProps {
@@ -57,7 +58,6 @@ export interface DataflowProfile extends Resource<
  * **Example:** Profile with two runtime instances
  * ```typescript
  * const profile = yield* Azure.IoTOperations.DataflowProfile("profile", {
- *   resourceGroup: group.resourceGroupName,
  *   instanceName: instance.instanceName,
  *   instanceCount: 2,
  *   diagnostics: { logs: { level: "info" } },
@@ -66,7 +66,9 @@ export interface DataflowProfile extends Resource<
  *
  * @resource
  */
-export const DataflowProfile = Resource<DataflowProfile>("Azure.IoTOperations.DataflowProfile");
+export const DataflowProfile = GroupedResource<DataflowProfile>(
+  "Azure.IoTOperations.DataflowProfile",
+);
 
 export const DataflowProfileProvider = () =>
   Provider.succeed(DataflowProfile, {

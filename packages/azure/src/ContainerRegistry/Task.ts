@@ -2,7 +2,7 @@ import * as containerregistry from "@distilled.cloud/azure/containerregistry";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -17,6 +17,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createRegistryName,
   getRegistry,
@@ -189,7 +190,6 @@ export interface Task extends Resource<
  * **Example:** Nightly Docker build from GitHub
  * ```typescript
  * const nightly = yield* Azure.ContainerRegistry.Task("nightly", {
- *   resourceGroup: group.resourceGroupName,
  *   registry: registry.registryName,
  *   platform: { os: "Linux" },
  *   step: {
@@ -206,7 +206,6 @@ export interface Task extends Resource<
  * **Example:** Inline (base64) task YAML
  * ```typescript
  * const purge = yield* Azure.ContainerRegistry.Task("purge", {
- *   resourceGroup: group.resourceGroupName,
  *   registry: registry.registryName,
  *   platform: { os: "Linux" },
  *   step: {
@@ -221,7 +220,7 @@ export interface Task extends Resource<
  *
  * @resource
  */
-export const Task = Resource<Task>("Azure.ContainerRegistry.Task");
+export const Task = GroupedResource<Task>("Azure.ContainerRegistry.Task");
 
 const getTask = (
   subscriptionId: string,

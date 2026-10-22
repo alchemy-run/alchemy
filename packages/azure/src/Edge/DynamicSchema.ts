@@ -2,7 +2,7 @@ import * as edge from "@distilled.cloud/azure/edge";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { EDGE_WAIT, edgeState } from "./EdgeShared.ts";
 
 export interface DynamicSchemaProps {
@@ -63,11 +64,9 @@ export interface DynamicSchema extends Resource<
  * **Example:** Dynamic schema with a version
  * ```typescript
  * const dynamic = yield* Azure.Edge.DynamicSchema("dynamic", {
- *   resourceGroup: group.resourceGroupName,
  *   schema: schema.schemaName,
  * });
  * yield* Azure.Edge.DynamicSchemaVersion("dynamic-v1", {
- *   resourceGroup: group.resourceGroupName,
  *   schema: schema.schemaName,
  *   dynamicSchema: dynamic.dynamicSchemaName,
  *   version: "1.0.0",
@@ -77,7 +76,7 @@ export interface DynamicSchema extends Resource<
  *
  * @resource
  */
-export const DynamicSchema = Resource<DynamicSchema>("Azure.Edge.DynamicSchema");
+export const DynamicSchema = GroupedResource<DynamicSchema>("Azure.Edge.DynamicSchema");
 
 const getDynamicSchema = (
   subscriptionId: string,

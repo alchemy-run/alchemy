@@ -2,7 +2,7 @@ import * as netapp from "@distilled.cloud/azure/netapp";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
 import {
@@ -18,6 +18,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createNetAppName,
   getAccount,
@@ -174,17 +175,13 @@ export interface Account extends Resource<
  * ### Creating an Account
  * **Example:** NetApp account
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("storage");
- * const account = yield* Azure.NetApp.Account("files", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const account = yield* Azure.NetApp.Account("files");
  * ```
  *
  * ### NFSv4 Identity Mapping
  * **Example:** Set the NFSv4 ID domain
  * ```typescript
  * const account = yield* Azure.NetApp.Account("files", {
- *   resourceGroup: group.resourceGroupName,
  *   nfsV4IDDomain: "contoso.com",
  * });
  * ```
@@ -193,7 +190,6 @@ export interface Account extends Resource<
  * **Example:** Join an Active Directory domain
  * ```typescript
  * const account = yield* Azure.NetApp.Account("files", {
- *   resourceGroup: group.resourceGroupName,
  *   activeDirectories: [
  *     {
  *       username: "anfadmin",
@@ -208,7 +204,7 @@ export interface Account extends Resource<
  *
  * @resource
  */
-export const Account = Resource<Account>("Azure.NetApp.Account");
+export const Account = GroupedResource<Account>("Azure.NetApp.Account");
 
 type ObservedAccount = netapp.GetAccountResponse | netapp.NetAppAccount;
 

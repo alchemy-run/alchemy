@@ -2,7 +2,7 @@ import * as mnf from "@distilled.cloud/azure/managednetworkfabric";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -19,6 +19,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createFabricName,
   differs,
@@ -126,9 +127,7 @@ export interface AccessControlList extends Resource<
  * ### Creating an ACL
  * **Example:** Inline ACL that drops one subnet
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("fabric");
  * const acl = yield* Azure.ManagedNetworkFabric.AccessControlList("ingress", {
- *   resourceGroup: group.resourceGroupName,
  *   configurationType: "Inline",
  *   defaultAction: "Permit",
  *   matchConfigurations: [
@@ -153,7 +152,7 @@ export interface AccessControlList extends Resource<
  *
  * @resource
  */
-export const AccessControlList = Resource<AccessControlList>(
+export const AccessControlList = GroupedResource<AccessControlList>(
   "Azure.ManagedNetworkFabric.AccessControlList",
 );
 

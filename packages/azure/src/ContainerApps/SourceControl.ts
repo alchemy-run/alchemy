@@ -2,7 +2,7 @@ import * as app from "@distilled.cloud/azure/app";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
 import {
@@ -14,6 +14,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   fingerprint,
   isContainerAppOwnedByStack,
@@ -114,7 +115,6 @@ export interface SourceControl extends Resource<
  * **Example:** Build and deploy from `main`
  * ```typescript
  * yield* Azure.ContainerApps.SourceControl("ci", {
- *   resourceGroup: group.resourceGroupName,
  *   containerApp: api.containerAppName,
  *   repoUrl: "https://github.com/acme/api",
  *   branch: "main",
@@ -138,7 +138,7 @@ export interface SourceControl extends Resource<
  *
  * @resource
  */
-export const SourceControl = Resource<SourceControl>("Azure.ContainerApps.SourceControl");
+export const SourceControl = GroupedResource<SourceControl>("Azure.ContainerApps.SourceControl");
 
 const getSourceControl = (
   subscriptionId: string,

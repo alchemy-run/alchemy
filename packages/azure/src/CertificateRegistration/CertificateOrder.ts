@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -21,6 +21,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 
 /** App Service Certificate product. */
 export type CertificateOrderProductType =
@@ -144,9 +145,7 @@ export interface CertificateOrder extends Resource<
  * ### Ordering a Certificate
  * **Example:** Single-domain certificate
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("certs");
  * const order = yield* Azure.CertificateRegistration.CertificateOrder("www", {
- *   resourceGroup: group.resourceGroupName,
  *   productType: "StandardDomainValidatedSsl",
  *   distinguishedName: "CN=www.example.com",
  *   autoRenew: true,
@@ -156,7 +155,6 @@ export interface CertificateOrder extends Resource<
  * **Example:** Wildcard certificate
  * ```typescript
  * const order = yield* Azure.CertificateRegistration.CertificateOrder("wildcard", {
- *   resourceGroup: group.resourceGroupName,
  *   productType: "StandardDomainValidatedWildCardSsl",
  *   distinguishedName: "CN=*.example.com",
  * });
@@ -166,7 +164,6 @@ export interface CertificateOrder extends Resource<
  * **Example:** Publish the domain verification token as a TXT record
  * ```typescript
  * yield* Azure.Dns.RecordSet("asuid", {
- *   resourceGroup: group.resourceGroupName,
  *   zoneName: zone.zoneName,
  *   name: "@",
  *   recordType: "TXT",
@@ -176,7 +173,7 @@ export interface CertificateOrder extends Resource<
  *
  * @resource
  */
-export const CertificateOrder = Resource<CertificateOrder>(
+export const CertificateOrder = GroupedResource<CertificateOrder>(
   "Azure.CertificateRegistration.CertificateOrder",
 );
 

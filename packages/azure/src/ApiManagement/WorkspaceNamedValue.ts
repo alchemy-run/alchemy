@@ -1,8 +1,9 @@
 import * as apim from "@distilled.cloud/azure/apimanagement";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createEntityName } from "./Common.ts";
 import { entityLifecycle, reveal } from "./Entity.ts";
 import type { NamedValue, NamedValueProps } from "./NamedValue.ts";
@@ -34,7 +35,6 @@ export interface WorkspaceNamedValue extends Resource<
  * **Example:** A secret named value
  * ```typescript
  * yield* Azure.ApiManagement.WorkspaceNamedValue("backend-key", {
- *   resourceGroup: group.resourceGroupName,
  *   serviceName: apim.serviceName,
  *   workspaceName: workspace.workspaceName,
  *   value: Redacted.make(backendKey),
@@ -44,7 +44,7 @@ export interface WorkspaceNamedValue extends Resource<
  *
  * @resource
  */
-export const WorkspaceNamedValue = Resource<WorkspaceNamedValue>(
+export const WorkspaceNamedValue = GroupedResource<WorkspaceNamedValue>(
   "Azure.ApiManagement.WorkspaceNamedValue",
 );
 

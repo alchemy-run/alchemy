@@ -2,12 +2,13 @@ import * as web from "@distilled.cloud/azure/web";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
 import { ensureRegistered, ignoreNotFound, orUndefinedIfNotFound, waitUntilGone } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { lower, reveal, siteWhere } from "./common.ts";
 
 export interface HybridConnectionProps {
@@ -83,7 +84,6 @@ export interface HybridConnection extends Resource<
  * **Example:** SQL Server behind the corporate firewall
  * ```typescript
  * yield* Azure.Web.HybridConnection("onprem-sql", {
- *   resourceGroup: group.resourceGroupName,
  *   siteName: app.siteName,
  *   namespaceName: "contoso-relay",
  *   relayName: "onprem-sql",
@@ -97,7 +97,7 @@ export interface HybridConnection extends Resource<
  *
  * @resource
  */
-export const HybridConnection = Resource<HybridConnection>("Azure.Web.HybridConnection");
+export const HybridConnection = GroupedResource<HybridConnection>("Azure.Web.HybridConnection");
 
 type ObservedConnection = web.GetWebAppHybridConnectionResponse;
 

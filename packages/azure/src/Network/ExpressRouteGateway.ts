@@ -1,8 +1,9 @@
 import * as network from "@distilled.cloud/azure/network";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import { orUndefinedIfNotFound, userTags } from "../Arm.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { sameId } from "./common.ts";
 import { networkProvider } from "./generic.ts";
 
@@ -72,7 +73,6 @@ export interface ExpressRouteGateway extends Resource<
  * **Example:** One scale unit in a hub
  * ```typescript
  * const gateway = yield* Azure.Network.ExpressRouteGateway("er", {
- *   resourceGroup: group.resourceGroupName,
  *   virtualHubId: hub.virtualHubId,
  *   minScaleUnits: 1,
  * });
@@ -80,7 +80,7 @@ export interface ExpressRouteGateway extends Resource<
  *
  * @resource
  */
-export const ExpressRouteGateway = Resource<ExpressRouteGateway>(
+export const ExpressRouteGateway = GroupedResource<ExpressRouteGateway>(
   "Azure.Network.ExpressRouteGateway",
 );
 

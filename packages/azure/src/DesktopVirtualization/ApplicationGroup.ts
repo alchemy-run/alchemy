@@ -2,7 +2,7 @@ import * as desktopvirtualization from "@distilled.cloud/azure/desktopvirtualiza
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -19,6 +19,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createAvdName, deltaOf } from "./Common.ts";
 
 export type ApplicationGroupType = "Desktop" | "RemoteApp";
@@ -104,7 +105,6 @@ export interface ApplicationGroup extends Resource<
  * **Example:** Desktop application group
  * ```typescript
  * const desktops = yield* Azure.DesktopVirtualization.ApplicationGroup("desktops", {
- *   resourceGroup: group.resourceGroupName,
  *   hostPoolId: pool.hostPoolId,
  *   applicationGroupType: "Desktop",
  *   friendlyName: "Office desktop",
@@ -114,7 +114,6 @@ export interface ApplicationGroup extends Resource<
  * **Example:** RemoteApp application group
  * ```typescript
  * const apps = yield* Azure.DesktopVirtualization.ApplicationGroup("apps", {
- *   resourceGroup: group.resourceGroupName,
  *   hostPoolId: pool.hostPoolId,
  *   applicationGroupType: "RemoteApp",
  * });
@@ -122,7 +121,7 @@ export interface ApplicationGroup extends Resource<
  *
  * @resource
  */
-export const ApplicationGroup = Resource<ApplicationGroup>(
+export const ApplicationGroup = GroupedResource<ApplicationGroup>(
   "Azure.DesktopVirtualization.ApplicationGroup",
 );
 

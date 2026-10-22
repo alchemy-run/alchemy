@@ -1,8 +1,9 @@
 import * as network from "@distilled.cloud/azure/network";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import { orUndefinedIfNotFound } from "../Arm.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { networkProvider } from "./generic.ts";
 import { networkManagerChildName, networkManagerTags } from "./networkManagerShared.ts";
 
@@ -90,7 +91,6 @@ export interface AdminRule extends Resource<
  * **Example:** Deny inbound RDP and SSH from the internet
  * ```typescript
  * yield* Azure.Network.AdminRule("deny-remote", {
- *   resourceGroup: group.resourceGroupName,
  *   networkManager: manager.networkManagerName,
  *   securityAdminConfiguration: admin.configurationName,
  *   ruleCollection: rules.ruleCollectionName,
@@ -105,7 +105,7 @@ export interface AdminRule extends Resource<
  *
  * @resource
  */
-export const AdminRule = Resource<AdminRule>("Azure.Network.AdminRule");
+export const AdminRule = GroupedResource<AdminRule>("Azure.Network.AdminRule");
 
 const anyAddress = [{ addressPrefix: "*", addressPrefixType: "IPPrefix" }];
 

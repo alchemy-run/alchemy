@@ -2,7 +2,7 @@ import * as netapp from "@distilled.cloud/azure/netapp";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import {
@@ -20,6 +20,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createNetAppName,
   listAllPools,
@@ -170,7 +171,6 @@ export interface Cache extends Resource<
  * **Example:** Cache an on-premises ONTAP volume
  * ```typescript
  * const cache = yield* Azure.NetApp.Cache("cache", {
- *   resourceGroup: group.resourceGroupName,
  *   account: account.accountName,
  *   pool: pool.poolName,
  *   size: 100 * Azure.NetApp.GiB,
@@ -190,7 +190,6 @@ export interface Cache extends Resource<
  * **Example:** Enable write-back caching
  * ```typescript
  * const cache = yield* Azure.NetApp.Cache("cache", {
- *   resourceGroup: group.resourceGroupName,
  *   account: account.accountName,
  *   pool: pool.poolName,
  *   size: 100 * Azure.NetApp.GiB,
@@ -203,7 +202,7 @@ export interface Cache extends Resource<
  *
  * @resource
  */
-export const Cache = Resource<Cache>("Azure.NetApp.Cache");
+export const Cache = GroupedResource<Cache>("Azure.NetApp.Cache");
 
 interface Where {
   subscriptionId: string;

@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -23,6 +23,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 
 /** An Azure DevOps organization the pool serves. */
 export interface PoolAzureDevOpsOrganization {
@@ -288,16 +289,11 @@ export interface Pool extends Resource<
  * ### Creating a Pool
  * **Example:** Stateless Ubuntu pool for an Azure DevOps organization
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("ci");
- * const center = yield* Azure.DevCenter.DevCenter("ci", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const center = yield* Azure.DevCenter.DevCenter("ci");
  * const project = yield* Azure.DevCenter.Project("ci", {
- *   resourceGroup: group.resourceGroupName,
  *   devCenterId: center.devCenterId,
  * });
  * const pool = yield* Azure.DevOpsInfrastructure.Pool("agents", {
- *   resourceGroup: group.resourceGroupName,
  *   devCenterProjectResourceId: project.projectId,
  *   maximumConcurrency: 2,
  *   organizationProfile: {
@@ -316,7 +312,6 @@ export interface Pool extends Resource<
  * **Example:** Stateful pool with automatic stand-by agents
  * ```typescript
  * const pool = yield* Azure.DevOpsInfrastructure.Pool("warm", {
- *   resourceGroup: group.resourceGroupName,
  *   devCenterProjectResourceId: project.projectId,
  *   maximumConcurrency: 4,
  *   organizationProfile: {
@@ -344,7 +339,6 @@ export interface Pool extends Resource<
  * **Example:** Pool serving a GitHub organization
  * ```typescript
  * const runners = yield* Azure.DevOpsInfrastructure.Pool("runners", {
- *   resourceGroup: group.resourceGroupName,
  *   devCenterProjectResourceId: project.projectId,
  *   maximumConcurrency: 2,
  *   organizationProfile: {
@@ -361,7 +355,7 @@ export interface Pool extends Resource<
  *
  * @resource
  */
-export const Pool = Resource<Pool>("Azure.DevOpsInfrastructure.Pool");
+export const Pool = GroupedResource<Pool>("Azure.DevOpsInfrastructure.Pool");
 
 /**
  * The service accepted the create and then removed the pool because its

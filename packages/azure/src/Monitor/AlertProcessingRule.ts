@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -21,6 +21,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 
 /** What an alert processing rule does to the alerts it matches. */
 export type AlertProcessingRuleAction =
@@ -150,7 +151,6 @@ export interface AlertProcessingRule extends Resource<
  * ```typescript
  * const group = yield* Azure.Resources.ResourceGroup("app");
  * const rule = yield* Azure.Monitor.AlertProcessingRule("weekend-quiet", {
- *   resourceGroup: group.resourceGroupName,
  *   scopes: [group.resourceGroupId],
  *   actions: [{ actionType: "RemoveAllActionGroups" }],
  *   conditions: [
@@ -169,7 +169,6 @@ export interface AlertProcessingRule extends Resource<
  * **Example:** Add an action group to every critical alert
  * ```typescript
  * const rule = yield* Azure.Monitor.AlertProcessingRule("page-oncall", {
- *   resourceGroup: group.resourceGroupName,
  *   scopes: [group.resourceGroupId],
  *   actions: [{ actionType: "AddActionGroups", actionGroupIds: [oncallId] }],
  *   conditions: [{ field: "Severity", operator: "Equals", values: ["Sev0"] }],
@@ -179,7 +178,7 @@ export interface AlertProcessingRule extends Resource<
  *
  * @resource
  */
-export const AlertProcessingRule = Resource<AlertProcessingRule>(
+export const AlertProcessingRule = GroupedResource<AlertProcessingRule>(
   "Azure.Monitor.AlertProcessingRule",
 );
 

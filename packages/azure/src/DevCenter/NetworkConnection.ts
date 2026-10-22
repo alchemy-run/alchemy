@@ -2,7 +2,7 @@ import * as devcenter from "@distilled.cloud/azure/devcenter";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
@@ -22,6 +22,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createDevCenterName, sameArm } from "./Common.ts";
 
 export type NetworkConnectionDomainJoinType = "AzureADJoin" | "HybridAzureADJoin" | "None";
@@ -116,16 +117,13 @@ export interface NetworkConnection extends Resource<
  * **Example:** Microsoft Entra joined dev boxes in a subnet
  * ```typescript
  * const vnet = yield* Azure.Network.VirtualNetwork("vnet", {
- *   resourceGroup: group.resourceGroupName,
  *   addressPrefixes: ["10.0.0.0/16"],
  * });
  * const subnet = yield* Azure.Network.Subnet("devboxes", {
- *   resourceGroup: group.resourceGroupName,
  *   virtualNetwork: vnet.virtualNetworkName,
  *   addressPrefix: "10.0.0.0/24",
  * });
  * const connection = yield* Azure.DevCenter.NetworkConnection("connection", {
- *   resourceGroup: group.resourceGroupName,
  *   subnetId: subnet.subnetId,
  * });
  * ```
@@ -134,7 +132,6 @@ export interface NetworkConnection extends Resource<
  * **Example:** Hybrid Microsoft Entra joined dev boxes
  * ```typescript
  * const connection = yield* Azure.DevCenter.NetworkConnection("connection", {
- *   resourceGroup: group.resourceGroupName,
  *   subnetId: subnet.subnetId,
  *   domainJoinType: "HybridAzureADJoin",
  *   domainName: "corp.contoso.com",
@@ -145,7 +142,9 @@ export interface NetworkConnection extends Resource<
  *
  * @resource
  */
-export const NetworkConnection = Resource<NetworkConnection>("Azure.DevCenter.NetworkConnection");
+export const NetworkConnection = GroupedResource<NetworkConnection>(
+  "Azure.DevCenter.NetworkConnection",
+);
 
 type Observed = devcenter.GetNetworkConnectionResponse;
 

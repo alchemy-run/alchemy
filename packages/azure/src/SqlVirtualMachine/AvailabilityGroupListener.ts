@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -14,6 +14,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { isGroupOwnedByStack, lower, matchesObserved } from "./common.ts";
 
 export interface AvailabilityGroupListenerProps {
@@ -96,7 +97,6 @@ export interface AvailabilityGroupListener extends Resource<
  * **Example:** Load-balanced listener for a single-subnet cluster
  * ```typescript
  * const listener = yield* Azure.SqlVirtualMachine.AvailabilityGroupListener("ag", {
- *   resourceGroup: group.resourceGroupName,
  *   sqlVirtualMachineGroup: cluster.sqlVirtualMachineGroupName,
  *   availabilityGroupName: "ag1",
  *   port: 1433,
@@ -114,7 +114,6 @@ export interface AvailabilityGroupListener extends Resource<
  * **Example:** Multi-subnet listener without a load balancer
  * ```typescript
  * yield* Azure.SqlVirtualMachine.AvailabilityGroupListener("ag", {
- *   resourceGroup: group.resourceGroupName,
  *   sqlVirtualMachineGroup: cluster.sqlVirtualMachineGroupName,
  *   availabilityGroupName: "ag1",
  *   multiSubnetIpConfigurations: [
@@ -132,7 +131,7 @@ export interface AvailabilityGroupListener extends Resource<
  *
  * @resource
  */
-export const AvailabilityGroupListener = Resource<AvailabilityGroupListener>(
+export const AvailabilityGroupListener = GroupedResource<AvailabilityGroupListener>(
   "Azure.SqlVirtualMachine.AvailabilityGroupListener",
 );
 

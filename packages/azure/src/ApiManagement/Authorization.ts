@@ -1,9 +1,10 @@
 import * as apim from "@distilled.cloud/azure/apimanagement";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createEntityName, sameName } from "./Common.ts";
 import { entityLifecycle, reveal, sameSecrets } from "./Entity.ts";
 
@@ -70,7 +71,6 @@ export interface Authorization extends Resource<
  * **Example:** A client-credentials connection to Microsoft Graph
  * ```typescript
  * const connection = yield* Azure.ApiManagement.Authorization("graph", {
- *   resourceGroup: group.resourceGroupName,
  *   serviceName: apim.serviceName,
  *   authorizationProviderName: provider.authorizationProviderName,
  *   oauth2GrantType: "ClientCredentials",
@@ -83,7 +83,7 @@ export interface Authorization extends Resource<
  *
  * @resource
  */
-export const Authorization = Resource<Authorization>("Azure.ApiManagement.Authorization");
+export const Authorization = GroupedResource<Authorization>("Azure.ApiManagement.Authorization");
 
 interface Key {
   resourceGroup: string;

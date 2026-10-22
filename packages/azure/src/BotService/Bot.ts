@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
 import {
@@ -21,6 +21,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { DEFAULT_BOT_LOCATION, isSubset, reveal, sameArm } from "./Common.ts";
 
 export type BotKind = "azurebot" | "bot" | "designer" | "function" | "sdk";
@@ -176,12 +177,8 @@ export interface Bot extends Resource<
  * ### Creating a Bot
  * **Example:** Bot authenticating as a managed identity
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("bots");
- * const identity = yield* Azure.ManagedIdentity.UserAssignedIdentity("bot-id", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const identity = yield* Azure.ManagedIdentity.UserAssignedIdentity("bot-id");
  * const bot = yield* Azure.BotService.Bot("support", {
- *   resourceGroup: group.resourceGroupName,
  *   msaAppId: identity.clientId,
  *   msaAppTenantId: identity.tenantId,
  *   msaAppMSIResourceId: identity.identityId,
@@ -193,7 +190,6 @@ export interface Bot extends Resource<
  * **Example:** Display name, description, and Standard tier
  * ```typescript
  * const bot = yield* Azure.BotService.Bot("support", {
- *   resourceGroup: group.resourceGroupName,
  *   msaAppId: identity.clientId,
  *   msaAppMSIResourceId: identity.identityId,
  *   displayName: "Support Bot",
@@ -205,7 +201,7 @@ export interface Bot extends Resource<
  *
  * @resource
  */
-export const Bot = Resource<Bot>("Azure.BotService.Bot");
+export const Bot = GroupedResource<Bot>("Azure.BotService.Bot");
 
 const createBotName = (id: string) => createPhysicalName({ id, maxLength: 42 });
 

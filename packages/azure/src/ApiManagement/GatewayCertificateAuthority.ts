@@ -1,8 +1,9 @@
 import * as apim from "@distilled.cloud/azure/apimanagement";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { entityLifecycle } from "./Entity.ts";
 
 export interface GatewayCertificateAuthorityProps {
@@ -53,7 +54,6 @@ export interface GatewayCertificateAuthority extends Resource<
  * **Example:** Trust an internal CA on a self-hosted gateway
  * ```typescript
  * yield* Azure.ApiManagement.GatewayCertificateAuthority("internal-ca", {
- *   resourceGroup: group.resourceGroupName,
  *   serviceName: apim.serviceName,
  *   gatewayName: gateway.gatewayName,
  *   certificateName: caCert.certificateName,
@@ -63,7 +63,7 @@ export interface GatewayCertificateAuthority extends Resource<
  *
  * @resource
  */
-export const GatewayCertificateAuthority = Resource<GatewayCertificateAuthority>(
+export const GatewayCertificateAuthority = GroupedResource<GatewayCertificateAuthority>(
   "Azure.ApiManagement.GatewayCertificateAuthority",
 );
 

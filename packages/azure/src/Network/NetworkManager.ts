@@ -1,8 +1,9 @@
 import * as network from "@distilled.cloud/azure/network";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import { orUndefinedIfNotFound, userTags } from "../Arm.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { sameSet } from "./common.ts";
 import { networkProvider } from "./generic.ts";
 import { networkManagerChildName } from "./networkManagerShared.ts";
@@ -88,14 +89,13 @@ export interface NetworkManager extends Resource<
  * **Example:** Manage the current subscription
  * ```typescript
  * const manager = yield* Azure.Network.NetworkManager("avnm", {
- *   resourceGroup: group.resourceGroupName,
  *   scopeAccesses: ["Connectivity", "SecurityAdmin"],
  * });
  * ```
  *
  * @resource
  */
-export const NetworkManager = Resource<NetworkManager>("Azure.Network.NetworkManager");
+export const NetworkManager = GroupedResource<NetworkManager>("Azure.Network.NetworkManager");
 
 export const NetworkManagerProvider = () =>
   Provider.succeed(

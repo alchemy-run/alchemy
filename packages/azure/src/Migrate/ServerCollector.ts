@@ -2,7 +2,7 @@ import * as migrate from "@distilled.cloud/azure/migrate";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { getAssessmentProject } from "./AssessmentProject.ts";
 import { migrateName, ownedByStage, settingsDiffer } from "./Common.ts";
 import type { CollectorServicePrincipal } from "./Types.ts";
@@ -81,11 +82,9 @@ export interface ServerCollector extends Resource<
  * **Example:** Collector for a discovery site's agent
  * ```typescript
  * const site = yield* Azure.Migrate.ServerSite("servers-site", {
- *   resourceGroup: group.resourceGroupName,
  *   location: "centralus",
  * });
  * const collector = yield* Azure.Migrate.ServerCollector("servers", {
- *   resourceGroup: group.resourceGroupName,
  *   assessmentProject: project.projectName,
  *   agentId: site.agentId,
  *   discoverySiteId: site.siteId,
@@ -101,7 +100,7 @@ export interface ServerCollector extends Resource<
  *
  * @resource
  */
-export const ServerCollector = Resource<ServerCollector>("Azure.Migrate.ServerCollector");
+export const ServerCollector = GroupedResource<ServerCollector>("Azure.Migrate.ServerCollector");
 
 const getServerCollector = (
   subscriptionId: string,

@@ -1,7 +1,7 @@
 import * as asr from "@distilled.cloud/azure/recoveryservicessiterecovery";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import {
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createSiteRecoveryName,
   matchesDesired,
@@ -98,7 +99,6 @@ export interface ReplicationPolicy extends Resource<
  * **Example:** 24-hour retention with 4-hourly app-consistent snapshots
  * ```typescript
  * const policy = yield* Azure.SiteRecovery.ReplicationPolicy("a2a-policy", {
- *   resourceGroup: group.resourceGroupName,
  *   vault: vault.vaultName,
  *   providerSpecificInput: {
  *     instanceType: "A2A",
@@ -111,7 +111,7 @@ export interface ReplicationPolicy extends Resource<
  *
  * @resource
  */
-export const ReplicationPolicy = Resource<ReplicationPolicy>(
+export const ReplicationPolicy = GroupedResource<ReplicationPolicy>(
   "Azure.SiteRecovery.ReplicationPolicy",
 );
 

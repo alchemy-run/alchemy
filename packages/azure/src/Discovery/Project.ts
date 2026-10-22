@@ -2,7 +2,7 @@ import * as discovery from "@distilled.cloud/azure/discovery";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -17,6 +17,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createDiscoveryName,
   DISCOVERY_NAMESPACE,
@@ -93,7 +94,6 @@ export interface Project extends Resource<
  * **Example:** Project with access to a storage container
  * ```typescript
  * const project = yield* Azure.Discovery.Project("battery", {
- *   resourceGroup: group.resourceGroupName,
  *   workspace: workspace.workspaceName,
  *   storageContainerIds: [container.storageContainerId],
  *   behaviorPreferences: "Prefer peer-reviewed sources.",
@@ -102,7 +102,7 @@ export interface Project extends Resource<
  *
  * @resource
  */
-export const Project = Resource<Project>("Azure.Discovery.Project");
+export const Project = GroupedResource<Project>("Azure.Discovery.Project");
 
 const getProject = (
   subscriptionId: string,

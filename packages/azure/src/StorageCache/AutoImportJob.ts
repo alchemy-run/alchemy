@@ -2,7 +2,7 @@ import * as storagecache from "@distilled.cloud/azure/storagecache";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -21,6 +21,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { getAmlFilesystem } from "./AmlFilesystem.ts";
 import { AmlFilesystemMissing, createLustreName, JOB_BUDGET, sameList } from "./Common.ts";
 
@@ -132,7 +133,6 @@ export interface AutoImportJob extends Resource<
  * **Example:** Continuously import the whole container
  * ```typescript
  * const importJob = yield* Azure.StorageCache.AutoImportJob("import", {
- *   resourceGroup: group.resourceGroupName,
  *   amlFilesystem: fs.amlFilesystemName,
  * });
  * ```
@@ -140,7 +140,6 @@ export interface AutoImportJob extends Resource<
  * **Example:** Import two prefixes, overwriting dirty files and applying deletions
  * ```typescript
  * const importJob = yield* Azure.StorageCache.AutoImportJob("import", {
- *   resourceGroup: group.resourceGroupName,
  *   amlFilesystem: fs.amlFilesystemName,
  *   autoImportPrefixes: ["/datasets", "/models"],
  *   conflictResolutionMode: "OverwriteIfDirty",
@@ -150,7 +149,7 @@ export interface AutoImportJob extends Resource<
  *
  * @resource
  */
-export const AutoImportJob = Resource<AutoImportJob>("Azure.StorageCache.AutoImportJob");
+export const AutoImportJob = GroupedResource<AutoImportJob>("Azure.StorageCache.AutoImportJob");
 
 type ObservedJob = storagecache.GetAutoImportJobResponse;
 

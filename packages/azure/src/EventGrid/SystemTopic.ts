@@ -2,7 +2,7 @@ import * as eventgrid from "@distilled.cloud/azure/eventgrid";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -20,6 +20,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createEventGridName,
   identityDiffers,
@@ -104,11 +105,8 @@ export interface SystemTopic extends Resource<
  * ### Creating a System Topic
  * **Example:** Storage account events
  * ```typescript
- * const account = yield* Azure.Storage.StorageAccount("files", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const account = yield* Azure.Storage.StorageAccount("files");
  * const events = yield* Azure.EventGrid.SystemTopic("files-events", {
- *   resourceGroup: group.resourceGroupName,
  *   source: account.storageAccountId,
  *   topicType: "Microsoft.Storage.StorageAccounts",
  * });
@@ -117,7 +115,6 @@ export interface SystemTopic extends Resource<
  * **Example:** Resource group events
  * ```typescript
  * const events = yield* Azure.EventGrid.SystemTopic("group-events", {
- *   resourceGroup: group.resourceGroupName,
  *   source: group.resourceGroupId,
  *   topicType: "Microsoft.Resources.ResourceGroups",
  *   location: "global",
@@ -126,7 +123,7 @@ export interface SystemTopic extends Resource<
  *
  * @resource
  */
-export const SystemTopic = Resource<SystemTopic>("Azure.EventGrid.SystemTopic");
+export const SystemTopic = GroupedResource<SystemTopic>("Azure.EventGrid.SystemTopic");
 
 type ObservedSystemTopic = Pick<
   eventgrid.SystemTopic,

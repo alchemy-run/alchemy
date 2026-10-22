@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -21,6 +21,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   HYBRID_AKS_NAMESPACE,
   type HybridAksExtendedLocation,
@@ -142,7 +143,6 @@ export interface VirtualNetwork extends Resource<
  * **Example:** Static IP network with a VIP pool
  * ```typescript
  * const network = yield* Azure.HybridContainerService.VirtualNetwork("aks-net", {
- *   resourceGroup: group.resourceGroupName,
  *   extendedLocation: { name: customLocationId },
  *   hci: { mocGroup: "target-group", mocLocation: "MocLocation", mocVnetName: "vnet1" },
  *   ipAddressPrefix: "10.0.0.0/24",
@@ -156,7 +156,6 @@ export interface VirtualNetwork extends Resource<
  * **Example:** Tagged network on a VLAN
  * ```typescript
  * yield* Azure.HybridContainerService.VirtualNetwork("vlan-net", {
- *   resourceGroup: group.resourceGroupName,
  *   extendedLocation: { name: customLocationId },
  *   hci: { mocVnetName: "vlan100" },
  *   vlanID: 100,
@@ -166,7 +165,7 @@ export interface VirtualNetwork extends Resource<
  *
  * @resource
  */
-export const VirtualNetwork = Resource<VirtualNetwork>(
+export const VirtualNetwork = GroupedResource<VirtualNetwork>(
   "Azure.HybridContainerService.VirtualNetwork",
 );
 

@@ -2,7 +2,7 @@ import * as backup from "@distilled.cloud/azure/recoveryservicesbackup";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import {
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   isVaultOwnedByStack,
   RECOVERY_SERVICES_NAMESPACE,
@@ -92,11 +93,8 @@ export interface BackupVaultConfig extends Resource<
  * ### Soft Delete
  * **Example:** Keep soft-deleted backups for 30 days
  * ```typescript
- * const vault = yield* Azure.RecoveryServices.Vault("backup-vault", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const vault = yield* Azure.RecoveryServices.Vault("backup-vault");
  * yield* Azure.RecoveryServices.BackupVaultConfig("vault-config", {
- *   resourceGroup: group.resourceGroupName,
  *   vault: vault.vaultName,
  *   softDeleteRetentionPeriodInDays: 30,
  * });
@@ -105,7 +103,6 @@ export interface BackupVaultConfig extends Resource<
  * **Example:** Disable soft delete on a vault that is not `AlwaysON`
  * ```typescript
  * yield* Azure.RecoveryServices.BackupVaultConfig("vault-config", {
- *   resourceGroup: group.resourceGroupName,
  *   vault: legacyVaultName,
  *   softDeleteFeatureState: "Disabled",
  * });
@@ -113,7 +110,7 @@ export interface BackupVaultConfig extends Resource<
  *
  * @resource
  */
-export const BackupVaultConfig = Resource<BackupVaultConfig>(
+export const BackupVaultConfig = GroupedResource<BackupVaultConfig>(
   "Azure.RecoveryServices.BackupVaultConfig",
 );
 

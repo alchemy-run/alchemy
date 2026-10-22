@@ -1,7 +1,7 @@
 import * as postgresql from "@distilled.cloud/azure/postgresql";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -11,6 +11,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { POSTGRES_NAMESPACE, type ServerRef, whileServerBusy } from "./common.ts";
 
 export interface AdvancedThreatProtectionSettingsProps {
@@ -59,7 +60,6 @@ export interface AdvancedThreatProtectionSettings extends Resource<
  * const protection = yield* Azure.PostgreSQL.AdvancedThreatProtectionSettings(
  *   "protection",
  *   {
- *     resourceGroup: group.resourceGroupName,
  *     server: server.serverName,
  *   },
  * );
@@ -67,7 +67,7 @@ export interface AdvancedThreatProtectionSettings extends Resource<
  *
  * @resource
  */
-export const AdvancedThreatProtectionSettings = Resource<AdvancedThreatProtectionSettings>(
+export const AdvancedThreatProtectionSettings = GroupedResource<AdvancedThreatProtectionSettings>(
   "Azure.PostgreSQL.AdvancedThreatProtectionSettings",
 );
 

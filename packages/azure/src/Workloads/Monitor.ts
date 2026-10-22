@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -20,6 +20,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { getMonitor, identityBlock, identityIds, lower, withRecordedError } from "./Common.ts";
 
 export interface MonitorProps {
@@ -146,17 +147,14 @@ export interface Monitor extends Resource<
  * ```typescript
  * const group = yield* Azure.Resources.ResourceGroup("sap", {});
  * const vnet = yield* Azure.Network.VirtualNetwork("sap-vnet", {
- *   resourceGroup: group.resourceGroupName,
  *   addressPrefixes: ["10.0.0.0/16"],
  * });
  * const subnet = yield* Azure.Network.Subnet("ams", {
- *   resourceGroup: group.resourceGroupName,
  *   virtualNetwork: vnet.virtualNetworkName,
  *   addressPrefix: "10.0.1.0/24",
  *   delegations: [{ serviceName: "Microsoft.Web/serverFarms" }],
  * });
  * const monitor = yield* Azure.Workloads.Monitor("ams", {
- *   resourceGroup: group.resourceGroupName,
  *   monitorSubnet: subnet.subnetId,
  * });
  * ```
@@ -164,7 +162,6 @@ export interface Monitor extends Resource<
  * **Example:** Monitor that routes all traffic through the VNet
  * ```typescript
  * const monitor = yield* Azure.Workloads.Monitor("ams", {
- *   resourceGroup: group.resourceGroupName,
  *   monitorSubnet: subnet.subnetId,
  *   routingPreference: "RouteAll",
  *   tags: { team: "sap-basis" },
@@ -175,7 +172,6 @@ export interface Monitor extends Resource<
  * **Example:** Send data to an existing workspace
  * ```typescript
  * const monitor = yield* Azure.Workloads.Monitor("ams", {
- *   resourceGroup: group.resourceGroupName,
  *   monitorSubnet: subnet.subnetId,
  *   logAnalyticsWorkspaceArmId: workspace.workspaceId,
  * });
@@ -183,7 +179,7 @@ export interface Monitor extends Resource<
  *
  * @resource
  */
-export const Monitor = Resource<Monitor>("Azure.Workloads.Monitor");
+export const Monitor = GroupedResource<Monitor>("Azure.Workloads.Monitor");
 
 type ObservedMonitor = workloads.GetMonitorResponse;
 

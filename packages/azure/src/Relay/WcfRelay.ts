@@ -2,7 +2,7 @@ import * as relay from "@distilled.cloud/azure/relay";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createEntityName,
   hasMarker,
@@ -106,11 +107,8 @@ export interface WcfRelay extends Resource<
  * ### Creating a WCF Relay
  * **Example:** NetTcp relay
  * ```typescript
- * const ns = yield* Azure.Relay.Namespace("relay", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const ns = yield* Azure.Relay.Namespace("relay");
  * const svc = yield* Azure.Relay.WcfRelay("legacy-svc", {
- *   resourceGroup: group.resourceGroupName,
  *   namespace: ns.namespaceName,
  *   relayType: "NetTcp",
  * });
@@ -119,7 +117,6 @@ export interface WcfRelay extends Resource<
  * **Example:** HTTP relay
  * ```typescript
  * const svc = yield* Azure.Relay.WcfRelay("legacy-http", {
- *   resourceGroup: group.resourceGroupName,
  *   namespace: ns.namespaceName,
  *   relayType: "Http",
  *   userMetadata: "SOAP endpoint for ERP",
@@ -128,7 +125,7 @@ export interface WcfRelay extends Resource<
  *
  * @resource
  */
-export const WcfRelay = Resource<WcfRelay>("Azure.Relay.WcfRelay");
+export const WcfRelay = GroupedResource<WcfRelay>("Azure.Relay.WcfRelay");
 
 interface Where {
   subscriptionId: string;

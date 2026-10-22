@@ -2,7 +2,7 @@ import * as servicenetworking from "@distilled.cloud/azure/servicenetworking";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -20,6 +20,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { AGC_BUDGET, childLocation, createAgcName, ensureProvisioned, sameArm } from "./Common.ts";
 
 export interface AssociationProps {
@@ -103,11 +104,9 @@ export interface Association extends Resource<
  * **Example:** Association with a delegated subnet
  * ```typescript
  * const vnet = yield* Azure.Network.VirtualNetwork("vnet", {
- *   resourceGroup: group.resourceGroupName,
  *   addressPrefixes: ["10.0.0.0/16"],
  * });
  * const subnet = yield* Azure.Network.Subnet("alb", {
- *   resourceGroup: group.resourceGroupName,
  *   virtualNetwork: vnet.virtualNetworkName,
  *   addressPrefix: "10.0.1.0/24",
  *   delegations: [
@@ -115,7 +114,6 @@ export interface Association extends Resource<
  *   ],
  * });
  * const association = yield* Azure.ServiceNetworking.Association("alb", {
- *   resourceGroup: group.resourceGroupName,
  *   trafficController: controller.trafficControllerName,
  *   subnetId: subnet.subnetId,
  * });
@@ -123,7 +121,7 @@ export interface Association extends Resource<
  *
  * @resource
  */
-export const Association = Resource<Association>("Azure.ServiceNetworking.Association");
+export const Association = GroupedResource<Association>("Azure.ServiceNetworking.Association");
 
 type Observed = servicenetworking.GetAssociationsInterfaceResponse | servicenetworking.Association;
 

@@ -3,11 +3,12 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { ensureRegistered, ignoreNotFound, orUndefinedIfNotFound, waitUntilGone } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { isOwnedChild, waitForChild, whileAccountBusy } from "./Shared.ts";
 
 export interface SqlTriggerProps {
@@ -87,7 +88,6 @@ export interface SqlTrigger extends Resource<
  * **Example:** Stamp a timestamp on every created item
  * ```typescript
  * yield* Azure.CosmosDB.SqlTrigger("stamp", {
- *   resourceGroup: group.resourceGroupName,
  *   account: account.accountName,
  *   database: database.databaseName,
  *   container: container.containerName,
@@ -105,7 +105,7 @@ export interface SqlTrigger extends Resource<
  *
  * @resource
  */
-export const SqlTrigger = Resource<SqlTrigger>("Azure.CosmosDB.SqlTrigger");
+export const SqlTrigger = GroupedResource<SqlTrigger>("Azure.CosmosDB.SqlTrigger");
 
 const createName = (id: string) => createPhysicalName({ id, maxLength: 255 });
 

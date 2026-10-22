@@ -2,7 +2,7 @@ import * as migrate from "@distilled.cloud/azure/migrate";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { migrateName, ownedByStage, settingsDiffer } from "./Common.ts";
 import { getHypervSite } from "./HypervSite.ts";
 
@@ -72,7 +73,6 @@ export interface HypervHost extends Resource<
  * **Example:** Hyper-V host discovered by an appliance
  * ```typescript
  * const host = yield* Azure.Migrate.HypervHost("host", {
- *   resourceGroup: group.resourceGroupName,
  *   hypervSite: site.siteName,
  *   fqdn: "hyperv01.contoso.local",
  *   runAsAccountId: "<run-as account ARM ID registered by the appliance>",
@@ -81,7 +81,7 @@ export interface HypervHost extends Resource<
  *
  * @resource
  */
-export const HypervHost = Resource<HypervHost>("Azure.Migrate.HypervHost");
+export const HypervHost = GroupedResource<HypervHost>("Azure.Migrate.HypervHost");
 
 const getHypervHost = (
   subscriptionId: string,

@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -14,6 +14,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { isAccountOwnedByStack } from "./StorageOwnership.ts";
 
 /** Access a local user has to one container or file share. */
@@ -139,15 +140,12 @@ export interface LocalUser extends Resource<
  * **Example:** Read/write user scoped to one container
  * ```typescript
  * const account = yield* Azure.Storage.StorageAccount("sftp", {
- *   resourceGroup: group.resourceGroupName,
  *   isHnsEnabled: true,
  * });
  * const uploads = yield* Azure.Storage.BlobContainer("uploads", {
- *   resourceGroup: group.resourceGroupName,
  *   storageAccount: account.storageAccountName,
  * });
  * yield* Azure.Storage.LocalUser("partner", {
- *   resourceGroup: group.resourceGroupName,
  *   storageAccount: account.storageAccountName,
  *   name: "partner",
  *   homeDirectory: "uploads",
@@ -161,7 +159,6 @@ export interface LocalUser extends Resource<
  * **Example:** Read-only password user
  * ```typescript
  * yield* Azure.Storage.LocalUser("auditor", {
- *   resourceGroup: group.resourceGroupName,
  *   storageAccount: account.storageAccountName,
  *   hasSshPassword: true,
  *   permissionScopes: [
@@ -172,7 +169,7 @@ export interface LocalUser extends Resource<
  *
  * @resource
  */
-export const LocalUser = Resource<LocalUser>("Azure.Storage.LocalUser");
+export const LocalUser = GroupedResource<LocalUser>("Azure.Storage.LocalUser");
 
 type Observed = storage.GetLocalUserResponse;
 

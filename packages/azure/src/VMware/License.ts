@@ -2,7 +2,7 @@ import * as vmware from "@distilled.cloud/azure/vmware";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
 import {
@@ -14,6 +14,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   AVS_NAMESPACE,
   CHILD_BUDGET,
@@ -80,7 +81,6 @@ export interface License extends Resource<
  * **Example:** VMware Firewall license
  * ```typescript
  * yield* Azure.VMware.License("firewall", {
- *   resourceGroup: group.resourceGroupName,
  *   privateCloud: cloud.privateCloudName,
  *   licenseKey: Redacted.make(firewallLicenseKey),
  *   endDate: "2027-12-31T00:00:00Z",
@@ -90,7 +90,7 @@ export interface License extends Resource<
  *
  * @resource
  */
-export const License = Resource<License>("Azure.VMware.License");
+export const License = GroupedResource<License>("Azure.VMware.License");
 
 const getLicense = (
   subscriptionId: string,

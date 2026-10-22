@@ -1,7 +1,7 @@
 import * as edge from "@distilled.cloud/azure/edge";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -12,6 +12,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { EDGE_WAIT, edgeState, payloadText } from "./EdgeShared.ts";
 
 export interface ConfigTemplateVersionProps {
@@ -64,7 +65,6 @@ export interface ConfigTemplateVersion extends Resource<
  * **Example:** Config template with an inline schema
  * ```typescript
  * const v1 = yield* Azure.Edge.ConfigTemplateVersion("common-v1", {
- *   resourceGroup: group.resourceGroupName,
  *   configTemplate: template.configTemplateName,
  *   version: "1.0.0",
  *   configurations: [
@@ -84,7 +84,7 @@ export interface ConfigTemplateVersion extends Resource<
  *
  * @resource
  */
-export const ConfigTemplateVersion = Resource<ConfigTemplateVersion>(
+export const ConfigTemplateVersion = GroupedResource<ConfigTemplateVersion>(
   "Azure.Edge.ConfigTemplateVersion",
 );
 

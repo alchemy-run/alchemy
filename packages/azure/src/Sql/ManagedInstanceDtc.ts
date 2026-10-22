@@ -2,11 +2,12 @@ import * as sql from "@distilled.cloud/azure/sql";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { ensureRegistered, ignoreNotFound, orUndefinedIfNotFound } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { fieldsMatch, isManagedInstanceOwnedByStack, lower } from "./common.ts";
 import { instancePath, type InstanceScope, sameList, syncSetting } from "./setting.ts";
 
@@ -81,7 +82,6 @@ export interface ManagedInstanceDtc extends Resource<
  * **Example:** Allow inbound and outbound transactions
  * ```typescript
  * yield* Azure.Sql.ManagedInstanceDtc("dtc", {
- *   resourceGroup: group.resourceGroupName,
  *   managedInstance: instance.managedInstanceName,
  *   dtcEnabled: true,
  *   security: { allowInboundEnabled: true, allowOutboundEnabled: true },
@@ -90,7 +90,9 @@ export interface ManagedInstanceDtc extends Resource<
  *
  * @resource
  */
-export const ManagedInstanceDtc = Resource<ManagedInstanceDtc>("Azure.Sql.ManagedInstanceDtc");
+export const ManagedInstanceDtc = GroupedResource<ManagedInstanceDtc>(
+  "Azure.Sql.ManagedInstanceDtc",
+);
 
 type Observed = sql.GetManagedInstanceDtcResponse;
 

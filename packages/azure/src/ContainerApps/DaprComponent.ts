@@ -2,7 +2,7 @@ import * as app from "@distilled.cloud/azure/app";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createContainerAppsName,
   fingerprint,
@@ -114,7 +115,6 @@ export interface DaprComponent extends Resource<
  * **Example:** Cron input binding
  * ```typescript
  * const cron = yield* Azure.ContainerApps.DaprComponent("cron", {
- *   resourceGroup: group.resourceGroupName,
  *   environment: env.environmentName,
  *   componentType: "bindings.cron",
  *   metadata: [{ name: "schedule", value: "@every 10m" }],
@@ -126,7 +126,6 @@ export interface DaprComponent extends Resource<
  * **Example:** Blob storage state store with a secret account key
  * ```typescript
  * const state = yield* Azure.ContainerApps.DaprComponent("state", {
- *   resourceGroup: group.resourceGroupName,
  *   environment: env.environmentName,
  *   componentType: "state.azure.blobstorage",
  *   secrets: [{ name: "account-key", value: Redacted.make(accountKey) }],
@@ -140,7 +139,7 @@ export interface DaprComponent extends Resource<
  *
  * @resource
  */
-export const DaprComponent = Resource<DaprComponent>("Azure.ContainerApps.DaprComponent");
+export const DaprComponent = GroupedResource<DaprComponent>("Azure.ContainerApps.DaprComponent");
 
 const createComponentName = (id: string) => createContainerAppsName(id, 60);
 

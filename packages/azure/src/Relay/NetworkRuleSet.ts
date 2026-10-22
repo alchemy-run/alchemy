@@ -1,11 +1,12 @@
 import * as relay from "@distilled.cloud/azure/relay";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { ensureRegistered, ignoreNotFound, orUndefinedIfNotFound } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { sameName } from "./internal.ts";
 
 export interface NetworkRuleSetIpRule {
@@ -74,11 +75,8 @@ export interface NetworkRuleSet extends Resource<
  * ### Restricting Access
  * **Example:** Allow only an office IP range
  * ```typescript
- * const ns = yield* Azure.Relay.Namespace("relay", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const ns = yield* Azure.Relay.Namespace("relay");
  * yield* Azure.Relay.NetworkRuleSet("relay-firewall", {
- *   resourceGroup: group.resourceGroupName,
  *   namespace: ns.namespaceName,
  *   defaultAction: "Deny",
  *   ipRules: [{ ipMask: "203.0.113.0/24" }],
@@ -88,7 +86,6 @@ export interface NetworkRuleSet extends Resource<
  * **Example:** Disable the public endpoint, allow trusted services
  * ```typescript
  * yield* Azure.Relay.NetworkRuleSet("relay-firewall", {
- *   resourceGroup: group.resourceGroupName,
  *   namespace: ns.namespaceName,
  *   publicNetworkAccess: "Disabled",
  *   trustedServiceAccessEnabled: true,
@@ -97,7 +94,7 @@ export interface NetworkRuleSet extends Resource<
  *
  * @resource
  */
-export const NetworkRuleSet = Resource<NetworkRuleSet>("Azure.Relay.NetworkRuleSet");
+export const NetworkRuleSet = GroupedResource<NetworkRuleSet>("Azure.Relay.NetworkRuleSet");
 
 interface Where {
   subscriptionId: string;

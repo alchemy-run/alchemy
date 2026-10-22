@@ -2,7 +2,7 @@ import * as migrate from "@distilled.cloud/azure/migrate";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -20,6 +20,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { migrateName, settingsDiffer } from "./Common.ts";
 
 export interface MasterSiteProps {
@@ -92,7 +93,6 @@ export interface MasterSite extends Resource<
  * **Example:** Master site
  * ```typescript
  * const site = yield* Azure.Migrate.MasterSite("master", {
- *   resourceGroup: group.resourceGroupName,
  *   location: "centralus",
  * });
  * ```
@@ -101,11 +101,9 @@ export interface MasterSite extends Resource<
  * **Example:** Master site over a VMware site
  * ```typescript
  * const vmware = yield* Azure.Migrate.VmwareSite("vmware", {
- *   resourceGroup: group.resourceGroupName,
  *   location: "centralus",
  * });
  * const master = yield* Azure.Migrate.MasterSite("master", {
- *   resourceGroup: group.resourceGroupName,
  *   location: "centralus",
  *   allowMultipleSites: true,
  *   sites: [vmware.siteId],
@@ -114,7 +112,7 @@ export interface MasterSite extends Resource<
  *
  * @resource
  */
-export const MasterSite = Resource<MasterSite>("Azure.Migrate.MasterSite");
+export const MasterSite = GroupedResource<MasterSite>("Azure.Migrate.MasterSite");
 
 type ObservedMasterSite = migrate.GetMasterSitesControllerResponse;
 

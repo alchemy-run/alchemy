@@ -2,7 +2,7 @@ import * as discovery from "@distilled.cloud/azure/discovery";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -17,6 +17,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createDiscoveryName, DISCOVERY_NAMESPACE, lower, sameLocation } from "./common.ts";
 import { getSupercomputer } from "./Supercomputer.ts";
 
@@ -123,7 +124,6 @@ export interface NodePool extends Resource<
  * **Example:** Scale-to-zero A100 pool
  * ```typescript
  * const gpus = yield* Azure.Discovery.NodePool("a100", {
- *   resourceGroup: group.resourceGroupName,
  *   supercomputer: supercomputer.supercomputerName,
  *   subnetId: nodeSubnet.subnetId,
  *   vmSize: "Standard_NC24ads_A100_v4",
@@ -135,7 +135,6 @@ export interface NodePool extends Resource<
  * **Example:** Spot T4 pool
  * ```typescript
  * const gpus = yield* Azure.Discovery.NodePool("t4", {
- *   resourceGroup: group.resourceGroupName,
  *   supercomputer: supercomputer.supercomputerName,
  *   subnetId: nodeSubnet.subnetId,
  *   vmSize: "Standard_NC4as_T4_v3",
@@ -146,7 +145,7 @@ export interface NodePool extends Resource<
  *
  * @resource
  */
-export const NodePool = Resource<NodePool>("Azure.Discovery.NodePool");
+export const NodePool = GroupedResource<NodePool>("Azure.Discovery.NodePool");
 
 const getNodePool = (
   subscriptionId: string,

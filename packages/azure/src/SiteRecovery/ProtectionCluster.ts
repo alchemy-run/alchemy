@@ -1,7 +1,7 @@
 import * as asr from "@distilled.cloud/azure/recoveryservicessiterecovery";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -12,6 +12,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   compact,
   createSiteRecoveryName,
@@ -103,7 +104,6 @@ export interface ProtectionCluster extends Resource<
  * **Example:** Protect a two-node shared-disk cluster
  * ```typescript
  * yield* Azure.SiteRecovery.ProtectionCluster("sql-cluster", {
- *   resourceGroup: group.resourceGroupName,
  *   vault: vault.vaultName,
  *   fabric: primary.fabricName,
  *   protectionContainer: primaryContainer.protectionContainerName,
@@ -118,7 +118,7 @@ export interface ProtectionCluster extends Resource<
  *
  * @resource
  */
-export const ProtectionCluster = Resource<ProtectionCluster>(
+export const ProtectionCluster = GroupedResource<ProtectionCluster>(
   "Azure.SiteRecovery.ProtectionCluster",
 );
 

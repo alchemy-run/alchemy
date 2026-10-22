@@ -1,7 +1,7 @@
 import * as edge from "@distilled.cloud/azure/edge";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -12,6 +12,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { EDGE_WAIT, edgeState } from "./EdgeShared.ts";
 
 export interface DynamicConfigurationProps {
@@ -79,13 +80,11 @@ export interface DynamicConfiguration extends Resource<
  *   configurationResourceId: configuration.configurationId,
  * });
  * const links = yield* Azure.Edge.ConfigTemplateMetadata("common-links", {
- *   resourceGroup: group.resourceGroupName,
  *   configTemplate: template.configTemplateName,
  *   contextId: context.contextId,
  *   linkedHierarchies: [{ level: "country", hierarchyIds: [site.siteId] }],
  * });
  * const dynamic = yield* Azure.Edge.DynamicConfiguration("common-values", {
- *   resourceGroup: group.resourceGroupName,
  *   configuration: configuration.configurationName,
  *   name: Output.all(
  *     template.uniqueIdentifier,
@@ -98,7 +97,7 @@ export interface DynamicConfiguration extends Resource<
  *
  * @resource
  */
-export const DynamicConfiguration = Resource<DynamicConfiguration>(
+export const DynamicConfiguration = GroupedResource<DynamicConfiguration>(
   "Azure.Edge.DynamicConfiguration",
 );
 

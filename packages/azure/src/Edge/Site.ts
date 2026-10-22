@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import {
@@ -19,6 +19,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { EDGE_WAIT, edgeState, sameJson } from "./EdgeShared.ts";
 
 /** Physical address of an Azure Arc site. */
@@ -100,9 +101,7 @@ export interface Site extends Resource<
  * ### Creating a Site
  * **Example:** Site with an address
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("edge");
  * const site = yield* Azure.Edge.Site("seattle", {
- *   resourceGroup: group.resourceGroupName,
  *   displayName: "Seattle plant",
  *   siteAddress: { city: "Seattle", country: "US" },
  * });
@@ -111,14 +110,13 @@ export interface Site extends Resource<
  * **Example:** Site with labels
  * ```typescript
  * const site = yield* Azure.Edge.Site("seattle", {
- *   resourceGroup: group.resourceGroupName,
  *   labels: { region: "west" },
  * });
  * ```
  *
  * @resource
  */
-export const Site = Resource<Site>("Azure.Edge.Site");
+export const Site = GroupedResource<Site>("Azure.Edge.Site");
 
 const getSite = (subscriptionId: string, resourceGroupName: string, siteName: string) =>
   orUndefinedIfNotFound(edge.GetSite({ subscriptionId, resourceGroupName, siteName }));

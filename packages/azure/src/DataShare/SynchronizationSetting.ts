@@ -2,7 +2,7 @@ import * as datashare from "@distilled.cloud/azure/datashare";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   accountOwnedByStack,
   createChildName,
@@ -82,7 +83,6 @@ export interface SynchronizationSetting extends Resource<
  * **Example:** Daily snapshots at 06:00 UTC
  * ```typescript
  * yield* Azure.DataShare.SynchronizationSetting("daily", {
- *   resourceGroup: group.resourceGroupName,
  *   account: account.accountName,
  *   share: share.shareName,
  *   recurrenceInterval: "Day",
@@ -92,7 +92,7 @@ export interface SynchronizationSetting extends Resource<
  *
  * @resource
  */
-export const SynchronizationSetting = Resource<SynchronizationSetting>(
+export const SynchronizationSetting = GroupedResource<SynchronizationSetting>(
   "Azure.DataShare.SynchronizationSetting",
 );
 

@@ -1,11 +1,12 @@
 # Azure Storage Example
 
-A resource group, a storage account, and a private blob container on
-Azure, deployed with `Azure.providers()`.
+A storage account and a private blob container on Azure, deployed with
+`Azure.providers()`. Both go into the stack's resource group,
+`AzureStorageExample-<stage>`, which Alchemy creates on deploy and deletes
+on destroy.
 
-- [`alchemy.run.ts`](./alchemy.run.ts) — `Azure.Resources.ResourceGroup`,
-  `Azure.Storage.StorageAccount` (Standard_LRS, HTTPS-only, TLS 1.2), and
-  `Azure.Storage.BlobContainer`.
+- [`alchemy.run.ts`](./alchemy.run.ts) — `Azure.Storage.StorageAccount`
+  (Standard_LRS, HTTPS-only, TLS 1.2) and `Azure.Storage.BlobContainer`.
 
 Set up an Azure service principal and profile first — see
 [Azure setup](https://alchemy.run/azure/setup).

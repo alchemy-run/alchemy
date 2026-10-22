@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -16,6 +16,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   desiredMetadata,
   DNS_BUDGET,
@@ -178,7 +179,6 @@ export interface RecordSet extends Resource<
  * **Example:** A record with two addresses
  * ```typescript
  * const www = yield* Azure.Dns.RecordSet("www", {
- *   resourceGroup: group.resourceGroupName,
  *   zoneName: zone.zoneName,
  *   recordType: "A",
  *   name: "www",
@@ -190,7 +190,6 @@ export interface RecordSet extends Resource<
  * **Example:** Alias record pointing at a public IP address
  * ```typescript
  * yield* Azure.Dns.RecordSet("apex", {
- *   resourceGroup: group.resourceGroupName,
  *   zoneName: zone.zoneName,
  *   recordType: "A",
  *   name: "@",
@@ -202,7 +201,6 @@ export interface RecordSet extends Resource<
  * **Example:** CNAME record
  * ```typescript
  * yield* Azure.Dns.RecordSet("api", {
- *   resourceGroup: group.resourceGroupName,
  *   zoneName: zone.zoneName,
  *   recordType: "CNAME",
  *   name: "api",
@@ -213,7 +211,6 @@ export interface RecordSet extends Resource<
  * **Example:** TXT record for domain verification
  * ```typescript
  * yield* Azure.Dns.RecordSet("verify", {
- *   resourceGroup: group.resourceGroupName,
  *   zoneName: zone.zoneName,
  *   recordType: "TXT",
  *   name: "@",
@@ -225,7 +222,6 @@ export interface RecordSet extends Resource<
  * **Example:** MX record
  * ```typescript
  * yield* Azure.Dns.RecordSet("mail", {
- *   resourceGroup: group.resourceGroupName,
  *   zoneName: zone.zoneName,
  *   recordType: "MX",
  *   name: "@",
@@ -236,7 +232,6 @@ export interface RecordSet extends Resource<
  * **Example:** CAA record restricting certificate issuers
  * ```typescript
  * yield* Azure.Dns.RecordSet("caa", {
- *   resourceGroup: group.resourceGroupName,
  *   zoneName: zone.zoneName,
  *   recordType: "CAA",
  *   name: "@",
@@ -248,7 +243,6 @@ export interface RecordSet extends Resource<
  * **Example:** NS record for a child zone
  * ```typescript
  * yield* Azure.Dns.RecordSet("dev", {
- *   resourceGroup: group.resourceGroupName,
  *   zoneName: zone.zoneName,
  *   recordType: "NS",
  *   name: "dev",
@@ -258,7 +252,7 @@ export interface RecordSet extends Resource<
  *
  * @resource
  */
-export const RecordSet = Resource<RecordSet>("Azure.Dns.RecordSet");
+export const RecordSet = GroupedResource<RecordSet>("Azure.Dns.RecordSet");
 
 const DEFAULT_TTL = 3600;
 

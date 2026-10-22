@@ -2,11 +2,12 @@ import * as apim from "@distilled.cloud/azure/apimanagement";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { ensureRegistered, ignoreNotFound, orUndefinedIfNotFound, waitUntilGone } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createEntityName, isParentOwned, sameName, subsetMatches } from "./Common.ts";
 
 export type ProductState = "notPublished" | "published";
@@ -86,7 +87,6 @@ export interface Product extends Resource<
  * **Example:** Published product that requires a subscription
  * ```typescript
  * const product = yield* Azure.ApiManagement.Product("starter", {
- *   resourceGroup: group.resourceGroupName,
  *   serviceName: apim.serviceName,
  *   displayName: "Starter",
  *   subscriptionRequired: true,
@@ -97,7 +97,6 @@ export interface Product extends Resource<
  * **Example:** Open product (no subscription key)
  * ```typescript
  * const open = yield* Azure.ApiManagement.Product("open", {
- *   resourceGroup: group.resourceGroupName,
  *   serviceName: apim.serviceName,
  *   subscriptionRequired: false,
  *   state: "published",
@@ -106,7 +105,7 @@ export interface Product extends Resource<
  *
  * @resource
  */
-export const Product = Resource<Product>("Azure.ApiManagement.Product");
+export const Product = GroupedResource<Product>("Azure.ApiManagement.Product");
 
 const getProduct = (
   subscriptionId: string,

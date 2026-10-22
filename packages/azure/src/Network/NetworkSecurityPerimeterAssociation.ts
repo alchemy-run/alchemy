@@ -1,8 +1,9 @@
 import * as network from "@distilled.cloud/azure/network";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import { orUndefinedIfNotFound } from "../Arm.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { sameId } from "./common.ts";
 import { networkProvider } from "./generic.ts";
 import { perimeterTags } from "./networkSecurityPerimeterShared.ts";
@@ -68,7 +69,6 @@ export interface NetworkSecurityPerimeterAssociation extends Resource<
  * **Example:** Put a storage account in the perimeter (learning mode)
  * ```typescript
  * yield* Azure.Network.NetworkSecurityPerimeterAssociation("storage", {
- *   resourceGroup: group.resourceGroupName,
  *   networkSecurityPerimeter: perimeter.networkSecurityPerimeterName,
  *   privateLinkResourceId: account.storageAccountId,
  *   profileId: profile.profileId,
@@ -77,9 +77,10 @@ export interface NetworkSecurityPerimeterAssociation extends Resource<
  *
  * @resource
  */
-export const NetworkSecurityPerimeterAssociation = Resource<NetworkSecurityPerimeterAssociation>(
-  "Azure.Network.NetworkSecurityPerimeterAssociation",
-);
+export const NetworkSecurityPerimeterAssociation =
+  GroupedResource<NetworkSecurityPerimeterAssociation>(
+    "Azure.Network.NetworkSecurityPerimeterAssociation",
+  );
 
 export const NetworkSecurityPerimeterAssociationProvider = () =>
   Provider.succeed(

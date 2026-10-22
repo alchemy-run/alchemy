@@ -2,7 +2,7 @@ import * as servicebus from "@distilled.cloud/azure/servicebus";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
 import {
@@ -14,6 +14,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   type AccessRight,
   createEntityName,
@@ -88,13 +89,10 @@ export interface NamespaceAuthorizationRule extends Resource<
  * ### Creating a Rule
  * **Example:** Send-only connection string for a producer
  * ```typescript
- * const bus = yield* Azure.ServiceBus.Namespace("bus", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const bus = yield* Azure.ServiceBus.Namespace("bus");
  * const producer = yield* Azure.ServiceBus.NamespaceAuthorizationRule(
  *   "producer",
  *   {
- *     resourceGroup: group.resourceGroupName,
  *     namespace: bus.namespaceName,
  *     rights: ["Send"],
  *   },
@@ -105,7 +103,6 @@ export interface NamespaceAuthorizationRule extends Resource<
  * **Example:** Listen and send
  * ```typescript
  * const worker = yield* Azure.ServiceBus.NamespaceAuthorizationRule("worker", {
- *   resourceGroup: group.resourceGroupName,
  *   namespace: bus.namespaceName,
  *   rights: ["Listen", "Send"],
  * });
@@ -113,7 +110,7 @@ export interface NamespaceAuthorizationRule extends Resource<
  *
  * @resource
  */
-export const NamespaceAuthorizationRule = Resource<NamespaceAuthorizationRule>(
+export const NamespaceAuthorizationRule = GroupedResource<NamespaceAuthorizationRule>(
   "Azure.ServiceBus.NamespaceAuthorizationRule",
 );
 

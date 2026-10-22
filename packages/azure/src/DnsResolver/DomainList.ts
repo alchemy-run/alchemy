@@ -2,7 +2,7 @@ import * as dnsresolver from "@distilled.cloud/azure/dnsresolver";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -20,6 +20,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createDnsResolverName,
   FAST_BUDGET,
@@ -91,14 +92,13 @@ export interface DomainList extends Resource<
  * **Example:** Block list of known-bad domains
  * ```typescript
  * const blocked = yield* Azure.DnsResolver.DomainList("blocked", {
- *   resourceGroup: group.resourceGroupName,
  *   domains: ["malicious.example.com.", "phishing.example.net."],
  * });
  * ```
  *
  * @resource
  */
-export const DomainList = Resource<DomainList>("Azure.DnsResolver.DomainList");
+export const DomainList = GroupedResource<DomainList>("Azure.DnsResolver.DomainList");
 
 const getList = (
   subscriptionId: string,

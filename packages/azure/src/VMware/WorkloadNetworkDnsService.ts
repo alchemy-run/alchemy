@@ -2,7 +2,7 @@ import * as vmware from "@distilled.cloud/azure/vmware";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   AVS_NAMESPACE,
   WORKLOAD_BUDGET,
@@ -77,13 +78,11 @@ export interface WorkloadNetworkDnsService extends Resource<
  * **Example:** DNS forwarder with a default zone
  * ```typescript
  * const zone = yield* Azure.VMware.WorkloadNetworkDnsZone("default", {
- *   resourceGroup: group.resourceGroupName,
  *   privateCloud: cloud.privateCloudName,
  *   domain: [],
  *   dnsServerIps: ["1.1.1.1"],
  * });
  * yield* Azure.VMware.WorkloadNetworkDnsService("dns", {
- *   resourceGroup: group.resourceGroupName,
  *   privateCloud: cloud.privateCloudName,
  *   dnsServiceIp: "5.5.5.5",
  *   defaultDnsZone: zone.dnsZoneName,
@@ -93,7 +92,7 @@ export interface WorkloadNetworkDnsService extends Resource<
  *
  * @resource
  */
-export const WorkloadNetworkDnsService = Resource<WorkloadNetworkDnsService>(
+export const WorkloadNetworkDnsService = GroupedResource<WorkloadNetworkDnsService>(
   "Azure.VMware.WorkloadNetworkDnsService",
 );
 

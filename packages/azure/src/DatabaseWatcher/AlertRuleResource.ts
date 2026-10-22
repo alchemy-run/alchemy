@@ -2,7 +2,7 @@ import * as databasewatcher from "@distilled.cloud/azure/databasewatcher";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createWatcherChildName } from "./common.ts";
 
 export interface AlertRuleResourceProps {
@@ -88,7 +89,6 @@ export interface AlertRuleResource extends Resource<
  * **Example:** Register a scheduled query rule with a watcher
  * ```typescript
  * yield* Azure.DatabaseWatcher.AlertRuleResource("high-cpu", {
- *   resourceGroup: group.resourceGroupName,
  *   watcher: watcher.watcherName,
  *   alertRuleResourceId: rule.scheduledQueryRuleId,
  *   alertRuleTemplateId: "SqlDb-HighCpuUtilization",
@@ -98,7 +98,7 @@ export interface AlertRuleResource extends Resource<
  *
  * @resource
  */
-export const AlertRuleResource = Resource<AlertRuleResource>(
+export const AlertRuleResource = GroupedResource<AlertRuleResource>(
   "Azure.DatabaseWatcher.AlertRuleResource",
 );
 

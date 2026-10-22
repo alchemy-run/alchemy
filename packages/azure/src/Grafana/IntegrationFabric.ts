@@ -2,7 +2,7 @@ import * as dashboard from "@distilled.cloud/azure/dashboard";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -20,6 +20,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createGrafanaName, getGrafana } from "./Workspace.ts";
 
 export interface IntegrationFabricProps {
@@ -108,7 +109,6 @@ export interface IntegrationFabric extends Resource<
  * **Example:** AKS and Istio dashboards over an Azure Monitor workspace
  * ```typescript
  * const fabric = yield* Azure.Grafana.IntegrationFabric("aks", {
- *   resourceGroup: group.resourceGroupName,
  *   workspace: grafana.workspaceName,
  *   dataSourceResourceId: metrics.workspaceId,
  *   scenarios: ["aks", "istio"],
@@ -117,7 +117,9 @@ export interface IntegrationFabric extends Resource<
  *
  * @resource
  */
-export const IntegrationFabric = Resource<IntegrationFabric>("Azure.Grafana.IntegrationFabric");
+export const IntegrationFabric = GroupedResource<IntegrationFabric>(
+  "Azure.Grafana.IntegrationFabric",
+);
 
 const getFabric = (
   subscriptionId: string,

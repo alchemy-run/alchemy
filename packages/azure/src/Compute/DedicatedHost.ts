@@ -2,7 +2,7 @@ import * as compute from "@distilled.cloud/azure/compute";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -15,6 +15,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createComputeName,
   idsOf,
@@ -112,11 +113,9 @@ export interface DedicatedHost extends Resource<
  * **Example:** DSv3 host in fault domain 0
  * ```typescript
  * const hostGroup = yield* Azure.Compute.DedicatedHostGroup("isolated", {
- *   resourceGroup: group.resourceGroupName,
  *   zones: ["1"],
  * });
  * const host = yield* Azure.Compute.DedicatedHost("host-1", {
- *   resourceGroup: group.resourceGroupName,
  *   hostGroup: hostGroup.hostGroupName,
  *   sku: "DSv3-Type4",
  * });
@@ -126,7 +125,6 @@ export interface DedicatedHost extends Resource<
  * **Example:** VM pinned to the host
  * ```typescript
  * const vm = yield* Azure.Compute.VirtualMachine("isolated-vm", {
- *   resourceGroup: group.resourceGroupName,
  *   vmSize: "Standard_D2s_v3",
  *   zones: ["1"],
  *   hostId: host.dedicatedHostId,
@@ -138,7 +136,7 @@ export interface DedicatedHost extends Resource<
  *
  * @resource
  */
-export const DedicatedHost = Resource<DedicatedHost>("Azure.Compute.DedicatedHost");
+export const DedicatedHost = GroupedResource<DedicatedHost>("Azure.Compute.DedicatedHost");
 
 type Observed = compute.GetDedicatedHostResponse;
 

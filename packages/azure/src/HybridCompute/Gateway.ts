@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import {
@@ -22,6 +22,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 
 export interface GatewayProps {
   /**
@@ -101,16 +102,12 @@ export interface Gateway extends Resource<
  * ### Creating a Gateway
  * **Example:** Gateway for all Arc features
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("arc");
- * const gateway = yield* Azure.HybridCompute.Gateway("arc-gateway", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const gateway = yield* Azure.HybridCompute.Gateway("arc-gateway");
  * ```
  *
  * **Example:** Let some hosts bypass the gateway
  * ```typescript
  * const gateway = yield* Azure.HybridCompute.Gateway("arc-gateway", {
- *   resourceGroup: group.resourceGroupName,
  *   gatewayBypass: ["packages.example.com"],
  * });
  * ```
@@ -119,7 +116,6 @@ export interface Gateway extends Resource<
  * **Example:** Route an Arc machine through the gateway
  * ```typescript
  * yield* Azure.HybridCompute.Settings("machine-gateway", {
- *   resourceGroup: group.resourceGroupName,
  *   machineName: "my-server",
  *   gatewayResourceId: gateway.gatewayResourceId,
  * });
@@ -127,7 +123,7 @@ export interface Gateway extends Resource<
  *
  * @resource
  */
-export const Gateway = Resource<Gateway>("Azure.HybridCompute.Gateway");
+export const Gateway = GroupedResource<Gateway>("Azure.HybridCompute.Gateway");
 
 type ObservedGateway = hybridcompute.GetGatewayResponse;
 

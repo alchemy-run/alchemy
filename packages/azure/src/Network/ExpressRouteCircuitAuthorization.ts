@@ -1,10 +1,11 @@
 import * as network from "@distilled.cloud/azure/network";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { orUndefinedIfNotFound } from "../Arm.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { waitNetworkProvisionedSlow } from "./common.ts";
 import { type NetworkPath, networkProvider } from "./generic.ts";
 
@@ -55,7 +56,6 @@ export interface ExpressRouteCircuitAuthorization extends Resource<
  * **Example:** Share a circuit with another subscription
  * ```typescript
  * const auth = yield* Azure.Network.ExpressRouteCircuitAuthorization("spoke", {
- *   resourceGroup: group.resourceGroupName,
  *   circuit: circuit.circuitName,
  * });
  * // Hand auth.authorizationKey to the connecting subscription.
@@ -63,7 +63,7 @@ export interface ExpressRouteCircuitAuthorization extends Resource<
  *
  * @resource
  */
-export const ExpressRouteCircuitAuthorization = Resource<ExpressRouteCircuitAuthorization>(
+export const ExpressRouteCircuitAuthorization = GroupedResource<ExpressRouteCircuitAuthorization>(
   "Azure.Network.ExpressRouteCircuitAuthorization",
 );
 

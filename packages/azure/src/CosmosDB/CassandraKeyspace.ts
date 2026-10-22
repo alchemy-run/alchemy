@@ -3,11 +3,12 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { ensureRegistered, ignoreNotFound, orUndefinedIfNotFound, waitUntilGone } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createOptions,
   hasDedicatedThroughput,
@@ -71,11 +72,9 @@ export interface CassandraKeyspace extends Resource<
  * **Example:** Keyspace on a serverless Cassandra account
  * ```typescript
  * const account = yield* Azure.CosmosDB.DatabaseAccount("cassandra", {
- *   resourceGroup: group.resourceGroupName,
  *   capabilities: ["EnableServerless", "EnableCassandra"],
  * });
  * const keyspace = yield* Azure.CosmosDB.CassandraKeyspace("app", {
- *   resourceGroup: group.resourceGroupName,
  *   account: account.accountName,
  * });
  * ```
@@ -84,7 +83,6 @@ export interface CassandraKeyspace extends Resource<
  * **Example:** Manual throughput shared by every table
  * ```typescript
  * const keyspace = yield* Azure.CosmosDB.CassandraKeyspace("app", {
- *   resourceGroup: group.resourceGroupName,
  *   account: account.accountName,
  *   throughput: 400,
  * });
@@ -92,7 +90,9 @@ export interface CassandraKeyspace extends Resource<
  *
  * @resource
  */
-export const CassandraKeyspace = Resource<CassandraKeyspace>("Azure.CosmosDB.CassandraKeyspace");
+export const CassandraKeyspace = GroupedResource<CassandraKeyspace>(
+  "Azure.CosmosDB.CassandraKeyspace",
+);
 
 const createKeyspaceName = Effect.fn(function* (id: string) {
   const name = (yield* createPhysicalName({

@@ -1,8 +1,9 @@
 import * as apicenter from "@distilled.cloud/azure/apicenter";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createApiCenterName, entityLifecycle, subsetMatches } from "./Common.ts";
 
 export type ApiCenterMetadataEntity = "api" | "environment" | "deployment";
@@ -75,7 +76,6 @@ export interface MetadataSchema extends Resource<
  * **Example:** String property required on every API
  * ```typescript
  * const team = yield* Azure.ApiCenter.MetadataSchema("team", {
- *   resourceGroup: group.resourceGroupName,
  *   serviceName: center.serviceName,
  *   name: "team",
  *   schema: { type: "string", title: "Owning team" },
@@ -86,7 +86,6 @@ export interface MetadataSchema extends Resource<
  * **Example:** Enumerated property for environments
  * ```typescript
  * const tier = yield* Azure.ApiCenter.MetadataSchema("tier", {
- *   resourceGroup: group.resourceGroupName,
  *   serviceName: center.serviceName,
  *   schema: { type: "string", enum: ["gold", "silver"] },
  *   assignedTo: [{ entity: "environment" }],
@@ -95,7 +94,7 @@ export interface MetadataSchema extends Resource<
  *
  * @resource
  */
-export const MetadataSchema = Resource<MetadataSchema>("Azure.ApiCenter.MetadataSchema");
+export const MetadataSchema = GroupedResource<MetadataSchema>("Azure.ApiCenter.MetadataSchema");
 
 interface Key {
   resourceGroup: string;

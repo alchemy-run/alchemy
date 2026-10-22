@@ -1,9 +1,10 @@
 import * as network from "@distilled.cloud/azure/network";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { orUndefinedIfNotFound, userTags } from "../Arm.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { lower } from "./common.ts";
 import { idsOf, networkProvider } from "./generic.ts";
 
@@ -84,7 +85,6 @@ export interface InterconnectGroup extends Resource<
  * **Example:** InfiniBand group for H100 VMs
  * ```typescript
  * const interconnect = yield* Azure.Network.InterconnectGroup("gpu", {
- *   resourceGroup: group.resourceGroupName,
  *   scope: "InfiniBand",
  *   subgroupProfile: {
  *     vmSize: "Standard_ND96isr_H100_v5",
@@ -96,7 +96,9 @@ export interface InterconnectGroup extends Resource<
  *
  * @resource
  */
-export const InterconnectGroup = Resource<InterconnectGroup>("Azure.Network.InterconnectGroup");
+export const InterconnectGroup = GroupedResource<InterconnectGroup>(
+  "Azure.Network.InterconnectGroup",
+);
 
 export const InterconnectGroupProvider = () =>
   Provider.succeed(

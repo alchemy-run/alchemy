@@ -2,7 +2,7 @@ import * as webpubsub from "@distilled.cloud/azure/webpubsub";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createWebPubSubName,
   lower,
@@ -82,7 +83,6 @@ export interface CustomDomain extends Resource<
  * ```typescript
  * // CNAME realtime.example.com -> {webPubSub.webPubSubName}.webpubsub.azure.com
  * const domain = yield* Azure.WebPubSub.CustomDomain("realtime", {
- *   resourceGroup: group.resourceGroupName,
  *   webPubSub: webPubSub.webPubSubName,
  *   domainName: "realtime.example.com",
  *   customCertificateId: certificate.certificateId,
@@ -91,7 +91,7 @@ export interface CustomDomain extends Resource<
  *
  * @resource
  */
-export const CustomDomain = Resource<CustomDomain>("Azure.WebPubSub.CustomDomain");
+export const CustomDomain = GroupedResource<CustomDomain>("Azure.WebPubSub.CustomDomain");
 
 const getDomain = (
   subscriptionId: string,

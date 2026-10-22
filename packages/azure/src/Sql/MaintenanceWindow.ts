@@ -2,11 +2,12 @@ import * as sql from "@distilled.cloud/azure/sql";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { ensureRegistered, ignoreNotFound, orUndefinedIfNotFound } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { isServerOwnedByStack, lower } from "./common.ts";
 import { databasePath, type DatabaseScope, syncSetting } from "./setting.ts";
 
@@ -70,7 +71,6 @@ export interface MaintenanceWindow extends Resource<
  * **Example:** Allow maintenance on Saturday nights
  * ```typescript
  * yield* Azure.Sql.MaintenanceWindow("maintenance", {
- *   resourceGroup: group.resourceGroupName,
  *   server: server.serverName,
  *   database: database.databaseName,
  *   timeRanges: [
@@ -81,7 +81,7 @@ export interface MaintenanceWindow extends Resource<
  *
  * @resource
  */
-export const MaintenanceWindow = Resource<MaintenanceWindow>("Azure.Sql.MaintenanceWindow");
+export const MaintenanceWindow = GroupedResource<MaintenanceWindow>("Azure.Sql.MaintenanceWindow");
 
 type Observed = sql.GetMaintenanceWindowsResponse;
 

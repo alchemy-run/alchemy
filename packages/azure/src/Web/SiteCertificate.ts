@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
 import {
@@ -19,6 +19,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { lower, reveal, sameLocation, siteWhere } from "./common.ts";
 
 export interface SiteCertificateProps {
@@ -109,7 +110,6 @@ export interface SiteCertificate extends Resource<
  * **Example:** PFX scoped to one app
  * ```typescript
  * const cert = yield* Azure.Web.SiteCertificate("tls", {
- *   resourceGroup: group.resourceGroupName,
  *   siteName: app.siteName,
  *   location: app.location,
  *   pfxBlob: Redacted.make(pfxBase64),
@@ -120,7 +120,7 @@ export interface SiteCertificate extends Resource<
  *
  * @resource
  */
-export const SiteCertificate = Resource<SiteCertificate>("Azure.Web.SiteCertificate");
+export const SiteCertificate = GroupedResource<SiteCertificate>("Azure.Web.SiteCertificate");
 
 type ObservedCertificate = web.GetSiteCertificateResponse;
 

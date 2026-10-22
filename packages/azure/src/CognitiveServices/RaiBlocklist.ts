@@ -2,7 +2,7 @@ import * as cognitiveservices from "@distilled.cloud/azure/cognitiveservices";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -17,6 +17,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { CHILD_BUDGET, createChildName, sameArm, whileAccountBusy } from "./Common.ts";
 
 export interface RaiBlocklistProps {
@@ -78,12 +79,10 @@ export interface RaiBlocklist extends Resource<
  * **Example:** Blocklist with one regex item
  * ```typescript
  * const blocklist = yield* Azure.CognitiveServices.RaiBlocklist("terms", {
- *   resourceGroup: group.resourceGroupName,
  *   account: account.accountName,
  *   description: "Internal code names",
  * });
  * yield* Azure.CognitiveServices.RaiBlocklistItem("codename", {
- *   resourceGroup: group.resourceGroupName,
  *   account: account.accountName,
  *   raiBlocklist: blocklist.raiBlocklistName,
  *   pattern: "project-[a-z]+",
@@ -93,7 +92,7 @@ export interface RaiBlocklist extends Resource<
  *
  * @resource
  */
-export const RaiBlocklist = Resource<RaiBlocklist>("Azure.CognitiveServices.RaiBlocklist");
+export const RaiBlocklist = GroupedResource<RaiBlocklist>("Azure.CognitiveServices.RaiBlocklist");
 
 export const getRaiBlocklist = (
   subscriptionId: string,

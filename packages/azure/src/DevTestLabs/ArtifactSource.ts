@@ -2,7 +2,7 @@ import * as devtestlabs from "@distilled.cloud/azure/devtestlabs";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import {
@@ -17,6 +17,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createLabResourceName, DEVTESTLAB_NAMESPACE, diverges, labLocation } from "./Common.ts";
 
 export interface ArtifactSourceProps {
@@ -93,7 +94,6 @@ export interface ArtifactSource extends Resource<
  * **Example:** Private GitHub repository
  * ```typescript
  * const repo = yield* Azure.DevTestLabs.ArtifactSource("artifacts", {
- *   resourceGroup: group.resourceGroupName,
  *   lab: lab.labName,
  *   displayName: "Team artifacts",
  *   uri: "https://github.com/acme/lab-artifacts.git",
@@ -107,7 +107,7 @@ export interface ArtifactSource extends Resource<
  *
  * @resource
  */
-export const ArtifactSource = Resource<ArtifactSource>("Azure.DevTestLabs.ArtifactSource");
+export const ArtifactSource = GroupedResource<ArtifactSource>("Azure.DevTestLabs.ArtifactSource");
 
 const getSource = (
   subscriptionId: string,

@@ -2,11 +2,12 @@ import * as storage from "@distilled.cloud/azure/storage";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { ensureRegistered, ignoreNotFound, orUndefinedIfNotFound } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   fromStorageCorsRules,
   storageCorsDiffers,
@@ -119,11 +120,8 @@ export interface FileServiceProperties extends Resource<
  * ### Data Protection
  * **Example:** Keep deleted shares for 14 days
  * ```typescript
- * const account = yield* Azure.Storage.StorageAccount("files", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const account = yield* Azure.Storage.StorageAccount("files");
  * yield* Azure.Storage.FileServiceProperties("files-settings", {
- *   resourceGroup: group.resourceGroupName,
  *   storageAccount: account.storageAccountName,
  *   shareDeleteRetentionPolicy: { enabled: true, days: 14 },
  * });
@@ -133,7 +131,6 @@ export interface FileServiceProperties extends Resource<
  * **Example:** Require SMB 3.1.1 with Kerberos and AES-256
  * ```typescript
  * yield* Azure.Storage.FileServiceProperties("files-settings", {
- *   resourceGroup: group.resourceGroupName,
  *   storageAccount: account.storageAccountName,
  *   smb: {
  *     versions: "SMB3.1.1",
@@ -148,7 +145,6 @@ export interface FileServiceProperties extends Resource<
  * **Example:** Allow browser downloads from one origin
  * ```typescript
  * yield* Azure.Storage.FileServiceProperties("files-settings", {
- *   resourceGroup: group.resourceGroupName,
  *   storageAccount: account.storageAccountName,
  *   cors: [
  *     { allowedOrigins: ["https://app.example.com"], allowedMethods: ["GET"] },
@@ -158,7 +154,7 @@ export interface FileServiceProperties extends Resource<
  *
  * @resource
  */
-export const FileServiceProperties = Resource<FileServiceProperties>(
+export const FileServiceProperties = GroupedResource<FileServiceProperties>(
   "Azure.Storage.FileServiceProperties",
 );
 

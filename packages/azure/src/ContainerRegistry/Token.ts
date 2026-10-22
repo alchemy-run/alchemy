@@ -2,7 +2,7 @@ import * as containerregistry from "@distilled.cloud/azure/containerregistry";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import {
@@ -14,6 +14,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createRegistryName, registryOwnedByStage, sameName } from "./Common.ts";
 
 export type TokenPasswordName = "password1" | "password2";
@@ -103,12 +104,10 @@ export interface Token extends Resource<
  * **Example:** Pull-only token with a generated password
  * ```typescript
  * const pull = yield* Azure.ContainerRegistry.ScopeMap("app-pull", {
- *   resourceGroup: group.resourceGroupName,
  *   registry: registry.registryName,
  *   actions: ["repositories/app/content/read"],
  * });
  * const token = yield* Azure.ContainerRegistry.Token("ci", {
- *   resourceGroup: group.resourceGroupName,
  *   registry: registry.registryName,
  *   scopeMapId: pull.scopeMapId,
  *   passwords: [{ name: "password1" }],
@@ -119,7 +118,6 @@ export interface Token extends Resource<
  * **Example:** Disabled token
  * ```typescript
  * const token = yield* Azure.ContainerRegistry.Token("ci", {
- *   resourceGroup: group.resourceGroupName,
  *   registry: registry.registryName,
  *   scopeMapId: pull.scopeMapId,
  *   status: "disabled",
@@ -128,7 +126,7 @@ export interface Token extends Resource<
  *
  * @resource
  */
-export const Token = Resource<Token>("Azure.ContainerRegistry.Token");
+export const Token = GroupedResource<Token>("Azure.ContainerRegistry.Token");
 
 const getToken = (
   subscriptionId: string,

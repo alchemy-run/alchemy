@@ -1,9 +1,10 @@
 import * as apicenter from "@distilled.cloud/azure/apicenter";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { waitForProvisioned } from "../Arm.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createApiCenterName,
   DEFAULT_WORKSPACE,
@@ -108,7 +109,6 @@ export interface ApiDefinition extends Resource<
  * **Example:** Inline OpenAPI document
  * ```typescript
  * const definition = yield* Azure.ApiCenter.ApiDefinition("orders-openapi", {
- *   resourceGroup: group.resourceGroupName,
  *   serviceName: center.serviceName,
  *   apiName: api.apiName,
  *   versionName: v1.versionName,
@@ -129,7 +129,6 @@ export interface ApiDefinition extends Resource<
  * **Example:** Specification fetched from a URL
  * ```typescript
  * const definition = yield* Azure.ApiCenter.ApiDefinition("petstore", {
- *   resourceGroup: group.resourceGroupName,
  *   serviceName: center.serviceName,
  *   apiName: api.apiName,
  *   versionName: v1.versionName,
@@ -143,7 +142,7 @@ export interface ApiDefinition extends Resource<
  *
  * @resource
  */
-export const ApiDefinition = Resource<ApiDefinition>("Azure.ApiCenter.ApiDefinition");
+export const ApiDefinition = GroupedResource<ApiDefinition>("Azure.ApiCenter.ApiDefinition");
 
 interface Key {
   resourceGroup: string;

@@ -2,7 +2,7 @@ import * as devcenter from "@distilled.cloud/azure/devcenter";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -16,6 +16,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   catalogDelta,
   sourceTypeOf,
@@ -69,7 +70,6 @@ export interface ProjectCatalog extends Resource<
  * **Example:** Microsoft's public quick-start catalog
  * ```typescript
  * const catalog = yield* Azure.DevCenter.ProjectCatalog("quickstart", {
- *   resourceGroup: group.resourceGroupName,
  *   project: project.projectName,
  *   gitHub: {
  *     uri: "https://github.com/microsoft/devcenter-catalog.git",
@@ -82,7 +82,6 @@ export interface ProjectCatalog extends Resource<
  * **Example:** Private repository with a Key Vault PAT
  * ```typescript
  * const catalog = yield* Azure.DevCenter.ProjectCatalog("team", {
- *   resourceGroup: group.resourceGroupName,
  *   project: project.projectName,
  *   gitHub: {
  *     uri: "https://github.com/acme/environments.git",
@@ -96,7 +95,7 @@ export interface ProjectCatalog extends Resource<
  *
  * @resource
  */
-export const ProjectCatalog = Resource<ProjectCatalog>("Azure.DevCenter.ProjectCatalog");
+export const ProjectCatalog = GroupedResource<ProjectCatalog>("Azure.DevCenter.ProjectCatalog");
 
 type Observed = devcenter.GetProjectCatalogResponse;
 

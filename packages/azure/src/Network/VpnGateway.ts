@@ -1,8 +1,9 @@
 import * as network from "@distilled.cloud/azure/network";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import { orUndefinedIfNotFound, userTags } from "../Arm.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { sameId } from "./common.ts";
 import { idsOf, networkProvider } from "./generic.ts";
 
@@ -89,7 +90,6 @@ export interface VpnGateway extends Resource<
  * **Example:** One-unit gateway in a hub
  * ```typescript
  * const gateway = yield* Azure.Network.VpnGateway("s2s", {
- *   resourceGroup: group.resourceGroupName,
  *   virtualHubId: hub.virtualHubId,
  *   scaleUnit: 1,
  * });
@@ -97,7 +97,7 @@ export interface VpnGateway extends Resource<
  *
  * @resource
  */
-export const VpnGateway = Resource<VpnGateway>("Azure.Network.VpnGateway");
+export const VpnGateway = GroupedResource<VpnGateway>("Azure.Network.VpnGateway");
 
 export const VpnGatewayProvider = () =>
   Provider.succeed(

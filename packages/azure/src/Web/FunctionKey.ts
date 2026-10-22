@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import {
@@ -15,6 +15,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { lower, reveal, siteWhere } from "./common.ts";
 
 export interface FunctionKeyProps {
@@ -71,7 +72,6 @@ export interface FunctionKey extends Resource<
  * **Example:** Generated key for one function
  * ```typescript
  * const key = yield* Azure.Web.FunctionKey("webhook", {
- *   resourceGroup: group.resourceGroupName,
  *   functionAppName: app.siteName,
  *   functionName: "HttpTrigger",
  * });
@@ -81,7 +81,6 @@ export interface FunctionKey extends Resource<
  * **Example:** Key with an explicit value
  * ```typescript
  * const key = yield* Azure.Web.FunctionKey("webhook", {
- *   resourceGroup: group.resourceGroupName,
  *   functionAppName: app.siteName,
  *   functionName: "HttpTrigger",
  *   value: Redacted.make(secret),
@@ -90,7 +89,7 @@ export interface FunctionKey extends Resource<
  *
  * @resource
  */
-export const FunctionKey = Resource<FunctionKey>("Azure.Web.FunctionKey");
+export const FunctionKey = GroupedResource<FunctionKey>("Azure.Web.FunctionKey");
 
 const createKeyName = (id: string) => createPhysicalName({ id, maxLength: 64, lowercase: true });
 

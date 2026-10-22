@@ -3,11 +3,12 @@ import * as serialconsole from "@distilled.cloud/azure/serialconsole";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { ensureRegistered, ignoreNotFound, orUndefinedIfNotFound, stackAndStage } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 
 /** The parent resource type a serial port belongs to. */
 export type SerialPortParentType = "virtualMachines" | "virtualMachineScaleSets";
@@ -79,7 +80,6 @@ export interface SerialPort extends Resource<
  * **Example:** Serial port on a VM
  * ```typescript
  * const vm = yield* Azure.Compute.VirtualMachine("Vm", {
- *   resourceGroup: group.resourceGroupName,
  *   vmSize: "Standard_B1s",
  *   networkInterfaceIds: [nic.networkInterfaceId],
  *   adminUsername: "azureuser",
@@ -87,7 +87,6 @@ export interface SerialPort extends Resource<
  *   bootDiagnostics: true,
  * });
  * yield* Azure.SerialConsole.SerialPort("Console", {
- *   resourceGroup: group.resourceGroupName,
  *   virtualMachine: vm.virtualMachineName,
  * });
  * ```
@@ -96,7 +95,6 @@ export interface SerialPort extends Resource<
  * **Example:** Block console sessions to a VM
  * ```typescript
  * yield* Azure.SerialConsole.SerialPort("Console", {
- *   resourceGroup: group.resourceGroupName,
  *   virtualMachine: vm.virtualMachineName,
  *   state: "disabled",
  * });
@@ -104,7 +102,7 @@ export interface SerialPort extends Resource<
  *
  * @resource
  */
-export const SerialPort = Resource<SerialPort>("Azure.SerialConsole.SerialPort");
+export const SerialPort = GroupedResource<SerialPort>("Azure.SerialConsole.SerialPort");
 
 const NAMESPACE = "Microsoft.Compute";
 

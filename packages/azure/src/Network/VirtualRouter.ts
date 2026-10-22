@@ -1,8 +1,9 @@
 import * as network from "@distilled.cloud/azure/network";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import { orUndefinedIfNotFound, userTags } from "../Arm.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { ref, sameId } from "./common.ts";
 import { idsOf, networkProvider } from "./generic.ts";
 
@@ -74,14 +75,13 @@ export interface VirtualRouter extends Resource<
  * **Example:** Router in a RouteServerSubnet
  * ```typescript
  * const router = yield* Azure.Network.VirtualRouter("router", {
- *   resourceGroup: group.resourceGroupName,
  *   hostedSubnetId: routeServerSubnet.subnetId,
  * });
  * ```
  *
  * @resource
  */
-export const VirtualRouter = Resource<VirtualRouter>("Azure.Network.VirtualRouter");
+export const VirtualRouter = GroupedResource<VirtualRouter>("Azure.Network.VirtualRouter");
 
 export const VirtualRouterProvider = () =>
   Provider.succeed(

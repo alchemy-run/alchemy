@@ -2,7 +2,7 @@ import * as dnsresolver from "@distilled.cloud/azure/dnsresolver";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -20,6 +20,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createDnsResolverName,
   FAST_BUDGET,
@@ -95,7 +96,6 @@ export interface ForwardingRuleset extends Resource<
  * **Example:** Ruleset on one outbound endpoint
  * ```typescript
  * const ruleset = yield* Azure.DnsResolver.ForwardingRuleset("rules", {
- *   resourceGroup: group.resourceGroupName,
  *   outboundEndpointIds: [outbound.outboundEndpointId],
  * });
  * ```
@@ -104,7 +104,6 @@ export interface ForwardingRuleset extends Resource<
  * **Example:** Forward `corp.example.com` to on-premises DNS servers
  * ```typescript
  * yield* Azure.DnsResolver.ForwardingRule("corp", {
- *   resourceGroup: group.resourceGroupName,
  *   dnsForwardingRuleset: ruleset.dnsForwardingRulesetName,
  *   domainName: "corp.example.com.",
  *   targetDnsServers: [{ ipAddress: "10.10.0.4" }],
@@ -113,7 +112,9 @@ export interface ForwardingRuleset extends Resource<
  *
  * @resource
  */
-export const ForwardingRuleset = Resource<ForwardingRuleset>("Azure.DnsResolver.ForwardingRuleset");
+export const ForwardingRuleset = GroupedResource<ForwardingRuleset>(
+  "Azure.DnsResolver.ForwardingRuleset",
+);
 
 const getRuleset = (
   subscriptionId: string,

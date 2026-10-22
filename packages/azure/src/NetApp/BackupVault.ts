@@ -2,7 +2,7 @@ import * as netapp from "@distilled.cloud/azure/netapp";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -19,6 +19,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   accountLocation,
   createNetAppName,
@@ -78,7 +79,6 @@ export interface BackupVault extends Resource<
  * **Example:** Backup vault
  * ```typescript
  * const vault = yield* Azure.NetApp.BackupVault("vault", {
- *   resourceGroup: group.resourceGroupName,
  *   account: account.accountName,
  * });
  * ```
@@ -86,7 +86,6 @@ export interface BackupVault extends Resource<
  * **Example:** Tagged vault
  * ```typescript
  * const vault = yield* Azure.NetApp.BackupVault("vault", {
- *   resourceGroup: group.resourceGroupName,
  *   account: account.accountName,
  *   tags: { team: "storage" },
  * });
@@ -94,7 +93,7 @@ export interface BackupVault extends Resource<
  *
  * @resource
  */
-export const BackupVault = Resource<BackupVault>("Azure.NetApp.BackupVault");
+export const BackupVault = GroupedResource<BackupVault>("Azure.NetApp.BackupVault");
 
 const getBackupVault = (
   subscriptionId: string,

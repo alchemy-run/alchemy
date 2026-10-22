@@ -2,7 +2,7 @@ import * as compute from "@distilled.cloud/azure/compute";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   canonical,
   createComputeName,
@@ -97,7 +98,6 @@ export interface RestorePoint extends Resource<
  * **Example:** Crash-consistent snapshot of all disks
  * ```typescript
  * const point = yield* Azure.Compute.RestorePoint("nightly", {
- *   resourceGroup: group.resourceGroupName,
  *   restorePointCollection: collection.restorePointCollectionName,
  *   consistencyMode: "CrashConsistent",
  * });
@@ -106,7 +106,6 @@ export interface RestorePoint extends Resource<
  * **Example:** Snapshot that skips a scratch data disk
  * ```typescript
  * yield* Azure.Compute.RestorePoint("os-only", {
- *   resourceGroup: group.resourceGroupName,
  *   restorePointCollection: collection.restorePointCollectionName,
  *   excludeDiskIds: [scratchDiskId],
  * });
@@ -114,7 +113,7 @@ export interface RestorePoint extends Resource<
  *
  * @resource
  */
-export const RestorePoint = Resource<RestorePoint>("Azure.Compute.RestorePoint");
+export const RestorePoint = GroupedResource<RestorePoint>("Azure.Compute.RestorePoint");
 
 type Observed = compute.GetRestorePointResponse;
 

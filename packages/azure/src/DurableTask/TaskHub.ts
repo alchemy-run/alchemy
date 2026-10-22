@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import {
@@ -16,6 +16,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { getScheduler } from "./Scheduler.ts";
 
 export interface TaskHubProps {
@@ -63,11 +64,8 @@ export interface TaskHub extends Resource<
  * ### Creating a Task Hub
  * **Example:** Task hub on a Consumption scheduler
  * ```typescript
- * const scheduler = yield* Azure.DurableTask.Scheduler("orchestrations", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const scheduler = yield* Azure.DurableTask.Scheduler("orchestrations");
  * const hub = yield* Azure.DurableTask.TaskHub("default", {
- *   resourceGroup: group.resourceGroupName,
  *   scheduler: scheduler.schedulerName,
  * });
  * ```
@@ -79,7 +77,7 @@ export interface TaskHub extends Resource<
  *
  * @resource
  */
-export const TaskHub = Resource<TaskHub>("Azure.DurableTask.TaskHub");
+export const TaskHub = GroupedResource<TaskHub>("Azure.DurableTask.TaskHub");
 
 const createTaskHubName = (id: string) =>
   createPhysicalName({ id, maxLength: 64, lowercase: true, delimiter: "-" });

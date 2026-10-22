@@ -2,7 +2,7 @@ import * as storage from "@distilled.cloud/azure/storage";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -12,6 +12,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createStorageChildName, isAccountOwnedByStack } from "./StorageOwnership.ts";
 
 export type EncryptionScopeSource = storage.EncryptionScopeSource;
@@ -98,11 +99,8 @@ export interface EncryptionScope extends Resource<
  * ### Creating an Encryption Scope
  * **Example:** Microsoft-managed key scope
  * ```typescript
- * const account = yield* Azure.Storage.StorageAccount("files", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const account = yield* Azure.Storage.StorageAccount("files");
  * const scope = yield* Azure.Storage.EncryptionScope("tenant-a", {
- *   resourceGroup: group.resourceGroupName,
  *   storageAccount: account.storageAccountName,
  * });
  * ```
@@ -110,7 +108,6 @@ export interface EncryptionScope extends Resource<
  * **Example:** Scope with infrastructure encryption
  * ```typescript
  * const scope = yield* Azure.Storage.EncryptionScope("sensitive", {
- *   resourceGroup: group.resourceGroupName,
  *   storageAccount: account.storageAccountName,
  *   requireInfrastructureEncryption: true,
  * });
@@ -120,7 +117,6 @@ export interface EncryptionScope extends Resource<
  * **Example:** Key Vault key scope
  * ```typescript
  * const scope = yield* Azure.Storage.EncryptionScope("cmk", {
- *   resourceGroup: group.resourceGroupName,
  *   storageAccount: account.storageAccountName,
  *   source: "Microsoft.KeyVault",
  *   keyUri: "https://my-vault.vault.azure.net/keys/storage-key",
@@ -129,7 +125,7 @@ export interface EncryptionScope extends Resource<
  *
  * @resource
  */
-export const EncryptionScope = Resource<EncryptionScope>("Azure.Storage.EncryptionScope");
+export const EncryptionScope = GroupedResource<EncryptionScope>("Azure.Storage.EncryptionScope");
 
 const getScope = (
   subscriptionId: string,

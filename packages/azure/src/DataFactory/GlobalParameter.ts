@@ -2,11 +2,12 @@ import * as datafactory from "@distilled.cloud/azure/datafactory";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { ensureRegistered, ignoreNotFound, orUndefinedIfNotFound, waitUntilGone } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { factoryOwnedByStack } from "./FactoryChild.ts";
 
 export type GlobalParameterType = "String" | "Int" | "Float" | "Bool" | "Array" | "Object";
@@ -68,7 +69,6 @@ export interface GlobalParameter extends Resource<
  * **Example:** Environment name and batch size
  * ```typescript
  * yield* Azure.DataFactory.GlobalParameter("params", {
- *   resourceGroup: group.resourceGroupName,
  *   factoryName: factory.factoryName,
  *   parameters: {
  *     env: { type: "String", value: "prod" },
@@ -81,7 +81,6 @@ export interface GlobalParameter extends Resource<
  * **Example:** Object and array parameters
  * ```typescript
  * yield* Azure.DataFactory.GlobalParameter("params", {
- *   resourceGroup: group.resourceGroupName,
  *   factoryName: factory.factoryName,
  *   parameters: {
  *     endpoints: { type: "Array", value: ["a", "b"] },
@@ -92,7 +91,9 @@ export interface GlobalParameter extends Resource<
  *
  * @resource
  */
-export const GlobalParameter = Resource<GlobalParameter>("Azure.DataFactory.GlobalParameter");
+export const GlobalParameter = GroupedResource<GlobalParameter>(
+  "Azure.DataFactory.GlobalParameter",
+);
 
 const DEFAULT_NAME = "default";
 

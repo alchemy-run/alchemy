@@ -2,7 +2,7 @@ import * as hybridnetwork from "@distilled.cloud/azure/hybridnetwork";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -20,6 +20,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createHybridNetworkName,
   FAST_BUDGET,
@@ -106,7 +107,6 @@ export interface ConfigurationGroupSchema extends Resource<
  * **Example:** Schema with one required string value
  * ```typescript
  * const schema = yield* Azure.HybridNetwork.ConfigurationGroupSchema("schema", {
- *   resourceGroup: group.resourceGroupName,
  *   publisher: publisher.publisherName,
  *   schemaDefinition: JSON.stringify({
  *     type: "object",
@@ -119,7 +119,6 @@ export interface ConfigurationGroupSchema extends Resource<
  * **Example:** Publish the schema
  * ```typescript
  * const schema = yield* Azure.HybridNetwork.ConfigurationGroupSchema("schema", {
- *   resourceGroup: group.resourceGroupName,
  *   publisher: publisher.publisherName,
  *   schemaDefinition: JSON.stringify({ type: "object" }),
  *   versionState: "Active",
@@ -128,7 +127,7 @@ export interface ConfigurationGroupSchema extends Resource<
  *
  * @resource
  */
-export const ConfigurationGroupSchema = Resource<ConfigurationGroupSchema>(
+export const ConfigurationGroupSchema = GroupedResource<ConfigurationGroupSchema>(
   "Azure.HybridNetwork.ConfigurationGroupSchema",
 );
 

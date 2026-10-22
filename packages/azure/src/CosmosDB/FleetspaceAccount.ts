@@ -2,7 +2,7 @@ import * as cosmos from "@distilled.cloud/azure/cosmos_db";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { whileAccountBusy } from "./Shared.ts";
 
 export interface FleetspaceAccountProps {
@@ -84,18 +85,12 @@ export interface FleetspaceAccount extends Resource<
  * ### Adding an Account to a Fleetspace
  * **Example:** Add a NoSQL account
  * ```typescript
- * const fleet = yield* Azure.CosmosDB.Fleet("tenants", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const fleet = yield* Azure.CosmosDB.Fleet("tenants");
  * const space = yield* Azure.CosmosDB.Fleetspace("standard", {
- *   resourceGroup: group.resourceGroupName,
  *   fleet: fleet.fleetName,
  * });
- * const account = yield* Azure.CosmosDB.DatabaseAccount("tenant-a", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const account = yield* Azure.CosmosDB.DatabaseAccount("tenant-a");
  * yield* Azure.CosmosDB.FleetspaceAccount("tenant-a-membership", {
- *   resourceGroup: group.resourceGroupName,
  *   fleet: fleet.fleetName,
  *   fleetspace: space.fleetspaceName,
  *   databaseAccountId: account.accountId,
@@ -105,7 +100,9 @@ export interface FleetspaceAccount extends Resource<
  *
  * @resource
  */
-export const FleetspaceAccount = Resource<FleetspaceAccount>("Azure.CosmosDB.FleetspaceAccount");
+export const FleetspaceAccount = GroupedResource<FleetspaceAccount>(
+  "Azure.CosmosDB.FleetspaceAccount",
+);
 
 const normalizeRegion = (region: string) => region.toLowerCase().replace(/\s+/g, "");
 

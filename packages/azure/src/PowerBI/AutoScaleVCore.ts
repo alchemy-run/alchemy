@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -20,6 +20,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 
 export interface AutoScaleVCoreProps {
   /**
@@ -96,9 +97,7 @@ export interface AutoScaleVCore extends Resource<
  * ### Enabling Autoscale
  * **Example:** Autoscale a Premium capacity by up to 4 v-cores
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("analytics");
  * const vcores = yield* Azure.PowerBI.AutoScaleVCore("autoscale", {
- *   resourceGroup: group.resourceGroupName,
  *   capacityObjectId: "00000000-0000-0000-0000-000000000000",
  *   capacityLimit: 4,
  * });
@@ -106,7 +105,7 @@ export interface AutoScaleVCore extends Resource<
  *
  * @resource
  */
-export const AutoScaleVCore = Resource<AutoScaleVCore>("Azure.PowerBI.AutoScaleVCore");
+export const AutoScaleVCore = GroupedResource<AutoScaleVCore>("Azure.PowerBI.AutoScaleVCore");
 
 type ObservedVCore = powerbidedicated.GetAutoScaleVCoreResponse;
 

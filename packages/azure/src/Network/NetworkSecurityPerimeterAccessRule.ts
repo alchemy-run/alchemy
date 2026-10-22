@@ -1,8 +1,9 @@
 import * as network from "@distilled.cloud/azure/network";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import { orUndefinedIfNotFound } from "../Arm.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { sameSet } from "./common.ts";
 import { networkProvider } from "./generic.ts";
 import { perimeterTags } from "./networkSecurityPerimeterShared.ts";
@@ -75,7 +76,6 @@ export interface NetworkSecurityPerimeterAccessRule extends Resource<
  * **Example:** Allow an office range inbound
  * ```typescript
  * yield* Azure.Network.NetworkSecurityPerimeterAccessRule("office", {
- *   resourceGroup: group.resourceGroupName,
  *   networkSecurityPerimeter: perimeter.networkSecurityPerimeterName,
  *   profile: profile.profileName,
  *   direction: "Inbound",
@@ -85,9 +85,10 @@ export interface NetworkSecurityPerimeterAccessRule extends Resource<
  *
  * @resource
  */
-export const NetworkSecurityPerimeterAccessRule = Resource<NetworkSecurityPerimeterAccessRule>(
-  "Azure.Network.NetworkSecurityPerimeterAccessRule",
-);
+export const NetworkSecurityPerimeterAccessRule =
+  GroupedResource<NetworkSecurityPerimeterAccessRule>(
+    "Azure.Network.NetworkSecurityPerimeterAccessRule",
+  );
 
 export const NetworkSecurityPerimeterAccessRuleProvider = () =>
   Provider.succeed(

@@ -2,7 +2,7 @@ import * as sql from "@distilled.cloud/azure/sql";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createChildName, lower } from "./common.ts";
 
 export interface IPv6FirewallRuleProps {
@@ -68,13 +69,11 @@ export interface IPv6FirewallRule extends Resource<
  * **Example:** Allow an IPv6 range
  * ```typescript
  * const server = yield* Azure.Sql.Server("db", {
- *   resourceGroup: group.resourceGroupName,
  *   administratorLogin: "sqladmin",
  *   administratorLoginPassword: password,
  *   isIPv6Enabled: "Enabled",
  * });
  * yield* Azure.Sql.IPv6FirewallRule("office-v6", {
- *   resourceGroup: group.resourceGroupName,
  *   server: server.serverName,
  *   startIPv6Address: "2001:db8::",
  *   endIPv6Address: "2001:db8::ffff",
@@ -83,7 +82,7 @@ export interface IPv6FirewallRule extends Resource<
  *
  * @resource
  */
-export const IPv6FirewallRule = Resource<IPv6FirewallRule>("Azure.Sql.IPv6FirewallRule");
+export const IPv6FirewallRule = GroupedResource<IPv6FirewallRule>("Azure.Sql.IPv6FirewallRule");
 
 const getRule = (
   subscriptionId: string,

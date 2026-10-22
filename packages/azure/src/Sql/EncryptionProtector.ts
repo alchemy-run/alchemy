@@ -2,11 +2,12 @@ import * as sql from "@distilled.cloud/azure/sql";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { ensureRegistered, ignoreNotFound, orUndefinedIfNotFound } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { fieldsMatch, isServerOwnedByStack, lower } from "./common.ts";
 import { serverPath, type ServerScope, syncSetting } from "./setting.ts";
 
@@ -70,12 +71,10 @@ export interface EncryptionProtector extends Resource<
  * **Example:** Protect TDE with a Key Vault key
  * ```typescript
  * const serverKey = yield* Azure.Sql.ServerKey("tde-key", {
- *   resourceGroup: group.resourceGroupName,
  *   server: server.serverName,
  *   uri: keyUriWithVersion,
  * });
  * yield* Azure.Sql.EncryptionProtector("protector", {
- *   resourceGroup: group.resourceGroupName,
  *   server: server.serverName,
  *   serverKeyType: "AzureKeyVault",
  *   serverKeyName: serverKey.serverKeyName,
@@ -87,7 +86,6 @@ export interface EncryptionProtector extends Resource<
  * **Example:** Use the Microsoft-managed key
  * ```typescript
  * yield* Azure.Sql.EncryptionProtector("protector", {
- *   resourceGroup: group.resourceGroupName,
  *   server: server.serverName,
  *   serverKeyType: "ServiceManaged",
  * });
@@ -95,7 +93,9 @@ export interface EncryptionProtector extends Resource<
  *
  * @resource
  */
-export const EncryptionProtector = Resource<EncryptionProtector>("Azure.Sql.EncryptionProtector");
+export const EncryptionProtector = GroupedResource<EncryptionProtector>(
+  "Azure.Sql.EncryptionProtector",
+);
 
 type Observed = sql.GetEncryptionProtectorResponse;
 

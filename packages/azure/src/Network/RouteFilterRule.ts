@@ -1,9 +1,10 @@
 import * as network from "@distilled.cloud/azure/network";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { orUndefinedIfNotFound } from "../Arm.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { sameSet } from "./common.ts";
 import { networkProvider } from "./generic.ts";
 
@@ -60,7 +61,6 @@ export interface RouteFilterRule extends Resource<
  * **Example:** Allow the East US Azure regional community
  * ```typescript
  * yield* Azure.Network.RouteFilterRule("exchange", {
- *   resourceGroup: group.resourceGroupName,
  *   routeFilter: filter.routeFilterName,
  *   communities: ["12076:51004"],
  * });
@@ -68,7 +68,7 @@ export interface RouteFilterRule extends Resource<
  *
  * @resource
  */
-export const RouteFilterRule = Resource<RouteFilterRule>("Azure.Network.RouteFilterRule");
+export const RouteFilterRule = GroupedResource<RouteFilterRule>("Azure.Network.RouteFilterRule");
 
 export const RouteFilterRuleProvider = () =>
   Provider.succeed(

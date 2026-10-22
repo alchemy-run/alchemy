@@ -2,11 +2,12 @@ import * as cdn from "@distilled.cloud/azure/cdn";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { ensureRegistered, ignoreNotFound, orUndefinedIfNotFound, waitUntilGone } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   AFD_DELETE_BUDGET,
   changedFields,
@@ -103,7 +104,6 @@ export interface Rule extends Resource<
  * **Example:** Add a security header to every response
  * ```typescript
  * const rule = yield* Azure.Cdn.Rule("frameOptions", {
- *   resourceGroup: group.resourceGroupName,
  *   profile: profile.profileName,
  *   ruleSet: rules.ruleSetName,
  *   order: 1,
@@ -124,7 +124,6 @@ export interface Rule extends Resource<
  * **Example:** Redirect a path
  * ```typescript
  * const redirect = yield* Azure.Cdn.Rule("oldDocs", {
- *   resourceGroup: group.resourceGroupName,
  *   profile: profile.profileName,
  *   ruleSet: rules.ruleSetName,
  *   order: 2,
@@ -154,7 +153,7 @@ export interface Rule extends Resource<
  *
  * @resource
  */
-export const Rule = Resource<Rule>("Azure.Cdn.Rule");
+export const Rule = GroupedResource<Rule>("Azure.Cdn.Rule");
 
 const getRule = (
   subscriptionId: string,

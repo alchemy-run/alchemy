@@ -2,7 +2,7 @@ import * as mission from "@distilled.cloud/azure/mission";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import {
@@ -21,6 +21,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   changedProperties,
   createMissionName,
@@ -100,12 +101,10 @@ export interface DedicatedHub extends Resource<
  * **Example:** Reserved hub for a sensitive enclave
  * ```typescript
  * const hub = yield* Azure.VirtualEnclaves.DedicatedHub("reserved", {
- *   resourceGroup: group.resourceGroupName,
  *   community: community.communityName,
  *   designation: "Reserved",
  * });
  * const enclave = yield* Azure.VirtualEnclaves.VirtualEnclave("spoke", {
- *   resourceGroup: group.resourceGroupName,
  *   communityId: community.communityId,
  *   dedicatedHubId: hub.dedicatedHubId,
  *   enclaveVirtualNetwork: { networkSize: "small" },
@@ -114,7 +113,7 @@ export interface DedicatedHub extends Resource<
  *
  * @resource
  */
-export const DedicatedHub = Resource<DedicatedHub>("Azure.VirtualEnclaves.DedicatedHub");
+export const DedicatedHub = GroupedResource<DedicatedHub>("Azure.VirtualEnclaves.DedicatedHub");
 
 type Observed = mission.GetDedicatedHubResponse | mission.DedicatedHubResource;
 

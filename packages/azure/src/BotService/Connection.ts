@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
@@ -19,6 +19,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { botOwnedByStack, DEFAULT_BOT_LOCATION, reveal, sameArm } from "./Common.ts";
 
 export interface ConnectionProps {
@@ -105,7 +106,6 @@ export interface Connection extends Resource<
  * **Example:** Microsoft Entra ID (AADv2) connection
  * ```typescript
  * const connection = yield* Azure.BotService.Connection("graph", {
- *   resourceGroup: group.resourceGroupName,
  *   bot: bot.botName,
  *   serviceProvider: "Aadv2",
  *   clientId: "00000000-0000-0000-0000-000000000000",
@@ -118,7 +118,6 @@ export interface Connection extends Resource<
  * **Example:** GitHub connection
  * ```typescript
  * yield* Azure.BotService.Connection("github", {
- *   resourceGroup: group.resourceGroupName,
  *   bot: bot.botName,
  *   serviceProvider: "GitHub",
  *   clientId: githubClientId,
@@ -129,7 +128,7 @@ export interface Connection extends Resource<
  *
  * @resource
  */
-export const Connection = Resource<Connection>("Azure.BotService.Connection");
+export const Connection = GroupedResource<Connection>("Azure.BotService.Connection");
 
 export class BotServiceProviderNotFound extends Data.TaggedError(
   "Azure.BotService.ServiceProviderNotFound",

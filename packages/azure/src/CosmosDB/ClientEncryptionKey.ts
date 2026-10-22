@@ -3,11 +3,12 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { ensureRegistered, orUndefinedIfNotFound } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { isOwnedChild, waitForChild, whileAccountBusy } from "./Shared.ts";
 
 export interface ClientEncryptionKeyWrapMetadata {
@@ -95,7 +96,6 @@ export interface ClientEncryptionKey extends Resource<
  * **Example:** Data encryption key wrapped by a Key Vault key
  * ```typescript
  * const cek = yield* Azure.CosmosDB.ClientEncryptionKey("ssn-key", {
- *   resourceGroup: group.resourceGroupName,
  *   account: account.accountName,
  *   database: database.databaseName,
  *   wrappedDataEncryptionKey: wrappedKeyBase64,
@@ -108,7 +108,7 @@ export interface ClientEncryptionKey extends Resource<
  *
  * @resource
  */
-export const ClientEncryptionKey = Resource<ClientEncryptionKey>(
+export const ClientEncryptionKey = GroupedResource<ClientEncryptionKey>(
   "Azure.CosmosDB.ClientEncryptionKey",
 );
 

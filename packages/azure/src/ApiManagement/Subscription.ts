@@ -2,12 +2,13 @@ import * as apim from "@distilled.cloud/azure/apimanagement";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { ensureRegistered, ignoreNotFound, orUndefinedIfNotFound, waitUntilGone } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createEntityName, isParentOwned, sameName } from "./Common.ts";
 
 export type SubscriptionState = apim.SubscriptionCreateParameterPropertiesState;
@@ -84,7 +85,6 @@ export interface Subscription extends Resource<
  * **Example:** Key for a product
  * ```typescript
  * const sub = yield* Azure.ApiManagement.Subscription("client", {
- *   resourceGroup: group.resourceGroupName,
  *   serviceName: apim.serviceName,
  *   scope: product.productId,
  * });
@@ -94,7 +94,6 @@ export interface Subscription extends Resource<
  * **Example:** All-APIs key with tracing enabled
  * ```typescript
  * const admin = yield* Azure.ApiManagement.Subscription("admin", {
- *   resourceGroup: group.resourceGroupName,
  *   serviceName: apim.serviceName,
  *   scope: "/apis",
  *   allowTracing: true,
@@ -103,7 +102,7 @@ export interface Subscription extends Resource<
  *
  * @resource
  */
-export const Subscription = Resource<Subscription>("Azure.ApiManagement.Subscription");
+export const Subscription = GroupedResource<Subscription>("Azure.ApiManagement.Subscription");
 
 /** `/products/x`, `/apis/x`, or `/apis` from a scope path or ARM id. */
 const normalizeScope = (scope: string) => {

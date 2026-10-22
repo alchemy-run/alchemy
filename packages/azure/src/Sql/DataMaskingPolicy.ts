@@ -2,11 +2,12 @@ import * as sql from "@distilled.cloud/azure/sql";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { ensureRegistered, ignoreNotFound, orUndefinedIfNotFound } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { fieldsMatch, isServerOwnedByStack, lower } from "./common.ts";
 import { databasePath, type DatabaseScope, syncSetting } from "./setting.ts";
 
@@ -70,7 +71,6 @@ export interface DataMaskingPolicy extends Resource<
  * **Example:** Mask data for everyone but the reporting user
  * ```typescript
  * yield* Azure.Sql.DataMaskingPolicy("masking", {
- *   resourceGroup: group.resourceGroupName,
  *   server: server.serverName,
  *   database: database.databaseName,
  *   dataMaskingState: "Enabled",
@@ -80,7 +80,7 @@ export interface DataMaskingPolicy extends Resource<
  *
  * @resource
  */
-export const DataMaskingPolicy = Resource<DataMaskingPolicy>("Azure.Sql.DataMaskingPolicy");
+export const DataMaskingPolicy = GroupedResource<DataMaskingPolicy>("Azure.Sql.DataMaskingPolicy");
 
 type Observed = sql.GetDataMaskingPolicyResponse;
 

@@ -2,7 +2,7 @@ import * as nc from "@distilled.cloud/azure/networkcloud";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -19,6 +19,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createNexusName,
   customLocation,
@@ -111,7 +112,6 @@ export interface CloudServicesNetwork extends Resource<
  * **Example:** Egress to the default endpoints plus one extra
  * ```typescript
  * const csn = yield* Azure.NetworkCloud.CloudServicesNetwork("csn", {
- *   resourceGroup: group.resourceGroupName,
  *   customLocationId: cluster.clusterExtendedLocationId,
  *   enableDefaultEgressEndpoints: "True",
  *   additionalEgressEndpoints: [
@@ -125,7 +125,7 @@ export interface CloudServicesNetwork extends Resource<
  *
  * @resource
  */
-export const CloudServicesNetwork = Resource<CloudServicesNetwork>(
+export const CloudServicesNetwork = GroupedResource<CloudServicesNetwork>(
   "Azure.NetworkCloud.CloudServicesNetwork",
 );
 

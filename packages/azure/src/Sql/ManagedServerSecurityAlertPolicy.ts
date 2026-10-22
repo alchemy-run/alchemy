@@ -2,12 +2,13 @@ import * as sql from "@distilled.cloud/azure/sql";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { ensureRegistered, ignoreNotFound, orUndefinedIfNotFound } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { fieldsMatch, isManagedInstanceOwnedByStack, lower, sameSecret } from "./common.ts";
 import {
   instancePath,
@@ -86,7 +87,6 @@ export interface ManagedServerSecurityAlertPolicy extends Resource<
  * **Example:** Email security alerts
  * ```typescript
  * yield* Azure.Sql.ManagedServerSecurityAlertPolicy("alerts", {
- *   resourceGroup: group.resourceGroupName,
  *   managedInstance: instance.managedInstanceName,
  *   state: "Enabled",
  *   emailAddresses: ["security@example.com"],
@@ -95,7 +95,7 @@ export interface ManagedServerSecurityAlertPolicy extends Resource<
  *
  * @resource
  */
-export const ManagedServerSecurityAlertPolicy = Resource<ManagedServerSecurityAlertPolicy>(
+export const ManagedServerSecurityAlertPolicy = GroupedResource<ManagedServerSecurityAlertPolicy>(
   "Azure.Sql.ManagedServerSecurityAlertPolicy",
 );
 

@@ -2,7 +2,7 @@ import * as operationalinsights from "@distilled.cloud/azure/operationalinsights
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -19,6 +19,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createLogAnalyticsName, sameText } from "./Common.ts";
 
 export interface QueryPackProps {
@@ -76,14 +77,13 @@ export interface QueryPack extends Resource<
  * **Example:** Query pack
  * ```typescript
  * const pack = yield* Azure.LogAnalytics.QueryPack("queries", {
- *   resourceGroup: group.resourceGroupName,
  *   tags: { team: "platform" },
  * });
  * ```
  *
  * @resource
  */
-export const QueryPack = Resource<QueryPack>("Azure.LogAnalytics.QueryPack");
+export const QueryPack = GroupedResource<QueryPack>("Azure.LogAnalytics.QueryPack");
 
 type ObservedQueryPack = operationalinsights.GetQueryPackResponse;
 

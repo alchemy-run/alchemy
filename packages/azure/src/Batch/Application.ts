@@ -2,7 +2,7 @@ import * as batch from "@distilled.cloud/azure/batch";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { accountOwnedByStage, createBatchChildName } from "./Common.ts";
 
 export interface ApplicationProps {
@@ -79,7 +80,6 @@ export interface Application extends Resource<
  * **Example:** Application in a Batch account
  * ```typescript
  * const app = yield* Azure.Batch.Application("renderer", {
- *   resourceGroup: group.resourceGroupName,
  *   account: account.accountName,
  *   displayName: "Frame renderer",
  *   allowUpdates: false,
@@ -89,7 +89,6 @@ export interface Application extends Resource<
  * **Example:** Pin the default version once a package exists
  * ```typescript
  * const app = yield* Azure.Batch.Application("renderer", {
- *   resourceGroup: group.resourceGroupName,
  *   account: account.accountName,
  *   defaultVersion: "1.0.0",
  * });
@@ -97,7 +96,7 @@ export interface Application extends Resource<
  *
  * @resource
  */
-export const Application = Resource<Application>("Azure.Batch.Application");
+export const Application = GroupedResource<Application>("Azure.Batch.Application");
 
 type ObservedApplication = batch.GetApplicationResponse;
 

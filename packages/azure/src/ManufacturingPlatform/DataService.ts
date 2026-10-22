@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -21,6 +21,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 
 /** Managed identity type of a Manufacturing Data Solutions service. */
 export type DataServiceIdentityType =
@@ -210,9 +211,7 @@ export interface DataService extends Resource<
  * ### Creating a Data Service
  * **Example:** Minimal service signed in through an Entra application
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("mds");
  * const service = yield* Azure.ManufacturingPlatform.DataService("mds", {
- *   resourceGroup: group.resourceGroupName,
  *   aadApplicationId: "00000000-0000-0000-0000-000000000000",
  *   aksAdminGroupId: "11111111-1111-1111-1111-111111111111",
  * });
@@ -222,7 +221,6 @@ export interface DataService extends Resource<
  * **Example:** Copilot with service-managed OpenAI deployments
  * ```typescript
  * const service = yield* Azure.ManufacturingPlatform.DataService("mds", {
- *   resourceGroup: group.resourceGroupName,
  *   aadApplicationId: appId,
  *   enableCopilot: true,
  *   openAIProfile: {
@@ -238,7 +236,6 @@ export interface DataService extends Resource<
  * **Example:** Mark the service inactive
  * ```typescript
  * const service = yield* Azure.ManufacturingPlatform.DataService("mds", {
- *   resourceGroup: group.resourceGroupName,
  *   aadApplicationId: appId,
  *   resourceState: "Inactive",
  * });
@@ -246,7 +243,7 @@ export interface DataService extends Resource<
  *
  * @resource
  */
-export const DataService = Resource<DataService>("Azure.ManufacturingPlatform.DataService");
+export const DataService = GroupedResource<DataService>("Azure.ManufacturingPlatform.DataService");
 
 type Observed = mds.GetManufacturingDataServiceResponse;
 

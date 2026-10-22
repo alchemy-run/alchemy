@@ -2,7 +2,7 @@ import * as redis from "@distilled.cloud/azure/redis";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import {
@@ -20,6 +20,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   CACHE_BUDGET,
   createCacheName,
@@ -236,16 +237,12 @@ export interface Cache extends Resource<
  * ### Creating a Cache
  * **Example:** Smallest Basic cache
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("app");
- * const cache = yield* Azure.Redis.Cache("cache", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const cache = yield* Azure.Redis.Cache("cache");
  * ```
  *
  * **Example:** Standard cache with an eviction policy
  * ```typescript
  * const cache = yield* Azure.Redis.Cache("cache", {
- *   resourceGroup: group.resourceGroupName,
  *   sku: "Standard",
  *   capacity: 1,
  *   redisConfiguration: { maxmemoryPolicy: "allkeys-lru" },
@@ -256,9 +253,7 @@ export interface Cache extends Resource<
  * ### Connecting
  * **Example:** Pass the connection string to an app
  * ```typescript
- * const cache = yield* Azure.Redis.Cache("cache", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const cache = yield* Azure.Redis.Cache("cache");
  * // `cache.hostName`, `cache.sslPort`, `cache.primaryKey` (Redacted)
  * const connection = cache.primaryConnectionString;
  * ```
@@ -267,7 +262,6 @@ export interface Cache extends Resource<
  * **Example:** Enable Entra auth and disable access keys
  * ```typescript
  * const cache = yield* Azure.Redis.Cache("cache", {
- *   resourceGroup: group.resourceGroupName,
  *   redisConfiguration: { aadEnabled: true },
  *   disableAccessKeyAuthentication: true,
  * });
@@ -277,7 +271,6 @@ export interface Cache extends Resource<
  * **Example:** Clustered Premium cache with zone redundancy
  * ```typescript
  * const cache = yield* Azure.Redis.Cache("cache", {
- *   resourceGroup: group.resourceGroupName,
  *   sku: "Premium",
  *   capacity: 1,
  *   shardCount: 2,
@@ -287,7 +280,7 @@ export interface Cache extends Resource<
  *
  * @resource
  */
-export const Cache = Resource<Cache>("Azure.Redis.Cache");
+export const Cache = GroupedResource<Cache>("Azure.Redis.Cache");
 
 type ObservedCache = redis.GetRedisResponse;
 type WireConfiguration = redis.RedisCommonPropertiesRedisConfigurationInput;

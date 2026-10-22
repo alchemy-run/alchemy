@@ -2,7 +2,7 @@ import * as apim from "@distilled.cloud/azure/apimanagement";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import {
@@ -14,6 +14,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createEntityName, isParentOwned, sameName } from "./Common.ts";
 
 export interface CertificateKeyVault {
@@ -87,7 +88,6 @@ export interface Certificate extends Resource<
  * **Example:** PFX certificate with a password
  * ```typescript
  * const cert = yield* Azure.ApiManagement.Certificate("backend-client", {
- *   resourceGroup: group.resourceGroupName,
  *   serviceName: apim.serviceName,
  *   data: Redacted.make(pfxBase64),
  *   password: Redacted.make(pfxPassword),
@@ -98,7 +98,6 @@ export interface Certificate extends Resource<
  * **Example:** Certificate read from Key Vault
  * ```typescript
  * const cert = yield* Azure.ApiManagement.Certificate("backend-client", {
- *   resourceGroup: group.resourceGroupName,
  *   serviceName: apim.serviceName,
  *   keyVault: {
  *     secretIdentifier: "https://my-vault.vault.azure.net/secrets/client-cert",
@@ -108,7 +107,7 @@ export interface Certificate extends Resource<
  *
  * @resource
  */
-export const Certificate = Resource<Certificate>("Azure.ApiManagement.Certificate");
+export const Certificate = GroupedResource<Certificate>("Azure.ApiManagement.Certificate");
 
 const getCertificate = (
   subscriptionId: string,

@@ -2,11 +2,12 @@ import * as eventgrid from "@distilled.cloud/azure/eventgrid";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { ensureRegistered, ignoreNotFound, orUndefinedIfNotFound, waitUntilGone } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createEventGridName, sameName } from "./common.ts";
 import {
   isOwnedDescription,
@@ -76,11 +77,9 @@ export interface TopicSpace extends Resource<
  * **Example:** Per-device telemetry topics
  * ```typescript
  * const namespace = yield* Azure.EventGrid.Namespace("iot", {
- *   resourceGroup: group.resourceGroupName,
  *   topicSpacesConfiguration: { state: "Enabled" },
  * });
  * const telemetry = yield* Azure.EventGrid.TopicSpace("telemetry", {
- *   resourceGroup: group.resourceGroupName,
  *   namespace: namespace.namespaceName,
  *   topicTemplates: ["devices/${client.authenticationName}/telemetry"],
  * });
@@ -88,7 +87,7 @@ export interface TopicSpace extends Resource<
  *
  * @resource
  */
-export const TopicSpace = Resource<TopicSpace>("Azure.EventGrid.TopicSpace");
+export const TopicSpace = GroupedResource<TopicSpace>("Azure.EventGrid.TopicSpace");
 
 type ObservedTopicSpace = Pick<eventgrid.TopicSpace, "id" | "properties">;
 

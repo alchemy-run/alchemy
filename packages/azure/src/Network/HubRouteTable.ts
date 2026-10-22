@@ -1,8 +1,9 @@
 import * as network from "@distilled.cloud/azure/network";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import { orUndefinedIfNotFound } from "../Arm.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { networkProvider } from "./generic.ts";
 import { hubOwnerTags } from "./virtualHubShared.ts";
 
@@ -72,7 +73,6 @@ export interface HubRouteTable extends Resource<
  * **Example:** Labeled table with a static route
  * ```typescript
  * const table = yield* Azure.Network.HubRouteTable("spokes", {
- *   resourceGroup: group.resourceGroupName,
  *   virtualHub: hub.virtualHubName,
  *   labels: ["spokes"],
  *   routes: [
@@ -89,7 +89,7 @@ export interface HubRouteTable extends Resource<
  *
  * @resource
  */
-export const HubRouteTable = Resource<HubRouteTable>("Azure.Network.HubRouteTable");
+export const HubRouteTable = GroupedResource<HubRouteTable>("Azure.Network.HubRouteTable");
 
 export const HubRouteTableProvider = () =>
   Provider.succeed(

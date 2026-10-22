@@ -2,7 +2,7 @@ import * as eventhub from "@distilled.cloud/azure/eventhub";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import {
@@ -15,6 +15,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createEntityName, namespaceOwnedByStage } from "./Common.ts";
 
 export type SchemaType = "Avro" | "Json" | "ProtoBuf" | "Unknown";
@@ -90,7 +91,6 @@ export interface SchemaGroup extends Resource<
  * **Example:** Avro schemas with backward compatibility
  * ```typescript
  * const schemas = yield* Azure.EventHub.SchemaGroup("orders-schemas", {
- *   resourceGroup: group.resourceGroupName,
  *   namespace: namespace.namespaceName,
  *   schemaType: "Avro",
  *   schemaCompatibility: "Backward",
@@ -99,7 +99,7 @@ export interface SchemaGroup extends Resource<
  *
  * @resource
  */
-export const SchemaGroup = Resource<SchemaGroup>("Azure.EventHub.SchemaGroup");
+export const SchemaGroup = GroupedResource<SchemaGroup>("Azure.EventHub.SchemaGroup");
 
 const getSchemaGroup = (
   subscriptionId: string,

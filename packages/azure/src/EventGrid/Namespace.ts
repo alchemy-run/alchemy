@@ -2,7 +2,7 @@ import * as eventgrid from "@distilled.cloud/azure/eventgrid";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
 import {
@@ -21,6 +21,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createEventGridName,
   identityDiffers,
@@ -150,17 +151,13 @@ export interface Namespace extends Resource<
  * ### Creating a Namespace
  * **Example:** Namespace with one throughput unit
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("app");
- * const namespace = yield* Azure.EventGrid.Namespace("events", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const namespace = yield* Azure.EventGrid.Namespace("events");
  * ```
  *
  * ### MQTT Broker
  * **Example:** Namespace with the MQTT broker enabled
  * ```typescript
  * const namespace = yield* Azure.EventGrid.Namespace("iot", {
- *   resourceGroup: group.resourceGroupName,
  *   capacity: 2,
  *   topicSpacesConfiguration: { state: "Enabled" },
  * });
@@ -168,7 +165,7 @@ export interface Namespace extends Resource<
  *
  * @resource
  */
-export const Namespace = Resource<Namespace>("Azure.EventGrid.Namespace");
+export const Namespace = GroupedResource<Namespace>("Azure.EventGrid.Namespace");
 
 type ObservedNamespace = Pick<
   eventgrid.Namespace,

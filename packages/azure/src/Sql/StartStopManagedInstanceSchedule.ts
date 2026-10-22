@@ -2,11 +2,12 @@ import * as sql from "@distilled.cloud/azure/sql";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { ensureRegistered, ignoreNotFound, orUndefinedIfNotFound, waitUntilGone } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { fieldsMatch, isManagedInstanceOwnedByStack, lower } from "./common.ts";
 import { instancePath, type InstanceScope, syncSetting } from "./setting.ts";
 
@@ -78,7 +79,6 @@ export interface StartStopManagedInstanceSchedule extends Resource<
  * **Example:** Run on weekdays during office hours
  * ```typescript
  * yield* Azure.Sql.StartStopManagedInstanceSchedule("office-hours", {
- *   resourceGroup: group.resourceGroupName,
  *   managedInstance: instance.managedInstanceName,
  *   timeZoneId: "Pacific Standard Time",
  *   scheduleList: [
@@ -89,7 +89,7 @@ export interface StartStopManagedInstanceSchedule extends Resource<
  *
  * @resource
  */
-export const StartStopManagedInstanceSchedule = Resource<StartStopManagedInstanceSchedule>(
+export const StartStopManagedInstanceSchedule = GroupedResource<StartStopManagedInstanceSchedule>(
   "Azure.Sql.StartStopManagedInstanceSchedule",
 );
 

@@ -2,7 +2,7 @@ import * as search from "@distilled.cloud/azure/search";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import {
@@ -20,6 +20,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createSearchName,
   deleteAllSharedPrivateLinks,
@@ -202,16 +203,12 @@ export interface SearchService extends Resource<
  * ### Creating a Search Service
  * **Example:** Basic search service
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("app");
- * const search = yield* Azure.Search.SearchService("search", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const search = yield* Azure.Search.SearchService("search");
  * ```
  *
  * **Example:** Standard tier with two replicas and semantic ranking
  * ```typescript
  * const search = yield* Azure.Search.SearchService("search", {
- *   resourceGroup: group.resourceGroupName,
  *   sku: "standard",
  *   replicaCount: 2,
  *   semanticSearch: "standard",
@@ -222,7 +219,6 @@ export interface SearchService extends Resource<
  * **Example:** Entra ID or API keys, restricted to one network
  * ```typescript
  * const search = yield* Azure.Search.SearchService("search", {
- *   resourceGroup: group.resourceGroupName,
  *   authMode: "aadOrApiKey",
  *   aadAuthFailureMode: "http401WithBearerChallenge",
  *   ipRules: ["203.0.113.0/24"],
@@ -232,7 +228,7 @@ export interface SearchService extends Resource<
  *
  * @resource
  */
-export const SearchService = Resource<SearchService>("Azure.Search.SearchService");
+export const SearchService = GroupedResource<SearchService>("Azure.Search.SearchService");
 
 type ObservedService = search.GetServiceResponse;
 

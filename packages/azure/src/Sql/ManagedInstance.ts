@@ -2,7 +2,7 @@ import * as sql from "@distilled.cloud/azure/sql";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
 import {
@@ -21,6 +21,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createDnsName,
   fieldsMatch,
@@ -188,7 +189,6 @@ export interface ManagedInstance extends Resource<
  * **Example:** General Purpose instance
  * ```typescript
  * const mi = yield* Azure.Sql.ManagedInstance("mi", {
- *   resourceGroup: group.resourceGroupName,
  *   subnetId: miSubnetId,
  *   administratorLogin: "sqladmin",
  *   administratorLoginPassword: Redacted.make(password),
@@ -202,7 +202,6 @@ export interface ManagedInstance extends Resource<
  * **Example:** Enable the public data endpoint
  * ```typescript
  * const mi = yield* Azure.Sql.ManagedInstance("mi", {
- *   resourceGroup: group.resourceGroupName,
  *   subnetId: miSubnetId,
  *   administratorLogin: "sqladmin",
  *   administratorLoginPassword: Redacted.make(password),
@@ -213,7 +212,7 @@ export interface ManagedInstance extends Resource<
  *
  * @resource
  */
-export const ManagedInstance = Resource<ManagedInstance>("Azure.Sql.ManagedInstance");
+export const ManagedInstance = GroupedResource<ManagedInstance>("Azure.Sql.ManagedInstance");
 
 type ObservedInstance = sql.GetManagedInstanceResponse;
 

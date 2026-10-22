@@ -2,7 +2,7 @@ import * as iot from "@distilled.cloud/azure/iotoperations";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -20,6 +20,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createIotName,
   getInstance,
@@ -139,7 +140,6 @@ export interface Instance extends Resource<
  * **Example:** Instance on an Arc-enabled cluster
  * ```typescript
  * const instance = yield* Azure.IoTOperations.Instance("aio", {
- *   resourceGroup: group.resourceGroupName,
  *   customLocationId,
  *   schemaRegistryId,
  * });
@@ -148,7 +148,6 @@ export interface Instance extends Resource<
  * **Example:** Instance with a description and a system-assigned identity
  * ```typescript
  * const instance = yield* Azure.IoTOperations.Instance("aio", {
- *   resourceGroup: group.resourceGroupName,
  *   customLocationId,
  *   schemaRegistryId,
  *   description: "factory floor",
@@ -159,7 +158,7 @@ export interface Instance extends Resource<
  *
  * @resource
  */
-export const Instance = Resource<Instance>("Azure.IoTOperations.Instance");
+export const Instance = GroupedResource<Instance>("Azure.IoTOperations.Instance");
 
 const toAttrs = (
   resourceGroup: string,

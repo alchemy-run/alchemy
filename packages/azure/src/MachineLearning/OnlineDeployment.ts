@@ -2,7 +2,7 @@ import * as ml from "@distilled.cloud/azure/machinelearningservices";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import {
@@ -19,6 +19,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { containsValue, createChildName, sameArm, inputFields } from "./Common.ts";
 
 export interface OnlineDeploymentProbe {
@@ -152,11 +153,9 @@ export interface OnlineDeployment extends Resource<
  * **Example:** MLflow model from the `azureml` registry
  * ```typescript
  * const endpoint = yield* Azure.MachineLearning.OnlineEndpoint("scoring", {
- *   resourceGroup: group.resourceGroupName,
  *   workspace: workspace.workspaceName,
  * });
  * const blue = yield* Azure.MachineLearning.OnlineDeployment("blue", {
- *   resourceGroup: group.resourceGroupName,
  *   workspace: workspace.workspaceName,
  *   endpoint: endpoint.endpointName,
  *   name: "blue",
@@ -170,7 +169,6 @@ export interface OnlineDeployment extends Resource<
  * **Example:** Model with a scoring script and environment
  * ```typescript
  * const green = yield* Azure.MachineLearning.OnlineDeployment("green", {
- *   resourceGroup: group.resourceGroupName,
  *   workspace: workspace.workspaceName,
  *   endpoint: endpoint.endpointName,
  *   model: modelAssetId,
@@ -183,7 +181,7 @@ export interface OnlineDeployment extends Resource<
  *
  * @resource
  */
-export const OnlineDeployment = Resource<OnlineDeployment>(
+export const OnlineDeployment = GroupedResource<OnlineDeployment>(
   "Azure.MachineLearning.OnlineDeployment",
 );
 

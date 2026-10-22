@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -21,6 +21,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { HCI_NAMESPACE, sameId } from "./Common.ts";
 
 export interface ClusterDesiredProperties {
@@ -145,16 +146,13 @@ export interface Cluster extends Resource<
  * const group = yield* Azure.Resources.ResourceGroup("edge", {
  *   location: "eastus",
  * });
- * const cluster = yield* Azure.AzureStackHCI.Cluster("site-a", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const cluster = yield* Azure.AzureStackHCI.Cluster("site-a");
  * ```
  *
  * ### Configuring Diagnostics
  * **Example:** Enhanced diagnostics and Windows Server subscription
  * ```typescript
  * const cluster = yield* Azure.AzureStackHCI.Cluster("site-a", {
- *   resourceGroup: group.resourceGroupName,
  *   desiredProperties: {
  *     diagnosticLevel: "Enhanced",
  *     windowsServerSubscription: "Enabled",
@@ -165,7 +163,7 @@ export interface Cluster extends Resource<
  *
  * @resource
  */
-export const Cluster = Resource<Cluster>("Azure.AzureStackHCI.Cluster");
+export const Cluster = GroupedResource<Cluster>("Azure.AzureStackHCI.Cluster");
 
 type ObservedCluster = hci.GetClusterResponse;
 

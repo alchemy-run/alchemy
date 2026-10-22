@@ -2,11 +2,12 @@ import * as cdn from "@distilled.cloud/azure/cdn";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { ensureRegistered, ignoreNotFound, orUndefinedIfNotFound, waitUntilGone } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   AFD_DELETE_BUDGET,
   createAfdName,
@@ -96,7 +97,6 @@ export interface Secret extends Resource<
  * **Example:** Key Vault certificate for a custom domain
  * ```typescript
  * const cert = yield* Azure.Cdn.Secret("cert", {
- *   resourceGroup: group.resourceGroupName,
  *   profile: profile.profileName,
  *   parameters: {
  *     type: "CustomerCertificate",
@@ -105,7 +105,6 @@ export interface Secret extends Resource<
  *   },
  * });
  * const domain = yield* Azure.Cdn.AfdCustomDomain("www", {
- *   resourceGroup: group.resourceGroupName,
  *   profile: profile.profileName,
  *   hostName: "www.example.com",
  *   tlsSettings: { certificateType: "CustomerCertificate", secretId: cert.secretId },
@@ -114,7 +113,7 @@ export interface Secret extends Resource<
  *
  * @resource
  */
-export const Secret = Resource<Secret>("Azure.Cdn.Secret");
+export const Secret = GroupedResource<Secret>("Azure.Cdn.Secret");
 
 const createSecretName = (id: string) => createAfdName(id, 50);
 

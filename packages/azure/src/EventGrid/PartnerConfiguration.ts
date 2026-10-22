@@ -2,7 +2,7 @@ import * as eventgrid from "@distilled.cloud/azure/eventgrid";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -20,6 +20,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { sameName } from "./common.ts";
 
 /** A SaaS partner authorized to create partner topics in the resource group. */
@@ -92,7 +93,6 @@ export interface PartnerConfiguration extends Resource<
  * **Example:** Authorize a partner for 30 days
  * ```typescript
  * const partners = yield* Azure.EventGrid.PartnerConfiguration("partners", {
- *   resourceGroup: group.resourceGroupName,
  *   defaultMaximumExpirationTimeInDays: 30,
  *   authorizedPartners: [
  *     {
@@ -106,14 +106,13 @@ export interface PartnerConfiguration extends Resource<
  * **Example:** Empty configuration with a default expiry
  * ```typescript
  * const partners = yield* Azure.EventGrid.PartnerConfiguration("partners", {
- *   resourceGroup: group.resourceGroupName,
  *   defaultMaximumExpirationTimeInDays: 14,
  * });
  * ```
  *
  * @resource
  */
-export const PartnerConfiguration = Resource<PartnerConfiguration>(
+export const PartnerConfiguration = GroupedResource<PartnerConfiguration>(
   "Azure.EventGrid.PartnerConfiguration",
 );
 

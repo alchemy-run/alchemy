@@ -2,7 +2,7 @@ import * as storage from "@distilled.cloud/azure/storage";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -15,6 +15,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { isAccountOwnedByStack } from "./StorageOwnership.ts";
 
 /** A container pair replicated by the policy. */
@@ -118,14 +119,9 @@ export interface ObjectReplicationPolicy extends Resource<
  * ### Replicating Containers
  * **Example:** Replicate one container to another account
  * ```typescript
- * const source = yield* Azure.Storage.StorageAccount("primary", {
- *   resourceGroup: group.resourceGroupName,
- * });
- * const destination = yield* Azure.Storage.StorageAccount("replica", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const source = yield* Azure.Storage.StorageAccount("primary");
+ * const destination = yield* Azure.Storage.StorageAccount("replica");
  * const sourceBlob = yield* Azure.Storage.BlobServiceProperties("primary-blob", {
- *   resourceGroup: group.resourceGroupName,
  *   storageAccount: source.storageAccountName,
  *   isVersioningEnabled: true,
  *   changeFeed: { enabled: true },
@@ -133,21 +129,17 @@ export interface ObjectReplicationPolicy extends Resource<
  * const destinationBlob = yield* Azure.Storage.BlobServiceProperties(
  *   "replica-blob",
  *   {
- *     resourceGroup: group.resourceGroupName,
  *     storageAccount: destination.storageAccountName,
  *     isVersioningEnabled: true,
  *   },
  * );
  * const images = yield* Azure.Storage.BlobContainer("images", {
- *   resourceGroup: group.resourceGroupName,
  *   storageAccount: source.storageAccountName,
  * });
  * const imagesCopy = yield* Azure.Storage.BlobContainer("images-copy", {
- *   resourceGroup: group.resourceGroupName,
  *   storageAccount: destination.storageAccountName,
  * });
  * yield* Azure.Storage.ObjectReplicationPolicy("images-replication", {
- *   resourceGroup: group.resourceGroupName,
  *   // Referencing the settings resources orders the policy after them.
  *   sourceAccount: sourceBlob.storageAccount,
  *   destinationAccount: destinationBlob.storageAccount,
@@ -163,7 +155,6 @@ export interface ObjectReplicationPolicy extends Resource<
  * **Example:** Replicate only a prefix, including existing blobs
  * ```typescript
  * yield* Azure.Storage.ObjectReplicationPolicy("images-replication", {
- *   resourceGroup: group.resourceGroupName,
  *   sourceAccount: sourceBlob.storageAccount,
  *   destinationAccount: destinationBlob.storageAccount,
  *   rules: [
@@ -179,7 +170,7 @@ export interface ObjectReplicationPolicy extends Resource<
  *
  * @resource
  */
-export const ObjectReplicationPolicy = Resource<ObjectReplicationPolicy>(
+export const ObjectReplicationPolicy = GroupedResource<ObjectReplicationPolicy>(
   "Azure.Storage.ObjectReplicationPolicy",
 );
 

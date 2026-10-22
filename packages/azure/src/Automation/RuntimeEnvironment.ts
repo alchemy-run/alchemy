@@ -2,7 +2,7 @@ import * as automation from "@distilled.cloud/azure/automation";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -15,6 +15,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   accountOwnedByStage,
   childNuke,
@@ -94,7 +95,6 @@ export interface RuntimeEnvironment extends Resource<
  * **Example:** PowerShell 7.4 with the Az modules
  * ```typescript
  * const ps74 = yield* Azure.Automation.RuntimeEnvironment("ps74", {
- *   resourceGroup: group.resourceGroupName,
  *   automationAccount: account.automationAccountName,
  *   language: "PowerShell",
  *   version: "7.4",
@@ -104,7 +104,7 @@ export interface RuntimeEnvironment extends Resource<
  *
  * @resource
  */
-export const RuntimeEnvironment = Resource<RuntimeEnvironment>(
+export const RuntimeEnvironment = GroupedResource<RuntimeEnvironment>(
   "Azure.Automation.RuntimeEnvironment",
 );
 

@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -14,6 +14,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { lower, sameLocation } from "./common.ts";
 
 export interface StaticSiteLinkedBackendProps {
@@ -81,11 +82,9 @@ export interface StaticSiteLinkedBackend extends Resource<
  * **Example:** Function app behind `/api`
  * ```typescript
  * const site = yield* Azure.Web.StaticSite("site", {
- *   resourceGroup: group.resourceGroupName,
  *   sku: "Standard",
  * });
  * yield* Azure.Web.StaticSiteLinkedBackend("api", {
- *   resourceGroup: group.resourceGroupName,
  *   staticSiteName: site.staticSiteName,
  *   backendResourceId: functionApp.siteId,
  *   region: functionApp.location,
@@ -94,7 +93,7 @@ export interface StaticSiteLinkedBackend extends Resource<
  *
  * @resource
  */
-export const StaticSiteLinkedBackend = Resource<StaticSiteLinkedBackend>(
+export const StaticSiteLinkedBackend = GroupedResource<StaticSiteLinkedBackend>(
   "Azure.Web.StaticSiteLinkedBackend",
 );
 

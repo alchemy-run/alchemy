@@ -2,7 +2,7 @@ import * as eventhub from "@distilled.cloud/azure/eventhub";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createNamespaceName, namespaceOwnedByStage } from "./Common.ts";
 
 export interface DisasterRecoveryConfigProps {
@@ -85,17 +86,14 @@ export interface DisasterRecoveryConfig extends Resource<
  * **Example:** Primary in East US, secondary in West US 2
  * ```typescript
  * const primary = yield* Azure.EventHub.Namespace("Primary", {
- *   resourceGroup: group.resourceGroupName,
  *   location: "eastus",
  *   sku: "Standard",
  * });
  * const secondary = yield* Azure.EventHub.Namespace("Secondary", {
- *   resourceGroup: group.resourceGroupName,
  *   location: "westus2",
  *   sku: "Standard",
  * });
  * const geoDr = yield* Azure.EventHub.DisasterRecoveryConfig("GeoDr", {
- *   resourceGroup: group.resourceGroupName,
  *   namespace: primary.namespaceName,
  *   partnerNamespace: secondary.namespaceId,
  * });
@@ -103,7 +101,7 @@ export interface DisasterRecoveryConfig extends Resource<
  *
  * @resource
  */
-export const DisasterRecoveryConfig = Resource<DisasterRecoveryConfig>(
+export const DisasterRecoveryConfig = GroupedResource<DisasterRecoveryConfig>(
   "Azure.EventHub.DisasterRecoveryConfig",
 );
 

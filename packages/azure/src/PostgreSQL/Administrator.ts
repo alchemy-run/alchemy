@@ -2,7 +2,7 @@ import * as postgresql from "@distilled.cloud/azure/postgresql";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -14,6 +14,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   POSTGRES_NAMESPACE,
   serverOnly,
@@ -86,14 +87,10 @@ export interface Administrator extends Resource<
  * **Example:** Make a managed identity a server administrator
  * ```typescript
  * const server = yield* Azure.PostgreSQL.FlexibleServer("db", {
- *   resourceGroup: group.resourceGroupName,
  *   authConfig: { activeDirectoryAuth: "Enabled", passwordAuth: "Enabled" },
  * });
- * const identity = yield* Azure.ManagedIdentity.UserAssignedIdentity("api", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const identity = yield* Azure.ManagedIdentity.UserAssignedIdentity("api");
  * const admin = yield* Azure.PostgreSQL.Administrator("api-admin", {
- *   resourceGroup: group.resourceGroupName,
  *   server: server.serverName,
  *   objectId: identity.principalId,
  *   principalType: "ServicePrincipal",
@@ -104,7 +101,6 @@ export interface Administrator extends Resource<
  * **Example:** Make an Entra group the administrator
  * ```typescript
  * const admin = yield* Azure.PostgreSQL.Administrator("dbas", {
- *   resourceGroup: group.resourceGroupName,
  *   server: server.serverName,
  *   objectId: "00000000-0000-0000-0000-000000000000",
  *   principalType: "Group",
@@ -114,7 +110,7 @@ export interface Administrator extends Resource<
  *
  * @resource
  */
-export const Administrator = Resource<Administrator>("Azure.PostgreSQL.Administrator");
+export const Administrator = GroupedResource<Administrator>("Azure.PostgreSQL.Administrator");
 
 interface AdministratorRef extends ServerRef {
   readonly objectId: string;

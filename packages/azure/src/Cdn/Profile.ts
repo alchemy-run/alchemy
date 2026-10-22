@@ -2,7 +2,7 @@ import * as cdn from "@distilled.cloud/azure/cdn";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -19,6 +19,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   AFD_DELETE_BUDGET,
   changedFields,
@@ -132,16 +133,12 @@ export interface Profile extends Resource<
  * ### Creating a Profile
  * **Example:** Standard Front Door profile
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("app");
- * const profile = yield* Azure.Cdn.Profile("cdn", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const profile = yield* Azure.Cdn.Profile("cdn");
  * ```
  *
  * **Example:** Premium profile with a managed identity
  * ```typescript
  * const profile = yield* Azure.Cdn.Profile("cdn", {
- *   resourceGroup: group.resourceGroupName,
  *   sku: "Premium_AzureFrontDoor",
  *   identity: { type: "SystemAssigned" },
  *   originResponseTimeoutSeconds: 120,
@@ -150,7 +147,7 @@ export interface Profile extends Resource<
  *
  * @resource
  */
-export const Profile = Resource<Profile>("Azure.Cdn.Profile");
+export const Profile = GroupedResource<Profile>("Azure.Cdn.Profile");
 
 type ObservedProfile = cdn.GetProfileResponse;
 

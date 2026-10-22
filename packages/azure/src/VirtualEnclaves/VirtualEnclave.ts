@@ -2,7 +2,7 @@ import * as mission from "@distilled.cloud/azure/mission";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -19,6 +19,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   changedProperties,
   createMissionName,
@@ -173,7 +174,6 @@ export interface VirtualEnclave extends Resource<
  * **Example:** Small enclave with one subnet
  * ```typescript
  * const enclave = yield* Azure.VirtualEnclaves.VirtualEnclave("spoke", {
- *   resourceGroup: group.resourceGroupName,
  *   communityId: community.communityId,
  *   enclaveVirtualNetwork: {
  *     networkSize: "small",
@@ -186,7 +186,6 @@ export interface VirtualEnclave extends Resource<
  * **Example:** Enclave with Bastion and role assignments
  * ```typescript
  * const enclave = yield* Azure.VirtualEnclaves.VirtualEnclave("spoke", {
- *   resourceGroup: group.resourceGroupName,
  *   communityId: community.communityId,
  *   enclaveVirtualNetwork: { networkSize: "small" },
  *   bastionEnabled: true,
@@ -201,7 +200,9 @@ export interface VirtualEnclave extends Resource<
  *
  * @resource
  */
-export const VirtualEnclave = Resource<VirtualEnclave>("Azure.VirtualEnclaves.VirtualEnclave");
+export const VirtualEnclave = GroupedResource<VirtualEnclave>(
+  "Azure.VirtualEnclaves.VirtualEnclave",
+);
 
 type ObservedEnclave = mission.GetVirtualEnclaveResponse | mission.EnclaveResource;
 

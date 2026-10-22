@@ -2,7 +2,7 @@ import * as servicelinker from "@distilled.cloud/azure/servicelinker";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   type ConnectionProps,
   connectionPropsDiffer,
@@ -85,7 +86,6 @@ export interface Connector extends Resource<
  * **Example:** Secret-based connection to a blob service
  * ```typescript
  * yield* Azure.ServiceConnector.Connector("local-storage", {
- *   resourceGroup: group.resourceGroupName,
  *   targetService: {
  *     type: "AzureResource",
  *     id: Output.interpolate`${account.storageAccountId}/blobServices/default`,
@@ -99,7 +99,6 @@ export interface Connector extends Resource<
  * **Example:** Grant a developer RBAC on the target
  * ```typescript
  * yield* Azure.ServiceConnector.Connector("dev-storage", {
- *   resourceGroup: group.resourceGroupName,
  *   targetService: { type: "AzureResource", id: blobServiceId },
  *   authInfo: { authType: "userAccount", principalId: developerObjectId },
  *   clientType: "python",
@@ -108,7 +107,7 @@ export interface Connector extends Resource<
  *
  * @resource
  */
-export const Connector = Resource<Connector>("Azure.ServiceConnector.Connector");
+export const Connector = GroupedResource<Connector>("Azure.ServiceConnector.Connector");
 
 const getConnector = (
   subscriptionId: string,

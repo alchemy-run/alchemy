@@ -3,7 +3,7 @@ import * as iothub from "@distilled.cloud/azure/iothub";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import {
@@ -15,6 +15,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createChildName, iotHubOwnedByStage } from "./Common.ts";
 
 export interface CertificateProps {
@@ -84,11 +85,8 @@ export interface Certificate extends Resource<
  * ### Registering a CA Certificate
  * **Example:** Upload a pre-verified root CA
  * ```typescript
- * const hub = yield* Azure.IoTHub.IotHub("devices", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const hub = yield* Azure.IoTHub.IotHub("devices");
  * const ca = yield* Azure.IoTHub.Certificate("root-ca", {
- *   resourceGroup: group.resourceGroupName,
  *   iotHub: hub.iotHubName,
  *   certificate: rootCaPem,
  *   isVerified: true,
@@ -97,7 +95,7 @@ export interface Certificate extends Resource<
  *
  * @resource
  */
-export const Certificate = Resource<Certificate>("Azure.IoTHub.Certificate");
+export const Certificate = GroupedResource<Certificate>("Azure.IoTHub.Certificate");
 
 export class InvalidCertificate extends Data.TaggedError("Azure.IoTHub.InvalidCertificate")<{
   readonly message: string;

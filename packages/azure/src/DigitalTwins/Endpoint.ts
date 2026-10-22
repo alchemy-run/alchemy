@@ -2,7 +2,7 @@ import * as digitaltwins from "@distilled.cloud/azure/digitaltwins";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
 import {
@@ -14,6 +14,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createChildName,
   instanceOwnedByStage,
@@ -116,11 +117,8 @@ export interface Endpoint extends Resource<
  * ### Event Grid Endpoints
  * **Example:** Key-based Event Grid topic endpoint
  * ```typescript
- * const topic = yield* Azure.EventGrid.Topic("twin-events", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const topic = yield* Azure.EventGrid.Topic("twin-events");
  * const endpoint = yield* Azure.DigitalTwins.Endpoint("events", {
- *   resourceGroup: group.resourceGroupName,
  *   instance: twins.instanceName,
  *   endpointType: "EventGrid",
  *   topicEndpoint: topic.endpoint,
@@ -132,7 +130,6 @@ export interface Endpoint extends Resource<
  * **Example:** Identity-based Event Hub endpoint
  * ```typescript
  * const twins = yield* Azure.DigitalTwins.Instance("factory", {
- *   resourceGroup: group.resourceGroupName,
  *   identity: { type: "SystemAssigned" },
  * });
  * yield* Azure.Authorization.RoleAssignment("twins-sends-events", {
@@ -143,7 +140,6 @@ export interface Endpoint extends Resource<
  *   principalType: "ServicePrincipal",
  * });
  * const endpoint = yield* Azure.DigitalTwins.Endpoint("telemetry", {
- *   resourceGroup: group.resourceGroupName,
  *   instance: twins.instanceName,
  *   endpointType: "EventHub",
  *   authenticationType: "IdentityBased",
@@ -154,7 +150,7 @@ export interface Endpoint extends Resource<
  *
  * @resource
  */
-export const Endpoint = Resource<Endpoint>("Azure.DigitalTwins.Endpoint");
+export const Endpoint = GroupedResource<Endpoint>("Azure.DigitalTwins.Endpoint");
 
 type ObservedEndpoint = digitaltwins.GetDigitalTwinsEndpointResponse;
 

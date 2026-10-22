@@ -2,7 +2,7 @@ import * as app from "@distilled.cloud/azure/app";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { fingerprint, isContainerAppOwnedByStack, lower, matchesDesired } from "./common.ts";
 
 /** The auth config of a container app is a singleton named `current`. */
@@ -79,13 +80,11 @@ export interface AuthConfig extends Resource<
  * **Example:** Require GitHub sign-in
  * ```typescript
  * const api = yield* Azure.ContainerApps.ContainerApp("api", {
- *   resourceGroup: group.resourceGroupName,
  *   environmentId: env.environmentId,
  *   secrets: [{ name: "github-secret", value: Redacted.make(clientSecret) }],
  *   template: { containers: [{ name: "api", image }] },
  * });
  * yield* Azure.ContainerApps.AuthConfig("auth", {
- *   resourceGroup: group.resourceGroupName,
  *   containerApp: api.containerAppName,
  *   platform: { enabled: true },
  *   globalValidation: {
@@ -107,7 +106,6 @@ export interface AuthConfig extends Resource<
  * **Example:** Reject unauthenticated requests with 401
  * ```typescript
  * yield* Azure.ContainerApps.AuthConfig("auth", {
- *   resourceGroup: group.resourceGroupName,
  *   containerApp: api.containerAppName,
  *   platform: { enabled: true },
  *   globalValidation: {
@@ -127,7 +125,7 @@ export interface AuthConfig extends Resource<
  *
  * @resource
  */
-export const AuthConfig = Resource<AuthConfig>("Azure.ContainerApps.AuthConfig");
+export const AuthConfig = GroupedResource<AuthConfig>("Azure.ContainerApps.AuthConfig");
 
 const getAuthConfig = (
   subscriptionId: string,

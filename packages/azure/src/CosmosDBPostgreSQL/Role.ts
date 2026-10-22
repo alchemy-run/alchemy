@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
 import {
@@ -15,6 +15,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   type ClusterRef,
   clusterOwnedByStack,
@@ -80,7 +81,6 @@ export interface Role extends Resource<
  * **Example:** Role with a generated password
  * ```typescript
  * const app = yield* Azure.CosmosDBPostgreSQL.Role("app", {
- *   resourceGroup: group.resourceGroupName,
  *   cluster: cluster.clusterName,
  * });
  * // app.roleName and app.password (Redacted) log in to the coordinator
@@ -89,7 +89,6 @@ export interface Role extends Resource<
  * **Example:** Role with an explicit password
  * ```typescript
  * const reporting = yield* Azure.CosmosDBPostgreSQL.Role("reporting", {
- *   resourceGroup: group.resourceGroupName,
  *   cluster: cluster.clusterName,
  *   name: "reporting",
  *   password: yield* Config.redacted("REPORTING_PASSWORD"),
@@ -98,7 +97,7 @@ export interface Role extends Resource<
  *
  * @resource
  */
-export const Role = Resource<Role>("Azure.CosmosDBPostgreSQL.Role");
+export const Role = GroupedResource<Role>("Azure.CosmosDBPostgreSQL.Role");
 
 const createRoleName = Effect.fn(function* (id: string) {
   const name = yield* createPhysicalName({

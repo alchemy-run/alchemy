@@ -1,7 +1,7 @@
 import * as dr from "@distilled.cloud/azure/recoveryservicesdatareplication";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -12,6 +12,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createDataReplicationName,
   DATA_REPLICATION_NAMESPACE,
@@ -107,7 +108,6 @@ export interface ProtectedItem extends Resource<
  * **Example:** Replicate a Hyper-V VM to Azure Local
  * ```typescript
  * const item = yield* Azure.DataReplication.ProtectedItem("web01", {
- *   resourceGroup: group.resourceGroupName,
  *   vault: vault.vaultName,
  *   policyName: policy.policyName,
  *   replicationExtensionName: extension.replicationExtensionName,
@@ -131,7 +131,7 @@ export interface ProtectedItem extends Resource<
  *
  * @resource
  */
-export const ProtectedItem = Resource<ProtectedItem>("Azure.DataReplication.ProtectedItem");
+export const ProtectedItem = GroupedResource<ProtectedItem>("Azure.DataReplication.ProtectedItem");
 
 type Observed = dr.GetProtectedItemResponse;
 

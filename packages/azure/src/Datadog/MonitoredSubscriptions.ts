@@ -2,13 +2,14 @@ import * as datadog from "@distilled.cloud/azure/datadog";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { ensureRegistered, ignoreNotFound, orUndefinedIfNotFound, waitUntilGone } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   canonicalJson,
   DEFAULT_CONFIGURATION,
@@ -72,7 +73,6 @@ export interface MonitoredSubscriptions extends Resource<
  * **Example:** Monitor a second subscription
  * ```typescript
  * const monitored = yield* Azure.Datadog.MonitoredSubscriptions("monitored", {
- *   resourceGroup: group.resourceGroupName,
  *   monitor: monitor.monitorName,
  *   subscriptions: [
  *     {
@@ -85,7 +85,7 @@ export interface MonitoredSubscriptions extends Resource<
  *
  * @resource
  */
-export const MonitoredSubscriptions = Resource<MonitoredSubscriptions>(
+export const MonitoredSubscriptions = GroupedResource<MonitoredSubscriptions>(
   "Azure.Datadog.MonitoredSubscriptions",
 );
 

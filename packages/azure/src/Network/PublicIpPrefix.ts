@@ -1,8 +1,9 @@
 import * as network from "@distilled.cloud/azure/network";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import { orUndefinedIfNotFound, userTags } from "../Arm.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { sameSet } from "./common.ts";
 import { idsOf, networkProvider } from "./generic.ts";
 
@@ -89,7 +90,6 @@ export interface PublicIpPrefix extends Resource<
  * **Example:** A /31 IPv4 prefix (two addresses)
  * ```typescript
  * const prefix = yield* Azure.Network.PublicIpPrefix("egress", {
- *   resourceGroup: group.resourceGroupName,
  *   prefixLength: 31,
  * });
  * ```
@@ -97,14 +97,13 @@ export interface PublicIpPrefix extends Resource<
  * **Example:** Use the prefix for NAT gateway SNAT
  * ```typescript
  * yield* Azure.Network.NatGateway("egress", {
- *   resourceGroup: group.resourceGroupName,
  *   publicIpPrefixIds: [prefix.publicIpPrefixId],
  * });
  * ```
  *
  * @resource
  */
-export const PublicIpPrefix = Resource<PublicIpPrefix>("Azure.Network.PublicIpPrefix");
+export const PublicIpPrefix = GroupedResource<PublicIpPrefix>("Azure.Network.PublicIpPrefix");
 
 export const PublicIpPrefixProvider = () =>
   Provider.succeed(

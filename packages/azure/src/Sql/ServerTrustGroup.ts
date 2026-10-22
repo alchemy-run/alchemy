@@ -2,7 +2,7 @@ import * as sql from "@distilled.cloud/azure/sql";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createChildName, lower } from "./common.ts";
 
 export interface ServerTrustGroupProps {
@@ -78,7 +79,6 @@ export interface ServerTrustGroup extends Resource<
  * **Example:** Trust two managed instances
  * ```typescript
  * yield* Azure.Sql.ServerTrustGroup("trust", {
- *   resourceGroup: group.resourceGroupName,
  *   location: "centralus",
  *   groupMembers: [first.managedInstanceId, second.managedInstanceId],
  * });
@@ -87,7 +87,6 @@ export interface ServerTrustGroup extends Resource<
  * **Example:** Explicit trust scopes
  * ```typescript
  * yield* Azure.Sql.ServerTrustGroup("trust", {
- *   resourceGroup: group.resourceGroupName,
  *   location: "centralus",
  *   groupMembers: [first.managedInstanceId, second.managedInstanceId],
  *   trustScopes: ["GlobalTransactions", "ServiceBroker"],
@@ -96,7 +95,7 @@ export interface ServerTrustGroup extends Resource<
  *
  * @resource
  */
-export const ServerTrustGroup = Resource<ServerTrustGroup>("Azure.Sql.ServerTrustGroup");
+export const ServerTrustGroup = GroupedResource<ServerTrustGroup>("Azure.Sql.ServerTrustGroup");
 
 type ObservedGroup = sql.GetServerTrustGroupResponse;
 

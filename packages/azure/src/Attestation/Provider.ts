@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider_ from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -19,6 +19,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 
 /** `Enabled` or `Disabled`. */
 export type AttestationToggle = "Enabled" | "Disabled";
@@ -129,10 +130,7 @@ export interface Provider extends Resource<
  * ### Creating a Provider
  * **Example:** Attestation provider with the AAD trust model
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("app");
- * const attest = yield* Azure.Attestation.Provider("attest", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const attest = yield* Azure.Attestation.Provider("attest");
  * // attest.attestUri => https://<name>.eus.attest.azure.net
  * ```
  *
@@ -140,7 +138,6 @@ export interface Provider extends Resource<
  * **Example:** Require policy updates to be signed by your certificate
  * ```typescript
  * const attest = yield* Azure.Attestation.Provider("attest", {
- *   resourceGroup: group.resourceGroupName,
  *   policySigningCertificates: [{ kty: "RSA", x5c: [certificateBase64Der] }],
  * });
  * ```
@@ -149,14 +146,13 @@ export interface Provider extends Resource<
  * **Example:** Disable the public endpoint
  * ```typescript
  * const attest = yield* Azure.Attestation.Provider("attest", {
- *   resourceGroup: group.resourceGroupName,
  *   publicNetworkAccess: "Disabled",
  * });
  * ```
  *
  * @resource
  */
-export const Provider = Resource<Provider>("Azure.Attestation.Provider");
+export const Provider = GroupedResource<Provider>("Azure.Attestation.Provider");
 
 type ObservedProvider = attestation.GetAttestationProviderResponse;
 

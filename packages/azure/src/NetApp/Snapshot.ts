@@ -2,7 +2,7 @@ import * as netapp from "@distilled.cloud/azure/netapp";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createNetAppName, getVolume, LRO_BUDGET, ownedByStage, whileBusy } from "./Common.ts";
 
 export interface SnapshotProps {
@@ -72,7 +73,6 @@ export interface Snapshot extends Resource<
  * **Example:** Snapshot a volume
  * ```typescript
  * const snapshot = yield* Azure.NetApp.Snapshot("before-upgrade", {
- *   resourceGroup: group.resourceGroupName,
  *   account: account.accountName,
  *   pool: pool.poolName,
  *   volume: volume.volumeName,
@@ -83,7 +83,6 @@ export interface Snapshot extends Resource<
  * **Example:** Create a volume from a snapshot
  * ```typescript
  * const clone = yield* Azure.NetApp.Volume("clone", {
- *   resourceGroup: group.resourceGroupName,
  *   account: account.accountName,
  *   pool: pool.poolName,
  *   subnetId: subnet.subnetId,
@@ -93,7 +92,7 @@ export interface Snapshot extends Resource<
  *
  * @resource
  */
-export const Snapshot = Resource<Snapshot>("Azure.NetApp.Snapshot");
+export const Snapshot = GroupedResource<Snapshot>("Azure.NetApp.Snapshot");
 
 interface Where {
   subscriptionId: string;

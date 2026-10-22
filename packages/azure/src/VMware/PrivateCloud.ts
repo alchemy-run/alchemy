@@ -2,7 +2,7 @@ import * as vmware from "@distilled.cloud/azure/vmware";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
 import {
@@ -20,6 +20,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   AVS_NAMESPACE,
   createAvsName,
@@ -225,9 +226,7 @@ export interface PrivateCloud extends Resource<
  * ### Creating a Private Cloud
  * **Example:** Three-host private cloud
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("avs");
  * const cloud = yield* Azure.VMware.PrivateCloud("cloud", {
- *   resourceGroup: group.resourceGroupName,
  *   sku: "av36p",
  *   networkBlock: "10.175.0.0/22",
  *   clusterSize: 3,
@@ -238,7 +237,6 @@ export interface PrivateCloud extends Resource<
  * **Example:** Enable internet access and a system-assigned identity
  * ```typescript
  * const cloud = yield* Azure.VMware.PrivateCloud("cloud", {
- *   resourceGroup: group.resourceGroupName,
  *   networkBlock: "10.175.0.0/22",
  *   internet: "Enabled",
  *   identity: "SystemAssigned",
@@ -247,7 +245,7 @@ export interface PrivateCloud extends Resource<
  *
  * @resource
  */
-export const PrivateCloud = Resource<PrivateCloud>("Azure.VMware.PrivateCloud");
+export const PrivateCloud = GroupedResource<PrivateCloud>("Azure.VMware.PrivateCloud");
 
 type Observed = vmware.GetPrivateCloudResponse;
 

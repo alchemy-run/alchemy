@@ -2,11 +2,12 @@ import * as datafactory from "@distilled.cloud/azure/datafactory";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { ensureRegistered, ignoreNotFound, orUndefinedIfNotFound, waitUntilGone } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   annotationsWithOwnership,
   createChildName,
@@ -137,7 +138,6 @@ export interface Pipeline extends Resource<
  * **Example:** Pipeline with a Wait activity
  * ```typescript
  * const pipeline = yield* Azure.DataFactory.Pipeline("nightly", {
- *   resourceGroup: group.resourceGroupName,
  *   factoryName: factory.factoryName,
  *   activities: [
  *     { name: "pause", type: "Wait", typeProperties: { waitTimeInSeconds: 5 } },
@@ -148,7 +148,6 @@ export interface Pipeline extends Resource<
  * **Example:** Copy activity between two datasets
  * ```typescript
  * const copy = yield* Azure.DataFactory.Pipeline("copy", {
- *   resourceGroup: group.resourceGroupName,
  *   factoryName: factory.factoryName,
  *   parameters: { date: { type: "String" } },
  *   activities: [
@@ -168,7 +167,7 @@ export interface Pipeline extends Resource<
  *
  * @resource
  */
-export const Pipeline = Resource<Pipeline>("Azure.DataFactory.Pipeline");
+export const Pipeline = GroupedResource<Pipeline>("Azure.DataFactory.Pipeline");
 
 const getPipeline = (
   subscriptionId: string,

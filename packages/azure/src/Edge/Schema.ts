@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -21,6 +21,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { EDGE_WAIT, edgeState } from "./EdgeShared.ts";
 
 export interface SchemaProps {
@@ -79,11 +80,8 @@ export interface Schema extends Resource<
  * const group = yield* Azure.Resources.ResourceGroup("edge", {
  *   location: "eastus",
  * });
- * const schema = yield* Azure.Edge.Schema("app", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const schema = yield* Azure.Edge.Schema("app");
  * yield* Azure.Edge.SchemaVersion("app-v1", {
- *   resourceGroup: group.resourceGroupName,
  *   schema: schema.schemaName,
  *   version: "1.0.0",
  *   value: [
@@ -98,7 +96,7 @@ export interface Schema extends Resource<
  *
  * @resource
  */
-export const Schema = Resource<Schema>("Azure.Edge.Schema");
+export const Schema = GroupedResource<Schema>("Azure.Edge.Schema");
 
 const getSchema = (subscriptionId: string, resourceGroupName: string, schemaName: string) =>
   orUndefinedIfNotFound(edge.GetSchema({ subscriptionId, resourceGroupName, schemaName }));

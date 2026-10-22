@@ -2,7 +2,7 @@ import * as backup from "@distilled.cloud/azure/recoveryservicesbackup";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -16,6 +16,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   BACKUP_FABRIC,
   isVaultOwnedByStack,
@@ -105,16 +106,11 @@ export interface BackupProtectionContainer extends Resource<
  * ### Azure Files
  * **Example:** Register a storage account for Azure Files backup
  * ```typescript
- * const vault = yield* Azure.RecoveryServices.Vault("backup-vault", {
- *   resourceGroup: group.resourceGroupName,
- * });
- * const account = yield* Azure.Storage.StorageAccount("files", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const vault = yield* Azure.RecoveryServices.Vault("backup-vault");
+ * const account = yield* Azure.Storage.StorageAccount("files");
  * const container = yield* Azure.RecoveryServices.BackupProtectionContainer(
  *   "files-container",
  *   {
- *     resourceGroup: group.resourceGroupName,
  *     vault: vault.vaultName,
  *     sourceResourceId: account.storageAccountId,
  *   },
@@ -124,7 +120,6 @@ export interface BackupProtectionContainer extends Resource<
  * **Example:** Register without the storage account delete lock
  * ```typescript
  * yield* Azure.RecoveryServices.BackupProtectionContainer("files-container", {
- *   resourceGroup: group.resourceGroupName,
  *   vault: vault.vaultName,
  *   sourceResourceId: account.storageAccountId,
  *   acquireStorageAccountLock: "NotAcquire",
@@ -133,7 +128,7 @@ export interface BackupProtectionContainer extends Resource<
  *
  * @resource
  */
-export const BackupProtectionContainer = Resource<BackupProtectionContainer>(
+export const BackupProtectionContainer = GroupedResource<BackupProtectionContainer>(
   "Azure.RecoveryServices.BackupProtectionContainer",
 );
 

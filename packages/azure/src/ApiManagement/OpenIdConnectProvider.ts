@@ -1,9 +1,10 @@
 import * as apim from "@distilled.cloud/azure/apimanagement";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createEntityName, subsetMatches } from "./Common.ts";
 import { entityLifecycle, reveal } from "./Entity.ts";
 
@@ -67,7 +68,6 @@ export interface OpenIdConnectProvider extends Resource<
  * **Example:** Microsoft Entra ID as an OpenID Connect provider
  * ```typescript
  * yield* Azure.ApiManagement.OpenIdConnectProvider("entra", {
- *   resourceGroup: group.resourceGroupName,
  *   serviceName: apim.serviceName,
  *   displayName: "Entra ID",
  *   metadataEndpoint: `https://login.microsoftonline.com/${tenantId}/v2.0/.well-known/openid-configuration`,
@@ -78,7 +78,7 @@ export interface OpenIdConnectProvider extends Resource<
  *
  * @resource
  */
-export const OpenIdConnectProvider = Resource<OpenIdConnectProvider>(
+export const OpenIdConnectProvider = GroupedResource<OpenIdConnectProvider>(
   "Azure.ApiManagement.OpenIdConnectProvider",
 );
 

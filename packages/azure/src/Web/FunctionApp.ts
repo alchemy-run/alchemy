@@ -1,7 +1,8 @@
 import type * as web from "@distilled.cloud/azure/web";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { lower } from "./common.ts";
 import { makeSiteLifecycle, type SiteAttributes, type SiteProps } from "./Site.ts";
 
@@ -101,11 +102,9 @@ export interface FunctionApp extends Resource<
  * **Example:** Node.js function app on a Flex Consumption plan
  * ```typescript
  * const plan = yield* Azure.Web.AppServicePlan("functions", {
- *   resourceGroup: group.resourceGroupName,
  *   sku: "FC1",
  * });
  * const app = yield* Azure.Web.FunctionApp("api", {
- *   resourceGroup: group.resourceGroupName,
  *   serverFarmId: plan.appServicePlanId,
  *   runtime: { name: "node", version: "20" },
  *   flexConsumption: {
@@ -123,11 +122,9 @@ export interface FunctionApp extends Resource<
  * **Example:** Linux function app on a Consumption plan
  * ```typescript
  * const plan = yield* Azure.Web.AppServicePlan("functions", {
- *   resourceGroup: group.resourceGroupName,
  *   sku: "Y1",
  * });
  * const app = yield* Azure.Web.FunctionApp("api", {
- *   resourceGroup: group.resourceGroupName,
  *   serverFarmId: plan.appServicePlanId,
  *   runtime: { name: "python" },
  *   siteConfig: { linuxFxVersion: "Python|3.12" },
@@ -137,7 +134,7 @@ export interface FunctionApp extends Resource<
  *
  * @resource
  */
-export const FunctionApp = Resource<FunctionApp>("Azure.Web.FunctionApp");
+export const FunctionApp = GroupedResource<FunctionApp>("Azure.Web.FunctionApp");
 
 const functionAppConfig = (
   flex: FlexConsumptionConfig,

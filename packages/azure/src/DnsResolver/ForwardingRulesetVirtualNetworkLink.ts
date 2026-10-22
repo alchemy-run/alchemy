@@ -2,7 +2,7 @@ import * as dnsresolver from "@distilled.cloud/azure/dnsresolver";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -20,6 +20,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createDnsResolverName, FAST_BUDGET, sameArm } from "./Common.ts";
 
 export interface ForwardingRulesetVirtualNetworkLinkProps {
@@ -85,7 +86,6 @@ export interface ForwardingRulesetVirtualNetworkLink extends Resource<
  * const link = yield* Azure.DnsResolver.ForwardingRulesetVirtualNetworkLink(
  *   "spoke",
  *   {
- *     resourceGroup: group.resourceGroupName,
  *     dnsForwardingRuleset: ruleset.dnsForwardingRulesetName,
  *     virtualNetworkId: spokeVnetId,
  *   },
@@ -94,9 +94,10 @@ export interface ForwardingRulesetVirtualNetworkLink extends Resource<
  *
  * @resource
  */
-export const ForwardingRulesetVirtualNetworkLink = Resource<ForwardingRulesetVirtualNetworkLink>(
-  "Azure.DnsResolver.ForwardingRulesetVirtualNetworkLink",
-);
+export const ForwardingRulesetVirtualNetworkLink =
+  GroupedResource<ForwardingRulesetVirtualNetworkLink>(
+    "Azure.DnsResolver.ForwardingRulesetVirtualNetworkLink",
+  );
 
 const getLink = (
   subscriptionId: string,

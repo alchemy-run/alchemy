@@ -2,7 +2,7 @@ import * as eventhub from "@distilled.cloud/azure/eventhub";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
 import {
@@ -20,6 +20,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createNamespaceName, getNamespace, toKeys } from "./Common.ts";
 
 export type NamespaceSkuName = "Basic" | "Standard" | "Premium";
@@ -149,16 +150,12 @@ export interface Namespace extends Resource<
  * ### Creating a Namespace
  * **Example:** Standard namespace
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("app");
- * const namespace = yield* Azure.EventHub.Namespace("events", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const namespace = yield* Azure.EventHub.Namespace("events");
  * ```
  *
  * **Example:** Cheapest Basic namespace
  * ```typescript
  * const namespace = yield* Azure.EventHub.Namespace("events", {
- *   resourceGroup: group.resourceGroupName,
  *   sku: "Basic",
  * });
  * ```
@@ -167,7 +164,6 @@ export interface Namespace extends Resource<
  * **Example:** Auto-inflate throughput units
  * ```typescript
  * const namespace = yield* Azure.EventHub.Namespace("events", {
- *   resourceGroup: group.resourceGroupName,
  *   sku: "Standard",
  *   capacity: 2,
  *   isAutoInflateEnabled: true,
@@ -179,14 +175,13 @@ export interface Namespace extends Resource<
  * **Example:** Disable shared access keys
  * ```typescript
  * const namespace = yield* Azure.EventHub.Namespace("events", {
- *   resourceGroup: group.resourceGroupName,
  *   disableLocalAuth: true,
  * });
  * ```
  *
  * @resource
  */
-export const Namespace = Resource<Namespace>("Azure.EventHub.Namespace");
+export const Namespace = GroupedResource<Namespace>("Azure.EventHub.Namespace");
 
 type ObservedNamespace = eventhub.GetNamespaceResponse;
 

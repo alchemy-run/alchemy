@@ -1,8 +1,9 @@
 import * as network from "@distilled.cloud/azure/network";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import { orUndefinedIfNotFound } from "../Arm.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { networkProvider } from "./generic.ts";
 import { hubOwnerTags } from "./virtualHubShared.ts";
 
@@ -62,7 +63,6 @@ export interface RoutingIntent extends Resource<
  * **Example:** Internet and private traffic through the hub firewall
  * ```typescript
  * yield* Azure.Network.RoutingIntent("intent", {
- *   resourceGroup: group.resourceGroupName,
  *   virtualHub: hub.virtualHubName,
  *   routingPolicies: [
  *     { name: "InternetTraffic", destinations: ["Internet"], nextHop: firewall.azureFirewallId },
@@ -73,7 +73,7 @@ export interface RoutingIntent extends Resource<
  *
  * @resource
  */
-export const RoutingIntent = Resource<RoutingIntent>("Azure.Network.RoutingIntent");
+export const RoutingIntent = GroupedResource<RoutingIntent>("Azure.Network.RoutingIntent");
 
 export const RoutingIntentProvider = () =>
   Provider.succeed(

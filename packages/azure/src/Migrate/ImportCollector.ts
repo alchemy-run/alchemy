@@ -2,7 +2,7 @@ import * as migrate from "@distilled.cloud/azure/migrate";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { getAssessmentProject } from "./AssessmentProject.ts";
 import { migrateName, ownedByStage } from "./Common.ts";
 
@@ -67,11 +68,9 @@ export interface ImportCollector extends Resource<
  * **Example:** Collector for an import site
  * ```typescript
  * const site = yield* Azure.Migrate.ImportSite("imports-site", {
- *   resourceGroup: group.resourceGroupName,
  *   location: "centralus",
  * });
  * const collector = yield* Azure.Migrate.ImportCollector("imports", {
- *   resourceGroup: group.resourceGroupName,
  *   assessmentProject: project.projectName,
  *   discoverySiteId: site.siteId,
  * });
@@ -79,7 +78,7 @@ export interface ImportCollector extends Resource<
  *
  * @resource
  */
-export const ImportCollector = Resource<ImportCollector>("Azure.Migrate.ImportCollector");
+export const ImportCollector = GroupedResource<ImportCollector>("Azure.Migrate.ImportCollector");
 
 const getImportCollector = (
   subscriptionId: string,

@@ -2,7 +2,7 @@ import * as synapse from "@distilled.cloud/azure/synapse";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createDnsName, fieldsMatch, isWorkspaceOwnedByStack, lower } from "./common.ts";
 
 /** Data flow compute of a Managed (Azure) integration runtime. */
@@ -101,7 +102,6 @@ export interface IntegrationRuntime extends Resource<
  * **Example:** Azure-hosted runtime with a data flow cluster
  * ```typescript
  * yield* Azure.Synapse.IntegrationRuntime("flows", {
- *   resourceGroup: group.resourceGroupName,
  *   workspace: workspace.workspaceName,
  *   type: "Managed",
  *   computeProperties: {
@@ -115,7 +115,6 @@ export interface IntegrationRuntime extends Resource<
  * **Example:** Self-hosted runtime registration
  * ```typescript
  * yield* Azure.Synapse.IntegrationRuntime("onprem", {
- *   resourceGroup: group.resourceGroupName,
  *   workspace: workspace.workspaceName,
  *   type: "SelfHosted",
  *   description: "On-premises SQL Server gateway",
@@ -124,7 +123,9 @@ export interface IntegrationRuntime extends Resource<
  *
  * @resource
  */
-export const IntegrationRuntime = Resource<IntegrationRuntime>("Azure.Synapse.IntegrationRuntime");
+export const IntegrationRuntime = GroupedResource<IntegrationRuntime>(
+  "Azure.Synapse.IntegrationRuntime",
+);
 
 type ObservedRuntime = synapse.GetIntegrationRuntimeResponse;
 

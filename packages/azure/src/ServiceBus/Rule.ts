@@ -2,7 +2,7 @@ import * as servicebus from "@distilled.cloud/azure/servicebus";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createEntityName, sameName } from "./internal.ts";
 
 /** A SQL-92 subset filter evaluated against message properties. */
@@ -123,7 +124,6 @@ export interface Rule extends Resource<
  * **Example:** SQL filter
  * ```typescript
  * yield* Azure.ServiceBus.Rule("red-only", {
- *   resourceGroup: group.resourceGroupName,
  *   namespace: bus.namespaceName,
  *   topic: events.topicName,
  *   subscription: audit.subscriptionName,
@@ -134,7 +134,6 @@ export interface Rule extends Resource<
  * **Example:** Correlation filter
  * ```typescript
  * yield* Azure.ServiceBus.Rule("orders", {
- *   resourceGroup: group.resourceGroupName,
  *   namespace: bus.namespaceName,
  *   topic: events.topicName,
  *   subscription: audit.subscriptionName,
@@ -146,7 +145,6 @@ export interface Rule extends Resource<
  * **Example:** SQL filter with an action
  * ```typescript
  * yield* Azure.ServiceBus.Rule("tag-priority", {
- *   resourceGroup: group.resourceGroupName,
  *   namespace: bus.namespaceName,
  *   topic: events.topicName,
  *   subscription: audit.subscriptionName,
@@ -157,7 +155,7 @@ export interface Rule extends Resource<
  *
  * @resource
  */
-export const Rule = Resource<Rule>("Azure.ServiceBus.Rule");
+export const Rule = GroupedResource<Rule>("Azure.ServiceBus.Rule");
 
 interface Where {
   subscriptionId: string;

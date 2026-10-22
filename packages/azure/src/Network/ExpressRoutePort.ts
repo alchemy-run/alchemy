@@ -1,8 +1,9 @@
 import * as network from "@distilled.cloud/azure/network";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import { orUndefinedIfNotFound, userTags } from "../Arm.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { lower, sameSet } from "./common.ts";
 import {
   type ExpressRouteLinkConfig,
@@ -108,7 +109,6 @@ export interface ExpressRoutePort extends Resource<
  * **Example:** 10 Gbps port pair
  * ```typescript
  * const port = yield* Azure.Network.ExpressRoutePort("direct", {
- *   resourceGroup: group.resourceGroupName,
  *   peeringLocation: "Equinix-Ashburn-DC2",
  *   bandwidthInGbps: 10,
  *   encapsulation: "Dot1Q",
@@ -118,7 +118,6 @@ export interface ExpressRoutePort extends Resource<
  * **Example:** Disable one link for maintenance
  * ```typescript
  * const port = yield* Azure.Network.ExpressRoutePort("direct", {
- *   resourceGroup: group.resourceGroupName,
  *   peeringLocation: "Equinix-Ashburn-DC2",
  *   bandwidthInGbps: 10,
  *   links: [{ name: "link2", adminState: "Disabled" }],
@@ -127,7 +126,7 @@ export interface ExpressRoutePort extends Resource<
  *
  * @resource
  */
-export const ExpressRoutePort = Resource<ExpressRoutePort>("Azure.Network.ExpressRoutePort");
+export const ExpressRoutePort = GroupedResource<ExpressRoutePort>("Azure.Network.ExpressRoutePort");
 
 export const ExpressRoutePortProvider = () =>
   Provider.succeed(

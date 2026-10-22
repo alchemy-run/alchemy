@@ -2,11 +2,12 @@ import * as sql from "@distilled.cloud/azure/sql";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { ensureRegistered, ignoreNotFound, orUndefinedIfNotFound } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { fieldsMatch, isManagedInstanceOwnedByStack, lower } from "./common.ts";
 import { managedDatabasePath, type ManagedDatabaseScope, syncSetting } from "./setting.ts";
 
@@ -56,7 +57,6 @@ export interface ManagedTransparentDataEncryption extends Resource<
  * **Example:** Make encryption explicit
  * ```typescript
  * yield* Azure.Sql.ManagedTransparentDataEncryption("tde", {
- *   resourceGroup: group.resourceGroupName,
  *   managedInstance: instance.managedInstanceName,
  *   database: database.databaseName,
  *   state: "Enabled",
@@ -65,7 +65,7 @@ export interface ManagedTransparentDataEncryption extends Resource<
  *
  * @resource
  */
-export const ManagedTransparentDataEncryption = Resource<ManagedTransparentDataEncryption>(
+export const ManagedTransparentDataEncryption = GroupedResource<ManagedTransparentDataEncryption>(
   "Azure.Sql.ManagedTransparentDataEncryption",
 );
 

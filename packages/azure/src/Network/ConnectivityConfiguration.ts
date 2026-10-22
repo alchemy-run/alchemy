@@ -1,8 +1,9 @@
 import * as network from "@distilled.cloud/azure/network";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import { orUndefinedIfNotFound } from "../Arm.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { networkProvider } from "./generic.ts";
 import { networkManagerChildName, networkManagerTags } from "./networkManagerShared.ts";
 
@@ -90,7 +91,6 @@ export interface ConnectivityConfiguration extends Resource<
  * **Example:** Mesh between spokes
  * ```typescript
  * yield* Azure.Network.ConnectivityConfiguration("mesh", {
- *   resourceGroup: group.resourceGroupName,
  *   networkManager: manager.networkManagerName,
  *   connectivityTopology: "Mesh",
  *   appliesToGroups: [
@@ -101,7 +101,7 @@ export interface ConnectivityConfiguration extends Resource<
  *
  * @resource
  */
-export const ConnectivityConfiguration = Resource<ConnectivityConfiguration>(
+export const ConnectivityConfiguration = GroupedResource<ConnectivityConfiguration>(
   "Azure.Network.ConnectivityConfiguration",
 );
 

@@ -2,7 +2,7 @@ import * as hci from "@distilled.cloud/azure/azurestackhci";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { getHciCluster } from "./Cluster.ts";
 import { HCI_NAMESPACE, isStackOwnedTags, sameId, sameValue } from "./Common.ts";
 
@@ -105,11 +106,8 @@ export interface ArcSetting extends Resource<
  * ### Creating Arc Settings
  * **Example:** Arc settings that keep node resources in the cluster's group
  * ```typescript
- * const cluster = yield* Azure.AzureStackHCI.Cluster("site-a", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const cluster = yield* Azure.AzureStackHCI.Cluster("site-a");
  * const arc = yield* Azure.AzureStackHCI.ArcSetting("arc", {
- *   resourceGroup: group.resourceGroupName,
  *   cluster: cluster.clusterName,
  *   arcInstanceResourceGroup: group.resourceGroupName,
  * });
@@ -119,7 +117,6 @@ export interface ArcSetting extends Resource<
  * **Example:** Expose Windows Admin Center through Arc
  * ```typescript
  * const arc = yield* Azure.AzureStackHCI.ArcSetting("arc", {
- *   resourceGroup: group.resourceGroupName,
  *   cluster: cluster.clusterName,
  *   arcInstanceResourceGroup: group.resourceGroupName,
  *   connectivityProperties: {
@@ -131,7 +128,7 @@ export interface ArcSetting extends Resource<
  *
  * @resource
  */
-export const ArcSetting = Resource<ArcSetting>("Azure.AzureStackHCI.ArcSetting");
+export const ArcSetting = GroupedResource<ArcSetting>("Azure.AzureStackHCI.ArcSetting");
 
 export const getHciArcSetting = (
   subscriptionId: string,

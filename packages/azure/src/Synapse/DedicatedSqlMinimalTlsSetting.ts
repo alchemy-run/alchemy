@@ -2,11 +2,12 @@ import * as synapse from "@distilled.cloud/azure/synapse";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { ensureRegistered, orUndefinedIfNotFound } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { isWorkspaceOwnedByStack, lower, resetSetting, syncSetting } from "./common.ts";
 
 /** The setting is a singleton named `default`. */
@@ -59,7 +60,6 @@ export interface DedicatedSqlMinimalTlsSetting extends Resource<
  * **Example:** Require TLS 1.2
  * ```typescript
  * yield* Azure.Synapse.DedicatedSqlMinimalTlsSetting("tls", {
- *   resourceGroup: group.resourceGroupName,
  *   workspace: workspace.workspaceName,
  *   minimalTlsVersion: "1.2",
  * });
@@ -68,14 +68,13 @@ export interface DedicatedSqlMinimalTlsSetting extends Resource<
  * **Example:** Pin the default
  * ```typescript
  * yield* Azure.Synapse.DedicatedSqlMinimalTlsSetting("tls", {
- *   resourceGroup: group.resourceGroupName,
  *   workspace: workspace.workspaceName,
  * });
  * ```
  *
  * @resource
  */
-export const DedicatedSqlMinimalTlsSetting = Resource<DedicatedSqlMinimalTlsSetting>(
+export const DedicatedSqlMinimalTlsSetting = GroupedResource<DedicatedSqlMinimalTlsSetting>(
   "Azure.Synapse.DedicatedSqlMinimalTlsSetting",
 );
 

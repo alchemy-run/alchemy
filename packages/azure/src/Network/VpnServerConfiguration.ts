@@ -1,9 +1,10 @@
 import * as network from "@distilled.cloud/azure/network";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import type * as Redacted from "effect/Redacted";
 import { orUndefinedIfNotFound, userTags } from "../Arm.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { reveal, secretChanged } from "./common.ts";
 import { idsOf, networkProvider, subsetDiffers } from "./generic.ts";
 
@@ -107,7 +108,6 @@ export interface VpnServerConfiguration extends Resource<
  * **Example:** Certificate authentication over OpenVPN
  * ```typescript
  * const config = yield* Azure.Network.VpnServerConfiguration("p2s", {
- *   resourceGroup: group.resourceGroupName,
  *   vpnProtocols: ["OpenVPN"],
  *   vpnAuthenticationTypes: ["Certificate"],
  *   vpnClientRootCertificates: [{ name: "root", publicCertData: rootCertBase64 }],
@@ -117,7 +117,6 @@ export interface VpnServerConfiguration extends Resource<
  * **Example:** Entra ID authentication
  * ```typescript
  * const config = yield* Azure.Network.VpnServerConfiguration("p2s-aad", {
- *   resourceGroup: group.resourceGroupName,
  *   vpnAuthenticationTypes: ["AAD"],
  *   aad: {
  *     tenant: `https://login.microsoftonline.com/${tenantId}`,
@@ -129,7 +128,7 @@ export interface VpnServerConfiguration extends Resource<
  *
  * @resource
  */
-export const VpnServerConfiguration = Resource<VpnServerConfiguration>(
+export const VpnServerConfiguration = GroupedResource<VpnServerConfiguration>(
   "Azure.Network.VpnServerConfiguration",
 );
 

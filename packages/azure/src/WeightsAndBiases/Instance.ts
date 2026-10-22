@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -21,6 +21,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 
 /** The Azure Marketplace offer the W&B instance subscribes to. */
 export interface WeightsAndBiasesOfferDetails {
@@ -187,7 +188,6 @@ export interface Instance extends Resource<
  *   location: "eastus",
  * });
  * const wandb = yield* Azure.WeightsAndBiases.Instance("wandb", {
- *   resourceGroup: group.resourceGroupName,
  *   location: "eastus",
  *   marketplace: {
  *     offerDetails: {
@@ -205,7 +205,6 @@ export interface Instance extends Resource<
  * **Example:** Entra ID SSO with a system-assigned identity
  * ```typescript
  * const wandb = yield* Azure.WeightsAndBiases.Instance("wandb", {
- *   resourceGroup: group.resourceGroupName,
  *   marketplace,
  *   user: { emailAddress: "ml-platform@example.com" },
  *   singleSignOn: { type: "OpenId", enterpriseAppId: appId },
@@ -215,7 +214,7 @@ export interface Instance extends Resource<
  *
  * @resource
  */
-export const Instance = Resource<Instance>("Azure.WeightsAndBiases.Instance");
+export const Instance = GroupedResource<Instance>("Azure.WeightsAndBiases.Instance");
 
 type ObservedInstance = wandb.GetInstanceResponse;
 

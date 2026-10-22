@@ -1,8 +1,9 @@
 import * as network from "@distilled.cloud/azure/network";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import { orUndefinedIfNotFound, userTags } from "../Arm.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { idsOf, networkProvider } from "./generic.ts";
 
 export interface RouteFilterProps {
@@ -56,11 +57,8 @@ export interface RouteFilter extends Resource<
  * ### Creating a Route Filter
  * **Example:** Filter with an allow rule
  * ```typescript
- * const filter = yield* Azure.Network.RouteFilter("m365", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const filter = yield* Azure.Network.RouteFilter("m365");
  * yield* Azure.Network.RouteFilterRule("exchange", {
- *   resourceGroup: group.resourceGroupName,
  *   routeFilter: filter.routeFilterName,
  *   communities: ["12076:51004"],
  * });
@@ -68,7 +66,7 @@ export interface RouteFilter extends Resource<
  *
  * @resource
  */
-export const RouteFilter = Resource<RouteFilter>("Azure.Network.RouteFilter");
+export const RouteFilter = GroupedResource<RouteFilter>("Azure.Network.RouteFilter");
 
 export const RouteFilterProvider = () =>
   Provider.succeed(

@@ -1,8 +1,9 @@
 import * as network from "@distilled.cloud/azure/network";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import { orUndefinedIfNotFound, userTags } from "../Arm.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { networkProvider } from "./generic.ts";
 import { networkManagerChildName } from "./networkManagerShared.ts";
 
@@ -62,14 +63,15 @@ export interface VerifierWorkspace extends Resource<
  * **Example:** Verifier workspace
  * ```typescript
  * const workspace = yield* Azure.Network.VerifierWorkspace("verify", {
- *   resourceGroup: group.resourceGroupName,
  *   networkManager: manager.networkManagerName,
  * });
  * ```
  *
  * @resource
  */
-export const VerifierWorkspace = Resource<VerifierWorkspace>("Azure.Network.VerifierWorkspace");
+export const VerifierWorkspace = GroupedResource<VerifierWorkspace>(
+  "Azure.Network.VerifierWorkspace",
+);
 
 export const VerifierWorkspaceProvider = () =>
   Provider.succeed(

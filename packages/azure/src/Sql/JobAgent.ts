@@ -2,7 +2,7 @@ import * as sql from "@distilled.cloud/azure/sql";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import {
@@ -18,6 +18,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   childLocation,
   createChildName,
@@ -116,12 +117,10 @@ export interface JobAgent extends Resource<
  * **Example:** Agent with an S1 job database
  * ```typescript
  * const jobsDb = yield* Azure.Sql.Database("jobs", {
- *   resourceGroup: group.resourceGroupName,
  *   server: server.serverName,
  *   sku: { name: "S1" },
  * });
  * const agent = yield* Azure.Sql.JobAgent("agent", {
- *   resourceGroup: group.resourceGroupName,
  *   server: server.serverName,
  *   databaseId: jobsDb.databaseId,
  * });
@@ -131,7 +130,6 @@ export interface JobAgent extends Resource<
  * **Example:** Agent authenticating with a managed identity
  * ```typescript
  * const agent = yield* Azure.Sql.JobAgent("agent", {
- *   resourceGroup: group.resourceGroupName,
  *   server: server.serverName,
  *   databaseId: jobsDb.databaseId,
  *   identity: {
@@ -143,7 +141,7 @@ export interface JobAgent extends Resource<
  *
  * @resource
  */
-export const JobAgent = Resource<JobAgent>("Azure.Sql.JobAgent");
+export const JobAgent = GroupedResource<JobAgent>("Azure.Sql.JobAgent");
 
 const getAgent = (
   subscriptionId: string,

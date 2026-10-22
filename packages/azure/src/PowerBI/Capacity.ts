@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -21,6 +21,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 
 /** Power BI Embedded capacity SKU (A1 = 1 v-core ... A8 = 32 v-cores). */
 export type CapacitySkuName = "A1" | "A2" | "A3" | "A4" | "A5" | "A6" | "A7" | "A8" | (string & {});
@@ -112,9 +113,7 @@ export interface Capacity extends Resource<
  * ### Creating a Capacity
  * **Example:** A1 capacity administered by a user
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("analytics");
  * const capacity = yield* Azure.PowerBI.Capacity("embedded", {
- *   resourceGroup: group.resourceGroupName,
  *   administrators: ["admin@contoso.com"],
  * });
  * ```
@@ -123,7 +122,6 @@ export interface Capacity extends Resource<
  * ```typescript
  * const identity = yield* Azure.ManagedIdentity.UserAssignedIdentity("pbi");
  * const capacity = yield* Azure.PowerBI.Capacity("embedded", {
- *   resourceGroup: group.resourceGroupName,
  *   sku: "A2",
  *   administrators: [identity.principalId],
  * });
@@ -133,7 +131,6 @@ export interface Capacity extends Resource<
  * **Example:** Suspend the capacity to stop billing
  * ```typescript
  * const capacity = yield* Azure.PowerBI.Capacity("embedded", {
- *   resourceGroup: group.resourceGroupName,
  *   administrators: ["admin@contoso.com"],
  *   suspended: true,
  * });
@@ -141,7 +138,7 @@ export interface Capacity extends Resource<
  *
  * @resource
  */
-export const Capacity = Resource<Capacity>("Azure.PowerBI.Capacity");
+export const Capacity = GroupedResource<Capacity>("Azure.PowerBI.Capacity");
 
 type ObservedCapacity = powerbidedicated.GetCapacityDetailsResponse;
 

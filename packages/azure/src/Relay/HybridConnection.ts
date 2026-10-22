@@ -2,7 +2,7 @@ import * as relay from "@distilled.cloud/azure/relay";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createEntityName,
   hasMarker,
@@ -88,11 +89,8 @@ export interface HybridConnection extends Resource<
  * ### Creating a Hybrid Connection
  * **Example:** Authenticated hybrid connection
  * ```typescript
- * const ns = yield* Azure.Relay.Namespace("relay", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const ns = yield* Azure.Relay.Namespace("relay");
  * const hc = yield* Azure.Relay.HybridConnection("onprem-api", {
- *   resourceGroup: group.resourceGroupName,
  *   namespace: ns.namespaceName,
  *   userMetadata: "on-prem inventory API",
  * });
@@ -101,7 +99,6 @@ export interface HybridConnection extends Resource<
  * **Example:** Anonymous senders
  * ```typescript
  * const hc = yield* Azure.Relay.HybridConnection("public-hook", {
- *   resourceGroup: group.resourceGroupName,
  *   namespace: ns.namespaceName,
  *   requiresClientAuthorization: false,
  * });
@@ -109,7 +106,7 @@ export interface HybridConnection extends Resource<
  *
  * @resource
  */
-export const HybridConnection = Resource<HybridConnection>("Azure.Relay.HybridConnection");
+export const HybridConnection = GroupedResource<HybridConnection>("Azure.Relay.HybridConnection");
 
 interface Where {
   subscriptionId: string;

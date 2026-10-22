@@ -2,11 +2,12 @@ import * as web from "@distilled.cloud/azure/web";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { ensureRegistered, ignoreNotFound, orUndefinedIfNotFound, waitUntilGone } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { lower, siteWhere } from "./common.ts";
 
 /** TLS binding mode of a custom hostname. */
@@ -83,7 +84,6 @@ export interface HostNameBinding extends Resource<
  * **Example:** Hostname without TLS
  * ```typescript
  * const binding = yield* Azure.Web.HostNameBinding("www", {
- *   resourceGroup: group.resourceGroupName,
  *   siteName: app.siteName,
  *   hostName: "www.example.com",
  * });
@@ -93,7 +93,6 @@ export interface HostNameBinding extends Resource<
  * **Example:** SNI binding with an App Service certificate
  * ```typescript
  * const binding = yield* Azure.Web.HostNameBinding("www", {
- *   resourceGroup: group.resourceGroupName,
  *   siteName: app.siteName,
  *   hostName: "www.example.com",
  *   sslState: "SniEnabled",
@@ -103,7 +102,7 @@ export interface HostNameBinding extends Resource<
  *
  * @resource
  */
-export const HostNameBinding = Resource<HostNameBinding>("Azure.Web.HostNameBinding");
+export const HostNameBinding = GroupedResource<HostNameBinding>("Azure.Web.HostNameBinding");
 
 const getBinding = (
   subscriptionId: string,

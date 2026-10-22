@@ -2,7 +2,7 @@ import * as compute from "@distilled.cloud/azure/compute";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -18,6 +18,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   canonical,
   createComputeName,
@@ -148,7 +149,6 @@ export interface Image extends Resource<
  * // The VM must be deallocated and generalized first
  * // (`waagent -deprovision+user`, then the Generalize action).
  * const image = yield* Azure.Compute.Image("golden", {
- *   resourceGroup: group.resourceGroupName,
  *   sourceVirtualMachineId: vm.virtualMachineId,
  *   hyperVGeneration: "V2",
  * });
@@ -158,7 +158,6 @@ export interface Image extends Resource<
  * **Example:** Image from a VHD blob
  * ```typescript
  * const image = yield* Azure.Compute.Image("imported", {
- *   resourceGroup: group.resourceGroupName,
  *   osDisk: {
  *     osType: "Linux",
  *     osState: "Generalized",
@@ -171,7 +170,6 @@ export interface Image extends Resource<
  * **Example:** VM from the image
  * ```typescript
  * const vm = yield* Azure.Compute.VirtualMachine("app", {
- *   resourceGroup: group.resourceGroupName,
  *   vmSize: "Standard_B1s",
  *   image: { id: image.imageId },
  *   networkInterfaceIds: [nic.networkInterfaceId],
@@ -182,7 +180,7 @@ export interface Image extends Resource<
  *
  * @resource
  */
-export const Image = Resource<Image>("Azure.Compute.Image");
+export const Image = GroupedResource<Image>("Azure.Compute.Image");
 
 type Observed = compute.GetImageResponse;
 

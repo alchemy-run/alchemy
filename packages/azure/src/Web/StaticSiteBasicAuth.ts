@@ -2,12 +2,13 @@ import * as web from "@distilled.cloud/azure/web";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
 import { ensureRegistered, ignoreNotFound, orUndefinedIfNotFound, waitUntilGone } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { lower, reveal } from "./common.ts";
 
 /** Which environments of a static site require the password. */
@@ -71,7 +72,6 @@ export interface StaticSiteBasicAuth extends Resource<
  * **Example:** Password-protect staging environments
  * ```typescript
  * yield* Azure.Web.StaticSiteBasicAuth("preview-password", {
- *   resourceGroup: group.resourceGroupName,
  *   staticSiteName: site.staticSiteName,
  *   password: Redacted.make(previewPassword),
  *   applicableEnvironmentsMode: "StagingEnvironments",
@@ -80,7 +80,9 @@ export interface StaticSiteBasicAuth extends Resource<
  *
  * @resource
  */
-export const StaticSiteBasicAuth = Resource<StaticSiteBasicAuth>("Azure.Web.StaticSiteBasicAuth");
+export const StaticSiteBasicAuth = GroupedResource<StaticSiteBasicAuth>(
+  "Azure.Web.StaticSiteBasicAuth",
+);
 
 type ObservedBasicAuth = web.GetStaticSiteBasicAuthResponse;
 

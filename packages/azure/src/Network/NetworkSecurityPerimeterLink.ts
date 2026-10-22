@@ -1,8 +1,9 @@
 import * as network from "@distilled.cloud/azure/network";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import { orUndefinedIfNotFound } from "../Arm.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { sameId, sameSet } from "./common.ts";
 import { networkProvider } from "./generic.ts";
 import { perimeterTags } from "./networkSecurityPerimeterShared.ts";
@@ -67,7 +68,6 @@ export interface NetworkSecurityPerimeterLink extends Resource<
  * **Example:** Link to another perimeter
  * ```typescript
  * yield* Azure.Network.NetworkSecurityPerimeterLink("to-shared", {
- *   resourceGroup: group.resourceGroupName,
  *   networkSecurityPerimeter: perimeter.networkSecurityPerimeterName,
  *   remotePerimeterId: shared.networkSecurityPerimeterId,
  * });
@@ -75,7 +75,7 @@ export interface NetworkSecurityPerimeterLink extends Resource<
  *
  * @resource
  */
-export const NetworkSecurityPerimeterLink = Resource<NetworkSecurityPerimeterLink>(
+export const NetworkSecurityPerimeterLink = GroupedResource<NetworkSecurityPerimeterLink>(
   "Azure.Network.NetworkSecurityPerimeterLink",
 );
 

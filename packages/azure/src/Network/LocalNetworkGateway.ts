@@ -1,8 +1,9 @@
 import * as network from "@distilled.cloud/azure/network";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import { orUndefinedIfNotFound, userTags } from "../Arm.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { sameSet } from "./common.ts";
 import { networkProvider } from "./generic.ts";
 
@@ -78,7 +79,6 @@ export interface LocalNetworkGateway extends Resource<
  * **Example:** On-premises site
  * ```typescript
  * const site = yield* Azure.Network.LocalNetworkGateway("office", {
- *   resourceGroup: group.resourceGroupName,
  *   gatewayIpAddress: "203.0.113.10",
  *   addressPrefixes: ["192.168.0.0/16"],
  * });
@@ -86,7 +86,7 @@ export interface LocalNetworkGateway extends Resource<
  *
  * @resource
  */
-export const LocalNetworkGateway = Resource<LocalNetworkGateway>(
+export const LocalNetworkGateway = GroupedResource<LocalNetworkGateway>(
   "Azure.Network.LocalNetworkGateway",
 );
 

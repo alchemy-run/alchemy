@@ -1,8 +1,9 @@
 import * as apim from "@distilled.cloud/azure/apimanagement";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { loggerNameOf, sameName, subsetMatches } from "./Common.ts";
 import type {
   DiagnosticCorrelationProtocol,
@@ -94,7 +95,6 @@ export interface WorkspaceApiDiagnostic extends Resource<
  * **Example:** Log every request of an API to Application Insights
  * ```typescript
  * yield* Azure.ApiManagement.WorkspaceApiDiagnostic("orders-insights", {
- *   resourceGroup: group.resourceGroupName,
  *   serviceName: apim.serviceName,
  *   workspaceName: workspace.workspaceName,
  *   apiName: api.apiName,
@@ -107,7 +107,7 @@ export interface WorkspaceApiDiagnostic extends Resource<
  *
  * @resource
  */
-export const WorkspaceApiDiagnostic = Resource<WorkspaceApiDiagnostic>(
+export const WorkspaceApiDiagnostic = GroupedResource<WorkspaceApiDiagnostic>(
   "Azure.ApiManagement.WorkspaceApiDiagnostic",
 );
 

@@ -2,7 +2,7 @@ import * as deviceregistry from "@distilled.cloud/azure/deviceregistry";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -20,6 +20,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   DEVICE_REGISTRY_RP,
   DEVICE_REGISTRY_WAIT,
@@ -124,7 +125,6 @@ export interface AssetEndpointProfile extends Resource<
  * **Example:** Anonymous OPC UA endpoint
  * ```typescript
  * const profile = yield* Azure.DeviceRegistry.AssetEndpointProfile("plc", {
- *   resourceGroup: group.resourceGroupName,
  *   customLocationId: aioCustomLocationId,
  *   targetAddress: "opc.tcp://plc.factory.local:4840",
  *   endpointProfileType: "Microsoft.OpcUa",
@@ -135,7 +135,6 @@ export interface AssetEndpointProfile extends Resource<
  * **Example:** Username/password authentication
  * ```typescript
  * const profile = yield* Azure.DeviceRegistry.AssetEndpointProfile("plc", {
- *   resourceGroup: group.resourceGroupName,
  *   customLocationId: aioCustomLocationId,
  *   targetAddress: "opc.tcp://plc.factory.local:4840",
  *   endpointProfileType: "Microsoft.OpcUa",
@@ -151,7 +150,7 @@ export interface AssetEndpointProfile extends Resource<
  *
  * @resource
  */
-export const AssetEndpointProfile = Resource<AssetEndpointProfile>(
+export const AssetEndpointProfile = GroupedResource<AssetEndpointProfile>(
   "Azure.DeviceRegistry.AssetEndpointProfile",
 );
 

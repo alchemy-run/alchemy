@@ -1,9 +1,10 @@
 import * as network from "@distilled.cloud/azure/network";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { orUndefinedIfNotFound, userTags, waitForProvisioned } from "../Arm.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { lower, ref, sameId, sameSet, whileNetworkBusy } from "./common.ts";
 import { idsOf, type NetworkPath, networkProvider } from "./generic.ts";
 
@@ -132,7 +133,6 @@ export interface CustomIpPrefix extends Resource<
  * **Example:** Provision an IPv4 /24
  * ```typescript
  * const prefix = yield* Azure.Network.CustomIpPrefix("byoip", {
- *   resourceGroup: group.resourceGroupName,
  *   cidr: "1.2.3.0/24",
  *   authorizationMessage: `${subscriptionId}|1.2.3.0/24|20301231`,
  *   signedMessage: "<base64 signature>",
@@ -143,7 +143,6 @@ export interface CustomIpPrefix extends Resource<
  * **Example:** Commission once provisioned
  * ```typescript
  * const prefix = yield* Azure.Network.CustomIpPrefix("byoip", {
- *   resourceGroup: group.resourceGroupName,
  *   cidr: "1.2.3.0/24",
  *   authorizationMessage: `${subscriptionId}|1.2.3.0/24|20301231`,
  *   signedMessage: "<base64 signature>",
@@ -153,7 +152,7 @@ export interface CustomIpPrefix extends Resource<
  *
  * @resource
  */
-export const CustomIpPrefix = Resource<CustomIpPrefix>("Azure.Network.CustomIpPrefix");
+export const CustomIpPrefix = GroupedResource<CustomIpPrefix>("Azure.Network.CustomIpPrefix");
 
 const COMMISSIONED = new Set(["commissioned", "commissionednointernetadvertise"]);
 

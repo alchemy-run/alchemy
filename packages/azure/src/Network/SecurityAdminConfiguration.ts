@@ -1,8 +1,9 @@
 import * as network from "@distilled.cloud/azure/network";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import { orUndefinedIfNotFound } from "../Arm.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { networkProvider } from "./generic.ts";
 import { networkManagerChildName, networkManagerTags } from "./networkManagerShared.ts";
 
@@ -62,7 +63,6 @@ export interface SecurityAdminConfiguration extends Resource<
  * **Example:** Organization-wide security rules
  * ```typescript
  * const admin = yield* Azure.Network.SecurityAdminConfiguration("org", {
- *   resourceGroup: group.resourceGroupName,
  *   networkManager: manager.networkManagerName,
  *   description: "Org-wide deny rules",
  * });
@@ -70,7 +70,7 @@ export interface SecurityAdminConfiguration extends Resource<
  *
  * @resource
  */
-export const SecurityAdminConfiguration = Resource<SecurityAdminConfiguration>(
+export const SecurityAdminConfiguration = GroupedResource<SecurityAdminConfiguration>(
   "Azure.Network.SecurityAdminConfiguration",
 );
 

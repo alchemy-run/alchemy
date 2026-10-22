@@ -2,7 +2,7 @@ import * as dr from "@distilled.cloud/azure/recoveryservicesdatareplication";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -20,6 +20,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createDataReplicationName,
   DATA_REPLICATION_NAMESPACE,
@@ -112,7 +113,6 @@ export interface Fabric extends Resource<
  * **Example:** Hyper-V source fabric
  * ```typescript
  * const source = yield* Azure.DataReplication.Fabric("hyperv", {
- *   resourceGroup: group.resourceGroupName,
  *   customProperties: {
  *     instanceType: "HyperVMigrate",
  *     hyperVSiteId: hyperVSite.siteId,
@@ -124,7 +124,6 @@ export interface Fabric extends Resource<
  * **Example:** Azure Local target fabric
  * ```typescript
  * const target = yield* Azure.DataReplication.Fabric("azlocal", {
- *   resourceGroup: group.resourceGroupName,
  *   customProperties: {
  *     instanceType: "AzStackHCI",
  *     azStackHciSiteId: hciSite.siteId,
@@ -142,7 +141,7 @@ export interface Fabric extends Resource<
  *
  * @resource
  */
-export const Fabric = Resource<Fabric>("Azure.DataReplication.Fabric");
+export const Fabric = GroupedResource<Fabric>("Azure.DataReplication.Fabric");
 
 type Observed = dr.GetFabricResponse;
 

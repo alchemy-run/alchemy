@@ -2,7 +2,7 @@ import * as streamanalytics from "@distilled.cloud/azure/streamanalytics";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -19,6 +19,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createStreamAnalyticsName,
   getStreamingJob,
@@ -163,16 +164,12 @@ export interface StreamingJob extends Resource<
  * ### Creating a Streaming Job
  * **Example:** Cloud job with default policies
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("analytics");
- * const job = yield* Azure.StreamAnalytics.StreamingJob("telemetry", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const job = yield* Azure.StreamAnalytics.StreamingJob("telemetry");
  * ```
  *
  * **Example:** Job with a managed identity and event-ordering policies
  * ```typescript
  * const job = yield* Azure.StreamAnalytics.StreamingJob("telemetry", {
- *   resourceGroup: group.resourceGroupName,
  *   identity: "SystemAssigned",
  *   compatibilityLevel: "1.2",
  *   eventsOutOfOrderPolicy: "Drop",
@@ -184,18 +181,15 @@ export interface StreamingJob extends Resource<
  * ### Running on a Dedicated Cluster
  * **Example:** Job pinned to a Stream Analytics cluster
  * ```typescript
- * const cluster = yield* Azure.StreamAnalytics.Cluster("dedicated", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const cluster = yield* Azure.StreamAnalytics.Cluster("dedicated");
  * const job = yield* Azure.StreamAnalytics.StreamingJob("telemetry", {
- *   resourceGroup: group.resourceGroupName,
  *   clusterId: cluster.clusterResourceId,
  * });
  * ```
  *
  * @resource
  */
-export const StreamingJob = Resource<StreamingJob>("Azure.StreamAnalytics.StreamingJob");
+export const StreamingJob = GroupedResource<StreamingJob>("Azure.StreamAnalytics.StreamingJob");
 
 type ObservedJob = streamanalytics.GetStreamingJobResponse;
 

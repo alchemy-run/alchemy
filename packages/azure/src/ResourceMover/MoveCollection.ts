@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -21,6 +21,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 
 export type MoveCollectionMoveType = "RegionToRegion" | "RegionToZone";
 
@@ -142,7 +143,6 @@ export interface MoveCollection extends Resource<
  *   location: "eastus2",
  * });
  * const collection = yield* Azure.ResourceMover.MoveCollection("eastToWest", {
- *   resourceGroup: group.resourceGroupName,
  *   location: "eastus2",
  *   sourceRegion: "eastus",
  *   targetRegion: "westus2",
@@ -152,7 +152,6 @@ export interface MoveCollection extends Resource<
  * **Example:** Regional-to-zonal VM move
  * ```typescript
  * const collection = yield* Azure.ResourceMover.MoveCollection("toZone", {
- *   resourceGroup: group.resourceGroupName,
  *   moveType: "RegionToZone",
  *   moveRegion: "eastus",
  * });
@@ -171,7 +170,7 @@ export interface MoveCollection extends Resource<
  *
  * @resource
  */
-export const MoveCollection = Resource<MoveCollection>("Azure.ResourceMover.MoveCollection");
+export const MoveCollection = GroupedResource<MoveCollection>("Azure.ResourceMover.MoveCollection");
 
 const getCollection = (
   subscriptionId: string,

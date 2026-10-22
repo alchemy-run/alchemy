@@ -2,11 +2,12 @@ import * as streamanalytics from "@distilled.cloud/azure/streamanalytics";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { ensureRegistered, orUndefinedIfNotFound, waitForProvisioned } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { checkResourceGroup, jobOwnedByStage, lower } from "./Common.ts";
 
 export interface TransformationProps {
@@ -76,7 +77,6 @@ export interface Transformation extends Resource<
  * **Example:** Pass-through query
  * ```typescript
  * const query = yield* Azure.StreamAnalytics.Transformation("query", {
- *   resourceGroup: group.resourceGroupName,
  *   streamingJob: job.jobName,
  *   query: `SELECT * INTO [${archive.outputName}] FROM [${events.inputName}]`,
  * });
@@ -85,7 +85,6 @@ export interface Transformation extends Resource<
  * **Example:** Windowed aggregate on 3 streaming units
  * ```typescript
  * const query = yield* Azure.StreamAnalytics.Transformation("query", {
- *   resourceGroup: group.resourceGroupName,
  *   streamingJob: job.jobName,
  *   streamingUnits: 3,
  *   query: `
@@ -98,7 +97,9 @@ export interface Transformation extends Resource<
  *
  * @resource
  */
-export const Transformation = Resource<Transformation>("Azure.StreamAnalytics.Transformation");
+export const Transformation = GroupedResource<Transformation>(
+  "Azure.StreamAnalytics.Transformation",
+);
 
 const DEFAULT_NAME = "Transformation";
 

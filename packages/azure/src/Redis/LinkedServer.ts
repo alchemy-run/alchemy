@@ -2,7 +2,7 @@ import * as redis from "@distilled.cloud/azure/redis";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -14,6 +14,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   CACHE_BUDGET,
   cacheOwnedByStage,
@@ -94,19 +95,16 @@ export interface LinkedServer extends Resource<
  * **Example:** Replicate an East US cache to West US 2
  * ```typescript
  * const primary = yield* Azure.Redis.Cache("primary", {
- *   resourceGroup: group.resourceGroupName,
  *   location: "eastus",
  *   sku: "Premium",
  *   capacity: 1,
  * });
  * const secondary = yield* Azure.Redis.Cache("secondary", {
- *   resourceGroup: group.resourceGroupName,
  *   location: "westus2",
  *   sku: "Premium",
  *   capacity: 1,
  * });
  * const link = yield* Azure.Redis.LinkedServer("geo", {
- *   resourceGroup: group.resourceGroupName,
  *   cache: primary.cacheName,
  *   linkedCacheId: secondary.cacheId,
  *   linkedCacheLocation: secondary.location,
@@ -116,7 +114,7 @@ export interface LinkedServer extends Resource<
  *
  * @resource
  */
-export const LinkedServer = Resource<LinkedServer>("Azure.Redis.LinkedServer");
+export const LinkedServer = GroupedResource<LinkedServer>("Azure.Redis.LinkedServer");
 
 const nameOf = (armId: string) => armId.split("/").filter(Boolean).pop() ?? "";
 

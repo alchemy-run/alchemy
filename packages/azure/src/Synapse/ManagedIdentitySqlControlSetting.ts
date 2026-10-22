@@ -2,11 +2,12 @@ import * as synapse from "@distilled.cloud/azure/synapse";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { ensureRegistered, orUndefinedIfNotFound } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { isWorkspaceOwnedByStack, lower, resetSetting, syncSetting } from "./common.ts";
 
 export interface ManagedIdentitySqlControlSettingProps {
@@ -54,7 +55,6 @@ export interface ManagedIdentitySqlControlSetting extends Resource<
  * **Example:** Grant the workspace identity CONTROL on SQL pools
  * ```typescript
  * yield* Azure.Synapse.ManagedIdentitySqlControlSetting("msi-sql", {
- *   resourceGroup: group.resourceGroupName,
  *   workspace: workspace.workspaceName,
  * });
  * ```
@@ -62,7 +62,6 @@ export interface ManagedIdentitySqlControlSetting extends Resource<
  * **Example:** Explicitly revoke the grant
  * ```typescript
  * yield* Azure.Synapse.ManagedIdentitySqlControlSetting("msi-sql", {
- *   resourceGroup: group.resourceGroupName,
  *   workspace: workspace.workspaceName,
  *   grantSqlControlToManagedIdentity: false,
  * });
@@ -70,7 +69,7 @@ export interface ManagedIdentitySqlControlSetting extends Resource<
  *
  * @resource
  */
-export const ManagedIdentitySqlControlSetting = Resource<ManagedIdentitySqlControlSetting>(
+export const ManagedIdentitySqlControlSetting = GroupedResource<ManagedIdentitySqlControlSetting>(
   "Azure.Synapse.ManagedIdentitySqlControlSetting",
 );
 

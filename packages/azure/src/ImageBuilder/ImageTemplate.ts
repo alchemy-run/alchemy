@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import {
@@ -23,6 +23,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 
 /** Marketplace plan of a platform image that requires one. */
 export interface ImageTemplatePlanInfo {
@@ -363,9 +364,7 @@ export interface ImageTemplate extends Resource<
  * **Example:** Ubuntu image with a shell customizer, published as a managed image
  * ```typescript
  * const group = yield* Azure.Resources.ResourceGroup("images");
- * const identity = yield* Azure.ManagedIdentity.UserAssignedIdentity("builder", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const identity = yield* Azure.ManagedIdentity.UserAssignedIdentity("builder");
  * yield* Azure.Authorization.RoleAssignment("builder-contributor", {
  *   scope: group.resourceGroupId,
  *   roleDefinitionId: Azure.Authorization.BuiltInRole.Contributor,
@@ -373,7 +372,6 @@ export interface ImageTemplate extends Resource<
  *   principalType: "ServicePrincipal",
  * });
  * const template = yield* Azure.ImageBuilder.ImageTemplate("web", {
- *   resourceGroup: group.resourceGroupName,
  *   identityId: identity.identityId,
  *   source: {
  *     type: "PlatformImage",
@@ -400,7 +398,6 @@ export interface ImageTemplate extends Resource<
  * **Example:** Start a build as soon as the template exists
  * ```typescript
  * const template = yield* Azure.ImageBuilder.ImageTemplate("web", {
- *   resourceGroup: group.resourceGroupName,
  *   identityId: identity.identityId,
  *   source,
  *   distribute,
@@ -411,7 +408,7 @@ export interface ImageTemplate extends Resource<
  *
  * @resource
  */
-export const ImageTemplate = Resource<ImageTemplate>("Azure.ImageBuilder.ImageTemplate");
+export const ImageTemplate = GroupedResource<ImageTemplate>("Azure.ImageBuilder.ImageTemplate");
 
 type Observed = imagebuilder.GetVirtualMachineImageTemplateResponse;
 

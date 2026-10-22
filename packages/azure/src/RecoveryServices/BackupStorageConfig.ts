@@ -2,7 +2,7 @@ import * as backup from "@distilled.cloud/azure/recoveryservicesbackup";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import {
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   isVaultOwnedByStack,
   RECOVERY_SERVICES_NAMESPACE,
@@ -84,11 +85,8 @@ export interface BackupStorageConfig extends Resource<
  * ### Storage Redundancy
  * **Example:** Locally redundant backup storage (cheapest)
  * ```typescript
- * const vault = yield* Azure.RecoveryServices.Vault("backup-vault", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const vault = yield* Azure.RecoveryServices.Vault("backup-vault");
  * yield* Azure.RecoveryServices.BackupStorageConfig("storage-config", {
- *   resourceGroup: group.resourceGroupName,
  *   vault: vault.vaultName,
  *   storageType: "LocallyRedundant",
  * });
@@ -97,7 +95,6 @@ export interface BackupStorageConfig extends Resource<
  * **Example:** Geo-redundant storage with Cross Region Restore
  * ```typescript
  * yield* Azure.RecoveryServices.BackupStorageConfig("storage-config", {
- *   resourceGroup: group.resourceGroupName,
  *   vault: vault.vaultName,
  *   storageType: "GeoRedundant",
  *   crossRegionRestoreFlag: true,
@@ -106,7 +103,7 @@ export interface BackupStorageConfig extends Resource<
  *
  * @resource
  */
-export const BackupStorageConfig = Resource<BackupStorageConfig>(
+export const BackupStorageConfig = GroupedResource<BackupStorageConfig>(
   "Azure.RecoveryServices.BackupStorageConfig",
 );
 

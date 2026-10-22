@@ -2,11 +2,12 @@ import * as communication from "@distilled.cloud/azure/communication";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { ensureRegistered, ignoreNotFound, orUndefinedIfNotFound, waitUntilGone } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createCommunicationName,
   isEmailServiceOwnedByStack,
@@ -77,7 +78,6 @@ export interface SuppressionList extends Resource<
  * **Example:** Suppression list for the default sender
  * ```typescript
  * const list = yield* Azure.Communication.SuppressionList("unsubscribed", {
- *   resourceGroup: group.resourceGroupName,
  *   emailService: email.emailServiceName,
  *   domain: domain.domainName,
  *   listName: "DoNotReply",
@@ -86,7 +86,9 @@ export interface SuppressionList extends Resource<
  *
  * @resource
  */
-export const SuppressionList = Resource<SuppressionList>("Azure.Communication.SuppressionList");
+export const SuppressionList = GroupedResource<SuppressionList>(
+  "Azure.Communication.SuppressionList",
+);
 
 const getList = (
   subscriptionId: string,

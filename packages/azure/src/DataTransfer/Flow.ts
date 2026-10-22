@@ -2,7 +2,7 @@ import * as adt from "@distilled.cloud/azure/azuredatatransfer";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -20,6 +20,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createDataTransferName,
   type DataTransferIdentity,
@@ -181,7 +182,6 @@ export interface Flow extends Resource<
  * **Example:** Blob flow into a storage container
  * ```typescript
  * const flow = yield* Azure.DataTransfer.Flow("telemetry", {
- *   resourceGroup: group.resourceGroupName,
  *   connection: connection.connectionName,
  *   flowType: "Mission",
  *   dataType: "Blob",
@@ -194,7 +194,6 @@ export interface Flow extends Resource<
  * **Example:** Pause a flow without deleting it
  * ```typescript
  * const flow = yield* Azure.DataTransfer.Flow("telemetry", {
- *   resourceGroup: group.resourceGroupName,
  *   connection: connection.connectionName,
  *   flowType: "Mission",
  *   dataType: "Blob",
@@ -204,7 +203,7 @@ export interface Flow extends Resource<
  *
  * @resource
  */
-export const Flow = Resource<Flow>("Azure.DataTransfer.Flow");
+export const Flow = GroupedResource<Flow>("Azure.DataTransfer.Flow");
 
 type ObservedFlow = adt.GetFlowResponse;
 

@@ -2,7 +2,7 @@ import * as compute from "@distilled.cloud/azure/compute";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import {
@@ -19,6 +19,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createComputeName, idsOf, sameId, sameSet, waitComputeGone } from "./common.ts";
 
 export interface ProximityPlacementGroupProps {
@@ -99,15 +100,12 @@ export interface ProximityPlacementGroup extends Resource<
  * ### Creating a Proximity Placement Group
  * **Example:** Standard group
  * ```typescript
- * const ppg = yield* Azure.Compute.ProximityPlacementGroup("low-latency", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const ppg = yield* Azure.Compute.ProximityPlacementGroup("low-latency");
  * ```
  *
  * **Example:** Group with a VM-size intent and a zone
  * ```typescript
  * const ppg = yield* Azure.Compute.ProximityPlacementGroup("hpc", {
- *   resourceGroup: group.resourceGroupName,
  *   zones: ["1"],
  *   intentVmSizes: ["Standard_D2s_v5"],
  * });
@@ -117,14 +115,13 @@ export interface ProximityPlacementGroup extends Resource<
  * **Example:** Availability set in the group
  * ```typescript
  * const set = yield* Azure.Compute.AvailabilitySet("web", {
- *   resourceGroup: group.resourceGroupName,
  *   proximityPlacementGroupId: ppg.proximityPlacementGroupId,
  * });
  * ```
  *
  * @resource
  */
-export const ProximityPlacementGroup = Resource<ProximityPlacementGroup>(
+export const ProximityPlacementGroup = GroupedResource<ProximityPlacementGroup>(
   "Azure.Compute.ProximityPlacementGroup",
 );
 

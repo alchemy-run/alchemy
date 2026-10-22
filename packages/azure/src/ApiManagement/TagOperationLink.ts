@@ -1,8 +1,9 @@
 import * as apim from "@distilled.cloud/azure/apimanagement";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createEntityName } from "./Common.ts";
 import { entityLifecycle, serviceEntityId } from "./Entity.ts";
 
@@ -59,7 +60,6 @@ export interface TagOperationLink extends Resource<
  * **Example:** Mark an operation as deprecated
  * ```typescript
  * yield* Azure.ApiManagement.TagOperationLink("deprecated-get-order", {
- *   resourceGroup: group.resourceGroupName,
  *   serviceName: apim.serviceName,
  *   tagName: deprecated.tagName,
  *   apiName: orders.apiName,
@@ -69,7 +69,9 @@ export interface TagOperationLink extends Resource<
  *
  * @resource
  */
-export const TagOperationLink = Resource<TagOperationLink>("Azure.ApiManagement.TagOperationLink");
+export const TagOperationLink = GroupedResource<TagOperationLink>(
+  "Azure.ApiManagement.TagOperationLink",
+);
 
 interface Key {
   resourceGroup: string;

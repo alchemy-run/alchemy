@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -18,6 +18,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { canonical, lower } from "./Common.ts";
 
 /** A script run on the application's nodes. */
@@ -127,7 +128,6 @@ export interface Application extends Resource<
  * **Example:** Edge node with an install script
  * ```typescript
  * const app = yield* Azure.HDInsight.Application("hue", {
- *   resourceGroup: group.resourceGroupName,
  *   cluster: cluster.clusterName,
  *   installScriptActions: [
  *     {
@@ -142,7 +142,6 @@ export interface Application extends Resource<
  * **Example:** Web UI behind the cluster gateway
  * ```typescript
  * const app = yield* Azure.HDInsight.Application("hue", {
- *   resourceGroup: group.resourceGroupName,
  *   cluster: cluster.clusterName,
  *   edgeNodeVmSize: "Standard_E8_v3",
  *   installScriptActions: [
@@ -154,7 +153,7 @@ export interface Application extends Resource<
  *
  * @resource
  */
-export const Application = Resource<Application>("Azure.HDInsight.Application");
+export const Application = GroupedResource<Application>("Azure.HDInsight.Application");
 
 type ObservedApplication = hdinsight.GetApplicationResponse;
 

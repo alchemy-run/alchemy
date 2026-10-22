@@ -2,7 +2,7 @@ import * as notificationhubs from "@distilled.cloud/azure/notificationhubs";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
 import {
@@ -14,6 +14,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   type AccessRight,
   createEntityName,
@@ -92,13 +93,11 @@ export interface NotificationHubAuthorizationRule extends Resource<
  * **Example:** Listen rule for the mobile app
  * ```typescript
  * const hub = yield* Azure.NotificationHubs.NotificationHub("app", {
- *   resourceGroup: group.resourceGroupName,
  *   namespace: ns.namespaceName,
  * });
  * const devices = yield* Azure.NotificationHubs.NotificationHubAuthorizationRule(
  *   "devices",
  *   {
- *     resourceGroup: group.resourceGroupName,
  *     namespace: ns.namespaceName,
  *     notificationHub: hub.notificationHubName,
  *     rights: ["Listen"],
@@ -111,7 +110,6 @@ export interface NotificationHubAuthorizationRule extends Resource<
  * const backend = yield* Azure.NotificationHubs.NotificationHubAuthorizationRule(
  *   "backend",
  *   {
- *     resourceGroup: group.resourceGroupName,
  *     namespace: ns.namespaceName,
  *     notificationHub: hub.notificationHubName,
  *     rights: ["Send"],
@@ -122,7 +120,7 @@ export interface NotificationHubAuthorizationRule extends Resource<
  *
  * @resource
  */
-export const NotificationHubAuthorizationRule = Resource<NotificationHubAuthorizationRule>(
+export const NotificationHubAuthorizationRule = GroupedResource<NotificationHubAuthorizationRule>(
   "Azure.NotificationHubs.NotificationHubAuthorizationRule",
 );
 

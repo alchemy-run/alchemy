@@ -2,7 +2,7 @@ import * as vmware from "@distilled.cloud/azure/vmware";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   AVS_NAMESPACE,
   CHILD_BUDGET,
@@ -96,7 +97,6 @@ export interface PlacementPolicy extends Resource<
  * **Example:** VM-VM anti-affinity
  * ```typescript
  * yield* Azure.VMware.PlacementPolicy("spread", {
- *   resourceGroup: group.resourceGroupName,
  *   privateCloud: cloud.privateCloudName,
  *   cluster: "Cluster-1",
  *   type: "VmVm",
@@ -109,7 +109,6 @@ export interface PlacementPolicy extends Resource<
  * **Example:** VM-host affinity that must be honoured
  * ```typescript
  * yield* Azure.VMware.PlacementPolicy("pin", {
- *   resourceGroup: group.resourceGroupName,
  *   privateCloud: cloud.privateCloudName,
  *   cluster: "Cluster-1",
  *   type: "VmHost",
@@ -122,7 +121,7 @@ export interface PlacementPolicy extends Resource<
  *
  * @resource
  */
-export const PlacementPolicy = Resource<PlacementPolicy>("Azure.VMware.PlacementPolicy");
+export const PlacementPolicy = GroupedResource<PlacementPolicy>("Azure.VMware.PlacementPolicy");
 
 const createName = (id: string) => createAvsName(id, 32);
 

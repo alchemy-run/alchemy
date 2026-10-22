@@ -2,7 +2,7 @@ import * as streamanalytics from "@distilled.cloud/azure/streamanalytics";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   canonical,
   createStreamAnalyticsName,
@@ -105,7 +106,6 @@ export interface Function extends Resource<
  * **Example:** Scalar JavaScript UDF
  * ```typescript
  * const double = yield* Azure.StreamAnalytics.Function("double", {
- *   resourceGroup: group.resourceGroupName,
  *   streamingJob: job.jobName,
  *   name: "double",
  *   inputs: [{ dataType: "bigint" }],
@@ -116,7 +116,6 @@ export interface Function extends Resource<
  *   },
  * });
  * const query = yield* Azure.StreamAnalytics.Transformation("query", {
- *   resourceGroup: group.resourceGroupName,
  *   streamingJob: job.jobName,
  *   query: "SELECT udf.double(value) AS doubled INTO [out] FROM [in]",
  * });
@@ -124,7 +123,7 @@ export interface Function extends Resource<
  *
  * @resource
  */
-export const Function = Resource<Function>("Azure.StreamAnalytics.Function");
+export const Function = GroupedResource<Function>("Azure.StreamAnalytics.Function");
 
 const getFunction = (
   subscriptionId: string,

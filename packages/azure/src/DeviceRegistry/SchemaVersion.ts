@@ -1,7 +1,7 @@
 import * as deviceregistry from "@distilled.cloud/azure/deviceregistry";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import {
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { DEVICE_REGISTRY_RP, DEVICE_REGISTRY_WAIT, sameName } from "./DeviceRegistryShared.ts";
 
 export interface SchemaVersionProps {
@@ -83,7 +84,6 @@ export interface SchemaVersion extends Resource<
  * **Example:** JSON Schema version
  * ```typescript
  * const v1 = yield* Azure.DeviceRegistry.SchemaVersion("telemetry-v1", {
- *   resourceGroup: group.resourceGroupName,
  *   schemaRegistry: registry.schemaRegistryName,
  *   schema: schema.schemaName,
  *   version: "1",
@@ -97,7 +97,7 @@ export interface SchemaVersion extends Resource<
  *
  * @resource
  */
-export const SchemaVersion = Resource<SchemaVersion>("Azure.DeviceRegistry.SchemaVersion");
+export const SchemaVersion = GroupedResource<SchemaVersion>("Azure.DeviceRegistry.SchemaVersion");
 
 const getVersion = (
   subscriptionId: string,

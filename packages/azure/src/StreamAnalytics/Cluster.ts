@@ -2,7 +2,7 @@ import * as streamanalytics from "@distilled.cloud/azure/streamanalytics";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -19,6 +19,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { checkResourceGroup, createStreamAnalyticsName, getCluster, lower } from "./Common.ts";
 
 export interface ClusterProps {
@@ -92,15 +93,12 @@ export interface Cluster extends Resource<
  * ### Creating a Cluster
  * **Example:** Smallest dedicated cluster
  * ```typescript
- * const cluster = yield* Azure.StreamAnalytics.Cluster("dedicated", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const cluster = yield* Azure.StreamAnalytics.Cluster("dedicated");
  * ```
  *
  * **Example:** Cluster scaled to 72 streaming units
  * ```typescript
  * const cluster = yield* Azure.StreamAnalytics.Cluster("dedicated", {
- *   resourceGroup: group.resourceGroupName,
  *   capacity: 72,
  *   tags: { team: "analytics" },
  * });
@@ -110,14 +108,13 @@ export interface Cluster extends Resource<
  * **Example:** Job pinned to the cluster
  * ```typescript
  * const job = yield* Azure.StreamAnalytics.StreamingJob("telemetry", {
- *   resourceGroup: group.resourceGroupName,
  *   clusterId: cluster.clusterResourceId,
  * });
  * ```
  *
  * @resource
  */
-export const Cluster = Resource<Cluster>("Azure.StreamAnalytics.Cluster");
+export const Cluster = GroupedResource<Cluster>("Azure.StreamAnalytics.Cluster");
 
 type ObservedCluster = streamanalytics.GetClusterResponse;
 

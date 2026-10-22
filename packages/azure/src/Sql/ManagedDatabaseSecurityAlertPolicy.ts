@@ -2,12 +2,13 @@ import * as sql from "@distilled.cloud/azure/sql";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { ensureRegistered, ignoreNotFound, orUndefinedIfNotFound } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { fieldsMatch, isManagedInstanceOwnedByStack, lower, sameSecret } from "./common.ts";
 import {
   managedDatabasePath,
@@ -90,7 +91,6 @@ export interface ManagedDatabaseSecurityAlertPolicy extends Resource<
  * **Example:** Email security alerts
  * ```typescript
  * yield* Azure.Sql.ManagedDatabaseSecurityAlertPolicy("alerts", {
- *   resourceGroup: group.resourceGroupName,
  *   managedInstance: instance.managedInstanceName,
  *   database: database.databaseName,
  *   state: "Enabled",
@@ -100,9 +100,10 @@ export interface ManagedDatabaseSecurityAlertPolicy extends Resource<
  *
  * @resource
  */
-export const ManagedDatabaseSecurityAlertPolicy = Resource<ManagedDatabaseSecurityAlertPolicy>(
-  "Azure.Sql.ManagedDatabaseSecurityAlertPolicy",
-);
+export const ManagedDatabaseSecurityAlertPolicy =
+  GroupedResource<ManagedDatabaseSecurityAlertPolicy>(
+    "Azure.Sql.ManagedDatabaseSecurityAlertPolicy",
+  );
 
 type Observed = sql.GetManagedDatabaseSecurityAlertPolicyResponse;
 

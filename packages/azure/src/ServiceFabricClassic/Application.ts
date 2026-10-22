@@ -2,7 +2,7 @@ import * as servicefabric from "@distilled.cloud/azure/servicefabric";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -18,6 +18,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createEntityName, delta, listClusters, lower, matches } from "./Common.ts";
 
 export interface ApplicationProps {
@@ -102,7 +103,6 @@ export interface Application extends Resource<
  * **Example:** Application from a registered version
  * ```typescript
  * const app = yield* Azure.ServiceFabricClassic.Application("voting", {
- *   resourceGroup: group.resourceGroupName,
  *   cluster: cluster.clusterName,
  *   typeName: appType.applicationTypeName,
  *   typeVersion: v1.version,
@@ -114,7 +114,6 @@ export interface Application extends Resource<
  * **Example:** Monitored rolling upgrade
  * ```typescript
  * const app = yield* Azure.ServiceFabricClassic.Application("voting", {
- *   resourceGroup: group.resourceGroupName,
  *   cluster: cluster.clusterName,
  *   typeName: appType.applicationTypeName,
  *   typeVersion: v2.version,
@@ -127,7 +126,7 @@ export interface Application extends Resource<
  *
  * @resource
  */
-export const Application = Resource<Application>("Azure.ServiceFabricClassic.Application");
+export const Application = GroupedResource<Application>("Azure.ServiceFabricClassic.Application");
 
 type Observed = servicefabric.GetApplicationResponse | servicefabric.ApplicationResource;
 

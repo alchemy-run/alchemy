@@ -2,7 +2,7 @@ import * as storagesync from "@distilled.cloud/azure/storagesync";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import {
@@ -14,6 +14,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createChildName, isServiceOwnedByStack, sameName } from "./internal.ts";
 
 export type FeatureStatus = "on" | "off";
@@ -156,7 +157,6 @@ export interface ServerEndpoint extends Resource<
  * **Example:** Sync a server folder
  * ```typescript
  * yield* Azure.StorageSync.ServerEndpoint("docs-server", {
- *   resourceGroup: group.resourceGroupName,
  *   storageSyncService: sync.storageSyncServiceName,
  *   syncGroup: syncGroup.syncGroupName,
  *   serverResourceId: Output.interpolate`${sync.storageSyncServiceId}/registeredServers/${serverId}`,
@@ -168,7 +168,6 @@ export interface ServerEndpoint extends Resource<
  * **Example:** Keep 30% of the volume free
  * ```typescript
  * yield* Azure.StorageSync.ServerEndpoint("docs-server", {
- *   resourceGroup: group.resourceGroupName,
  *   storageSyncService: sync.storageSyncServiceName,
  *   syncGroup: syncGroup.syncGroupName,
  *   serverResourceId: registeredServerId,
@@ -181,7 +180,7 @@ export interface ServerEndpoint extends Resource<
  *
  * @resource
  */
-export const ServerEndpoint = Resource<ServerEndpoint>("Azure.StorageSync.ServerEndpoint");
+export const ServerEndpoint = GroupedResource<ServerEndpoint>("Azure.StorageSync.ServerEndpoint");
 
 export class RegisteredServerNotFound extends Data.TaggedError(
   "Azure.StorageSync.RegisteredServerNotFound",

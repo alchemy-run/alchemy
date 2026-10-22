@@ -2,7 +2,7 @@ import * as aci from "@distilled.cloud/azure/containerinstance";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -20,6 +20,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   comparable,
   containerNames,
@@ -161,9 +162,7 @@ export interface ContainerGroup extends Resource<
  * ### Creating a Container Group
  * **Example:** Public web server
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("app");
  * const web = yield* Azure.ContainerInstance.ContainerGroup("web", {
- *   resourceGroup: group.resourceGroupName,
  *   containers: [
  *     {
  *       name: "web",
@@ -181,7 +180,6 @@ export interface ContainerGroup extends Resource<
  * **Example:** Run-to-completion job
  * ```typescript
  * const job = yield* Azure.ContainerInstance.ContainerGroup("job", {
- *   resourceGroup: group.resourceGroupName,
  *   restartPolicy: "Never",
  *   containers: [
  *     {
@@ -198,7 +196,6 @@ export interface ContainerGroup extends Resource<
  * **Example:** Plain and secure environment variables
  * ```typescript
  * const api = yield* Azure.ContainerInstance.ContainerGroup("api", {
- *   resourceGroup: group.resourceGroupName,
  *   containers: [
  *     {
  *       name: "api",
@@ -221,7 +218,6 @@ export interface ContainerGroup extends Resource<
  * **Example:** System-assigned identity
  * ```typescript
  * const worker = yield* Azure.ContainerInstance.ContainerGroup("worker", {
- *   resourceGroup: group.resourceGroupName,
  *   identity: { type: "SystemAssigned" },
  *   containers: [{ name: "worker", image }],
  * });
@@ -230,7 +226,9 @@ export interface ContainerGroup extends Resource<
  *
  * @resource
  */
-export const ContainerGroup = Resource<ContainerGroup>("Azure.ContainerInstance.ContainerGroup");
+export const ContainerGroup = GroupedResource<ContainerGroup>(
+  "Azure.ContainerInstance.ContainerGroup",
+);
 
 type ObservedGroup = aci.GetContainerGroupResponse;
 

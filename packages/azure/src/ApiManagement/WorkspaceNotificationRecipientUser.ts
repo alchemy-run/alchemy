@@ -1,8 +1,9 @@
 import * as apim from "@distilled.cloud/azure/apimanagement";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { entityLifecycle, serviceEntityId } from "./Entity.ts";
 import type { NotificationName } from "./Notification.ts";
 
@@ -55,7 +56,6 @@ export interface WorkspaceNotificationRecipientUser extends Resource<
  * **Example:** Send quota warnings to an operator account
  * ```typescript
  * yield* Azure.ApiManagement.WorkspaceNotificationRecipientUser("quota-ops", {
- *   resourceGroup: group.resourceGroupName,
  *   serviceName: apim.serviceName,
  *   workspaceName: workspace.workspaceName,
  *   notificationName: "QuotaLimitApproachingPublisherNotificationMessage",
@@ -65,9 +65,10 @@ export interface WorkspaceNotificationRecipientUser extends Resource<
  *
  * @resource
  */
-export const WorkspaceNotificationRecipientUser = Resource<WorkspaceNotificationRecipientUser>(
-  "Azure.ApiManagement.WorkspaceNotificationRecipientUser",
-);
+export const WorkspaceNotificationRecipientUser =
+  GroupedResource<WorkspaceNotificationRecipientUser>(
+    "Azure.ApiManagement.WorkspaceNotificationRecipientUser",
+  );
 
 interface Key {
   resourceGroup: string;

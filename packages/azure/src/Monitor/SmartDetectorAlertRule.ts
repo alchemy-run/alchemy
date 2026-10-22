@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -21,6 +21,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 
 export type SmartDetectorSeverity = "Sev0" | "Sev1" | "Sev2" | "Sev3" | "Sev4";
 
@@ -120,7 +121,6 @@ export interface SmartDetectorAlertRule extends Resource<
  * **Example:** Notify an action group about failure anomalies of an app
  * ```typescript
  * const rule = yield* Azure.Monitor.SmartDetectorAlertRule("failures", {
- *   resourceGroup: group.resourceGroupName,
  *   detector: { id: "FailureAnomaliesDetector" },
  *   scopes: [appInsightsId],
  *   severity: "Sev3",
@@ -133,7 +133,6 @@ export interface SmartDetectorAlertRule extends Resource<
  * **Example:** Throttle notifications and customize the email subject
  * ```typescript
  * const rule = yield* Azure.Monitor.SmartDetectorAlertRule("failures", {
- *   resourceGroup: group.resourceGroupName,
  *   detector: { id: "FailureAnomaliesDetector" },
  *   scopes: [appInsightsId],
  *   severity: "Sev2",
@@ -149,7 +148,7 @@ export interface SmartDetectorAlertRule extends Resource<
  *
  * @resource
  */
-export const SmartDetectorAlertRule = Resource<SmartDetectorAlertRule>(
+export const SmartDetectorAlertRule = GroupedResource<SmartDetectorAlertRule>(
   "Azure.Monitor.SmartDetectorAlertRule",
 );
 

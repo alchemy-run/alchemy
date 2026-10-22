@@ -2,11 +2,12 @@ import * as eventgrid from "@distilled.cloud/azure/eventgrid";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { ensureRegistered, ignoreNotFound, orUndefinedIfNotFound, waitUntilGone } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createEventGridName, sameName } from "./common.ts";
 import {
   isOwnedDescription,
@@ -80,17 +81,14 @@ export interface PermissionBinding extends Resource<
  * **Example:** Sensors may publish telemetry
  * ```typescript
  * const telemetry = yield* Azure.EventGrid.TopicSpace("telemetry", {
- *   resourceGroup: group.resourceGroupName,
  *   namespace: namespace.namespaceName,
  *   topicTemplates: ["devices/${client.authenticationName}/telemetry"],
  * });
  * const sensors = yield* Azure.EventGrid.ClientGroup("sensors", {
- *   resourceGroup: group.resourceGroupName,
  *   namespace: namespace.namespaceName,
  *   query: "attributes.role = 'sensor'",
  * });
  * const publish = yield* Azure.EventGrid.PermissionBinding("sensors-publish", {
- *   resourceGroup: group.resourceGroupName,
  *   namespace: namespace.namespaceName,
  *   topicSpace: telemetry.topicSpaceName,
  *   clientGroup: sensors.clientGroupName,
@@ -100,7 +98,9 @@ export interface PermissionBinding extends Resource<
  *
  * @resource
  */
-export const PermissionBinding = Resource<PermissionBinding>("Azure.EventGrid.PermissionBinding");
+export const PermissionBinding = GroupedResource<PermissionBinding>(
+  "Azure.EventGrid.PermissionBinding",
+);
 
 type ObservedPermissionBinding = Pick<eventgrid.PermissionBinding, "id" | "properties">;
 

@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import {
@@ -22,6 +22,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 
 export interface SqlMigrationServiceProps {
   /**
@@ -90,16 +91,12 @@ export interface SqlMigrationService extends Resource<
  * ### Creating a SQL Migration Service
  * **Example:** Service in a resource group
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("migrations");
- * const service = yield* Azure.DataMigration.SqlMigrationService("sql", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const service = yield* Azure.DataMigration.SqlMigrationService("sql");
  * ```
  *
  * **Example:** Service with tags
  * ```typescript
  * const service = yield* Azure.DataMigration.SqlMigrationService("sql", {
- *   resourceGroup: group.resourceGroupName,
  *   tags: { team: "data" },
  * });
  * ```
@@ -107,16 +104,14 @@ export interface SqlMigrationService extends Resource<
  * ### Registering an Integration Runtime
  * **Example:** Hand the auth key to the self-hosted integration runtime
  * ```typescript
- * const service = yield* Azure.DataMigration.SqlMigrationService("sql", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const service = yield* Azure.DataMigration.SqlMigrationService("sql");
  * // pass `service.authKey1` (Redacted) to the SHIR installer on the
  * // machine that can reach the source SQL Server
  * ```
  *
  * @resource
  */
-export const SqlMigrationService = Resource<SqlMigrationService>(
+export const SqlMigrationService = GroupedResource<SqlMigrationService>(
   "Azure.DataMigration.SqlMigrationService",
 );
 

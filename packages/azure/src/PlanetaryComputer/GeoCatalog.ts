@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import {
@@ -22,6 +22,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 
 /**
  * Microsoft.Orbital/geoCatalogs only supports user-assigned identities;
@@ -135,20 +136,15 @@ export interface GeoCatalog extends Resource<
  * const group = yield* Azure.Resources.ResourceGroup("geo", {
  *   location: "eastus",
  * });
- * const catalog = yield* Azure.PlanetaryComputer.GeoCatalog("catalog", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const catalog = yield* Azure.PlanetaryComputer.GeoCatalog("catalog");
  * yield* Console.log(catalog.catalogUri);
  * ```
  *
  * ### Identity
  * **Example:** User-assigned identity for ingestion sources
  * ```typescript
- * const identity = yield* Azure.ManagedIdentity.UserAssignedIdentity("geo-id", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const identity = yield* Azure.ManagedIdentity.UserAssignedIdentity("geo-id");
  * const catalog = yield* Azure.PlanetaryComputer.GeoCatalog("catalog", {
- *   resourceGroup: group.resourceGroupName,
  *   identity: {
  *     type: "UserAssigned",
  *     userAssignedIdentities: [identity.identityId],
@@ -158,7 +154,7 @@ export interface GeoCatalog extends Resource<
  *
  * @resource
  */
-export const GeoCatalog = Resource<GeoCatalog>("Azure.PlanetaryComputer.GeoCatalog");
+export const GeoCatalog = GroupedResource<GeoCatalog>("Azure.PlanetaryComputer.GeoCatalog");
 
 type ObservedGeoCatalog = orbitalplanetarycomputer.GetGeoCatalogResponse;
 

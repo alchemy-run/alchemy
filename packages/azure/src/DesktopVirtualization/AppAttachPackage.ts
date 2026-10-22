@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -20,6 +20,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { deltaOf, sameIdSet } from "./Common.ts";
 
 /**
@@ -101,7 +102,6 @@ export interface AppAttachPackage extends Resource<
  * **Example:** Attach an MSIX image to a host pool
  * ```typescript
  * const pkg = yield* Azure.DesktopVirtualization.AppAttachPackage("notepadpp", {
- *   resourceGroup: group.resourceGroupName,
  *   hostPoolIds: [pool.hostPoolId],
  *   failHealthCheckOnStagingFailure: "NeedsAssistance",
  *   image: {
@@ -122,7 +122,7 @@ export interface AppAttachPackage extends Resource<
  *
  * @resource
  */
-export const AppAttachPackage = Resource<AppAttachPackage>(
+export const AppAttachPackage = GroupedResource<AppAttachPackage>(
   "Azure.DesktopVirtualization.AppAttachPackage",
 );
 

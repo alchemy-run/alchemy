@@ -2,7 +2,7 @@ import * as synapse from "@distilled.cloud/azure/synapse";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -15,6 +15,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { getWorkspace, isWorkspaceOwnedByStack, lower } from "./common.ts";
 
 export interface WorkspaceKeyProps {
@@ -78,18 +79,15 @@ export interface WorkspaceKey extends Resource<
  * ```typescript
  * // A short key name keeps `{vault}_{key}_{version}` under Synapse's limit.
  * const key = yield* Azure.KeyVault.Key("cmk", {
- *   resourceGroup: group.resourceGroupName,
  *   vault: vault.vaultName, // purge protection enabled
  *   name: "synapse-cmk",
  * });
  * const workspace = yield* Azure.Synapse.Workspace("ws", {
- *   resourceGroup: group.resourceGroupName,
  *   defaultDataLakeStorage: { accountUrl, filesystem },
  *   customerManagedKey: { keyName: "cmk", keyVaultUrl: key.keyUri },
  * });
  * // grant workspace.principalId get/wrapKey/unwrapKey on the key, then:
  * yield* Azure.Synapse.WorkspaceKey("cmk", {
- *   resourceGroup: group.resourceGroupName,
  *   workspace: workspace.workspaceName,
  *   name: "cmk",
  *   keyVaultUrl: key.keyUri,
@@ -99,7 +97,7 @@ export interface WorkspaceKey extends Resource<
  *
  * @resource
  */
-export const WorkspaceKey = Resource<WorkspaceKey>("Azure.Synapse.WorkspaceKey");
+export const WorkspaceKey = GroupedResource<WorkspaceKey>("Azure.Synapse.WorkspaceKey");
 
 type Observed = synapse.GetKeyResponse;
 

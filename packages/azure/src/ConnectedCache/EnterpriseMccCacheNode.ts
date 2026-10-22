@@ -2,7 +2,7 @@ import * as connectedcache from "@distilled.cloud/azure/connectedcache";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -16,6 +16,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createConnectedCacheName, MCC_BUDGET, sameArm } from "./Common.ts";
 
 /** A cache drive on the server that hosts the cache node. */
@@ -147,11 +148,9 @@ export interface EnterpriseMccCacheNode extends Resource<
  * **Example:** Linux cache node with one cache drive
  * ```typescript
  * const customer = yield* Azure.ConnectedCache.EnterpriseMccCustomer("mcc", {
- *   resourceGroup: group.resourceGroupName,
  *   location: "westus",
  * });
  * const node = yield* Azure.ConnectedCache.EnterpriseMccCacheNode("node", {
- *   resourceGroup: group.resourceGroupName,
  *   customer: customer.customerResourceName,
  *   osType: "Linux",
  *   driveConfiguration: [
@@ -164,7 +163,6 @@ export interface EnterpriseMccCacheNode extends Resource<
  * **Example:** Enabled node with an egress cap and an HTTP proxy
  * ```typescript
  * yield* Azure.ConnectedCache.EnterpriseMccCacheNode("branch", {
- *   resourceGroup: group.resourceGroupName,
  *   customer: customer.customerResourceName,
  *   isEnabled: true,
  *   maxAllowableEgressInMbps: 500,
@@ -174,7 +172,7 @@ export interface EnterpriseMccCacheNode extends Resource<
  *
  * @resource
  */
-export const EnterpriseMccCacheNode = Resource<EnterpriseMccCacheNode>(
+export const EnterpriseMccCacheNode = GroupedResource<EnterpriseMccCacheNode>(
   "Azure.ConnectedCache.EnterpriseMccCacheNode",
 );
 

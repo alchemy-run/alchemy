@@ -1,7 +1,8 @@
 import * as iot from "@distilled.cloud/azure/iotoperations";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { childLifecycle, childStatus, type InstanceScope } from "./Common.ts";
 
 export interface BrokerProps {
@@ -70,7 +71,6 @@ export interface Broker extends Resource<
  * **Example:** Default broker with a low memory profile
  * ```typescript
  * const broker = yield* Azure.IoTOperations.Broker("broker", {
- *   resourceGroup: group.resourceGroupName,
  *   instanceName: instance.instanceName,
  *   memoryProfile: "Low",
  *   cardinality: {
@@ -82,7 +82,7 @@ export interface Broker extends Resource<
  *
  * @resource
  */
-export const Broker = Resource<Broker>("Azure.IoTOperations.Broker");
+export const Broker = GroupedResource<Broker>("Azure.IoTOperations.Broker");
 
 export const BrokerProvider = () =>
   Provider.succeed(Broker, {

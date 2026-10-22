@@ -2,11 +2,12 @@ import * as redis from "@distilled.cloud/azure/redis";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { ensureRegistered, ignoreNotFound, orUndefinedIfNotFound, waitUntilGone } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { cacheOwnedByStage, lower, whileCacheBusy } from "./Common.ts";
 
 export type PatchScheduleDay =
@@ -69,11 +70,8 @@ export interface PatchSchedule extends Resource<
  * ### Scheduling Updates
  * **Example:** Patch on Saturday and Sunday nights
  * ```typescript
- * const cache = yield* Azure.Redis.Cache("cache", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const cache = yield* Azure.Redis.Cache("cache");
  * yield* Azure.Redis.PatchSchedule("patching", {
- *   resourceGroup: group.resourceGroupName,
  *   cache: cache.cacheName,
  *   scheduleEntries: [
  *     { dayOfWeek: "Saturday", startHourUtc: 2 },
@@ -84,7 +82,7 @@ export interface PatchSchedule extends Resource<
  *
  * @resource
  */
-export const PatchSchedule = Resource<PatchSchedule>("Azure.Redis.PatchSchedule");
+export const PatchSchedule = GroupedResource<PatchSchedule>("Azure.Redis.PatchSchedule");
 
 const DEFAULT_WINDOW = "PT5H";
 

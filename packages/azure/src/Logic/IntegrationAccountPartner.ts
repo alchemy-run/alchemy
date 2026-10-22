@@ -2,11 +2,12 @@ import * as logic from "@distilled.cloud/azure/logic";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { ensureRegistered, ignoreNotFound, orUndefinedIfNotFound, waitUntilGone } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   artifactDiffers,
   artifactMetadata,
@@ -85,12 +86,10 @@ export interface IntegrationAccountPartner extends Resource<
  * **Example:** Host and guest partners
  * ```typescript
  * const contoso = yield* Azure.Logic.IntegrationAccountPartner("contoso", {
- *   resourceGroup: group.resourceGroupName,
  *   integrationAccount: account.integrationAccountName,
  *   businessIdentities: [{ qualifier: "ZZ", value: "CONTOSO" }],
  * });
  * const fabrikam = yield* Azure.Logic.IntegrationAccountPartner("fabrikam", {
- *   resourceGroup: group.resourceGroupName,
  *   integrationAccount: account.integrationAccountName,
  *   businessIdentities: [{ qualifier: "ZZ", value: "FABRIKAM" }],
  * });
@@ -98,7 +97,7 @@ export interface IntegrationAccountPartner extends Resource<
  *
  * @resource
  */
-export const IntegrationAccountPartner = Resource<IntegrationAccountPartner>(
+export const IntegrationAccountPartner = GroupedResource<IntegrationAccountPartner>(
   "Azure.Logic.IntegrationAccountPartner",
 );
 

@@ -2,7 +2,7 @@ import * as sql from "@distilled.cloud/azure/sql";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { isManagedInstanceOwnedByStack, lower } from "./common.ts";
 import { instancePath, type InstanceScope, serverKeyNameOf } from "./setting.ts";
 
@@ -69,7 +70,6 @@ export interface ManagedInstanceKey extends Resource<
  * **Example:** Register a Key Vault key with a managed instance
  * ```typescript
  * const key = yield* Azure.Sql.ManagedInstanceKey("tde-key", {
- *   resourceGroup: group.resourceGroupName,
  *   managedInstance: instance.managedInstanceName,
  *   uri: "https://myvault.vault.azure.net/keys/tde/0123456789abcdef",
  * });
@@ -77,7 +77,9 @@ export interface ManagedInstanceKey extends Resource<
  *
  * @resource
  */
-export const ManagedInstanceKey = Resource<ManagedInstanceKey>("Azure.Sql.ManagedInstanceKey");
+export const ManagedInstanceKey = GroupedResource<ManagedInstanceKey>(
+  "Azure.Sql.ManagedInstanceKey",
+);
 
 // A key whose name is not `<vault>_<key>_<version>` cannot exist.
 const getKey = (subscriptionId: string, scope: InstanceScope, name: string) =>

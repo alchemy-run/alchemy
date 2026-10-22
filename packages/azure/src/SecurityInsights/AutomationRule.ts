@@ -2,11 +2,12 @@ import * as securityinsights from "@distilled.cloud/azure/securityinsights";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { ensureRegistered, ignoreNotFound, orUndefinedIfNotFound, waitUntilGone } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   compact,
   deterministicGuid,
@@ -121,7 +122,6 @@ export interface AutomationRule extends Resource<
  * **Example:** Raise severity of matching incidents
  * ```typescript
  * const sentinel = yield* Azure.SecurityInsights.OnboardingState("sentinel", {
- *   resourceGroup: group.resourceGroupName,
  *   workspace: logs.workspaceName,
  * });
  * const rule = yield* Azure.SecurityInsights.AutomationRule("raise", {
@@ -175,7 +175,9 @@ export interface AutomationRule extends Resource<
  *
  * @resource
  */
-export const AutomationRule = Resource<AutomationRule>("Azure.SecurityInsights.AutomationRule");
+export const AutomationRule = GroupedResource<AutomationRule>(
+  "Azure.SecurityInsights.AutomationRule",
+);
 
 const getRule = (
   subscriptionId: string,

@@ -1,8 +1,9 @@
 import * as apim from "@distilled.cloud/azure/apimanagement";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createEntityName } from "./Common.ts";
 import { entityLifecycle, serviceEntityId } from "./Entity.ts";
 
@@ -63,7 +64,6 @@ export interface WorkspaceProductGroupLink extends Resource<
  * **Example:** Let partners see the premium product
  * ```typescript
  * yield* Azure.ApiManagement.WorkspaceProductGroupLink("premium-partners", {
- *   resourceGroup: group.resourceGroupName,
  *   serviceName: apim.serviceName,
  *   workspaceName: workspace.workspaceName,
  *   productName: premium.productName,
@@ -73,7 +73,7 @@ export interface WorkspaceProductGroupLink extends Resource<
  *
  * @resource
  */
-export const WorkspaceProductGroupLink = Resource<WorkspaceProductGroupLink>(
+export const WorkspaceProductGroupLink = GroupedResource<WorkspaceProductGroupLink>(
   "Azure.ApiManagement.WorkspaceProductGroupLink",
 );
 

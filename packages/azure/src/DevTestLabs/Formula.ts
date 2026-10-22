@@ -2,7 +2,7 @@ import * as devtestlabs from "@distilled.cloud/azure/devtestlabs";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import {
@@ -18,6 +18,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createLabResourceName,
   DEVTESTLAB_NAMESPACE,
@@ -148,7 +149,6 @@ export interface Formula extends Resource<
  * **Example:** Ubuntu VM formula
  * ```typescript
  * const formula = yield* Azure.DevTestLabs.Formula("ubuntu", {
- *   resourceGroup: group.resourceGroupName,
  *   lab: lab.labName,
  *   description: "Ubuntu 22.04 dev box",
  *   osType: "Linux",
@@ -169,7 +169,7 @@ export interface Formula extends Resource<
  *
  * @resource
  */
-export const Formula = Resource<Formula>("Azure.DevTestLabs.Formula");
+export const Formula = GroupedResource<Formula>("Azure.DevTestLabs.Formula");
 
 const getFormula = (
   subscriptionId: string,

@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import {
@@ -16,6 +16,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { getConfigurationStore } from "./ConfigurationStore.ts";
 
 export interface ReplicaProps {
@@ -70,12 +71,10 @@ export interface Replica extends Resource<
  * **Example:** Replica in a second region
  * ```typescript
  * const store = yield* Azure.AppConfiguration.ConfigurationStore("config", {
- *   resourceGroup: group.resourceGroupName,
  *   location: "eastus",
  *   sku: "Standard",
  * });
  * const replica = yield* Azure.AppConfiguration.Replica("west", {
- *   resourceGroup: group.resourceGroupName,
  *   configurationStore: store.configurationStoreName,
  *   location: "westus2",
  * });
@@ -83,7 +82,7 @@ export interface Replica extends Resource<
  *
  * @resource
  */
-export const Replica = Resource<Replica>("Azure.AppConfiguration.Replica");
+export const Replica = GroupedResource<Replica>("Azure.AppConfiguration.Replica");
 
 /**
  * Alphanumeric replica name; Azure caps it at 50 characters and the store

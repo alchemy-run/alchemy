@@ -2,11 +2,12 @@ import * as eventgrid from "@distilled.cloud/azure/eventgrid";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { ensureRegistered, ignoreNotFound, orUndefinedIfNotFound, waitUntilGone } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createEventGridName, sameName } from "./common.ts";
 import {
   desiredSubscription,
@@ -56,15 +57,11 @@ export interface DomainTopicEventSubscription extends Resource<
  * ### Subscribing to a Domain Topic
  * **Example:** Deliver one tenant's events to a Storage queue
  * ```typescript
- * const domain = yield* Azure.EventGrid.Domain("tenants", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const domain = yield* Azure.EventGrid.Domain("tenants");
  * const tenantA = yield* Azure.EventGrid.DomainTopic("tenant-a", {
- *   resourceGroup: group.resourceGroupName,
  *   domain: domain.domainName,
  * });
  * const audit = yield* Azure.EventGrid.DomainTopicEventSubscription("audit", {
- *   resourceGroup: group.resourceGroupName,
  *   domain: domain.domainName,
  *   domainTopic: tenantA.domainTopicName,
  *   destination: {
@@ -78,7 +75,6 @@ export interface DomainTopicEventSubscription extends Resource<
  * **Example:** Filter by event type with a retry policy
  * ```typescript
  * const orders = yield* Azure.EventGrid.DomainTopicEventSubscription("orders", {
- *   resourceGroup: group.resourceGroupName,
  *   domain: domain.domainName,
  *   domainTopic: tenantA.domainTopicName,
  *   destination: {
@@ -93,7 +89,7 @@ export interface DomainTopicEventSubscription extends Resource<
  *
  * @resource
  */
-export const DomainTopicEventSubscription = Resource<DomainTopicEventSubscription>(
+export const DomainTopicEventSubscription = GroupedResource<DomainTopicEventSubscription>(
   "Azure.EventGrid.DomainTopicEventSubscription",
 );
 

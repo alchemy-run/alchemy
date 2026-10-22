@@ -2,7 +2,7 @@ import * as sql from "@distilled.cloud/azure/sql";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createDnsName, lower, sameId } from "./common.ts";
 
 /** A primary/secondary pair of managed instances in a failover group. */
@@ -113,7 +114,6 @@ export interface InstanceFailoverGroup extends Resource<
  * **Example:** Manual failover group
  * ```typescript
  * yield* Azure.Sql.InstanceFailoverGroup("fog", {
- *   resourceGroup: group.resourceGroupName,
  *   location: "centralus",
  *   partnerLocation: "eastus2",
  *   managedInstancePair: {
@@ -126,7 +126,6 @@ export interface InstanceFailoverGroup extends Resource<
  * **Example:** Automatic failover after one hour
  * ```typescript
  * yield* Azure.Sql.InstanceFailoverGroup("fog", {
- *   resourceGroup: group.resourceGroupName,
  *   location: "centralus",
  *   partnerLocation: "eastus2",
  *   managedInstancePair: {
@@ -141,7 +140,7 @@ export interface InstanceFailoverGroup extends Resource<
  *
  * @resource
  */
-export const InstanceFailoverGroup = Resource<InstanceFailoverGroup>(
+export const InstanceFailoverGroup = GroupedResource<InstanceFailoverGroup>(
   "Azure.Sql.InstanceFailoverGroup",
 );
 

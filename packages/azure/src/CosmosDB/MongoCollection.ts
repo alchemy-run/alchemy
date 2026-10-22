@@ -3,12 +3,13 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { ensureRegistered, ignoreNotFound, orUndefinedIfNotFound, waitUntilGone } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   canonical,
   createOptions,
@@ -95,7 +96,6 @@ export interface MongoCollection extends Resource<
  * **Example:** Sharded collection with a unique index
  * ```typescript
  * const users = yield* Azure.CosmosDB.MongoCollection("users", {
- *   resourceGroup: group.resourceGroupName,
  *   account: account.accountName,
  *   database: database.databaseName,
  *   shardKey: "tenantId",
@@ -107,7 +107,6 @@ export interface MongoCollection extends Resource<
  * **Example:** TTL index that expires documents after an hour
  * ```typescript
  * const sessions = yield* Azure.CosmosDB.MongoCollection("sessions", {
- *   resourceGroup: group.resourceGroupName,
  *   account: account.accountName,
  *   database: database.databaseName,
  *   indexes: [{ keys: ["_ts"], expireAfterSeconds: 3600 }],
@@ -116,7 +115,7 @@ export interface MongoCollection extends Resource<
  *
  * @resource
  */
-export const MongoCollection = Resource<MongoCollection>("Azure.CosmosDB.MongoCollection");
+export const MongoCollection = GroupedResource<MongoCollection>("Azure.CosmosDB.MongoCollection");
 
 type ObservedCollection = cosmos.GetMongoDBResourceMongoDBCollectionResponse;
 

@@ -2,7 +2,7 @@ import * as devcenter from "@distilled.cloud/azure/devcenter";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import {
@@ -14,6 +14,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createDevCenterName, devCenterOwnedByStage, sameArm } from "./Common.ts";
 
 export interface GalleryProps {
@@ -69,7 +70,6 @@ export interface Gallery extends Resource<
  * **Example:** Grant the dev center access, then attach the gallery
  * ```typescript
  * const center = yield* Azure.DevCenter.DevCenter("center", {
- *   resourceGroup: group.resourceGroupName,
  *   identity: { type: "SystemAssigned" },
  * });
  * const access = yield* Azure.Authorization.RoleAssignment("gallery-access", {
@@ -80,7 +80,6 @@ export interface Gallery extends Resource<
  *   principalType: "ServicePrincipal",
  * });
  * const gallery = yield* Azure.DevCenter.Gallery("images", {
- *   resourceGroup: group.resourceGroupName,
  *   devCenter: center.devCenterName,
  *   galleryResourceId: computeGalleryId,
  * });
@@ -88,7 +87,7 @@ export interface Gallery extends Resource<
  *
  * @resource
  */
-export const Gallery = Resource<Gallery>("Azure.DevCenter.Gallery");
+export const Gallery = GroupedResource<Gallery>("Azure.DevCenter.Gallery");
 
 type Observed = devcenter.GetGalleryResponse;
 

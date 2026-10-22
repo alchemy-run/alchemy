@@ -2,7 +2,7 @@ import * as automation from "@distilled.cloud/azure/automation";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import {
@@ -14,6 +14,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { accountOwnedByStage, childNuke, createChildName, sameName, sameRecord } from "./Common.ts";
 
 export interface WebhookProps {
@@ -92,13 +93,11 @@ export interface Webhook extends Resource<
  * **Example:** Start a runbook over HTTP
  * ```typescript
  * const runbook = yield* Azure.Automation.Runbook("deploy", {
- *   resourceGroup: group.resourceGroupName,
  *   automationAccount: account.automationAccountName,
  *   runbookType: "PowerShell72",
  *   content: 'param($WebhookData) Write-Output $WebhookData.RequestBody',
  * });
  * const hook = yield* Azure.Automation.Webhook("deploy", {
- *   resourceGroup: group.resourceGroupName,
  *   automationAccount: account.automationAccountName,
  *   runbook: runbook.runbookName,
  * });
@@ -107,7 +106,7 @@ export interface Webhook extends Resource<
  *
  * @resource
  */
-export const Webhook = Resource<Webhook>("Azure.Automation.Webhook");
+export const Webhook = GroupedResource<Webhook>("Azure.Automation.Webhook");
 
 const getWebhook = (
   subscriptionId: string,

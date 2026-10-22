@@ -2,7 +2,7 @@ import * as network from "@distilled.cloud/azure/network";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -18,6 +18,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createNetworkName,
   sameId,
@@ -119,16 +120,12 @@ export interface NatGateway extends Resource<
  * ### Creating a NAT Gateway
  * **Example:** NAT gateway with a public IP, attached to a subnet
  * ```typescript
- * const ip = yield* Azure.Network.PublicIpAddress("egress", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const ip = yield* Azure.Network.PublicIpAddress("egress");
  * const nat = yield* Azure.Network.NatGateway("egress", {
- *   resourceGroup: group.resourceGroupName,
  *   publicIpAddressIds: [ip.publicIpAddressId],
  *   idleTimeoutInMinutes: 10,
  * });
  * const subnet = yield* Azure.Network.Subnet("app", {
- *   resourceGroup: group.resourceGroupName,
  *   virtualNetwork: vnet.virtualNetworkName,
  *   addressPrefix: "10.0.1.0/24",
  *   natGatewayId: nat.natGatewayId,
@@ -137,7 +134,7 @@ export interface NatGateway extends Resource<
  *
  * @resource
  */
-export const NatGateway = Resource<NatGateway>("Azure.Network.NatGateway");
+export const NatGateway = GroupedResource<NatGateway>("Azure.Network.NatGateway");
 
 type Observed = network.GetNatGatewayResponse;
 

@@ -3,11 +3,12 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { ensureRegistered, ignoreNotFound, orUndefinedIfNotFound, waitUntilGone } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   canonical,
   createOptions,
@@ -107,7 +108,6 @@ export interface GremlinGraph extends Resource<
  * **Example:** Graph partitioned by tenant
  * ```typescript
  * const graph = yield* Azure.CosmosDB.GremlinGraph("social", {
- *   resourceGroup: group.resourceGroupName,
  *   account: account.accountName,
  *   database: database.databaseName,
  *   partitionKey: { paths: ["/tenantId"] },
@@ -117,7 +117,6 @@ export interface GremlinGraph extends Resource<
  * **Example:** Graph with dedicated throughput and TTL
  * ```typescript
  * const graph = yield* Azure.CosmosDB.GremlinGraph("sessions", {
- *   resourceGroup: group.resourceGroupName,
  *   account: account.accountName,
  *   database: database.databaseName,
  *   partitionKey: { paths: ["/userId"] },
@@ -128,7 +127,7 @@ export interface GremlinGraph extends Resource<
  *
  * @resource
  */
-export const GremlinGraph = Resource<GremlinGraph>("Azure.CosmosDB.GremlinGraph");
+export const GremlinGraph = GroupedResource<GremlinGraph>("Azure.CosmosDB.GremlinGraph");
 
 type ObservedGraph = cosmos.GetGremlinResourceGremlinGraphResponse;
 

@@ -2,7 +2,7 @@ import * as servicefabric from "@distilled.cloud/azure/servicefabric";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -18,6 +18,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createEntityName, delta, listClusters, lower } from "./Common.ts";
 
 export interface ServiceProps {
@@ -126,7 +127,6 @@ export interface Service extends Resource<
  * **Example:** Stateless service on every node
  * ```typescript
  * const web = yield* Azure.ServiceFabricClassic.Service("web", {
- *   resourceGroup: group.resourceGroupName,
  *   cluster: cluster.clusterName,
  *   application: app.applicationName,
  *   name: "VotingWeb",
@@ -139,7 +139,6 @@ export interface Service extends Resource<
  * **Example:** Partitioned stateful service
  * ```typescript
  * const data = yield* Azure.ServiceFabricClassic.Service("data", {
- *   resourceGroup: group.resourceGroupName,
  *   cluster: cluster.clusterName,
  *   application: app.applicationName,
  *   name: "VotingData",
@@ -159,7 +158,7 @@ export interface Service extends Resource<
  *
  * @resource
  */
-export const Service = Resource<Service>("Azure.ServiceFabricClassic.Service");
+export const Service = GroupedResource<Service>("Azure.ServiceFabricClassic.Service");
 
 type Observed = servicefabric.GetServiceResponse | servicefabric.ServiceResource;
 

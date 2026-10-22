@@ -2,11 +2,12 @@ import * as desktopvirtualization from "@distilled.cloud/azure/desktopvirtualiza
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { ensureRegistered, ignoreNotFound, orUndefinedIfNotFound, waitUntilGone } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createAvdName, deltaOf, ownedByStage } from "./Common.ts";
 import { getScalingPlan } from "./ScalingPlan.ts";
 
@@ -112,7 +113,6 @@ export interface ScalingPlanPooledSchedule extends Resource<
  * const weekdays = yield* Azure.DesktopVirtualization.ScalingPlanPooledSchedule(
  *   "weekdays",
  *   {
- *     resourceGroup: group.resourceGroupName,
  *     scalingPlan: plan.scalingPlanName,
  *     daysOfWeek: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"],
  *     rampUpStartTime: { hour: 7, minute: 0 },
@@ -133,7 +133,7 @@ export interface ScalingPlanPooledSchedule extends Resource<
  *
  * @resource
  */
-export const ScalingPlanPooledSchedule = Resource<ScalingPlanPooledSchedule>(
+export const ScalingPlanPooledSchedule = GroupedResource<ScalingPlanPooledSchedule>(
   "Azure.DesktopVirtualization.ScalingPlanPooledSchedule",
 );
 

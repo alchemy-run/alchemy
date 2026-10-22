@@ -1,7 +1,7 @@
 import * as edge from "@distilled.cloud/azure/edge";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -12,6 +12,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { EDGE_WAIT, edgeState, payloadText } from "./EdgeShared.ts";
 
 export interface DynamicConfigurationVersionProps {
@@ -68,7 +69,6 @@ export interface DynamicConfigurationVersion extends Resource<
  * **Example:** Configuration values for a template
  * ```typescript
  * yield* Azure.Edge.DynamicConfigurationVersion("app-values-v1", {
- *   resourceGroup: group.resourceGroupName,
  *   configuration: configuration.configurationName,
  *   dynamicConfiguration: dynamic.dynamicConfigurationName,
  *   version: "1.0.0",
@@ -78,7 +78,7 @@ export interface DynamicConfigurationVersion extends Resource<
  *
  * @resource
  */
-export const DynamicConfigurationVersion = Resource<DynamicConfigurationVersion>(
+export const DynamicConfigurationVersion = GroupedResource<DynamicConfigurationVersion>(
   "Azure.Edge.DynamicConfigurationVersion",
 );
 

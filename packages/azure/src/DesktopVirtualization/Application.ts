@@ -2,11 +2,12 @@ import * as desktopvirtualization from "@distilled.cloud/azure/desktopvirtualiza
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { ensureRegistered, ignoreNotFound, orUndefinedIfNotFound, waitUntilGone } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { getApplicationGroup } from "./ApplicationGroup.ts";
 import { createAvdName, deltaOf, ownedByStage } from "./Common.ts";
 
@@ -97,7 +98,6 @@ export interface Application extends Resource<
  * **Example:** Publish Notepad
  * ```typescript
  * const notepad = yield* Azure.DesktopVirtualization.Application("notepad", {
- *   resourceGroup: group.resourceGroupName,
  *   applicationGroup: apps.applicationGroupName,
  *   filePath: "C:\\Windows\\System32\\notepad.exe",
  *   commandLineSetting: "DoNotAllow",
@@ -108,7 +108,6 @@ export interface Application extends Resource<
  * **Example:** Require command line arguments
  * ```typescript
  * const edge = yield* Azure.DesktopVirtualization.Application("intranet", {
- *   resourceGroup: group.resourceGroupName,
  *   applicationGroup: apps.applicationGroupName,
  *   filePath: "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
  *   commandLineSetting: "Require",
@@ -118,7 +117,7 @@ export interface Application extends Resource<
  *
  * @resource
  */
-export const Application = Resource<Application>("Azure.DesktopVirtualization.Application");
+export const Application = GroupedResource<Application>("Azure.DesktopVirtualization.Application");
 
 type ObservedApplication = desktopvirtualization.GetApplicationResponse;
 

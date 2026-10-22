@@ -2,7 +2,7 @@ import * as vmware from "@distilled.cloud/azure/vmware";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   AVS_NAMESPACE,
   WORKLOAD_BUDGET,
@@ -81,7 +82,6 @@ export interface WorkloadNetworkSegment extends Resource<
  * **Example:** Segment on the default tier-1 gateway
  * ```typescript
  * yield* Azure.VMware.WorkloadNetworkSegment("web", {
- *   resourceGroup: group.resourceGroupName,
  *   privateCloud: cloud.privateCloudName,
  *   displayName: "web",
  *   connectedGateway: "/infra/tier-1s/TNT-T1",
@@ -92,7 +92,6 @@ export interface WorkloadNetworkSegment extends Resource<
  * **Example:** Segment with DHCP ranges
  * ```typescript
  * yield* Azure.VMware.WorkloadNetworkSegment("app", {
- *   resourceGroup: group.resourceGroupName,
  *   privateCloud: cloud.privateCloudName,
  *   connectedGateway: "/infra/tier-1s/TNT-T1",
  *   subnet: {
@@ -104,7 +103,7 @@ export interface WorkloadNetworkSegment extends Resource<
  *
  * @resource
  */
-export const WorkloadNetworkSegment = Resource<WorkloadNetworkSegment>(
+export const WorkloadNetworkSegment = GroupedResource<WorkloadNetworkSegment>(
   "Azure.VMware.WorkloadNetworkSegment",
 );
 

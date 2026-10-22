@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import {
@@ -21,6 +21,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { getBatchAccount, matches, sameValue } from "./Common.ts";
 
 export type BatchPoolAllocationMode = batch.PoolAllocationMode;
@@ -161,19 +162,13 @@ export interface Account extends Resource<
  * ### Creating a Batch Account
  * **Example:** Basic account
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("batch");
- * const account = yield* Azure.Batch.Account("jobs", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const account = yield* Azure.Batch.Account("jobs");
  * ```
  *
  * **Example:** Account with auto-storage for application packages
  * ```typescript
- * const storage = yield* Azure.Storage.StorageAccount("batchfiles", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const storage = yield* Azure.Storage.StorageAccount("batchfiles");
  * const account = yield* Azure.Batch.Account("jobs", {
- *   resourceGroup: group.resourceGroupName,
  *   autoStorage: { storageAccountId: storage.storageAccountId },
  * });
  * ```
@@ -182,14 +177,13 @@ export interface Account extends Resource<
  * **Example:** Entra ID only
  * ```typescript
  * const account = yield* Azure.Batch.Account("jobs", {
- *   resourceGroup: group.resourceGroupName,
  *   allowedAuthenticationModes: ["AAD"],
  * });
  * ```
  *
  * @resource
  */
-export const Account = Resource<Account>("Azure.Batch.Account");
+export const Account = GroupedResource<Account>("Azure.Batch.Account");
 
 type ObservedAccount = batch.GetBatchAccountResponse;
 

@@ -2,7 +2,7 @@ import * as devcenter from "@distilled.cloud/azure/devcenter";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import {
@@ -14,6 +14,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createDevCenterName, devCenterOwnedByStage, sameArm } from "./Common.ts";
 
 export interface AttachedNetworkProps {
@@ -69,7 +70,6 @@ export interface AttachedNetwork extends Resource<
  * **Example:** Attach a network connection to a dev center
  * ```typescript
  * const attached = yield* Azure.DevCenter.AttachedNetwork("network", {
- *   resourceGroup: group.resourceGroupName,
  *   devCenter: center.devCenterName,
  *   networkConnectionId: connection.networkConnectionId,
  * });
@@ -77,7 +77,7 @@ export interface AttachedNetwork extends Resource<
  *
  * @resource
  */
-export const AttachedNetwork = Resource<AttachedNetwork>("Azure.DevCenter.AttachedNetwork");
+export const AttachedNetwork = GroupedResource<AttachedNetwork>("Azure.DevCenter.AttachedNetwork");
 
 type Observed = devcenter.GetAttachedNetworkByDevCenterResponse;
 

@@ -2,7 +2,7 @@ import * as storage from "@distilled.cloud/azure/storage";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -14,6 +14,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createStorageChildName,
   isOwnedByMetadata,
@@ -73,11 +74,8 @@ export interface Queue extends Resource<
  * ### Creating a Queue
  * **Example:** Basic queue
  * ```typescript
- * const account = yield* Azure.Storage.StorageAccount("app", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const account = yield* Azure.Storage.StorageAccount("app");
  * const jobs = yield* Azure.Storage.Queue("jobs", {
- *   resourceGroup: group.resourceGroupName,
  *   storageAccount: account.storageAccountName,
  * });
  * ```
@@ -85,7 +83,6 @@ export interface Queue extends Resource<
  * **Example:** Queue with metadata
  * ```typescript
  * const jobs = yield* Azure.Storage.Queue("jobs", {
- *   resourceGroup: group.resourceGroupName,
  *   storageAccount: account.storageAccountName,
  *   metadata: { purpose: "background_jobs" },
  * });
@@ -93,7 +90,7 @@ export interface Queue extends Resource<
  *
  * @resource
  */
-export const Queue = Resource<Queue>("Azure.Storage.Queue");
+export const Queue = GroupedResource<Queue>("Azure.Storage.Queue");
 
 const getQueue = (
   subscriptionId: string,

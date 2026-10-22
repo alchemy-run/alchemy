@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -14,6 +14,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { MYSQL_NAMESPACE, serverOwnedByStack, type ServerRef, whileServerBusy } from "./common.ts";
 
 export interface FirewallRuleProps {
@@ -70,7 +71,6 @@ export interface FirewallRule extends Resource<
  * **Example:** Allow an office IP range
  * ```typescript
  * const office = yield* Azure.MySQL.FirewallRule("office", {
- *   resourceGroup: group.resourceGroupName,
  *   server: server.serverName,
  *   startIpAddress: "203.0.113.0",
  *   endIpAddress: "203.0.113.255",
@@ -80,7 +80,6 @@ export interface FirewallRule extends Resource<
  * **Example:** Allow Azure services
  * ```typescript
  * const azure = yield* Azure.MySQL.FirewallRule("azure", {
- *   resourceGroup: group.resourceGroupName,
  *   server: server.serverName,
  *   name: "AllowAllAzureServices",
  *   startIpAddress: "0.0.0.0",
@@ -90,7 +89,7 @@ export interface FirewallRule extends Resource<
  *
  * @resource
  */
-export const FirewallRule = Resource<FirewallRule>("Azure.MySQL.FirewallRule");
+export const FirewallRule = GroupedResource<FirewallRule>("Azure.MySQL.FirewallRule");
 
 const createRuleName = Effect.fn(function* (id: string) {
   const name = yield* createPhysicalName({ id, maxLength: 80 });

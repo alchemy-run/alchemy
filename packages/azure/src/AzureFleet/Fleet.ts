@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import {
@@ -22,6 +22,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 
 export type FleetComputeProfile = azurefleet.ComputeProfileInput;
 export type FleetVmSizeProfile = azurefleet.VmSizeProfile;
@@ -162,7 +163,6 @@ export interface Fleet extends Resource<
  * **Example:** One regular-priority Linux VM from two candidate sizes
  * ```typescript
  * const fleet = yield* Azure.AzureFleet.Fleet("workers", {
- *   resourceGroup: group.resourceGroupName,
  *   vmSizesProfile: [{ name: "Standard_D2as_v5" }, { name: "Standard_D2s_v5" }],
  *   regularPriorityProfile: {
  *     capacity: 1,
@@ -207,7 +207,6 @@ export interface Fleet extends Resource<
  * **Example:** Spot capacity with a regular-priority floor
  * ```typescript
  * const fleet = yield* Azure.AzureFleet.Fleet("batch", {
- *   resourceGroup: group.resourceGroupName,
  *   vmSizesProfile: [{ name: "Standard_D4as_v5" }, { name: "Standard_D4s_v5" }],
  *   spotPriorityProfile: {
  *     capacity: 8,
@@ -223,7 +222,7 @@ export interface Fleet extends Resource<
  *
  * @resource
  */
-export const Fleet = Resource<Fleet>("Azure.AzureFleet.Fleet");
+export const Fleet = GroupedResource<Fleet>("Azure.AzureFleet.Fleet");
 
 type Observed = azurefleet.GetFleetResponse;
 

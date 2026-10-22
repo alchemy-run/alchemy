@@ -2,7 +2,7 @@ import * as containerregistry from "@distilled.cloud/azure/containerregistry";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createRegistryName, registryOwnedByStage, sameName } from "./Common.ts";
 
 export interface CacheRuleProps {
@@ -82,7 +83,6 @@ export interface CacheRule extends Resource<
  * **Example:** Cache a public MCR image
  * ```typescript
  * const rule = yield* Azure.ContainerRegistry.CacheRule("hello", {
- *   resourceGroup: group.resourceGroupName,
  *   registry: registry.registryName,
  *   sourceRepository: "mcr.microsoft.com/hello-world",
  *   targetRepository: "hello-world",
@@ -93,7 +93,6 @@ export interface CacheRule extends Resource<
  * **Example:** Authenticated Docker Hub cache
  * ```typescript
  * const rule = yield* Azure.ContainerRegistry.CacheRule("nginx", {
- *   resourceGroup: group.resourceGroupName,
  *   registry: registry.registryName,
  *   sourceRepository: "docker.io/library/nginx",
  *   targetRepository: "nginx",
@@ -103,7 +102,7 @@ export interface CacheRule extends Resource<
  *
  * @resource
  */
-export const CacheRule = Resource<CacheRule>("Azure.ContainerRegistry.CacheRule");
+export const CacheRule = GroupedResource<CacheRule>("Azure.ContainerRegistry.CacheRule");
 
 const getCacheRule = (
   subscriptionId: string,

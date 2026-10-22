@@ -2,7 +2,7 @@ import * as mnf from "@distilled.cloud/azure/managednetworkfabric";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -19,6 +19,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createFabricName,
   FABRIC_NAMESPACE,
@@ -94,16 +95,16 @@ export interface NeighborGroup extends Resource<
  * ### Creating a Neighbor Group
  * **Example:** Group of collector addresses
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("fabric");
  * const collectors = yield* Azure.ManagedNetworkFabric.NeighborGroup("collectors", {
- *   resourceGroup: group.resourceGroupName,
  *   destination: { ipv4Addresses: ["10.10.10.10", "10.10.10.11"] },
  * });
  * ```
  *
  * @resource
  */
-export const NeighborGroup = Resource<NeighborGroup>("Azure.ManagedNetworkFabric.NeighborGroup");
+export const NeighborGroup = GroupedResource<NeighborGroup>(
+  "Azure.ManagedNetworkFabric.NeighborGroup",
+);
 
 type Observed = mnf.GetNeighborGroupResponse;
 

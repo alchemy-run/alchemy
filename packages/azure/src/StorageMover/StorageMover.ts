@@ -2,7 +2,7 @@ import * as storagemover from "@distilled.cloud/azure/storagemover";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -20,6 +20,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createMoverName, DELETE_BUDGET } from "./Common.ts";
 
 export interface StorageMoverProps {
@@ -82,9 +83,7 @@ export interface StorageMover extends Resource<
  * ### Creating a Storage Mover
  * **Example:** Storage Mover in a resource group
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("migration");
  * const mover = yield* Azure.StorageMover.StorageMover("mover", {
- *   resourceGroup: group.resourceGroupName,
  *   description: "File share migration",
  * });
  * ```
@@ -92,14 +91,13 @@ export interface StorageMover extends Resource<
  * **Example:** Storage Mover with tags
  * ```typescript
  * const mover = yield* Azure.StorageMover.StorageMover("mover", {
- *   resourceGroup: group.resourceGroupName,
  *   tags: { team: "storage" },
  * });
  * ```
  *
  * @resource
  */
-export const StorageMover = Resource<StorageMover>("Azure.StorageMover.StorageMover");
+export const StorageMover = GroupedResource<StorageMover>("Azure.StorageMover.StorageMover");
 
 type ObservedMover = storagemover.GetStorageMoverResponse;
 

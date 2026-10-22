@@ -2,7 +2,7 @@ import * as devcenter from "@distilled.cloud/azure/devcenter";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -17,6 +17,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { sameArm } from "./Common.ts";
 
 export interface ScheduleProps {
@@ -99,7 +100,6 @@ export interface Schedule extends Resource<
  * **Example:** Stop dev boxes at 7 PM Pacific
  * ```typescript
  * const schedule = yield* Azure.DevCenter.Schedule("stop", {
- *   resourceGroup: group.resourceGroupName,
  *   project: project.projectName,
  *   pool: pool.poolName,
  *   time: "19:00",
@@ -109,7 +109,7 @@ export interface Schedule extends Resource<
  *
  * @resource
  */
-export const Schedule = Resource<Schedule>("Azure.DevCenter.Schedule");
+export const Schedule = GroupedResource<Schedule>("Azure.DevCenter.Schedule");
 
 type Observed = devcenter.GetScheduleResponse;
 

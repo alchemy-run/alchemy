@@ -1,8 +1,9 @@
 import * as apim from "@distilled.cloud/azure/apimanagement";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { loggerNameOf, sameName, subsetMatches } from "./Common.ts";
 import type { Diagnostic, DiagnosticProps } from "./Diagnostic.ts";
 import { entityLifecycle } from "./Entity.ts";
@@ -34,7 +35,6 @@ export interface WorkspaceDiagnostic extends Resource<
  * **Example:** Log every workspace API
  * ```typescript
  * yield* Azure.ApiManagement.WorkspaceDiagnostic("insights", {
- *   resourceGroup: group.resourceGroupName,
  *   serviceName: apim.serviceName,
  *   workspaceName: workspace.workspaceName,
  *   loggerId: logger.loggerId,
@@ -44,7 +44,7 @@ export interface WorkspaceDiagnostic extends Resource<
  *
  * @resource
  */
-export const WorkspaceDiagnostic = Resource<WorkspaceDiagnostic>(
+export const WorkspaceDiagnostic = GroupedResource<WorkspaceDiagnostic>(
   "Azure.ApiManagement.WorkspaceDiagnostic",
 );
 

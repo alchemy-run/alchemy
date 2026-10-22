@@ -2,7 +2,7 @@ import * as sql from "@distilled.cloud/azure/sql";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createDnsName, lower } from "./common.ts";
 import { serverPath, type ServerScope } from "./setting.ts";
 
@@ -65,7 +66,6 @@ export interface ServerDnsAlias extends Resource<
  * **Example:** Stable connection name for a server
  * ```typescript
  * const alias = yield* Azure.Sql.ServerDnsAlias("alias", {
- *   resourceGroup: group.resourceGroupName,
  *   server: server.serverName,
  * });
  * // connect to alias.azureDnsRecord
@@ -74,7 +74,6 @@ export interface ServerDnsAlias extends Resource<
  * **Example:** Alias with an explicit name
  * ```typescript
  * yield* Azure.Sql.ServerDnsAlias("alias", {
- *   resourceGroup: group.resourceGroupName,
  *   server: server.serverName,
  *   name: "orders-db",
  * });
@@ -82,7 +81,7 @@ export interface ServerDnsAlias extends Resource<
  *
  * @resource
  */
-export const ServerDnsAlias = Resource<ServerDnsAlias>("Azure.Sql.ServerDnsAlias");
+export const ServerDnsAlias = GroupedResource<ServerDnsAlias>("Azure.Sql.ServerDnsAlias");
 
 const getAlias = (subscriptionId: string, scope: ServerScope, name: string) =>
   orUndefinedIfNotFound(

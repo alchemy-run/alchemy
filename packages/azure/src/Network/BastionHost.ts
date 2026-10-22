@@ -1,8 +1,9 @@
 import * as network from "@distilled.cloud/azure/network";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import { orUndefinedIfNotFound, userTags } from "../Arm.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createNetworkName, ref, sameId, sameSet } from "./common.ts";
 import { networkProvider, subsetDiffers } from "./generic.ts";
 
@@ -123,7 +124,6 @@ export interface BastionHost extends Resource<
  * **Example:** Free Developer bastion
  * ```typescript
  * const bastion = yield* Azure.Network.BastionHost("dev", {
- *   resourceGroup: group.resourceGroupName,
  *   sku: "Developer",
  *   virtualNetworkId: vnet.virtualNetworkId,
  * });
@@ -132,7 +132,6 @@ export interface BastionHost extends Resource<
  * **Example:** Standard bastion with tunneling
  * ```typescript
  * const bastion = yield* Azure.Network.BastionHost("ops", {
- *   resourceGroup: group.resourceGroupName,
  *   sku: "Standard",
  *   subnetId: bastionSubnet.subnetId,
  *   publicIpAddressId: ip.publicIpAddressId,
@@ -142,7 +141,7 @@ export interface BastionHost extends Resource<
  *
  * @resource
  */
-export const BastionHost = Resource<BastionHost>("Azure.Network.BastionHost");
+export const BastionHost = GroupedResource<BastionHost>("Azure.Network.BastionHost");
 
 export const BastionHostProvider = () =>
   Provider.succeed(

@@ -2,7 +2,7 @@ import * as servicenetworking from "@distilled.cloud/azure/servicenetworking";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -20,6 +20,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { AGC_BUDGET, childLocation, createAgcName, ensureProvisioned, sameArm } from "./Common.ts";
 
 export interface SecurityPolicyIpAccessRule {
@@ -126,7 +127,6 @@ export interface SecurityPolicy extends Resource<
  * **Example:** Allow one range, deny everything else
  * ```typescript
  * const policy = yield* Azure.ServiceNetworking.SecurityPolicy("ip-rules", {
- *   resourceGroup: group.resourceGroupName,
  *   trafficController: controller.trafficControllerName,
  *   ipAccessRules: [
  *     {
@@ -150,7 +150,6 @@ export interface SecurityPolicy extends Resource<
  * ```typescript
  * // AGC supports only the Default Rule Set 2.1.
  * const waf = yield* Azure.Network.WebApplicationFirewallPolicy("waf", {
- *   resourceGroup: group.resourceGroupName,
  *   managedRules: {
  *     managedRuleSets: [
  *       { ruleSetType: "Microsoft_DefaultRuleSet", ruleSetVersion: "2.1" },
@@ -158,7 +157,6 @@ export interface SecurityPolicy extends Resource<
  *   },
  * });
  * const policy = yield* Azure.ServiceNetworking.SecurityPolicy("waf", {
- *   resourceGroup: group.resourceGroupName,
  *   trafficController: controller.trafficControllerName,
  *   wafPolicyId: waf.policyId,
  * });
@@ -166,7 +164,9 @@ export interface SecurityPolicy extends Resource<
  *
  * @resource
  */
-export const SecurityPolicy = Resource<SecurityPolicy>("Azure.ServiceNetworking.SecurityPolicy");
+export const SecurityPolicy = GroupedResource<SecurityPolicy>(
+  "Azure.ServiceNetworking.SecurityPolicy",
+);
 
 type Observed =
   | servicenetworking.GetSecurityPoliciesInterfaceResponse

@@ -2,7 +2,7 @@ import * as vmware from "@distilled.cloud/azure/vmware";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   AVS_NAMESPACE,
   CHILD_BUDGET,
@@ -62,7 +63,6 @@ export interface IscsiPath extends Resource<
  * **Example:** iSCSI path for Elastic SAN datastores
  * ```typescript
  * yield* Azure.VMware.IscsiPath("iscsi", {
- *   resourceGroup: group.resourceGroupName,
  *   privateCloud: cloud.privateCloudName,
  *   networkBlock: "10.10.0.0/24",
  * });
@@ -70,7 +70,7 @@ export interface IscsiPath extends Resource<
  *
  * @resource
  */
-export const IscsiPath = Resource<IscsiPath>("Azure.VMware.IscsiPath");
+export const IscsiPath = GroupedResource<IscsiPath>("Azure.VMware.IscsiPath");
 
 const getIscsiPath = (
   subscriptionId: string,

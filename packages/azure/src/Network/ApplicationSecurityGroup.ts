@@ -2,7 +2,7 @@ import * as network from "@distilled.cloud/azure/network";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -18,6 +18,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createNetworkName,
   sameId,
@@ -85,16 +86,13 @@ export interface ApplicationSecurityGroup extends Resource<
  * ### Creating an Application Security Group
  * **Example:** Group for web servers
  * ```typescript
- * const web = yield* Azure.Network.ApplicationSecurityGroup("web", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const web = yield* Azure.Network.ApplicationSecurityGroup("web");
  * ```
  *
  * ### Using the Group in a Security Rule
  * **Example:** Allow HTTPS to the web tier
  * ```typescript
  * yield* Azure.Network.SecurityRule("allow-https", {
- *   resourceGroup: group.resourceGroupName,
  *   networkSecurityGroup: nsg.networkSecurityGroupName,
  *   priority: 100,
  *   direction: "Inbound",
@@ -107,7 +105,7 @@ export interface ApplicationSecurityGroup extends Resource<
  *
  * @resource
  */
-export const ApplicationSecurityGroup = Resource<ApplicationSecurityGroup>(
+export const ApplicationSecurityGroup = GroupedResource<ApplicationSecurityGroup>(
   "Azure.Network.ApplicationSecurityGroup",
 );
 

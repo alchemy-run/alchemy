@@ -2,7 +2,7 @@ import * as webpubsub from "@distilled.cloud/azure/webpubsub";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createWebPubSubName,
   lower,
@@ -89,11 +90,9 @@ export interface SharedPrivateLinkResource extends Resource<
  * **Example:** Private link to a Function App
  * ```typescript
  * const pubsub = yield* Azure.WebPubSub.WebPubSub("pubsub", {
- *   resourceGroup: group.resourceGroupName,
  *   sku: "Standard_S1",
  * });
  * const link = yield* Azure.WebPubSub.SharedPrivateLinkResource("func", {
- *   resourceGroup: group.resourceGroupName,
  *   webPubSub: pubsub.webPubSubName,
  *   groupId: "sites",
  *   privateLinkResourceId: functionApp.siteId,
@@ -104,7 +103,6 @@ export interface SharedPrivateLinkResource extends Resource<
  * **Example:** Private link to a Key Vault
  * ```typescript
  * const link = yield* Azure.WebPubSub.SharedPrivateLinkResource("vault", {
- *   resourceGroup: group.resourceGroupName,
  *   webPubSub: pubsub.webPubSubName,
  *   groupId: "vault",
  *   privateLinkResourceId: vault.vaultId,
@@ -113,7 +111,7 @@ export interface SharedPrivateLinkResource extends Resource<
  *
  * @resource
  */
-export const SharedPrivateLinkResource = Resource<SharedPrivateLinkResource>(
+export const SharedPrivateLinkResource = GroupedResource<SharedPrivateLinkResource>(
   "Azure.WebPubSub.SharedPrivateLinkResource",
 );
 

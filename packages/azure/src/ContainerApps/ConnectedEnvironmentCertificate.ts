@@ -2,7 +2,7 @@ import * as app from "@distilled.cloud/azure/app";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
 import {
@@ -18,6 +18,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createContainerAppsName,
   getConnectedEnvironment,
@@ -121,7 +122,6 @@ export interface ConnectedEnvironmentCertificate extends Resource<
  * **Example:** PFX certificate
  * ```typescript
  * const cert = yield* Azure.ContainerApps.ConnectedEnvironmentCertificate("tls", {
- *   resourceGroup: group.resourceGroupName,
  *   environment: arcEnv.environmentName,
  *   value: Redacted.make(pfxBase64),
  *   password: Redacted.make(pfxPassword),
@@ -132,7 +132,6 @@ export interface ConnectedEnvironmentCertificate extends Resource<
  * **Example:** Reference a Key Vault secret with the environment's identity
  * ```typescript
  * const cert = yield* Azure.ContainerApps.ConnectedEnvironmentCertificate("tls", {
- *   resourceGroup: group.resourceGroupName,
  *   environment: arcEnv.environmentName,
  *   keyVaultUrl: "https://my-vault.vault.azure.net/secrets/tls",
  *   keyVaultIdentity: "system",
@@ -141,7 +140,7 @@ export interface ConnectedEnvironmentCertificate extends Resource<
  *
  * @resource
  */
-export const ConnectedEnvironmentCertificate = Resource<ConnectedEnvironmentCertificate>(
+export const ConnectedEnvironmentCertificate = GroupedResource<ConnectedEnvironmentCertificate>(
   "Azure.ContainerApps.ConnectedEnvironmentCertificate",
 );
 

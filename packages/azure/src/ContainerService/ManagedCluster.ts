@@ -2,7 +2,7 @@ import * as cs from "@distilled.cloud/azure/containerservice";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -19,6 +19,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createChildName,
   deepMerge,
@@ -258,9 +259,7 @@ export interface ManagedCluster extends Resource<
  * ### Creating a Cluster
  * **Example:** Minimal cluster
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("app");
  * const cluster = yield* Azure.ContainerService.ManagedCluster("aks", {
- *   resourceGroup: group.resourceGroupName,
  *   defaultNodePool: { vmSize: "Standard_D2s_v7", count: 1 },
  * });
  * ```
@@ -268,7 +267,6 @@ export interface ManagedCluster extends Resource<
  * **Example:** Autoscaling system pool on the Standard tier
  * ```typescript
  * const cluster = yield* Azure.ContainerService.ManagedCluster("aks", {
- *   resourceGroup: group.resourceGroupName,
  *   skuTier: "Standard",
  *   defaultNodePool: { enableAutoScaling: true, minCount: 1, maxCount: 3 },
  * });
@@ -278,7 +276,6 @@ export interface ManagedCluster extends Resource<
  * **Example:** Workload identity with Entra ID and Azure RBAC
  * ```typescript
  * const cluster = yield* Azure.ContainerService.ManagedCluster("aks", {
- *   resourceGroup: group.resourceGroupName,
  *   oidcIssuerEnabled: true,
  *   workloadIdentityEnabled: true,
  *   aad: { enableAzureRbac: true },
@@ -296,7 +293,9 @@ export interface ManagedCluster extends Resource<
  *
  * @resource
  */
-export const ManagedCluster = Resource<ManagedCluster>("Azure.ContainerService.ManagedCluster");
+export const ManagedCluster = GroupedResource<ManagedCluster>(
+  "Azure.ContainerService.ManagedCluster",
+);
 
 type ObservedCluster = cs.GetManagedClusterResponse;
 

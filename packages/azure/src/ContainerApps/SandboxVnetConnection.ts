@@ -2,7 +2,7 @@ import * as app from "@distilled.cloud/azure/app";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createContainerAppsName, lower, taggedByStack } from "./common.ts";
 
 export interface SandboxVnetConnectionProps {
@@ -65,16 +66,12 @@ export interface SandboxVnetConnection extends Resource<
  * **Example:** Sandboxes in a private subnet
  * ```typescript
  * const subnet = yield* Azure.Network.Subnet("sandboxes", {
- *   resourceGroup: group.resourceGroupName,
  *   virtualNetwork: vnet.virtualNetworkName,
  *   addressPrefix: "10.40.1.0/24",
  *   delegations: [{ serviceName: "Microsoft.App/environments" }],
  * });
- * const sandboxes = yield* Azure.ContainerApps.SandboxGroup("sandboxes", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const sandboxes = yield* Azure.ContainerApps.SandboxGroup("sandboxes");
  * yield* Azure.ContainerApps.SandboxVnetConnection("private", {
- *   resourceGroup: group.resourceGroupName,
  *   sandboxGroup: sandboxes.sandboxGroupName,
  *   subnetId: subnet.subnetId,
  * });
@@ -82,7 +79,7 @@ export interface SandboxVnetConnection extends Resource<
  *
  * @resource
  */
-export const SandboxVnetConnection = Resource<SandboxVnetConnection>(
+export const SandboxVnetConnection = GroupedResource<SandboxVnetConnection>(
   "Azure.ContainerApps.SandboxVnetConnection",
 );
 

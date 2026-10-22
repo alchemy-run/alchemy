@@ -1,9 +1,10 @@
 import * as apim from "@distilled.cloud/azure/apimanagement";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createEntityName, sameName } from "./Common.ts";
 import { entityLifecycle, reveal } from "./Entity.ts";
 import type { Subscription, SubscriptionProps } from "./Subscription.ts";
@@ -35,7 +36,6 @@ export interface WorkspaceSubscription extends Resource<
  * **Example:** Keys for a workspace product
  * ```typescript
  * yield* Azure.ApiManagement.WorkspaceSubscription("partner-keys", {
- *   resourceGroup: group.resourceGroupName,
  *   serviceName: apim.serviceName,
  *   workspaceName: workspace.workspaceName,
  *   scope: `/products/${product.productName}`,
@@ -45,7 +45,7 @@ export interface WorkspaceSubscription extends Resource<
  *
  * @resource
  */
-export const WorkspaceSubscription = Resource<WorkspaceSubscription>(
+export const WorkspaceSubscription = GroupedResource<WorkspaceSubscription>(
   "Azure.ApiManagement.WorkspaceSubscription",
 );
 

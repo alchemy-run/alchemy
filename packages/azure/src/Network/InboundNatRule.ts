@@ -1,8 +1,9 @@
 import * as network from "@distilled.cloud/azure/network";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import { orUndefinedIfNotFound } from "../Arm.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { networkProvider } from "./generic.ts";
 import { loadBalancerTags } from "./loadBalancerShared.ts";
 
@@ -81,7 +82,6 @@ export interface InboundNatRule extends Resource<
  * **Example:** SSH to a VM on port 50022
  * ```typescript
  * yield* Azure.Network.InboundNatRule("ssh", {
- *   resourceGroup: group.resourceGroupName,
  *   loadBalancer: lb.loadBalancerName,
  *   frontendIpConfiguration: "public",
  *   protocol: "Tcp",
@@ -92,7 +92,7 @@ export interface InboundNatRule extends Resource<
  *
  * @resource
  */
-export const InboundNatRule = Resource<InboundNatRule>("Azure.Network.InboundNatRule");
+export const InboundNatRule = GroupedResource<InboundNatRule>("Azure.Network.InboundNatRule");
 
 export const InboundNatRuleProvider = () =>
   Provider.succeed(

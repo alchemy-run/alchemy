@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import {
@@ -18,6 +18,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 
 /** Audience Microsoft Entra expects in federated tokens by default. */
 export const DEFAULT_FEDERATED_AUDIENCE = "api://AzureADTokenExchange";
@@ -99,12 +100,8 @@ export interface FederatedIdentityCredential extends Resource<
  * ### Trusting GitHub Actions
  * **Example:** Deploy from the main branch without secrets
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("ci");
- * const identity = yield* Azure.ManagedIdentity.UserAssignedIdentity("deployer", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const identity = yield* Azure.ManagedIdentity.UserAssignedIdentity("deployer");
  * yield* Azure.ManagedIdentity.FederatedIdentityCredential("github-main", {
- *   resourceGroup: group.resourceGroupName,
  *   identity: identity.identityName,
  *   issuer: "https://token.actions.githubusercontent.com",
  *   subject: "repo:my-org/my-repo:ref:refs/heads/main",
@@ -115,7 +112,6 @@ export interface FederatedIdentityCredential extends Resource<
  * **Example:** AKS workload identity
  * ```typescript
  * yield* Azure.ManagedIdentity.FederatedIdentityCredential("api-sa", {
- *   resourceGroup: group.resourceGroupName,
  *   identity: identity.identityName,
  *   issuer: cluster.oidcIssuerUrl,
  *   subject: "system:serviceaccount:default:api",
@@ -124,7 +120,7 @@ export interface FederatedIdentityCredential extends Resource<
  *
  * @resource
  */
-export const FederatedIdentityCredential = Resource<FederatedIdentityCredential>(
+export const FederatedIdentityCredential = GroupedResource<FederatedIdentityCredential>(
   "Azure.ManagedIdentity.FederatedIdentityCredential",
 );
 

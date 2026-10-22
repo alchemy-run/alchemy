@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import {
@@ -22,6 +22,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 
 /** Fabric capacity SKU, `F2` (2 capacity units) up to `F2048`. */
 export type CapacitySkuName =
@@ -116,20 +117,15 @@ export interface Capacity extends Resource<
  * ### Creating a Capacity
  * **Example:** F2 capacity with one administrator
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("analytics");
  * const capacity = yield* Azure.Fabric.Capacity("fabric", {
- *   resourceGroup: group.resourceGroupName,
  *   administrators: ["admin@contoso.com"],
  * });
  * ```
  *
  * **Example:** Larger SKU administered by a managed identity
  * ```typescript
- * const identity = yield* Azure.ManagedIdentity.UserAssignedIdentity("ops", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const identity = yield* Azure.ManagedIdentity.UserAssignedIdentity("ops");
  * const capacity = yield* Azure.Fabric.Capacity("fabric", {
- *   resourceGroup: group.resourceGroupName,
  *   sku: "F8",
  *   administrators: [identity.principalId],
  * });
@@ -139,7 +135,6 @@ export interface Capacity extends Resource<
  * **Example:** Suspend compute billing while keeping the capacity
  * ```typescript
  * const capacity = yield* Azure.Fabric.Capacity("fabric", {
- *   resourceGroup: group.resourceGroupName,
  *   administrators: ["admin@contoso.com"],
  *   state: "Paused",
  * });
@@ -147,7 +142,7 @@ export interface Capacity extends Resource<
  *
  * @resource
  */
-export const Capacity = Resource<Capacity>("Azure.Fabric.Capacity");
+export const Capacity = GroupedResource<Capacity>("Azure.Fabric.Capacity");
 
 type ObservedCapacity = fabric.GetFabricCapacityResponse;
 

@@ -2,7 +2,7 @@ import * as hci from "@distilled.cloud/azure/azurestackhci";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { getHciCluster } from "./Cluster.ts";
 import { HCI_NAMESPACE, isStackOwnedTags, sameId, sameValue } from "./Common.ts";
 
@@ -99,12 +100,10 @@ export interface Extension extends Resource<
  * **Example:** Azure Monitor Agent on every node
  * ```typescript
  * const arc = yield* Azure.AzureStackHCI.ArcSetting("arc", {
- *   resourceGroup: group.resourceGroupName,
  *   cluster: cluster.clusterName,
  *   arcInstanceResourceGroup: group.resourceGroupName,
  * });
  * yield* Azure.AzureStackHCI.Extension("monitor", {
- *   resourceGroup: group.resourceGroupName,
  *   cluster: cluster.clusterName,
  *   arcSetting: arc.arcSettingName,
  *   publisher: "Microsoft.Azure.Monitor",
@@ -116,7 +115,7 @@ export interface Extension extends Resource<
  *
  * @resource
  */
-export const Extension = Resource<Extension>("Azure.AzureStackHCI.Extension");
+export const Extension = GroupedResource<Extension>("Azure.AzureStackHCI.Extension");
 
 const getExtension = (
   subscriptionId: string,

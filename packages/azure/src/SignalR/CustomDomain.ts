@@ -2,7 +2,7 @@ import * as signalr from "@distilled.cloud/azure/signalr";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createSignalRName,
   lower,
@@ -82,7 +83,6 @@ export interface CustomDomain extends Resource<
  * ```typescript
  * // CNAME realtime.example.com -> {signalR.signalRName}.service.signalr.net
  * const domain = yield* Azure.SignalR.CustomDomain("realtime", {
- *   resourceGroup: group.resourceGroupName,
  *   signalR: signalR.signalRName,
  *   domainName: "realtime.example.com",
  *   customCertificateId: certificate.certificateId,
@@ -91,7 +91,7 @@ export interface CustomDomain extends Resource<
  *
  * @resource
  */
-export const CustomDomain = Resource<CustomDomain>("Azure.SignalR.CustomDomain");
+export const CustomDomain = GroupedResource<CustomDomain>("Azure.SignalR.CustomDomain");
 
 const getDomain = (
   subscriptionId: string,

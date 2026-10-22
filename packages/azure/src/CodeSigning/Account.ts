@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -21,6 +21,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 
 /** Pricing tier of an Artifact Signing account. */
 export type CodeSigningAccountSku = "Basic" | "Premium";
@@ -105,16 +106,13 @@ export interface Account extends Resource<
  * const group = yield* Azure.Resources.ResourceGroup("signing", {
  *   location: "eastus",
  * });
- * const account = yield* Azure.CodeSigning.Account("signing", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const account = yield* Azure.CodeSigning.Account("signing");
  * // account.accountUri -> "https://eus.codesigning.azure.net/"
  * ```
  *
  * **Example:** Premium account with tags
  * ```typescript
  * const account = yield* Azure.CodeSigning.Account("signing", {
- *   resourceGroup: group.resourceGroupName,
  *   sku: "Premium",
  *   tags: { team: "release" },
  * });
@@ -124,7 +122,6 @@ export interface Account extends Resource<
  * **Example:** Public-trust profile for an identity validation
  * ```typescript
  * const profile = yield* Azure.CodeSigning.CertificateProfile("release", {
- *   resourceGroup: group.resourceGroupName,
  *   account: account.accountName,
  *   profileType: "PublicTrust",
  *   identityValidationId: "00000000-0000-0000-0000-000000000000",
@@ -133,7 +130,7 @@ export interface Account extends Resource<
  *
  * @resource
  */
-export const Account = Resource<Account>("Azure.CodeSigning.Account");
+export const Account = GroupedResource<Account>("Azure.CodeSigning.Account");
 
 type ObservedAccount = codesigning.GetCodeSigningAccountResponse;
 

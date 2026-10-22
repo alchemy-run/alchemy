@@ -2,11 +2,12 @@ import * as apim from "@distilled.cloud/azure/apimanagement";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { ensureRegistered, ignoreNotFound, orUndefinedIfNotFound, waitUntilGone } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createEntityName, isParentOwned, sameName, subsetMatches } from "./Common.ts";
 
 export type ApiOperationParameter = apim.ParameterContract;
@@ -82,7 +83,6 @@ export interface ApiOperation extends Resource<
  * **Example:** GET operation
  * ```typescript
  * const hello = yield* Azure.ApiManagement.ApiOperation("hello", {
- *   resourceGroup: group.resourceGroupName,
  *   serviceName: apim.serviceName,
  *   apiName: api.apiName,
  *   method: "GET",
@@ -93,7 +93,6 @@ export interface ApiOperation extends Resource<
  * **Example:** Operation with a path parameter
  * ```typescript
  * const getUser = yield* Azure.ApiManagement.ApiOperation("get-user", {
- *   resourceGroup: group.resourceGroupName,
  *   serviceName: apim.serviceName,
  *   apiName: api.apiName,
  *   displayName: "Get user",
@@ -106,7 +105,7 @@ export interface ApiOperation extends Resource<
  *
  * @resource
  */
-export const ApiOperation = Resource<ApiOperation>("Azure.ApiManagement.ApiOperation");
+export const ApiOperation = GroupedResource<ApiOperation>("Azure.ApiManagement.ApiOperation");
 
 const getOperation = (
   subscriptionId: string,

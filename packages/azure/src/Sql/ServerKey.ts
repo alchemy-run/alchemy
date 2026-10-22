@@ -2,7 +2,7 @@ import * as sql from "@distilled.cloud/azure/sql";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { isServerOwnedByStack, lower } from "./common.ts";
 import { serverKeyNameOf, serverPath, type ServerScope } from "./setting.ts";
 
@@ -68,7 +69,6 @@ export interface ServerKey extends Resource<
  * **Example:** Register a Key Vault key with a server
  * ```typescript
  * const serverKey = yield* Azure.Sql.ServerKey("tde-key", {
- *   resourceGroup: group.resourceGroupName,
  *   server: server.serverName,
  *   uri: "https://myvault.vault.azure.net/keys/tde/0123456789abcdef",
  * });
@@ -76,7 +76,7 @@ export interface ServerKey extends Resource<
  *
  * @resource
  */
-export const ServerKey = Resource<ServerKey>("Azure.Sql.ServerKey");
+export const ServerKey = GroupedResource<ServerKey>("Azure.Sql.ServerKey");
 
 // A key whose name is not `<vault>_<key>_<version>` cannot exist.
 const getKey = (subscriptionId: string, scope: ServerScope, name: string) =>

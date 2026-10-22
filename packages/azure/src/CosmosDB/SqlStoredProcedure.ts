@@ -3,11 +3,12 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { ensureRegistered, ignoreNotFound, orUndefinedIfNotFound, waitUntilGone } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { isOwnedChild, waitForChild, whileAccountBusy } from "./Shared.ts";
 
 export interface SqlStoredProcedureProps {
@@ -70,7 +71,6 @@ export interface SqlStoredProcedure extends Resource<
  * **Example:** Hello-world procedure
  * ```typescript
  * const sproc = yield* Azure.CosmosDB.SqlStoredProcedure("hello", {
- *   resourceGroup: group.resourceGroupName,
  *   account: account.accountName,
  *   database: database.databaseName,
  *   container: container.containerName,
@@ -83,7 +83,6 @@ export interface SqlStoredProcedure extends Resource<
  * **Example:** Procedure with a fixed name
  * ```typescript
  * yield* Azure.CosmosDB.SqlStoredProcedure("bulk-delete", {
- *   resourceGroup: group.resourceGroupName,
  *   account: account.accountName,
  *   database: database.databaseName,
  *   container: container.containerName,
@@ -94,7 +93,9 @@ export interface SqlStoredProcedure extends Resource<
  *
  * @resource
  */
-export const SqlStoredProcedure = Resource<SqlStoredProcedure>("Azure.CosmosDB.SqlStoredProcedure");
+export const SqlStoredProcedure = GroupedResource<SqlStoredProcedure>(
+  "Azure.CosmosDB.SqlStoredProcedure",
+);
 
 const createName = (id: string) => createPhysicalName({ id, maxLength: 255 });
 

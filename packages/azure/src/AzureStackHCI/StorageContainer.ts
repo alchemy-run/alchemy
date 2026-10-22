@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -21,6 +21,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   HCI_NAMESPACE,
   type HciExtendedLocation,
@@ -99,7 +100,6 @@ export interface StorageContainer extends Resource<
  * **Example:** Storage path on a cluster shared volume
  * ```typescript
  * const storage = yield* Azure.AzureStackHCI.StorageContainer("images", {
- *   resourceGroup: group.resourceGroupName,
  *   extendedLocation: { name: customLocationId },
  *   path: "C:\\ClusterStorage\\UserStorage_1\\images",
  * });
@@ -107,7 +107,9 @@ export interface StorageContainer extends Resource<
  *
  * @resource
  */
-export const StorageContainer = Resource<StorageContainer>("Azure.AzureStackHCI.StorageContainer");
+export const StorageContainer = GroupedResource<StorageContainer>(
+  "Azure.AzureStackHCI.StorageContainer",
+);
 
 const SPEC_KEYS = ["path"] as const;
 

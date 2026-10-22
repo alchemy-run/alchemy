@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -18,6 +18,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { sameJson } from "./Shared.ts";
 
 /** A linked template referenced from the main template by relative path. */
@@ -101,11 +102,8 @@ export interface TemplateSpecVersion extends Resource<
  * ### Publishing a Version
  * **Example:** Version with an inline template
  * ```typescript
- * const spec = yield* Azure.Resources.TemplateSpec("app", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const spec = yield* Azure.Resources.TemplateSpec("app");
  * const v1 = yield* Azure.Resources.TemplateSpecVersion("app-v1", {
- *   resourceGroup: group.resourceGroupName,
  *   templateSpecName: spec.templateSpecName,
  *   name: "1.0.0",
  *   mainTemplate: {
@@ -121,14 +119,13 @@ export interface TemplateSpecVersion extends Resource<
  * **Example:** Deploy the version into a resource group
  * ```typescript
  * yield* Azure.Resources.Deployment("app", {
- *   resourceGroup: group.resourceGroupName,
  *   templateLink: { id: v1.templateSpecVersionId },
  * });
  * ```
  *
  * @resource
  */
-export const TemplateSpecVersion = Resource<TemplateSpecVersion>(
+export const TemplateSpecVersion = GroupedResource<TemplateSpecVersion>(
   "Azure.Resources.TemplateSpecVersion",
 );
 

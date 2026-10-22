@@ -2,7 +2,7 @@ import * as databasewatcher from "@distilled.cloud/azure/databasewatcher";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import {
@@ -14,6 +14,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createWatcherChildName } from "./common.ts";
 
 export type SharedPrivateLinkGroupId = "sqlServer" | "managedInstance" | "cluster" | "vault";
@@ -101,7 +102,6 @@ export interface SharedPrivateLinkResource extends Resource<
  * **Example:** Private link to a SQL logical server
  * ```typescript
  * const link = yield* Azure.DatabaseWatcher.SharedPrivateLinkResource("sql", {
- *   resourceGroup: group.resourceGroupName,
  *   watcher: watcher.watcherName,
  *   privateLinkResourceId: server.serverId,
  *   groupId: "sqlServer",
@@ -111,7 +111,6 @@ export interface SharedPrivateLinkResource extends Resource<
  * **Example:** Private link to an Azure Data Explorer cluster
  * ```typescript
  * const link = yield* Azure.DatabaseWatcher.SharedPrivateLinkResource("adx", {
- *   resourceGroup: group.resourceGroupName,
  *   watcher: watcher.watcherName,
  *   privateLinkResourceId: cluster.clusterId,
  *   groupId: "cluster",
@@ -121,7 +120,7 @@ export interface SharedPrivateLinkResource extends Resource<
  *
  * @resource
  */
-export const SharedPrivateLinkResource = Resource<SharedPrivateLinkResource>(
+export const SharedPrivateLinkResource = GroupedResource<SharedPrivateLinkResource>(
   "Azure.DatabaseWatcher.SharedPrivateLinkResource",
 );
 

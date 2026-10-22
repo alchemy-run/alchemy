@@ -1,7 +1,7 @@
 import * as postgresql from "@distilled.cloud/azure/postgresql";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -11,6 +11,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   getServer,
   POSTGRES_NAMESPACE,
@@ -82,7 +83,6 @@ export interface Configuration extends Resource<
  * **Example:** Log slow statements
  * ```typescript
  * const slowLog = yield* Azure.PostgreSQL.Configuration("slow-log", {
- *   resourceGroup: group.resourceGroupName,
  *   server: server.serverName,
  *   name: "log_min_duration_statement",
  *   value: "500",
@@ -92,7 +92,6 @@ export interface Configuration extends Resource<
  * **Example:** Static parameter applied with a restart
  * ```typescript
  * const extensions = yield* Azure.PostgreSQL.Configuration("preload", {
- *   resourceGroup: group.resourceGroupName,
  *   server: server.serverName,
  *   name: "shared_preload_libraries",
  *   value: "pg_stat_statements",
@@ -102,7 +101,7 @@ export interface Configuration extends Resource<
  *
  * @resource
  */
-export const Configuration = Resource<Configuration>("Azure.PostgreSQL.Configuration");
+export const Configuration = GroupedResource<Configuration>("Azure.PostgreSQL.Configuration");
 
 interface ConfigurationRef extends ServerRef {
   readonly configurationName: string;

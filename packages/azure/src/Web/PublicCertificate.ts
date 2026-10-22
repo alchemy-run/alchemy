@@ -3,11 +3,12 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { ensureRegistered, ignoreNotFound, orUndefinedIfNotFound, waitUntilGone } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { lower, siteWhere } from "./common.ts";
 
 /** Certificate store a public certificate is installed into. */
@@ -70,7 +71,6 @@ export interface PublicCertificate extends Resource<
  * **Example:** Private root CA
  * ```typescript
  * const ca = yield* Azure.Web.PublicCertificate("root-ca", {
- *   resourceGroup: group.resourceGroupName,
  *   siteName: app.siteName,
  *   blob: rootCaDerBase64,
  * });
@@ -79,7 +79,7 @@ export interface PublicCertificate extends Resource<
  *
  * @resource
  */
-export const PublicCertificate = Resource<PublicCertificate>("Azure.Web.PublicCertificate");
+export const PublicCertificate = GroupedResource<PublicCertificate>("Azure.Web.PublicCertificate");
 
 type ObservedCertificate = web.GetWebAppPublicCertificateResponse;
 

@@ -1,9 +1,10 @@
 import * as apim from "@distilled.cloud/azure/apimanagement";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { sameName } from "./Common.ts";
 import { entityLifecycle, reveal } from "./Entity.ts";
 
@@ -62,7 +63,6 @@ export interface Cache extends Resource<
  * **Example:** Point the gateway at Azure Cache for Redis
  * ```typescript
  * yield* Azure.ApiManagement.Cache("redis", {
- *   resourceGroup: group.resourceGroupName,
  *   serviceName: apim.serviceName,
  *   connectionString: Redacted.make(
  *     `${redisHost}:6380,password=${redisKey},ssl=True,abortConnect=False`,
@@ -74,7 +74,7 @@ export interface Cache extends Resource<
  *
  * @resource
  */
-export const Cache = Resource<Cache>("Azure.ApiManagement.Cache");
+export const Cache = GroupedResource<Cache>("Azure.ApiManagement.Cache");
 
 interface Key {
   resourceGroup: string;

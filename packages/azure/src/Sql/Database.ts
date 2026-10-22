@@ -2,7 +2,7 @@ import * as sql from "@distilled.cloud/azure/sql";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -17,6 +17,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   childLocation,
   createChildName,
@@ -172,7 +173,6 @@ export interface Database extends Resource<
  * **Example:** Basic tier database
  * ```typescript
  * const db = yield* Azure.Sql.Database("app", {
- *   resourceGroup: group.resourceGroupName,
  *   server: server.serverName,
  *   sku: { name: "Basic" },
  * });
@@ -181,7 +181,6 @@ export interface Database extends Resource<
  * **Example:** Free serverless database
  * ```typescript
  * const db = yield* Azure.Sql.Database("app", {
- *   resourceGroup: group.resourceGroupName,
  *   server: server.serverName,
  *   sku: { name: "GP_S_Gen5_2" },
  *   useFreeLimit: true,
@@ -193,12 +192,10 @@ export interface Database extends Resource<
  * **Example:** Database in an elastic pool
  * ```typescript
  * const pool = yield* Azure.Sql.ElasticPool("pool", {
- *   resourceGroup: group.resourceGroupName,
  *   server: server.serverName,
  *   sku: { name: "BasicPool", capacity: 50 },
  * });
  * const db = yield* Azure.Sql.Database("tenant-a", {
- *   resourceGroup: group.resourceGroupName,
  *   server: server.serverName,
  *   elasticPoolId: pool.elasticPoolId,
  * });
@@ -206,7 +203,7 @@ export interface Database extends Resource<
  *
  * @resource
  */
-export const Database = Resource<Database>("Azure.Sql.Database");
+export const Database = GroupedResource<Database>("Azure.Sql.Database");
 
 const getDatabase = (
   subscriptionId: string,

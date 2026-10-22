@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -14,6 +14,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   type ConnectionProps,
   connectionPropsDiffer,
@@ -117,7 +118,7 @@ export interface Linker extends Resource<
  *
  * @resource
  */
-export const Linker = Resource<Linker>("Azure.ServiceConnector.Linker");
+export const Linker = GroupedResource<Linker>("Azure.ServiceConnector.Linker");
 
 /** Deterministic linker name (`^[A-Za-z0-9._]+$`). */
 export const createLinkerName = (id: string, instanceId: string) =>

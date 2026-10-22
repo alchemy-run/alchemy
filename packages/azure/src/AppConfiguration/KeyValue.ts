@@ -2,7 +2,7 @@ import * as appconfiguration from "@distilled.cloud/azure/appconfiguration";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import {
@@ -17,6 +17,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 
 export interface KeyValueProps {
   /** Resource group of the configuration store. Changing it replaces the key-value. */
@@ -99,11 +100,8 @@ export interface KeyValue extends Resource<
  * ### Creating Key-Values
  * **Example:** Plain setting
  * ```typescript
- * const store = yield* Azure.AppConfiguration.ConfigurationStore("config", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const store = yield* Azure.AppConfiguration.ConfigurationStore("config");
  * yield* Azure.AppConfiguration.KeyValue("color", {
- *   resourceGroup: group.resourceGroupName,
  *   configurationStore: store.configurationStoreName,
  *   key: "App:Settings:Color",
  *   label: "prod",
@@ -114,7 +112,6 @@ export interface KeyValue extends Resource<
  * **Example:** JSON value
  * ```typescript
  * yield* Azure.AppConfiguration.KeyValue("limits", {
- *   resourceGroup: group.resourceGroupName,
  *   configurationStore: store.configurationStoreName,
  *   key: "App:Limits",
  *   value: JSON.stringify({ maxUsers: 100 }),
@@ -125,7 +122,6 @@ export interface KeyValue extends Resource<
  * **Example:** Secret value
  * ```typescript
  * yield* Azure.AppConfiguration.KeyValue("token", {
- *   resourceGroup: group.resourceGroupName,
  *   configurationStore: store.configurationStoreName,
  *   key: "App:Token",
  *   value: Redacted.make("s3cr3t"),
@@ -134,7 +130,7 @@ export interface KeyValue extends Resource<
  *
  * @resource
  */
-export const KeyValue = Resource<KeyValue>("Azure.AppConfiguration.KeyValue");
+export const KeyValue = GroupedResource<KeyValue>("Azure.AppConfiguration.KeyValue");
 
 /** ARM key-value name: `key$label`, with `/` encoded as `~2F`. */
 export const keyValueName = (key: string, label: string | undefined) => {

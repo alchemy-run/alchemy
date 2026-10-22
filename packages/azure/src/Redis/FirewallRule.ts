@@ -2,11 +2,12 @@ import * as redis from "@distilled.cloud/azure/redis";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { ensureRegistered, ignoreNotFound, orUndefinedIfNotFound, waitUntilGone } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { cacheOwnedByStage, createAlphanumericName, lower, whileCacheBusy } from "./Common.ts";
 
 export interface FirewallRuleProps {
@@ -59,11 +60,8 @@ export interface FirewallRule extends Resource<
  * ### Allowing Clients
  * **Example:** Allow a single office range
  * ```typescript
- * const cache = yield* Azure.Redis.Cache("cache", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const cache = yield* Azure.Redis.Cache("cache");
  * yield* Azure.Redis.FirewallRule("office", {
- *   resourceGroup: group.resourceGroupName,
  *   cache: cache.cacheName,
  *   startIP: "203.0.113.0",
  *   endIP: "203.0.113.255",
@@ -73,7 +71,6 @@ export interface FirewallRule extends Resource<
  * **Example:** Allow one address with an explicit rule name
  * ```typescript
  * yield* Azure.Redis.FirewallRule("ci", {
- *   resourceGroup: group.resourceGroupName,
  *   cache: cache.cacheName,
  *   name: "ci_runner",
  *   startIP: "198.51.100.7",
@@ -83,7 +80,7 @@ export interface FirewallRule extends Resource<
  *
  * @resource
  */
-export const FirewallRule = Resource<FirewallRule>("Azure.Redis.FirewallRule");
+export const FirewallRule = GroupedResource<FirewallRule>("Azure.Redis.FirewallRule");
 
 const getRule = (
   subscriptionId: string,

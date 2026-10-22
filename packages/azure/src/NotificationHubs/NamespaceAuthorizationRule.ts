@@ -2,7 +2,7 @@ import * as notificationhubs from "@distilled.cloud/azure/notificationhubs";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
 import {
@@ -14,6 +14,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   type AccessRight,
   createEntityName,
@@ -91,13 +92,10 @@ export interface NamespaceAuthorizationRule extends Resource<
  * ### Creating a Rule
  * **Example:** Send-only rule for a backend
  * ```typescript
- * const ns = yield* Azure.NotificationHubs.Namespace("push", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const ns = yield* Azure.NotificationHubs.Namespace("push");
  * const backend = yield* Azure.NotificationHubs.NamespaceAuthorizationRule(
  *   "backend",
  *   {
- *     resourceGroup: group.resourceGroupName,
  *     namespace: ns.namespaceName,
  *     rights: ["Send"],
  *   },
@@ -110,7 +108,6 @@ export interface NamespaceAuthorizationRule extends Resource<
  * const admin = yield* Azure.NotificationHubs.NamespaceAuthorizationRule(
  *   "admin",
  *   {
- *     resourceGroup: group.resourceGroupName,
  *     namespace: ns.namespaceName,
  *     rights: ["Manage"],
  *   },
@@ -119,7 +116,7 @@ export interface NamespaceAuthorizationRule extends Resource<
  *
  * @resource
  */
-export const NamespaceAuthorizationRule = Resource<NamespaceAuthorizationRule>(
+export const NamespaceAuthorizationRule = GroupedResource<NamespaceAuthorizationRule>(
   "Azure.NotificationHubs.NamespaceAuthorizationRule",
 );
 

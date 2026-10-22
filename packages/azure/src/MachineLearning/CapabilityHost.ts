@@ -1,7 +1,7 @@
 import * as ml from "@distilled.cloud/azure/machinelearningservices";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -12,6 +12,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createChildName, sameArm, sameValue, inputFields } from "./Common.ts";
 
 export interface CapabilityHostProps {
@@ -99,7 +100,6 @@ export interface CapabilityHost extends Resource<
  * **Example:** Standard agent setup on a project
  * ```typescript
  * const host = yield* Azure.MachineLearning.CapabilityHost("agents", {
- *   resourceGroup: group.resourceGroupName,
  *   workspace: project.workspaceName,
  *   aiServicesConnections: [openai.connectionName],
  *   storageConnections: [files.connectionName],
@@ -110,7 +110,9 @@ export interface CapabilityHost extends Resource<
  *
  * @resource
  */
-export const CapabilityHost = Resource<CapabilityHost>("Azure.MachineLearning.CapabilityHost");
+export const CapabilityHost = GroupedResource<CapabilityHost>(
+  "Azure.MachineLearning.CapabilityHost",
+);
 
 const getHost = (
   subscriptionId: string,

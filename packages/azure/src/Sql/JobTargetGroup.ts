@@ -2,7 +2,7 @@ import * as sql from "@distilled.cloud/azure/sql";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createChildName, isServerOwnedByStack, lower } from "./common.ts";
 import { jobAgentPath, type JobAgentScope, retryWhileAgentBusy } from "./setting.ts";
 
@@ -114,7 +115,6 @@ export interface JobTargetGroup extends Resource<
  * **Example:** Every database on a server except one
  * ```typescript
  * yield* Azure.Sql.JobTargetGroup("all-dbs", {
- *   resourceGroup: group.resourceGroupName,
  *   server: server.serverName,
  *   jobAgent: agent.jobAgentName,
  *   members: [
@@ -131,7 +131,7 @@ export interface JobTargetGroup extends Resource<
  *
  * @resource
  */
-export const JobTargetGroup = Resource<JobTargetGroup>("Azure.Sql.JobTargetGroup");
+export const JobTargetGroup = GroupedResource<JobTargetGroup>("Azure.Sql.JobTargetGroup");
 
 type Observed = sql.GetJobTargetGroupResponse;
 

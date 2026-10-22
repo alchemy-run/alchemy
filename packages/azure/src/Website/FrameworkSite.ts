@@ -1,5 +1,6 @@
 import { AlchemyContext } from "alchemy/AlchemyContext";
 import type { MemoOptions } from "alchemy/Command/Memo";
+import type { Input } from "alchemy/Input";
 import * as Namespace from "alchemy/Namespace";
 import * as Output from "alchemy/Output";
 import { ProviderModePolicy } from "alchemy/ProviderMode";
@@ -25,7 +26,8 @@ import { Route } from "../Cdn/Route.ts";
 import { Rule } from "../Cdn/Rule.ts";
 import { RuleSet } from "../Cdn/RuleSet.ts";
 import type { Providers } from "../Providers.ts";
-import { ResourceGroup } from "../Resources/ResourceGroup.ts";
+import type { ResourceGroup } from "../Resources/ResourceGroup.ts";
+import { stackResourceGroup } from "../StackResourceGroup.ts";
 import { StorageAccount } from "../Storage/StorageAccount.ts";
 import { AppServicePlan } from "../Web/AppServicePlan.ts";
 import { WebApp } from "../Web/WebApp.ts";
@@ -95,8 +97,8 @@ export interface FrameworkSiteProps {
    */
   tags?: Record<string, string>;
   /**
-   * Resource group that holds the site. When omitted, one is created
-   * under this site's namespace.
+   * Resource group that holds the site.
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
    */
   resourceGroup?: Ref<ResourceGroup>;
   /**
@@ -187,7 +189,10 @@ export interface Website {
    * builds) or the web app (server builds).
    */
   readonly url: string | Output.Output<string | undefined> | undefined;
-  /** Resource group holding the site. `undefined` during `alchemy dev`. */
+  /**
+   * Resource group holding the site. `undefined` during `alchemy dev` and
+   * when the stack deploys into an existing group by name.
+   */
   readonly resourceGroup: ResourceGroup | undefined;
   /** Storage account serving an assets-only build. */
   readonly storageAccount: StorageAccount | undefined;
@@ -234,10 +239,18 @@ export const unwrapEnv = (
 
 type SiteLocation = Pick<FrameworkSiteProps, "resourceGroup" | "location" | "tags">;
 
-const siteResourceGroup = (site: SiteLocation) =>
-  site.resourceGroup !== undefined
-    ? resolveRef(site.resourceGroup)
-    : ResourceGroup("ResourceGroup", { location: site.location, tags: site.tags });
+/**
+ * The site's resource group: the `resourceGroup` prop, else the stack's
+ * resource group. `group` is `undefined` when the stack deploys into an
+ * existing group by name.
+ */
+const siteResourceGroup = Effect.fn(function* (site: SiteLocation) {
+  if (site.resourceGroup !== undefined) {
+    const group = yield* resolveRef(site.resourceGroup);
+    return { name: group.resourceGroupName, group };
+  }
+  return yield* stackResourceGroup;
+});
 
 /**
  * Put a Front Door endpoint in front of `originHost`. For a single-page
@@ -246,12 +259,12 @@ const siteResourceGroup = (site: SiteLocation) =>
  */
 const deployFrontDoor = Effect.fn(function* (props: {
   readonly frontDoor: true | WebsiteFrontDoorProps;
-  readonly resourceGroup: ResourceGroup;
+  readonly resourceGroup: Input<string>;
   readonly originHost: string;
   readonly spa: boolean;
   readonly tags: Record<string, string> | undefined;
 }) {
-  const resourceGroup = props.resourceGroup.resourceGroupName;
+  const resourceGroup = props.resourceGroup;
   const options = props.frontDoor === true ? {} : props.frontDoor;
   const profile =
     options.profile !== undefined
@@ -363,7 +376,7 @@ export const deployStaticSite = Effect.fn(function* (props: {
     site.storageAccount !== undefined
       ? yield* resolveRef(site.storageAccount)
       : yield* StorageAccount("Storage", {
-          resourceGroup: resourceGroup.resourceGroupName,
+          resourceGroup: resourceGroup.name,
           location: site.location,
           sku: "Standard_LRS",
           tags: site.tags,
@@ -379,7 +392,7 @@ export const deployStaticSite = Effect.fn(function* (props: {
     site.frontDoor !== undefined && site.frontDoor !== false
       ? yield* deployFrontDoor({
           frontDoor: site.frontDoor,
-          resourceGroup,
+          resourceGroup: resourceGroup.name,
           originHost: assets.hostName as unknown as string,
           spa: props.spa,
           tags: site.tags,
@@ -387,7 +400,7 @@ export const deployStaticSite = Effect.fn(function* (props: {
       : undefined;
   return {
     url: edge?.url ?? assets.url,
-    resourceGroup,
+    resourceGroup: resourceGroup.group,
     storageAccount,
     assets,
     plan: undefined,
@@ -417,7 +430,7 @@ export const deployAppServiceSite = Effect.fn(function* (props: {
     site.plan !== undefined
       ? yield* resolveRef(site.plan)
       : yield* AppServicePlan("Plan", {
-          resourceGroup: resourceGroup.resourceGroupName,
+          resourceGroup: resourceGroup.name,
           location: site.location,
           sku: site.sku ?? DEFAULT_PLAN_SKU,
           os: "linux",
@@ -425,7 +438,7 @@ export const deployAppServiceSite = Effect.fn(function* (props: {
         });
   const env = unwrapEnv(site.env) ?? {};
   const app = yield* WebApp("App", {
-    resourceGroup: resourceGroup.resourceGroupName,
+    resourceGroup: resourceGroup.name,
     location: site.location,
     serverFarmId: plan.appServicePlanId,
     siteConfig: {
@@ -445,7 +458,7 @@ export const deployAppServiceSite = Effect.fn(function* (props: {
     tags: site.tags,
   });
   const deployment = yield* AppDeployment("Code", {
-    resourceGroup: resourceGroup.resourceGroupName,
+    resourceGroup: resourceGroup.name,
     siteName: app.siteName,
     main: props.main,
     entry: props.entry,
@@ -456,7 +469,7 @@ export const deployAppServiceSite = Effect.fn(function* (props: {
     site.frontDoor !== undefined && site.frontDoor !== false
       ? yield* deployFrontDoor({
           frontDoor: site.frontDoor,
-          resourceGroup,
+          resourceGroup: resourceGroup.name,
           originHost: app.defaultHostName as unknown as string,
           spa: false,
           tags: site.tags,
@@ -464,7 +477,7 @@ export const deployAppServiceSite = Effect.fn(function* (props: {
       : undefined;
   return {
     url: edge?.url ?? deployment.url,
-    resourceGroup,
+    resourceGroup: resourceGroup.group,
     storageAccount: undefined,
     assets: undefined,
     plan,

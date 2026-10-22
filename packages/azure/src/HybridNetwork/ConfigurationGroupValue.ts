@@ -3,7 +3,7 @@ import * as hybridnetwork from "@distilled.cloud/azure/hybridnetwork";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import {
@@ -22,6 +22,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createHybridNetworkName,
   FAST_BUDGET,
@@ -116,7 +117,6 @@ export interface ConfigurationGroupValue extends Resource<
  * **Example:** Open configuration values
  * ```typescript
  * const values = yield* Azure.HybridNetwork.ConfigurationGroupValue("values", {
- *   resourceGroup: group.resourceGroupName,
  *   configurationGroupSchemaId: schema.configurationGroupSchemaId,
  *   configurationValue: JSON.stringify({ region: "eastus" }),
  * });
@@ -125,7 +125,6 @@ export interface ConfigurationGroupValue extends Resource<
  * **Example:** Secret configuration values
  * ```typescript
  * const secrets = yield* Azure.HybridNetwork.ConfigurationGroupValue("secrets", {
- *   resourceGroup: group.resourceGroupName,
  *   configurationGroupSchemaId: schema.configurationGroupSchemaId,
  *   secretConfigurationValue: Redacted.make(
  *     JSON.stringify({ adminPassword: process.env.ADMIN_PASSWORD }),
@@ -135,7 +134,7 @@ export interface ConfigurationGroupValue extends Resource<
  *
  * @resource
  */
-export const ConfigurationGroupValue = Resource<ConfigurationGroupValue>(
+export const ConfigurationGroupValue = GroupedResource<ConfigurationGroupValue>(
   "Azure.HybridNetwork.ConfigurationGroupValue",
 );
 

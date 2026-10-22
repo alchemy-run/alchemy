@@ -1,7 +1,7 @@
 import * as mysql from "@distilled.cloud/azure/mysql";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -11,6 +11,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   getServer,
   MYSQL_NAMESPACE,
@@ -86,7 +87,6 @@ export interface Configuration extends Resource<
  * **Example:** Raise the connection limit
  * ```typescript
  * const connections = yield* Azure.MySQL.Configuration("max-connections", {
- *   resourceGroup: group.resourceGroupName,
  *   server: server.serverName,
  *   name: "max_connections",
  *   value: "200",
@@ -96,7 +96,6 @@ export interface Configuration extends Resource<
  * **Example:** Static parameter applied with a restart
  * ```typescript
  * const ftTokens = yield* Azure.MySQL.Configuration("ft-min-token", {
- *   resourceGroup: group.resourceGroupName,
  *   server: server.serverName,
  *   name: "innodb_ft_min_token_size",
  *   value: "2",
@@ -106,7 +105,7 @@ export interface Configuration extends Resource<
  *
  * @resource
  */
-export const Configuration = Resource<Configuration>("Azure.MySQL.Configuration");
+export const Configuration = GroupedResource<Configuration>("Azure.MySQL.Configuration");
 
 interface ConfigurationRef extends ServerRef {
   readonly configurationName: string;

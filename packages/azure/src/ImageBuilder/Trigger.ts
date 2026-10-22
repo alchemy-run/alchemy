@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -15,6 +15,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 
 export interface TriggerProps {
   /**
@@ -76,7 +77,6 @@ export interface Trigger extends Resource<
  * **Example:** Trigger on the gallery image's latest version
  * ```typescript
  * const template = yield* Azure.ImageBuilder.ImageTemplate("app", {
- *   resourceGroup: group.resourceGroupName,
  *   identityId: identity.identityId,
  *   source: {
  *     type: "SharedImageVersion",
@@ -85,14 +85,13 @@ export interface Trigger extends Resource<
  *   distribute,
  * });
  * yield* Azure.ImageBuilder.Trigger("on-base-update", {
- *   resourceGroup: group.resourceGroupName,
  *   imageTemplate: template.imageTemplateName,
  * });
  * ```
  *
  * @resource
  */
-export const Trigger = Resource<Trigger>("Azure.ImageBuilder.Trigger");
+export const Trigger = GroupedResource<Trigger>("Azure.ImageBuilder.Trigger");
 
 type Observed = imagebuilder.GetTriggerResponse;
 

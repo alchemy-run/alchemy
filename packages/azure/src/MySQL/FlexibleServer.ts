@@ -4,7 +4,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
@@ -25,6 +25,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   getServer,
   MYSQL_NAMESPACE,
@@ -292,17 +293,13 @@ export interface FlexibleServer extends Resource<
  * ### Creating a Server
  * **Example:** Burstable server with a generated password
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("app");
- * const server = yield* Azure.MySQL.FlexibleServer("db", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const server = yield* Azure.MySQL.FlexibleServer("db");
  * // server.connectionString is a Redacted mysql:// URL
  * ```
  *
  * **Example:** General Purpose server with longer backup retention
  * ```typescript
  * const server = yield* Azure.MySQL.FlexibleServer("db", {
- *   resourceGroup: group.resourceGroupName,
  *   version: "8.4",
  *   sku: { name: "Standard_D2ds_v4", tier: "GeneralPurpose" },
  *   storage: { storageSizeGB: 128, autoGrow: "Enabled" },
@@ -315,7 +312,6 @@ export interface FlexibleServer extends Resource<
  * **Example:** Replica of an existing server
  * ```typescript
  * const replica = yield* Azure.MySQL.FlexibleServer("replica", {
- *   resourceGroup: group.resourceGroupName,
  *   createMode: "Replica",
  *   sourceServerResourceId: primary.serverId,
  *   sku: { name: "Standard_D2ds_v4", tier: "GeneralPurpose" },
@@ -324,7 +320,7 @@ export interface FlexibleServer extends Resource<
  *
  * @resource
  */
-export const FlexibleServer = Resource<FlexibleServer>("Azure.MySQL.FlexibleServer");
+export const FlexibleServer = GroupedResource<FlexibleServer>("Azure.MySQL.FlexibleServer");
 
 type ObservedServer = mysql.GetServerResponse;
 

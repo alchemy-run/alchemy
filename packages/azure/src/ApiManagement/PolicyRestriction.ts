@@ -1,8 +1,9 @@
 import * as apim from "@distilled.cloud/azure/apimanagement";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createEntityName } from "./Common.ts";
 import { entityLifecycle } from "./Entity.ts";
 
@@ -56,7 +57,6 @@ export interface PolicyRestriction extends Resource<
  * **Example:** Require `<base />` in the orders API policy
  * ```typescript
  * yield* Azure.ApiManagement.PolicyRestriction("orders-base", {
- *   resourceGroup: group.resourceGroupName,
  *   serviceName: apim.serviceName,
  *   scope: `/apis/${orders.apiName}`,
  *   requireBase: true,
@@ -65,7 +65,7 @@ export interface PolicyRestriction extends Resource<
  *
  * @resource
  */
-export const PolicyRestriction = Resource<PolicyRestriction>(
+export const PolicyRestriction = GroupedResource<PolicyRestriction>(
   "Azure.ApiManagement.PolicyRestriction",
 );
 

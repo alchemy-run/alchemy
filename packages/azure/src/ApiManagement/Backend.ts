@@ -2,11 +2,12 @@ import * as apim from "@distilled.cloud/azure/apimanagement";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { ensureRegistered, ignoreNotFound, orUndefinedIfNotFound, waitUntilGone } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createEntityName, isParentOwned, sameName, subsetMatches } from "./Common.ts";
 
 export interface BackendCredentials {
@@ -117,7 +118,6 @@ export interface Backend extends Resource<
  * **Example:** HTTP backend
  * ```typescript
  * const backend = yield* Azure.ApiManagement.Backend("orders", {
- *   resourceGroup: group.resourceGroupName,
  *   serviceName: apim.serviceName,
  *   url: "https://orders.example.com",
  *   protocol: "http",
@@ -127,7 +127,6 @@ export interface Backend extends Resource<
  * **Example:** Backend with a header credential and relaxed TLS
  * ```typescript
  * const backend = yield* Azure.ApiManagement.Backend("legacy", {
- *   resourceGroup: group.resourceGroupName,
  *   serviceName: apim.serviceName,
  *   url: "https://legacy.internal.example.com",
  *   credentials: { header: { "x-api-key": ["{{legacy-key}}"] } },
@@ -137,7 +136,7 @@ export interface Backend extends Resource<
  *
  * @resource
  */
-export const Backend = Resource<Backend>("Azure.ApiManagement.Backend");
+export const Backend = GroupedResource<Backend>("Azure.ApiManagement.Backend");
 
 const getBackend = (
   subscriptionId: string,

@@ -2,7 +2,7 @@ import * as mnf from "@distilled.cloud/azure/managednetworkfabric";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -19,6 +19,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createFabricName,
   differs,
@@ -110,18 +111,15 @@ export interface RoutePolicy extends Resource<
  * ### Creating a Route Policy
  * **Example:** Permit routes from a prefix list
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("fabric");
  * // The Network Fabric is provisioned on Operator Nexus racks.
  * const fabricId =
  *   "/subscriptions/.../resourceGroups/nexus/providers/Microsoft.ManagedNetworkFabric/networkFabrics/fab1";
  * const prefixes = yield* Azure.ManagedNetworkFabric.IpPrefix("private", {
- *   resourceGroup: group.resourceGroupName,
  *   ipPrefixRules: [
  *     { action: "Permit", sequenceNumber: 10, networkPrefix: "10.0.0.0/8" },
  *   ],
  * });
  * const policy = yield* Azure.ManagedNetworkFabric.RoutePolicy("import", {
- *   resourceGroup: group.resourceGroupName,
  *   networkFabricId: fabricId,
  *   addressFamilyType: "IPv4",
  *   statements: [
@@ -136,7 +134,7 @@ export interface RoutePolicy extends Resource<
  *
  * @resource
  */
-export const RoutePolicy = Resource<RoutePolicy>("Azure.ManagedNetworkFabric.RoutePolicy");
+export const RoutePolicy = GroupedResource<RoutePolicy>("Azure.ManagedNetworkFabric.RoutePolicy");
 
 type Observed = mnf.GetRoutePolicyResponse;
 

@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -14,6 +14,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { isSubset, isVaultOwnedByStack, NAMESPACE, sameText } from "./Common.ts";
 
 /** A datastore reference inside a policy rule. */
@@ -143,7 +144,6 @@ export interface BackupPolicy extends Resource<
  * **Example:** Operational blob backup retained for 30 days
  * ```typescript
  * const policy = yield* Azure.DataProtection.BackupPolicy("blobs", {
- *   resourceGroup: group.resourceGroupName,
  *   backupVault: vault.backupVaultName,
  *   datasourceTypes: ["Microsoft.Storage/storageAccounts/blobServices"],
  *   policyRules: [
@@ -169,7 +169,6 @@ export interface BackupPolicy extends Resource<
  * **Example:** Daily disk snapshots kept for 7 days
  * ```typescript
  * const policy = yield* Azure.DataProtection.BackupPolicy("disks", {
- *   resourceGroup: group.resourceGroupName,
  *   backupVault: vault.backupVaultName,
  *   datasourceTypes: ["Microsoft.Compute/disks"],
  *   policyRules: [
@@ -203,7 +202,7 @@ export interface BackupPolicy extends Resource<
  *
  * @resource
  */
-export const BackupPolicy = Resource<BackupPolicy>("Azure.DataProtection.BackupPolicy");
+export const BackupPolicy = GroupedResource<BackupPolicy>("Azure.DataProtection.BackupPolicy");
 
 const createPolicyName = Effect.fn(function* (id: string) {
   return yield* createPhysicalName({ id, maxLength: 50 });

@@ -2,7 +2,7 @@ import * as discovery from "@distilled.cloud/azure/discovery";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -20,6 +20,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createDiscoveryName,
   DISCOVERY_NAMESPACE,
@@ -148,7 +149,6 @@ export interface Supercomputer extends Resource<
  * **Example:** Supercomputer on an existing virtual network
  * ```typescript
  * const supercomputer = yield* Azure.Discovery.Supercomputer("hpc", {
- *   resourceGroup: group.resourceGroupName,
  *   subnetId: systemSubnet.subnetId,
  *   managementSubnetId: apiServerSubnet.subnetId,
  *   clusterIdentity: clusterIdentity.identityId,
@@ -160,7 +160,6 @@ export interface Supercomputer extends Resource<
  * **Example:** Federated workload identity
  * ```typescript
  * const supercomputer = yield* Azure.Discovery.Supercomputer("hpc", {
- *   resourceGroup: group.resourceGroupName,
  *   subnetId: systemSubnet.subnetId,
  *   clusterIdentity: clusterIdentity.identityId,
  *   kubeletIdentity: kubeletIdentity.identityId,
@@ -170,7 +169,7 @@ export interface Supercomputer extends Resource<
  *
  * @resource
  */
-export const Supercomputer = Resource<Supercomputer>("Azure.Discovery.Supercomputer");
+export const Supercomputer = GroupedResource<Supercomputer>("Azure.Discovery.Supercomputer");
 
 /**
  * Without the Discovery preview ARM rejects the type itself

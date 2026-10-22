@@ -2,7 +2,7 @@ import * as storagecache from "@distilled.cloud/azure/storagecache";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import {
@@ -21,6 +21,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createLustreName, FILESYSTEM_BUDGET, sameList, sameLocation } from "./Common.ts";
 
 /** Azure Managed Lustre SKU (throughput tier in MB/s per TiB). */
@@ -220,18 +221,14 @@ export interface AmlFilesystem extends Resource<
  * ### Creating a File System
  * **Example:** 4 TiB Premium-500 file system in a dedicated subnet
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("hpc");
  * const vnet = yield* Azure.Network.VirtualNetwork("vnet", {
- *   resourceGroup: group.resourceGroupName,
  *   addressPrefixes: ["10.0.0.0/16"],
  * });
  * const subnet = yield* Azure.Network.Subnet("lustre", {
- *   resourceGroup: group.resourceGroupName,
  *   virtualNetwork: vnet.virtualNetworkName,
  *   addressPrefix: "10.0.0.0/24",
  * });
  * const fs = yield* Azure.StorageCache.AmlFilesystem("scratch", {
- *   resourceGroup: group.resourceGroupName,
  *   sku: "AMLFS-Durable-Premium-500",
  *   storageCapacityTiB: 4,
  *   filesystemSubnet: subnet.subnetId,
@@ -243,7 +240,6 @@ export interface AmlFilesystem extends Resource<
  * **Example:** Hydrate from and archive to a blob container
  * ```typescript
  * const fs = yield* Azure.StorageCache.AmlFilesystem("scratch", {
- *   resourceGroup: group.resourceGroupName,
  *   sku: "AMLFS-Durable-Premium-500",
  *   storageCapacityTiB: 4,
  *   filesystemSubnet: subnet.subnetId,
@@ -259,7 +255,6 @@ export interface AmlFilesystem extends Resource<
  * **Example:** Squash root on untrusted clients
  * ```typescript
  * const fs = yield* Azure.StorageCache.AmlFilesystem("scratch", {
- *   resourceGroup: group.resourceGroupName,
  *   sku: "AMLFS-Durable-Premium-500",
  *   storageCapacityTiB: 4,
  *   filesystemSubnet: subnet.subnetId,
@@ -270,7 +265,7 @@ export interface AmlFilesystem extends Resource<
  *
  * @resource
  */
-export const AmlFilesystem = Resource<AmlFilesystem>("Azure.StorageCache.AmlFilesystem");
+export const AmlFilesystem = GroupedResource<AmlFilesystem>("Azure.StorageCache.AmlFilesystem");
 
 type ObservedFilesystem = storagecache.GetAmlFilesystemResponse;
 

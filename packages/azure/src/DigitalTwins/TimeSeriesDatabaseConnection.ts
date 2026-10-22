@@ -2,7 +2,7 @@ import * as digitaltwins from "@distilled.cloud/azure/digitaltwins";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createChildName, instanceOwnedByStage, type ManagedIdentityReference } from "./Common.ts";
 
 export interface TimeSeriesDatabaseConnectionProps {
@@ -115,13 +116,11 @@ export interface TimeSeriesDatabaseConnection extends Resource<
  * **Example:** History into Azure Data Explorer
  * ```typescript
  * const twins = yield* Azure.DigitalTwins.Instance("factory", {
- *   resourceGroup: group.resourceGroupName,
  *   identity: { type: "SystemAssigned" },
  * });
  * const history = yield* Azure.DigitalTwins.TimeSeriesDatabaseConnection(
  *   "history",
  *   {
- *     resourceGroup: group.resourceGroupName,
  *     instance: twins.instanceName,
  *     adxResourceId: cluster.clusterId,
  *     adxEndpointUri: cluster.uri,
@@ -136,7 +135,7 @@ export interface TimeSeriesDatabaseConnection extends Resource<
  *
  * @resource
  */
-export const TimeSeriesDatabaseConnection = Resource<TimeSeriesDatabaseConnection>(
+export const TimeSeriesDatabaseConnection = GroupedResource<TimeSeriesDatabaseConnection>(
   "Azure.DigitalTwins.TimeSeriesDatabaseConnection",
 );
 

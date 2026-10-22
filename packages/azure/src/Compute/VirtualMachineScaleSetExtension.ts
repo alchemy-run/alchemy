@@ -2,12 +2,13 @@ import * as compute from "@distilled.cloud/azure/compute";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { ensureRegistered, ignoreNotFound, orUndefinedIfNotFound, stackAndStage } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   canonical,
   createComputeName,
@@ -121,7 +122,6 @@ export interface VirtualMachineScaleSetExtension extends Resource<
  * **Example:** Custom Script extension
  * ```typescript
  * yield* Azure.Compute.VirtualMachineScaleSetExtension("bootstrap", {
- *   resourceGroup: group.resourceGroupName,
  *   virtualMachineScaleSet: scaleSet.virtualMachineScaleSetName,
  *   publisher: "Microsoft.Azure.Extensions",
  *   type: "CustomScript",
@@ -134,7 +134,6 @@ export interface VirtualMachineScaleSetExtension extends Resource<
  * **Example:** Application health extension
  * ```typescript
  * yield* Azure.Compute.VirtualMachineScaleSetExtension("health", {
- *   resourceGroup: group.resourceGroupName,
  *   virtualMachineScaleSet: scaleSet.virtualMachineScaleSetName,
  *   publisher: "Microsoft.ManagedServices",
  *   type: "ApplicationHealthLinux",
@@ -145,7 +144,7 @@ export interface VirtualMachineScaleSetExtension extends Resource<
  *
  * @resource
  */
-export const VirtualMachineScaleSetExtension = Resource<VirtualMachineScaleSetExtension>(
+export const VirtualMachineScaleSetExtension = GroupedResource<VirtualMachineScaleSetExtension>(
   "Azure.Compute.VirtualMachineScaleSetExtension",
 );
 

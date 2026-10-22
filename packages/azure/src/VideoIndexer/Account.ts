@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -21,6 +21,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 
 /** Managed identity type of a Video Indexer account. */
 export type VideoIndexerIdentityType =
@@ -145,13 +146,8 @@ export interface Account extends Resource<
  * ### Creating an Account
  * **Example:** Account backed by a storage account and a user-assigned identity
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("media");
- * const storage = yield* Azure.Storage.StorageAccount("media", {
- *   resourceGroup: group.resourceGroupName,
- * });
- * const identity = yield* Azure.ManagedIdentity.UserAssignedIdentity("indexer", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const storage = yield* Azure.Storage.StorageAccount("media");
+ * const identity = yield* Azure.ManagedIdentity.UserAssignedIdentity("indexer");
  * const grant = yield* Azure.Authorization.RoleAssignment("indexer-storage", {
  *   scope: storage.storageAccountId,
  *   roleDefinitionId: Azure.Authorization.BuiltInRole.StorageBlobDataOwner,
@@ -159,7 +155,6 @@ export interface Account extends Resource<
  *   principalType: "ServicePrincipal",
  * });
  * const indexer = yield* Azure.VideoIndexer.Account("indexer", {
- *   resourceGroup: group.resourceGroupName,
  *   storageAccountId: storage.storageAccountId,
  *   storageUserAssignedIdentity: identity.identityId,
  *   // depend on the grant so the identity can reach storage at create
@@ -171,7 +166,6 @@ export interface Account extends Resource<
  * **Example:** Disable public network access
  * ```typescript
  * const indexer = yield* Azure.VideoIndexer.Account("indexer", {
- *   resourceGroup: group.resourceGroupName,
  *   storageAccountId: storage.storageAccountId,
  *   storageUserAssignedIdentity: identity.identityId,
  *   publicNetworkAccess: "Disabled",
@@ -180,7 +174,7 @@ export interface Account extends Resource<
  *
  * @resource
  */
-export const Account = Resource<Account>("Azure.VideoIndexer.Account");
+export const Account = GroupedResource<Account>("Azure.VideoIndexer.Account");
 
 type Observed = vi.GetAccountResponse;
 

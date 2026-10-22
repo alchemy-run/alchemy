@@ -1,8 +1,9 @@
 import * as network from "@distilled.cloud/azure/network";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import { orUndefinedIfNotFound } from "../Arm.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { ref, sameId } from "./common.ts";
 import { networkProvider } from "./generic.ts";
 import { hubOwnerTags } from "./virtualHubShared.ts";
@@ -67,7 +68,6 @@ export interface VirtualHubBgpConnection extends Resource<
  * **Example:** BGP peer in a spoke
  * ```typescript
  * yield* Azure.Network.VirtualHubBgpConnection("nva", {
- *   resourceGroup: group.resourceGroupName,
  *   virtualHub: hub.virtualHubName,
  *   peerAsn: 65010,
  *   peerIp: "10.1.0.4",
@@ -77,7 +77,7 @@ export interface VirtualHubBgpConnection extends Resource<
  *
  * @resource
  */
-export const VirtualHubBgpConnection = Resource<VirtualHubBgpConnection>(
+export const VirtualHubBgpConnection = GroupedResource<VirtualHubBgpConnection>(
   "Azure.Network.VirtualHubBgpConnection",
 );
 

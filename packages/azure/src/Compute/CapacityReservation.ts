@@ -2,7 +2,7 @@ import * as compute from "@distilled.cloud/azure/compute";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -15,6 +15,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createComputeName,
   idsOf,
@@ -113,11 +114,9 @@ export interface CapacityReservation extends Resource<
  * **Example:** Two D2s_v5 instances in zone 1
  * ```typescript
  * const reservations = yield* Azure.Compute.CapacityReservationGroup("prod", {
- *   resourceGroup: group.resourceGroupName,
  *   zones: ["1"],
  * });
  * const reservation = yield* Azure.Compute.CapacityReservation("d2", {
- *   resourceGroup: group.resourceGroupName,
  *   capacityReservationGroup: reservations.capacityReservationGroupName,
  *   sku: "Standard_D2s_v5",
  *   capacity: 2,
@@ -129,7 +128,6 @@ export interface CapacityReservation extends Resource<
  * **Example:** Keep the reservation without reserved capacity
  * ```typescript
  * yield* Azure.Compute.CapacityReservation("d2", {
- *   resourceGroup: group.resourceGroupName,
  *   capacityReservationGroup: reservations.capacityReservationGroupName,
  *   sku: "Standard_D2s_v5",
  *   capacity: 0,
@@ -139,7 +137,7 @@ export interface CapacityReservation extends Resource<
  *
  * @resource
  */
-export const CapacityReservation = Resource<CapacityReservation>(
+export const CapacityReservation = GroupedResource<CapacityReservation>(
   "Azure.Compute.CapacityReservation",
 );
 

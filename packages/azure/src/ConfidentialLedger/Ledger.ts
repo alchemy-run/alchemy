@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -21,6 +21,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 
 /** Role a security principal holds on a ledger. */
 export type LedgerRoleName = "Reader" | "Contributor" | "Administrator";
@@ -181,11 +182,8 @@ export interface Ledger extends Resource<
  *   name: "ledger-rg", // ledger requires a group name of <= 63 characters
  *   location: "eastus",
  * });
- * const admin = yield* Azure.ManagedIdentity.UserAssignedIdentity("admin", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const admin = yield* Azure.ManagedIdentity.UserAssignedIdentity("admin");
  * const ledger = yield* Azure.ConfidentialLedger.Ledger("audit", {
- *   resourceGroup: group.resourceGroupName,
  *   aadBasedSecurityPrincipals: [
  *     { principalId: admin.principalId, ledgerRoleName: "Administrator" },
  *   ],
@@ -196,7 +194,6 @@ export interface Ledger extends Resource<
  * **Example:** Private ledger
  * ```typescript
  * const ledger = yield* Azure.ConfidentialLedger.Ledger("secrets", {
- *   resourceGroup: group.resourceGroupName,
  *   ledgerType: "Private",
  *   aadBasedSecurityPrincipals: [
  *     { principalId: admin.principalId, ledgerRoleName: "Administrator" },
@@ -208,7 +205,6 @@ export interface Ledger extends Resource<
  * **Example:** Add a reader and a certificate administrator
  * ```typescript
  * const ledger = yield* Azure.ConfidentialLedger.Ledger("audit", {
- *   resourceGroup: group.resourceGroupName,
  *   aadBasedSecurityPrincipals: [
  *     { principalId: admin.principalId, ledgerRoleName: "Administrator" },
  *     { principalId: auditor.principalId, ledgerRoleName: "Reader" },
@@ -223,7 +219,6 @@ export interface Ledger extends Resource<
  * **Example:** Pause to stop billing
  * ```typescript
  * const ledger = yield* Azure.ConfidentialLedger.Ledger("audit", {
- *   resourceGroup: group.resourceGroupName,
  *   runningState: "Paused",
  *   aadBasedSecurityPrincipals: [
  *     { principalId: admin.principalId, ledgerRoleName: "Administrator" },
@@ -233,7 +228,7 @@ export interface Ledger extends Resource<
  *
  * @resource
  */
-export const Ledger = Resource<Ledger>("Azure.ConfidentialLedger.Ledger");
+export const Ledger = GroupedResource<Ledger>("Azure.ConfidentialLedger.Ledger");
 
 type ObservedLedger = confidentialledger.GetLedgerResponse;
 

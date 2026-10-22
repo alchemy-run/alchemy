@@ -2,11 +2,12 @@ import * as keyvault from "@distilled.cloud/azure/keyvault";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { desiredTags, ensureRegistered, isOwned, orUndefinedIfNotFound, userTags } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createObjectName, lower } from "./common.ts";
 
 export type KeyType = keyvault.JsonWebKeyType;
@@ -131,11 +132,9 @@ export interface Key extends Resource<
  * **Example:** RSA key for customer-managed encryption
  * ```typescript
  * const vault = yield* Azure.KeyVault.Vault("keys", {
- *   resourceGroup: group.resourceGroupName,
  *   enablePurgeProtection: true,
  * });
  * const key = yield* Azure.KeyVault.Key("cmk", {
- *   resourceGroup: group.resourceGroupName,
  *   vault: vault.vaultName,
  *   kty: "RSA",
  *   keySize: 3072,
@@ -145,7 +144,6 @@ export interface Key extends Resource<
  * **Example:** Elliptic-curve signing key
  * ```typescript
  * const signing = yield* Azure.KeyVault.Key("signing", {
- *   resourceGroup: group.resourceGroupName,
  *   vault: vault.vaultName,
  *   kty: "EC",
  *   curveName: "P-384",
@@ -157,7 +155,6 @@ export interface Key extends Resource<
  * **Example:** Rotate every 90 days
  * ```typescript
  * const key = yield* Azure.KeyVault.Key("cmk", {
- *   resourceGroup: group.resourceGroupName,
  *   vault: vault.vaultName,
  *   rotationPolicy: {
  *     expiryTime: "P1Y",
@@ -168,7 +165,7 @@ export interface Key extends Resource<
  *
  * @resource
  */
-export const Key = Resource<Key>("Azure.KeyVault.Key");
+export const Key = GroupedResource<Key>("Azure.KeyVault.Key");
 
 /** Request body for a create-if-not-exist key PUT. */
 export const toKeyProperties = (props: KeyCommonProps): keyvault.KeyPropertiesInput => {

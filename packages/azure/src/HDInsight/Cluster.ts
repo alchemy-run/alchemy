@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import {
@@ -21,6 +21,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { canonical, getCluster, lower, normalizeLocation, reveal } from "./Common.ts";
 
 /** Workload type of an HDInsight cluster. */
@@ -277,16 +278,11 @@ export interface Cluster extends Resource<
  * ### Creating a Cluster
  * **Example:** Spark cluster on a blob container
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("analytics");
- * const account = yield* Azure.Storage.StorageAccount("lake", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const account = yield* Azure.Storage.StorageAccount("lake");
  * const container = yield* Azure.Storage.BlobContainer("spark", {
- *   resourceGroup: group.resourceGroupName,
  *   storageAccount: account.storageAccountName,
  * });
  * const cluster = yield* Azure.HDInsight.Cluster("spark", {
- *   resourceGroup: group.resourceGroupName,
  *   kind: "spark",
  *   gatewayPassword: Redacted.make(process.env.HDI_PASSWORD!),
  *   storage: {
@@ -301,7 +297,6 @@ export interface Cluster extends Resource<
  * **Example:** Kafka cluster with managed disks and ZooKeeper nodes
  * ```typescript
  * const kafka = yield* Azure.HDInsight.Cluster("kafka", {
- *   resourceGroup: group.resourceGroupName,
  *   kind: "kafka",
  *   gatewayPassword,
  *   workerNode: { count: 3, disksPerNode: 2 },
@@ -314,7 +309,6 @@ export interface Cluster extends Resource<
  * **Example:** Resize the worker nodes in place
  * ```typescript
  * const cluster = yield* Azure.HDInsight.Cluster("spark", {
- *   resourceGroup: group.resourceGroupName,
  *   kind: "spark",
  *   gatewayPassword,
  *   workerNode: { count: 4 },
@@ -325,7 +319,6 @@ export interface Cluster extends Resource<
  * **Example:** Load-based autoscale
  * ```typescript
  * const cluster = yield* Azure.HDInsight.Cluster("spark", {
- *   resourceGroup: group.resourceGroupName,
  *   kind: "spark",
  *   gatewayPassword,
  *   workerNode: {
@@ -339,7 +332,6 @@ export interface Cluster extends Resource<
  * **Example:** Cluster on an ADLS Gen2 file system
  * ```typescript
  * const cluster = yield* Azure.HDInsight.Cluster("hadoop", {
- *   resourceGroup: group.resourceGroupName,
  *   kind: "hadoop",
  *   gatewayPassword,
  *   storage: {
@@ -354,7 +346,7 @@ export interface Cluster extends Resource<
  *
  * @resource
  */
-export const Cluster = Resource<Cluster>("Azure.HDInsight.Cluster");
+export const Cluster = GroupedResource<Cluster>("Azure.HDInsight.Cluster");
 
 type ObservedCluster = hdinsight.GetClusterResponse;
 

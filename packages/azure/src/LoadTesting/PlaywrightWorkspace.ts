@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -21,6 +21,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 
 export interface PlaywrightWorkspaceProps {
   /**
@@ -100,9 +101,7 @@ export interface PlaywrightWorkspace extends Resource<
  * const group = yield* Azure.Resources.ResourceGroup("e2e", {
  *   location: "eastus",
  * });
- * const workspace = yield* Azure.LoadTesting.PlaywrightWorkspace("browsers", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const workspace = yield* Azure.LoadTesting.PlaywrightWorkspace("browsers");
  * // PLAYWRIGHT_SERVICE_URL
  * const url = workspace.dataplaneUri;
  * ```
@@ -111,7 +110,6 @@ export interface PlaywrightWorkspace extends Resource<
  * **Example:** Allow access tokens and pin browsers to the workspace region
  * ```typescript
  * const workspace = yield* Azure.LoadTesting.PlaywrightWorkspace("browsers", {
- *   resourceGroup: group.resourceGroupName,
  *   localAuth: "Enabled",
  *   regionalAffinity: "Disabled",
  * });
@@ -119,7 +117,7 @@ export interface PlaywrightWorkspace extends Resource<
  *
  * @resource
  */
-export const PlaywrightWorkspace = Resource<PlaywrightWorkspace>(
+export const PlaywrightWorkspace = GroupedResource<PlaywrightWorkspace>(
   "Azure.LoadTesting.PlaywrightWorkspace",
 );
 

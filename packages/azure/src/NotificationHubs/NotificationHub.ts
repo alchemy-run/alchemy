@@ -2,7 +2,7 @@ import * as notificationhubs from "@distilled.cloud/azure/notificationhubs";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import {
@@ -18,6 +18,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createEntityName,
   credentialsNeedWrite,
@@ -97,11 +98,8 @@ export interface NotificationHub extends Resource<
  * ### Creating a Hub
  * **Example:** Hub in a free namespace
  * ```typescript
- * const ns = yield* Azure.NotificationHubs.Namespace("push", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const ns = yield* Azure.NotificationHubs.Namespace("push");
  * const hub = yield* Azure.NotificationHubs.NotificationHub("app", {
- *   resourceGroup: group.resourceGroupName,
  *   namespace: ns.namespaceName,
  *   registrationTtl: "90.00:00:00",
  * });
@@ -111,7 +109,6 @@ export interface NotificationHub extends Resource<
  * **Example:** APNs token authentication
  * ```typescript
  * const hub = yield* Azure.NotificationHubs.NotificationHub("app", {
- *   resourceGroup: group.resourceGroupName,
  *   namespace: ns.namespaceName,
  *   pnsCredentials: {
  *     apnsCredential: {
@@ -129,7 +126,9 @@ export interface NotificationHub extends Resource<
  *
  * @resource
  */
-export const NotificationHub = Resource<NotificationHub>("Azure.NotificationHubs.NotificationHub");
+export const NotificationHub = GroupedResource<NotificationHub>(
+  "Azure.NotificationHubs.NotificationHub",
+);
 
 export class NotificationHubNamespaceMissing extends Data.TaggedError(
   "Azure.NotificationHubs.NamespaceMissing",

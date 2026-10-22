@@ -2,7 +2,7 @@ import * as mysql from "@distilled.cloud/azure/mysql";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { MYSQL_NAMESPACE, serverOwnedByStack, type ServerRef, whileServerBusy } from "./common.ts";
 
 export interface AdministratorProps {
@@ -79,15 +80,11 @@ export interface Administrator extends Resource<
  * ### Granting Entra Admin
  * **Example:** Make an Entra group the administrator
  * ```typescript
- * const identity = yield* Azure.ManagedIdentity.UserAssignedIdentity("db", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const identity = yield* Azure.ManagedIdentity.UserAssignedIdentity("db");
  * const server = yield* Azure.MySQL.FlexibleServer("db", {
- *   resourceGroup: group.resourceGroupName,
  *   userAssignedIdentityIds: [identity.identityId],
  * });
  * const admin = yield* Azure.MySQL.Administrator("dbas", {
- *   resourceGroup: group.resourceGroupName,
  *   server: server.serverName,
  *   login: "db-admins",
  *   sid: "00000000-0000-0000-0000-000000000000",
@@ -97,7 +94,7 @@ export interface Administrator extends Resource<
  *
  * @resource
  */
-export const Administrator = Resource<Administrator>("Azure.MySQL.Administrator");
+export const Administrator = GroupedResource<Administrator>("Azure.MySQL.Administrator");
 
 const ADMINISTRATOR_NAME = "ActiveDirectory";
 

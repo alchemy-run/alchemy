@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import {
@@ -22,6 +22,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { EDGE_WAIT, edgeState, sameJson } from "./EdgeShared.ts";
 
 /** A capability declared by a context. */
@@ -114,7 +115,6 @@ export interface Context extends Resource<
  *   location: "eastus",
  * });
  * const context = yield* Azure.Edge.Context("context", {
- *   resourceGroup: group.resourceGroupName,
  *   capabilities: [{ name: "soap", description: "Soap production" }],
  *   hierarchies: [
  *     { name: "country", description: "Country" },
@@ -126,11 +126,8 @@ export interface Context extends Resource<
  * ### Linking Sites
  * **Example:** Add a site to the context
  * ```typescript
- * const site = yield* Azure.Edge.Site("plant", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const site = yield* Azure.Edge.Site("plant");
  * yield* Azure.Edge.SiteReference("plant-ref", {
- *   resourceGroup: group.resourceGroupName,
  *   context: context.contextName,
  *   siteId: site.siteId,
  * });
@@ -138,7 +135,7 @@ export interface Context extends Resource<
  *
  * @resource
  */
-export const Context = Resource<Context>("Azure.Edge.Context");
+export const Context = GroupedResource<Context>("Azure.Edge.Context");
 
 const getContext = (subscriptionId: string, resourceGroupName: string, contextName: string) =>
   orUndefinedIfNotFound(edge.GetContext({ subscriptionId, resourceGroupName, contextName }));

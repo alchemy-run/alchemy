@@ -1,9 +1,10 @@
 import * as apim from "@distilled.cloud/azure/apimanagement";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { subsetMatches } from "./Common.ts";
 import { entityLifecycle, reveal } from "./Entity.ts";
 
@@ -74,7 +75,6 @@ export interface IdentityProvider extends Resource<
  * **Example:** Sign in with Microsoft Entra ID
  * ```typescript
  * yield* Azure.ApiManagement.IdentityProvider("entra", {
- *   resourceGroup: group.resourceGroupName,
  *   serviceName: apim.serviceName,
  *   type: "aad",
  *   clientId: appId,
@@ -86,7 +86,9 @@ export interface IdentityProvider extends Resource<
  *
  * @resource
  */
-export const IdentityProvider = Resource<IdentityProvider>("Azure.ApiManagement.IdentityProvider");
+export const IdentityProvider = GroupedResource<IdentityProvider>(
+  "Azure.ApiManagement.IdentityProvider",
+);
 
 interface Key {
   resourceGroup: string;

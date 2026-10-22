@@ -3,12 +3,13 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { ensureRegistered, ignoreNotFound, orUndefinedIfNotFound, waitUntilGone } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { isMonitorOwnedByStack, type MonitorChildProps, sameName } from "./common.ts";
 
 export interface OpenAIIntegrationProps extends MonitorChildProps {
@@ -63,7 +64,6 @@ export interface OpenAIIntegration extends Resource<
  * **Example:** Connect an Azure OpenAI account to Elastic
  * ```typescript
  * const integration = yield* Azure.Elastic.OpenAIIntegration("openai", {
- *   resourceGroup: group.resourceGroupName,
  *   monitor: monitor.monitorName,
  *   openAIResourceId: account.accountId,
  *   openAIResourceEndpoint: account.endpoint,
@@ -73,7 +73,9 @@ export interface OpenAIIntegration extends Resource<
  *
  * @resource
  */
-export const OpenAIIntegration = Resource<OpenAIIntegration>("Azure.Elastic.OpenAIIntegration");
+export const OpenAIIntegration = GroupedResource<OpenAIIntegration>(
+  "Azure.Elastic.OpenAIIntegration",
+);
 
 const createIntegrationName = (id: string) => createPhysicalName({ id, maxLength: 50 });
 

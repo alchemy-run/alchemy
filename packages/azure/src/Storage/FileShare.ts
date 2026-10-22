@@ -2,7 +2,7 @@ import * as storage from "@distilled.cloud/azure/storage";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -14,6 +14,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   accessPoliciesDiffer,
   createStorageChildName,
@@ -119,11 +120,8 @@ export interface FileShare extends Resource<
  * ### Creating a File Share
  * **Example:** 5 GiB SMB share
  * ```typescript
- * const account = yield* Azure.Storage.StorageAccount("files", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const account = yield* Azure.Storage.StorageAccount("files");
  * const share = yield* Azure.Storage.FileShare("documents", {
- *   resourceGroup: group.resourceGroupName,
  *   storageAccount: account.storageAccountName,
  *   shareQuota: 5,
  * });
@@ -132,7 +130,6 @@ export interface FileShare extends Resource<
  * **Example:** Cool tier share with metadata
  * ```typescript
  * const archive = yield* Azure.Storage.FileShare("archive", {
- *   resourceGroup: group.resourceGroupName,
  *   storageAccount: account.storageAccountName,
  *   shareQuota: 100,
  *   accessTier: "Cool",
@@ -144,7 +141,6 @@ export interface FileShare extends Resource<
  * **Example:** Stored access policy for SAS tokens
  * ```typescript
  * const share = yield* Azure.Storage.FileShare("exports", {
- *   resourceGroup: group.resourceGroupName,
  *   storageAccount: account.storageAccountName,
  *   accessPolicies: [
  *     { id: "readers", permission: "rl", expiryTime: "2030-01-01T00:00:00Z" },
@@ -154,7 +150,7 @@ export interface FileShare extends Resource<
  *
  * @resource
  */
-export const FileShare = Resource<FileShare>("Azure.Storage.FileShare");
+export const FileShare = GroupedResource<FileShare>("Azure.Storage.FileShare");
 
 const getShare = (
   subscriptionId: string,

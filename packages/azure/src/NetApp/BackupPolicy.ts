@@ -2,7 +2,7 @@ import * as netapp from "@distilled.cloud/azure/netapp";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -19,6 +19,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   accountLocation,
   createNetAppName,
@@ -96,7 +97,6 @@ export interface BackupPolicy extends Resource<
  * **Example:** Keep a week of dailies and a month of weeklies
  * ```typescript
  * const policy = yield* Azure.NetApp.BackupPolicy("backups", {
- *   resourceGroup: group.resourceGroupName,
  *   account: account.accountName,
  *   dailyBackupsToKeep: 7,
  *   weeklyBackupsToKeep: 4,
@@ -108,11 +108,9 @@ export interface BackupPolicy extends Resource<
  * **Example:** Back up a volume into a vault
  * ```typescript
  * const vault = yield* Azure.NetApp.BackupVault("vault", {
- *   resourceGroup: group.resourceGroupName,
  *   account: account.accountName,
  * });
  * const volume = yield* Azure.NetApp.Volume("data", {
- *   resourceGroup: group.resourceGroupName,
  *   account: account.accountName,
  *   pool: pool.poolName,
  *   subnetId: subnet.subnetId,
@@ -123,7 +121,7 @@ export interface BackupPolicy extends Resource<
  *
  * @resource
  */
-export const BackupPolicy = Resource<BackupPolicy>("Azure.NetApp.BackupPolicy");
+export const BackupPolicy = GroupedResource<BackupPolicy>("Azure.NetApp.BackupPolicy");
 
 const getBackupPolicy = (
   subscriptionId: string,

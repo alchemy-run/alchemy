@@ -2,7 +2,7 @@ import * as hdinsight from "@distilled.cloud/azure/hdinsight";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import {
@@ -14,6 +14,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { clusterOwnedByStage, lower, reveal } from "./Common.ts";
 
 export interface ExtensionProps {
@@ -67,7 +68,6 @@ export interface Extension extends Resource<
  * **Example:** Classic cluster monitoring
  * ```typescript
  * const monitoring = yield* Azure.HDInsight.Extension("monitoring", {
- *   resourceGroup: group.resourceGroupName,
  *   cluster: cluster.clusterName,
  *   extensionName: "clustermonitoring",
  *   workspaceId: workspace.customerId,
@@ -77,7 +77,7 @@ export interface Extension extends Resource<
  *
  * @resource
  */
-export const Extension = Resource<Extension>("Azure.HDInsight.Extension");
+export const Extension = GroupedResource<Extension>("Azure.HDInsight.Extension");
 
 const getExtension = (
   subscriptionId: string,

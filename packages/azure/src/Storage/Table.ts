@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -14,6 +14,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   accessPoliciesDiffer,
   fromSignedIdentifiers,
@@ -74,11 +75,8 @@ export interface Table extends Resource<
  * ### Creating a Table
  * **Example:** Basic table
  * ```typescript
- * const account = yield* Azure.Storage.StorageAccount("app", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const account = yield* Azure.Storage.StorageAccount("app");
  * const users = yield* Azure.Storage.Table("users", {
- *   resourceGroup: group.resourceGroupName,
  *   storageAccount: account.storageAccountName,
  * });
  * ```
@@ -87,7 +85,6 @@ export interface Table extends Resource<
  * **Example:** Stored access policy for read-only SAS tokens
  * ```typescript
  * const users = yield* Azure.Storage.Table("users", {
- *   resourceGroup: group.resourceGroupName,
  *   storageAccount: account.storageAccountName,
  *   accessPolicies: [
  *     { id: "readers", permission: "r", expiryTime: "2030-01-01T00:00:00Z" },
@@ -97,7 +94,7 @@ export interface Table extends Resource<
  *
  * @resource
  */
-export const Table = Resource<Table>("Azure.Storage.Table");
+export const Table = GroupedResource<Table>("Azure.Storage.Table");
 
 const createTableName = Effect.fn(function* (id: string) {
   const name = yield* createPhysicalName({

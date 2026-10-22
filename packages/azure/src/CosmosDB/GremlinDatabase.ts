@@ -3,11 +3,12 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { ensureRegistered, ignoreNotFound, orUndefinedIfNotFound, waitUntilGone } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createOptions,
   hasDedicatedThroughput,
@@ -71,11 +72,9 @@ export interface GremlinDatabase extends Resource<
  * **Example:** Database on a serverless Gremlin account
  * ```typescript
  * const account = yield* Azure.CosmosDB.DatabaseAccount("graph", {
- *   resourceGroup: group.resourceGroupName,
  *   capabilities: ["EnableServerless", "EnableGremlin"],
  * });
  * const database = yield* Azure.CosmosDB.GremlinDatabase("app", {
- *   resourceGroup: group.resourceGroupName,
  *   account: account.accountName,
  * });
  * ```
@@ -84,7 +83,6 @@ export interface GremlinDatabase extends Resource<
  * **Example:** Autoscale throughput shared by every graph
  * ```typescript
  * const database = yield* Azure.CosmosDB.GremlinDatabase("app", {
- *   resourceGroup: group.resourceGroupName,
  *   account: account.accountName,
  *   autoscaleMaxThroughput: 1000,
  * });
@@ -92,7 +90,7 @@ export interface GremlinDatabase extends Resource<
  *
  * @resource
  */
-export const GremlinDatabase = Resource<GremlinDatabase>("Azure.CosmosDB.GremlinDatabase");
+export const GremlinDatabase = GroupedResource<GremlinDatabase>("Azure.CosmosDB.GremlinDatabase");
 
 const createDatabaseName = (id: string) => createPhysicalName({ id, maxLength: 255 });
 

@@ -2,7 +2,7 @@ import * as ml from "@distilled.cloud/azure/machinelearningservices";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -17,6 +17,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createChildName,
   identityDiffers,
@@ -112,7 +113,6 @@ export interface BatchEndpoint extends Resource<
  * **Example:** Batch endpoint
  * ```typescript
  * const endpoint = yield* Azure.MachineLearning.BatchEndpoint("nightly", {
- *   resourceGroup: group.resourceGroupName,
  *   workspace: workspace.workspaceName,
  *   description: "Nightly scoring",
  * });
@@ -122,7 +122,6 @@ export interface BatchEndpoint extends Resource<
  * **Example:** Route invocations to a deployment (after it exists)
  * ```typescript
  * const endpoint = yield* Azure.MachineLearning.BatchEndpoint("nightly", {
- *   resourceGroup: group.resourceGroupName,
  *   workspace: workspace.workspaceName,
  *   defaultDeployment: "v1",
  * });
@@ -130,7 +129,7 @@ export interface BatchEndpoint extends Resource<
  *
  * @resource
  */
-export const BatchEndpoint = Resource<BatchEndpoint>("Azure.MachineLearning.BatchEndpoint");
+export const BatchEndpoint = GroupedResource<BatchEndpoint>("Azure.MachineLearning.BatchEndpoint");
 
 const getEndpoint = (
   subscriptionId: string,

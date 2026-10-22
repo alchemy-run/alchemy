@@ -2,7 +2,7 @@ import * as mnf from "@distilled.cloud/azure/managednetworkfabric";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -19,6 +19,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createFabricName,
   differs,
@@ -115,12 +116,10 @@ export interface L3IsolationDomain extends Resource<
  * ### Creating an L3 Isolation Domain
  * **Example:** Domain that advertises connected subnets
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("fabric");
  * // The Network Fabric is provisioned on Operator Nexus racks.
  * const fabricId =
  *   "/subscriptions/.../resourceGroups/nexus/providers/Microsoft.ManagedNetworkFabric/networkFabrics/fab1";
  * const l3 = yield* Azure.ManagedNetworkFabric.L3IsolationDomain("tenant", {
- *   resourceGroup: group.resourceGroupName,
  *   networkFabricId: fabricId,
  *   redistributeConnectedSubnets: "True",
  *   redistributeStaticRoutes: "False",
@@ -129,7 +128,7 @@ export interface L3IsolationDomain extends Resource<
  *
  * @resource
  */
-export const L3IsolationDomain = Resource<L3IsolationDomain>(
+export const L3IsolationDomain = GroupedResource<L3IsolationDomain>(
   "Azure.ManagedNetworkFabric.L3IsolationDomain",
 );
 

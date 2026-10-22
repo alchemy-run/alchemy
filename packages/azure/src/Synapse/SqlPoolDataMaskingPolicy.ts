@@ -2,11 +2,12 @@ import * as synapse from "@distilled.cloud/azure/synapse";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { ensureRegistered, orUndefinedIfNotFound } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   fieldsMatch,
   isWorkspaceOwnedByStack,
@@ -70,7 +71,6 @@ export interface SqlPoolDataMaskingPolicy extends Resource<
  * **Example:** Mask for everyone except analysts
  * ```typescript
  * yield* Azure.Synapse.SqlPoolDataMaskingPolicy("masking", {
- *   resourceGroup: group.resourceGroupName,
  *   workspace: workspace.workspaceName,
  *   sqlPool: pool.sqlPoolName,
  *   exemptPrincipals: "analyst1;analyst2",
@@ -79,7 +79,7 @@ export interface SqlPoolDataMaskingPolicy extends Resource<
  *
  * @resource
  */
-export const SqlPoolDataMaskingPolicy = Resource<SqlPoolDataMaskingPolicy>(
+export const SqlPoolDataMaskingPolicy = GroupedResource<SqlPoolDataMaskingPolicy>(
   "Azure.Synapse.SqlPoolDataMaskingPolicy",
 );
 

@@ -2,7 +2,7 @@ import * as vmware from "@distilled.cloud/azure/vmware";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   AVS_NAMESPACE,
   WORKLOAD_BUDGET,
@@ -71,7 +72,6 @@ export interface WorkloadNetworkVMGroup extends Resource<
  * **Example:** VM group with two members
  * ```typescript
  * yield* Azure.VMware.WorkloadNetworkVMGroup("web", {
- *   resourceGroup: group.resourceGroupName,
  *   privateCloud: cloud.privateCloudName,
  *   displayName: "web-servers",
  *   members: [vm1NsxId, vm2NsxId],
@@ -80,7 +80,7 @@ export interface WorkloadNetworkVMGroup extends Resource<
  *
  * @resource
  */
-export const WorkloadNetworkVMGroup = Resource<WorkloadNetworkVMGroup>(
+export const WorkloadNetworkVMGroup = GroupedResource<WorkloadNetworkVMGroup>(
   "Azure.VMware.WorkloadNetworkVMGroup",
 );
 

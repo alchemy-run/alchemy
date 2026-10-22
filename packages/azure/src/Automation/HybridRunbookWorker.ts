@@ -2,7 +2,7 @@ import * as automation from "@distilled.cloud/azure/automation";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -14,6 +14,7 @@ import {
 import { deterministicGuid } from "../Authorization/Ownership.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { accountOwnedByStage, sameName } from "./Common.ts";
 
 export interface HybridRunbookWorkerProps {
@@ -71,7 +72,6 @@ export interface HybridRunbookWorker extends Resource<
  * **Example:** Register a VM, then install the worker extension
  * ```typescript
  * const worker = yield* Azure.Automation.HybridRunbookWorker("vm1", {
- *   resourceGroup: group.resourceGroupName,
  *   automationAccount: account.automationAccountName,
  *   hybridRunbookWorkerGroup: workers.hybridRunbookWorkerGroupName,
  *   vmResourceId: vm.virtualMachineId,
@@ -80,7 +80,7 @@ export interface HybridRunbookWorker extends Resource<
  *
  * @resource
  */
-export const HybridRunbookWorker = Resource<HybridRunbookWorker>(
+export const HybridRunbookWorker = GroupedResource<HybridRunbookWorker>(
   "Azure.Automation.HybridRunbookWorker",
 );
 

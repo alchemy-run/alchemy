@@ -2,7 +2,7 @@ import * as dashboard from "@distilled.cloud/azure/dashboard";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -21,6 +21,7 @@ import {
 import { AzureEnvironment } from "../Environment.ts";
 import { createGrafanaName } from "../Grafana/Workspace.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 
 export interface ManagedDashboardProps {
   /**
@@ -78,16 +79,16 @@ export interface ManagedDashboard extends Resource<
  * ### Creating a Managed Dashboard
  * **Example:** Dashboard in a resource group
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("observability");
  * const board = yield* Azure.Dashboard.ManagedDashboard("ops", {
- *   resourceGroup: group.resourceGroupName,
  *   tags: { team: "ops" },
  * });
  * ```
  *
  * @resource
  */
-export const ManagedDashboard = Resource<ManagedDashboard>("Azure.Dashboard.ManagedDashboard");
+export const ManagedDashboard = GroupedResource<ManagedDashboard>(
+  "Azure.Dashboard.ManagedDashboard",
+);
 
 const getDashboard = (subscriptionId: string, resourceGroupName: string, dashboardName: string) =>
   orUndefinedIfNotFound(

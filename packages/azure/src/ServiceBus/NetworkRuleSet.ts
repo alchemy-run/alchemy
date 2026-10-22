@@ -1,11 +1,12 @@
 import * as servicebus from "@distilled.cloud/azure/servicebus";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { ensureRegistered, ignoreNotFound, orUndefinedIfNotFound } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { sameName } from "./internal.ts";
 
 export interface NetworkRuleSetIpRule {
@@ -89,11 +90,8 @@ export interface NetworkRuleSet extends Resource<
  * ### Restricting Access
  * **Example:** Allow only an office IP range
  * ```typescript
- * const bus = yield* Azure.ServiceBus.Namespace("bus", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const bus = yield* Azure.ServiceBus.Namespace("bus");
  * yield* Azure.ServiceBus.NetworkRuleSet("bus-firewall", {
- *   resourceGroup: group.resourceGroupName,
  *   namespace: bus.namespaceName,
  *   defaultAction: "Deny",
  *   ipRules: [{ ipMask: "203.0.113.0/24" }],
@@ -103,7 +101,6 @@ export interface NetworkRuleSet extends Resource<
  * **Example:** Disable the public endpoint, allow trusted services
  * ```typescript
  * yield* Azure.ServiceBus.NetworkRuleSet("bus-firewall", {
- *   resourceGroup: group.resourceGroupName,
  *   namespace: bus.namespaceName,
  *   publicNetworkAccess: "Disabled",
  *   trustedServiceAccessEnabled: true,
@@ -112,7 +109,7 @@ export interface NetworkRuleSet extends Resource<
  *
  * @resource
  */
-export const NetworkRuleSet = Resource<NetworkRuleSet>("Azure.ServiceBus.NetworkRuleSet");
+export const NetworkRuleSet = GroupedResource<NetworkRuleSet>("Azure.ServiceBus.NetworkRuleSet");
 
 interface Where {
   subscriptionId: string;

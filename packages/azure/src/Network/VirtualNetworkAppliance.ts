@@ -1,8 +1,9 @@
 import * as network from "@distilled.cloud/azure/network";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import { orUndefinedIfNotFound, userTags } from "../Arm.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { lower, sameId } from "./common.ts";
 import { idsOf, networkProvider } from "./generic.ts";
 
@@ -78,13 +79,11 @@ export interface VirtualNetworkAppliance extends Resource<
  * **Example:** 10 Gbps appliance in its dedicated subnet
  * ```typescript
  * const subnet = yield* Azure.Network.Subnet("appliance", {
- *   resourceGroup: group.resourceGroupName,
  *   virtualNetwork: vnet.virtualNetworkName,
  *   name: "VirtualNetworkApplianceSubnet",
  *   addressPrefix: "10.0.1.0/24",
  * });
  * const appliance = yield* Azure.Network.VirtualNetworkAppliance("edge", {
- *   resourceGroup: group.resourceGroupName,
  *   subnetId: subnet.subnetId,
  *   bandwidthInGbps: 10,
  * });
@@ -92,7 +91,7 @@ export interface VirtualNetworkAppliance extends Resource<
  *
  * @resource
  */
-export const VirtualNetworkAppliance = Resource<VirtualNetworkAppliance>(
+export const VirtualNetworkAppliance = GroupedResource<VirtualNetworkAppliance>(
   "Azure.Network.VirtualNetworkAppliance",
 );
 

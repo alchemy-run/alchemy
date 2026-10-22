@@ -2,7 +2,7 @@ import * as dnsresolver from "@distilled.cloud/azure/dnsresolver";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -20,6 +20,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createDnsResolverName,
   FAST_BUDGET,
@@ -83,22 +84,19 @@ export interface Policy extends Resource<
  * ### Creating a Policy
  * **Example:** DNS security policy
  * ```typescript
- * const policy = yield* Azure.DnsResolver.Policy("dns-security", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const policy = yield* Azure.DnsResolver.Policy("dns-security");
  * ```
  *
  * **Example:** Policy with tags
  * ```typescript
  * const policy = yield* Azure.DnsResolver.Policy("dns-security", {
- *   resourceGroup: group.resourceGroupName,
  *   tags: { team: "security" },
  * });
  * ```
  *
  * @resource
  */
-export const Policy = Resource<Policy>("Azure.DnsResolver.Policy");
+export const Policy = GroupedResource<Policy>("Azure.DnsResolver.Policy");
 
 const getPolicy = (
   subscriptionId: string,

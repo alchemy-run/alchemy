@@ -2,7 +2,7 @@ import * as mnf from "@distilled.cloud/azure/managednetworkfabric";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -19,6 +19,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createFabricName,
   FABRIC_NAMESPACE,
@@ -96,9 +97,7 @@ export interface IpExtendedCommunity extends Resource<
  * ### Creating an Extended Community List
  * **Example:** Match a route target
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("fabric");
  * const targets = yield* Azure.ManagedNetworkFabric.IpExtendedCommunity("rt", {
- *   resourceGroup: group.resourceGroupName,
  *   ipExtendedCommunityRules: [
  *     { action: "Permit", sequenceNumber: 10, routeTargets: ["65000:100"] },
  *   ],
@@ -107,7 +106,7 @@ export interface IpExtendedCommunity extends Resource<
  *
  * @resource
  */
-export const IpExtendedCommunity = Resource<IpExtendedCommunity>(
+export const IpExtendedCommunity = GroupedResource<IpExtendedCommunity>(
   "Azure.ManagedNetworkFabric.IpExtendedCommunity",
 );
 

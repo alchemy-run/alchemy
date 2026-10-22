@@ -2,7 +2,7 @@ import * as compute from "@distilled.cloud/azure/compute";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import {
@@ -19,6 +19,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createComputeName, sameId, waitComputeGone } from "./common.ts";
 
 export interface SshPublicKeyProps {
@@ -99,7 +100,6 @@ export interface SshPublicKey extends Resource<
  * **Example:** Upload a public key
  * ```typescript
  * const key = yield* Azure.Compute.SshPublicKey("admin", {
- *   resourceGroup: group.resourceGroupName,
  *   publicKey: "ssh-ed25519 AAAAC3Nza... admin@example.com",
  * });
  * ```
@@ -108,7 +108,6 @@ export interface SshPublicKey extends Resource<
  * **Example:** Let Azure generate the pair
  * ```typescript
  * const key = yield* Azure.Compute.SshPublicKey("admin", {
- *   resourceGroup: group.resourceGroupName,
  *   generateKeyPair: true,
  * });
  * // key.privateKey is a Redacted<string>
@@ -118,7 +117,6 @@ export interface SshPublicKey extends Resource<
  * **Example:** VM that trusts the key
  * ```typescript
  * const vm = yield* Azure.Compute.VirtualMachine("web", {
- *   resourceGroup: group.resourceGroupName,
  *   vmSize: "Standard_B1s",
  *   networkInterfaceIds: [nic.networkInterfaceId],
  *   adminUsername: "azureuser",
@@ -128,7 +126,7 @@ export interface SshPublicKey extends Resource<
  *
  * @resource
  */
-export const SshPublicKey = Resource<SshPublicKey>("Azure.Compute.SshPublicKey");
+export const SshPublicKey = GroupedResource<SshPublicKey>("Azure.Compute.SshPublicKey");
 
 type Observed = compute.GetSshPublicKeyResponse;
 

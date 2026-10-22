@@ -3,7 +3,7 @@ import * as guestconfiguration from "@distilled.cloud/azure/guestconfiguration";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import {
@@ -15,6 +15,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   type AssignmentAttributes,
   type AssignmentProps,
@@ -75,7 +76,6 @@ export interface VirtualMachineScaleSetAssignment extends Resource<
  * **Example:** Audit the Azure Linux security baseline on a scale set
  * ```typescript
  * const scaleSet = yield* Azure.Compute.VirtualMachineScaleSet("Vmss", {
- *   resourceGroup: group.resourceGroupName,
  *   vmSize: "Standard_B1s",
  *   capacity: 2,
  *   subnetId: subnet.subnetId,
@@ -86,7 +86,6 @@ export interface VirtualMachineScaleSetAssignment extends Resource<
  *   yield* Azure.GuestConfiguration.VirtualMachineScaleSetAssignment(
  *     "Baseline",
  *     {
- *       resourceGroup: group.resourceGroupName,
  *       virtualMachineScaleSet: scaleSet.virtualMachineScaleSetName,
  *       configurationName: "AzureLinuxBaseline",
  *       configurationVersion: "1.*",
@@ -100,7 +99,6 @@ export interface VirtualMachineScaleSetAssignment extends Resource<
  * yield* Azure.GuestConfiguration.VirtualMachineScaleSetAssignment(
  *   "Baseline",
  *   {
- *     resourceGroup: group.resourceGroupName,
  *     virtualMachineScaleSet: scaleSet.virtualMachineScaleSetName,
  *     configurationName: "AzureLinuxBaseline",
  *     configurationVersion: "1.*",
@@ -114,7 +112,7 @@ export interface VirtualMachineScaleSetAssignment extends Resource<
  *
  * @resource
  */
-export const VirtualMachineScaleSetAssignment = Resource<VirtualMachineScaleSetAssignment>(
+export const VirtualMachineScaleSetAssignment = GroupedResource<VirtualMachineScaleSetAssignment>(
   "Azure.GuestConfiguration.VirtualMachineScaleSetAssignment",
 );
 

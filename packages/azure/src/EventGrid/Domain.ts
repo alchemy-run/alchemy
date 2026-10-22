@@ -2,7 +2,7 @@ import * as eventgrid from "@distilled.cloud/azure/eventgrid";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
 import {
@@ -21,6 +21,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createEventGridName,
   identityDiffers,
@@ -152,28 +153,23 @@ export interface Domain extends Resource<
  * ### Creating a Domain
  * **Example:** Domain with default settings
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("app");
- * const domain = yield* Azure.EventGrid.Domain("tenants", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const domain = yield* Azure.EventGrid.Domain("tenants");
  * ```
  *
  * **Example:** Domain whose topics are managed explicitly
  * ```typescript
  * const domain = yield* Azure.EventGrid.Domain("tenants", {
- *   resourceGroup: group.resourceGroupName,
  *   autoCreateTopicWithFirstSubscription: false,
  *   autoDeleteTopicWithLastSubscription: false,
  * });
  * const contoso = yield* Azure.EventGrid.DomainTopic("contoso", {
- *   resourceGroup: group.resourceGroupName,
  *   domain: domain.domainName,
  * });
  * ```
  *
  * @resource
  */
-export const Domain = Resource<Domain>("Azure.EventGrid.Domain");
+export const Domain = GroupedResource<Domain>("Azure.EventGrid.Domain");
 
 const getDomain = (subscriptionId: string, resourceGroupName: string, domainName: string) =>
   orUndefinedIfNotFound(eventgrid.GetDomain({ subscriptionId, resourceGroupName, domainName }));

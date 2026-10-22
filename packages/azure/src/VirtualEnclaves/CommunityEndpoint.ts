@@ -2,7 +2,7 @@ import * as mission from "@distilled.cloud/azure/mission";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -20,6 +20,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   changedProperties,
   createMissionName,
@@ -107,7 +108,6 @@ export interface CommunityEndpoint extends Resource<
  * **Example:** Allow HTTPS egress to an FQDN
  * ```typescript
  * const endpoint = yield* Azure.VirtualEnclaves.CommunityEndpoint("egress", {
- *   resourceGroup: group.resourceGroupName,
  *   community: community.communityName,
  *   ruleCollection: [
  *     {
@@ -123,7 +123,7 @@ export interface CommunityEndpoint extends Resource<
  *
  * @resource
  */
-export const CommunityEndpoint = Resource<CommunityEndpoint>(
+export const CommunityEndpoint = GroupedResource<CommunityEndpoint>(
   "Azure.VirtualEnclaves.CommunityEndpoint",
 );
 

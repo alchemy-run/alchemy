@@ -1,8 +1,9 @@
 import * as apim from "@distilled.cloud/azure/apimanagement";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { entityLifecycle, serviceEntityId } from "./Entity.ts";
 import type { NotificationName } from "./Notification.ts";
 
@@ -48,7 +49,6 @@ export interface NotificationRecipientUser extends Resource<
  * **Example:** Send quota warnings to an operator account
  * ```typescript
  * yield* Azure.ApiManagement.NotificationRecipientUser("quota-ops", {
- *   resourceGroup: group.resourceGroupName,
  *   serviceName: apim.serviceName,
  *   notificationName: "QuotaLimitApproachingPublisherNotificationMessage",
  *   userName: operator.userName,
@@ -57,7 +57,7 @@ export interface NotificationRecipientUser extends Resource<
  *
  * @resource
  */
-export const NotificationRecipientUser = Resource<NotificationRecipientUser>(
+export const NotificationRecipientUser = GroupedResource<NotificationRecipientUser>(
   "Azure.ApiManagement.NotificationRecipientUser",
 );
 

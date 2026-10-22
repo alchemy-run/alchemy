@@ -2,7 +2,7 @@ import * as automation from "@distilled.cloud/azure/automation";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { accountOwnedByStage, childNuke, createChildName, sameName, sameText } from "./Common.ts";
 
 export type ScheduleFrequency = "OneTime" | "Day" | "Hour" | "Week" | "Month" | "Minute";
@@ -126,7 +127,6 @@ export interface Schedule extends Resource<
  * **Example:** Daily at 02:00 UTC
  * ```typescript
  * const nightly = yield* Azure.Automation.Schedule("nightly", {
- *   resourceGroup: group.resourceGroupName,
  *   automationAccount: account.automationAccountName,
  *   startTime: "2030-01-01T02:00:00Z",
  *   frequency: "Day",
@@ -136,7 +136,6 @@ export interface Schedule extends Resource<
  * **Example:** Every Monday and Friday
  * ```typescript
  * const weekly = yield* Azure.Automation.Schedule("weekly", {
- *   resourceGroup: group.resourceGroupName,
  *   automationAccount: account.automationAccountName,
  *   startTime: "2030-01-01T08:00:00Z",
  *   frequency: "Week",
@@ -146,7 +145,7 @@ export interface Schedule extends Resource<
  *
  * @resource
  */
-export const Schedule = Resource<Schedule>("Azure.Automation.Schedule");
+export const Schedule = GroupedResource<Schedule>("Azure.Automation.Schedule");
 
 const getSchedule = (
   subscriptionId: string,

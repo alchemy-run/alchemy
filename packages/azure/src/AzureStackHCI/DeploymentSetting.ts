@@ -2,7 +2,7 @@ import * as hci from "@distilled.cloud/azure/azurestackhci";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { getHciCluster } from "./Cluster.ts";
 import { HCI_NAMESPACE, isStackOwnedTags, sameId, sameValue } from "./Common.ts";
 
@@ -93,7 +94,6 @@ export interface DeploymentSetting extends Resource<
  * **Example:** Validate the configuration first
  * ```typescript
  * const deployment = yield* Azure.AzureStackHCI.DeploymentSetting("deploy", {
- *   resourceGroup: group.resourceGroupName,
  *   cluster: cluster.clusterName,
  *   arcNodeResourceIds: [node1Id, node2Id],
  *   deploymentMode: "Validate", // then "Deploy"
@@ -106,7 +106,7 @@ export interface DeploymentSetting extends Resource<
  *
  * @resource
  */
-export const DeploymentSetting = Resource<DeploymentSetting>(
+export const DeploymentSetting = GroupedResource<DeploymentSetting>(
   "Azure.AzureStackHCI.DeploymentSetting",
 );
 

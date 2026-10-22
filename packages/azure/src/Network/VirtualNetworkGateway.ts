@@ -1,8 +1,9 @@
 import * as network from "@distilled.cloud/azure/network";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import { orUndefinedIfNotFound, userTags } from "../Arm.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { idsOf, networkProvider, subsetDiffers } from "./generic.ts";
 
 /** Point-to-site settings of a VPN gateway. */
@@ -136,7 +137,6 @@ export interface VirtualNetworkGateway extends Resource<
  * **Example:** Route-based VPN gateway
  * ```typescript
  * const gateway = yield* Azure.Network.VirtualNetworkGateway("vpn", {
- *   resourceGroup: group.resourceGroupName,
  *   sku: "VpnGw1AZ",
  *   subnetId: gatewaySubnet.subnetId,
  *   publicIpAddressIds: [ip.publicIpAddressId],
@@ -146,7 +146,6 @@ export interface VirtualNetworkGateway extends Resource<
  * **Example:** Point-to-site with Entra ID
  * ```typescript
  * const gateway = yield* Azure.Network.VirtualNetworkGateway("p2s", {
- *   resourceGroup: group.resourceGroupName,
  *   subnetId: gatewaySubnet.subnetId,
  *   publicIpAddressIds: [ip.publicIpAddressId],
  *   generation: "Generation2",
@@ -164,7 +163,7 @@ export interface VirtualNetworkGateway extends Resource<
  *
  * @resource
  */
-export const VirtualNetworkGateway = Resource<VirtualNetworkGateway>(
+export const VirtualNetworkGateway = GroupedResource<VirtualNetworkGateway>(
   "Azure.Network.VirtualNetworkGateway",
 );
 

@@ -2,7 +2,7 @@ import * as devtestlabs from "@distilled.cloud/azure/devtestlabs";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -16,6 +16,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { DEVTESTLAB_NAMESPACE, diverges, labLocation } from "./Common.ts";
 
 export type PolicyFactName =
@@ -109,7 +110,6 @@ export interface Policy extends Resource<
  * **Example:** At most 5 VMs per lab
  * ```typescript
  * const vmCount = yield* Azure.DevTestLabs.Policy("vm-count", {
- *   resourceGroup: group.resourceGroupName,
  *   lab: lab.labName,
  *   factName: "LabVmCount",
  *   evaluatorType: "MaxValuePolicy",
@@ -121,7 +121,6 @@ export interface Policy extends Resource<
  * **Example:** Allowed VM sizes
  * ```typescript
  * const sizes = yield* Azure.DevTestLabs.Policy("vm-sizes", {
- *   resourceGroup: group.resourceGroupName,
  *   lab: lab.labName,
  *   factName: "LabVmSize",
  *   evaluatorType: "AllowedValuesPolicy",
@@ -131,7 +130,7 @@ export interface Policy extends Resource<
  *
  * @resource
  */
-export const Policy = Resource<Policy>("Azure.DevTestLabs.Policy");
+export const Policy = GroupedResource<Policy>("Azure.DevTestLabs.Policy");
 
 const POLICY_SET = "default";
 

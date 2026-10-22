@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -15,6 +15,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 
 /** Target settings of a moved resource. */
 export interface MoveResourceSettings {
@@ -124,7 +125,6 @@ export interface MoveResource extends Resource<
  * **Example:** Move a network security group to another region
  * ```typescript
  * const collection = yield* Azure.ResourceMover.MoveCollection("eastToWest", {
- *   resourceGroup: group.resourceGroupName,
  *   sourceRegion: "eastus",
  *   targetRegion: "westus2",
  * });
@@ -136,11 +136,9 @@ export interface MoveResource extends Resource<
  *   principalType: "ServicePrincipal",
  * });
  * const nsg = yield* Azure.Network.NetworkSecurityGroup("web", {
- *   resourceGroup: group.resourceGroupName,
  *   location: "eastus",
  * });
  * yield* Azure.ResourceMover.MoveResource("webNsg", {
- *   resourceGroup: group.resourceGroupName,
  *   // Order after the grant so it exists for the add and outlives the delete.
  *   moveCollection: Output.map(
  *     Output.all(collection.moveCollectionName, grant.roleAssignmentId),
@@ -158,7 +156,6 @@ export interface MoveResource extends Resource<
  * **Example:** Point a dependency at an existing target resource
  * ```typescript
  * yield* Azure.ResourceMover.MoveResource("webNic", {
- *   resourceGroup: group.resourceGroupName,
  *   moveCollection: collection.moveCollectionName,
  *   sourceId: nic.networkInterfaceId,
  *   resourceSettings: {
@@ -172,7 +169,7 @@ export interface MoveResource extends Resource<
  *
  * @resource
  */
-export const MoveResource = Resource<MoveResource>("Azure.ResourceMover.MoveResource");
+export const MoveResource = GroupedResource<MoveResource>("Azure.ResourceMover.MoveResource");
 
 const getMoveResource = (
   subscriptionId: string,

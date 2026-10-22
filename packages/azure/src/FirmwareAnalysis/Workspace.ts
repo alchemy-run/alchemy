@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -21,6 +21,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 
 /**
  * SKU of a firmware analysis workspace.
@@ -101,16 +102,12 @@ export interface Workspace extends Resource<
  * ### Creating a Workspace
  * **Example:** Workspace in a resource group
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("app");
- * const workspace = yield* Azure.FirmwareAnalysis.Workspace("firmware", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const workspace = yield* Azure.FirmwareAnalysis.Workspace("firmware");
  * ```
  *
  * **Example:** Workspace with an explicit SKU and tags
  * ```typescript
  * const workspace = yield* Azure.FirmwareAnalysis.Workspace("firmware", {
- *   resourceGroup: group.resourceGroupName,
  *   location: "westeurope",
  *   sku: { name: "Free" },
  *   tags: { team: "iot" },
@@ -119,7 +116,7 @@ export interface Workspace extends Resource<
  *
  * @resource
  */
-export const Workspace = Resource<Workspace>("Azure.FirmwareAnalysis.Workspace");
+export const Workspace = GroupedResource<Workspace>("Azure.FirmwareAnalysis.Workspace");
 
 type ObservedWorkspace = fist.GetWorkspaceResponse;
 

@@ -2,7 +2,7 @@ import * as redisenterprise from "@distilled.cloud/azure/redisenterprise";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -19,6 +19,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createClusterName, getCluster, lower, readiness } from "./Common.ts";
 
 export type ManagedRedisSkuName = redisenterprise.SkuName;
@@ -158,9 +159,7 @@ export interface ManagedRedis extends Resource<
  * ### Creating a Cluster
  * **Example:** Smallest Balanced cluster
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("app");
  * const redis = yield* Azure.Redis.ManagedRedis("cache", {
- *   resourceGroup: group.resourceGroupName,
  *   sku: "Balanced_B0",
  *   highAvailability: "Disabled",
  * });
@@ -169,7 +168,6 @@ export interface ManagedRedis extends Resource<
  * **Example:** Highly available Memory Optimized cluster
  * ```typescript
  * const redis = yield* Azure.Redis.ManagedRedis("cache", {
- *   resourceGroup: group.resourceGroupName,
  *   sku: "MemoryOptimized_M10",
  *   tags: { team: "platform" },
  * });
@@ -179,7 +177,6 @@ export interface ManagedRedis extends Resource<
  * **Example:** Disable the public endpoint
  * ```typescript
  * const redis = yield* Azure.Redis.ManagedRedis("cache", {
- *   resourceGroup: group.resourceGroupName,
  *   publicNetworkAccess: "Disabled",
  * });
  * ```
@@ -187,11 +184,8 @@ export interface ManagedRedis extends Resource<
  * ### Managed Identity
  * **Example:** Customer-managed key with a user-assigned identity
  * ```typescript
- * const identity = yield* Azure.ManagedIdentity.UserAssignedIdentity("redis", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const identity = yield* Azure.ManagedIdentity.UserAssignedIdentity("redis");
  * const redis = yield* Azure.Redis.ManagedRedis("cache", {
- *   resourceGroup: group.resourceGroupName,
  *   identity: {
  *     type: "UserAssigned",
  *     userAssignedIdentities: [identity.identityId],
@@ -205,7 +199,7 @@ export interface ManagedRedis extends Resource<
  *
  * @resource
  */
-export const ManagedRedis = Resource<ManagedRedis>("Azure.Redis.ManagedRedis");
+export const ManagedRedis = GroupedResource<ManagedRedis>("Azure.Redis.ManagedRedis");
 
 type ObservedCluster = redisenterprise.GetRedisEnterpriseResponse;
 

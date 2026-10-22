@@ -2,7 +2,7 @@ import * as nc from "@distilled.cloud/azure/networkcloud";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -19,6 +19,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createNexusName,
   customLocation,
@@ -144,7 +145,6 @@ export interface KubernetesCluster extends Resource<
  * **Example:** Three control plane nodes and one agent pool
  * ```typescript
  * const naks = yield* Azure.NetworkCloud.KubernetesCluster("naks", {
- *   resourceGroup: group.resourceGroupName,
  *   customLocationId: cluster.clusterExtendedLocationId,
  *   kubernetesVersion: "1.30.4-1",
  *   controlPlaneNodeConfiguration: { count: 3, vmSkuName: "NC_G6_28_v1" },
@@ -164,7 +164,7 @@ export interface KubernetesCluster extends Resource<
  *
  * @resource
  */
-export const KubernetesCluster = Resource<KubernetesCluster>(
+export const KubernetesCluster = GroupedResource<KubernetesCluster>(
   "Azure.NetworkCloud.KubernetesCluster",
 );
 

@@ -2,7 +2,7 @@ import * as cognitiveservices from "@distilled.cloud/azure/cognitiveservices";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -14,6 +14,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { CHILD_BUDGET, createChildName, sameArm, whileAccountBusy } from "./Common.ts";
 import {
   type ConnectionAttrs,
@@ -65,7 +66,6 @@ export interface Connection extends Resource<
  * **Example:** API key connection
  * ```typescript
  * const search = yield* Azure.CognitiveServices.Connection("search", {
- *   resourceGroup: group.resourceGroupName,
  *   account: account.accountName,
  *   category: "ApiKey",
  *   authType: "ApiKey",
@@ -77,7 +77,6 @@ export interface Connection extends Resource<
  * **Example:** Managed-identity connection to Azure AI Search
  * ```typescript
  * const search = yield* Azure.CognitiveServices.Connection("search", {
- *   resourceGroup: group.resourceGroupName,
  *   account: account.accountName,
  *   category: "CognitiveSearch",
  *   authType: "AAD",
@@ -88,7 +87,7 @@ export interface Connection extends Resource<
  *
  * @resource
  */
-export const Connection = Resource<Connection>("Azure.CognitiveServices.Connection");
+export const Connection = GroupedResource<Connection>("Azure.CognitiveServices.Connection");
 
 const getConnection = (
   subscriptionId: string,

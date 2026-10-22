@@ -2,7 +2,7 @@ import * as deviceregistry from "@distilled.cloud/azure/deviceregistry";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -20,6 +20,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   DEVICE_REGISTRY_RP,
   DEVICE_REGISTRY_WAIT,
@@ -153,13 +154,11 @@ export interface Asset extends Resource<
  * **Example:** OPC UA asset with a dataset
  * ```typescript
  * const profile = yield* Azure.DeviceRegistry.AssetEndpointProfile("plc", {
- *   resourceGroup: group.resourceGroupName,
  *   customLocationId: aioCustomLocationId,
  *   targetAddress: "opc.tcp://plc.factory.local:4840",
  *   endpointProfileType: "Microsoft.OpcUa",
  * });
  * const asset = yield* Azure.DeviceRegistry.Asset("oven", {
- *   resourceGroup: group.resourceGroupName,
  *   customLocationId: aioCustomLocationId,
  *   assetEndpointProfile: profile.assetEndpointProfileName,
  *   displayName: "Oven",
@@ -177,7 +176,7 @@ export interface Asset extends Resource<
  *
  * @resource
  */
-export const Asset = Resource<Asset>("Azure.DeviceRegistry.Asset");
+export const Asset = GroupedResource<Asset>("Azure.DeviceRegistry.Asset");
 
 /** Properties the PATCH API can change in place. */
 const MUTABLE = [

@@ -2,7 +2,7 @@ import * as storagesync from "@distilled.cloud/azure/storagesync";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createChildName, isServiceOwnedByStack, sameName } from "./internal.ts";
 
 export interface SyncGroupProps {
@@ -65,18 +66,15 @@ export interface SyncGroup extends Resource<
  * ### Creating a Sync Group
  * **Example:** Sync group under a Storage Sync Service
  * ```typescript
- * const sync = yield* Azure.StorageSync.StorageSyncService("sync", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const sync = yield* Azure.StorageSync.StorageSyncService("sync");
  * const syncGroup = yield* Azure.StorageSync.SyncGroup("docs", {
- *   resourceGroup: group.resourceGroupName,
  *   storageSyncService: sync.storageSyncServiceName,
  * });
  * ```
  *
  * @resource
  */
-export const SyncGroup = Resource<SyncGroup>("Azure.StorageSync.SyncGroup");
+export const SyncGroup = GroupedResource<SyncGroup>("Azure.StorageSync.SyncGroup");
 
 type Observed = storagesync.GetSyncGroupResponse;
 

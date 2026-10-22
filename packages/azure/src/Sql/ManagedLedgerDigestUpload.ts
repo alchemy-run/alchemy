@@ -2,11 +2,12 @@ import * as sql from "@distilled.cloud/azure/sql";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { ensureRegistered, ignoreNotFound, orUndefinedIfNotFound } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { isManagedInstanceOwnedByStack, lower } from "./common.ts";
 import { managedDatabasePath, type ManagedDatabaseScope, syncSetting } from "./setting.ts";
 
@@ -60,7 +61,6 @@ export interface ManagedLedgerDigestUpload extends Resource<
  * **Example:** Upload digests to Blob Storage
  * ```typescript
  * yield* Azure.Sql.ManagedLedgerDigestUpload("digests", {
- *   resourceGroup: group.resourceGroupName,
  *   managedInstance: instance.managedInstanceName,
  *   database: database.databaseName,
  *   digestStorageEndpoint: account.primaryEndpoints.blob,
@@ -69,7 +69,7 @@ export interface ManagedLedgerDigestUpload extends Resource<
  *
  * @resource
  */
-export const ManagedLedgerDigestUpload = Resource<ManagedLedgerDigestUpload>(
+export const ManagedLedgerDigestUpload = GroupedResource<ManagedLedgerDigestUpload>(
   "Azure.Sql.ManagedLedgerDigestUpload",
 );
 

@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -14,6 +14,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { isOwnedChild } from "./Shared.ts";
 
 export interface FleetspaceThroughputPool {
@@ -108,11 +109,8 @@ export interface Fleetspace extends Resource<
  * ### Creating a Fleetspace
  * **Example:** Fleetspace without pooling
  * ```typescript
- * const fleet = yield* Azure.CosmosDB.Fleet("tenants", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const fleet = yield* Azure.CosmosDB.Fleet("tenants");
  * const space = yield* Azure.CosmosDB.Fleetspace("standard", {
- *   resourceGroup: group.resourceGroupName,
  *   fleet: fleet.fleetName,
  * });
  * ```
@@ -121,7 +119,6 @@ export interface Fleetspace extends Resource<
  * **Example:** Pool shared by single-write accounts in one region
  * ```typescript
  * const space = yield* Azure.CosmosDB.Fleetspace("pooled", {
- *   resourceGroup: group.resourceGroupName,
  *   fleet: fleet.fleetName,
  *   serviceTier: "GeneralPurpose",
  *   dataRegions: ["westus2"],
@@ -131,7 +128,7 @@ export interface Fleetspace extends Resource<
  *
  * @resource
  */
-export const Fleetspace = Resource<Fleetspace>("Azure.CosmosDB.Fleetspace");
+export const Fleetspace = GroupedResource<Fleetspace>("Azure.CosmosDB.Fleetspace");
 
 const normalizeRegion = (region: string) => region.toLowerCase().replace(/\s+/g, "");
 

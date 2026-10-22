@@ -2,7 +2,7 @@ import * as healthcareapis from "@distilled.cloud/azure/healthcareapis";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -15,6 +15,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   covers,
   checkServiceId,
@@ -223,11 +224,8 @@ export interface FhirService extends Resource<
  * ### Creating a FHIR Service
  * **Example:** FHIR R4 service with Entra ID authentication
  * ```typescript
- * const workspace = yield* Azure.HealthcareApis.Workspace("workspace", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const workspace = yield* Azure.HealthcareApis.Workspace("workspace");
  * const fhir = yield* Azure.HealthcareApis.FhirService("fhir", {
- *   resourceGroup: group.resourceGroupName,
  *   workspace: workspace.workspaceName,
  * });
  * // fhir.serviceUrl -> https://{workspace}-{name}.fhir.azurehealthcareapis.com
@@ -237,7 +235,6 @@ export interface FhirService extends Resource<
  * **Example:** FHIR service with CORS for a web app
  * ```typescript
  * const fhir = yield* Azure.HealthcareApis.FhirService("fhir", {
- *   resourceGroup: group.resourceGroupName,
  *   workspace: workspace.workspaceName,
  *   corsConfiguration: {
  *     origins: ["https://app.contoso.com"],
@@ -252,7 +249,6 @@ export interface FhirService extends Resource<
  * **Example:** Managed identity and an export storage account
  * ```typescript
  * const fhir = yield* Azure.HealthcareApis.FhirService("fhir", {
- *   resourceGroup: group.resourceGroupName,
  *   workspace: workspace.workspaceName,
  *   identity: { type: "SystemAssigned" },
  *   exportStorageAccountName: account.storageAccountName,
@@ -261,7 +257,7 @@ export interface FhirService extends Resource<
  *
  * @resource
  */
-export const FhirService = Resource<FhirService>("Azure.HealthcareApis.FhirService");
+export const FhirService = GroupedResource<FhirService>("Azure.HealthcareApis.FhirService");
 
 type ObservedFhir = healthcareapis.GetFhirServiceResponse | healthcareapis.FhirService;
 

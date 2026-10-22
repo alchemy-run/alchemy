@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import {
@@ -15,6 +15,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   getServer,
   POSTGRES_NAMESPACE,
@@ -74,14 +75,13 @@ export interface Backup extends Resource<
  * **Example:** Snapshot a server before a migration
  * ```typescript
  * const snapshot = yield* Azure.PostgreSQL.Backup("pre-migration", {
- *   resourceGroup: group.resourceGroupName,
  *   server: server.serverName,
  * });
  * ```
  *
  * @resource
  */
-export const Backup = Resource<Backup>("Azure.PostgreSQL.Backup");
+export const Backup = GroupedResource<Backup>("Azure.PostgreSQL.Backup");
 
 /**
  * Azure accepts the backup request on a Burstable server and then fails

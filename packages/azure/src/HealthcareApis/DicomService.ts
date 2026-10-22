@@ -2,7 +2,7 @@ import * as healthcareapis from "@distilled.cloud/azure/healthcareapis";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -15,6 +15,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   covers,
   checkServiceId,
@@ -138,11 +139,8 @@ export interface DicomService extends Resource<
  * ### Creating a DICOM Service
  * **Example:** DICOM service in a workspace
  * ```typescript
- * const workspace = yield* Azure.HealthcareApis.Workspace("workspace", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const workspace = yield* Azure.HealthcareApis.Workspace("workspace");
  * const dicom = yield* Azure.HealthcareApis.DicomService("dicom", {
- *   resourceGroup: group.resourceGroupName,
  *   workspace: workspace.workspaceName,
  * });
  * // dicom.serviceUrl -> https://{workspace}-{name}.dicom.azurehealthcareapis.com
@@ -152,7 +150,6 @@ export interface DicomService extends Resource<
  * **Example:** DICOM service with CORS for a web viewer
  * ```typescript
  * const dicom = yield* Azure.HealthcareApis.DicomService("dicom", {
- *   resourceGroup: group.resourceGroupName,
  *   workspace: workspace.workspaceName,
  *   corsConfiguration: {
  *     origins: ["https://viewer.contoso.com"],
@@ -166,7 +163,6 @@ export interface DicomService extends Resource<
  * **Example:** DICOM data in your own Data Lake account
  * ```typescript
  * const dicom = yield* Azure.HealthcareApis.DicomService("dicom", {
- *   resourceGroup: group.resourceGroupName,
  *   workspace: workspace.workspaceName,
  *   identity: { type: "SystemAssigned" },
  *   storageConfiguration: {
@@ -178,7 +174,7 @@ export interface DicomService extends Resource<
  *
  * @resource
  */
-export const DicomService = Resource<DicomService>("Azure.HealthcareApis.DicomService");
+export const DicomService = GroupedResource<DicomService>("Azure.HealthcareApis.DicomService");
 
 type ObservedDicom = healthcareapis.GetDicomServiceResponse | healthcareapis.DicomService;
 

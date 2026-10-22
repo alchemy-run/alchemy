@@ -2,11 +2,12 @@ import * as logic from "@distilled.cloud/azure/logic";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { ensureRegistered, ignoreNotFound, orUndefinedIfNotFound, waitUntilGone } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   artifactDiffers,
   artifactMetadata,
@@ -87,7 +88,6 @@ export interface IntegrationAccountCertificate extends Resource<
  * **Example:** Public certificate
  * ```typescript
  * const partnerCert = yield* Azure.Logic.IntegrationAccountCertificate("fabrikam", {
- *   resourceGroup: group.resourceGroupName,
  *   integrationAccount: account.integrationAccountName,
  *   publicCertificate: cerBase64,
  * });
@@ -96,7 +96,6 @@ export interface IntegrationAccountCertificate extends Resource<
  * **Example:** Private certificate backed by Key Vault
  * ```typescript
  * const signing = yield* Azure.Logic.IntegrationAccountCertificate("signing", {
- *   resourceGroup: group.resourceGroupName,
  *   integrationAccount: account.integrationAccountName,
  *   publicCertificate: cerBase64,
  *   key: { keyVault: vaultId, keyName: "as2-signing" },
@@ -105,7 +104,7 @@ export interface IntegrationAccountCertificate extends Resource<
  *
  * @resource
  */
-export const IntegrationAccountCertificate = Resource<IntegrationAccountCertificate>(
+export const IntegrationAccountCertificate = GroupedResource<IntegrationAccountCertificate>(
   "Azure.Logic.IntegrationAccountCertificate",
 );
 

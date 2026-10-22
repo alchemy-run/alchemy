@@ -2,7 +2,7 @@ import * as app from "@distilled.cloud/azure/app";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createContainerAppsName,
   fingerprint,
@@ -127,7 +128,6 @@ export interface HttpRouteConfig extends Resource<
  * **Example:** Split `/api` and `/` across two apps
  * ```typescript
  * const routes = yield* Azure.ContainerApps.HttpRouteConfig("routes", {
- *   resourceGroup: group.resourceGroupName,
  *   environment: env.environmentName,
  *   rules: [
  *     {
@@ -145,7 +145,9 @@ export interface HttpRouteConfig extends Resource<
  *
  * @resource
  */
-export const HttpRouteConfig = Resource<HttpRouteConfig>("Azure.ContainerApps.HttpRouteConfig");
+export const HttpRouteConfig = GroupedResource<HttpRouteConfig>(
+  "Azure.ContainerApps.HttpRouteConfig",
+);
 
 const createRouteName = (id: string) => createContainerAppsName(id, 32);
 

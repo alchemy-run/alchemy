@@ -2,11 +2,12 @@ import * as network from "@distilled.cloud/azure/network";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { ensureRegistered, ignoreNotFound, orUndefinedIfNotFound, stackAndStage } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   canonical,
   createNetworkName,
@@ -133,11 +134,9 @@ export interface Subnet extends Resource<
  * **Example:** Subnet in a virtual network
  * ```typescript
  * const vnet = yield* Azure.Network.VirtualNetwork("vnet", {
- *   resourceGroup: group.resourceGroupName,
  *   addressPrefixes: ["10.0.0.0/16"],
  * });
  * const subnet = yield* Azure.Network.Subnet("app", {
- *   resourceGroup: group.resourceGroupName,
  *   virtualNetwork: vnet.virtualNetworkName,
  *   addressPrefix: "10.0.1.0/24",
  * });
@@ -147,7 +146,6 @@ export interface Subnet extends Resource<
  * **Example:** Subnet with an NSG, route table, and NAT gateway
  * ```typescript
  * const subnet = yield* Azure.Network.Subnet("app", {
- *   resourceGroup: group.resourceGroupName,
  *   virtualNetwork: vnet.virtualNetworkName,
  *   addressPrefix: "10.0.1.0/24",
  *   networkSecurityGroupId: nsg.networkSecurityGroupId,
@@ -160,7 +158,6 @@ export interface Subnet extends Resource<
  * **Example:** Subnet delegated to Azure Container Apps
  * ```typescript
  * const subnet = yield* Azure.Network.Subnet("apps", {
- *   resourceGroup: group.resourceGroupName,
  *   virtualNetwork: vnet.virtualNetworkName,
  *   addressPrefix: "10.0.2.0/23",
  *   serviceEndpoints: [{ service: "Microsoft.Storage" }],
@@ -170,7 +167,7 @@ export interface Subnet extends Resource<
  *
  * @resource
  */
-export const Subnet = Resource<Subnet>("Azure.Network.Subnet");
+export const Subnet = GroupedResource<Subnet>("Azure.Network.Subnet");
 
 type Observed = network.GetSubnetResponse;
 

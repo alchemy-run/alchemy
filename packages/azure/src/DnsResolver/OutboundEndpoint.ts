@@ -2,7 +2,7 @@ import * as dnsresolver from "@distilled.cloud/azure/dnsresolver";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -20,6 +20,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createDnsResolverName,
   ENDPOINT_BUDGET,
@@ -101,19 +102,19 @@ export interface OutboundEndpoint extends Resource<
  * **Example:** Endpoint used by a forwarding ruleset
  * ```typescript
  * const outbound = yield* Azure.DnsResolver.OutboundEndpoint("outbound", {
- *   resourceGroup: group.resourceGroupName,
  *   dnsResolver: resolver.dnsResolverName,
  *   subnetId: outboundSubnetId,
  * });
  * const ruleset = yield* Azure.DnsResolver.ForwardingRuleset("rules", {
- *   resourceGroup: group.resourceGroupName,
  *   outboundEndpointIds: [outbound.outboundEndpointId],
  * });
  * ```
  *
  * @resource
  */
-export const OutboundEndpoint = Resource<OutboundEndpoint>("Azure.DnsResolver.OutboundEndpoint");
+export const OutboundEndpoint = GroupedResource<OutboundEndpoint>(
+  "Azure.DnsResolver.OutboundEndpoint",
+);
 
 const getEndpoint = (
   subscriptionId: string,

@@ -4,7 +4,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -24,6 +24,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 
 export type VaultIdentityType =
   | "None"
@@ -185,16 +186,12 @@ export interface Vault extends Resource<
  * ### Creating a Vault
  * **Example:** Basic vault
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("backup");
- * const vault = yield* Azure.RecoveryServices.Vault("vault", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const vault = yield* Azure.RecoveryServices.Vault("vault");
  * ```
  *
  * **Example:** Locally redundant vault with a system-assigned identity
  * ```typescript
  * const vault = yield* Azure.RecoveryServices.Vault("vault", {
- *   resourceGroup: group.resourceGroupName,
  *   storageRedundancy: "LocallyRedundant",
  *   identity: { type: "SystemAssigned" },
  * });
@@ -204,7 +201,6 @@ export interface Vault extends Resource<
  * **Example:** Soft-delete retention and immutability
  * ```typescript
  * const vault = yield* Azure.RecoveryServices.Vault("vault", {
- *   resourceGroup: group.resourceGroupName,
  *   softDeleteRetentionPeriodInDays: 30,
  *   immutability: "Unlocked",
  *   publicNetworkAccess: "Disabled",
@@ -214,11 +210,8 @@ export interface Vault extends Resource<
  * ### Backing Up Resources
  * **Example:** Vault with a backup policy
  * ```typescript
- * const vault = yield* Azure.RecoveryServices.Vault("vault", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const vault = yield* Azure.RecoveryServices.Vault("vault");
  * const policy = yield* Azure.RecoveryServices.BackupPolicy("files-daily", {
- *   resourceGroup: group.resourceGroupName,
  *   vault: vault.vaultName,
  *   backupManagementType: "AzureStorage",
  *   workLoadType: "AzureFileShare",
@@ -236,7 +229,7 @@ export interface Vault extends Resource<
  *
  * @resource
  */
-export const Vault = Resource<Vault>("Azure.RecoveryServices.Vault");
+export const Vault = GroupedResource<Vault>("Azure.RecoveryServices.Vault");
 
 type ObservedVault = recoveryservices.GetVaultResponse;
 

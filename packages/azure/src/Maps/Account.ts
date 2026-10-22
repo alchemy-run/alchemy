@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import {
@@ -22,6 +22,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 
 /** SKU of a Maps account. `S0`/`S1` are Gen1 SKUs (retired). */
 export type MapsSkuName = "G2" | "S0" | "S1";
@@ -189,17 +190,13 @@ export interface Account extends Resource<
  * ### Creating an Account
  * **Example:** Gen2 Maps account
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("app");
- * const account = yield* Azure.Maps.Account("maps", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const account = yield* Azure.Maps.Account("maps");
  * ```
  *
  * ### Browser Access
  * **Example:** Allow a web origin via CORS
  * ```typescript
  * const account = yield* Azure.Maps.Account("maps", {
- *   resourceGroup: group.resourceGroupName,
  *   cors: [{ allowedOrigins: ["https://example.com"] }],
  * });
  * ```
@@ -208,7 +205,6 @@ export interface Account extends Resource<
  * **Example:** Disable shared keys and attach a system identity
  * ```typescript
  * const account = yield* Azure.Maps.Account("maps", {
- *   resourceGroup: group.resourceGroupName,
  *   disableLocalAuth: true,
  *   identity: { type: "SystemAssigned" },
  * });
@@ -217,7 +213,7 @@ export interface Account extends Resource<
  *
  * @resource
  */
-export const Account = Resource<Account>("Azure.Maps.Account");
+export const Account = GroupedResource<Account>("Azure.Maps.Account");
 
 const SUPPORTED_LOCATIONS = new Set([
   "eastus",

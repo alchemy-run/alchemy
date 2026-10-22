@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import {
@@ -21,6 +21,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 
 /** Managed identity type of a Fluid Relay server. */
 export type ServerIdentityType =
@@ -158,16 +159,12 @@ export interface Server extends Resource<
  * ### Creating a Server
  * **Example:** Server in a resource group
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("app");
- * const relay = yield* Azure.FluidRelay.Server("relay", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const relay = yield* Azure.FluidRelay.Server("relay");
  * ```
  *
  * **Example:** Basic storage SKU
  * ```typescript
  * const relay = yield* Azure.FluidRelay.Server("relay", {
- *   resourceGroup: group.resourceGroupName,
  *   storagesku: "basic",
  * });
  * ```
@@ -185,14 +182,13 @@ export interface Server extends Resource<
  * **Example:** System-assigned identity
  * ```typescript
  * const relay = yield* Azure.FluidRelay.Server("relay", {
- *   resourceGroup: group.resourceGroupName,
  *   identity: { type: "SystemAssigned" },
  * });
  * ```
  *
  * @resource
  */
-export const Server = Resource<Server>("Azure.FluidRelay.Server");
+export const Server = GroupedResource<Server>("Azure.FluidRelay.Server");
 
 type ObservedServer = fluidrelay.GetFluidRelayServerResponse;
 

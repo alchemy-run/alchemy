@@ -2,7 +2,7 @@ import * as dr from "@distilled.cloud/azure/recoveryservicesdatareplication";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -20,6 +20,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createDataReplicationName, DATA_REPLICATION_NAMESPACE, sameName } from "./Shared.ts";
 
 export type DataReplicationVaultType = "DisasterRecovery" | "Migrate";
@@ -113,16 +114,12 @@ export interface Vault extends Resource<
  * ### Creating a Vault
  * **Example:** Disaster recovery vault
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("dr");
- * const vault = yield* Azure.DataReplication.Vault("vault", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const vault = yield* Azure.DataReplication.Vault("vault");
  * ```
  *
  * **Example:** Private vault with a managed identity
  * ```typescript
  * const vault = yield* Azure.DataReplication.Vault("vault", {
- *   resourceGroup: group.resourceGroupName,
  *   vaultType: "Migrate",
  *   publicNetworkAccess: "Disabled",
  *   identity: "SystemAssigned",
@@ -132,7 +129,7 @@ export interface Vault extends Resource<
  *
  * @resource
  */
-export const Vault = Resource<Vault>("Azure.DataReplication.Vault");
+export const Vault = GroupedResource<Vault>("Azure.DataReplication.Vault");
 
 type ObservedVault = dr.GetVaultResponse;
 

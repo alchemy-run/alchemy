@@ -2,7 +2,7 @@ import * as sf from "@distilled.cloud/azure/servicefabricmanagedclusters";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -20,6 +20,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   APP_BUDGET,
   CLUSTER_BUDGET,
@@ -111,7 +112,6 @@ export interface Application extends Resource<
  * **Example:** Application running version 1.0.0
  * ```typescript
  * const app = yield* Azure.ServiceFabric.Application("voting", {
- *   resourceGroup: group.resourceGroupName,
  *   cluster: cluster.managedClusterName,
  *   version: v1.applicationTypeVersionId,
  *   parameters: { VotingWeb_InstanceCount: "-1" },
@@ -122,7 +122,6 @@ export interface Application extends Resource<
  * **Example:** Monitored rolling upgrade that rolls back on failure
  * ```typescript
  * const app = yield* Azure.ServiceFabric.Application("voting", {
- *   resourceGroup: group.resourceGroupName,
  *   cluster: cluster.managedClusterName,
  *   version: v2.applicationTypeVersionId,
  *   upgradePolicy: {
@@ -141,7 +140,7 @@ export interface Application extends Resource<
  *
  * @resource
  */
-export const Application = Resource<Application>("Azure.ServiceFabric.Application");
+export const Application = GroupedResource<Application>("Azure.ServiceFabric.Application");
 
 type ObservedApplication = sf.GetApplicationResponse | sf.ApplicationResource;
 

@@ -2,7 +2,7 @@ import * as sql from "@distilled.cloud/azure/sql";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createDnsName, lower } from "./common.ts";
 import { instancePath, type InstanceScope } from "./setting.ts";
 
@@ -67,7 +68,6 @@ export interface ManagedServerDnsAlias extends Resource<
  * **Example:** Stable connection name for a managed instance
  * ```typescript
  * const alias = yield* Azure.Sql.ManagedServerDnsAlias("alias", {
- *   resourceGroup: group.resourceGroupName,
  *   managedInstance: instance.managedInstanceName,
  * });
  * // connect to alias.azureDnsRecord
@@ -75,7 +75,7 @@ export interface ManagedServerDnsAlias extends Resource<
  *
  * @resource
  */
-export const ManagedServerDnsAlias = Resource<ManagedServerDnsAlias>(
+export const ManagedServerDnsAlias = GroupedResource<ManagedServerDnsAlias>(
   "Azure.Sql.ManagedServerDnsAlias",
 );
 

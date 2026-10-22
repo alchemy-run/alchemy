@@ -2,7 +2,7 @@ import * as migrate from "@distilled.cloud/azure/migrate";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { getAssessmentProject } from "./AssessmentProject.ts";
 import { migrateName, ownedByStage } from "./Common.ts";
 
@@ -78,11 +79,9 @@ export interface Group extends Resource<
  * **Example:** Group in an assessment project
  * ```typescript
  * const project = yield* Azure.Migrate.AssessmentProject("assess", {
- *   resourceGroup: group.resourceGroupName,
  *   location: "centralus",
  * });
  * const machines = yield* Azure.Migrate.Group("web-tier", {
- *   resourceGroup: group.resourceGroupName,
  *   assessmentProject: project.projectName,
  * });
  * ```
@@ -91,7 +90,6 @@ export interface Group extends Resource<
  * **Example:** Group for CSV-imported machines
  * ```typescript
  * const imported = yield* Azure.Migrate.Group("imported", {
- *   resourceGroup: group.resourceGroupName,
  *   assessmentProject: project.projectName,
  *   groupType: "Import",
  * });
@@ -99,7 +97,7 @@ export interface Group extends Resource<
  *
  * @resource
  */
-export const Group = Resource<Group>("Azure.Migrate.Group");
+export const Group = GroupedResource<Group>("Azure.Migrate.Group");
 
 export const getGroup = (
   subscriptionId: string,

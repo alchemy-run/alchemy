@@ -2,7 +2,7 @@ import * as servicebus from "@distilled.cloud/azure/servicebus";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createEntityName,
   hasMarker,
@@ -139,15 +140,11 @@ export interface Topic extends Resource<
  * ### Creating a Topic
  * **Example:** Topic with one subscription
  * ```typescript
- * const bus = yield* Azure.ServiceBus.Namespace("bus", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const bus = yield* Azure.ServiceBus.Namespace("bus");
  * const events = yield* Azure.ServiceBus.Topic("events", {
- *   resourceGroup: group.resourceGroupName,
  *   namespace: bus.namespaceName,
  * });
  * yield* Azure.ServiceBus.Subscription("audit", {
- *   resourceGroup: group.resourceGroupName,
  *   namespace: bus.namespaceName,
  *   topic: events.topicName,
  * });
@@ -156,7 +153,6 @@ export interface Topic extends Resource<
  * **Example:** Topic with duplicate detection and a one-day TTL
  * ```typescript
  * const events = yield* Azure.ServiceBus.Topic("events", {
- *   resourceGroup: group.resourceGroupName,
  *   namespace: bus.namespaceName,
  *   requiresDuplicateDetection: true,
  *   duplicateDetectionHistoryTimeWindow: "PT1H",
@@ -166,7 +162,7 @@ export interface Topic extends Resource<
  *
  * @resource
  */
-export const Topic = Resource<Topic>("Azure.ServiceBus.Topic");
+export const Topic = GroupedResource<Topic>("Azure.ServiceBus.Topic");
 
 const MUTABLE_KEYS = [
   "supportOrdering",

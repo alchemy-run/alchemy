@@ -2,7 +2,7 @@ import * as cognitiveservices from "@distilled.cloud/azure/cognitiveservices";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import {
@@ -14,6 +14,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { isAccountOwnedByStack } from "./Account.ts";
 import { createChildName, sameArm, sameValue, whileAccountBusy } from "./Common.ts";
 import { MANAGED_NETWORK_BUDGET, MANAGED_NETWORK_NAME } from "./ManagedNetwork.ts";
@@ -112,7 +113,6 @@ export interface OutboundRule extends Resource<
  *   principalType: "ServicePrincipal",
  * });
  * yield* Azure.CognitiveServices.OutboundRule("storage", {
- *   resourceGroup: group.resourceGroupName,
  *   account: network.account,
  *   type: "PrivateEndpoint",
  *   destination: {
@@ -126,7 +126,6 @@ export interface OutboundRule extends Resource<
  * **Example:** Allow PyPI
  * ```typescript
  * yield* Azure.CognitiveServices.OutboundRule("pypi", {
- *   resourceGroup: group.resourceGroupName,
  *   account: network.account,
  *   type: "FQDN",
  *   destination: "pypi.org",
@@ -135,7 +134,7 @@ export interface OutboundRule extends Resource<
  *
  * @resource
  */
-export const OutboundRule = Resource<OutboundRule>("Azure.CognitiveServices.OutboundRule");
+export const OutboundRule = GroupedResource<OutboundRule>("Azure.CognitiveServices.OutboundRule");
 
 const getRule = (
   subscriptionId: string,

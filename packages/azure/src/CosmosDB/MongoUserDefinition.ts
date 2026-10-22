@@ -3,12 +3,13 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { ensureRegistered, ignoreNotFound, orUndefinedIfNotFound, waitUntilGone } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import type { MongoRoleReference } from "./MongoRoleDefinition.ts";
 import { canonical, isOwnedChild, waitForChild, whileAccountBusy } from "./Shared.ts";
 
@@ -82,7 +83,6 @@ export interface MongoUserDefinition extends Resource<
  * **Example:** Read-write user on one database
  * ```typescript
  * const user = yield* Azure.CosmosDB.MongoUserDefinition("api", {
- *   resourceGroup: group.resourceGroupName,
  *   account: account.accountName,
  *   databaseName: "shop",
  *   userName: "api",
@@ -94,7 +94,6 @@ export interface MongoUserDefinition extends Resource<
  * **Example:** User holding a custom role
  * ```typescript
  * yield* Azure.CosmosDB.MongoUserDefinition("reporting", {
- *   resourceGroup: group.resourceGroupName,
  *   account: account.accountName,
  *   databaseName: "shop",
  *   password: yield* Config.redacted("MONGO_REPORTING_PASSWORD"),
@@ -104,7 +103,7 @@ export interface MongoUserDefinition extends Resource<
  *
  * @resource
  */
-export const MongoUserDefinition = Resource<MongoUserDefinition>(
+export const MongoUserDefinition = GroupedResource<MongoUserDefinition>(
   "Azure.CosmosDB.MongoUserDefinition",
 );
 

@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -18,6 +18,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { changedKeys, lower, siteWhere } from "./common.ts";
 import { getSite, type SiteConfig, type SiteIdentity } from "./Site.ts";
 
@@ -126,7 +127,6 @@ export interface WebAppSlot extends Resource<
  * **Example:** Staging slot with its own settings
  * ```typescript
  * const staging = yield* Azure.Web.WebAppSlot("staging", {
- *   resourceGroup: group.resourceGroupName,
  *   siteName: app.siteName,
  *   name: "staging",
  *   siteConfig: { linuxFxVersion: "NODE|20-lts" },
@@ -137,7 +137,7 @@ export interface WebAppSlot extends Resource<
  *
  * @resource
  */
-export const WebAppSlot = Resource<WebAppSlot>("Azure.Web.WebAppSlot");
+export const WebAppSlot = GroupedResource<WebAppSlot>("Azure.Web.WebAppSlot");
 
 const createSlotName = (id: string) => createPhysicalName({ id, maxLength: 20, lowercase: true });
 

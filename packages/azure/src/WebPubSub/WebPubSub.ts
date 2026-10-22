@@ -2,7 +2,7 @@ import * as webpubsub from "@distilled.cloud/azure/webpubsub";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import {
@@ -20,6 +20,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   boolString,
   createWebPubSubName,
@@ -233,16 +234,12 @@ export interface WebPubSub extends Resource<
  * ### Creating a Service
  * **Example:** Free tier service
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("app");
- * const pubsub = yield* Azure.WebPubSub.WebPubSub("pubsub", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const pubsub = yield* Azure.WebPubSub.WebPubSub("pubsub");
  * ```
  *
  * **Example:** Standard tier with two units and live trace
  * ```typescript
  * const pubsub = yield* Azure.WebPubSub.WebPubSub("pubsub", {
- *   resourceGroup: group.resourceGroupName,
  *   sku: "Standard_S1",
  *   capacity: 2,
  *   liveTrace: {
@@ -256,7 +253,6 @@ export interface WebPubSub extends Resource<
  * **Example:** Serverless Web PubSub for Socket.IO
  * ```typescript
  * const io = yield* Azure.WebPubSub.WebPubSub("socketio", {
- *   resourceGroup: group.resourceGroupName,
  *   kind: "SocketIO",
  *   sku: "Standard_S1",
  *   socketIOServiceMode: "Serverless",
@@ -267,7 +263,6 @@ export interface WebPubSub extends Resource<
  * **Example:** Entra ID only, with a system-assigned identity
  * ```typescript
  * const pubsub = yield* Azure.WebPubSub.WebPubSub("pubsub", {
- *   resourceGroup: group.resourceGroupName,
  *   sku: "Standard_S1",
  *   disableLocalAuth: true,
  *   identity: { type: "SystemAssigned" },
@@ -276,7 +271,7 @@ export interface WebPubSub extends Resource<
  *
  * @resource
  */
-export const WebPubSub = Resource<WebPubSub>("Azure.WebPubSub.WebPubSub");
+export const WebPubSub = GroupedResource<WebPubSub>("Azure.WebPubSub.WebPubSub");
 
 type Observed = webpubsub.GetWebPubSubResponse | webpubsub.WebPubSubResource;
 

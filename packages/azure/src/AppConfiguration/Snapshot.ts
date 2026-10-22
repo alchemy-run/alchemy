@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -15,6 +15,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 
 export interface SnapshotFilter {
   /** Key filter; a trailing `*` matches a prefix, e.g. `App:*`. */
@@ -103,7 +104,6 @@ export interface Snapshot extends Resource<
  * **Example:** Snapshot of all `App:` keys
  * ```typescript
  * const snapshot = yield* Azure.AppConfiguration.Snapshot("release", {
- *   resourceGroup: group.resourceGroupName,
  *   configurationStore: store.configurationStoreName,
  *   filters: [{ key: "App:*" }],
  * });
@@ -112,7 +112,6 @@ export interface Snapshot extends Resource<
  * **Example:** Snapshot keeping every label
  * ```typescript
  * const snapshot = yield* Azure.AppConfiguration.Snapshot("release", {
- *   resourceGroup: group.resourceGroupName,
  *   configurationStore: store.configurationStoreName,
  *   filters: [{ key: "*", label: "prod" }, { key: "*", label: "staging" }],
  *   compositionType: "Key_Label",
@@ -122,7 +121,7 @@ export interface Snapshot extends Resource<
  *
  * @resource
  */
-export const Snapshot = Resource<Snapshot>("Azure.AppConfiguration.Snapshot");
+export const Snapshot = GroupedResource<Snapshot>("Azure.AppConfiguration.Snapshot");
 
 const createSnapshotName = Effect.fn(function* (id: string) {
   const name = yield* createPhysicalName({

@@ -2,7 +2,7 @@ import * as signalr from "@distilled.cloud/azure/signalr";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createSignalRName,
   lower,
@@ -95,12 +96,10 @@ export interface SharedPrivateLinkResource extends Resource<
  * **Example:** Private link to a Function App
  * ```typescript
  * const signalR = yield* Azure.SignalR.SignalR("realtime", {
- *   resourceGroup: group.resourceGroupName,
  *   sku: "Standard_S1",
  *   serviceMode: "Serverless",
  * });
  * const link = yield* Azure.SignalR.SharedPrivateLinkResource("func", {
- *   resourceGroup: group.resourceGroupName,
  *   signalR: signalR.signalRName,
  *   groupId: "sites",
  *   privateLinkResourceId: functionApp.siteId,
@@ -111,7 +110,6 @@ export interface SharedPrivateLinkResource extends Resource<
  * **Example:** Private link to a Key Vault
  * ```typescript
  * const link = yield* Azure.SignalR.SharedPrivateLinkResource("vault", {
- *   resourceGroup: group.resourceGroupName,
  *   signalR: signalR.signalRName,
  *   groupId: "vault",
  *   privateLinkResourceId: vault.vaultId,
@@ -120,7 +118,7 @@ export interface SharedPrivateLinkResource extends Resource<
  *
  * @resource
  */
-export const SharedPrivateLinkResource = Resource<SharedPrivateLinkResource>(
+export const SharedPrivateLinkResource = GroupedResource<SharedPrivateLinkResource>(
   "Azure.SignalR.SharedPrivateLinkResource",
 );
 

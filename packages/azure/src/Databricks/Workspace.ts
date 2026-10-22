@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import {
@@ -22,6 +22,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 
 /** Access connector a workspace uses for its default storage. */
 export interface WorkspaceAccessConnector {
@@ -227,9 +228,7 @@ export interface Workspace extends Resource<
  * ### Creating a Workspace
  * **Example:** Premium workspace with a managed VNet
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("analytics");
  * const workspace = yield* Azure.Databricks.Workspace("lakehouse", {
- *   resourceGroup: group.resourceGroupName,
  *   sku: "premium",
  * });
  * // https://${workspace.workspaceUrl}
@@ -238,7 +237,6 @@ export interface Workspace extends Resource<
  * **Example:** Serverless workspace
  * ```typescript
  * const workspace = yield* Azure.Databricks.Workspace("serverless", {
- *   resourceGroup: group.resourceGroupName,
  *   computeMode: "Serverless",
  *   sku: "premium",
  * });
@@ -248,7 +246,6 @@ export interface Workspace extends Resource<
  * **Example:** VNet-injected workspace
  * ```typescript
  * const workspace = yield* Azure.Databricks.Workspace("injected", {
- *   resourceGroup: group.resourceGroupName,
  *   customVirtualNetworkId: vnet.virtualNetworkId,
  *   customPublicSubnetName: "databricks-host",
  *   customPrivateSubnetName: "databricks-container",
@@ -258,11 +255,8 @@ export interface Workspace extends Resource<
  * ### Unity Catalog Storage
  * **Example:** Default storage behind an access connector
  * ```typescript
- * const connector = yield* Azure.Databricks.AccessConnector("uc", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const connector = yield* Azure.Databricks.AccessConnector("uc");
  * const workspace = yield* Azure.Databricks.Workspace("lakehouse", {
- *   resourceGroup: group.resourceGroupName,
  *   accessConnector: {
  *     id: connector.accessConnectorId,
  *     identityType: "SystemAssigned",
@@ -273,7 +267,7 @@ export interface Workspace extends Resource<
  *
  * @resource
  */
-export const Workspace = Resource<Workspace>("Azure.Databricks.Workspace");
+export const Workspace = GroupedResource<Workspace>("Azure.Databricks.Workspace");
 
 type Observed = databricks.GetWorkspaceResponse;
 

@@ -1,8 +1,9 @@
 import * as apim from "@distilled.cloud/azure/apimanagement";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import type { Certificate, CertificateProps } from "./Certificate.ts";
 import { createEntityName } from "./Common.ts";
 import { entityLifecycle, reveal } from "./Entity.ts";
@@ -34,7 +35,6 @@ export interface WorkspaceCertificate extends Resource<
  * **Example:** Upload a PFX
  * ```typescript
  * yield* Azure.ApiManagement.WorkspaceCertificate("client-cert", {
- *   resourceGroup: group.resourceGroupName,
  *   serviceName: apim.serviceName,
  *   workspaceName: workspace.workspaceName,
  *   data: Redacted.make(pfxBase64),
@@ -44,7 +44,7 @@ export interface WorkspaceCertificate extends Resource<
  *
  * @resource
  */
-export const WorkspaceCertificate = Resource<WorkspaceCertificate>(
+export const WorkspaceCertificate = GroupedResource<WorkspaceCertificate>(
   "Azure.ApiManagement.WorkspaceCertificate",
 );
 

@@ -2,7 +2,7 @@ import * as cs from "@distilled.cloud/azure/containerservice";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -19,6 +19,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createChildName, getFleet, sameName, whileFleetBusy } from "./Common.ts";
 
 export interface FleetHubProfile {
@@ -112,15 +113,12 @@ export interface Fleet extends Resource<
  * ### Creating a Fleet
  * **Example:** Hubless fleet for update orchestration
  * ```typescript
- * const fleet = yield* Azure.ContainerService.Fleet("fleet", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const fleet = yield* Azure.ContainerService.Fleet("fleet");
  * ```
  *
  * **Example:** Fleet with a hub cluster
  * ```typescript
  * const fleet = yield* Azure.ContainerService.Fleet("fleet", {
- *   resourceGroup: group.resourceGroupName,
  *   hubProfile: { agentVmSize: "Standard_D2s_v7" },
  *   systemAssignedIdentity: true,
  * });
@@ -128,7 +126,7 @@ export interface Fleet extends Resource<
  *
  * @resource
  */
-export const Fleet = Resource<Fleet>("Azure.ContainerService.Fleet");
+export const Fleet = GroupedResource<Fleet>("Azure.ContainerService.Fleet");
 
 type ObservedFleet = cs.GetFleetResponse;
 

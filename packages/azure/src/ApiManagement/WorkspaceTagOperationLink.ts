@@ -1,8 +1,9 @@
 import * as apim from "@distilled.cloud/azure/apimanagement";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createEntityName } from "./Common.ts";
 import { entityLifecycle, serviceEntityId } from "./Entity.ts";
 
@@ -66,7 +67,6 @@ export interface WorkspaceTagOperationLink extends Resource<
  * **Example:** Mark an operation as deprecated
  * ```typescript
  * yield* Azure.ApiManagement.WorkspaceTagOperationLink("deprecated-get-order", {
- *   resourceGroup: group.resourceGroupName,
  *   serviceName: apim.serviceName,
  *   workspaceName: workspace.workspaceName,
  *   tagName: deprecated.tagName,
@@ -77,7 +77,7 @@ export interface WorkspaceTagOperationLink extends Resource<
  *
  * @resource
  */
-export const WorkspaceTagOperationLink = Resource<WorkspaceTagOperationLink>(
+export const WorkspaceTagOperationLink = GroupedResource<WorkspaceTagOperationLink>(
   "Azure.ApiManagement.WorkspaceTagOperationLink",
 );
 

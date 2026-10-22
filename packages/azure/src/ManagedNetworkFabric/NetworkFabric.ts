@@ -2,7 +2,7 @@ import * as mnf from "@distilled.cloud/azure/managednetworkfabric";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -19,6 +19,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createFabricName,
   differs,
@@ -150,9 +151,7 @@ export interface NetworkFabric extends Resource<
  * ### Creating a Network Fabric
  * **Example:** Fabric managed by a controller
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("fabric");
  * const fabric = yield* Azure.ManagedNetworkFabric.NetworkFabric("fab1", {
- *   resourceGroup: group.resourceGroupName,
  *   networkFabricControllerId: nfc.networkFabricControllerId,
  *   networkFabricSku: "M4-A400-A100-C16-aa",
  *   fabricVersion: "5.0.0",
@@ -175,7 +174,9 @@ export interface NetworkFabric extends Resource<
  *
  * @resource
  */
-export const NetworkFabric = Resource<NetworkFabric>("Azure.ManagedNetworkFabric.NetworkFabric");
+export const NetworkFabric = GroupedResource<NetworkFabric>(
+  "Azure.ManagedNetworkFabric.NetworkFabric",
+);
 
 type Observed = mnf.GetNetworkFabricResponse;
 

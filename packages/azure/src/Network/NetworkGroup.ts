@@ -1,8 +1,9 @@
 import * as network from "@distilled.cloud/azure/network";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import { orUndefinedIfNotFound } from "../Arm.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { networkProvider } from "./generic.ts";
 import { networkManagerChildName, networkManagerTags } from "./networkManagerShared.ts";
 
@@ -59,7 +60,6 @@ export interface NetworkGroup extends Resource<
  * **Example:** Group of spoke VNets
  * ```typescript
  * const spokes = yield* Azure.Network.NetworkGroup("spokes", {
- *   resourceGroup: group.resourceGroupName,
  *   networkManager: manager.networkManagerName,
  *   description: "Production spokes",
  * });
@@ -67,7 +67,7 @@ export interface NetworkGroup extends Resource<
  *
  * @resource
  */
-export const NetworkGroup = Resource<NetworkGroup>("Azure.Network.NetworkGroup");
+export const NetworkGroup = GroupedResource<NetworkGroup>("Azure.Network.NetworkGroup");
 
 export const NetworkGroupProvider = () =>
   Provider.succeed(

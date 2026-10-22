@@ -1,8 +1,9 @@
 import * as network from "@distilled.cloud/azure/network";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import { orUndefinedIfNotFound } from "../Arm.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { sameId } from "./common.ts";
 import { networkProvider } from "./generic.ts";
 import {
@@ -81,7 +82,6 @@ export interface HubVirtualNetworkConnection extends Resource<
  * **Example:** Spoke VNet with default routing
  * ```typescript
  * yield* Azure.Network.HubVirtualNetworkConnection("spoke", {
- *   resourceGroup: group.resourceGroupName,
  *   virtualHub: hub.virtualHubName,
  *   remoteVirtualNetworkId: spoke.virtualNetworkId,
  * });
@@ -90,7 +90,6 @@ export interface HubVirtualNetworkConnection extends Resource<
  * **Example:** Associate with a custom route table
  * ```typescript
  * yield* Azure.Network.HubVirtualNetworkConnection("spoke", {
- *   resourceGroup: group.resourceGroupName,
  *   virtualHub: hub.virtualHubName,
  *   remoteVirtualNetworkId: spoke.virtualNetworkId,
  *   routing: {
@@ -102,7 +101,7 @@ export interface HubVirtualNetworkConnection extends Resource<
  *
  * @resource
  */
-export const HubVirtualNetworkConnection = Resource<HubVirtualNetworkConnection>(
+export const HubVirtualNetworkConnection = GroupedResource<HubVirtualNetworkConnection>(
   "Azure.Network.HubVirtualNetworkConnection",
 );
 

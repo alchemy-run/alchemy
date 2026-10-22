@@ -1,9 +1,10 @@
 import * as network from "@distilled.cloud/azure/network";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { orUndefinedIfNotFound } from "../Arm.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { networkProvider } from "./generic.ts";
 
 export interface VirtualRouterPeeringProps {
@@ -54,7 +55,6 @@ export interface VirtualRouterPeering extends Resource<
  * **Example:** BGP peer
  * ```typescript
  * yield* Azure.Network.VirtualRouterPeering("nva", {
- *   resourceGroup: group.resourceGroupName,
  *   virtualRouter: router.virtualRouterName,
  *   peerAsn: 65010,
  *   peerIp: "10.0.1.4",
@@ -63,7 +63,7 @@ export interface VirtualRouterPeering extends Resource<
  *
  * @resource
  */
-export const VirtualRouterPeering = Resource<VirtualRouterPeering>(
+export const VirtualRouterPeering = GroupedResource<VirtualRouterPeering>(
   "Azure.Network.VirtualRouterPeering",
 );
 

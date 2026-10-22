@@ -1,7 +1,8 @@
 import * as iot from "@distilled.cloud/azure/iotoperations";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { childLifecycle, childStatus, type InstanceScope } from "./Common.ts";
 
 type BrokerScope = InstanceScope & { readonly brokerName: string };
@@ -63,7 +64,6 @@ export interface BrokerAuthentication extends Resource<
  * **Example:** Kubernetes service account tokens
  * ```typescript
  * const authn = yield* Azure.IoTOperations.BrokerAuthentication("sat", {
- *   resourceGroup: group.resourceGroupName,
  *   instanceName: instance.instanceName,
  *   authenticationMethods: [
  *     {
@@ -77,7 +77,6 @@ export interface BrokerAuthentication extends Resource<
  * **Example:** X.509 client certificates
  * ```typescript
  * const authn = yield* Azure.IoTOperations.BrokerAuthentication("x509", {
- *   resourceGroup: group.resourceGroupName,
  *   instanceName: instance.instanceName,
  *   authenticationMethods: [
  *     {
@@ -90,7 +89,7 @@ export interface BrokerAuthentication extends Resource<
  *
  * @resource
  */
-export const BrokerAuthentication = Resource<BrokerAuthentication>(
+export const BrokerAuthentication = GroupedResource<BrokerAuthentication>(
   "Azure.IoTOperations.BrokerAuthentication",
 );
 

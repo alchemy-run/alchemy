@@ -2,7 +2,7 @@ import * as automation from "@distilled.cloud/azure/automation";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -17,6 +17,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   type AutomationContentLink,
   childNuke,
@@ -87,7 +88,6 @@ export interface Module extends Resource<
  * **Example:** Module from the PowerShell Gallery
  * ```typescript
  * const color = yield* Azure.Automation.Module("PSWriteColor", {
- *   resourceGroup: group.resourceGroupName,
  *   automationAccount: account.automationAccountName,
  *   name: "PSWriteColor",
  *   contentLink: {
@@ -98,7 +98,7 @@ export interface Module extends Resource<
  *
  * @resource
  */
-export const Module = Resource<Module>("Azure.Automation.Module");
+export const Module = GroupedResource<Module>("Azure.Automation.Module");
 
 const getModule = (
   subscriptionId: string,

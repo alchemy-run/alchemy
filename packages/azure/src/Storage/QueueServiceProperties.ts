@@ -2,12 +2,13 @@ import * as storage from "@distilled.cloud/azure/storage";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { ensureRegistered, ignoreNotFound, orUndefinedIfNotFound } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   fromStorageCorsRules,
   storageCorsDiffers,
@@ -64,11 +65,8 @@ export interface QueueServiceProperties extends Resource<
  * ### CORS
  * **Example:** Allow a web app to read and send messages
  * ```typescript
- * const account = yield* Azure.Storage.StorageAccount("jobs", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const account = yield* Azure.Storage.StorageAccount("jobs");
  * yield* Azure.Storage.QueueServiceProperties("jobs-queue", {
- *   resourceGroup: group.resourceGroupName,
  *   storageAccount: account.storageAccountName,
  *   cors: [
  *     {
@@ -82,7 +80,7 @@ export interface QueueServiceProperties extends Resource<
  *
  * @resource
  */
-export const QueueServiceProperties = Resource<QueueServiceProperties>(
+export const QueueServiceProperties = GroupedResource<QueueServiceProperties>(
   "Azure.Storage.QueueServiceProperties",
 );
 

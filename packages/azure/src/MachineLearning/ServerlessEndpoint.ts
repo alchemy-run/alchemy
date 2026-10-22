@@ -2,7 +2,7 @@ import * as ml from "@distilled.cloud/azure/machinelearningservices";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -17,6 +17,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createChildName,
   identityDiffers,
@@ -103,7 +104,6 @@ export interface ServerlessEndpoint extends Resource<
  * **Example:** Serverless endpoint for a catalog model
  * ```typescript
  * const llama = yield* Azure.MachineLearning.ServerlessEndpoint("llama", {
- *   resourceGroup: group.resourceGroupName,
  *   workspace: project.workspaceName,
  *   modelId: "azureml://registries/azureml-meta/models/Llama-3.3-70B-Instruct",
  * });
@@ -112,7 +112,6 @@ export interface ServerlessEndpoint extends Resource<
  * **Example:** Endpoint without content safety filtering
  * ```typescript
  * const phi = yield* Azure.MachineLearning.ServerlessEndpoint("phi", {
- *   resourceGroup: group.resourceGroupName,
  *   workspace: project.workspaceName,
  *   modelId: "azureml://registries/azureml/models/Phi-3-mini-4k-instruct",
  *   contentSafety: "Disabled",
@@ -121,7 +120,7 @@ export interface ServerlessEndpoint extends Resource<
  *
  * @resource
  */
-export const ServerlessEndpoint = Resource<ServerlessEndpoint>(
+export const ServerlessEndpoint = GroupedResource<ServerlessEndpoint>(
   "Azure.MachineLearning.ServerlessEndpoint",
 );
 

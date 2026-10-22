@@ -2,7 +2,7 @@ import * as relay from "@distilled.cloud/azure/relay";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
 import {
@@ -14,6 +14,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   type AccessRight,
   createEntityName,
@@ -88,13 +89,11 @@ export interface WcfRelayAuthorizationRule extends Resource<
  * **Example:** Separate listener and sender credentials
  * ```typescript
  * const svc = yield* Azure.Relay.WcfRelay("legacy-svc", {
- *   resourceGroup: group.resourceGroupName,
  *   namespace: ns.namespaceName,
  * });
  * const listener = yield* Azure.Relay.WcfRelayAuthorizationRule(
  *   "listener",
  *   {
- *     resourceGroup: group.resourceGroupName,
  *     namespace: ns.namespaceName,
  *     wcfRelay: svc.relayName,
  *     rights: ["Listen"],
@@ -103,7 +102,6 @@ export interface WcfRelayAuthorizationRule extends Resource<
  * const sender = yield* Azure.Relay.WcfRelayAuthorizationRule(
  *   "sender",
  *   {
- *     resourceGroup: group.resourceGroupName,
  *     namespace: ns.namespaceName,
  *     wcfRelay: svc.relayName,
  *     rights: ["Send"],
@@ -113,7 +111,7 @@ export interface WcfRelayAuthorizationRule extends Resource<
  *
  * @resource
  */
-export const WcfRelayAuthorizationRule = Resource<WcfRelayAuthorizationRule>(
+export const WcfRelayAuthorizationRule = GroupedResource<WcfRelayAuthorizationRule>(
   "Azure.Relay.WcfRelayAuthorizationRule",
 );
 

@@ -2,11 +2,12 @@ import * as mnf from "@distilled.cloud/azure/managednetworkfabric";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { ensureRegistered, ignoreNotFound, orUndefinedIfNotFound, waitUntilGone } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   annotationMarker,
   createFabricName,
@@ -104,7 +105,6 @@ export interface InternalNetwork extends Resource<
  * **Example:** Workload subnet with BGP
  * ```typescript
  * const internal = yield* Azure.ManagedNetworkFabric.InternalNetwork("workload", {
- *   resourceGroup: group.resourceGroupName,
  *   l3IsolationDomain: l3.l3IsolationDomainName,
  *   vlanId: 805,
  *   mtu: 1500,
@@ -118,7 +118,7 @@ export interface InternalNetwork extends Resource<
  *
  * @resource
  */
-export const InternalNetwork = Resource<InternalNetwork>(
+export const InternalNetwork = GroupedResource<InternalNetwork>(
   "Azure.ManagedNetworkFabric.InternalNetwork",
 );
 

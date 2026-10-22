@@ -2,7 +2,7 @@ import * as eventhub from "@distilled.cloud/azure/eventhub";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createEntityName, matchesObserved, namespaceOwnedByStage } from "./Common.ts";
 
 export type ApplicationGroupMetric =
@@ -96,12 +97,10 @@ export interface ApplicationGroup extends Resource<
  * **Example:** Group the clients of a SAS rule
  * ```typescript
  * const rule = yield* Azure.EventHub.NamespaceAuthorizationRule("Producers", {
- *   resourceGroup: group.resourceGroupName,
  *   namespace: namespace.namespaceName,
  *   rights: ["Send"],
  * });
  * const producers = yield* Azure.EventHub.ApplicationGroup("producers", {
- *   resourceGroup: group.resourceGroupName,
  *   namespace: namespace.namespaceName,
  *   clientAppGroupIdentifier: Output.interpolate`SASKeyName=${rule.authorizationRuleName}`,
  * });
@@ -111,7 +110,6 @@ export interface ApplicationGroup extends Resource<
  * **Example:** Cap incoming messages per second
  * ```typescript
  * const producers = yield* Azure.EventHub.ApplicationGroup("producers", {
- *   resourceGroup: group.resourceGroupName,
  *   namespace: namespace.namespaceName,
  *   clientAppGroupIdentifier: "AADAppID=00000000-0000-0000-0000-000000000000",
  *   policies: [
@@ -127,7 +125,6 @@ export interface ApplicationGroup extends Resource<
  * **Example:** Temporarily disconnect the group
  * ```typescript
  * const producers = yield* Azure.EventHub.ApplicationGroup("producers", {
- *   resourceGroup: group.resourceGroupName,
  *   namespace: namespace.namespaceName,
  *   clientAppGroupIdentifier: "SASKeyName=producers",
  *   isEnabled: false,
@@ -136,7 +133,9 @@ export interface ApplicationGroup extends Resource<
  *
  * @resource
  */
-export const ApplicationGroup = Resource<ApplicationGroup>("Azure.EventHub.ApplicationGroup");
+export const ApplicationGroup = GroupedResource<ApplicationGroup>(
+  "Azure.EventHub.ApplicationGroup",
+);
 
 const getApplicationGroup = (
   subscriptionId: string,

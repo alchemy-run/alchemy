@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import {
@@ -16,6 +16,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 
 export interface VirtualNetworkPeeringProps {
   /**
@@ -113,16 +114,13 @@ export interface VirtualNetworkPeering extends Resource<
  * **Example:** Peer the workspace VNet with a hub VNet, both directions
  * ```typescript
  * const hub = yield* Azure.Network.VirtualNetwork("hub", {
- *   resourceGroup: group.resourceGroupName,
  *   addressPrefixes: ["10.20.0.0/16"],
  * });
  * const toHub = yield* Azure.Databricks.VirtualNetworkPeering("to-hub", {
- *   resourceGroup: group.resourceGroupName,
  *   workspace: workspace.workspaceName,
  *   remoteVirtualNetworkId: hub.virtualNetworkId,
  * });
  * yield* Azure.Network.VirtualNetworkPeering("hub-to-databricks", {
- *   resourceGroup: group.resourceGroupName,
  *   virtualNetwork: hub.virtualNetworkName,
  *   remoteVirtualNetworkId: toHub.databricksVirtualNetworkId,
  * });
@@ -130,7 +128,7 @@ export interface VirtualNetworkPeering extends Resource<
  *
  * @resource
  */
-export const VirtualNetworkPeering = Resource<VirtualNetworkPeering>(
+export const VirtualNetworkPeering = GroupedResource<VirtualNetworkPeering>(
   "Azure.Databricks.VirtualNetworkPeering",
 );
 

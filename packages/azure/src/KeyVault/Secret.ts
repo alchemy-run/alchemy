@@ -3,7 +3,7 @@ import * as keyvault from "@distilled.cloud/azure/keyvault";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import {
@@ -17,6 +17,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createObjectName, lower } from "./common.ts";
 
 /** Secret lifetime attributes. Times are Unix seconds. */
@@ -101,11 +102,8 @@ export interface Secret extends Resource<
  * ### Creating a Secret
  * **Example:** Store a database password
  * ```typescript
- * const vault = yield* Azure.KeyVault.Vault("secrets", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const vault = yield* Azure.KeyVault.Vault("secrets");
  * const password = yield* Azure.KeyVault.Secret("db-password", {
- *   resourceGroup: group.resourceGroupName,
  *   vault: vault.vaultName,
  *   value: Redacted.make(process.env.DB_PASSWORD!),
  *   contentType: "text/plain",
@@ -116,7 +114,6 @@ export interface Secret extends Resource<
  * **Example:** Secret that expires
  * ```typescript
  * const token = yield* Azure.KeyVault.Secret("api-token", {
- *   resourceGroup: group.resourceGroupName,
  *   vault: vault.vaultName,
  *   value: Redacted.make(apiToken),
  *   attributes: { expires: 1_893_456_000 },
@@ -125,7 +122,7 @@ export interface Secret extends Resource<
  *
  * @resource
  */
-export const Secret = Resource<Secret>("Azure.KeyVault.Secret");
+export const Secret = GroupedResource<Secret>("Azure.KeyVault.Secret");
 
 type ObservedSecret = keyvault.GetSecretResponse;
 

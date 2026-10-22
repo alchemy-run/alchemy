@@ -2,11 +2,12 @@ import * as keyvault from "@distilled.cloud/azure/keyvault";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { ensureRegistered, waitForProvisioned, waitUntilGone } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { getVault, isVaultOwnedByStack, lower, sameId } from "./common.ts";
 import { normalizePolicies, type VaultPermissions } from "./Vault.ts";
 
@@ -71,11 +72,9 @@ export interface AccessPolicy extends Resource<
  * **Example:** Let a managed identity read secrets
  * ```typescript
  * const vault = yield* Azure.KeyVault.Vault("legacy", {
- *   resourceGroup: group.resourceGroupName,
  *   enableRbacAuthorization: false,
  * });
  * yield* Azure.KeyVault.AccessPolicy("app-reads-secrets", {
- *   resourceGroup: group.resourceGroupName,
  *   vault: vault.vaultName,
  *   objectId: identity.principalId,
  *   permissions: { secrets: ["get", "list"] },
@@ -85,7 +84,6 @@ export interface AccessPolicy extends Resource<
  * **Example:** Key permissions for disk encryption
  * ```typescript
  * yield* Azure.KeyVault.AccessPolicy("disk-encryption", {
- *   resourceGroup: group.resourceGroupName,
  *   vault: vault.vaultName,
  *   objectId: diskEncryptionSet.principalId,
  *   permissions: { keys: ["get", "wrapKey", "unwrapKey"] },
@@ -94,7 +92,7 @@ export interface AccessPolicy extends Resource<
  *
  * @resource
  */
-export const AccessPolicy = Resource<AccessPolicy>("Azure.KeyVault.AccessPolicy");
+export const AccessPolicy = GroupedResource<AccessPolicy>("Azure.KeyVault.AccessPolicy");
 
 const matches =
   (objectId: string, applicationId: string | undefined) => (entry: keyvault.AccessPolicyEntry) =>

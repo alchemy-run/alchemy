@@ -1,8 +1,9 @@
 import * as network from "@distilled.cloud/azure/network";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import { orUndefinedIfNotFound, userTags } from "../Arm.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { networkProvider } from "./generic.ts";
 
 export interface DscpConfigurationProps {
@@ -71,7 +72,6 @@ export interface DscpConfiguration extends Resource<
  * **Example:** Mark voice traffic
  * ```typescript
  * yield* Azure.Network.DscpConfiguration("voice", {
- *   resourceGroup: group.resourceGroupName,
  *   qosDefinitionCollection: [
  *     {
  *       markings: [46],
@@ -84,7 +84,9 @@ export interface DscpConfiguration extends Resource<
  *
  * @resource
  */
-export const DscpConfiguration = Resource<DscpConfiguration>("Azure.Network.DscpConfiguration");
+export const DscpConfiguration = GroupedResource<DscpConfiguration>(
+  "Azure.Network.DscpConfiguration",
+);
 
 export const DscpConfigurationProvider = () =>
   Provider.succeed(

@@ -2,7 +2,7 @@ import * as ml from "@distilled.cloud/azure/machinelearningservices";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -18,6 +18,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createChildName,
   type MachineLearningIdentity,
@@ -163,7 +164,6 @@ export interface Compute extends Resource<
  * **Example:** Autoscaling CPU cluster that scales to zero
  * ```typescript
  * const cluster = yield* Azure.MachineLearning.Compute("cpu", {
- *   resourceGroup: group.resourceGroupName,
  *   workspace: workspace.workspaceName,
  *   vmSize: "Standard_DS3_v2",
  *   scaleSettings: { minNodeCount: 0, maxNodeCount: 4 },
@@ -173,7 +173,6 @@ export interface Compute extends Resource<
  * **Example:** Low-priority cluster with a short idle timeout
  * ```typescript
  * const cluster = yield* Azure.MachineLearning.Compute("spot", {
- *   resourceGroup: group.resourceGroupName,
  *   workspace: workspace.workspaceName,
  *   vmSize: "Standard_DS3_v2",
  *   vmPriority: "LowPriority",
@@ -186,7 +185,7 @@ export interface Compute extends Resource<
  *
  * @resource
  */
-export const Compute = Resource<Compute>("Azure.MachineLearning.Compute");
+export const Compute = GroupedResource<Compute>("Azure.MachineLearning.Compute");
 
 const getCompute = (
   subscriptionId: string,

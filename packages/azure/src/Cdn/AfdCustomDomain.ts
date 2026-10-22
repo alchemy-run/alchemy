@@ -2,13 +2,14 @@ import * as cdn from "@distilled.cloud/azure/cdn";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { ensureRegistered, ignoreNotFound, orUndefinedIfNotFound, waitUntilGone } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   AFD_DELETE_BUDGET,
   changedFields,
@@ -104,13 +105,11 @@ export interface AfdCustomDomain extends Resource<
  * **Example:** Managed-certificate domain on a route
  * ```typescript
  * const domain = yield* Azure.Cdn.AfdCustomDomain("www", {
- *   resourceGroup: group.resourceGroupName,
  *   profile: profile.profileName,
  *   hostName: "www.example.com",
  *   tlsSettings: { certificateType: "ManagedCertificate", minimumTlsVersion: "TLS12" },
  * });
  * const route = yield* Azure.Cdn.Route("default", {
- *   resourceGroup: group.resourceGroupName,
  *   profile: profile.profileName,
  *   endpoint: endpoint.endpointName,
  *   originGroupId: origins.originGroupId,
@@ -121,7 +120,7 @@ export interface AfdCustomDomain extends Resource<
  *
  * @resource
  */
-export const AfdCustomDomain = Resource<AfdCustomDomain>("Azure.Cdn.AfdCustomDomain");
+export const AfdCustomDomain = GroupedResource<AfdCustomDomain>("Azure.Cdn.AfdCustomDomain");
 
 /**
  * Front Door locks a custom domain while its ownership validation is

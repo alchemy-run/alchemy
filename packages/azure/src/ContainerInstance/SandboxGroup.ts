@@ -2,7 +2,7 @@ import * as aci from "@distilled.cloud/azure/containerinstance";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -20,6 +20,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createContainerInstanceName, identityMatches, lower, sameLocation } from "./common.ts";
 
 /** Managed identity of a sandbox group. */
@@ -92,9 +93,7 @@ export interface SandboxGroup extends Resource<
  * ### Creating a Sandbox Group
  * **Example:** Sandbox group with a system-assigned identity
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("app");
  * const sandboxes = yield* Azure.ContainerInstance.SandboxGroup("sandboxes", {
- *   resourceGroup: group.resourceGroupName,
  *   identity: { type: "SystemAssigned" },
  * });
  * ```
@@ -102,14 +101,13 @@ export interface SandboxGroup extends Resource<
  * **Example:** VNet-injected sandbox group
  * ```typescript
  * const sandboxes = yield* Azure.ContainerInstance.SandboxGroup("sandboxes", {
- *   resourceGroup: group.resourceGroupName,
  *   subnetIds: [subnet.subnetId],
  * });
  * ```
  *
  * @resource
  */
-export const SandboxGroup = Resource<SandboxGroup>("Azure.ContainerInstance.SandboxGroup");
+export const SandboxGroup = GroupedResource<SandboxGroup>("Azure.ContainerInstance.SandboxGroup");
 
 /**
  * Sandbox groups are a limited preview: where ARM has not rolled the type

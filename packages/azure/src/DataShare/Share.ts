@@ -2,7 +2,7 @@ import * as datashare from "@distilled.cloud/azure/datashare";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { accountOwnedByStack, createChildName, sameName } from "./internal.ts";
 
 export type ShareKind = "CopyBased" | "InPlace";
@@ -82,7 +83,6 @@ export interface Share extends Resource<
  * **Example:** Snapshot-based share
  * ```typescript
  * const share = yield* Azure.DataShare.Share("sales", {
- *   resourceGroup: group.resourceGroupName,
  *   account: account.accountName,
  *   description: "Daily sales extracts",
  *   terms: "Internal use only",
@@ -91,7 +91,7 @@ export interface Share extends Resource<
  *
  * @resource
  */
-export const Share = Resource<Share>("Azure.DataShare.Share");
+export const Share = GroupedResource<Share>("Azure.DataShare.Share");
 
 type ObservedShare = datashare.GetShareResponse | datashare.CreateShareResponse;
 

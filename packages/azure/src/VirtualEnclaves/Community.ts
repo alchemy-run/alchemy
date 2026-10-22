@@ -2,7 +2,7 @@ import * as mission from "@distilled.cloud/azure/mission";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -19,6 +19,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   changedProperties,
   createMissionName,
@@ -142,7 +143,6 @@ export interface Community extends Resource<
  * **Example:** Community with a Basic firewall
  * ```typescript
  * const community = yield* Azure.VirtualEnclaves.Community("hub", {
- *   resourceGroup: group.resourceGroupName,
  *   addressSpace: "10.0.0.0/16",
  *   firewallSku: "Basic",
  * });
@@ -152,7 +152,6 @@ export interface Community extends Resource<
  * **Example:** Deny a service and require approval for new enclaves
  * ```typescript
  * const community = yield* Azure.VirtualEnclaves.Community("hub", {
- *   resourceGroup: group.resourceGroupName,
  *   addressSpace: "10.0.0.0/16",
  *   governedServiceList: [
  *     { serviceId: "CosmosDB", option: "Deny", enforcement: "Enabled" },
@@ -165,7 +164,7 @@ export interface Community extends Resource<
  *
  * @resource
  */
-export const Community = Resource<Community>("Azure.VirtualEnclaves.Community");
+export const Community = GroupedResource<Community>("Azure.VirtualEnclaves.Community");
 
 type ObservedCommunity = mission.GetCommunityResponse | mission.CommunityResource;
 

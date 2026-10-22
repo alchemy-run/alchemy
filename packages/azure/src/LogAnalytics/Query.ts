@@ -2,12 +2,13 @@ import * as operationalinsights from "@distilled.cloud/azure/operationalinsights
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import { createInternalTags, hasAlchemyTags } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import { ensureRegistered, ignoreNotFound, orUndefinedIfNotFound, waitUntilGone } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { deterministicGuid, sameText } from "./Common.ts";
 
 export interface QueryRelated {
@@ -76,11 +77,8 @@ export interface Query extends Resource<
  * ### Adding Queries to a Pack
  * **Example:** Query with categories
  * ```typescript
- * const pack = yield* Azure.LogAnalytics.QueryPack("queries", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const pack = yield* Azure.LogAnalytics.QueryPack("queries");
  * const slow = yield* Azure.LogAnalytics.Query("slow-requests", {
- *   resourceGroup: group.resourceGroupName,
  *   queryPack: pack.queryPackName,
  *   displayName: "Slow requests",
  *   body: "AppRequests | where DurationMs > 1000 | take 100",
@@ -90,7 +88,7 @@ export interface Query extends Resource<
  *
  * @resource
  */
-export const Query = Resource<Query>("Azure.LogAnalytics.Query");
+export const Query = GroupedResource<Query>("Azure.LogAnalytics.Query");
 
 type ObservedQuery = operationalinsights.GetQueryResponse;
 type QueryTags = { [key: string]: string[] | undefined };

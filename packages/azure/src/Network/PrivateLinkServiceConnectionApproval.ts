@@ -1,9 +1,10 @@
 import * as network from "@distilled.cloud/azure/network";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { orUndefinedIfNotFound } from "../Arm.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { connectionApprovalProvider } from "./connectionApprovalShared.ts";
 
 export interface PrivateLinkServiceConnectionApprovalProps {
@@ -63,7 +64,6 @@ export interface PrivateLinkServiceConnectionApproval extends Resource<
  * **Example:** Approve a consumer's manual request
  * ```typescript
  * yield* Azure.Network.PrivateLinkServiceConnectionApproval("consumer", {
- *   resourceGroup: group.resourceGroupName,
  *   privateLinkService: service.privateLinkServiceName,
  *   privateEndpointId: endpoint.privateEndpointId,
  * });
@@ -71,9 +71,10 @@ export interface PrivateLinkServiceConnectionApproval extends Resource<
  *
  * @resource
  */
-export const PrivateLinkServiceConnectionApproval = Resource<PrivateLinkServiceConnectionApproval>(
-  "Azure.Network.PrivateLinkServiceConnectionApproval",
-);
+export const PrivateLinkServiceConnectionApproval =
+  GroupedResource<PrivateLinkServiceConnectionApproval>(
+    "Azure.Network.PrivateLinkServiceConnectionApproval",
+  );
 
 export const PrivateLinkServiceConnectionApprovalProvider = () =>
   Provider.succeed(

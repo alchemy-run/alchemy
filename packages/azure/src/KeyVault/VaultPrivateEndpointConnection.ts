@@ -2,7 +2,7 @@ import * as keyvault from "@distilled.cloud/azure/keyvault";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -16,6 +16,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { isVaultOwnedByStack, lower, sameId } from "./common.ts";
 
 export interface VaultPrivateEndpointConnectionProps {
@@ -77,14 +78,12 @@ export interface VaultPrivateEndpointConnection extends Resource<
  * **Example:** Approve a manual private endpoint request
  * ```typescript
  * const endpoint = yield* Azure.Network.PrivateEndpoint("vault-pe", {
- *   resourceGroup: group.resourceGroupName,
  *   subnetId: subnet.subnetId,
  *   manualPrivateLinkServiceConnections: [
  *     { privateLinkServiceId: vault.vaultId, groupIds: ["vault"] },
  *   ],
  * });
  * yield* Azure.KeyVault.VaultPrivateEndpointConnection("vault-pe-approval", {
- *   resourceGroup: group.resourceGroupName,
  *   vault: vault.vaultName,
  *   privateEndpointId: endpoint.privateEndpointId,
  *   description: "Approved for the app VNet",
@@ -94,7 +93,6 @@ export interface VaultPrivateEndpointConnection extends Resource<
  * **Example:** Reject a request
  * ```typescript
  * yield* Azure.KeyVault.VaultPrivateEndpointConnection("vault-pe-approval", {
- *   resourceGroup: group.resourceGroupName,
  *   vault: vault.vaultName,
  *   privateEndpointId: endpoint.privateEndpointId,
  *   status: "Rejected",
@@ -104,7 +102,7 @@ export interface VaultPrivateEndpointConnection extends Resource<
  *
  * @resource
  */
-export const VaultPrivateEndpointConnection = Resource<VaultPrivateEndpointConnection>(
+export const VaultPrivateEndpointConnection = GroupedResource<VaultPrivateEndpointConnection>(
   "Azure.KeyVault.VaultPrivateEndpointConnection",
 );
 

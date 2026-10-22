@@ -2,11 +2,12 @@ import * as operationalinsights from "@distilled.cloud/azure/operationalinsights
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { ensureRegistered, ignoreNotFound, orUndefinedIfNotFound, waitUntilGone } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createLogAnalyticsName, isWorkspaceOwnedByStack, sameText } from "./Common.ts";
 
 export type DataSourceKind =
@@ -81,7 +82,6 @@ export interface DataSource extends Resource<
  * **Example:** System log errors and warnings
  * ```typescript
  * yield* Azure.LogAnalytics.DataSource("system-events", {
- *   resourceGroup: group.resourceGroupName,
  *   workspace: logs.workspaceName,
  *   kind: "WindowsEvent",
  *   properties: {
@@ -95,7 +95,6 @@ export interface DataSource extends Resource<
  * **Example:** CPU every 60 seconds
  * ```typescript
  * yield* Azure.LogAnalytics.DataSource("cpu", {
- *   resourceGroup: group.resourceGroupName,
  *   workspace: logs.workspaceName,
  *   kind: "WindowsPerformanceCounter",
  *   properties: {
@@ -109,7 +108,7 @@ export interface DataSource extends Resource<
  *
  * @resource
  */
-export const DataSource = Resource<DataSource>("Azure.LogAnalytics.DataSource");
+export const DataSource = GroupedResource<DataSource>("Azure.LogAnalytics.DataSource");
 
 type ObservedDataSource = operationalinsights.GetDataSourceResponse;
 

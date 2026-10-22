@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -21,6 +21,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 
 export type MachineKind = hybridcompute.ArcKindEnum;
 
@@ -153,9 +154,7 @@ export interface Machine extends Resource<
  * ### Registering a Machine
  * **Example:** Pre-register a Linux server
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("arc");
  * const machine = yield* Azure.HybridCompute.Machine("web-01", {
- *   resourceGroup: group.resourceGroupName,
  *   vmId: "3f2c1a9e-5b7d-4e8a-9c21-7d6e5f4a3b2c",
  *   clientPublicKey: agentPublicKey,
  *   osType: "linux",
@@ -165,11 +164,8 @@ export interface Machine extends Resource<
  * ### Private Connectivity
  * **Example:** Assign the machine to a private link scope
  * ```typescript
- * const scope = yield* Azure.HybridCompute.PrivateLinkScope("arc-scope", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const scope = yield* Azure.HybridCompute.PrivateLinkScope("arc-scope");
  * const machine = yield* Azure.HybridCompute.Machine("web-01", {
- *   resourceGroup: group.resourceGroupName,
  *   vmId,
  *   clientPublicKey: agentPublicKey,
  *   privateLinkScopeResourceId: scope.privateLinkScopeResourceId,
@@ -178,7 +174,7 @@ export interface Machine extends Resource<
  *
  * @resource
  */
-export const Machine = Resource<Machine>("Azure.HybridCompute.Machine");
+export const Machine = GroupedResource<Machine>("Azure.HybridCompute.Machine");
 
 type ObservedMachine = hybridcompute.GetMachineResponse | hybridcompute.Machine;
 

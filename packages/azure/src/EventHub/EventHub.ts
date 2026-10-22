@@ -2,7 +2,7 @@ import * as eventhub from "@distilled.cloud/azure/eventhub";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createEntityName,
   getNamespace,
@@ -171,11 +172,8 @@ export interface EventHub extends Resource<
  * ### Creating an Event Hub
  * **Example:** Event hub with four partitions
  * ```typescript
- * const namespace = yield* Azure.EventHub.Namespace("events", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const namespace = yield* Azure.EventHub.Namespace("events");
  * const orders = yield* Azure.EventHub.EventHub("orders", {
- *   resourceGroup: group.resourceGroupName,
  *   namespace: namespace.namespaceName,
  *   partitionCount: 4,
  *   messageRetentionInDays: 1,
@@ -186,7 +184,6 @@ export interface EventHub extends Resource<
  * **Example:** Keep events for three days
  * ```typescript
  * const orders = yield* Azure.EventHub.EventHub("orders", {
- *   resourceGroup: group.resourceGroupName,
  *   namespace: namespace.namespaceName,
  *   retention: { cleanupPolicy: "Delete", retentionTimeInHours: 72 },
  * });
@@ -196,7 +193,6 @@ export interface EventHub extends Resource<
  * **Example:** Archive events to Blob Storage
  * ```typescript
  * const orders = yield* Azure.EventHub.EventHub("orders", {
- *   resourceGroup: group.resourceGroupName,
  *   namespace: namespace.namespaceName,
  *   capture: {
  *     enabled: true,
@@ -213,7 +209,7 @@ export interface EventHub extends Resource<
  *
  * @resource
  */
-export const EventHub = Resource<EventHub>("Azure.EventHub.EventHub");
+export const EventHub = GroupedResource<EventHub>("Azure.EventHub.EventHub");
 
 const getEventHub = (
   subscriptionId: string,

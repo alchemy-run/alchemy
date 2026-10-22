@@ -2,7 +2,7 @@ import * as discovery from "@distilled.cloud/azure/discovery";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -20,6 +20,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createDiscoveryName,
   DISCOVERY_NAMESPACE,
@@ -130,12 +131,8 @@ export interface Bookshelf extends Resource<
  * ### Creating a Bookshelf
  * **Example:** Bookshelf with a workload identity
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("science");
- * const identity = yield* Azure.ManagedIdentity.UserAssignedIdentity("kb", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const identity = yield* Azure.ManagedIdentity.UserAssignedIdentity("kb");
  * const bookshelf = yield* Azure.Discovery.Bookshelf("papers", {
- *   resourceGroup: group.resourceGroupName,
  *   workloadIdentities: [identity.identityId],
  * });
  * ```
@@ -144,14 +141,13 @@ export interface Bookshelf extends Resource<
  * **Example:** Public network access
  * ```typescript
  * const bookshelf = yield* Azure.Discovery.Bookshelf("papers", {
- *   resourceGroup: group.resourceGroupName,
  *   publicNetworkAccess: "Enabled",
  * });
  * ```
  *
  * @resource
  */
-export const Bookshelf = Resource<Bookshelf>("Azure.Discovery.Bookshelf");
+export const Bookshelf = GroupedResource<Bookshelf>("Azure.Discovery.Bookshelf");
 
 const getBookshelf = (subscriptionId: string, resourceGroupName: string, bookshelfName: string) =>
   orUndefinedIfNotFound(

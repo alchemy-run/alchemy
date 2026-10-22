@@ -2,7 +2,7 @@ import * as nc from "@distilled.cloud/azure/networkcloud";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -19,6 +19,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createNexusName,
   customLocation,
@@ -138,7 +139,6 @@ export interface L3Network extends Resource<
  * **Example:** Dual-stack L3 network
  * ```typescript
  * const net = yield* Azure.NetworkCloud.L3Network("l3", {
- *   resourceGroup: group.resourceGroupName,
  *   customLocationId: cluster.clusterExtendedLocationId,
  *   l3IsolationDomainId: l3Domain.l3IsolationDomainId,
  *   vlan: 1001,
@@ -150,7 +150,7 @@ export interface L3Network extends Resource<
  *
  * @resource
  */
-export const L3Network = Resource<L3Network>("Azure.NetworkCloud.L3Network");
+export const L3Network = GroupedResource<L3Network>("Azure.NetworkCloud.L3Network");
 
 type Observed = nc.GetL3NetworkResponse;
 

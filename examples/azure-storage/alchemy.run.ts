@@ -9,20 +9,18 @@ export default Alchemy.Stack(
     state: Alchemy.localState(),
   },
   Effect.gen(function* () {
-    const group = yield* Azure.Resources.ResourceGroup("app");
-
+    // Both resources go into the stack's resource group,
+    // "AzureStorageExample-<stage>", which Alchemy creates and deletes.
     const account = yield* Azure.Storage.StorageAccount("files", {
-      resourceGroup: group.resourceGroupName,
       sku: "Standard_LRS",
     });
 
     const uploads = yield* Azure.Storage.BlobContainer("uploads", {
-      resourceGroup: group.resourceGroupName,
       storageAccount: account.storageAccountName,
     });
 
     return {
-      resourceGroup: group.resourceGroupName,
+      resourceGroup: account.resourceGroup,
       storageAccount: account.storageAccountName,
       blobEndpoint: account.primaryEndpoints.blob,
       container: uploads.containerName,

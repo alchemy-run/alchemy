@@ -1,8 +1,9 @@
 import * as apim from "@distilled.cloud/azure/apimanagement";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createEntityName } from "./Common.ts";
 import { entityLifecycle, serviceEntityId } from "./Entity.ts";
 
@@ -62,7 +63,6 @@ export interface WorkspaceTagApiLink extends Resource<
  * **Example:** Tag the orders API as public
  * ```typescript
  * yield* Azure.ApiManagement.WorkspaceTagApiLink("public-orders", {
- *   resourceGroup: group.resourceGroupName,
  *   serviceName: apim.serviceName,
  *   workspaceName: workspace.workspaceName,
  *   tagName: publicTag.tagName,
@@ -72,7 +72,7 @@ export interface WorkspaceTagApiLink extends Resource<
  *
  * @resource
  */
-export const WorkspaceTagApiLink = Resource<WorkspaceTagApiLink>(
+export const WorkspaceTagApiLink = GroupedResource<WorkspaceTagApiLink>(
   "Azure.ApiManagement.WorkspaceTagApiLink",
 );
 

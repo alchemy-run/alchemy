@@ -1,8 +1,9 @@
 import * as apim from "@distilled.cloud/azure/apimanagement";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createEntityName } from "./Common.ts";
 import { entityLifecycle, serviceEntityId } from "./Entity.ts";
 
@@ -63,7 +64,6 @@ export interface ApiRelease extends Resource<
  * **Example:** Make revision 2 current with release notes
  * ```typescript
  * yield* Azure.ApiManagement.ApiRelease("orders-r2", {
- *   resourceGroup: group.resourceGroupName,
  *   serviceName: apim.serviceName,
  *   apiName: "orders",
  *   apiRevision: "2",
@@ -73,7 +73,7 @@ export interface ApiRelease extends Resource<
  *
  * @resource
  */
-export const ApiRelease = Resource<ApiRelease>("Azure.ApiManagement.ApiRelease");
+export const ApiRelease = GroupedResource<ApiRelease>("Azure.ApiManagement.ApiRelease");
 
 interface Key {
   resourceGroup: string;

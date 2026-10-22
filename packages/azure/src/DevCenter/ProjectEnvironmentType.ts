@@ -2,7 +2,7 @@ import * as devcenter from "@distilled.cloud/azure/devcenter";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -17,6 +17,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { identityDiffers, sameArm, toIdentityInput, type DevCenterIdentity } from "./Common.ts";
 
 export interface ProjectEnvironmentTypeProps {
@@ -108,12 +109,10 @@ export interface ProjectEnvironmentType extends Resource<
  * **Example:** Deploy `dev` environments into the current subscription
  * ```typescript
  * const dev = yield* Azure.DevCenter.EnvironmentType("dev", {
- *   resourceGroup: group.resourceGroupName,
  *   devCenter: center.devCenterName,
  *   name: "dev",
  * });
  * const projectDev = yield* Azure.DevCenter.ProjectEnvironmentType("project-dev", {
- *   resourceGroup: group.resourceGroupName,
  *   project: project.projectName,
  *   environmentType: dev.environmentTypeName,
  *   deploymentTargetId: `/subscriptions/${subscriptionId}`,
@@ -126,7 +125,6 @@ export interface ProjectEnvironmentType extends Resource<
  * **Example:** Temporarily disable an environment type
  * ```typescript
  * const projectDev = yield* Azure.DevCenter.ProjectEnvironmentType("project-dev", {
- *   resourceGroup: group.resourceGroupName,
  *   project: project.projectName,
  *   environmentType: "dev",
  *   status: "Disabled",
@@ -135,7 +133,7 @@ export interface ProjectEnvironmentType extends Resource<
  *
  * @resource
  */
-export const ProjectEnvironmentType = Resource<ProjectEnvironmentType>(
+export const ProjectEnvironmentType = GroupedResource<ProjectEnvironmentType>(
   "Azure.DevCenter.ProjectEnvironmentType",
 );
 

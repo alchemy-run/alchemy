@@ -1,8 +1,9 @@
 import * as apim from "@distilled.cloud/azure/apimanagement";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { entityLifecycle } from "./Entity.ts";
 
 export interface ProductWikiProps {
@@ -50,7 +51,6 @@ export interface ProductWiki extends Resource<
  * **Example:** Show onboarding docs with a product
  * ```typescript
  * yield* Azure.ApiManagement.ProductWiki("starter-wiki", {
- *   resourceGroup: group.resourceGroupName,
  *   serviceName: apim.serviceName,
  *   productName: product.productName,
  *   documents: [onboarding.documentationName],
@@ -59,7 +59,7 @@ export interface ProductWiki extends Resource<
  *
  * @resource
  */
-export const ProductWiki = Resource<ProductWiki>("Azure.ApiManagement.ProductWiki");
+export const ProductWiki = GroupedResource<ProductWiki>("Azure.ApiManagement.ProductWiki");
 
 interface Key {
   resourceGroup: string;

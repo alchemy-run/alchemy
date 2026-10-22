@@ -2,7 +2,7 @@ import * as dataprotection from "@distilled.cloud/azure/dataprotection";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { isVaultOwnedByStack, NAMESPACE, sameText } from "./Common.ts";
 
 /** Azure allows exactly one proxy per vault, with this fixed name. */
@@ -77,11 +78,8 @@ export interface ResourceGuardProxy extends Resource<
  * const guard = yield* Azure.DataProtection.ResourceGuard("guard", {
  *   resourceGroup: securityGroup.resourceGroupName,
  * });
- * const vault = yield* Azure.DataProtection.BackupVault("vault", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const vault = yield* Azure.DataProtection.BackupVault("vault");
  * yield* Azure.DataProtection.ResourceGuardProxy("mua", {
- *   resourceGroup: group.resourceGroupName,
  *   backupVault: vault.backupVaultName,
  *   resourceGuardId: guard.resourceGuardId,
  * });
@@ -89,7 +87,7 @@ export interface ResourceGuardProxy extends Resource<
  *
  * @resource
  */
-export const ResourceGuardProxy = Resource<ResourceGuardProxy>(
+export const ResourceGuardProxy = GroupedResource<ResourceGuardProxy>(
   "Azure.DataProtection.ResourceGuardProxy",
 );
 

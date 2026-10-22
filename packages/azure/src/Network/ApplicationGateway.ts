@@ -2,7 +2,7 @@ import * as network from "@distilled.cloud/azure/network";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -18,6 +18,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   canonical,
   createNetworkName,
@@ -257,15 +258,11 @@ export interface ApplicationGateway extends Resource<
  * **Example:** Public HTTP gateway in front of a web app
  * ```typescript
  * const subnet = yield* Azure.Network.Subnet("appgw-subnet", {
- *   resourceGroup: group.resourceGroupName,
  *   virtualNetwork: vnet.virtualNetworkName,
  *   addressPrefix: "10.0.0.0/24",
  * });
- * const ip = yield* Azure.Network.PublicIpAddress("appgw-ip", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const ip = yield* Azure.Network.PublicIpAddress("appgw-ip");
  * const gateway = yield* Azure.Network.ApplicationGateway("appgw", {
- *   resourceGroup: group.resourceGroupName,
  *   sku: "Basic",
  *   subnetId: subnet.subnetId,
  *   frontendIpConfigurations: [
@@ -300,7 +297,6 @@ export interface ApplicationGateway extends Resource<
  * **Example:** Autoscaling Standard_v2 gateway
  * ```typescript
  * const gateway = yield* Azure.Network.ApplicationGateway("appgw", {
- *   resourceGroup: group.resourceGroupName,
  *   sku: "Standard_v2",
  *   autoscale: { minCapacity: 0, maxCapacity: 3 },
  *   subnetId: subnet.subnetId,
@@ -315,7 +311,9 @@ export interface ApplicationGateway extends Resource<
  *
  * @resource
  */
-export const ApplicationGateway = Resource<ApplicationGateway>("Azure.Network.ApplicationGateway");
+export const ApplicationGateway = GroupedResource<ApplicationGateway>(
+  "Azure.Network.ApplicationGateway",
+);
 
 type Observed = network.GetApplicationGatewayResponse;
 

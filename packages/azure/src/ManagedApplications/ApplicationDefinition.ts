@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import { stableStringify } from "alchemy/Util/stable";
 import * as Effect from "effect/Effect";
 import {
@@ -22,6 +22,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 
 /** A principal the publisher grants access to the managed resource group. */
 export interface ApplicationDefinitionAuthorization {
@@ -186,11 +187,9 @@ export interface ApplicationDefinition extends Resource<
  * ### Creating a Definition
  * **Example:** Definition with an inline template
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("catalog");
  * const definition = yield* Azure.ManagedApplications.ApplicationDefinition(
  *   "storage-app",
  *   {
- *     resourceGroup: group.resourceGroupName,
  *     displayName: "Storage app",
  *     description: "A managed storage application",
  *     mainTemplate: {
@@ -216,7 +215,6 @@ export interface ApplicationDefinition extends Resource<
  * const definition = yield* Azure.ManagedApplications.ApplicationDefinition(
  *   "storage-app",
  *   {
- *     resourceGroup: group.resourceGroupName,
  *     lockLevel: "ReadOnly",
  *     authorizations: [
  *       {
@@ -231,7 +229,7 @@ export interface ApplicationDefinition extends Resource<
  *
  * @resource
  */
-export const ApplicationDefinition = Resource<ApplicationDefinition>(
+export const ApplicationDefinition = GroupedResource<ApplicationDefinition>(
   "Azure.ManagedApplications.ApplicationDefinition",
 );
 

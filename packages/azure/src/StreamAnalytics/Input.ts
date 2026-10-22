@@ -2,7 +2,7 @@ import * as streamanalytics from "@distilled.cloud/azure/streamanalytics";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   canonical,
   createStreamAnalyticsName,
@@ -100,11 +101,9 @@ export interface Input extends Resource<
  * **Example:** Blob storage stream read with the job's managed identity
  * ```typescript
  * const job = yield* Azure.StreamAnalytics.StreamingJob("telemetry", {
- *   resourceGroup: group.resourceGroupName,
  *   identity: "SystemAssigned",
  * });
  * const events = yield* Azure.StreamAnalytics.Input("events", {
- *   resourceGroup: group.resourceGroupName,
  *   streamingJob: job.jobName,
  *   name: "events",
  *   datasource: {
@@ -125,7 +124,6 @@ export interface Input extends Resource<
  * **Example:** Event Hubs stream
  * ```typescript
  * const events = yield* Azure.StreamAnalytics.Input("events", {
- *   resourceGroup: group.resourceGroupName,
  *   streamingJob: job.jobName,
  *   datasource: {
  *     type: "Microsoft.ServiceBus/EventHub",
@@ -144,7 +142,6 @@ export interface Input extends Resource<
  * **Example:** CSV reference data from Blob storage
  * ```typescript
  * const devices = yield* Azure.StreamAnalytics.Input("devices", {
- *   resourceGroup: group.resourceGroupName,
  *   streamingJob: job.jobName,
  *   type: "Reference",
  *   datasource: {
@@ -165,7 +162,7 @@ export interface Input extends Resource<
  *
  * @resource
  */
-export const Input = Resource<Input>("Azure.StreamAnalytics.Input");
+export const Input = GroupedResource<Input>("Azure.StreamAnalytics.Input");
 
 const getInput = (
   subscriptionId: string,

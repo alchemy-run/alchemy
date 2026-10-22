@@ -1,7 +1,7 @@
 import * as asr from "@distilled.cloud/azure/recoveryservicessiterecovery";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -12,6 +12,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createSiteRecoveryName,
   ownedOrUnowned,
@@ -128,7 +129,6 @@ export interface RecoveryPlan extends Resource<
  * **Example:** One boot group with a protected VM
  * ```typescript
  * yield* Azure.SiteRecovery.RecoveryPlan("dr-plan", {
- *   resourceGroup: group.resourceGroupName,
  *   vault: vault.vaultName,
  *   primaryFabricId: primary.fabricId,
  *   recoveryFabricId: recovery.fabricId,
@@ -140,7 +140,7 @@ export interface RecoveryPlan extends Resource<
  *
  * @resource
  */
-export const RecoveryPlan = Resource<RecoveryPlan>("Azure.SiteRecovery.RecoveryPlan");
+export const RecoveryPlan = GroupedResource<RecoveryPlan>("Azure.SiteRecovery.RecoveryPlan");
 
 type Observed = asr.GetReplicationRecoveryPlanResponse;
 

@@ -2,7 +2,7 @@ import * as sql from "@distilled.cloud/azure/sql";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { lower } from "./common.ts";
 
 /** The administrator resource is a singleton named `ActiveDirectory`. */
@@ -75,7 +76,6 @@ export interface ServerAzureADAdministrator extends Resource<
  * **Example:** Entra group as administrator
  * ```typescript
  * yield* Azure.Sql.ServerAzureADAdministrator("admin", {
- *   resourceGroup: group.resourceGroupName,
  *   server: server.serverName,
  *   login: "dba-group",
  *   sid: dbaGroupObjectId,
@@ -84,11 +84,8 @@ export interface ServerAzureADAdministrator extends Resource<
  *
  * **Example:** Managed identity as administrator
  * ```typescript
- * const identity = yield* Azure.ManagedIdentity.UserAssignedIdentity("dba", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const identity = yield* Azure.ManagedIdentity.UserAssignedIdentity("dba");
  * yield* Azure.Sql.ServerAzureADAdministrator("admin", {
- *   resourceGroup: group.resourceGroupName,
  *   server: server.serverName,
  *   login: identity.identityName,
  *   sid: identity.clientId,
@@ -97,7 +94,7 @@ export interface ServerAzureADAdministrator extends Resource<
  *
  * @resource
  */
-export const ServerAzureADAdministrator = Resource<ServerAzureADAdministrator>(
+export const ServerAzureADAdministrator = GroupedResource<ServerAzureADAdministrator>(
   "Azure.Sql.ServerAzureADAdministrator",
 );
 

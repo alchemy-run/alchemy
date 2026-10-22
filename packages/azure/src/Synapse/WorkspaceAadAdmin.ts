@@ -2,11 +2,12 @@ import * as synapse from "@distilled.cloud/azure/synapse";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { ensureRegistered, ignoreNotFound, orUndefinedIfNotFound, waitUntilGone } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { isWorkspaceOwnedByStack, lower, syncSetting } from "./common.ts";
 
 export interface WorkspaceAadAdminProps {
@@ -64,7 +65,6 @@ export interface WorkspaceAadAdmin extends Resource<
  * **Example:** Entra group as administrator
  * ```typescript
  * yield* Azure.Synapse.WorkspaceAadAdmin("admin", {
- *   resourceGroup: group.resourceGroupName,
  *   workspace: workspace.workspaceName,
  *   login: "data-admins",
  *   sid: dataAdminsGroupObjectId,
@@ -73,11 +73,8 @@ export interface WorkspaceAadAdmin extends Resource<
  *
  * **Example:** Managed identity as administrator
  * ```typescript
- * const identity = yield* Azure.ManagedIdentity.UserAssignedIdentity("dba", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const identity = yield* Azure.ManagedIdentity.UserAssignedIdentity("dba");
  * yield* Azure.Synapse.WorkspaceAadAdmin("admin", {
- *   resourceGroup: group.resourceGroupName,
  *   workspace: workspace.workspaceName,
  *   login: identity.identityName,
  *   sid: identity.principalId,
@@ -86,7 +83,9 @@ export interface WorkspaceAadAdmin extends Resource<
  *
  * @resource
  */
-export const WorkspaceAadAdmin = Resource<WorkspaceAadAdmin>("Azure.Synapse.WorkspaceAadAdmin");
+export const WorkspaceAadAdmin = GroupedResource<WorkspaceAadAdmin>(
+  "Azure.Synapse.WorkspaceAadAdmin",
+);
 
 type ObservedAdmin = synapse.GetWorkspaceAadAdminResponse;
 

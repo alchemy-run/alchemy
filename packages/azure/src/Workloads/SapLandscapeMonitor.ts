@@ -2,7 +2,7 @@ import * as workloads from "@distilled.cloud/azure/workloads";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { lower, monitorOwnedByStage } from "./Common.ts";
 
 /** A named group of SAP system IDs on the landscape dashboard. */
@@ -83,7 +84,6 @@ export interface SapLandscapeMonitor extends Resource<
  * **Example:** Group systems and set thresholds
  * ```typescript
  * yield* Azure.Workloads.SapLandscapeMonitor("landscape", {
- *   resourceGroup: group.resourceGroupName,
  *   monitor: monitor.monitorName,
  *   landscape: [{ name: "Production", topSid: ["S4P"] }],
  *   sapApplication: [{ name: "ERP", topSid: ["S4P", "S4Q"] }],
@@ -95,7 +95,7 @@ export interface SapLandscapeMonitor extends Resource<
  *
  * @resource
  */
-export const SapLandscapeMonitor = Resource<SapLandscapeMonitor>(
+export const SapLandscapeMonitor = GroupedResource<SapLandscapeMonitor>(
   "Azure.Workloads.SapLandscapeMonitor",
 );
 

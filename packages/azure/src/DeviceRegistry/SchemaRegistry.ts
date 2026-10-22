@@ -2,7 +2,7 @@ import * as deviceregistry from "@distilled.cloud/azure/deviceregistry";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -20,6 +20,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   DEVICE_REGISTRY_RP,
   DEVICE_REGISTRY_WAIT,
@@ -115,15 +116,11 @@ export interface SchemaRegistry extends Resource<
  * ### Creating a Schema Registry
  * **Example:** Registry backed by a blob container
  * ```typescript
- * const account = yield* Azure.Storage.StorageAccount("schemas", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const account = yield* Azure.Storage.StorageAccount("schemas");
  * const container = yield* Azure.Storage.BlobContainer("schemas", {
- *   resourceGroup: group.resourceGroupName,
  *   storageAccount: account.storageAccountName,
  * });
  * const registry = yield* Azure.DeviceRegistry.SchemaRegistry("registry", {
- *   resourceGroup: group.resourceGroupName,
  *   storageAccountContainerUrl: Output.interpolate`${account.primaryEndpoints.blob}${container.containerName}`,
  *   description: "Message schemas for the plant floor",
  * });
@@ -142,7 +139,9 @@ export interface SchemaRegistry extends Resource<
  *
  * @resource
  */
-export const SchemaRegistry = Resource<SchemaRegistry>("Azure.DeviceRegistry.SchemaRegistry");
+export const SchemaRegistry = GroupedResource<SchemaRegistry>(
+  "Azure.DeviceRegistry.SchemaRegistry",
+);
 
 const getRegistry = (
   subscriptionId: string,

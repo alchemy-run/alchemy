@@ -2,11 +2,12 @@ import * as securityinsights from "@distilled.cloud/azure/securityinsights";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { ensureRegistered, ignoreNotFound, orUndefinedIfNotFound, waitUntilGone } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { isWorkspaceOwnedByStack, SENTINEL_NAMESPACE, sameText } from "./Common.ts";
 
 /** The onboarding state is a singleton per workspace. */
@@ -60,11 +61,8 @@ export interface OnboardingState extends Resource<
  * ### Enabling Microsoft Sentinel
  * **Example:** Onboard a workspace
  * ```typescript
- * const logs = yield* Azure.LogAnalytics.Workspace("logs", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const logs = yield* Azure.LogAnalytics.Workspace("logs");
  * const sentinel = yield* Azure.SecurityInsights.OnboardingState("sentinel", {
- *   resourceGroup: group.resourceGroupName,
  *   workspace: logs.workspaceName,
  * });
  * ```
@@ -85,7 +83,9 @@ export interface OnboardingState extends Resource<
  *
  * @resource
  */
-export const OnboardingState = Resource<OnboardingState>("Azure.SecurityInsights.OnboardingState");
+export const OnboardingState = GroupedResource<OnboardingState>(
+  "Azure.SecurityInsights.OnboardingState",
+);
 
 const getState = (subscriptionId: string, resourceGroupName: string, workspaceName: string) =>
   orUndefinedIfNotFound(

@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -20,6 +20,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 
 export interface UserAssignedIdentityProps {
   /**
@@ -88,10 +89,7 @@ export interface UserAssignedIdentity extends Resource<
  * ### Creating an Identity
  * **Example:** Identity in a resource group
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("app");
- * const identity = yield* Azure.ManagedIdentity.UserAssignedIdentity("api", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const identity = yield* Azure.ManagedIdentity.UserAssignedIdentity("api");
  * ```
  *
  * ### Granting Access
@@ -107,7 +105,7 @@ export interface UserAssignedIdentity extends Resource<
  *
  * @resource
  */
-export const UserAssignedIdentity = Resource<UserAssignedIdentity>(
+export const UserAssignedIdentity = GroupedResource<UserAssignedIdentity>(
   "Azure.ManagedIdentity.UserAssignedIdentity",
 );
 

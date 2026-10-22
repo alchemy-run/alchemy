@@ -2,11 +2,12 @@ import * as keyvault from "@distilled.cloud/azure/keyvault";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { desiredTags, ensureRegistered, isOwned, orUndefinedIfNotFound } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createManagedHsmKeyName, lower } from "./common.ts";
 import { type KeyAttrs, type KeyCommonProps, keySpec, toKeyAttrs, toKeyProperties } from "./Key.ts";
 
@@ -47,7 +48,6 @@ export interface ManagedHsmKey extends Resource<
  * **Example:** RSA-HSM key
  * ```typescript
  * const key = yield* Azure.KeyVault.ManagedHsmKey("cmk", {
- *   resourceGroup: group.resourceGroupName,
  *   managedHsm: hsm.managedHsmName,
  *   kty: "RSA-HSM",
  *   keySize: 3072,
@@ -57,7 +57,6 @@ export interface ManagedHsmKey extends Resource<
  * **Example:** EC-HSM signing key
  * ```typescript
  * const key = yield* Azure.KeyVault.ManagedHsmKey("signing", {
- *   resourceGroup: group.resourceGroupName,
  *   managedHsm: hsm.managedHsmName,
  *   kty: "EC-HSM",
  *   curveName: "P-256",
@@ -67,7 +66,7 @@ export interface ManagedHsmKey extends Resource<
  *
  * @resource
  */
-export const ManagedHsmKey = Resource<ManagedHsmKey>("Azure.KeyVault.ManagedHsmKey");
+export const ManagedHsmKey = GroupedResource<ManagedHsmKey>("Azure.KeyVault.ManagedHsmKey");
 
 const getKey = (subscriptionId: string, resourceGroupName: string, name: string, keyName: string) =>
   orUndefinedIfNotFound(

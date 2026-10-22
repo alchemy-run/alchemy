@@ -2,11 +2,12 @@ import * as app from "@distilled.cloud/azure/app";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { ensureRegistered, ignoreNotFound, orUndefinedIfNotFound, waitUntilGone } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { isEnvironmentOwnedByStack, lower, matchesDesired } from "./common.ts";
 
 /** A weekly window in which the platform may patch the environment. */
@@ -65,7 +66,6 @@ export interface MaintenanceConfiguration extends Resource<
  * **Example:** Sunday night maintenance window
  * ```typescript
  * yield* Azure.ContainerApps.MaintenanceConfiguration("maintenance", {
- *   resourceGroup: group.resourceGroupName,
  *   environment: env.environmentName,
  *   scheduledEntries: [{ weekDay: "Sunday", startHourUtc: 1, durationHours: 8 }],
  * });
@@ -73,7 +73,7 @@ export interface MaintenanceConfiguration extends Resource<
  *
  * @resource
  */
-export const MaintenanceConfiguration = Resource<MaintenanceConfiguration>(
+export const MaintenanceConfiguration = GroupedResource<MaintenanceConfiguration>(
   "Azure.ContainerApps.MaintenanceConfiguration",
 );
 

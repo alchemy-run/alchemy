@@ -2,7 +2,7 @@ import * as synapse from "@distilled.cloud/azure/synapse";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createChildName, isWorkspaceOwnedByStack, lower } from "./common.ts";
 
 export interface FirewallRuleProps {
@@ -64,7 +65,6 @@ export interface FirewallRule extends Resource<
  * **Example:** Allow an office range
  * ```typescript
  * yield* Azure.Synapse.FirewallRule("office", {
- *   resourceGroup: group.resourceGroupName,
  *   workspace: workspace.workspaceName,
  *   startIpAddress: "203.0.113.0",
  *   endIpAddress: "203.0.113.255",
@@ -74,7 +74,6 @@ export interface FirewallRule extends Resource<
  * **Example:** Allow Azure services
  * ```typescript
  * yield* Azure.Synapse.FirewallRule("azure", {
- *   resourceGroup: group.resourceGroupName,
  *   workspace: workspace.workspaceName,
  *   name: "AllowAllWindowsAzureIps",
  *   startIpAddress: "0.0.0.0",
@@ -84,7 +83,7 @@ export interface FirewallRule extends Resource<
  *
  * @resource
  */
-export const FirewallRule = Resource<FirewallRule>("Azure.Synapse.FirewallRule");
+export const FirewallRule = GroupedResource<FirewallRule>("Azure.Synapse.FirewallRule");
 
 const getRule = (
   subscriptionId: string,

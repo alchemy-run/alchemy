@@ -2,7 +2,7 @@ import * as migrate from "@distilled.cloud/azure/migrate";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -20,6 +20,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { migrateName, settingsDiffer } from "./Common.ts";
 
 export interface ImportSiteProps {
@@ -79,14 +80,13 @@ export interface ImportSite extends Resource<
  * **Example:** Discovery site
  * ```typescript
  * const site = yield* Azure.Migrate.ImportSite("imports", {
- *   resourceGroup: group.resourceGroupName,
  *   location: "centralus",
  * });
  * ```
  *
  * @resource
  */
-export const ImportSite = Resource<ImportSite>("Azure.Migrate.ImportSite");
+export const ImportSite = GroupedResource<ImportSite>("Azure.Migrate.ImportSite");
 
 type ObservedImportSite = migrate.GetImportSitesControllerResponse;
 

@@ -2,7 +2,7 @@ import * as discovery from "@distilled.cloud/azure/discovery";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -20,6 +20,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createDiscoveryName,
   DISCOVERY_NAMESPACE,
@@ -132,12 +133,8 @@ export interface Workspace extends Resource<
  * ### Creating a Workspace
  * **Example:** Workspace with a user-assigned identity
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("science");
- * const identity = yield* Azure.ManagedIdentity.UserAssignedIdentity("ws", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const identity = yield* Azure.ManagedIdentity.UserAssignedIdentity("ws");
  * const workspace = yield* Azure.Discovery.Workspace("lab", {
- *   resourceGroup: group.resourceGroupName,
  *   workspaceIdentity: identity.identityId,
  * });
  * ```
@@ -146,7 +143,6 @@ export interface Workspace extends Resource<
  * **Example:** Workspace linked to a supercomputer
  * ```typescript
  * const workspace = yield* Azure.Discovery.Workspace("lab", {
- *   resourceGroup: group.resourceGroupName,
  *   workspaceIdentity: identity.identityId,
  *   supercomputerIds: [supercomputer.supercomputerId],
  *   publicNetworkAccess: "Enabled",
@@ -155,7 +151,7 @@ export interface Workspace extends Resource<
  *
  * @resource
  */
-export const Workspace = Resource<Workspace>("Azure.Discovery.Workspace");
+export const Workspace = GroupedResource<Workspace>("Azure.Discovery.Workspace");
 
 /**
  * Without the Discovery preview ARM rejects the type itself

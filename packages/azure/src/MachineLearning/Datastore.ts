@@ -2,7 +2,7 @@ import * as ml from "@distilled.cloud/azure/machinelearningservices";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -16,6 +16,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { armTags, createChildName, inputFields, sameArm, sameValue } from "./Common.ts";
 
 export type DatastoreType =
@@ -151,11 +152,9 @@ export interface Datastore extends Resource<
  * **Example:** Identity-based blob datastore
  * ```typescript
  * const container = yield* Azure.Storage.BlobContainer("training", {
- *   resourceGroup: group.resourceGroupName,
  *   storageAccount: storage.storageAccountName,
  * });
  * const datastore = yield* Azure.MachineLearning.Datastore("training", {
- *   resourceGroup: group.resourceGroupName,
  *   workspace: workspace.workspaceName,
  *   accountName: storage.storageAccountName,
  *   containerName: container.containerName,
@@ -165,7 +164,6 @@ export interface Datastore extends Resource<
  * **Example:** Data Lake Gen2 datastore with a service principal
  * ```typescript
  * const datastore = yield* Azure.MachineLearning.Datastore("lake", {
- *   resourceGroup: group.resourceGroupName,
  *   workspace: workspace.workspaceName,
  *   datastoreType: "AzureDataLakeGen2",
  *   accountName: lake.storageAccountName,
@@ -181,7 +179,7 @@ export interface Datastore extends Resource<
  *
  * @resource
  */
-export const Datastore = Resource<Datastore>("Azure.MachineLearning.Datastore");
+export const Datastore = GroupedResource<Datastore>("Azure.MachineLearning.Datastore");
 
 const getDatastore = (
   subscriptionId: string,

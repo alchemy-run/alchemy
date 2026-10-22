@@ -2,7 +2,7 @@ import * as logic from "@distilled.cloud/azure/logic";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -19,6 +19,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createLogicName } from "./LogicShared.ts";
 
 /** Integration account pricing tier. */
@@ -94,16 +95,12 @@ export interface IntegrationAccount extends Resource<
  * ### Creating an Integration Account
  * **Example:** Free integration account
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("b2b");
- * const account = yield* Azure.Logic.IntegrationAccount("b2b", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const account = yield* Azure.Logic.IntegrationAccount("b2b");
  * ```
  *
  * **Example:** Standard account with tags
  * ```typescript
  * const account = yield* Azure.Logic.IntegrationAccount("b2b", {
- *   resourceGroup: group.resourceGroupName,
  *   sku: "Standard",
  *   tags: { team: "integration" },
  * });
@@ -113,7 +110,6 @@ export interface IntegrationAccount extends Resource<
  * **Example:** Workflow that uses the account's artifacts
  * ```typescript
  * const workflow = yield* Azure.Logic.Workflow("orders", {
- *   resourceGroup: group.resourceGroupName,
  *   integrationAccount: account.integrationAccountId,
  *   definition,
  * });
@@ -121,7 +117,9 @@ export interface IntegrationAccount extends Resource<
  *
  * @resource
  */
-export const IntegrationAccount = Resource<IntegrationAccount>("Azure.Logic.IntegrationAccount");
+export const IntegrationAccount = GroupedResource<IntegrationAccount>(
+  "Azure.Logic.IntegrationAccount",
+);
 
 const SKU_RANK: Record<string, number> = { free: 0, basic: 1, standard: 2 };
 

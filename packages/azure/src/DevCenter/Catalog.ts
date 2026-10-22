@@ -2,7 +2,7 @@ import * as devcenter from "@distilled.cloud/azure/devcenter";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -16,6 +16,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   catalogDelta,
   sourceTypeOf,
@@ -68,7 +69,6 @@ export interface Catalog extends Resource<
  * **Example:** Microsoft's public quick-start catalog
  * ```typescript
  * const catalog = yield* Azure.DevCenter.Catalog("quickstart", {
- *   resourceGroup: group.resourceGroupName,
  *   devCenter: center.devCenterName,
  *   gitHub: {
  *     uri: "https://github.com/microsoft/devcenter-catalog.git",
@@ -81,7 +81,6 @@ export interface Catalog extends Resource<
  * **Example:** Private repository with a Key Vault PAT
  * ```typescript
  * const catalog = yield* Azure.DevCenter.Catalog("team", {
- *   resourceGroup: group.resourceGroupName,
  *   devCenter: center.devCenterName,
  *   gitHub: {
  *     uri: "https://github.com/acme/environments.git",
@@ -95,7 +94,7 @@ export interface Catalog extends Resource<
  *
  * @resource
  */
-export const Catalog = Resource<Catalog>("Azure.DevCenter.Catalog");
+export const Catalog = GroupedResource<Catalog>("Azure.DevCenter.Catalog");
 
 type Observed = devcenter.GetCatalogResponse;
 

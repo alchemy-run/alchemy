@@ -1,9 +1,10 @@
 import * as network from "@distilled.cloud/azure/network";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import type * as Redacted from "effect/Redacted";
 import { orUndefinedIfNotFound, userTags } from "../Arm.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { reveal, sameId, secretChanged } from "./common.ts";
 import { networkProvider, subsetDiffers } from "./generic.ts";
 
@@ -111,7 +112,6 @@ export interface VirtualNetworkGatewayConnection extends Resource<
  * **Example:** Site-to-site IPsec
  * ```typescript
  * yield* Azure.Network.VirtualNetworkGatewayConnection("onprem", {
- *   resourceGroup: group.resourceGroupName,
  *   connectionType: "IPsec",
  *   virtualNetworkGatewayId: gateway.virtualNetworkGatewayId,
  *   localNetworkGatewayId: onPrem.localNetworkGatewayId,
@@ -121,7 +121,7 @@ export interface VirtualNetworkGatewayConnection extends Resource<
  *
  * @resource
  */
-export const VirtualNetworkGatewayConnection = Resource<VirtualNetworkGatewayConnection>(
+export const VirtualNetworkGatewayConnection = GroupedResource<VirtualNetworkGatewayConnection>(
   "Azure.Network.VirtualNetworkGatewayConnection",
 );
 

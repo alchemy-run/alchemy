@@ -2,12 +2,13 @@ import * as sql from "@distilled.cloud/azure/sql";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { ensureRegistered, ignoreNotFound, orUndefinedIfNotFound } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { fieldsMatch, isServerOwnedByStack, lower, sameSecret } from "./common.ts";
 import { secretsFingerprint, serverPath, type ServerScope, syncSetting } from "./setting.ts";
 
@@ -79,7 +80,6 @@ export interface ServerDevOpsAuditSettings extends Resource<
  * **Example:** Audit support operations to Azure Monitor
  * ```typescript
  * yield* Azure.Sql.ServerDevOpsAuditSettings("devops-audit", {
- *   resourceGroup: group.resourceGroupName,
  *   server: server.serverName,
  *   state: "Enabled",
  *   isAzureMonitorTargetEnabled: true,
@@ -88,7 +88,7 @@ export interface ServerDevOpsAuditSettings extends Resource<
  *
  * @resource
  */
-export const ServerDevOpsAuditSettings = Resource<ServerDevOpsAuditSettings>(
+export const ServerDevOpsAuditSettings = GroupedResource<ServerDevOpsAuditSettings>(
   "Azure.Sql.ServerDevOpsAuditSettings",
 );
 

@@ -1,8 +1,9 @@
 import * as apim from "@distilled.cloud/azure/apimanagement";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { entityLifecycle } from "./Entity.ts";
 import type { NotificationName } from "./Notification.ts";
 
@@ -62,13 +63,11 @@ export interface WorkspaceNotification extends Resource<
  * **Example:** BCC every developer email to the API team
  * ```typescript
  * const bcc = yield* Azure.ApiManagement.WorkspaceNotification("bcc", {
- *   resourceGroup: group.resourceGroupName,
  *   serviceName: apim.serviceName,
  *   workspaceName: workspace.workspaceName,
  *   notificationName: "BCC",
  * });
  * yield* Azure.ApiManagement.WorkspaceNotificationRecipientEmail("bcc-team", {
- *   resourceGroup: group.resourceGroupName,
  *   serviceName: apim.serviceName,
  *   workspaceName: workspace.workspaceName,
  *   notificationName: bcc.notificationName,
@@ -78,7 +77,7 @@ export interface WorkspaceNotification extends Resource<
  *
  * @resource
  */
-export const WorkspaceNotification = Resource<WorkspaceNotification>(
+export const WorkspaceNotification = GroupedResource<WorkspaceNotification>(
   "Azure.ApiManagement.WorkspaceNotification",
 );
 

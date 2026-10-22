@@ -45,25 +45,68 @@ Without an `Azure.location(...)` layer, resources default to the
 profile's location, then `eastus`. A resource's recorded location always
 wins, so changing the default never moves existing resources.
 
-## Resources
+## Resource groups
 
-Everything lives in a resource group:
+Every Azure resource lives in a resource group. Alchemy creates one per
+stack and stage, named `<stack>-<stage>` (for example `shop-prod`), and
+puts every resource that doesn't set `resourceGroup` into it. Destroy
+deletes the group after its resources, and only when it is empty and
+carries the stack's ownership tags.
+
+To deploy into a group someone else created, name it on the providers.
+Alchemy references the group and never creates or deletes it:
 
 ```typescript
-const group = yield* Azure.Resources.ResourceGroup("app");
+providers: Azure.providers().pipe(
+  Layer.provideMerge(Azure.resourceGroup("rg-shop-prod")),
+),
 ```
+
+To set the group's name, location, or tags, declare it and provide it to
+the resources that go into it:
+
+```typescript
+const group = yield* Azure.Resources.ResourceGroup("app", {
+  name: "shop-prod",
+  location: "westeurope",
+});
+
+yield* Effect.gen(function* () {
+  yield* Azure.Storage.StorageAccount("files");
+}).pipe(Effect.provide(Azure.resourceGroup(group)));
+```
+
+Set `resourceGroup` on one resource to put it in another group, such as
+a shared networking group:
+
+```typescript
+const vnet = yield* Azure.Network.VirtualNetwork("vnet", {
+  resourceGroup: "rg-network",
+  addressPrefixes: ["10.0.0.0/16"],
+});
+```
+
+:::caution
+A resource's ID contains its resource group. Moving a resource to another
+group, or switching the stack from the default group to a named one,
+replaces the resource.
+:::
+
+Creating the default group needs permission to write resource groups in
+the subscription. Without it, deploy fails with
+`Azure.ResourceGroupCreateForbidden`; use `Azure.resourceGroup("<name>")`
+instead.
+
+## Resources
 
 A storage account holds Blob, Queue, Table, and File storage. Accounts
 are HTTPS-only, require TLS 1.2, and block anonymous blob access unless
 you opt in:
 
 ```typescript
-const account = yield* Azure.Storage.StorageAccount("files", {
-  resourceGroup: group.resourceGroupName,
-});
+const account = yield* Azure.Storage.StorageAccount("files");
 
 const uploads = yield* Azure.Storage.BlobContainer("uploads", {
-  resourceGroup: group.resourceGroupName,
   storageAccount: account.storageAccountName,
 });
 ```
@@ -72,9 +115,7 @@ Grant access with a managed identity and a role assignment scoped to
 the one resource it needs:
 
 ```typescript
-const identity = yield* Azure.ManagedIdentity.UserAssignedIdentity("api", {
-  resourceGroup: group.resourceGroupName,
-});
+const identity = yield* Azure.ManagedIdentity.UserAssignedIdentity("api");
 
 yield* Azure.Authorization.RoleAssignment("api-reads-files", {
   scope: account.storageAccountId,

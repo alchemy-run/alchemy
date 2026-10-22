@@ -1,10 +1,11 @@
 import * as network from "@distilled.cloud/azure/network";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
 import { orUndefinedIfNotFound } from "../Arm.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { reveal, sameId, secretChanged } from "./common.ts";
 import { networkProvider, subsetDiffers } from "./generic.ts";
 import { routingConfigurationInput, type HubRoutingConfiguration } from "./virtualHubShared.ts";
@@ -97,7 +98,6 @@ export interface VpnConnection extends Resource<
  * **Example:** One-link branch with a pre-shared key
  * ```typescript
  * yield* Azure.Network.VpnConnection("branch", {
- *   resourceGroup: group.resourceGroupName,
  *   vpnGateway: gateway.vpnGatewayName,
  *   remoteVpnSiteId: site.vpnSiteId,
  *   links: [
@@ -112,7 +112,7 @@ export interface VpnConnection extends Resource<
  *
  * @resource
  */
-export const VpnConnection = Resource<VpnConnection>("Azure.Network.VpnConnection");
+export const VpnConnection = GroupedResource<VpnConnection>("Azure.Network.VpnConnection");
 
 const refs = (ids: string[] | undefined) => ids?.map((id) => ({ id }));
 

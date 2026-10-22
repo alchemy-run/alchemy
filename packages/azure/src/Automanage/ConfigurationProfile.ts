@@ -2,7 +2,7 @@ import * as automanage from "@distilled.cloud/azure/automanage";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -18,6 +18,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { configurationDiffers, configurationOf, createProfileName } from "./Common.ts";
 
 export interface ConfigurationProfileProps {
@@ -86,9 +87,7 @@ export interface ConfigurationProfile extends Resource<
  * ### Creating a Profile
  * **Example:** Profile enabling the security baseline
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("app");
  * const profile = yield* Azure.Automanage.ConfigurationProfile("baseline", {
- *   resourceGroup: group.resourceGroupName,
  *   configuration: {
  *     "AzureSecurityBaseline/Enable": true,
  *     "Antimalware/Enable": true,
@@ -100,7 +99,6 @@ export interface ConfigurationProfile extends Resource<
  * **Example:** Attach the profile to a virtual machine
  * ```typescript
  * yield* Azure.Automanage.ConfigurationProfileAssignment("vm-profile", {
- *   resourceGroup: group.resourceGroupName,
  *   virtualMachine: vm.virtualMachineName,
  *   configurationProfile: profile.configurationProfileId,
  * });
@@ -108,7 +106,7 @@ export interface ConfigurationProfile extends Resource<
  *
  * @resource
  */
-export const ConfigurationProfile = Resource<ConfigurationProfile>(
+export const ConfigurationProfile = GroupedResource<ConfigurationProfile>(
   "Azure.Automanage.ConfigurationProfile",
 );
 

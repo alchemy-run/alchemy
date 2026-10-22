@@ -1,8 +1,9 @@
 import * as apim from "@distilled.cloud/azure/apimanagement";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createEntityName } from "./Common.ts";
 import { entityLifecycle, serviceEntityId } from "./Entity.ts";
 
@@ -56,7 +57,6 @@ export interface ProductApiLink extends Resource<
  * **Example:** Publish an API through a product
  * ```typescript
  * yield* Azure.ApiManagement.ProductApiLink("starter-orders", {
- *   resourceGroup: group.resourceGroupName,
  *   serviceName: apim.serviceName,
  *   productName: product.productName,
  *   apiName: api.apiName,
@@ -65,7 +65,7 @@ export interface ProductApiLink extends Resource<
  *
  * @resource
  */
-export const ProductApiLink = Resource<ProductApiLink>("Azure.ApiManagement.ProductApiLink");
+export const ProductApiLink = GroupedResource<ProductApiLink>("Azure.ApiManagement.ProductApiLink");
 
 interface Key {
   resourceGroup: string;

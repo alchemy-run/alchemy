@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -20,6 +20,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 
 /** Tag the Azure portal reads as a dashboard's display title. */
 const TITLE_TAG = "hidden-title";
@@ -141,9 +142,7 @@ export interface Dashboard extends Resource<
  * ### Creating a Dashboard
  * **Example:** Dashboard with a Markdown tile
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("ops");
  * const dashboard = yield* Azure.Portal.Dashboard("overview", {
- *   resourceGroup: group.resourceGroupName,
  *   title: "Service overview",
  *   lenses: [
  *     {
@@ -174,7 +173,6 @@ export interface Dashboard extends Resource<
  * **Example:** Dashboard-level metadata
  * ```typescript
  * const dashboard = yield* Azure.Portal.Dashboard("metrics", {
- *   resourceGroup: group.resourceGroupName,
  *   lenses: [],
  *   metadata: {
  *     model: {
@@ -189,7 +187,7 @@ export interface Dashboard extends Resource<
  *
  * @resource
  */
-export const Dashboard = Resource<Dashboard>("Azure.Portal.Dashboard");
+export const Dashboard = GroupedResource<Dashboard>("Azure.Portal.Dashboard");
 
 type ObservedDashboard = portal.GetDashboardResponse;
 

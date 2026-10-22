@@ -2,7 +2,7 @@ import * as netapp from "@distilled.cloud/azure/netapp";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -17,6 +17,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createNetAppName, LRO_BUDGET, whileBusy } from "./Common.ts";
 
 export type VolumeQuotaType =
@@ -98,7 +99,6 @@ export interface VolumeQuotaRule extends Resource<
  * **Example:** Limit every user to 10 GiB
  * ```typescript
  * const rule = yield* Azure.NetApp.VolumeQuotaRule("per-user", {
- *   resourceGroup: group.resourceGroupName,
  *   account: account.accountName,
  *   pool: pool.poolName,
  *   volume: volume.volumeName,
@@ -111,7 +111,6 @@ export interface VolumeQuotaRule extends Resource<
  * **Example:** Give UID 1001 50 GiB
  * ```typescript
  * const rule = yield* Azure.NetApp.VolumeQuotaRule("uid-1001", {
- *   resourceGroup: group.resourceGroupName,
  *   account: account.accountName,
  *   pool: pool.poolName,
  *   volume: volume.volumeName,
@@ -123,7 +122,7 @@ export interface VolumeQuotaRule extends Resource<
  *
  * @resource
  */
-export const VolumeQuotaRule = Resource<VolumeQuotaRule>("Azure.NetApp.VolumeQuotaRule");
+export const VolumeQuotaRule = GroupedResource<VolumeQuotaRule>("Azure.NetApp.VolumeQuotaRule");
 
 interface Where {
   subscriptionId: string;

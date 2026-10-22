@@ -2,7 +2,7 @@ import * as communication from "@distilled.cloud/azure/communication";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import {
@@ -18,6 +18,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { GLOBAL_LOCATION, lower } from "./CommunicationShared.ts";
 
 export type EmailDomainManagement = communication.DomainManagement;
@@ -157,11 +158,8 @@ export interface EmailDomain extends Resource<
  * ### Azure-managed Domains
  * **Example:** Free azurecomm.net sender domain
  * ```typescript
- * const email = yield* Azure.Communication.EmailService("email", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const email = yield* Azure.Communication.EmailService("email");
  * const domain = yield* Azure.Communication.EmailDomain("domain", {
- *   resourceGroup: group.resourceGroupName,
  *   emailService: email.emailServiceName,
  * });
  * // domain.fromSenderDomain → "<guid>.azurecomm.net"
@@ -171,7 +169,6 @@ export interface EmailDomain extends Resource<
  * **Example:** Customer-managed domain with engagement tracking
  * ```typescript
  * const domain = yield* Azure.Communication.EmailDomain("custom", {
- *   resourceGroup: group.resourceGroupName,
  *   emailService: email.emailServiceName,
  *   domainManagement: "CustomerManaged",
  *   name: "mail.example.com",
@@ -184,14 +181,13 @@ export interface EmailDomain extends Resource<
  * **Example:** Link the domain to a communication service
  * ```typescript
  * const acs = yield* Azure.Communication.CommunicationService("acs", {
- *   resourceGroup: group.resourceGroupName,
  *   linkedDomains: [domain.domainId],
  * });
  * ```
  *
  * @resource
  */
-export const EmailDomain = Resource<EmailDomain>("Azure.Communication.EmailDomain");
+export const EmailDomain = GroupedResource<EmailDomain>("Azure.Communication.EmailDomain");
 
 type ObservedDomain = communication.GetDomainResponse;
 

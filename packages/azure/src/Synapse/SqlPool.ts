@@ -2,7 +2,7 @@ import * as synapse from "@distilled.cloud/azure/synapse";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -16,6 +16,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createAlnumName, getSqlPool, lower, workspaceLocation } from "./common.ts";
 
 export interface SqlPoolProps {
@@ -118,7 +119,6 @@ export interface SqlPool extends Resource<
  * **Example:** Smallest pool
  * ```typescript
  * const dw = yield* Azure.Synapse.SqlPool("dw", {
- *   resourceGroup: group.resourceGroupName,
  *   workspace: workspace.workspaceName,
  *   sku: "DW100c",
  * });
@@ -128,7 +128,6 @@ export interface SqlPool extends Resource<
  * **Example:** Paused pool with locally redundant backups
  * ```typescript
  * const dw = yield* Azure.Synapse.SqlPool("dw", {
- *   resourceGroup: group.resourceGroupName,
  *   workspace: workspace.workspaceName,
  *   storageAccountType: "LRS",
  *   paused: true,
@@ -137,7 +136,7 @@ export interface SqlPool extends Resource<
  *
  * @resource
  */
-export const SqlPool = Resource<SqlPool>("Azure.Synapse.SqlPool");
+export const SqlPool = GroupedResource<SqlPool>("Azure.Synapse.SqlPool");
 
 type ObservedPool = synapse.GetSqlPoolResponse;
 

@@ -2,7 +2,7 @@ import * as networkfunction from "@distilled.cloud/azure/networkfunction";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -20,6 +20,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   COLLECTOR_BUDGET,
   createNetworkFunctionName,
@@ -97,7 +98,6 @@ export interface AzureTrafficCollector extends Resource<
  * **Example:** Collector in a resource group
  * ```typescript
  * const collector = yield* Azure.NetworkFunction.AzureTrafficCollector("flows", {
- *   resourceGroup: group.resourceGroupName,
  *   location: "eastus",
  * });
  * ```
@@ -105,7 +105,6 @@ export interface AzureTrafficCollector extends Resource<
  * **Example:** Collector on a Virtual WAN hub
  * ```typescript
  * const collector = yield* Azure.NetworkFunction.AzureTrafficCollector("flows", {
- *   resourceGroup: group.resourceGroupName,
  *   virtualHubId: hub.virtualHubId,
  * });
  * ```
@@ -114,7 +113,6 @@ export interface AzureTrafficCollector extends Resource<
  * **Example:** Emit a circuit's flows to Azure Monitor
  * ```typescript
  * yield* Azure.NetworkFunction.CollectorPolicy("circuit", {
- *   resourceGroup: group.resourceGroupName,
  *   azureTrafficCollector: collector.azureTrafficCollectorName,
  *   location: collector.location,
  *   ingestionSourceIds: [circuit.circuitId],
@@ -123,7 +121,7 @@ export interface AzureTrafficCollector extends Resource<
  *
  * @resource
  */
-export const AzureTrafficCollector = Resource<AzureTrafficCollector>(
+export const AzureTrafficCollector = GroupedResource<AzureTrafficCollector>(
   "Azure.NetworkFunction.AzureTrafficCollector",
 );
 

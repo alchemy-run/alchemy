@@ -2,7 +2,7 @@ import * as servicebus from "@distilled.cloud/azure/servicebus";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createEntityName,
   hasMarker,
@@ -134,11 +135,9 @@ export interface Subscription extends Resource<
  * **Example:** Subscription on a topic
  * ```typescript
  * const events = yield* Azure.ServiceBus.Topic("events", {
- *   resourceGroup: group.resourceGroupName,
  *   namespace: bus.namespaceName,
  * });
  * const audit = yield* Azure.ServiceBus.Subscription("audit", {
- *   resourceGroup: group.resourceGroupName,
  *   namespace: bus.namespaceName,
  *   topic: events.topicName,
  *   maxDeliveryCount: 5,
@@ -149,11 +148,9 @@ export interface Subscription extends Resource<
  * **Example:** Forward a subscription into a queue
  * ```typescript
  * const inbox = yield* Azure.ServiceBus.Queue("inbox", {
- *   resourceGroup: group.resourceGroupName,
  *   namespace: bus.namespaceName,
  * });
  * yield* Azure.ServiceBus.Subscription("to-inbox", {
- *   resourceGroup: group.resourceGroupName,
  *   namespace: bus.namespaceName,
  *   topic: events.topicName,
  *   forwardTo: inbox.queueName,
@@ -162,7 +159,7 @@ export interface Subscription extends Resource<
  *
  * @resource
  */
-export const Subscription = Resource<Subscription>("Azure.ServiceBus.Subscription");
+export const Subscription = GroupedResource<Subscription>("Azure.ServiceBus.Subscription");
 
 const MUTABLE_KEYS = [
   "lockDuration",

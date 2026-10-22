@@ -1,7 +1,7 @@
 import * as asr from "@distilled.cloud/azure/recoveryservicessiterecovery";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -12,6 +12,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   compact,
   createSiteRecoveryName,
@@ -141,7 +142,6 @@ export interface ProtectedItem extends Resource<
  * **Example:** Replicate a VM with one managed disk
  * ```typescript
  * const item = yield* Azure.SiteRecovery.ProtectedItem("web-vm", {
- *   resourceGroup: group.resourceGroupName,
  *   vault: vault.vaultName,
  *   fabric: primary.fabricName,
  *   protectionContainer: primaryContainer.protectionContainerName,
@@ -165,7 +165,7 @@ export interface ProtectedItem extends Resource<
  *
  * @resource
  */
-export const ProtectedItem = Resource<ProtectedItem>("Azure.SiteRecovery.ProtectedItem");
+export const ProtectedItem = GroupedResource<ProtectedItem>("Azure.SiteRecovery.ProtectedItem");
 
 type Observed = asr.GetReplicationProtectedItemResponse;
 

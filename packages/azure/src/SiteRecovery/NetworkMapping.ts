@@ -1,7 +1,7 @@
 import * as asr from "@distilled.cloud/azure/recoveryservicessiterecovery";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -12,6 +12,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createSiteRecoveryName,
   ownedOrUnowned,
@@ -96,7 +97,6 @@ export interface NetworkMapping extends Resource<
  * **Example:** Map the primary VNet to the recovery VNet
  * ```typescript
  * yield* Azure.SiteRecovery.NetworkMapping("vnet-mapping", {
- *   resourceGroup: group.resourceGroupName,
  *   vault: vault.vaultName,
  *   fabric: primary.fabricName,
  *   primaryNetworkId: primaryVnet.virtualNetworkId,
@@ -107,7 +107,7 @@ export interface NetworkMapping extends Resource<
  *
  * @resource
  */
-export const NetworkMapping = Resource<NetworkMapping>("Azure.SiteRecovery.NetworkMapping");
+export const NetworkMapping = GroupedResource<NetworkMapping>("Azure.SiteRecovery.NetworkMapping");
 
 type Observed = asr.GetReplicationNetworkMappingResponse;
 

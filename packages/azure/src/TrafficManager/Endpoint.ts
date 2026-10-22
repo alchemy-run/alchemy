@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -15,6 +15,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { hasAnyProfileMarker, ownedByStack } from "./Ownership.ts";
 
 /** Kind of Traffic Manager endpoint (part of its ARM resource path). */
@@ -133,18 +134,15 @@ export interface Endpoint extends Resource<
  * **Example:** Priority failover between two hosts
  * ```typescript
  * const profile = yield* Azure.TrafficManager.Profile("global", {
- *   resourceGroup: group.resourceGroupName,
  *   trafficRoutingMethod: "Priority",
  * });
  * yield* Azure.TrafficManager.Endpoint("primary", {
- *   resourceGroup: group.resourceGroupName,
  *   profile: profile.profileName,
  *   endpointType: "ExternalEndpoints",
  *   target: "primary.example.com",
  *   priority: 1,
  * });
  * yield* Azure.TrafficManager.Endpoint("secondary", {
- *   resourceGroup: group.resourceGroupName,
  *   profile: profile.profileName,
  *   endpointType: "ExternalEndpoints",
  *   target: "secondary.example.com",
@@ -156,7 +154,6 @@ export interface Endpoint extends Resource<
  * **Example:** Route to a public IP with a DNS label
  * ```typescript
  * yield* Azure.TrafficManager.Endpoint("eastus", {
- *   resourceGroup: group.resourceGroupName,
  *   profile: profile.profileName,
  *   endpointType: "AzureEndpoints",
  *   targetResourceId: publicIp.publicIpAddressId,
@@ -168,7 +165,6 @@ export interface Endpoint extends Resource<
  * **Example:** Use a child profile as an endpoint
  * ```typescript
  * yield* Azure.TrafficManager.Endpoint("europe", {
- *   resourceGroup: group.resourceGroupName,
  *   profile: parent.profileName,
  *   endpointType: "NestedEndpoints",
  *   targetResourceId: child.profileId,
@@ -179,7 +175,7 @@ export interface Endpoint extends Resource<
  *
  * @resource
  */
-export const Endpoint = Resource<Endpoint>("Azure.TrafficManager.Endpoint");
+export const Endpoint = GroupedResource<Endpoint>("Azure.TrafficManager.Endpoint");
 
 type ObservedEndpoint = trafficmanager.GetEndpointResponse;
 

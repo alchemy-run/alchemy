@@ -1,8 +1,9 @@
 import * as apim from "@distilled.cloud/azure/apimanagement";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createEntityName } from "./Common.ts";
 import { entityLifecycle, policyInSync } from "./Entity.ts";
 
@@ -59,7 +60,6 @@ export interface PolicyFragment extends Resource<
  * **Example:** A fragment that stamps a response header
  * ```typescript
  * const fragment = yield* Azure.ApiManagement.PolicyFragment("stamp", {
- *   resourceGroup: group.resourceGroupName,
  *   serviceName: apim.serviceName,
  *   description: "Adds x-served-by",
  *   value: `<fragment>
@@ -69,7 +69,6 @@ export interface PolicyFragment extends Resource<
  * </fragment>`,
  * });
  * yield* Azure.ApiManagement.ApiPolicy("policy", {
- *   resourceGroup: group.resourceGroupName,
  *   serviceName: apim.serviceName,
  *   apiName: api.apiName,
  *   value: `<policies>
@@ -86,7 +85,7 @@ export interface PolicyFragment extends Resource<
  *
  * @resource
  */
-export const PolicyFragment = Resource<PolicyFragment>("Azure.ApiManagement.PolicyFragment");
+export const PolicyFragment = GroupedResource<PolicyFragment>("Azure.ApiManagement.PolicyFragment");
 
 interface Key {
   resourceGroup: string;

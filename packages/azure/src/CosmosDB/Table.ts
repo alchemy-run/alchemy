@@ -3,11 +3,12 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { ensureRegistered, ignoreNotFound, orUndefinedIfNotFound, waitUntilGone } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createOptions,
   hasDedicatedThroughput,
@@ -71,11 +72,9 @@ export interface Table extends Resource<
  * **Example:** Table on a serverless Table API account
  * ```typescript
  * const account = yield* Azure.CosmosDB.DatabaseAccount("tables", {
- *   resourceGroup: group.resourceGroupName,
  *   capabilities: ["EnableServerless", "EnableTable"],
  * });
  * const sessions = yield* Azure.CosmosDB.Table("sessions", {
- *   resourceGroup: group.resourceGroupName,
  *   account: account.accountName,
  * });
  * ```
@@ -84,7 +83,6 @@ export interface Table extends Resource<
  * **Example:** Autoscale table on a provisioned account
  * ```typescript
  * const events = yield* Azure.CosmosDB.Table("events", {
- *   resourceGroup: group.resourceGroupName,
  *   account: account.accountName,
  *   autoscaleMaxThroughput: 1000,
  * });
@@ -92,7 +90,7 @@ export interface Table extends Resource<
  *
  * @resource
  */
-export const Table = Resource<Table>("Azure.CosmosDB.Table");
+export const Table = GroupedResource<Table>("Azure.CosmosDB.Table");
 
 const createTableName = Effect.fn(function* (id: string) {
   const name = (yield* createPhysicalName({

@@ -2,7 +2,7 @@ import * as devtestlabs from "@distilled.cloud/azure/devtestlabs";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -16,6 +16,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   DEVTESTLAB_NAMESPACE,
   diverges,
@@ -81,7 +82,6 @@ export interface ServiceFabricSchedule extends Resource<
  * **Example:** Stop the cluster every evening
  * ```typescript
  * const shutdown = yield* Azure.DevTestLabs.ServiceFabricSchedule("off", {
- *   resourceGroup: group.resourceGroupName,
  *   lab: lab.labName,
  *   user: user.userName,
  *   serviceFabric: fabric.serviceFabricName,
@@ -91,7 +91,7 @@ export interface ServiceFabricSchedule extends Resource<
  *
  * @resource
  */
-export const ServiceFabricSchedule = Resource<ServiceFabricSchedule>(
+export const ServiceFabricSchedule = GroupedResource<ServiceFabricSchedule>(
   "Azure.DevTestLabs.ServiceFabricSchedule",
 );
 

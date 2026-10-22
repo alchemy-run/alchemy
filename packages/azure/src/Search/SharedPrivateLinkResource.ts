@@ -2,12 +2,13 @@ import * as search from "@distilled.cloud/azure/search";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { ensureRegistered, waitForProvisioned } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createSearchName,
   deleteSharedPrivateLink,
@@ -94,14 +95,9 @@ export interface SharedPrivateLinkResource extends Resource<
  * ### Connecting to Storage
  * **Example:** Private link to a storage account's blob endpoint
  * ```typescript
- * const search = yield* Azure.Search.SearchService("search", {
- *   resourceGroup: group.resourceGroupName,
- * });
- * const account = yield* Azure.Storage.StorageAccount("data", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const search = yield* Azure.Search.SearchService("search");
+ * const account = yield* Azure.Storage.StorageAccount("data");
  * const link = yield* Azure.Search.SharedPrivateLinkResource("blob-link", {
- *   resourceGroup: group.resourceGroupName,
  *   searchService: search.searchServiceName,
  *   privateLinkResourceId: account.storageAccountId,
  *   groupId: "blob",
@@ -111,7 +107,7 @@ export interface SharedPrivateLinkResource extends Resource<
  *
  * @resource
  */
-export const SharedPrivateLinkResource = Resource<SharedPrivateLinkResource>(
+export const SharedPrivateLinkResource = GroupedResource<SharedPrivateLinkResource>(
   "Azure.Search.SharedPrivateLinkResource",
 );
 

@@ -2,7 +2,7 @@ import * as migrate from "@distilled.cloud/azure/migrate";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { migrateName, ownedByStage, settingsDiffer } from "./Common.ts";
 import { getMigrateProject } from "./MigrateProject.ts";
 
@@ -112,11 +113,9 @@ export interface Solution extends Resource<
  * **Example:** Server assessment tool
  * ```typescript
  * const hub = yield* Azure.Migrate.MigrateProject("hub", {
- *   resourceGroup: group.resourceGroupName,
  *   location: "centralus",
  * });
  * const assessment = yield* Azure.Migrate.Solution("assessment", {
- *   resourceGroup: group.resourceGroupName,
  *   migrateProject: hub.migrateProjectName,
  *   name: "Servers-Assessment-ServerAssessment",
  *   tool: "ServerAssessment",
@@ -129,7 +128,6 @@ export interface Solution extends Resource<
  * **Example:** Discovery tool tracking a VMware site
  * ```typescript
  * const discovery = yield* Azure.Migrate.Solution("discovery", {
- *   resourceGroup: group.resourceGroupName,
  *   migrateProject: hub.migrateProjectName,
  *   name: "Servers-Discovery-ServerDiscovery",
  *   tool: "ServerDiscovery",
@@ -137,7 +135,6 @@ export interface Solution extends Resource<
  *   goal: "Servers",
  * });
  * const site = yield* Azure.Migrate.VmwareSite("vmware", {
- *   resourceGroup: group.resourceGroupName,
  *   location: "centralus",
  *   discoverySolutionId: discovery.solutionId,
  * });
@@ -145,7 +142,7 @@ export interface Solution extends Resource<
  *
  * @resource
  */
-export const Solution = Resource<Solution>("Azure.Migrate.Solution");
+export const Solution = GroupedResource<Solution>("Azure.Migrate.Solution");
 
 const getSolution = (
   subscriptionId: string,

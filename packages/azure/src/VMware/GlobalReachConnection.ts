@@ -2,7 +2,7 @@ import * as vmware from "@distilled.cloud/azure/vmware";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
 import {
@@ -14,6 +14,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   AVS_NAMESPACE,
   CHILD_BUDGET,
@@ -86,7 +87,6 @@ export interface GlobalReachConnection extends Resource<
  * **Example:** Peer with an on-premises circuit
  * ```typescript
  * yield* Azure.VMware.GlobalReachConnection("onprem", {
- *   resourceGroup: group.resourceGroupName,
  *   privateCloud: cloud.privateCloudName,
  *   peerExpressRouteCircuit: onPremCircuitId,
  *   authorizationKey: Redacted.make(onPremAuthorizationKey),
@@ -95,7 +95,7 @@ export interface GlobalReachConnection extends Resource<
  *
  * @resource
  */
-export const GlobalReachConnection = Resource<GlobalReachConnection>(
+export const GlobalReachConnection = GroupedResource<GlobalReachConnection>(
   "Azure.VMware.GlobalReachConnection",
 );
 

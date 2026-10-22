@@ -1,8 +1,9 @@
 import * as apim from "@distilled.cloud/azure/apimanagement";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { entityLifecycle, policyInSync } from "./Entity.ts";
 import type { PolicyFormat } from "./ServicePolicy.ts";
 
@@ -59,7 +60,6 @@ export interface ApiOperationPolicy extends Resource<
  * **Example:** Mock the response of one operation
  * ```typescript
  * yield* Azure.ApiManagement.ApiOperationPolicy("get-order-mock", {
- *   resourceGroup: group.resourceGroupName,
  *   serviceName: apim.serviceName,
  *   apiName: api.apiName,
  *   operationName: getOrder.operationName,
@@ -80,7 +80,7 @@ export interface ApiOperationPolicy extends Resource<
  *
  * @resource
  */
-export const ApiOperationPolicy = Resource<ApiOperationPolicy>(
+export const ApiOperationPolicy = GroupedResource<ApiOperationPolicy>(
   "Azure.ApiManagement.ApiOperationPolicy",
 );
 

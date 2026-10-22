@@ -1,8 +1,9 @@
 import * as apicenter from "@distilled.cloud/azure/apicenter";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createApiCenterName,
   DEFAULT_WORKSPACE,
@@ -102,7 +103,6 @@ export interface Environment extends Resource<
  * **Example:** Production environment on API Management
  * ```typescript
  * const prod = yield* Azure.ApiCenter.Environment("prod", {
- *   resourceGroup: group.resourceGroupName,
  *   serviceName: center.serviceName,
  *   title: "Production",
  *   kind: "production",
@@ -119,7 +119,7 @@ export interface Environment extends Resource<
  *
  * @resource
  */
-export const Environment = Resource<Environment>("Azure.ApiCenter.Environment");
+export const Environment = GroupedResource<Environment>("Azure.ApiCenter.Environment");
 
 interface Key {
   resourceGroup: string;

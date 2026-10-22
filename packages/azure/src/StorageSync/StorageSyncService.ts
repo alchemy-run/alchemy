@@ -2,7 +2,7 @@ import * as storagesync from "@distilled.cloud/azure/storagesync";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -20,6 +20,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createChildName, sameName } from "./internal.ts";
 
 export type StorageSyncIdentityType = storagesync.ManagedServiceIdentityType;
@@ -111,16 +112,12 @@ export interface StorageSyncService extends Resource<
  * ### Creating a Storage Sync Service
  * **Example:** Basic service
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("files");
- * const sync = yield* Azure.StorageSync.StorageSyncService("sync", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const sync = yield* Azure.StorageSync.StorageSyncService("sync");
  * ```
  *
  * **Example:** Private-endpoint-only service with a managed identity
  * ```typescript
  * const sync = yield* Azure.StorageSync.StorageSyncService("sync", {
- *   resourceGroup: group.resourceGroupName,
  *   incomingTrafficPolicy: "AllowVirtualNetworksOnly",
  *   identity: { type: "SystemAssigned" },
  *   tags: { team: "files" },
@@ -129,7 +126,7 @@ export interface StorageSyncService extends Resource<
  *
  * @resource
  */
-export const StorageSyncService = Resource<StorageSyncService>(
+export const StorageSyncService = GroupedResource<StorageSyncService>(
   "Azure.StorageSync.StorageSyncService",
 );
 

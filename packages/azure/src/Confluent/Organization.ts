@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import {
@@ -21,6 +21,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { canonicalJson, getOrganization, sameName } from "./common.ts";
 
 /** Azure Marketplace offer the organization subscribes to. */
@@ -158,9 +159,7 @@ export interface Organization extends Resource<
  * ### Creating an Organization
  * **Example:** Pay-as-you-go organization
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("streaming");
  * const org = yield* Azure.Confluent.Organization("kafka", {
- *   resourceGroup: group.resourceGroupName,
  *   userDetail: { emailAddress: "platform@example.com" },
  * });
  * ```
@@ -168,7 +167,6 @@ export interface Organization extends Resource<
  * **Example:** Linking an existing Confluent Cloud organization
  * ```typescript
  * const org = yield* Azure.Confluent.Organization("kafka", {
- *   resourceGroup: group.resourceGroupName,
  *   userDetail: { emailAddress: "platform@example.com" },
  *   linkOrganizationToken: Redacted.make(process.env.CONFLUENT_LINK_TOKEN!),
  * });
@@ -176,7 +174,7 @@ export interface Organization extends Resource<
  *
  * @resource
  */
-export const Organization = Resource<Organization>("Azure.Confluent.Organization");
+export const Organization = GroupedResource<Organization>("Azure.Confluent.Organization");
 
 type ObservedOrganization = confluent.GetOrganizationResponse;
 

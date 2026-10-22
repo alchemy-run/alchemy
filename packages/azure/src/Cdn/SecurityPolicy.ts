@@ -2,11 +2,12 @@ import * as cdn from "@distilled.cloud/azure/cdn";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { ensureRegistered, ignoreNotFound, orUndefinedIfNotFound, waitUntilGone } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   AFD_DELETE_BUDGET,
   createAfdName,
@@ -80,7 +81,6 @@ export interface SecurityPolicy extends Resource<
  * **Example:** Protect an endpoint with a WAF policy
  * ```typescript
  * const policy = yield* Azure.Cdn.SecurityPolicy("waf", {
- *   resourceGroup: group.resourceGroupName,
  *   profile: profile.profileName,
  *   wafPolicyId: wafPolicy.id,
  *   associations: [
@@ -91,7 +91,7 @@ export interface SecurityPolicy extends Resource<
  *
  * @resource
  */
-export const SecurityPolicy = Resource<SecurityPolicy>("Azure.Cdn.SecurityPolicy");
+export const SecurityPolicy = GroupedResource<SecurityPolicy>("Azure.Cdn.SecurityPolicy");
 
 const createPolicyName = (id: string) => createAfdName(id, 50);
 

@@ -2,11 +2,12 @@ import * as network from "@distilled.cloud/azure/network";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { ensureRegistered, ignoreNotFound, orUndefinedIfNotFound } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   convergeChild,
   createNetworkName,
@@ -85,11 +86,8 @@ export interface Route extends Resource<
  * ### Creating a Route
  * **Example:** Send all outbound traffic through an appliance
  * ```typescript
- * const table = yield* Azure.Network.RouteTable("egress", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const table = yield* Azure.Network.RouteTable("egress");
  * yield* Azure.Network.Route("default", {
- *   resourceGroup: group.resourceGroupName,
  *   routeTable: table.routeTableName,
  *   addressPrefix: "0.0.0.0/0",
  *   nextHopType: "VirtualAppliance",
@@ -100,7 +98,6 @@ export interface Route extends Resource<
  * **Example:** Black-hole a range
  * ```typescript
  * yield* Azure.Network.Route("drop", {
- *   resourceGroup: group.resourceGroupName,
  *   routeTable: table.routeTableName,
  *   addressPrefix: "192.168.0.0/16",
  *   nextHopType: "None",
@@ -109,7 +106,7 @@ export interface Route extends Resource<
  *
  * @resource
  */
-export const Route = Resource<Route>("Azure.Network.Route");
+export const Route = GroupedResource<Route>("Azure.Network.Route");
 
 type Observed = network.GetRouteResponse;
 

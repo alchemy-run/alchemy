@@ -2,7 +2,7 @@ import * as apim from "@distilled.cloud/azure/apimanagement";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import {
@@ -14,6 +14,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createEntityName, isParentOwned, sameName } from "./Common.ts";
 
 export interface NamedValueKeyVault {
@@ -96,7 +97,6 @@ export interface NamedValue extends Resource<
  * **Example:** Plain value
  * ```typescript
  * const region = yield* Azure.ApiManagement.NamedValue("region", {
- *   resourceGroup: group.resourceGroupName,
  *   serviceName: apim.serviceName,
  *   displayName: "region",
  *   value: "eu-west",
@@ -106,7 +106,6 @@ export interface NamedValue extends Resource<
  * **Example:** Secret value
  * ```typescript
  * const apiKey = yield* Azure.ApiManagement.NamedValue("backend-key", {
- *   resourceGroup: group.resourceGroupName,
  *   serviceName: apim.serviceName,
  *   displayName: "backend-key",
  *   value: Redacted.make(process.env.BACKEND_KEY!),
@@ -118,7 +117,6 @@ export interface NamedValue extends Resource<
  * **Example:** Value read from Key Vault
  * ```typescript
  * const secret = yield* Azure.ApiManagement.NamedValue("db-password", {
- *   resourceGroup: group.resourceGroupName,
  *   serviceName: apim.serviceName,
  *   keyVault: {
  *     secretIdentifier: "https://my-vault.vault.azure.net/secrets/db-password",
@@ -128,7 +126,7 @@ export interface NamedValue extends Resource<
  *
  * @resource
  */
-export const NamedValue = Resource<NamedValue>("Azure.ApiManagement.NamedValue");
+export const NamedValue = GroupedResource<NamedValue>("Azure.ApiManagement.NamedValue");
 
 const getNamedValue = (
   subscriptionId: string,

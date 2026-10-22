@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -21,6 +21,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { HCI_NAMESPACE, sameId, sameValue } from "./Common.ts";
 
 /** Site the machine is shipped to and its target device configuration. */
@@ -117,7 +118,6 @@ export interface EdgeMachine extends Resource<
  * **Example:** Edge machine backed by an Arc-enabled server
  * ```typescript
  * const machine = yield* Azure.AzureStackHCI.EdgeMachine("node-1", {
- *   resourceGroup: group.resourceGroupName,
  *   arcMachineResourceId: arcServerId,
  *   tags: { rack: "r1" },
  * });
@@ -125,7 +125,7 @@ export interface EdgeMachine extends Resource<
  *
  * @resource
  */
-export const EdgeMachine = Resource<EdgeMachine>("Azure.AzureStackHCI.EdgeMachine");
+export const EdgeMachine = GroupedResource<EdgeMachine>("Azure.AzureStackHCI.EdgeMachine");
 
 export const getHciEdgeMachine = (
   subscriptionId: string,

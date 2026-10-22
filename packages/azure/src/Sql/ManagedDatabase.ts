@@ -2,7 +2,7 @@ import * as sql from "@distilled.cloud/azure/sql";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -17,6 +17,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createChildName, lower } from "./common.ts";
 import { instancePath, type InstanceScope } from "./setting.ts";
 
@@ -101,7 +102,6 @@ export interface ManagedDatabase extends Resource<
  * **Example:** Empty database on a managed instance
  * ```typescript
  * const database = yield* Azure.Sql.ManagedDatabase("orders", {
- *   resourceGroup: group.resourceGroupName,
  *   managedInstance: instance.managedInstanceName,
  * });
  * ```
@@ -109,7 +109,6 @@ export interface ManagedDatabase extends Resource<
  * **Example:** Ledger database with tags
  * ```typescript
  * yield* Azure.Sql.ManagedDatabase("audit", {
- *   resourceGroup: group.resourceGroupName,
  *   managedInstance: instance.managedInstanceName,
  *   isLedgerOn: true,
  *   tags: { team: "compliance" },
@@ -118,7 +117,7 @@ export interface ManagedDatabase extends Resource<
  *
  * @resource
  */
-export const ManagedDatabase = Resource<ManagedDatabase>("Azure.Sql.ManagedDatabase");
+export const ManagedDatabase = GroupedResource<ManagedDatabase>("Azure.Sql.ManagedDatabase");
 
 type Observed = sql.GetManagedDatabaseResponse;
 

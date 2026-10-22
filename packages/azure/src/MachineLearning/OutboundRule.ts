@@ -1,7 +1,7 @@
 import * as ml from "@distilled.cloud/azure/machinelearningservices";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -12,6 +12,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { containsValue, createChildName, sameArm, sameValue, inputFields } from "./Common.ts";
 
 export type OutboundRuleType = "FQDN" | "PrivateEndpoint" | "ServiceTag";
@@ -111,14 +112,12 @@ export interface OutboundRule extends Resource<
  * **Example:** Private endpoint to a storage account
  * ```typescript
  * const workspace = yield* Azure.MachineLearning.Workspace("ws", {
- *   resourceGroup: group.resourceGroupName,
  *   kind: "Hub",
  *   storageAccount: storage.storageAccountId,
  *   keyVault: vault.vaultId,
  *   isolationMode: "AllowInternetOutbound",
  * });
  * const rule = yield* Azure.MachineLearning.OutboundRule("data", {
- *   resourceGroup: group.resourceGroupName,
  *   workspace: workspace.workspaceName,
  *   type: "PrivateEndpoint",
  *   destination: {
@@ -132,7 +131,6 @@ export interface OutboundRule extends Resource<
  * **Example:** Allow an FQDN in approved-outbound mode
  * ```typescript
  * const rule = yield* Azure.MachineLearning.OutboundRule("pypi", {
- *   resourceGroup: group.resourceGroupName,
  *   workspace: workspace.workspaceName,
  *   type: "FQDN",
  *   destination: "pypi.org",
@@ -141,7 +139,7 @@ export interface OutboundRule extends Resource<
  *
  * @resource
  */
-export const OutboundRule = Resource<OutboundRule>("Azure.MachineLearning.OutboundRule");
+export const OutboundRule = GroupedResource<OutboundRule>("Azure.MachineLearning.OutboundRule");
 
 const getRule = (
   subscriptionId: string,

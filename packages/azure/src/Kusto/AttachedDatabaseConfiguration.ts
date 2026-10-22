@@ -2,7 +2,7 @@ import * as kusto from "@distilled.cloud/azure/azure_kusto";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   clusterLocation,
   createKustoChildName,
@@ -125,7 +126,6 @@ export interface AttachedDatabaseConfiguration extends Resource<
  * **Example:** Follow one database from a leader cluster
  * ```typescript
  * const follow = yield* Azure.Kusto.AttachedDatabaseConfiguration("follow", {
- *   resourceGroup: group.resourceGroupName,
  *   cluster: follower.clusterName,
  *   leaderClusterId: leader.clusterId,
  *   databaseName: db.databaseName,
@@ -135,7 +135,7 @@ export interface AttachedDatabaseConfiguration extends Resource<
  *
  * @resource
  */
-export const AttachedDatabaseConfiguration = Resource<AttachedDatabaseConfiguration>(
+export const AttachedDatabaseConfiguration = GroupedResource<AttachedDatabaseConfiguration>(
   "Azure.Kusto.AttachedDatabaseConfiguration",
 );
 

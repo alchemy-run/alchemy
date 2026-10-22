@@ -2,11 +2,12 @@ import * as synapse from "@distilled.cloud/azure/synapse";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { ensureRegistered, orUndefinedIfNotFound } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createAlnumName,
   fieldsMatch,
@@ -84,7 +85,6 @@ export interface SqlPoolDataMaskingRule extends Resource<
  * **Example:** Mask email addresses
  * ```typescript
  * yield* Azure.Synapse.SqlPoolDataMaskingRule("email", {
- *   resourceGroup: group.resourceGroupName,
  *   workspace: workspace.workspaceName,
  *   sqlPool: masking.sqlPoolName,
  *   schemaName: "dbo",
@@ -97,7 +97,6 @@ export interface SqlPoolDataMaskingRule extends Resource<
  * **Example:** Show only the last four digits
  * ```typescript
  * yield* Azure.Synapse.SqlPoolDataMaskingRule("phone", {
- *   resourceGroup: group.resourceGroupName,
  *   workspace: workspace.workspaceName,
  *   sqlPool: masking.sqlPoolName,
  *   schemaName: "dbo",
@@ -112,7 +111,7 @@ export interface SqlPoolDataMaskingRule extends Resource<
  *
  * @resource
  */
-export const SqlPoolDataMaskingRule = Resource<SqlPoolDataMaskingRule>(
+export const SqlPoolDataMaskingRule = GroupedResource<SqlPoolDataMaskingRule>(
   "Azure.Synapse.SqlPoolDataMaskingRule",
 );
 

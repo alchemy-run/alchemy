@@ -2,11 +2,12 @@ import * as communication from "@distilled.cloud/azure/communication";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { ensureRegistered, ignoreNotFound, orUndefinedIfNotFound, waitUntilGone } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { isEmailServiceOwnedByStack, lower } from "./CommunicationShared.ts";
 
 export interface SenderUsernameProps {
@@ -70,7 +71,6 @@ export interface SenderUsername extends Resource<
  * **Example:** Set the display name of the default sender
  * ```typescript
  * const sender = yield* Azure.Communication.SenderUsername("sender", {
- *   resourceGroup: group.resourceGroupName,
  *   emailService: email.emailServiceName,
  *   domain: domain.domainName,
  *   username: "DoNotReply",
@@ -81,7 +81,6 @@ export interface SenderUsername extends Resource<
  * **Example:** Additional sender
  * ```typescript
  * const alerts = yield* Azure.Communication.SenderUsername("alerts", {
- *   resourceGroup: group.resourceGroupName,
  *   emailService: email.emailServiceName,
  *   domain: domain.domainName,
  *   username: "alerts",
@@ -91,7 +90,7 @@ export interface SenderUsername extends Resource<
  *
  * @resource
  */
-export const SenderUsername = Resource<SenderUsername>("Azure.Communication.SenderUsername");
+export const SenderUsername = GroupedResource<SenderUsername>("Azure.Communication.SenderUsername");
 
 const getSender = (
   subscriptionId: string,

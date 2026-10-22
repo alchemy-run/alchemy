@@ -1,8 +1,9 @@
 import * as apim from "@distilled.cloud/azure/apimanagement";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createEntityName } from "./Common.ts";
 import { entityLifecycle } from "./Entity.ts";
 
@@ -74,7 +75,6 @@ export interface WorkspaceApiSchema extends Resource<
  * **Example:** OpenAPI components for request validation
  * ```typescript
  * yield* Azure.ApiManagement.WorkspaceApiSchema("orders-schema", {
- *   resourceGroup: group.resourceGroupName,
  *   serviceName: apim.serviceName,
  *   workspaceName: workspace.workspaceName,
  *   apiName: api.apiName,
@@ -90,7 +90,6 @@ export interface WorkspaceApiSchema extends Resource<
  * **Example:** XSD for a SOAP API
  * ```typescript
  * yield* Azure.ApiManagement.WorkspaceApiSchema("soap-schema", {
- *   resourceGroup: group.resourceGroupName,
  *   serviceName: apim.serviceName,
  *   workspaceName: workspace.workspaceName,
  *   apiName: soapApi.apiName,
@@ -101,7 +100,7 @@ export interface WorkspaceApiSchema extends Resource<
  *
  * @resource
  */
-export const WorkspaceApiSchema = Resource<WorkspaceApiSchema>(
+export const WorkspaceApiSchema = GroupedResource<WorkspaceApiSchema>(
   "Azure.ApiManagement.WorkspaceApiSchema",
 );
 

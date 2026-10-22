@@ -1,8 +1,9 @@
 import * as network from "@distilled.cloud/azure/network";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import { orUndefinedIfNotFound, userTags } from "../Arm.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { networkProvider } from "./generic.ts";
 
 export interface ConnectionMonitorProps {
@@ -89,7 +90,9 @@ export interface ConnectionMonitor extends Resource<
  *
  * @resource
  */
-export const ConnectionMonitor = Resource<ConnectionMonitor>("Azure.Network.ConnectionMonitor");
+export const ConnectionMonitor = GroupedResource<ConnectionMonitor>(
+  "Azure.Network.ConnectionMonitor",
+);
 
 export const ConnectionMonitorProvider = () =>
   Provider.succeed(

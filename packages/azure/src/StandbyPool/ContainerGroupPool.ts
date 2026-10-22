@@ -2,7 +2,7 @@ import * as standbypool from "@distilled.cloud/azure/standbypool";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -20,6 +20,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createStandbyPoolName, lower, sameLocation, sortedKey } from "./common.ts";
 
 export interface ContainerGroupPoolProps {
@@ -116,9 +117,7 @@ export interface ContainerGroupPool extends Resource<
  * ### Creating a Pool
  * **Example:** Keep one container group warm
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("app");
  * const profile = yield* Azure.ContainerInstance.ContainerGroupProfile("web", {
- *   resourceGroup: group.resourceGroupName,
  *   containers: [
  *     {
  *       name: "web",
@@ -129,7 +128,6 @@ export interface ContainerGroupPool extends Resource<
  *   ],
  * });
  * const pool = yield* Azure.StandbyPool.ContainerGroupPool("web-pool", {
- *   resourceGroup: group.resourceGroupName,
  *   containerGroupProfileId: profile.containerGroupProfileId,
  *   containerGroupProfileRevision: profile.revision,
  *   maxReadyCapacity: 1,
@@ -140,7 +138,6 @@ export interface ContainerGroupPool extends Resource<
  * **Example:** Dynamic sizing up to five container groups
  * ```typescript
  * const pool = yield* Azure.StandbyPool.ContainerGroupPool("web-pool", {
- *   resourceGroup: group.resourceGroupName,
  *   containerGroupProfileId: profile.containerGroupProfileId,
  *   maxReadyCapacity: 5,
  *   dynamicSizing: true,
@@ -149,7 +146,7 @@ export interface ContainerGroupPool extends Resource<
  *
  * @resource
  */
-export const ContainerGroupPool = Resource<ContainerGroupPool>(
+export const ContainerGroupPool = GroupedResource<ContainerGroupPool>(
   "Azure.StandbyPool.ContainerGroupPool",
 );
 

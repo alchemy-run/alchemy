@@ -1,8 +1,9 @@
 import * as apim from "@distilled.cloud/azure/apimanagement";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { sameName } from "./Common.ts";
 import { entityLifecycle, serviceEntityId } from "./Entity.ts";
 
@@ -55,7 +56,6 @@ export interface WorkspaceGroupUser extends Resource<
  * **Example:** Add a developer to the partners group
  * ```typescript
  * yield* Azure.ApiManagement.WorkspaceGroupUser("jane-partners", {
- *   resourceGroup: group.resourceGroupName,
  *   serviceName: apim.serviceName,
  *   workspaceName: workspace.workspaceName,
  *   groupName: partners.groupName,
@@ -65,7 +65,7 @@ export interface WorkspaceGroupUser extends Resource<
  *
  * @resource
  */
-export const WorkspaceGroupUser = Resource<WorkspaceGroupUser>(
+export const WorkspaceGroupUser = GroupedResource<WorkspaceGroupUser>(
   "Azure.ApiManagement.WorkspaceGroupUser",
 );
 

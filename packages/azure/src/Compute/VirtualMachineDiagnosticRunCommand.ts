@@ -2,7 +2,7 @@ import * as compute from "@distilled.cloud/azure/compute";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -15,6 +15,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createComputeName,
   runCommandDrifted,
@@ -103,7 +104,6 @@ export interface VirtualMachineDiagnosticRunCommand extends Resource<
  * **Example:** Linux diagnostics that report instead of failing the deploy
  * ```typescript
  * const diag = yield* Azure.Compute.VirtualMachineDiagnosticRunCommand("diag", {
- *   resourceGroup: group.resourceGroupName,
  *   virtualMachine: vm.virtualMachineName,
  *   commandId: "FleetDiagnosticsLinux",
  *   treatFailureAsDeploymentFailure: false,
@@ -114,7 +114,6 @@ export interface VirtualMachineDiagnosticRunCommand extends Resource<
  * **Example:** Windows diagnostics streamed to a blob
  * ```typescript
  * yield* Azure.Compute.VirtualMachineDiagnosticRunCommand("diag", {
- *   resourceGroup: group.resourceGroupName,
  *   virtualMachine: vm.virtualMachineName,
  *   commandId: "FleetDiagnosticsWindows",
  *   outputBlobUri: outputBlobSasUrl,
@@ -123,9 +122,10 @@ export interface VirtualMachineDiagnosticRunCommand extends Resource<
  *
  * @resource
  */
-export const VirtualMachineDiagnosticRunCommand = Resource<VirtualMachineDiagnosticRunCommand>(
-  "Azure.Compute.VirtualMachineDiagnosticRunCommand",
-);
+export const VirtualMachineDiagnosticRunCommand =
+  GroupedResource<VirtualMachineDiagnosticRunCommand>(
+    "Azure.Compute.VirtualMachineDiagnosticRunCommand",
+  );
 
 type Observed = compute.GetVirtualMachineDiagnosticRunCommandByVirtualMachineResponse;
 

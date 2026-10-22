@@ -2,7 +2,7 @@ import * as migrate from "@distilled.cloud/azure/migrate";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { getAssessmentProject } from "./AssessmentProject.ts";
 import { migrateName, ownedByStage, settingsDiffer } from "./Common.ts";
 
@@ -76,7 +77,6 @@ export interface AvsAssessment extends Resource<
  * **Example:** Azure VMware Solution assessment
  * ```typescript
  * const assessment = yield* Azure.Migrate.AvsAssessment("assessment", {
- *   resourceGroup: group.resourceGroupName,
  *   assessmentProject: project.projectName,
  *   group: machines.groupName,
  *   settings: {
@@ -91,7 +91,7 @@ export interface AvsAssessment extends Resource<
  *
  * @resource
  */
-export const AvsAssessment = Resource<AvsAssessment>("Azure.Migrate.AvsAssessment");
+export const AvsAssessment = GroupedResource<AvsAssessment>("Azure.Migrate.AvsAssessment");
 
 const getAvsAssessment = (
   subscriptionId: string,

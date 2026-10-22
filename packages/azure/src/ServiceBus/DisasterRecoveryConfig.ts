@@ -2,7 +2,7 @@ import * as servicebus from "@distilled.cloud/azure/servicebus";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import {
@@ -15,6 +15,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createEntityName, sameName } from "./internal.ts";
 
 export interface DisasterRecoveryConfigProps {
@@ -93,17 +94,14 @@ export interface DisasterRecoveryConfig extends Resource<
  * **Example:** Primary in East US, secondary in West US
  * ```typescript
  * const primary = yield* Azure.ServiceBus.Namespace("primary", {
- *   resourceGroup: group.resourceGroupName,
  *   location: "eastus",
  *   sku: "Premium",
  * });
  * const secondary = yield* Azure.ServiceBus.Namespace("secondary", {
- *   resourceGroup: group.resourceGroupName,
  *   location: "westus",
  *   sku: "Premium",
  * });
  * const geoDr = yield* Azure.ServiceBus.DisasterRecoveryConfig("geo-dr", {
- *   resourceGroup: group.resourceGroupName,
  *   namespace: primary.namespaceName,
  *   partnerNamespace: secondary.namespaceId,
  * });
@@ -112,7 +110,7 @@ export interface DisasterRecoveryConfig extends Resource<
  *
  * @resource
  */
-export const DisasterRecoveryConfig = Resource<DisasterRecoveryConfig>(
+export const DisasterRecoveryConfig = GroupedResource<DisasterRecoveryConfig>(
   "Azure.ServiceBus.DisasterRecoveryConfig",
 );
 

@@ -2,7 +2,7 @@ import * as cosmos from "@distilled.cloud/azure/cosmos_db";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { whileAccountBusy } from "./Shared.ts";
 
 /** Kind of dedicated compute. The service is named after its type. */
@@ -92,7 +93,6 @@ export interface Service extends Resource<
  * **Example:** One-node dedicated gateway
  * ```typescript
  * const gateway = yield* Azure.CosmosDB.Service("gateway", {
- *   resourceGroup: group.resourceGroupName,
  *   account: account.accountName,
  *   serviceType: "SqlDedicatedGateway",
  *   instanceSize: "Cosmos.D4s",
@@ -104,7 +104,6 @@ export interface Service extends Resource<
  * **Example:** Compute for container copy jobs
  * ```typescript
  * yield* Azure.CosmosDB.Service("copy", {
- *   resourceGroup: group.resourceGroupName,
  *   account: account.accountName,
  *   serviceType: "DataTransfer",
  *   instanceCount: 2,
@@ -113,7 +112,7 @@ export interface Service extends Resource<
  *
  * @resource
  */
-export const Service = Resource<Service>("Azure.CosmosDB.Service");
+export const Service = GroupedResource<Service>("Azure.CosmosDB.Service");
 
 type ObservedService = cosmos.GetServiceResponse;
 

@@ -2,7 +2,7 @@ import * as automation from "@distilled.cloud/azure/automation";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   accountOwnedByStage,
   type AutomationContentLink,
@@ -77,13 +78,11 @@ export interface RuntimeEnvironmentPackage extends Resource<
  * **Example:** PowerShell Gallery module in a PowerShell 7.4 environment
  * ```typescript
  * const ps74 = yield* Azure.Automation.RuntimeEnvironment("ps74", {
- *   resourceGroup: group.resourceGroupName,
  *   automationAccount: account.automationAccountName,
  *   language: "PowerShell",
  *   version: "7.4",
  * });
  * yield* Azure.Automation.RuntimeEnvironmentPackage("PSWriteColor", {
- *   resourceGroup: group.resourceGroupName,
  *   automationAccount: account.automationAccountName,
  *   runtimeEnvironment: ps74.runtimeEnvironmentName,
  *   name: "PSWriteColor",
@@ -95,7 +94,7 @@ export interface RuntimeEnvironmentPackage extends Resource<
  *
  * @resource
  */
-export const RuntimeEnvironmentPackage = Resource<RuntimeEnvironmentPackage>(
+export const RuntimeEnvironmentPackage = GroupedResource<RuntimeEnvironmentPackage>(
   "Azure.Automation.RuntimeEnvironmentPackage",
 );
 

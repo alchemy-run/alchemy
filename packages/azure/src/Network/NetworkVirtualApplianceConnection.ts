@@ -1,9 +1,10 @@
 import * as network from "@distilled.cloud/azure/network";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { orUndefinedIfNotFound } from "../Arm.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { sameId, sameSet } from "./common.ts";
 import { idsOf, networkProvider } from "./generic.ts";
 import { type HubRoutingConfiguration, routingConfigurationInput } from "./virtualHubShared.ts";
@@ -73,7 +74,6 @@ export interface NetworkVirtualApplianceConnection extends Resource<
  * **Example:** Propagate the NVA's routes to the default route table
  * ```typescript
  * yield* Azure.Network.NetworkVirtualApplianceConnection("bgp", {
- *   resourceGroup: group.resourceGroupName,
  *   networkVirtualAppliance: nva.networkVirtualApplianceName,
  *   asn: 64512,
  *   bgpPeerAddresses: ["10.100.0.70", "10.100.0.71"],
@@ -86,7 +86,7 @@ export interface NetworkVirtualApplianceConnection extends Resource<
  *
  * @resource
  */
-export const NetworkVirtualApplianceConnection = Resource<NetworkVirtualApplianceConnection>(
+export const NetworkVirtualApplianceConnection = GroupedResource<NetworkVirtualApplianceConnection>(
   "Azure.Network.NetworkVirtualApplianceConnection",
 );
 

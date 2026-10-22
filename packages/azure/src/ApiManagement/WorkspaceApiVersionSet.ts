@@ -1,8 +1,9 @@
 import * as apim from "@distilled.cloud/azure/apimanagement";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import type { ApiVersionSet, ApiVersionSetProps } from "./ApiVersionSet.ts";
 import { createEntityName, subsetMatches } from "./Common.ts";
 import { entityLifecycle } from "./Entity.ts";
@@ -34,7 +35,6 @@ export interface WorkspaceApiVersionSet extends Resource<
  * **Example:** Version APIs by path segment
  * ```typescript
  * yield* Azure.ApiManagement.WorkspaceApiVersionSet("orders-versions", {
- *   resourceGroup: group.resourceGroupName,
  *   serviceName: apim.serviceName,
  *   workspaceName: workspace.workspaceName,
  *   displayName: "Orders",
@@ -44,7 +44,7 @@ export interface WorkspaceApiVersionSet extends Resource<
  *
  * @resource
  */
-export const WorkspaceApiVersionSet = Resource<WorkspaceApiVersionSet>(
+export const WorkspaceApiVersionSet = GroupedResource<WorkspaceApiVersionSet>(
   "Azure.ApiManagement.WorkspaceApiVersionSet",
 );
 

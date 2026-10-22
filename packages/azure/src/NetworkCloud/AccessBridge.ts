@@ -2,7 +2,7 @@ import * as nc from "@distilled.cloud/azure/networkcloud";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -19,6 +19,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   customLocation,
   NEXUS_BUDGET,
@@ -112,7 +113,6 @@ export interface AccessBridge extends Resource<
  * **Example:** Bastion on an L3 network
  * ```typescript
  * const bastion = yield* Azure.NetworkCloud.AccessBridge("bastion", {
- *   resourceGroup: group.resourceGroupName,
  *   name: "Bastion",
  *   customLocationId: cluster.clusterExtendedLocationId,
  *   networkId: l3.l3NetworkId,
@@ -124,7 +124,7 @@ export interface AccessBridge extends Resource<
  *
  * @resource
  */
-export const AccessBridge = Resource<AccessBridge>("Azure.NetworkCloud.AccessBridge");
+export const AccessBridge = GroupedResource<AccessBridge>("Azure.NetworkCloud.AccessBridge");
 
 type Observed = nc.GetAccessBridgeResponse;
 

@@ -2,7 +2,7 @@ import * as hci from "@distilled.cloud/azure/azurestackhci";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { HCI_NAMESPACE, isStackOwnedTags, sameId, sameValue } from "./Common.ts";
 import { getHciEdgeMachine } from "./EdgeMachine.ts";
 
@@ -66,11 +67,9 @@ export interface EdgeMachineDisk extends Resource<
  * **Example:** Volumes on a local disk
  * ```typescript
  * const machine = yield* Azure.AzureStackHCI.EdgeMachine("node-1", {
- *   resourceGroup: group.resourceGroupName,
  *   arcMachineResourceId: arcServerId,
  * });
  * yield* Azure.AzureStackHCI.EdgeMachineDisk("data-disk", {
- *   resourceGroup: group.resourceGroupName,
  *   edgeMachine: machine.edgeMachineName,
  *   name: "disk1",
  *   diskConfiguration: { volumes: [{ ... }] },
@@ -79,7 +78,9 @@ export interface EdgeMachineDisk extends Resource<
  *
  * @resource
  */
-export const EdgeMachineDisk = Resource<EdgeMachineDisk>("Azure.AzureStackHCI.EdgeMachineDisk");
+export const EdgeMachineDisk = GroupedResource<EdgeMachineDisk>(
+  "Azure.AzureStackHCI.EdgeMachineDisk",
+);
 
 const getEdgeMachineDisk = (
   subscriptionId: string,

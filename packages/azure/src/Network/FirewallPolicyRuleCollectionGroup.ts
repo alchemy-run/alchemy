@@ -1,9 +1,10 @@
 import * as network from "@distilled.cloud/azure/network";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { orUndefinedIfNotFound } from "../Arm.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { networkProvider } from "./generic.ts";
 
 export interface FirewallPolicyRuleCollectionGroupProps {
@@ -61,7 +62,6 @@ export interface FirewallPolicyRuleCollectionGroup extends Resource<
  * **Example:** Allow outbound HTTPS to one FQDN and DNS to Azure
  * ```typescript
  * yield* Azure.Network.FirewallPolicyRuleCollectionGroup("egress", {
- *   resourceGroup: group.resourceGroupName,
  *   firewallPolicy: policy.firewallPolicyName,
  *   priority: 200,
  *   ruleCollections: [
@@ -94,7 +94,7 @@ export interface FirewallPolicyRuleCollectionGroup extends Resource<
  *
  * @resource
  */
-export const FirewallPolicyRuleCollectionGroup = Resource<FirewallPolicyRuleCollectionGroup>(
+export const FirewallPolicyRuleCollectionGroup = GroupedResource<FirewallPolicyRuleCollectionGroup>(
   "Azure.Network.FirewallPolicyRuleCollectionGroup",
 );
 

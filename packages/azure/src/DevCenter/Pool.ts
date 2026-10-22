@@ -2,7 +2,7 @@ import * as devcenter from "@distilled.cloud/azure/devcenter";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import {
@@ -21,6 +21,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createDevCenterName, sameArm, sameValue } from "./Common.ts";
 
 export type PoolEnableStatus = "Enabled" | "Disabled";
@@ -131,11 +132,9 @@ export interface Pool extends Resource<
  * **Example:** Pool on a Microsoft-hosted network
  * ```typescript
  * const center = yield* Azure.DevCenter.DevCenter("center", {
- *   resourceGroup: group.resourceGroupName,
  *   microsoftHostedNetworkEnableStatus: "Enabled",
  * });
  * const pool = yield* Azure.DevCenter.Pool("pool", {
- *   resourceGroup: group.resourceGroupName,
  *   project: project.projectName,
  *   devBoxDefinitionName: definition.devBoxDefinitionName,
  * });
@@ -144,7 +143,6 @@ export interface Pool extends Resource<
  * **Example:** Pool on an attached network with auto-stop
  * ```typescript
  * const pool = yield* Azure.DevCenter.Pool("pool", {
- *   resourceGroup: group.resourceGroupName,
  *   project: project.projectName,
  *   devBoxDefinitionName: definition.devBoxDefinitionName,
  *   networkConnectionName: attached.attachedNetworkName,
@@ -154,7 +152,7 @@ export interface Pool extends Resource<
  *
  * @resource
  */
-export const Pool = Resource<Pool>("Azure.DevCenter.Pool");
+export const Pool = GroupedResource<Pool>("Azure.DevCenter.Pool");
 
 type Observed = devcenter.GetPoolResponse;
 

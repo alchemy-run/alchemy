@@ -2,7 +2,7 @@ import * as mnf from "@distilled.cloud/azure/managednetworkfabric";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -19,6 +19,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createFabricName,
   differs,
@@ -101,9 +102,7 @@ export interface IpCommunity extends Resource<
  * ### Creating an IP Community List
  * **Example:** Match a community value
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("fabric");
  * const community = yield* Azure.ManagedNetworkFabric.IpCommunity("tenant", {
- *   resourceGroup: group.resourceGroupName,
  *   ipCommunityRules: [
  *     { action: "Permit", sequenceNumber: 10, communityMembers: ["65000:100"] },
  *   ],
@@ -113,7 +112,6 @@ export interface IpCommunity extends Resource<
  * **Example:** Match a well-known community
  * ```typescript
  * const noExport = yield* Azure.ManagedNetworkFabric.IpCommunity("no-export", {
- *   resourceGroup: group.resourceGroupName,
  *   ipCommunityRules: [
  *     {
  *       action: "Deny",
@@ -127,7 +125,7 @@ export interface IpCommunity extends Resource<
  *
  * @resource
  */
-export const IpCommunity = Resource<IpCommunity>("Azure.ManagedNetworkFabric.IpCommunity");
+export const IpCommunity = GroupedResource<IpCommunity>("Azure.ManagedNetworkFabric.IpCommunity");
 
 type Observed = mnf.GetIpCommunityResponse;
 

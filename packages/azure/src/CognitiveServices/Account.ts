@@ -2,7 +2,7 @@ import * as cognitiveservices from "@distilled.cloud/azure/cognitiveservices";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -21,6 +21,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   ACCOUNT_BUDGET,
   type CognitiveServicesIdentity,
@@ -195,16 +196,12 @@ export interface Account extends Resource<
  * ### Creating an Account
  * **Example:** Azure AI services (Foundry) account
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("ai");
- * const account = yield* Azure.CognitiveServices.Account("ai", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const account = yield* Azure.CognitiveServices.Account("ai");
  * ```
  *
  * **Example:** Azure OpenAI account with Entra ID only
  * ```typescript
  * const openai = yield* Azure.CognitiveServices.Account("openai", {
- *   resourceGroup: group.resourceGroupName,
  *   kind: "OpenAI",
  *   disableLocalAuth: true,
  * });
@@ -214,7 +211,6 @@ export interface Account extends Resource<
  * **Example:** Account that can hold Foundry projects
  * ```typescript
  * const foundry = yield* Azure.CognitiveServices.Account("foundry", {
- *   resourceGroup: group.resourceGroupName,
  *   kind: "AIServices",
  *   allowProjectManagement: true,
  *   identity: { type: "SystemAssigned" },
@@ -225,14 +221,13 @@ export interface Account extends Resource<
  * **Example:** Allow only one IP range
  * ```typescript
  * const account = yield* Azure.CognitiveServices.Account("ai", {
- *   resourceGroup: group.resourceGroupName,
  *   networkAcls: { defaultAction: "Deny", ipRules: ["203.0.113.0/24"] },
  * });
  * ```
  *
  * @resource
  */
-export const Account = Resource<Account>("Azure.CognitiveServices.Account");
+export const Account = GroupedResource<Account>("Azure.CognitiveServices.Account");
 
 type ObservedAccount = cognitiveservices.GetAccountResponse;
 

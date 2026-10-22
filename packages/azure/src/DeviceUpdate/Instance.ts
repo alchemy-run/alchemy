@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
@@ -23,6 +23,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { getDeviceUpdateAccount } from "./Account.ts";
 
 export interface DeviceUpdateDiagnosticStorage {
@@ -112,10 +113,7 @@ export interface Instance extends Resource<
  * ### Creating an Instance
  * **Example:** Instance connected to an IoT Hub
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("app");
- * const hub = yield* Azure.IoTHub.IotHub("devices", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const hub = yield* Azure.IoTHub.IotHub("devices");
  * // Let the "Azure Device Update" service principal manage the hub.
  * const grant = yield* Azure.Authorization.RoleAssignment("adu-hub", {
  *   scope: hub.iotHubId,
@@ -123,11 +121,8 @@ export interface Instance extends Resource<
  *   principalId: deviceUpdatePrincipalObjectId,
  *   principalType: "ServicePrincipal",
  * });
- * const account = yield* Azure.DeviceUpdate.Account("updates", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const account = yield* Azure.DeviceUpdate.Account("updates");
  * const instance = yield* Azure.DeviceUpdate.Instance("fleet", {
- *   resourceGroup: group.resourceGroupName,
  *   account: account.accountName,
  *   iotHubs: [grant.scope],
  * });
@@ -136,11 +131,8 @@ export interface Instance extends Resource<
  * ### Diagnostics
  * **Example:** Collect device diagnostic logs into a storage account
  * ```typescript
- * const logs = yield* Azure.Storage.StorageAccount("logs", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const logs = yield* Azure.Storage.StorageAccount("logs");
  * const instance = yield* Azure.DeviceUpdate.Instance("fleet", {
- *   resourceGroup: group.resourceGroupName,
  *   account: account.accountName,
  *   iotHubs: [hub.iotHubId],
  *   enableDiagnostics: true,
@@ -153,7 +145,7 @@ export interface Instance extends Resource<
  *
  * @resource
  */
-export const Instance = Resource<Instance>("Azure.DeviceUpdate.Instance");
+export const Instance = GroupedResource<Instance>("Azure.DeviceUpdate.Instance");
 
 type ObservedInstance = deviceupdate.GetInstanceResponse;
 

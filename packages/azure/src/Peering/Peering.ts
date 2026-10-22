@@ -2,7 +2,7 @@ import * as peering from "@distilled.cloud/azure/peering";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -19,6 +19,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createPeeringName, getPeering } from "./Common.ts";
 
 export type PeeringKind = "Direct" | "Exchange";
@@ -126,7 +127,6 @@ export interface Peering extends Resource<
  * **Example:** Exchange peering at an Internet exchange
  * ```typescript
  * const peering = yield* Azure.Peering.Peering("seattle-ix", {
- *   resourceGroup: group.resourceGroupName,
  *   kind: "Exchange",
  *   sku: "Basic_Exchange_Free",
  *   peeringLocation: "Seattle",
@@ -148,7 +148,6 @@ export interface Peering extends Resource<
  * **Example:** Direct peering
  * ```typescript
  * const peering = yield* Azure.Peering.Peering("ashburn-direct", {
- *   resourceGroup: group.resourceGroupName,
  *   kind: "Direct",
  *   sku: "Basic_Direct_Free",
  *   peeringLocation: "Ashburn",
@@ -173,7 +172,7 @@ export interface Peering extends Resource<
  *
  * @resource
  */
-export const Peering = Resource<Peering>("Azure.Peering.Peering");
+export const Peering = GroupedResource<Peering>("Azure.Peering.Peering");
 
 const toAttrs = (
   resourceGroup: string,

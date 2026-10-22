@@ -2,7 +2,7 @@ import * as mnf from "@distilled.cloud/azure/managednetworkfabric";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -19,6 +19,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createFabricName,
   FABRIC_NAMESPACE,
@@ -99,9 +100,7 @@ export interface IpPrefix extends Resource<
  * ### Creating an IP Prefix List
  * **Example:** Permit the 10.0.0.0/8 range
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("fabric");
  * const prefixes = yield* Azure.ManagedNetworkFabric.IpPrefix("private", {
- *   resourceGroup: group.resourceGroupName,
  *   ipPrefixRules: [
  *     { action: "Permit", sequenceNumber: 10, networkPrefix: "10.0.0.0/8" },
  *   ],
@@ -111,7 +110,6 @@ export interface IpPrefix extends Resource<
  * **Example:** Match /24 and longer prefixes
  * ```typescript
  * const prefixes = yield* Azure.ManagedNetworkFabric.IpPrefix("subnets", {
- *   resourceGroup: group.resourceGroupName,
  *   ipPrefixRules: [
  *     {
  *       action: "Permit",
@@ -126,7 +124,7 @@ export interface IpPrefix extends Resource<
  *
  * @resource
  */
-export const IpPrefix = Resource<IpPrefix>("Azure.ManagedNetworkFabric.IpPrefix");
+export const IpPrefix = GroupedResource<IpPrefix>("Azure.ManagedNetworkFabric.IpPrefix");
 
 type Observed = mnf.GetIpPrefixResponse;
 

@@ -2,7 +2,7 @@ import * as backup from "@distilled.cloud/azure/recoveryservicesbackup";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -17,6 +17,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   BACKUP_FABRIC,
   isVaultOwnedByStack,
@@ -119,26 +120,19 @@ export interface BackupProtectedItem extends Resource<
  * ### Azure Files
  * **Example:** Back up a file share daily
  * ```typescript
- * const vault = yield* Azure.RecoveryServices.Vault("backup-vault", {
- *   resourceGroup: group.resourceGroupName,
- * });
- * const account = yield* Azure.Storage.StorageAccount("files", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const vault = yield* Azure.RecoveryServices.Vault("backup-vault");
+ * const account = yield* Azure.Storage.StorageAccount("files");
  * const share = yield* Azure.Storage.FileShare("share", {
- *   resourceGroup: group.resourceGroupName,
  *   storageAccount: account.storageAccountName,
  * });
  * const container = yield* Azure.RecoveryServices.BackupProtectionContainer(
  *   "files-container",
  *   {
- *     resourceGroup: group.resourceGroupName,
  *     vault: vault.vaultName,
  *     sourceResourceId: account.storageAccountId,
  *   },
  * );
  * yield* Azure.RecoveryServices.BackupProtectedItem("share-backup", {
- *   resourceGroup: group.resourceGroupName,
  *   vault: vault.vaultName,
  *   protectedItemType: "AzureFileShareProtectedItem",
  *   sourceResourceId: account.storageAccountId,
@@ -152,7 +146,6 @@ export interface BackupProtectedItem extends Resource<
  * **Example:** Back up a VM
  * ```typescript
  * yield* Azure.RecoveryServices.BackupProtectedItem("vm-backup", {
- *   resourceGroup: group.resourceGroupName,
  *   vault: vault.vaultName,
  *   protectedItemType: "Microsoft.Compute/virtualMachines",
  *   sourceResourceId: vm.id,
@@ -162,7 +155,7 @@ export interface BackupProtectedItem extends Resource<
  *
  * @resource
  */
-export const BackupProtectedItem = Resource<BackupProtectedItem>(
+export const BackupProtectedItem = GroupedResource<BackupProtectedItem>(
   "Azure.RecoveryServices.BackupProtectedItem",
 );
 

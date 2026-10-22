@@ -2,7 +2,7 @@ import * as cs from "@distilled.cloud/azure/containerservice";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { isClusterOwned, sameName, subsetMatches, whileClusterBusy } from "./Common.ts";
 
 export type MaintenanceConfigurationName =
@@ -78,7 +79,6 @@ export interface MaintenanceConfiguration extends Resource<
  * **Example:** Weekly auto-upgrade window
  * ```typescript
  * yield* Azure.ContainerService.MaintenanceConfiguration("upgrades", {
- *   resourceGroup: group.resourceGroupName,
  *   cluster: cluster.clusterName,
  *   name: "aksManagedAutoUpgradeSchedule",
  *   maintenanceWindow: {
@@ -93,7 +93,6 @@ export interface MaintenanceConfiguration extends Resource<
  * **Example:** Node OS upgrades every day
  * ```typescript
  * yield* Azure.ContainerService.MaintenanceConfiguration("node-os", {
- *   resourceGroup: group.resourceGroupName,
  *   cluster: cluster.clusterName,
  *   name: "aksManagedNodeOSUpgradeSchedule",
  *   maintenanceWindow: {
@@ -106,7 +105,7 @@ export interface MaintenanceConfiguration extends Resource<
  *
  * @resource
  */
-export const MaintenanceConfiguration = Resource<MaintenanceConfiguration>(
+export const MaintenanceConfiguration = GroupedResource<MaintenanceConfiguration>(
   "Azure.ContainerService.MaintenanceConfiguration",
 );
 

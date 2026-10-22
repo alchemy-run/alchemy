@@ -1,9 +1,10 @@
 import * as network from "@distilled.cloud/azure/network";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { orUndefinedIfNotFound } from "../Arm.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { networkProvider } from "./generic.ts";
 
 /** One side of a NAT mapping. */
@@ -79,7 +80,6 @@ export interface VpnGatewayNatRule extends Resource<
  * **Example:** Static egress SNAT
  * ```typescript
  * yield* Azure.Network.VpnGatewayNatRule("egress", {
- *   resourceGroup: group.resourceGroupName,
  *   vpnGateway: gateway.vpnGatewayName,
  *   mode: "EgressSnat",
  *   internalMappings: [{ addressSpace: "10.4.0.0/24" }],
@@ -89,7 +89,9 @@ export interface VpnGatewayNatRule extends Resource<
  *
  * @resource
  */
-export const VpnGatewayNatRule = Resource<VpnGatewayNatRule>("Azure.Network.VpnGatewayNatRule");
+export const VpnGatewayNatRule = GroupedResource<VpnGatewayNatRule>(
+  "Azure.Network.VpnGatewayNatRule",
+);
 
 export const VpnGatewayNatRuleProvider = () =>
   Provider.succeed(

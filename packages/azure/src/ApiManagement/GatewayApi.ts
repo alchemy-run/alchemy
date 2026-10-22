@@ -1,8 +1,9 @@
 import * as apim from "@distilled.cloud/azure/apimanagement";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { sameName } from "./Common.ts";
 import { entityLifecycle, serviceEntityId } from "./Entity.ts";
 
@@ -47,7 +48,6 @@ export interface GatewayApi extends Resource<
  * **Example:** Serve the orders API on-premises
  * ```typescript
  * yield* Azure.ApiManagement.GatewayApi("onprem-orders", {
- *   resourceGroup: group.resourceGroupName,
  *   serviceName: apim.serviceName,
  *   gatewayName: gateway.gatewayName,
  *   apiName: api.apiName,
@@ -56,7 +56,7 @@ export interface GatewayApi extends Resource<
  *
  * @resource
  */
-export const GatewayApi = Resource<GatewayApi>("Azure.ApiManagement.GatewayApi");
+export const GatewayApi = GroupedResource<GatewayApi>("Azure.ApiManagement.GatewayApi");
 
 interface Key {
   resourceGroup: string;

@@ -1,7 +1,7 @@
 import * as postgresqlhsc from "@distilled.cloud/azure/postgresqlhsc";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -11,6 +11,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   type ClusterRef,
   COSMOS_POSTGRES_NAMESPACE,
@@ -77,7 +78,6 @@ export interface NodeConfiguration extends Resource<
  * const slowLog = yield* Azure.CosmosDBPostgreSQL.NodeConfiguration(
  *   "node-slow-log",
  *   {
- *     resourceGroup: group.resourceGroupName,
  *     cluster: cluster.clusterName,
  *     name: "log_min_duration_statement",
  *     value: "500",
@@ -87,7 +87,7 @@ export interface NodeConfiguration extends Resource<
  *
  * @resource
  */
-export const NodeConfiguration = Resource<NodeConfiguration>(
+export const NodeConfiguration = GroupedResource<NodeConfiguration>(
   "Azure.CosmosDBPostgreSQL.NodeConfiguration",
 );
 

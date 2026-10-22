@@ -2,7 +2,7 @@ import * as deviceregistry from "@distilled.cloud/azure/deviceregistry";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -19,6 +19,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   DEVICE_REGISTRY_RP,
   DEVICE_REGISTRY_WAIT,
@@ -179,7 +180,6 @@ export interface NamespaceAsset extends Resource<
  * **Example:** OPC UA asset with one dataset
  * ```typescript
  * const asset = yield* Azure.DeviceRegistry.NamespaceAsset("oven", {
- *   resourceGroup: group.resourceGroupName,
  *   namespace: ns.namespaceName,
  *   customLocationId: aioCustomLocationId,
  *   device: plc.deviceName,
@@ -198,7 +198,9 @@ export interface NamespaceAsset extends Resource<
  *
  * @resource
  */
-export const NamespaceAsset = Resource<NamespaceAsset>("Azure.DeviceRegistry.NamespaceAsset");
+export const NamespaceAsset = GroupedResource<NamespaceAsset>(
+  "Azure.DeviceRegistry.NamespaceAsset",
+);
 
 /** Properties the PATCH API can change in place. */
 const MUTABLE = [

@@ -2,7 +2,7 @@ import * as web from "@distilled.cloud/azure/web";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { lower, siteWhere } from "./common.ts";
 
 export interface VirtualNetworkIntegrationProps {
@@ -68,17 +69,14 @@ export interface VirtualNetworkIntegration extends Resource<
  * **Example:** Delegated subnet
  * ```typescript
  * const vnet = yield* Azure.Network.VirtualNetwork("vnet", {
- *   resourceGroup: group.resourceGroupName,
  *   addressPrefixes: ["10.0.0.0/16"],
  * });
  * const subnet = yield* Azure.Network.Subnet("apps", {
- *   resourceGroup: group.resourceGroupName,
  *   virtualNetwork: vnet.virtualNetworkName,
  *   addressPrefix: "10.0.1.0/24",
  *   delegations: [{ serviceName: "Microsoft.Web/serverFarms" }],
  * });
  * yield* Azure.Web.VirtualNetworkIntegration("vnet-integration", {
- *   resourceGroup: group.resourceGroupName,
  *   siteName: app.siteName,
  *   subnetId: subnet.subnetId,
  * });
@@ -86,7 +84,7 @@ export interface VirtualNetworkIntegration extends Resource<
  *
  * @resource
  */
-export const VirtualNetworkIntegration = Resource<VirtualNetworkIntegration>(
+export const VirtualNetworkIntegration = GroupedResource<VirtualNetworkIntegration>(
   "Azure.Web.VirtualNetworkIntegration",
 );
 

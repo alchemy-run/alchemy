@@ -2,7 +2,7 @@ import * as kusto from "@distilled.cloud/azure/azure_kusto";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createKustoChildName,
   isClusterOwnedByStack,
@@ -87,11 +88,8 @@ export interface ClusterPrincipalAssignment extends Resource<
  * ### Granting Cluster Access
  * **Example:** Viewer access for a managed identity
  * ```typescript
- * const identity = yield* Azure.ManagedIdentity.UserAssignedIdentity("reader", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const identity = yield* Azure.ManagedIdentity.UserAssignedIdentity("reader");
  * yield* Azure.Kusto.ClusterPrincipalAssignment("reader", {
- *   resourceGroup: group.resourceGroupName,
  *   cluster: cluster.clusterName,
  *   principalId: identity.clientId,
  *   principalType: "App",
@@ -101,7 +99,7 @@ export interface ClusterPrincipalAssignment extends Resource<
  *
  * @resource
  */
-export const ClusterPrincipalAssignment = Resource<ClusterPrincipalAssignment>(
+export const ClusterPrincipalAssignment = GroupedResource<ClusterPrincipalAssignment>(
   "Azure.Kusto.ClusterPrincipalAssignment",
 );
 

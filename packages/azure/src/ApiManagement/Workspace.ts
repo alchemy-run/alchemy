@@ -1,8 +1,9 @@
 import * as apim from "@distilled.cloud/azure/apimanagement";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createEntityName } from "./Common.ts";
 import { entityLifecycle } from "./Entity.ts";
 
@@ -56,7 +57,6 @@ export interface Workspace extends Resource<
  * **Example:** A workspace for one team
  * ```typescript
  * const workspace = yield* Azure.ApiManagement.Workspace("payments", {
- *   resourceGroup: group.resourceGroupName,
  *   serviceName: apim.serviceName,
  *   displayName: "Payments team",
  *   description: "APIs owned by the payments team",
@@ -65,7 +65,7 @@ export interface Workspace extends Resource<
  *
  * @resource
  */
-export const Workspace = Resource<Workspace>("Azure.ApiManagement.Workspace");
+export const Workspace = GroupedResource<Workspace>("Azure.ApiManagement.Workspace");
 
 interface Key {
   resourceGroup: string;

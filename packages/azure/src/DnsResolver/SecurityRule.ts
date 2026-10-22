@@ -2,7 +2,7 @@ import * as dnsresolver from "@distilled.cloud/azure/dnsresolver";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -20,6 +20,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createDnsResolverName, FAST_BUDGET, sameArm, sameArmIds } from "./Common.ts";
 
 /** What a DNS security rule does with matching queries. */
@@ -110,14 +111,10 @@ export interface SecurityRule extends Resource<
  * **Example:** Block a list of domains
  * ```typescript
  * const blocked = yield* Azure.DnsResolver.DomainList("blocked", {
- *   resourceGroup: group.resourceGroupName,
  *   domains: ["malicious.example.com."],
  * });
- * const policy = yield* Azure.DnsResolver.Policy("dns-security", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const policy = yield* Azure.DnsResolver.Policy("dns-security");
  * const rule = yield* Azure.DnsResolver.SecurityRule("block-bad", {
- *   resourceGroup: group.resourceGroupName,
  *   dnsResolverPolicy: policy.policyName,
  *   priority: 100,
  *   action: "Block",
@@ -129,7 +126,6 @@ export interface SecurityRule extends Resource<
  * **Example:** Alert instead of block, temporarily disabled
  * ```typescript
  * const rule = yield* Azure.DnsResolver.SecurityRule("block-bad", {
- *   resourceGroup: group.resourceGroupName,
  *   dnsResolverPolicy: policy.policyName,
  *   priority: 200,
  *   action: "Alert",
@@ -140,7 +136,7 @@ export interface SecurityRule extends Resource<
  *
  * @resource
  */
-export const SecurityRule = Resource<SecurityRule>("Azure.DnsResolver.SecurityRule");
+export const SecurityRule = GroupedResource<SecurityRule>("Azure.DnsResolver.SecurityRule");
 
 const getRule = (
   subscriptionId: string,

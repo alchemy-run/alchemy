@@ -2,11 +2,12 @@ import * as eventgrid from "@distilled.cloud/azure/eventgrid";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { ensureRegistered, ignoreNotFound, orUndefinedIfNotFound, waitUntilGone } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createEventGridName, sameName } from "./common.ts";
 import {
   isOwnedDescription,
@@ -74,11 +75,9 @@ export interface ClientGroup extends Resource<
  * **Example:** All clients whose `role` attribute is `sensor`
  * ```typescript
  * const namespace = yield* Azure.EventGrid.Namespace("iot", {
- *   resourceGroup: group.resourceGroupName,
  *   topicSpacesConfiguration: { state: "Enabled" },
  * });
  * const sensors = yield* Azure.EventGrid.ClientGroup("sensors", {
- *   resourceGroup: group.resourceGroupName,
  *   namespace: namespace.namespaceName,
  *   query: "attributes.role = 'sensor'",
  * });
@@ -86,7 +85,7 @@ export interface ClientGroup extends Resource<
  *
  * @resource
  */
-export const ClientGroup = Resource<ClientGroup>("Azure.EventGrid.ClientGroup");
+export const ClientGroup = GroupedResource<ClientGroup>("Azure.EventGrid.ClientGroup");
 
 type ObservedClientGroup = Pick<eventgrid.ClientGroup, "id" | "properties">;
 

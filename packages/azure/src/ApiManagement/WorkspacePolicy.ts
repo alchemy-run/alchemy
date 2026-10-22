@@ -1,8 +1,9 @@
 import * as apim from "@distilled.cloud/azure/apimanagement";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { entityLifecycle, policyInSync } from "./Entity.ts";
 import type { ServicePolicy, ServicePolicyProps } from "./ServicePolicy.ts";
 
@@ -33,7 +34,6 @@ export interface WorkspacePolicy extends Resource<
  * **Example:** Add a header to every workspace API
  * ```typescript
  * yield* Azure.ApiManagement.WorkspacePolicy("workspace-policy", {
- *   resourceGroup: group.resourceGroupName,
  *   serviceName: apim.serviceName,
  *   workspaceName: workspace.workspaceName,
  *   value: `<policies>
@@ -47,7 +47,9 @@ export interface WorkspacePolicy extends Resource<
  *
  * @resource
  */
-export const WorkspacePolicy = Resource<WorkspacePolicy>("Azure.ApiManagement.WorkspacePolicy");
+export const WorkspacePolicy = GroupedResource<WorkspacePolicy>(
+  "Azure.ApiManagement.WorkspacePolicy",
+);
 
 interface Key {
   resourceGroup: string;

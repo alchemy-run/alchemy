@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -21,6 +21,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 
 /** Pricing tier of a Front Door WAF policy. */
 export type WebApplicationFirewallPolicySku =
@@ -122,9 +123,7 @@ export interface WebApplicationFirewallPolicy extends Resource<
  * ### Creating a Policy
  * **Example:** Detection-mode policy blocking an IP range
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("edge");
  * const waf = yield* Azure.FrontDoor.WebApplicationFirewallPolicy("waf", {
- *   resourceGroup: group.resourceGroupName,
  *   policySettings: { enabledState: "Enabled", mode: "Detection" },
  *   customRules: [
  *     {
@@ -147,7 +146,6 @@ export interface WebApplicationFirewallPolicy extends Resource<
  * **Example:** Rate limit requests per client IP
  * ```typescript
  * const waf = yield* Azure.FrontDoor.WebApplicationFirewallPolicy("waf", {
- *   resourceGroup: group.resourceGroupName,
  *   customRules: [
  *     {
  *       name: "RateLimit",
@@ -169,7 +167,6 @@ export interface WebApplicationFirewallPolicy extends Resource<
  * **Example:** Premium policy with the default rule set
  * ```typescript
  * const waf = yield* Azure.FrontDoor.WebApplicationFirewallPolicy("waf", {
- *   resourceGroup: group.resourceGroupName,
  *   sku: "Premium_AzureFrontDoor",
  *   managedRules: {
  *     managedRuleSets: [
@@ -187,7 +184,6 @@ export interface WebApplicationFirewallPolicy extends Resource<
  * **Example:** Protect an endpoint
  * ```typescript
  * yield* Azure.Cdn.SecurityPolicy("waf", {
- *   resourceGroup: group.resourceGroupName,
  *   profile: profile.profileName,
  *   wafPolicyId: waf.policyId,
  *   associations: [
@@ -198,7 +194,7 @@ export interface WebApplicationFirewallPolicy extends Resource<
  *
  * @resource
  */
-export const WebApplicationFirewallPolicy = Resource<WebApplicationFirewallPolicy>(
+export const WebApplicationFirewallPolicy = GroupedResource<WebApplicationFirewallPolicy>(
   "Azure.FrontDoor.WebApplicationFirewallPolicy",
 );
 

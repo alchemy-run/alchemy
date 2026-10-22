@@ -2,7 +2,7 @@ import * as mnf from "@distilled.cloud/azure/managednetworkfabric";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -19,6 +19,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createFabricName,
   differs,
@@ -131,9 +132,7 @@ export interface NetworkFabricController extends Resource<
  * ### Creating a Controller
  * **Example:** Controller over two ExpressRoute circuits
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("fabric");
  * const nfc = yield* Azure.ManagedNetworkFabric.NetworkFabricController("nfc", {
- *   resourceGroup: group.resourceGroupName,
  *   ipv4AddressSpace: "10.0.0.0/19",
  *   nfcSku: "Standard",
  *   infrastructureExpressRouteConnections: [
@@ -147,7 +146,7 @@ export interface NetworkFabricController extends Resource<
  *
  * @resource
  */
-export const NetworkFabricController = Resource<NetworkFabricController>(
+export const NetworkFabricController = GroupedResource<NetworkFabricController>(
   "Azure.ManagedNetworkFabric.NetworkFabricController",
 );
 

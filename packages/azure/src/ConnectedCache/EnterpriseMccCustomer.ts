@@ -2,7 +2,7 @@ import * as connectedcache from "@distilled.cloud/azure/connectedcache";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -20,6 +20,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createConnectedCacheName, MCC_BUDGET, sameArm, whileCacheNodesExist } from "./Common.ts";
 
 export interface EnterpriseMccCustomerProps {
@@ -109,7 +110,6 @@ export interface EnterpriseMccCustomer extends Resource<
  * **Example:** Connected Cache customer with a contact
  * ```typescript
  * const customer = yield* Azure.ConnectedCache.EnterpriseMccCustomer("mcc", {
- *   resourceGroup: group.resourceGroupName,
  *   location: "westus",
  *   contactName: "IT Operations",
  *   contactEmail: "it-ops@example.com",
@@ -120,7 +120,6 @@ export interface EnterpriseMccCustomer extends Resource<
  * **Example:** Linux cache node under the customer
  * ```typescript
  * yield* Azure.ConnectedCache.EnterpriseMccCacheNode("node", {
- *   resourceGroup: group.resourceGroupName,
  *   customer: customer.customerResourceName,
  *   location: customer.location,
  *   osType: "Linux",
@@ -132,7 +131,7 @@ export interface EnterpriseMccCustomer extends Resource<
  *
  * @resource
  */
-export const EnterpriseMccCustomer = Resource<EnterpriseMccCustomer>(
+export const EnterpriseMccCustomer = GroupedResource<EnterpriseMccCustomer>(
   "Azure.ConnectedCache.EnterpriseMccCustomer",
 );
 

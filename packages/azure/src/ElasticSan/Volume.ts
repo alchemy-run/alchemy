@@ -2,7 +2,7 @@ import * as elasticsan from "@distilled.cloud/azure/elasticsan";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createSanName, isParentOwned, lower } from "./Common.ts";
 
 export type VolumeCreateSource =
@@ -117,7 +118,6 @@ export interface Volume extends Resource<
  * **Example:** Empty 100 GiB volume
  * ```typescript
  * const volume = yield* Azure.ElasticSan.Volume("data", {
- *   resourceGroup: group.resourceGroupName,
  *   elasticSan: san.elasticSanName,
  *   volumeGroup: volumes.volumeGroupName,
  *   sizeGiB: 100,
@@ -130,7 +130,6 @@ export interface Volume extends Resource<
  * **Example:** Volume restored from an Elastic SAN snapshot
  * ```typescript
  * const restored = yield* Azure.ElasticSan.Volume("restored", {
- *   resourceGroup: group.resourceGroupName,
  *   elasticSan: san.elasticSanName,
  *   volumeGroup: volumes.volumeGroupName,
  *   sizeGiB: 100,
@@ -143,7 +142,7 @@ export interface Volume extends Resource<
  *
  * @resource
  */
-export const Volume = Resource<Volume>("Azure.ElasticSan.Volume");
+export const Volume = GroupedResource<Volume>("Azure.ElasticSan.Volume");
 
 type ObservedVolume = elasticsan.GetVolumeResponse;
 

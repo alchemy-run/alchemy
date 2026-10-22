@@ -2,7 +2,7 @@ import * as nc from "@distilled.cloud/azure/networkcloud";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -16,6 +16,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   NEXUS_BUDGET,
   NEXUS_NAMESPACE,
@@ -110,7 +111,7 @@ export interface KubernetesClusterFeature extends Resource<
  *
  * @resource
  */
-export const KubernetesClusterFeature = Resource<KubernetesClusterFeature>(
+export const KubernetesClusterFeature = GroupedResource<KubernetesClusterFeature>(
   "Azure.NetworkCloud.KubernetesClusterFeature",
 );
 

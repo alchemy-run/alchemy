@@ -2,7 +2,7 @@ import * as compute from "@distilled.cloud/azure/compute";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
 import {
@@ -19,6 +19,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   canonical,
   createComputeName,
@@ -214,7 +215,6 @@ export interface VirtualMachineScaleSet extends Resource<
  * **Example:** Flexible scale set with two Linux instances
  * ```typescript
  * const scaleSet = yield* Azure.Compute.VirtualMachineScaleSet("web", {
- *   resourceGroup: group.resourceGroupName,
  *   vmSize: "Standard_B1s",
  *   capacity: 2,
  *   subnetId: subnet.subnetId,
@@ -227,7 +227,6 @@ export interface VirtualMachineScaleSet extends Resource<
  * **Example:** Instances in a load balancer backend pool
  * ```typescript
  * const scaleSet = yield* Azure.Compute.VirtualMachineScaleSet("web", {
- *   resourceGroup: group.resourceGroupName,
  *   vmSize: "Standard_B2s",
  *   capacity: 3,
  *   zones: ["1", "2", "3"],
@@ -243,7 +242,6 @@ export interface VirtualMachineScaleSet extends Resource<
  * **Example:** Uniform scale set of Spot instances
  * ```typescript
  * const batch = yield* Azure.Compute.VirtualMachineScaleSet("batch", {
- *   resourceGroup: group.resourceGroupName,
  *   orchestrationMode: "Uniform",
  *   vmSize: "Standard_D2s_v5",
  *   capacity: 4,
@@ -257,7 +255,7 @@ export interface VirtualMachineScaleSet extends Resource<
  *
  * @resource
  */
-export const VirtualMachineScaleSet = Resource<VirtualMachineScaleSet>(
+export const VirtualMachineScaleSet = GroupedResource<VirtualMachineScaleSet>(
   "Azure.Compute.VirtualMachineScaleSet",
 );
 

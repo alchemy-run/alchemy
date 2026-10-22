@@ -1,8 +1,9 @@
 import * as apicenter from "@distilled.cloud/azure/apicenter";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import type { ApiCenterLifecycleStage } from "./Api.ts";
 import {
   createApiCenterName,
@@ -65,7 +66,6 @@ export interface ApiVersion extends Resource<
  * **Example:** Production version
  * ```typescript
  * const v1 = yield* Azure.ApiCenter.ApiVersion("orders-v1", {
- *   resourceGroup: group.resourceGroupName,
  *   serviceName: center.serviceName,
  *   apiName: api.apiName,
  *   name: "v1",
@@ -76,7 +76,7 @@ export interface ApiVersion extends Resource<
  *
  * @resource
  */
-export const ApiVersion = Resource<ApiVersion>("Azure.ApiCenter.ApiVersion");
+export const ApiVersion = GroupedResource<ApiVersion>("Azure.ApiCenter.ApiVersion");
 
 interface Key {
   resourceGroup: string;

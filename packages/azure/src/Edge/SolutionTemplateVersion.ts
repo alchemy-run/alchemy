@@ -1,7 +1,7 @@
 import * as edge from "@distilled.cloud/azure/edge";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -12,6 +12,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { EDGE_WAIT, edgeState, sameJson, payloadText } from "./EdgeShared.ts";
 
 export interface SolutionTemplateVersionProps {
@@ -81,7 +82,6 @@ export interface SolutionTemplateVersion extends Resource<
  * **Example:** Helm solution version
  * ```typescript
  * yield* Azure.Edge.SolutionTemplateVersion("app-v1", {
- *   resourceGroup: group.resourceGroupName,
  *   solutionTemplate: app.solutionTemplateName,
  *   version: "1.0.0",
  *   configurations: [
@@ -112,7 +112,7 @@ export interface SolutionTemplateVersion extends Resource<
  *
  * @resource
  */
-export const SolutionTemplateVersion = Resource<SolutionTemplateVersion>(
+export const SolutionTemplateVersion = GroupedResource<SolutionTemplateVersion>(
   "Azure.Edge.SolutionTemplateVersion",
 );
 

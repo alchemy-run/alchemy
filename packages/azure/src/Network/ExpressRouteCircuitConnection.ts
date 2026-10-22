@@ -1,10 +1,11 @@
 import * as network from "@distilled.cloud/azure/network";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
 import { orUndefinedIfNotFound } from "../Arm.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { lower, reveal, sameId, secretChanged } from "./common.ts";
 import { networkProvider } from "./generic.ts";
 
@@ -83,7 +84,6 @@ export interface ExpressRouteCircuitConnection extends Resource<
  * **Example:** Global Reach between two sites
  * ```typescript
  * yield* Azure.Network.ExpressRouteCircuitConnection("reach", {
- *   resourceGroup: group.resourceGroupName,
  *   circuit: east.circuitName,
  *   peering: "AzurePrivatePeering",
  *   peerCircuitPeeringId: `${west.circuitId}/peerings/AzurePrivatePeering`,
@@ -93,7 +93,7 @@ export interface ExpressRouteCircuitConnection extends Resource<
  *
  * @resource
  */
-export const ExpressRouteCircuitConnection = Resource<ExpressRouteCircuitConnection>(
+export const ExpressRouteCircuitConnection = GroupedResource<ExpressRouteCircuitConnection>(
   "Azure.Network.ExpressRouteCircuitConnection",
 );
 

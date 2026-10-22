@@ -2,7 +2,7 @@ import * as logic from "@distilled.cloud/azure/logic";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import {
@@ -20,6 +20,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createLogicName, HASH_KEY, hashOf, propertiesDiffer } from "./LogicShared.ts";
 
 /** A workflow parameter value. */
@@ -163,9 +164,7 @@ export interface Workflow extends Resource<
  * ### Creating a Workflow
  * **Example:** HTTP request/response workflow
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("app");
  * const hello = yield* Azure.Logic.Workflow("hello", {
- *   resourceGroup: group.resourceGroupName,
  *   definition: {
  *     $schema:
  *       "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
@@ -188,7 +187,6 @@ export interface Workflow extends Resource<
  * **Example:** Scheduled workflow with parameters
  * ```typescript
  * const nightly = yield* Azure.Logic.Workflow("nightly", {
- *   resourceGroup: group.resourceGroupName,
  *   definition: {
  *     $schema:
  *       "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
@@ -212,7 +210,6 @@ export interface Workflow extends Resource<
  * **Example:** Restrict trigger callers and use a managed identity
  * ```typescript
  * const secured = yield* Azure.Logic.Workflow("secured", {
- *   resourceGroup: group.resourceGroupName,
  *   definition,
  *   identity: { type: "SystemAssigned" },
  *   accessControl: {
@@ -224,7 +221,6 @@ export interface Workflow extends Resource<
  * **Example:** Disable a workflow
  * ```typescript
  * yield* Azure.Logic.Workflow("hello", {
- *   resourceGroup: group.resourceGroupName,
  *   definition,
  *   state: "Disabled",
  * });
@@ -232,7 +228,7 @@ export interface Workflow extends Resource<
  *
  * @resource
  */
-export const Workflow = Resource<Workflow>("Azure.Logic.Workflow");
+export const Workflow = GroupedResource<Workflow>("Azure.Logic.Workflow");
 
 type ObservedWorkflow = logic.GetWorkflowResponse;
 

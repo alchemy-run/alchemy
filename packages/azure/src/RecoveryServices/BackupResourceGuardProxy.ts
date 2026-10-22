@@ -2,7 +2,7 @@ import * as backup from "@distilled.cloud/azure/recoveryservicesbackup";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { isVaultOwnedByStack, RECOVERY_SERVICES_NAMESPACE, sameId } from "./BackupShared.ts";
 
 export interface BackupResourceGuardProxyProps {
@@ -78,11 +79,8 @@ export interface BackupResourceGuardProxy extends Resource<
  * ### Multi-User Authorization
  * **Example:** Protect a vault with a resource guard
  * ```typescript
- * const vault = yield* Azure.RecoveryServices.Vault("backup-vault", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const vault = yield* Azure.RecoveryServices.Vault("backup-vault");
  * yield* Azure.RecoveryServices.BackupResourceGuardProxy("vault-guard", {
- *   resourceGroup: group.resourceGroupName,
  *   vault: vault.vaultName,
  *   resourceGuardResourceId: guardId,
  *   description: "Security team approval required",
@@ -91,7 +89,7 @@ export interface BackupResourceGuardProxy extends Resource<
  *
  * @resource
  */
-export const BackupResourceGuardProxy = Resource<BackupResourceGuardProxy>(
+export const BackupResourceGuardProxy = GroupedResource<BackupResourceGuardProxy>(
   "Azure.RecoveryServices.BackupResourceGuardProxy",
 );
 

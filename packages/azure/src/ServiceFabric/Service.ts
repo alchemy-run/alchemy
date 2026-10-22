@@ -2,7 +2,7 @@ import * as sf from "@distilled.cloud/azure/servicefabricmanagedclusters";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -20,6 +20,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { APP_BUDGET, createFabricChildName, driftedFields, matches, sameArm } from "./Common.ts";
 
 export type ServiceKind = "Stateless" | "Stateful";
@@ -151,7 +152,6 @@ export interface Service extends Resource<
  * **Example:** Front-end service on every node
  * ```typescript
  * const web = yield* Azure.ServiceFabric.Service("web", {
- *   resourceGroup: group.resourceGroupName,
  *   cluster: cluster.managedClusterName,
  *   application: app.applicationName,
  *   serviceKind: "Stateless",
@@ -165,7 +165,6 @@ export interface Service extends Resource<
  * **Example:** Partitioned stateful service
  * ```typescript
  * const data = yield* Azure.ServiceFabric.Service("data", {
- *   resourceGroup: group.resourceGroupName,
  *   cluster: cluster.managedClusterName,
  *   application: app.applicationName,
  *   serviceKind: "Stateful",
@@ -184,7 +183,7 @@ export interface Service extends Resource<
  *
  * @resource
  */
-export const Service = Resource<Service>("Azure.ServiceFabric.Service");
+export const Service = GroupedResource<Service>("Azure.ServiceFabric.Service");
 
 type ObservedService = sf.GetServiceResponse | sf.ServiceResource;
 

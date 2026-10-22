@@ -2,11 +2,12 @@ import * as synapse from "@distilled.cloud/azure/synapse";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { ensureRegistered, orUndefinedIfNotFound } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { isWorkspaceOwnedByStack, lower, resetSetting, syncSetting } from "./common.ts";
 
 /** The setting is a singleton named `default`. */
@@ -56,7 +57,6 @@ export interface AzureADOnlyAuthentication extends Resource<
  * **Example:** Disable SQL authentication
  * ```typescript
  * yield* Azure.Synapse.AzureADOnlyAuthentication("entra-only", {
- *   resourceGroup: group.resourceGroupName,
  *   workspace: workspace.workspaceName,
  * });
  * ```
@@ -64,7 +64,6 @@ export interface AzureADOnlyAuthentication extends Resource<
  * **Example:** Explicitly allow SQL authentication
  * ```typescript
  * yield* Azure.Synapse.AzureADOnlyAuthentication("entra-only", {
- *   resourceGroup: group.resourceGroupName,
  *   workspace: workspace.workspaceName,
  *   azureADOnlyAuthentication: false,
  * });
@@ -72,7 +71,7 @@ export interface AzureADOnlyAuthentication extends Resource<
  *
  * @resource
  */
-export const AzureADOnlyAuthentication = Resource<AzureADOnlyAuthentication>(
+export const AzureADOnlyAuthentication = GroupedResource<AzureADOnlyAuthentication>(
   "Azure.Synapse.AzureADOnlyAuthentication",
 );
 

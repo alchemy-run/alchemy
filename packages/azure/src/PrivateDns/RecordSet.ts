@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -16,6 +16,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   desiredMetadata,
   hasAnyMarker,
@@ -150,7 +151,6 @@ export interface RecordSet extends Resource<
  * **Example:** A record with two addresses
  * ```typescript
  * const www = yield* Azure.PrivateDns.RecordSet("www", {
- *   resourceGroup: group.resourceGroupName,
  *   privateZoneName: zone.privateZoneName,
  *   recordType: "A",
  *   name: "www",
@@ -163,7 +163,6 @@ export interface RecordSet extends Resource<
  * **Example:** CNAME record
  * ```typescript
  * yield* Azure.PrivateDns.RecordSet("api", {
- *   resourceGroup: group.resourceGroupName,
  *   privateZoneName: zone.privateZoneName,
  *   recordType: "CNAME",
  *   name: "api",
@@ -174,7 +173,6 @@ export interface RecordSet extends Resource<
  * **Example:** TXT record
  * ```typescript
  * yield* Azure.PrivateDns.RecordSet("verify", {
- *   resourceGroup: group.resourceGroupName,
  *   privateZoneName: zone.privateZoneName,
  *   recordType: "TXT",
  *   name: "_verify",
@@ -186,7 +184,6 @@ export interface RecordSet extends Resource<
  * **Example:** SRV record
  * ```typescript
  * yield* Azure.PrivateDns.RecordSet("ldap", {
- *   resourceGroup: group.resourceGroupName,
  *   privateZoneName: zone.privateZoneName,
  *   recordType: "SRV",
  *   name: "_ldap._tcp",
@@ -196,7 +193,7 @@ export interface RecordSet extends Resource<
  *
  * @resource
  */
-export const RecordSet = Resource<RecordSet>("Azure.PrivateDns.RecordSet");
+export const RecordSet = GroupedResource<RecordSet>("Azure.PrivateDns.RecordSet");
 
 const DEFAULT_TTL = 3600;
 

@@ -2,7 +2,7 @@ import * as devtestlabs from "@distilled.cloud/azure/devtestlabs";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -19,6 +19,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createLabResourceName,
   DEVTESTLAB_NAMESPACE,
@@ -87,7 +88,6 @@ export interface Schedule extends Resource<
  * **Example:** Shut a VM down every evening
  * ```typescript
  * const shutdown = yield* Azure.DevTestLabs.Schedule("vm-shutdown", {
- *   resourceGroup: group.resourceGroupName,
  *   location: vm.location,
  *   targetResourceId: vm.virtualMachineId,
  *   dailyRecurrence: { time: "1900" },
@@ -98,7 +98,6 @@ export interface Schedule extends Resource<
  * **Example:** Email before shutdown
  * ```typescript
  * const shutdown = yield* Azure.DevTestLabs.Schedule("vm-shutdown", {
- *   resourceGroup: group.resourceGroupName,
  *   location: vm.location,
  *   targetResourceId: vm.virtualMachineId,
  *   dailyRecurrence: { time: "1900" },
@@ -112,7 +111,7 @@ export interface Schedule extends Resource<
  *
  * @resource
  */
-export const Schedule = Resource<Schedule>("Azure.DevTestLabs.Schedule");
+export const Schedule = GroupedResource<Schedule>("Azure.DevTestLabs.Schedule");
 
 const DEFAULT_TASK = "ComputeVmShutdownTask";
 

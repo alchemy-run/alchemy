@@ -2,7 +2,7 @@ import * as aci from "@distilled.cloud/azure/containerinstance";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -20,6 +20,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createContainerInstanceName,
   fingerprint,
@@ -129,9 +130,7 @@ export interface NGroup extends Resource<
  * ### Creating an NGroup
  * **Example:** Two replicas of a profile
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("app");
  * const profile = yield* Azure.ContainerInstance.ContainerGroupProfile("web", {
- *   resourceGroup: group.resourceGroupName,
  *   containers: [
  *     {
  *       name: "web",
@@ -142,7 +141,6 @@ export interface NGroup extends Resource<
  *   ],
  * });
  * const fleet = yield* Azure.ContainerInstance.NGroup("fleet", {
- *   resourceGroup: group.resourceGroupName,
  *   desiredCount: 2,
  *   maintainDesiredCount: true,
  *   containerGroupProfiles: [
@@ -155,7 +153,6 @@ export interface NGroup extends Resource<
  * **Example:** Roll profile revisions out in batches
  * ```typescript
  * const fleet = yield* Azure.ContainerInstance.NGroup("fleet", {
- *   resourceGroup: group.resourceGroupName,
  *   desiredCount: 4,
  *   updateProfile: {
  *     updateMode: "Rolling",
@@ -169,7 +166,7 @@ export interface NGroup extends Resource<
  *
  * @resource
  */
-export const NGroup = Resource<NGroup>("Azure.ContainerInstance.NGroup");
+export const NGroup = GroupedResource<NGroup>("Azure.ContainerInstance.NGroup");
 
 const getNGroup = (subscriptionId: string, resourceGroupName: string, ngroupsName: string) =>
   orUndefinedIfNotFound(aci.GetNGroup({ subscriptionId, resourceGroupName, ngroupsName }));

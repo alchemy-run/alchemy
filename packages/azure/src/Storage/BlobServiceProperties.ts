@@ -2,11 +2,12 @@ import * as storage from "@distilled.cloud/azure/storage";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { ensureRegistered, ignoreNotFound, orUndefinedIfNotFound } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { isAccountOwnedByStack } from "./StorageOwnership.ts";
 
 /** A CORS rule for the Blob service. */
@@ -154,11 +155,8 @@ export interface BlobServiceProperties extends Resource<
  * ### Data Protection
  * **Example:** Versioning with 7-day soft delete
  * ```typescript
- * const account = yield* Azure.Storage.StorageAccount("files", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const account = yield* Azure.Storage.StorageAccount("files");
  * yield* Azure.Storage.BlobServiceProperties("files-blob", {
- *   resourceGroup: group.resourceGroupName,
  *   storageAccount: account.storageAccountName,
  *   isVersioningEnabled: true,
  *   deleteRetentionPolicy: { enabled: true, days: 7 },
@@ -169,7 +167,6 @@ export interface BlobServiceProperties extends Resource<
  * **Example:** Point-in-time restore
  * ```typescript
  * yield* Azure.Storage.BlobServiceProperties("files-blob", {
- *   resourceGroup: group.resourceGroupName,
  *   storageAccount: account.storageAccountName,
  *   isVersioningEnabled: true,
  *   changeFeed: { enabled: true },
@@ -182,7 +179,6 @@ export interface BlobServiceProperties extends Resource<
  * **Example:** Allow browser uploads from one origin
  * ```typescript
  * yield* Azure.Storage.BlobServiceProperties("files-blob", {
- *   resourceGroup: group.resourceGroupName,
  *   storageAccount: account.storageAccountName,
  *   cors: [
  *     {
@@ -196,7 +192,7 @@ export interface BlobServiceProperties extends Resource<
  *
  * @resource
  */
-export const BlobServiceProperties = Resource<BlobServiceProperties>(
+export const BlobServiceProperties = GroupedResource<BlobServiceProperties>(
   "Azure.Storage.BlobServiceProperties",
 );
 

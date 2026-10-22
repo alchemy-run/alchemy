@@ -3,11 +3,12 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { ensureRegistered, ignoreNotFound, orUndefinedIfNotFound, waitUntilGone } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { isOwnedChild, waitForChild, whileAccountBusy } from "./Shared.ts";
 
 export interface SqlUserDefinedFunctionProps {
@@ -70,7 +71,6 @@ export interface SqlUserDefinedFunction extends Resource<
  * **Example:** Tax calculation usable as `udf.tax(c.income)`
  * ```typescript
  * yield* Azure.CosmosDB.SqlUserDefinedFunction("tax", {
- *   resourceGroup: group.resourceGroupName,
  *   account: account.accountName,
  *   database: database.databaseName,
  *   container: container.containerName,
@@ -83,7 +83,7 @@ export interface SqlUserDefinedFunction extends Resource<
  *
  * @resource
  */
-export const SqlUserDefinedFunction = Resource<SqlUserDefinedFunction>(
+export const SqlUserDefinedFunction = GroupedResource<SqlUserDefinedFunction>(
   "Azure.CosmosDB.SqlUserDefinedFunction",
 );
 

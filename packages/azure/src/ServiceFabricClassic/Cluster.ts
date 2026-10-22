@@ -2,7 +2,7 @@ import * as servicefabric from "@distilled.cloud/azure/servicefabric";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -19,6 +19,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createClusterName, delta, getCluster, lower, matches } from "./Common.ts";
 
 export interface ClusterProps {
@@ -168,7 +169,6 @@ export interface Cluster extends Resource<
  * **Example:** Single-node test cluster
  * ```typescript
  * const cluster = yield* Azure.ServiceFabricClassic.Cluster("sf", {
- *   resourceGroup: group.resourceGroupName,
  *   reliabilityLevel: "None",
  *   nodeTypes: [
  *     {
@@ -188,7 +188,6 @@ export interface Cluster extends Resource<
  * **Example:** Certificate-secured cluster with add-ons
  * ```typescript
  * const cluster = yield* Azure.ServiceFabricClassic.Cluster("sf", {
- *   resourceGroup: group.resourceGroupName,
  *   reliabilityLevel: "Bronze",
  *   certificate: { thumbprint: "<cluster cert thumbprint>", x509StoreName: "My" },
  *   clientCertificateThumbprints: [
@@ -209,7 +208,7 @@ export interface Cluster extends Resource<
  *
  * @resource
  */
-export const Cluster = Resource<Cluster>("Azure.ServiceFabricClassic.Cluster");
+export const Cluster = GroupedResource<Cluster>("Azure.ServiceFabricClassic.Cluster");
 
 type ObservedCluster = servicefabric.GetClusterResponse | servicefabric.Cluster;
 

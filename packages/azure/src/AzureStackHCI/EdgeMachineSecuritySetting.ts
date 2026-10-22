@@ -2,7 +2,7 @@ import * as hci from "@distilled.cloud/azure/azurestackhci";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { HCI_NAMESPACE, isStackOwnedTags, sameId } from "./Common.ts";
 import { getHciEdgeMachine } from "./EdgeMachine.ts";
 
@@ -64,18 +65,16 @@ export interface EdgeMachineSecuritySetting extends Resource<
  * **Example:** Security setting of an edge machine
  * ```typescript
  * const machine = yield* Azure.AzureStackHCI.EdgeMachine("node-1", {
- *   resourceGroup: group.resourceGroupName,
  *   arcMachineResourceId: arcServerId,
  * });
  * yield* Azure.AzureStackHCI.EdgeMachineSecuritySetting("security", {
- *   resourceGroup: group.resourceGroupName,
  *   edgeMachine: machine.edgeMachineName,
  * });
  * ```
  *
  * @resource
  */
-export const EdgeMachineSecuritySetting = Resource<EdgeMachineSecuritySetting>(
+export const EdgeMachineSecuritySetting = GroupedResource<EdgeMachineSecuritySetting>(
   "Azure.AzureStackHCI.EdgeMachineSecuritySetting",
 );
 

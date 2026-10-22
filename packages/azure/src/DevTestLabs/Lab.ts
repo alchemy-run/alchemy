@@ -2,7 +2,7 @@ import * as devtestlabs from "@distilled.cloud/azure/devtestlabs";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -19,6 +19,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createLabResourceName, DEVTESTLAB_NAMESPACE, diverges, getLab } from "./Common.ts";
 
 export interface LabAnnouncement {
@@ -141,9 +142,7 @@ export interface Lab extends Resource<
  * ### Creating a Lab
  * **Example:** Lab with standard storage
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("labs");
  * const lab = yield* Azure.DevTestLabs.Lab("team-lab", {
- *   resourceGroup: group.resourceGroupName,
  *   labStorageType: "Standard",
  * });
  * ```
@@ -152,7 +151,6 @@ export interface Lab extends Resource<
  * **Example:** Announcement for lab users
  * ```typescript
  * const lab = yield* Azure.DevTestLabs.Lab("team-lab", {
- *   resourceGroup: group.resourceGroupName,
  *   announcement: {
  *     title: "Maintenance",
  *     markdown: "VMs restart on **Saturday**.",
@@ -163,7 +161,7 @@ export interface Lab extends Resource<
  *
  * @resource
  */
-export const Lab = Resource<Lab>("Azure.DevTestLabs.Lab");
+export const Lab = GroupedResource<Lab>("Azure.DevTestLabs.Lab");
 
 const toAttrs = (
   resourceGroup: string,

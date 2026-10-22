@@ -1,8 +1,9 @@
 import * as network from "@distilled.cloud/azure/network";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import { orUndefinedIfNotFound, userTags } from "../Arm.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { ref, sameId } from "./common.ts";
 import { idsOf, networkProvider } from "./generic.ts";
 
@@ -105,11 +106,8 @@ export interface VirtualHub extends Resource<
  * ### Creating a Hub
  * **Example:** Standard hub in a WAN
  * ```typescript
- * const wan = yield* Azure.Network.VirtualWan("wan", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const wan = yield* Azure.Network.VirtualWan("wan");
  * const hub = yield* Azure.Network.VirtualHub("hub", {
- *   resourceGroup: group.resourceGroupName,
  *   virtualWanId: wan.virtualWanId,
  *   addressPrefix: "10.100.0.0/23",
  * });
@@ -117,7 +115,7 @@ export interface VirtualHub extends Resource<
  *
  * @resource
  */
-export const VirtualHub = Resource<VirtualHub>("Azure.Network.VirtualHub");
+export const VirtualHub = GroupedResource<VirtualHub>("Azure.Network.VirtualHub");
 
 export const VirtualHubProvider = () =>
   Provider.succeed(

@@ -2,11 +2,12 @@ import * as network from "@distilled.cloud/azure/network";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { ensureRegistered, ignoreNotFound, orUndefinedIfNotFound } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { parentOwned, sameId, waitNetworkProvisioned, whileNetworkBusy } from "./common.ts";
 
 /** IDPS mode of one signature override. */
@@ -62,11 +63,9 @@ export interface FirewallPolicyIdpsSignatureOverrides extends Resource<
  * **Example:** Deny one signature and silence another
  * ```typescript
  * const policy = yield* Azure.Network.FirewallPolicy("premium", {
- *   resourceGroup: group.resourceGroupName,
  *   tier: "Premium",
  * });
  * yield* Azure.Network.FirewallPolicyIdpsSignatureOverrides("idps", {
- *   resourceGroup: group.resourceGroupName,
  *   firewallPolicy: policy.firewallPolicyName,
  *   signatures: { "2024897": "Deny", "2024898": "Off" },
  * });
@@ -74,9 +73,10 @@ export interface FirewallPolicyIdpsSignatureOverrides extends Resource<
  *
  * @resource
  */
-export const FirewallPolicyIdpsSignatureOverrides = Resource<FirewallPolicyIdpsSignatureOverrides>(
-  "Azure.Network.FirewallPolicyIdpsSignatureOverrides",
-);
+export const FirewallPolicyIdpsSignatureOverrides =
+  GroupedResource<FirewallPolicyIdpsSignatureOverrides>(
+    "Azure.Network.FirewallPolicyIdpsSignatureOverrides",
+  );
 
 const definedEntries = (
   map: Record<string, string | undefined> | undefined,

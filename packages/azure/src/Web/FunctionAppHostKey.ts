@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import {
@@ -15,6 +15,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { lower, reveal } from "./common.ts";
 
 /** Scope of a Functions host key. */
@@ -76,7 +77,6 @@ export interface FunctionAppHostKey extends Resource<
  * **Example:** Generated host key for a client
  * ```typescript
  * const key = yield* Azure.Web.FunctionAppHostKey("partner", {
- *   resourceGroup: group.resourceGroupName,
  *   functionAppName: app.siteName,
  * });
  * // send key.value as the x-functions-key header
@@ -85,7 +85,6 @@ export interface FunctionAppHostKey extends Resource<
  * **Example:** Key with an explicit value
  * ```typescript
  * const key = yield* Azure.Web.FunctionAppHostKey("partner", {
- *   resourceGroup: group.resourceGroupName,
  *   functionAppName: app.siteName,
  *   value: Redacted.make(secret),
  * });
@@ -93,7 +92,9 @@ export interface FunctionAppHostKey extends Resource<
  *
  * @resource
  */
-export const FunctionAppHostKey = Resource<FunctionAppHostKey>("Azure.Web.FunctionAppHostKey");
+export const FunctionAppHostKey = GroupedResource<FunctionAppHostKey>(
+  "Azure.Web.FunctionAppHostKey",
+);
 
 const createKeyName = (id: string) => createPhysicalName({ id, maxLength: 64, lowercase: true });
 

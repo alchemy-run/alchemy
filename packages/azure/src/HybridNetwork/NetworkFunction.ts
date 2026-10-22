@@ -3,7 +3,7 @@ import * as hybridnetwork from "@distilled.cloud/azure/hybridnetwork";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import {
@@ -22,6 +22,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createHybridNetworkName,
   type HybridNetworkIdentity,
@@ -143,7 +144,6 @@ export interface NetworkFunction extends Resource<
  * **Example:** Virtual network function on Azure Core
  * ```typescript
  * const nf = yield* Azure.HybridNetwork.NetworkFunction("firewall", {
- *   resourceGroup: group.resourceGroupName,
  *   networkFunctionDefinitionVersionId: nfdv.networkFunctionDefinitionVersionId,
  *   nfviType: "AzureCore",
  *   nfviId: target.resourceGroupId,
@@ -154,7 +154,6 @@ export interface NetworkFunction extends Resource<
  * **Example:** Secret deployment values
  * ```typescript
  * const nf = yield* Azure.HybridNetwork.NetworkFunction("firewall", {
- *   resourceGroup: group.resourceGroupName,
  *   networkFunctionDefinitionVersionId: nfdv.networkFunctionDefinitionVersionId,
  *   nfviType: "AzureArcKubernetes",
  *   nfviId: customLocation.id,
@@ -166,7 +165,9 @@ export interface NetworkFunction extends Resource<
  *
  * @resource
  */
-export const NetworkFunction = Resource<NetworkFunction>("Azure.HybridNetwork.NetworkFunction");
+export const NetworkFunction = GroupedResource<NetworkFunction>(
+  "Azure.HybridNetwork.NetworkFunction",
+);
 
 const getFunction = (
   subscriptionId: string,

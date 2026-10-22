@@ -2,7 +2,7 @@ import * as automation from "@distilled.cloud/azure/automation";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -17,6 +17,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { childNuke, getAccount, sameName, sameText } from "./Common.ts";
 
 export interface DscConfigurationProps {
@@ -89,7 +90,6 @@ export interface DscConfiguration extends Resource<
  * **Example:** Configuration from an inline script
  * ```typescript
  * const web = yield* Azure.Automation.DscConfiguration("WebServer", {
- *   resourceGroup: group.resourceGroupName,
  *   automationAccount: account.automationAccountName,
  *   name: "WebServer",
  *   script: `Configuration WebServer {
@@ -102,7 +102,9 @@ export interface DscConfiguration extends Resource<
  *
  * @resource
  */
-export const DscConfiguration = Resource<DscConfiguration>("Azure.Automation.DscConfiguration");
+export const DscConfiguration = GroupedResource<DscConfiguration>(
+  "Azure.Automation.DscConfiguration",
+);
 
 const getConfiguration = (
   subscriptionId: string,

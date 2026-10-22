@@ -1,7 +1,7 @@
 import * as eventgrid from "@distilled.cloud/azure/eventgrid";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
 import {
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createEventGridName, redactKeys, sameName } from "./common.ts";
 
 export interface NamespaceTopicProps {
@@ -68,11 +69,8 @@ export interface NamespaceTopic extends Resource<
  * ### Creating a Namespace Topic
  * **Example:** Topic that retains events for one day
  * ```typescript
- * const namespace = yield* Azure.EventGrid.Namespace("events", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const namespace = yield* Azure.EventGrid.Namespace("events");
  * const orders = yield* Azure.EventGrid.NamespaceTopic("orders", {
- *   resourceGroup: group.resourceGroupName,
  *   namespace: namespace.namespaceName,
  *   eventRetentionInDays: 1,
  * });
@@ -80,7 +78,7 @@ export interface NamespaceTopic extends Resource<
  *
  * @resource
  */
-export const NamespaceTopic = Resource<NamespaceTopic>("Azure.EventGrid.NamespaceTopic");
+export const NamespaceTopic = GroupedResource<NamespaceTopic>("Azure.EventGrid.NamespaceTopic");
 
 const getNamespaceTopic = (
   subscriptionId: string,

@@ -2,7 +2,7 @@ import * as app from "@distilled.cloud/azure/app";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
 import {
@@ -21,6 +21,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createContainerAppsName,
   fingerprint,
@@ -132,7 +133,6 @@ export interface SessionPool extends Resource<
  * **Example:** Python code interpreter pool
  * ```typescript
  * const pool = yield* Azure.ContainerApps.SessionPool("interpreter", {
- *   resourceGroup: group.resourceGroupName,
  *   containerType: "PythonLTS",
  *   scaleConfiguration: { maxConcurrentSessions: 10, readySessionInstances: 1 },
  *   dynamicPoolConfiguration: {
@@ -149,7 +149,6 @@ export interface SessionPool extends Resource<
  * **Example:** Pool running your own image
  * ```typescript
  * const pool = yield* Azure.ContainerApps.SessionPool("sandbox", {
- *   resourceGroup: group.resourceGroupName,
  *   containerType: "CustomContainer",
  *   environmentId: env.environmentId,
  *   scaleConfiguration: { maxConcurrentSessions: 5, readySessionInstances: 1 },
@@ -168,7 +167,7 @@ export interface SessionPool extends Resource<
  *
  * @resource
  */
-export const SessionPool = Resource<SessionPool>("Azure.ContainerApps.SessionPool");
+export const SessionPool = GroupedResource<SessionPool>("Azure.ContainerApps.SessionPool");
 
 const createPoolName = (id: string) => createContainerAppsName(id, 32);
 

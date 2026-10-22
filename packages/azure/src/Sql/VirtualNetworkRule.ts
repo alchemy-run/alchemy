@@ -2,7 +2,7 @@ import * as sql from "@distilled.cloud/azure/sql";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createChildName, lower, sameId } from "./common.ts";
 
 export interface VirtualNetworkRuleProps {
@@ -75,17 +76,14 @@ export interface VirtualNetworkRule extends Resource<
  * **Example:** Allow a subnet with the SQL service endpoint
  * ```typescript
  * const vnet = yield* Azure.Network.VirtualNetwork("vnet", {
- *   resourceGroup: group.resourceGroupName,
  *   addressPrefixes: ["10.0.0.0/16"],
  * });
  * const subnet = yield* Azure.Network.Subnet("apps", {
- *   resourceGroup: group.resourceGroupName,
  *   virtualNetwork: vnet.virtualNetworkName,
  *   addressPrefix: "10.0.1.0/24",
  *   serviceEndpoints: [{ service: "Microsoft.Sql" }],
  * });
  * yield* Azure.Sql.VirtualNetworkRule("apps", {
- *   resourceGroup: group.resourceGroupName,
  *   server: server.serverName,
  *   virtualNetworkSubnetId: subnet.subnetId,
  * });
@@ -94,7 +92,6 @@ export interface VirtualNetworkRule extends Resource<
  * **Example:** Create the rule before the service endpoint exists
  * ```typescript
  * yield* Azure.Sql.VirtualNetworkRule("apps", {
- *   resourceGroup: group.resourceGroupName,
  *   server: server.serverName,
  *   virtualNetworkSubnetId: subnetId,
  *   ignoreMissingVnetServiceEndpoint: true,
@@ -103,7 +100,9 @@ export interface VirtualNetworkRule extends Resource<
  *
  * @resource
  */
-export const VirtualNetworkRule = Resource<VirtualNetworkRule>("Azure.Sql.VirtualNetworkRule");
+export const VirtualNetworkRule = GroupedResource<VirtualNetworkRule>(
+  "Azure.Sql.VirtualNetworkRule",
+);
 
 const getRule = (
   subscriptionId: string,

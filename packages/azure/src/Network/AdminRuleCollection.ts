@@ -1,8 +1,9 @@
 import * as network from "@distilled.cloud/azure/network";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import { orUndefinedIfNotFound } from "../Arm.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { sameSet } from "./common.ts";
 import { networkProvider } from "./generic.ts";
 import { networkManagerChildName, networkManagerTags } from "./networkManagerShared.ts";
@@ -62,7 +63,6 @@ export interface AdminRuleCollection extends Resource<
  * **Example:** Rules for the spokes group
  * ```typescript
  * const rules = yield* Azure.Network.AdminRuleCollection("deny-risky", {
- *   resourceGroup: group.resourceGroupName,
  *   networkManager: manager.networkManagerName,
  *   securityAdminConfiguration: admin.configurationName,
  *   networkGroupIds: [spokes.networkGroupId],
@@ -71,7 +71,7 @@ export interface AdminRuleCollection extends Resource<
  *
  * @resource
  */
-export const AdminRuleCollection = Resource<AdminRuleCollection>(
+export const AdminRuleCollection = GroupedResource<AdminRuleCollection>(
   "Azure.Network.AdminRuleCollection",
 );
 

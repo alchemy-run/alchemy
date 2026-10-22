@@ -2,12 +2,13 @@ import * as storage from "@distilled.cloud/azure/storage";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { ensureRegistered, ignoreNotFound, orUndefinedIfNotFound } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   fromStorageCorsRules,
   storageCorsDiffers,
@@ -64,11 +65,8 @@ export interface TableServiceProperties extends Resource<
  * ### CORS
  * **Example:** Allow a web app to query entities
  * ```typescript
- * const account = yield* Azure.Storage.StorageAccount("catalog", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const account = yield* Azure.Storage.StorageAccount("catalog");
  * yield* Azure.Storage.TableServiceProperties("catalog-table", {
- *   resourceGroup: group.resourceGroupName,
  *   storageAccount: account.storageAccountName,
  *   cors: [
  *     {
@@ -82,7 +80,7 @@ export interface TableServiceProperties extends Resource<
  *
  * @resource
  */
-export const TableServiceProperties = Resource<TableServiceProperties>(
+export const TableServiceProperties = GroupedResource<TableServiceProperties>(
   "Azure.Storage.TableServiceProperties",
 );
 

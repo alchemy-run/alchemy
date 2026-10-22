@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
@@ -23,6 +23,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   credentialsNeedWrite,
   hashCredentials,
@@ -153,16 +154,12 @@ export interface Namespace extends Resource<
  * ### Creating a Namespace
  * **Example:** Free namespace
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("app");
- * const ns = yield* Azure.NotificationHubs.Namespace("push", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const ns = yield* Azure.NotificationHubs.Namespace("push");
  * ```
  *
  * **Example:** Standard namespace with zone redundancy
  * ```typescript
  * const ns = yield* Azure.NotificationHubs.Namespace("push", {
- *   resourceGroup: group.resourceGroupName,
  *   sku: "Standard",
  *   zoneRedundancy: "Enabled",
  *   tags: { team: "mobile" },
@@ -173,7 +170,6 @@ export interface Namespace extends Resource<
  * **Example:** Allow one IP range
  * ```typescript
  * const ns = yield* Azure.NotificationHubs.Namespace("push", {
- *   resourceGroup: group.resourceGroupName,
  *   sku: "Standard",
  *   networkAcls: {
  *     ipRules: [{ ipMask: "203.0.113.0/24", rights: ["Send", "Listen"] }],
@@ -184,7 +180,7 @@ export interface Namespace extends Resource<
  *
  * @resource
  */
-export const Namespace = Resource<Namespace>("Azure.NotificationHubs.Namespace");
+export const Namespace = GroupedResource<Namespace>("Azure.NotificationHubs.Namespace");
 
 type ObservedNamespace = notificationhubs.GetNamespaceResponse | notificationhubs.NamespaceResource;
 

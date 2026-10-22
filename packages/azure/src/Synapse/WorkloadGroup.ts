@@ -2,11 +2,12 @@ import * as synapse from "@distilled.cloud/azure/synapse";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { ensureRegistered, ignoreNotFound, orUndefinedIfNotFound, waitUntilGone } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createAlnumName,
   fieldsMatch,
@@ -71,7 +72,6 @@ export interface WorkloadGroup extends Resource<
  * **Example:** Reserve 20% of the pool for loads
  * ```typescript
  * const loads = yield* Azure.Synapse.WorkloadGroup("loads", {
- *   resourceGroup: group.resourceGroupName,
  *   workspace: workspace.workspaceName,
  *   sqlPool: pool.sqlPoolName,
  *   minResourcePercent: 20,
@@ -83,7 +83,7 @@ export interface WorkloadGroup extends Resource<
  *
  * @resource
  */
-export const WorkloadGroup = Resource<WorkloadGroup>("Azure.Synapse.WorkloadGroup");
+export const WorkloadGroup = GroupedResource<WorkloadGroup>("Azure.Synapse.WorkloadGroup");
 
 type Observed = synapse.GetSqlPoolWorkloadGroupResponse;
 

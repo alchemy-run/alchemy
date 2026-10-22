@@ -2,7 +2,7 @@ import * as app from "@distilled.cloud/azure/app";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
 import {
@@ -14,6 +14,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createContainerAppsName,
   fingerprint,
@@ -106,7 +107,6 @@ export interface EnvironmentStorage extends Resource<
  * **Example:** Register a file share and mount it in an app
  * ```typescript
  * const storage = yield* Azure.ContainerApps.EnvironmentStorage("files", {
- *   resourceGroup: group.resourceGroupName,
  *   environment: env.environmentName,
  *   azureFile: {
  *     accountName: account.storageAccountName,
@@ -116,7 +116,6 @@ export interface EnvironmentStorage extends Resource<
  *   },
  * });
  * const api = yield* Azure.ContainerApps.ContainerApp("api", {
- *   resourceGroup: group.resourceGroupName,
  *   environmentId: env.environmentId,
  *   template: {
  *     containers: [
@@ -131,7 +130,7 @@ export interface EnvironmentStorage extends Resource<
  *
  * @resource
  */
-export const EnvironmentStorage = Resource<EnvironmentStorage>(
+export const EnvironmentStorage = GroupedResource<EnvironmentStorage>(
   "Azure.ContainerApps.EnvironmentStorage",
 );
 

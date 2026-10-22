@@ -1,8 +1,9 @@
 import * as apim from "@distilled.cloud/azure/apimanagement";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { sameName } from "./Common.ts";
 import { entityLifecycle, serviceEntityId } from "./Entity.ts";
 import type { NotificationName } from "./Notification.ts";
@@ -49,7 +50,6 @@ export interface NotificationRecipientEmail extends Resource<
  * **Example:** Notify the API team about new subscriptions
  * ```typescript
  * yield* Azure.ApiManagement.NotificationRecipientEmail("new-subs", {
- *   resourceGroup: group.resourceGroupName,
  *   serviceName: apim.serviceName,
  *   notificationName: "RequestPublisherNotificationMessage",
  *   email: "api-team@example.com",
@@ -58,7 +58,7 @@ export interface NotificationRecipientEmail extends Resource<
  *
  * @resource
  */
-export const NotificationRecipientEmail = Resource<NotificationRecipientEmail>(
+export const NotificationRecipientEmail = GroupedResource<NotificationRecipientEmail>(
   "Azure.ApiManagement.NotificationRecipientEmail",
 );
 

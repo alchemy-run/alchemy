@@ -2,7 +2,7 @@ import * as cdn from "@distilled.cloud/azure/cdn";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -16,6 +16,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   AFD_DELETE_BUDGET,
   changedFields,
@@ -104,11 +105,8 @@ export interface AfdEndpoint extends Resource<
  * ### Creating an Endpoint
  * **Example:** Endpoint on a Front Door profile
  * ```typescript
- * const profile = yield* Azure.Cdn.Profile("cdn", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const profile = yield* Azure.Cdn.Profile("cdn");
  * const endpoint = yield* Azure.Cdn.AfdEndpoint("web", {
- *   resourceGroup: group.resourceGroupName,
  *   profile: profile.profileName,
  * });
  * // endpoint.hostName → "web-...-abc123.z01.azurefd.net"
@@ -117,7 +115,6 @@ export interface AfdEndpoint extends Resource<
  * **Example:** Disabled endpoint
  * ```typescript
  * const endpoint = yield* Azure.Cdn.AfdEndpoint("web", {
- *   resourceGroup: group.resourceGroupName,
  *   profile: profile.profileName,
  *   enabledState: "Disabled",
  * });
@@ -125,7 +122,7 @@ export interface AfdEndpoint extends Resource<
  *
  * @resource
  */
-export const AfdEndpoint = Resource<AfdEndpoint>("Azure.Cdn.AfdEndpoint");
+export const AfdEndpoint = GroupedResource<AfdEndpoint>("Azure.Cdn.AfdEndpoint");
 
 const createEndpointName = (id: string) => createAfdName(id, 46);
 

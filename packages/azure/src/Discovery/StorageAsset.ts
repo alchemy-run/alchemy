@@ -2,7 +2,7 @@ import * as discovery from "@distilled.cloud/azure/discovery";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -17,6 +17,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createDiscoveryName, DISCOVERY_NAMESPACE, lower, sameLocation } from "./common.ts";
 import { getStorageContainer } from "./StorageContainer.ts";
 
@@ -90,7 +91,6 @@ export interface StorageAsset extends Resource<
  * **Example:** Dataset folder in a storage container
  * ```typescript
  * const asset = yield* Azure.Discovery.StorageAsset("molecules", {
- *   resourceGroup: group.resourceGroupName,
  *   storageContainer: container.storageContainerName,
  *   description: "Candidate molecule library",
  *   path: "datasets/molecules",
@@ -99,7 +99,7 @@ export interface StorageAsset extends Resource<
  *
  * @resource
  */
-export const StorageAsset = Resource<StorageAsset>("Azure.Discovery.StorageAsset");
+export const StorageAsset = GroupedResource<StorageAsset>("Azure.Discovery.StorageAsset");
 
 const getStorageAsset = (
   subscriptionId: string,

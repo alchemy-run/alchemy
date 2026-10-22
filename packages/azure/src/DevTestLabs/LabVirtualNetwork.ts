@@ -2,7 +2,7 @@ import * as devtestlabs from "@distilled.cloud/azure/devtestlabs";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -17,6 +17,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createLabResourceName, DEVTESTLAB_NAMESPACE, diverges, labLocation } from "./Common.ts";
 
 export type UsagePermission = "Default" | "Deny" | "Allow";
@@ -114,7 +115,6 @@ export interface LabVirtualNetwork extends Resource<
  * **Example:** Allow lab VMs in one subnet
  * ```typescript
  * const network = yield* Azure.DevTestLabs.LabVirtualNetwork("net", {
- *   resourceGroup: group.resourceGroupName,
  *   lab: lab.labName,
  *   externalProviderResourceId: vnet.virtualNetworkId,
  *   subnetOverrides: [
@@ -130,7 +130,9 @@ export interface LabVirtualNetwork extends Resource<
  *
  * @resource
  */
-export const LabVirtualNetwork = Resource<LabVirtualNetwork>("Azure.DevTestLabs.LabVirtualNetwork");
+export const LabVirtualNetwork = GroupedResource<LabVirtualNetwork>(
+  "Azure.DevTestLabs.LabVirtualNetwork",
+);
 
 const getNetwork = (
   subscriptionId: string,

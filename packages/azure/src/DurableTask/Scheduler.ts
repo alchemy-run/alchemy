@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -21,6 +21,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 
 export type SchedulerSkuName = "Dedicated" | "Consumption";
 
@@ -119,16 +120,12 @@ export interface Scheduler extends Resource<
  * ### Creating a Scheduler
  * **Example:** Consumption scheduler
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("app");
- * const scheduler = yield* Azure.DurableTask.Scheduler("orchestrations", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const scheduler = yield* Azure.DurableTask.Scheduler("orchestrations");
  * ```
  *
  * **Example:** Dedicated scheduler with an IP allow list
  * ```typescript
  * const scheduler = yield* Azure.DurableTask.Scheduler("orchestrations", {
- *   resourceGroup: group.resourceGroupName,
  *   sku: "Dedicated",
  *   capacity: 1,
  *   ipAllowlist: ["203.0.113.0/24"],
@@ -139,14 +136,13 @@ export interface Scheduler extends Resource<
  * **Example:** Scheduler with a task hub
  * ```typescript
  * const hub = yield* Azure.DurableTask.TaskHub("default", {
- *   resourceGroup: group.resourceGroupName,
  *   scheduler: scheduler.schedulerName,
  * });
  * ```
  *
  * @resource
  */
-export const Scheduler = Resource<Scheduler>("Azure.DurableTask.Scheduler");
+export const Scheduler = GroupedResource<Scheduler>("Azure.DurableTask.Scheduler");
 
 type ObservedScheduler = durabletask.GetSchedulerResponse;
 

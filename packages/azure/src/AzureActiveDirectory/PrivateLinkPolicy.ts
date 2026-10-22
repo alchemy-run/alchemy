@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -21,6 +21,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 
 export interface PrivateLinkPolicyProps {
   /**
@@ -100,16 +101,12 @@ export interface PrivateLinkPolicy extends Resource<
  * ### Creating a Policy
  * **Example:** Allow only the current tenant
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("identity");
- * const policy = yield* Azure.AzureActiveDirectory.PrivateLinkPolicy("entra", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const policy = yield* Azure.AzureActiveDirectory.PrivateLinkPolicy("entra");
  * ```
  *
  * **Example:** Allow a list of partner tenants
  * ```typescript
  * const policy = yield* Azure.AzureActiveDirectory.PrivateLinkPolicy("entra", {
- *   resourceGroup: group.resourceGroupName,
  *   tenants: [homeTenantId, partnerTenantId],
  *   tags: { team: "identity" },
  * });
@@ -119,7 +116,6 @@ export interface PrivateLinkPolicy extends Resource<
  * **Example:** Private endpoint into Microsoft Entra ID
  * ```typescript
  * const endpoint = yield* Azure.Network.PrivateEndpoint("entra", {
- *   resourceGroup: group.resourceGroupName,
  *   subnetId: subnet.subnetId,
  *   privateLinkServiceConnections: [
  *     { privateLinkServiceId: policy.policyId, groupIds: ["azuread"] },
@@ -129,7 +125,7 @@ export interface PrivateLinkPolicy extends Resource<
  *
  * @resource
  */
-export const PrivateLinkPolicy = Resource<PrivateLinkPolicy>(
+export const PrivateLinkPolicy = GroupedResource<PrivateLinkPolicy>(
   "Azure.AzureActiveDirectory.PrivateLinkPolicy",
 );
 

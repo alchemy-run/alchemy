@@ -2,7 +2,7 @@ import * as mongocluster from "@distilled.cloud/azure/mongocluster";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import {
@@ -14,6 +14,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { whileMongoClusterBusy } from "./MongoShared.ts";
 
 export interface MongoClusterUserRole {
@@ -84,14 +85,10 @@ export interface MongoClusterUser extends Resource<
  * **Example:** Grant a managed identity root access
  * ```typescript
  * const cluster = yield* Azure.CosmosDB.MongoCluster("db", {
- *   resourceGroup: group.resourceGroupName,
  *   authModes: ["NativeAuth", "MicrosoftEntraID"],
  * });
- * const identity = yield* Azure.ManagedIdentity.UserAssignedIdentity("app", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const identity = yield* Azure.ManagedIdentity.UserAssignedIdentity("app");
  * const user = yield* Azure.CosmosDB.MongoClusterUser("app", {
- *   resourceGroup: group.resourceGroupName,
  *   cluster: cluster.mongoClusterName,
  *   principalId: identity.principalId,
  *   principalType: "servicePrincipal",
@@ -100,7 +97,9 @@ export interface MongoClusterUser extends Resource<
  *
  * @resource
  */
-export const MongoClusterUser = Resource<MongoClusterUser>("Azure.CosmosDB.MongoClusterUser");
+export const MongoClusterUser = GroupedResource<MongoClusterUser>(
+  "Azure.CosmosDB.MongoClusterUser",
+);
 
 const DEFAULT_ROLES: MongoClusterUserRole[] = [{ db: "admin", role: "root" }];
 

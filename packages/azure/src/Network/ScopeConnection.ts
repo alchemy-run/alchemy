@@ -1,8 +1,9 @@
 import * as network from "@distilled.cloud/azure/network";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import { orUndefinedIfNotFound } from "../Arm.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { networkProvider } from "./generic.ts";
 import { networkManagerChildName, networkManagerTags } from "./networkManagerShared.ts";
 
@@ -63,7 +64,6 @@ export interface ScopeConnection extends Resource<
  * **Example:** Request management of another tenant's subscription
  * ```typescript
  * yield* Azure.Network.ScopeConnection("partner", {
- *   resourceGroup: group.resourceGroupName,
  *   networkManager: manager.networkManagerName,
  *   tenantId: "00000000-0000-0000-0000-000000000000",
  *   resourceId: "/subscriptions/00000000-0000-0000-0000-000000000000",
@@ -72,7 +72,7 @@ export interface ScopeConnection extends Resource<
  *
  * @resource
  */
-export const ScopeConnection = Resource<ScopeConnection>("Azure.Network.ScopeConnection");
+export const ScopeConnection = GroupedResource<ScopeConnection>("Azure.Network.ScopeConnection");
 
 export const ScopeConnectionProvider = () =>
   Provider.succeed(

@@ -2,7 +2,7 @@ import * as sql from "@distilled.cloud/azure/sql";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -17,6 +17,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   childLocation,
   createChildName,
@@ -129,7 +130,6 @@ export interface ElasticPool extends Resource<
  * **Example:** Basic 50 eDTU pool
  * ```typescript
  * const pool = yield* Azure.Sql.ElasticPool("pool", {
- *   resourceGroup: group.resourceGroupName,
  *   server: server.serverName,
  *   sku: { name: "BasicPool", capacity: 50 },
  *   perDatabaseSettings: { minCapacity: 0, maxCapacity: 5 },
@@ -140,7 +140,6 @@ export interface ElasticPool extends Resource<
  * **Example:** Place a database in the pool
  * ```typescript
  * yield* Azure.Sql.Database("tenant-a", {
- *   resourceGroup: group.resourceGroupName,
  *   server: server.serverName,
  *   elasticPoolId: pool.elasticPoolId,
  * });
@@ -148,7 +147,7 @@ export interface ElasticPool extends Resource<
  *
  * @resource
  */
-export const ElasticPool = Resource<ElasticPool>("Azure.Sql.ElasticPool");
+export const ElasticPool = GroupedResource<ElasticPool>("Azure.Sql.ElasticPool");
 
 const getPool = (
   subscriptionId: string,

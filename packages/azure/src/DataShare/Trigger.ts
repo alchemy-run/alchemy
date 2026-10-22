@@ -2,7 +2,7 @@ import * as datashare from "@distilled.cloud/azure/datashare";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   accountOwnedByStack,
   createChildName,
@@ -107,7 +108,7 @@ export interface Trigger extends Resource<
  *
  * @resource
  */
-export const Trigger = Resource<Trigger>("Azure.DataShare.Trigger");
+export const Trigger = GroupedResource<Trigger>("Azure.DataShare.Trigger");
 
 type ObservedTrigger = datashare.GetTriggerResponse | datashare.CreateTriggerResponse;
 

@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
@@ -23,6 +23,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 
 export type ServiceBusSku = "Basic" | "Standard" | "Premium";
 export type ServiceBusTlsVersion = servicebus.TlsVersion;
@@ -167,16 +168,12 @@ export interface Namespace extends Resource<
  * ### Creating a Namespace
  * **Example:** Standard namespace
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("app");
- * const bus = yield* Azure.ServiceBus.Namespace("bus", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const bus = yield* Azure.ServiceBus.Namespace("bus");
  * ```
  *
  * **Example:** Basic namespace (queues only)
  * ```typescript
  * const bus = yield* Azure.ServiceBus.Namespace("bus", {
- *   resourceGroup: group.resourceGroupName,
  *   sku: "Basic",
  * });
  * ```
@@ -185,7 +182,6 @@ export interface Namespace extends Resource<
  * **Example:** Entra ID only, TLS 1.2
  * ```typescript
  * const bus = yield* Azure.ServiceBus.Namespace("bus", {
- *   resourceGroup: group.resourceGroupName,
  *   disableLocalAuth: true,
  *   minimumTlsVersion: "1.2",
  * });
@@ -199,7 +195,7 @@ export interface Namespace extends Resource<
  *
  * @resource
  */
-export const Namespace = Resource<Namespace>("Azure.ServiceBus.Namespace");
+export const Namespace = GroupedResource<Namespace>("Azure.ServiceBus.Namespace");
 
 type ObservedNamespace = servicebus.GetNamespaceResponse | servicebus.SBNamespace;
 

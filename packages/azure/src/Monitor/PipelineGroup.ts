@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -21,6 +21,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 
 /** A pipeline group receiver (Syslog or OTLP listener). */
 export type PipelineGroupReceiver = monitoringservice.Receiver;
@@ -121,7 +122,6 @@ export interface PipelineGroup extends Resource<
  * **Example:** Syslog to a Log Analytics table through a DCR
  * ```typescript
  * const pipeline = yield* Azure.Monitor.PipelineGroup("edge", {
- *   resourceGroup: group.resourceGroupName,
  *   location: "eastus",
  *   customLocationId: customLocation.id,
  *   receivers: [
@@ -156,7 +156,7 @@ export interface PipelineGroup extends Resource<
  *
  * @resource
  */
-export const PipelineGroup = Resource<PipelineGroup>("Azure.Monitor.PipelineGroup");
+export const PipelineGroup = GroupedResource<PipelineGroup>("Azure.Monitor.PipelineGroup");
 
 type ObservedPipelineGroup =
   | monitoringservice.GetPipelineGroupResponse

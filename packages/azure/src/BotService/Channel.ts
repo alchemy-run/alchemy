@@ -2,7 +2,7 @@ import * as botservice from "@distilled.cloud/azure/botservice";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import {
@@ -16,6 +16,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { botOwnedByStack, DEFAULT_BOT_LOCATION, isSubset, sameArm } from "./Common.ts";
 
 export type ChannelName =
@@ -138,7 +139,6 @@ export interface Channel extends Resource<
  * **Example:** Direct Line channel with one site
  * ```typescript
  * const directLine = yield* Azure.BotService.Channel("direct-line", {
- *   resourceGroup: group.resourceGroupName,
  *   bot: bot.botName,
  *   channelName: "DirectLineChannel",
  *   properties: {
@@ -154,7 +154,6 @@ export interface Channel extends Resource<
  * **Example:** Microsoft Teams
  * ```typescript
  * yield* Azure.BotService.Channel("teams", {
- *   resourceGroup: group.resourceGroupName,
  *   bot: bot.botName,
  *   channelName: "MsTeamsChannel",
  *   properties: { isEnabled: true, enableCalling: false },
@@ -163,7 +162,7 @@ export interface Channel extends Resource<
  *
  * @resource
  */
-export const Channel = Resource<Channel>("Azure.BotService.Channel");
+export const Channel = GroupedResource<Channel>("Azure.BotService.Channel");
 
 const SITE_CHANNELS = new Set(["DirectLineChannel", "WebChatChannel"]);
 

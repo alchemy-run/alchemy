@@ -2,11 +2,12 @@ import * as apim from "@distilled.cloud/azure/apimanagement";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { ensureRegistered, ignoreNotFound, orUndefinedIfNotFound, waitUntilGone } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createEntityName, isParentOwned, sameName } from "./Common.ts";
 
 export interface GroupProps {
@@ -72,7 +73,6 @@ export interface Group extends Resource<
  * **Example:** Custom group
  * ```typescript
  * const partners = yield* Azure.ApiManagement.Group("partners", {
- *   resourceGroup: group.resourceGroupName,
  *   serviceName: apim.serviceName,
  *   displayName: "Partners",
  *   description: "External partner developers",
@@ -82,7 +82,6 @@ export interface Group extends Resource<
  * **Example:** Group mirroring a Microsoft Entra group
  * ```typescript
  * const staff = yield* Azure.ApiManagement.Group("staff", {
- *   resourceGroup: group.resourceGroupName,
  *   serviceName: apim.serviceName,
  *   displayName: "Staff",
  *   type: "external",
@@ -92,7 +91,7 @@ export interface Group extends Resource<
  *
  * @resource
  */
-export const Group = Resource<Group>("Azure.ApiManagement.Group");
+export const Group = GroupedResource<Group>("Azure.ApiManagement.Group");
 
 const getGroup = (
   subscriptionId: string,

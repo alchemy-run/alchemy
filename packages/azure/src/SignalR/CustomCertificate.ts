@@ -2,7 +2,7 @@ import * as signalr from "@distilled.cloud/azure/signalr";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import {
@@ -14,6 +14,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createSignalRName,
   lower,
@@ -89,7 +90,6 @@ export interface CustomCertificate extends Resource<
  * **Example:** Certificate read with the service's system identity
  * ```typescript
  * const signalR = yield* Azure.SignalR.SignalR("realtime", {
- *   resourceGroup: group.resourceGroupName,
  *   sku: "Premium_P1",
  *   identity: { type: "SystemAssigned" },
  * });
@@ -100,7 +100,6 @@ export interface CustomCertificate extends Resource<
  *   principalType: "ServicePrincipal",
  * });
  * const certificate = yield* Azure.SignalR.CustomCertificate("tls", {
- *   resourceGroup: group.resourceGroupName,
  *   signalR: signalR.signalRName,
  *   keyVaultBaseUri: vault.vaultUri,
  *   keyVaultSecretName: "realtime-example-com",
@@ -109,7 +108,9 @@ export interface CustomCertificate extends Resource<
  *
  * @resource
  */
-export const CustomCertificate = Resource<CustomCertificate>("Azure.SignalR.CustomCertificate");
+export const CustomCertificate = GroupedResource<CustomCertificate>(
+  "Azure.SignalR.CustomCertificate",
+);
 
 const getCertificate = (
   subscriptionId: string,

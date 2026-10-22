@@ -2,7 +2,7 @@ import * as sql from "@distilled.cloud/azure/sql";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createChildName, lower } from "./common.ts";
 
 export interface FirewallRuleProps {
@@ -70,7 +71,6 @@ export interface FirewallRule extends Resource<
  * **Example:** Allow an office IP range
  * ```typescript
  * yield* Azure.Sql.FirewallRule("office", {
- *   resourceGroup: group.resourceGroupName,
  *   server: server.serverName,
  *   startIpAddress: "203.0.113.0",
  *   endIpAddress: "203.0.113.255",
@@ -80,7 +80,6 @@ export interface FirewallRule extends Resource<
  * **Example:** Allow Azure services
  * ```typescript
  * yield* Azure.Sql.FirewallRule("azure-services", {
- *   resourceGroup: group.resourceGroupName,
  *   server: server.serverName,
  *   startIpAddress: "0.0.0.0",
  *   endIpAddress: "0.0.0.0",
@@ -89,7 +88,7 @@ export interface FirewallRule extends Resource<
  *
  * @resource
  */
-export const FirewallRule = Resource<FirewallRule>("Azure.Sql.FirewallRule");
+export const FirewallRule = GroupedResource<FirewallRule>("Azure.Sql.FirewallRule");
 
 const getRule = (
   subscriptionId: string,

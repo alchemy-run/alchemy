@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -21,6 +21,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { sameText } from "./Common.ts";
 
 export interface ClusterIdentity {
@@ -140,11 +141,9 @@ export interface Cluster extends Resource<
  * **Example:** Minimum commitment tier
  * ```typescript
  * const cluster = yield* Azure.LogAnalytics.Cluster("logs-cluster", {
- *   resourceGroup: group.resourceGroupName,
  *   capacity: 100,
  * });
  * yield* Azure.LogAnalytics.LinkedService("cluster-link", {
- *   resourceGroup: group.resourceGroupName,
  *   workspace: logs.workspaceName,
  *   name: "cluster",
  *   writeAccessResourceId: cluster.clusterId,
@@ -155,7 +154,6 @@ export interface Cluster extends Resource<
  * **Example:** Encrypt with a Key Vault key
  * ```typescript
  * const cluster = yield* Azure.LogAnalytics.Cluster("logs-cluster", {
- *   resourceGroup: group.resourceGroupName,
  *   keyVaultProperties: {
  *     keyVaultUri: "https://my-vault.vault.azure.net",
  *     keyName: "logs-key",
@@ -165,7 +163,7 @@ export interface Cluster extends Resource<
  *
  * @resource
  */
-export const Cluster = Resource<Cluster>("Azure.LogAnalytics.Cluster");
+export const Cluster = GroupedResource<Cluster>("Azure.LogAnalytics.Cluster");
 
 type ObservedCluster = operationalinsights.GetClusterResponse;
 

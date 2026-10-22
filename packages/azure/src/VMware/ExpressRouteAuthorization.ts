@@ -2,7 +2,7 @@ import * as vmware from "@distilled.cloud/azure/vmware";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
 import {
@@ -14,6 +14,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   AVS_NAMESPACE,
   CHILD_BUDGET,
@@ -81,7 +82,6 @@ export interface ExpressRouteAuthorization extends Resource<
  * **Example:** Authorization key for an ExpressRoute gateway connection
  * ```typescript
  * const auth = yield* Azure.VMware.ExpressRouteAuthorization("gateway", {
- *   resourceGroup: group.resourceGroupName,
  *   privateCloud: cloud.privateCloudName,
  * });
  * // auth.expressRouteAuthorizationKey and cloud.circuit.expressRouteId
@@ -90,7 +90,7 @@ export interface ExpressRouteAuthorization extends Resource<
  *
  * @resource
  */
-export const ExpressRouteAuthorization = Resource<ExpressRouteAuthorization>(
+export const ExpressRouteAuthorization = GroupedResource<ExpressRouteAuthorization>(
   "Azure.VMware.ExpressRouteAuthorization",
 );
 

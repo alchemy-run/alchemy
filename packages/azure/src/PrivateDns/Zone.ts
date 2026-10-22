@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -16,6 +16,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   desiredMetadata,
   GLOBAL,
@@ -88,7 +89,6 @@ export interface Zone extends Resource<
  * **Example:** Internal zone
  * ```typescript
  * const zone = yield* Azure.PrivateDns.Zone("internal", {
- *   resourceGroup: group.resourceGroupName,
  *   name: "internal.contoso.com",
  * });
  * ```
@@ -96,7 +96,6 @@ export interface Zone extends Resource<
  * **Example:** Private Link zone for blob storage
  * ```typescript
  * const zone = yield* Azure.PrivateDns.Zone("blob", {
- *   resourceGroup: group.resourceGroupName,
  *   name: "privatelink.blob.core.windows.net",
  *   tags: { purpose: "private-endpoints" },
  * });
@@ -106,7 +105,6 @@ export interface Zone extends Resource<
  * **Example:** Resolve the zone from a virtual network
  * ```typescript
  * yield* Azure.PrivateDns.VirtualNetworkLink("hub", {
- *   resourceGroup: group.resourceGroupName,
  *   privateZoneName: zone.privateZoneName,
  *   virtualNetworkId: vnet.virtualNetworkId,
  * });
@@ -114,7 +112,7 @@ export interface Zone extends Resource<
  *
  * @resource
  */
-export const Zone = Resource<Zone>("Azure.PrivateDns.Zone");
+export const Zone = GroupedResource<Zone>("Azure.PrivateDns.Zone");
 
 /** Default zone name: a generated label under `.internal`. */
 export const createZoneName = Effect.fn(function* (id: string) {

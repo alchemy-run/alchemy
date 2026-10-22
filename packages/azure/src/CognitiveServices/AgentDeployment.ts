@@ -2,7 +2,7 @@ import * as cognitiveservices from "@distilled.cloud/azure/cognitiveservices";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -17,6 +17,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { ACCOUNT_BUDGET, createChildName, sameArm, sameValue, whileAccountBusy } from "./Common.ts";
 
 export interface AgentDeploymentAgent {
@@ -104,7 +105,6 @@ export interface AgentDeployment extends Resource<
  * **Example:** Managed deployment of one agent version
  * ```typescript
  * yield* Azure.CognitiveServices.AgentDeployment("prod", {
- *   resourceGroup: group.resourceGroupName,
  *   account: account.accountName,
  *   project: project.projectName,
  *   application: app.applicationName,
@@ -116,7 +116,9 @@ export interface AgentDeployment extends Resource<
  *
  * @resource
  */
-export const AgentDeployment = Resource<AgentDeployment>("Azure.CognitiveServices.AgentDeployment");
+export const AgentDeployment = GroupedResource<AgentDeployment>(
+  "Azure.CognitiveServices.AgentDeployment",
+);
 
 const getDeployment = (
   subscriptionId: string,

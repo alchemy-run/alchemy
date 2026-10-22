@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -16,6 +16,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   desiredMetadata,
   DNS_BUDGET,
@@ -91,7 +92,6 @@ export interface Zone extends Resource<
  * **Example:** Zone for a domain
  * ```typescript
  * const zone = yield* Azure.Dns.Zone("contoso", {
- *   resourceGroup: group.resourceGroupName,
  *   name: "contoso.com",
  *   tags: { team: "web" },
  * });
@@ -103,7 +103,6 @@ export interface Zone extends Resource<
  * **Example:** A record at the zone apex
  * ```typescript
  * yield* Azure.Dns.RecordSet("apex", {
- *   resourceGroup: group.resourceGroupName,
  *   zoneName: zone.zoneName,
  *   recordType: "A",
  *   name: "@",
@@ -113,7 +112,7 @@ export interface Zone extends Resource<
  *
  * @resource
  */
-export const Zone = Resource<Zone>("Azure.Dns.Zone");
+export const Zone = GroupedResource<Zone>("Azure.Dns.Zone");
 
 /** Default zone name: a generated label under `.com`. */
 export const createZoneName = Effect.fn(function* (id: string) {

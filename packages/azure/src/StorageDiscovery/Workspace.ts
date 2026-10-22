@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -21,6 +21,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 
 /**
  * A collection of storage resources a Storage Discovery workspace reports on.
@@ -131,7 +132,6 @@ export interface Workspace extends Resource<
  * ```typescript
  * const group = yield* Azure.Resources.ResourceGroup("data");
  * const workspace = yield* Azure.StorageDiscovery.Workspace("insights", {
- *   resourceGroup: group.resourceGroupName,
  *   location: "eastus2",
  *   workspaceRoots: [group.resourceGroupId],
  *   scopes: [{ displayName: "All storage" }],
@@ -142,7 +142,6 @@ export interface Workspace extends Resource<
  * **Example:** Separate scopes for production and tagged accounts
  * ```typescript
  * const workspace = yield* Azure.StorageDiscovery.Workspace("insights", {
- *   resourceGroup: group.resourceGroupName,
  *   sku: "Standard",
  *   description: "Storage estate overview",
  *   workspaceRoots: [`/subscriptions/${subscriptionId}`],
@@ -155,7 +154,7 @@ export interface Workspace extends Resource<
  *
  * @resource
  */
-export const Workspace = Resource<Workspace>("Azure.StorageDiscovery.Workspace");
+export const Workspace = GroupedResource<Workspace>("Azure.StorageDiscovery.Workspace");
 
 type ObservedWorkspace = storagediscovery.GetStorageDiscoveryWorkspaceResponse;
 type Scope = storagediscovery.StorageDiscoveryScope;

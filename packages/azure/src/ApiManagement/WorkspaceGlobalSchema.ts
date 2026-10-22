@@ -1,8 +1,9 @@
 import * as apim from "@distilled.cloud/azure/apimanagement";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createEntityName } from "./Common.ts";
 import { entityLifecycle } from "./Entity.ts";
 
@@ -64,7 +65,6 @@ export interface WorkspaceGlobalSchema extends Resource<
  * **Example:** A JSON Schema for order payloads
  * ```typescript
  * const schema = yield* Azure.ApiManagement.WorkspaceGlobalSchema("order", {
- *   resourceGroup: group.resourceGroupName,
  *   serviceName: apim.serviceName,
  *   workspaceName: workspace.workspaceName,
  *   schemaType: "json",
@@ -79,7 +79,7 @@ export interface WorkspaceGlobalSchema extends Resource<
  *
  * @resource
  */
-export const WorkspaceGlobalSchema = Resource<WorkspaceGlobalSchema>(
+export const WorkspaceGlobalSchema = GroupedResource<WorkspaceGlobalSchema>(
   "Azure.ApiManagement.WorkspaceGlobalSchema",
 );
 

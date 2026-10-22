@@ -2,7 +2,7 @@ import * as devcenter from "@distilled.cloud/azure/devcenter";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createDevCenterName, devCenterOwnedByStage, sameArm, sameValue } from "./Common.ts";
 
 /** One rule of a project policy. */
@@ -89,13 +90,11 @@ export interface ProjectPolicy extends Resource<
  * ```typescript
  * // Every dev center needs a `default` policy (no scopes) before any other.
  * const defaults = yield* Azure.DevCenter.ProjectPolicy("default", {
- *   resourceGroup: group.resourceGroupName,
  *   devCenter: center.devCenterName,
  *   name: "default",
  *   resourcePolicies: [{ resourceType: "Skus", action: "Allow" }],
  * });
  * const policy = yield* Azure.DevCenter.ProjectPolicy("policy", {
- *   resourceGroup: group.resourceGroupName,
  *   devCenter: defaults.devCenter,
  *   scopes: [project.projectId],
  *   // `resources` must be the ID of an existing image or attached network;
@@ -106,7 +105,7 @@ export interface ProjectPolicy extends Resource<
  *
  * @resource
  */
-export const ProjectPolicy = Resource<ProjectPolicy>("Azure.DevCenter.ProjectPolicy");
+export const ProjectPolicy = GroupedResource<ProjectPolicy>("Azure.DevCenter.ProjectPolicy");
 
 type Observed = devcenter.GetProjectPolicyResponse;
 

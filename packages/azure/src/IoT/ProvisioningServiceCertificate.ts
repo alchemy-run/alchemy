@@ -3,7 +3,7 @@ import * as dps from "@distilled.cloud/azure/deviceprovisioningservices";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import {
@@ -15,6 +15,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createCertificateName,
   provisioningServiceOwnedByStage,
@@ -89,11 +90,8 @@ export interface ProvisioningServiceCertificate extends Resource<
  * ### Registering a CA Certificate
  * **Example:** Upload a pre-verified root CA
  * ```typescript
- * const dps = yield* Azure.IoT.ProvisioningService("dps", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const dps = yield* Azure.IoT.ProvisioningService("dps");
  * const ca = yield* Azure.IoT.ProvisioningServiceCertificate("root-ca", {
- *   resourceGroup: group.resourceGroupName,
  *   provisioningService: dps.provisioningServiceName,
  *   certificate: rootCaPem,
  *   isVerified: true,
@@ -103,7 +101,6 @@ export interface ProvisioningServiceCertificate extends Resource<
  * **Example:** Upload an unverified CA (prove possession later)
  * ```typescript
  * const ca = yield* Azure.IoT.ProvisioningServiceCertificate("root-ca", {
- *   resourceGroup: group.resourceGroupName,
  *   provisioningService: dps.provisioningServiceName,
  *   certificate: rootCaPem,
  * });
@@ -111,7 +108,7 @@ export interface ProvisioningServiceCertificate extends Resource<
  *
  * @resource
  */
-export const ProvisioningServiceCertificate = Resource<ProvisioningServiceCertificate>(
+export const ProvisioningServiceCertificate = GroupedResource<ProvisioningServiceCertificate>(
   "Azure.IoT.ProvisioningServiceCertificate",
 );
 

@@ -2,7 +2,7 @@ import * as datashare from "@distilled.cloud/azure/datashare";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import type { DataSetKind } from "./DataSet.ts";
 import {
   accountOwnedByStack,
@@ -162,7 +163,7 @@ export interface DataSetMapping extends Resource<
  *
  * @resource
  */
-export const DataSetMapping = Resource<DataSetMapping>("Azure.DataShare.DataSetMapping");
+export const DataSetMapping = GroupedResource<DataSetMapping>("Azure.DataShare.DataSetMapping");
 
 type ObservedMapping = datashare.GetDataSetMappingResponse | datashare.CreateDataSetMappingResponse;
 

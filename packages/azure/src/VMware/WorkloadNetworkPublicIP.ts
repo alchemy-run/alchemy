@@ -2,7 +2,7 @@ import * as vmware from "@distilled.cloud/azure/vmware";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   AVS_NAMESPACE,
   WORKLOAD_BUDGET,
@@ -72,7 +73,6 @@ export interface WorkloadNetworkPublicIP extends Resource<
  * **Example:** Allocate four public IPs
  * ```typescript
  * const ips = yield* Azure.VMware.WorkloadNetworkPublicIP("edge", {
- *   resourceGroup: group.resourceGroupName,
  *   privateCloud: cloud.privateCloudName,
  *   numberOfPublicIPs: 4,
  * });
@@ -81,7 +81,7 @@ export interface WorkloadNetworkPublicIP extends Resource<
  *
  * @resource
  */
-export const WorkloadNetworkPublicIP = Resource<WorkloadNetworkPublicIP>(
+export const WorkloadNetworkPublicIP = GroupedResource<WorkloadNetworkPublicIP>(
   "Azure.VMware.WorkloadNetworkPublicIP",
 );
 

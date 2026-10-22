@@ -2,12 +2,13 @@ import * as synapse from "@distilled.cloud/azure/synapse";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { ensureRegistered, orUndefinedIfNotFound } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { isWorkspaceOwnedByStack, lower, syncSetting } from "./common.ts";
 
 /** The protector is a singleton named `current`. */
@@ -81,7 +82,6 @@ export interface EncryptionProtector extends Resource<
  * **Example:** Protect TDE keys with a Key Vault key
  * ```typescript
  * yield* Azure.Synapse.EncryptionProtector("tde-protector", {
- *   resourceGroup: group.resourceGroupName,
  *   workspace: workspace.workspaceName,
  *   serverKeyType: "AzureKeyVault",
  *   serverKeyName: "myvault_cmk_0123456789abcdef0123456789abcdef",
@@ -90,7 +90,7 @@ export interface EncryptionProtector extends Resource<
  *
  * @resource
  */
-export const EncryptionProtector = Resource<EncryptionProtector>(
+export const EncryptionProtector = GroupedResource<EncryptionProtector>(
   "Azure.Synapse.EncryptionProtector",
 );
 

@@ -2,7 +2,7 @@ import * as edge from "@distilled.cloud/azure/edge";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { EDGE_WAIT, edgeState, sameId } from "./EdgeShared.ts";
 
 export interface SiteReferenceProps {
@@ -63,11 +64,8 @@ export interface SiteReference extends Resource<
  * ### Linking a Site
  * **Example:** Site in the context
  * ```typescript
- * const site = yield* Azure.Edge.Site("plant", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const site = yield* Azure.Edge.Site("plant");
  * yield* Azure.Edge.SiteReference("plant-ref", {
- *   resourceGroup: group.resourceGroupName,
  *   context: context.contextName,
  *   siteId: site.siteId,
  * });
@@ -75,7 +73,7 @@ export interface SiteReference extends Resource<
  *
  * @resource
  */
-export const SiteReference = Resource<SiteReference>("Azure.Edge.SiteReference");
+export const SiteReference = GroupedResource<SiteReference>("Azure.Edge.SiteReference");
 
 const getReference = (
   subscriptionId: string,

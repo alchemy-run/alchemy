@@ -2,7 +2,7 @@ import * as automation from "@distilled.cloud/azure/automation";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { accountOwnedByStage, createChildName, sameName } from "./Common.ts";
 
 export interface DscNodeConfigurationProps {
@@ -77,13 +78,11 @@ export interface DscNodeConfiguration extends Resource<
  * **Example:** Pre-compiled MOF
  * ```typescript
  * const web = yield* Azure.Automation.DscConfiguration("WebServer", {
- *   resourceGroup: group.resourceGroupName,
  *   automationAccount: account.automationAccountName,
  *   name: "WebServer",
  *   script: webServerScript,
  * });
  * const node = yield* Azure.Automation.DscNodeConfiguration("web-node", {
- *   resourceGroup: group.resourceGroupName,
  *   automationAccount: account.automationAccountName,
  *   configuration: web.configurationName,
  *   nodeName: "localhost",
@@ -93,7 +92,7 @@ export interface DscNodeConfiguration extends Resource<
  *
  * @resource
  */
-export const DscNodeConfiguration = Resource<DscNodeConfiguration>(
+export const DscNodeConfiguration = GroupedResource<DscNodeConfiguration>(
   "Azure.Automation.DscNodeConfiguration",
 );
 

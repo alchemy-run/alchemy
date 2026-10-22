@@ -2,7 +2,7 @@ import * as elasticsan from "@distilled.cloud/azure/elasticsan";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createSanName, isParentOwned, lower } from "./Common.ts";
 
 export interface SnapshotProps {
@@ -78,7 +79,6 @@ export interface Snapshot extends Resource<
  * **Example:** Snapshot a volume
  * ```typescript
  * const snapshot = yield* Azure.ElasticSan.Snapshot("nightly", {
- *   resourceGroup: group.resourceGroupName,
  *   elasticSan: san.elasticSanName,
  *   volumeGroup: volumes.volumeGroupName,
  *   sourceVolumeId: volume.volumeResourceId,
@@ -87,7 +87,7 @@ export interface Snapshot extends Resource<
  *
  * @resource
  */
-export const Snapshot = Resource<Snapshot>("Azure.ElasticSan.Snapshot");
+export const Snapshot = GroupedResource<Snapshot>("Azure.ElasticSan.Snapshot");
 
 type ObservedSnapshot = elasticsan.GetVolumeSnapshotResponse;
 

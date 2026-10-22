@@ -2,7 +2,7 @@ import * as cs from "@distilled.cloud/azure/containerservice";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -20,6 +20,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createChildName, sameName } from "./Common.ts";
 
 export interface SnapshotProps {
@@ -91,7 +92,6 @@ export interface Snapshot extends Resource<
  * **Example:** Snapshot the system pool
  * ```typescript
  * const snapshot = yield* Azure.ContainerService.Snapshot("golden", {
- *   resourceGroup: group.resourceGroupName,
  *   sourceAgentPoolId: pool.agentPoolId,
  *   tags: { purpose: "golden-image" },
  * });
@@ -99,7 +99,7 @@ export interface Snapshot extends Resource<
  *
  * @resource
  */
-export const Snapshot = Resource<Snapshot>("Azure.ContainerService.Snapshot");
+export const Snapshot = GroupedResource<Snapshot>("Azure.ContainerService.Snapshot");
 
 type ObservedSnapshot = cs.GetSnapshotResponse;
 

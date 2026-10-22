@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import {
@@ -21,6 +21,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { getCluster, lower, untilConverged, whileClusterBusy } from "./common.ts";
 
 export type KustoSkuName = kusto.AzureSkuName;
@@ -217,16 +218,12 @@ export interface Cluster extends Resource<
  * ### Creating a Cluster
  * **Example:** Dev cluster
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("analytics");
- * const cluster = yield* Azure.Kusto.Cluster("adx", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const cluster = yield* Azure.Kusto.Cluster("adx");
  * ```
  *
  * **Example:** Production cluster with streaming ingestion
  * ```typescript
  * const cluster = yield* Azure.Kusto.Cluster("adx", {
- *   resourceGroup: group.resourceGroupName,
  *   sku: { name: "Standard_E2ads_v5", tier: "Standard", capacity: 2 },
  *   enableStreamingIngest: true,
  *   identityType: "SystemAssigned",
@@ -237,7 +234,6 @@ export interface Cluster extends Resource<
  * **Example:** Enable the Python plugin
  * ```typescript
  * const cluster = yield* Azure.Kusto.Cluster("adx", {
- *   resourceGroup: group.resourceGroupName,
  *   // Sandboxes need a VM size with nested virtualization.
  *   sku: { name: "Standard_E2ads_v5", tier: "Standard", capacity: 2 },
  *   languageExtensions: [{ name: "PYTHON", imageName: "Python3_11_7" }],
@@ -246,7 +242,7 @@ export interface Cluster extends Resource<
  *
  * @resource
  */
-export const Cluster = Resource<Cluster>("Azure.Kusto.Cluster");
+export const Cluster = GroupedResource<Cluster>("Azure.Kusto.Cluster");
 
 type ObservedCluster = kusto.GetClusterResponse;
 

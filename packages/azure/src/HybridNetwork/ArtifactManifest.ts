@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -21,6 +21,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { canonical, FAST_BUDGET, NAMESPACE, retryInProgress, sameArm } from "./Common.ts";
 
 /** Manifest names: 5-50 lowercase alphanumerics separated by `-`. */
@@ -119,7 +120,6 @@ export interface ArtifactManifest extends Resource<
  * **Example:** Manifest for an ARM template
  * ```typescript
  * const manifest = yield* Azure.HybridNetwork.ArtifactManifest("templates", {
- *   resourceGroup: group.resourceGroupName,
  *   publisher: publisher.publisherName,
  *   artifactStore: store.artifactStoreName,
  *   artifacts: [
@@ -135,7 +135,6 @@ export interface ArtifactManifest extends Resource<
  * **Example:** Manifest for a Helm chart and its image
  * ```typescript
  * const manifest = yield* Azure.HybridNetwork.ArtifactManifest("cnf", {
- *   resourceGroup: group.resourceGroupName,
  *   publisher: publisher.publisherName,
  *   artifactStore: store.artifactStoreName,
  *   artifacts: [
@@ -147,7 +146,9 @@ export interface ArtifactManifest extends Resource<
  *
  * @resource
  */
-export const ArtifactManifest = Resource<ArtifactManifest>("Azure.HybridNetwork.ArtifactManifest");
+export const ArtifactManifest = GroupedResource<ArtifactManifest>(
+  "Azure.HybridNetwork.ArtifactManifest",
+);
 
 const getManifest = (
   subscriptionId: string,

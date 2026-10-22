@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import {
@@ -21,6 +21,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { canonicalJson, getMonitor, sameName } from "./common.ts";
 
 /** The Datadog organization owner Datadog contacts about the monitor. */
@@ -181,7 +182,6 @@ export interface Monitor extends Resource<
  *   location: "westus2",
  * });
  * const monitor = yield* Azure.Datadog.Monitor("datadog", {
- *   resourceGroup: group.resourceGroupName,
  *   location: "westus2",
  *   userInfo: { name: "Platform Team", emailAddress: "platform@example.com" },
  * });
@@ -190,7 +190,6 @@ export interface Monitor extends Resource<
  * **Example:** Linking an existing Datadog organization
  * ```typescript
  * const monitor = yield* Azure.Datadog.Monitor("datadog", {
- *   resourceGroup: group.resourceGroupName,
  *   location: "westus2",
  *   sku: "Linked",
  *   userInfo: { emailAddress: "platform@example.com" },
@@ -205,7 +204,6 @@ export interface Monitor extends Resource<
  * **Example:** Disable monitoring without deleting the organization
  * ```typescript
  * const monitor = yield* Azure.Datadog.Monitor("datadog", {
- *   resourceGroup: group.resourceGroupName,
  *   location: "westus2",
  *   userInfo: { emailAddress: "platform@example.com" },
  *   monitoringStatus: "Disabled",
@@ -214,7 +212,7 @@ export interface Monitor extends Resource<
  *
  * @resource
  */
-export const Monitor = Resource<Monitor>("Azure.Datadog.Monitor");
+export const Monitor = GroupedResource<Monitor>("Azure.Datadog.Monitor");
 
 type ObservedMonitor = datadog.GetMonitorResponse;
 

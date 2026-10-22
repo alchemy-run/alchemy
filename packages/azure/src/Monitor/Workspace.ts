@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -21,6 +21,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 
 export interface WorkspaceIdentity {
   /** Kind of managed identity attached to the workspace. */
@@ -121,10 +122,7 @@ export interface Workspace extends Resource<
  * ### Creating a Workspace
  * **Example:** Managed Prometheus workspace
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("app");
- * const metrics = yield* Azure.Monitor.Workspace("metrics", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const metrics = yield* Azure.Monitor.Workspace("metrics");
  * // metrics.prometheusQueryEndpoint, metrics.metricsIngestionEndpoint
  * ```
  *
@@ -132,7 +130,6 @@ export interface Workspace extends Resource<
  * **Example:** Private-only workspace with resource-context access
  * ```typescript
  * const metrics = yield* Azure.Monitor.Workspace("metrics", {
- *   resourceGroup: group.resourceGroupName,
  *   publicNetworkAccess: "Disabled",
  *   enableAccessUsingResourcePermissions: true,
  *   tags: { team: "platform" },
@@ -141,7 +138,7 @@ export interface Workspace extends Resource<
  *
  * @resource
  */
-export const Workspace = Resource<Workspace>("Azure.Monitor.Workspace");
+export const Workspace = GroupedResource<Workspace>("Azure.Monitor.Workspace");
 
 type ObservedWorkspace =
   | monitoringservice.GetAzureMonitorWorkspaceResponse

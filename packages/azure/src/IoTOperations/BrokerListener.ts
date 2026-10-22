@@ -1,7 +1,8 @@
 import * as iot from "@distilled.cloud/azure/iotoperations";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { childLifecycle, childStatus, type InstanceScope } from "./Common.ts";
 
 type BrokerScope = InstanceScope & { readonly brokerName: string };
@@ -71,7 +72,6 @@ export interface BrokerListener extends Resource<
  * **Example:** Load-balanced listener with automatic TLS
  * ```typescript
  * const listener = yield* Azure.IoTOperations.BrokerListener("external", {
- *   resourceGroup: group.resourceGroupName,
  *   instanceName: instance.instanceName,
  *   serviceType: "LoadBalancer",
  *   serviceName: "aio-broker-external",
@@ -93,7 +93,6 @@ export interface BrokerListener extends Resource<
  * **Example:** Unencrypted in-cluster listener
  * ```typescript
  * const listener = yield* Azure.IoTOperations.BrokerListener("internal", {
- *   resourceGroup: group.resourceGroupName,
  *   instanceName: instance.instanceName,
  *   serviceType: "ClusterIp",
  *   ports: [{ port: 1883 }],
@@ -102,7 +101,7 @@ export interface BrokerListener extends Resource<
  *
  * @resource
  */
-export const BrokerListener = Resource<BrokerListener>("Azure.IoTOperations.BrokerListener");
+export const BrokerListener = GroupedResource<BrokerListener>("Azure.IoTOperations.BrokerListener");
 
 export const BrokerListenerProvider = () =>
   Provider.succeed(BrokerListener, {

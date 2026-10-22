@@ -2,7 +2,7 @@ import * as eventhub from "@distilled.cloud/azure/eventhub";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   type AccessRight,
   type AuthorizationRuleKeys,
@@ -76,11 +77,9 @@ export interface EventHubAuthorizationRule extends Resource<
  * **Example:** Listen-only policy for one event hub
  * ```typescript
  * const orders = yield* Azure.EventHub.EventHub("orders", {
- *   resourceGroup: group.resourceGroupName,
  *   namespace: namespace.namespaceName,
  * });
  * const readers = yield* Azure.EventHub.EventHubAuthorizationRule("readers", {
- *   resourceGroup: group.resourceGroupName,
  *   namespace: namespace.namespaceName,
  *   eventHub: orders.eventHubName,
  *   rights: ["Listen"],
@@ -90,7 +89,7 @@ export interface EventHubAuthorizationRule extends Resource<
  *
  * @resource
  */
-export const EventHubAuthorizationRule = Resource<EventHubAuthorizationRule>(
+export const EventHubAuthorizationRule = GroupedResource<EventHubAuthorizationRule>(
   "Azure.EventHub.EventHubAuthorizationRule",
 );
 

@@ -1,8 +1,9 @@
 import * as apim from "@distilled.cloud/azure/apimanagement";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { sameName } from "./Common.ts";
 import { entityLifecycle, serviceEntityId } from "./Entity.ts";
 
@@ -48,7 +49,6 @@ export interface GroupUser extends Resource<
  * **Example:** Add a developer to the partners group
  * ```typescript
  * yield* Azure.ApiManagement.GroupUser("jane-partners", {
- *   resourceGroup: group.resourceGroupName,
  *   serviceName: apim.serviceName,
  *   groupName: partners.groupName,
  *   userName: jane.userName,
@@ -57,7 +57,7 @@ export interface GroupUser extends Resource<
  *
  * @resource
  */
-export const GroupUser = Resource<GroupUser>("Azure.ApiManagement.GroupUser");
+export const GroupUser = GroupedResource<GroupUser>("Azure.ApiManagement.GroupUser");
 
 interface Key {
   resourceGroup: string;

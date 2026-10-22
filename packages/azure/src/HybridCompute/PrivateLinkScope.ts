@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -21,6 +21,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 
 export interface PrivateLinkScopeProps {
   /**
@@ -108,16 +109,12 @@ export interface PrivateLinkScope extends Resource<
  * ### Creating a Private Link Scope
  * **Example:** Scope with public access disabled
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("arc");
- * const scope = yield* Azure.HybridCompute.PrivateLinkScope("arc-scope", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const scope = yield* Azure.HybridCompute.PrivateLinkScope("arc-scope");
  * ```
  *
  * **Example:** Scope that also allows the public endpoints
  * ```typescript
  * const scope = yield* Azure.HybridCompute.PrivateLinkScope("arc-scope", {
- *   resourceGroup: group.resourceGroupName,
  *   publicNetworkAccess: "Enabled",
  * });
  * ```
@@ -131,7 +128,9 @@ export interface PrivateLinkScope extends Resource<
  *
  * @resource
  */
-export const PrivateLinkScope = Resource<PrivateLinkScope>("Azure.HybridCompute.PrivateLinkScope");
+export const PrivateLinkScope = GroupedResource<PrivateLinkScope>(
+  "Azure.HybridCompute.PrivateLinkScope",
+);
 
 type ObservedScope = hybridcompute.GetPrivateLinkScopeResponse;
 

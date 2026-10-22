@@ -1,7 +1,8 @@
 import * as iot from "@distilled.cloud/azure/iotoperations";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { childLifecycle, childStatus, type InstanceScope } from "./Common.ts";
 
 type ProfileScope = InstanceScope & { readonly dataflowProfileName: string };
@@ -75,7 +76,6 @@ export interface DataflowGraph extends Resource<
  * **Example:** Source → WASM module → destination
  * ```typescript
  * const graph = yield* Azure.IoTOperations.DataflowGraph("graph", {
- *   resourceGroup: group.resourceGroupName,
  *   instanceName: instance.instanceName,
  *   nodes: [
  *     {
@@ -106,7 +106,7 @@ export interface DataflowGraph extends Resource<
  *
  * @resource
  */
-export const DataflowGraph = Resource<DataflowGraph>("Azure.IoTOperations.DataflowGraph");
+export const DataflowGraph = GroupedResource<DataflowGraph>("Azure.IoTOperations.DataflowGraph");
 
 export const DataflowGraphProvider = () =>
   Provider.succeed(DataflowGraph, {

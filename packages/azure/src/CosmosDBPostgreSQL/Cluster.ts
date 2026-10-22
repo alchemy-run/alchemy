@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
@@ -23,6 +23,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   type ClusterRef,
   COSMOS_POSTGRES_NAMESPACE,
@@ -218,17 +219,13 @@ export interface Cluster extends Resource<
  * ### Creating a Cluster
  * **Example:** Single-node cluster with a generated password
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("app");
- * const cluster = yield* Azure.CosmosDBPostgreSQL.Cluster("db", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const cluster = yield* Azure.CosmosDBPostgreSQL.Cluster("db");
  * // cluster.connectionString is a Redacted postgresql:// URL
  * ```
  *
  * **Example:** Multi-node cluster
  * ```typescript
  * const cluster = yield* Azure.CosmosDBPostgreSQL.Cluster("db", {
- *   resourceGroup: group.resourceGroupName,
  *   coordinatorServerEdition: "GeneralPurpose",
  *   coordinatorVCores: 4,
  *   coordinatorStorageQuotaInMb: 131072,
@@ -244,7 +241,6 @@ export interface Cluster extends Resource<
  * **Example:** Custom maintenance window
  * ```typescript
  * const cluster = yield* Azure.CosmosDBPostgreSQL.Cluster("db", {
- *   resourceGroup: group.resourceGroupName,
  *   maintenanceWindow: {
  *     customWindow: "Enabled",
  *     dayOfWeek: 0,
@@ -256,7 +252,7 @@ export interface Cluster extends Resource<
  *
  * @resource
  */
-export const Cluster = Resource<Cluster>("Azure.CosmosDBPostgreSQL.Cluster");
+export const Cluster = GroupedResource<Cluster>("Azure.CosmosDBPostgreSQL.Cluster");
 
 type ObservedCluster = postgresqlhsc.GetClusterResponse;
 

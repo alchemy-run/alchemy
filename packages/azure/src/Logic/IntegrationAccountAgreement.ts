@@ -2,11 +2,12 @@ import * as logic from "@distilled.cloud/azure/logic";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { ensureRegistered, ignoreNotFound, orUndefinedIfNotFound, waitUntilGone } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   artifactDiffers,
   artifactMetadata,
@@ -100,7 +101,6 @@ export interface IntegrationAccountAgreement extends Resource<
  * **Example:** AS2 agreement between two partners
  * ```typescript
  * const agreement = yield* Azure.Logic.IntegrationAccountAgreement("as2", {
- *   resourceGroup: group.resourceGroupName,
  *   integrationAccount: account.integrationAccountName,
  *   agreementType: "AS2",
  *   hostPartner: contoso.partnerName,
@@ -118,7 +118,7 @@ export interface IntegrationAccountAgreement extends Resource<
  *
  * @resource
  */
-export const IntegrationAccountAgreement = Resource<IntegrationAccountAgreement>(
+export const IntegrationAccountAgreement = GroupedResource<IntegrationAccountAgreement>(
   "Azure.Logic.IntegrationAccountAgreement",
 );
 

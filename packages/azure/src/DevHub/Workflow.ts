@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -20,6 +20,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 
 /** How the workflow deploys the application to Kubernetes. */
 export interface WorkflowDeploymentProperties {
@@ -186,7 +187,6 @@ export interface Workflow extends Resource<
  * **Example:** Deploy a repository to AKS with Helm
  * ```typescript
  * const workflow = yield* Azure.DevHub.Workflow("deploy", {
- *   resourceGroup: group.resourceGroupName,
  *   githubWorkflowProfile: {
  *     repositoryOwner: "my-org",
  *     repositoryName: "my-app",
@@ -215,7 +215,6 @@ export interface Workflow extends Resource<
  * **Example:** Let Developer Hub generate the build artifacts
  * ```typescript
  * const workflow = yield* Azure.DevHub.Workflow("deploy", {
- *   resourceGroup: group.resourceGroupName,
  *   githubWorkflowProfile: { ...profile },
  *   artifactGenerationProperties: {
  *     generationLanguage: "javascript",
@@ -233,7 +232,7 @@ export interface Workflow extends Resource<
  *
  * @resource
  */
-export const Workflow = Resource<Workflow>("Azure.DevHub.Workflow");
+export const Workflow = GroupedResource<Workflow>("Azure.DevHub.Workflow");
 
 type ObservedWorkflow = developerhub.GetWorkflowResponse;
 

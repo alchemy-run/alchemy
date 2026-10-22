@@ -2,7 +2,7 @@ import * as digitaltwins from "@distilled.cloud/azure/digitaltwins";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -19,6 +19,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createInstanceName, getInstance } from "./Common.ts";
 
 export type InstanceIdentityType =
@@ -117,9 +118,7 @@ export interface Instance extends Resource<
  * ### Creating an Instance
  * **Example:** Instance with a system-assigned identity
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("twins");
  * const twins = yield* Azure.DigitalTwins.Instance("factory", {
- *   resourceGroup: group.resourceGroupName,
  *   identity: { type: "SystemAssigned" },
  * });
  * ```
@@ -127,7 +126,6 @@ export interface Instance extends Resource<
  * **Example:** Private instance
  * ```typescript
  * const twins = yield* Azure.DigitalTwins.Instance("factory", {
- *   resourceGroup: group.resourceGroupName,
  *   publicNetworkAccess: "Disabled",
  * });
  * ```
@@ -146,7 +144,7 @@ export interface Instance extends Resource<
  *
  * @resource
  */
-export const Instance = Resource<Instance>("Azure.DigitalTwins.Instance");
+export const Instance = GroupedResource<Instance>("Azure.DigitalTwins.Instance");
 
 type ObservedInstance = digitaltwins.GetDigitalTwinResponse;
 

@@ -1,7 +1,7 @@
 import * as ml from "@distilled.cloud/azure/machinelearningservices";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import {
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createChildName, sameArm, inputFields } from "./Common.ts";
 
 export interface MarketplaceSubscriptionProps {
@@ -79,7 +80,6 @@ export interface MarketplaceSubscription extends Resource<
  * const subscription = yield* Azure.MachineLearning.MarketplaceSubscription(
  *   "llama",
  *   {
- *     resourceGroup: group.resourceGroupName,
  *     workspace: project.workspaceName,
  *     modelId: "azureml://registries/azureml-meta/models/Llama-3.3-70B-Instruct",
  *   },
@@ -93,13 +93,11 @@ export interface MarketplaceSubscription extends Resource<
  * const subscription = yield* Azure.MachineLearning.MarketplaceSubscription(
  *   "llama",
  *   {
- *     resourceGroup: group.resourceGroupName,
  *     workspace: project.workspaceName,
  *     modelId,
  *   },
  * );
  * const endpoint = yield* Azure.MachineLearning.ServerlessEndpoint("llama", {
- *   resourceGroup: group.resourceGroupName,
  *   workspace: subscription.workspace,
  *   modelId,
  * });
@@ -107,7 +105,7 @@ export interface MarketplaceSubscription extends Resource<
  *
  * @resource
  */
-export const MarketplaceSubscription = Resource<MarketplaceSubscription>(
+export const MarketplaceSubscription = GroupedResource<MarketplaceSubscription>(
   "Azure.MachineLearning.MarketplaceSubscription",
 );
 

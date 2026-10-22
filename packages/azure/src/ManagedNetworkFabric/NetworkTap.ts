@@ -2,7 +2,7 @@ import * as mnf from "@distilled.cloud/azure/managednetworkfabric";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -19,6 +19,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createFabricName,
   differs,
@@ -106,9 +107,7 @@ export interface NetworkTap extends Resource<
  * ### Creating a Network Tap
  * **Example:** Tap to a neighbor group
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("fabric");
  * const tap = yield* Azure.ManagedNetworkFabric.NetworkTap("tap", {
- *   resourceGroup: group.resourceGroupName,
  *   // Packet brokers are created with the fabric's hardware.
  *   networkPacketBrokerId: packetBrokerId,
  *   destinations: [
@@ -124,7 +123,7 @@ export interface NetworkTap extends Resource<
  *
  * @resource
  */
-export const NetworkTap = Resource<NetworkTap>("Azure.ManagedNetworkFabric.NetworkTap");
+export const NetworkTap = GroupedResource<NetworkTap>("Azure.ManagedNetworkFabric.NetworkTap");
 
 type Observed = mnf.GetNetworkTapResponse;
 

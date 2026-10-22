@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -21,6 +21,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 
 /** On-premises fabric the Arc resource bridge runs on. */
 export type ApplianceInfrastructureProvider = "VMWare" | "HCI" | "SCVMM";
@@ -125,9 +126,7 @@ export interface Appliance extends Resource<
  * ### Creating an Appliance
  * **Example:** Resource bridge for Azure Stack HCI
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("arc");
  * const bridge = yield* Azure.ResourceConnector.Appliance("bridge", {
- *   resourceGroup: group.resourceGroupName,
  *   infrastructureProvider: "HCI",
  * });
  * ```
@@ -135,7 +134,6 @@ export interface Appliance extends Resource<
  * **Example:** Resource bridge for VMware vSphere with tags
  * ```typescript
  * const bridge = yield* Azure.ResourceConnector.Appliance("vsphere", {
- *   resourceGroup: group.resourceGroupName,
  *   infrastructureProvider: "VMWare",
  *   tags: { site: "dc1" },
  * });
@@ -143,7 +141,7 @@ export interface Appliance extends Resource<
  *
  * @resource
  */
-export const Appliance = Resource<Appliance>("Azure.ResourceConnector.Appliance");
+export const Appliance = GroupedResource<Appliance>("Azure.ResourceConnector.Appliance");
 
 type ObservedAppliance = resourceconnector.GetApplianceResponse;
 

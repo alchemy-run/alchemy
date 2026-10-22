@@ -2,7 +2,7 @@ import * as vmware from "@distilled.cloud/azure/vmware";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   AVS_NAMESPACE,
   WORKLOAD_BUDGET,
@@ -72,17 +73,14 @@ export interface WorkloadNetworkPortMirroringProfile extends Resource<
  * **Example:** Mirror both directions between VM groups
  * ```typescript
  * const sources = yield* Azure.VMware.WorkloadNetworkVMGroup("sources", {
- *   resourceGroup: group.resourceGroupName,
  *   privateCloud: cloud.privateCloudName,
  *   members: [],
  * });
  * const collectors = yield* Azure.VMware.WorkloadNetworkVMGroup("collectors", {
- *   resourceGroup: group.resourceGroupName,
  *   privateCloud: cloud.privateCloudName,
  *   members: [],
  * });
  * yield* Azure.VMware.WorkloadNetworkPortMirroringProfile("mirror", {
- *   resourceGroup: group.resourceGroupName,
  *   privateCloud: cloud.privateCloudName,
  *   direction: "BIDIRECTIONAL",
  *   source: sources.vmGroupName,
@@ -92,9 +90,10 @@ export interface WorkloadNetworkPortMirroringProfile extends Resource<
  *
  * @resource
  */
-export const WorkloadNetworkPortMirroringProfile = Resource<WorkloadNetworkPortMirroringProfile>(
-  "Azure.VMware.WorkloadNetworkPortMirroringProfile",
-);
+export const WorkloadNetworkPortMirroringProfile =
+  GroupedResource<WorkloadNetworkPortMirroringProfile>(
+    "Azure.VMware.WorkloadNetworkPortMirroringProfile",
+  );
 
 const createName = (id: string) => createAvsName(id, 64);
 

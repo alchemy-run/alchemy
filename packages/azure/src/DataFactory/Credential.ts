@@ -2,11 +2,12 @@ import * as datafactory from "@distilled.cloud/azure/datafactory";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { ensureRegistered, ignoreNotFound, orUndefinedIfNotFound, waitUntilGone } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   annotationsWithOwnership,
   createChildName,
@@ -89,18 +90,14 @@ export interface Credential extends Resource<
  * ### Managed Identity Credentials
  * **Example:** Credential for a user-assigned identity
  * ```typescript
- * const identity = yield* Azure.ManagedIdentity.UserAssignedIdentity("etl", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const identity = yield* Azure.ManagedIdentity.UserAssignedIdentity("etl");
  * const factory = yield* Azure.DataFactory.Factory("etl", {
- *   resourceGroup: group.resourceGroupName,
  *   identity: {
  *     type: "UserAssigned",
  *     userAssignedIdentities: [identity.identityId],
  *   },
  * });
  * const credential = yield* Azure.DataFactory.Credential("etl", {
- *   resourceGroup: group.resourceGroupName,
  *   factoryName: factory.factoryName,
  *   resourceId: identity.identityId,
  * });
@@ -109,7 +106,6 @@ export interface Credential extends Resource<
  * **Example:** Linked service that authenticates with the credential
  * ```typescript
  * yield* Azure.DataFactory.LinkedService("blob", {
- *   resourceGroup: group.resourceGroupName,
  *   factoryName: factory.factoryName,
  *   type: "AzureBlobStorage",
  *   typeProperties: {
@@ -124,7 +120,7 @@ export interface Credential extends Resource<
  *
  * @resource
  */
-export const Credential = Resource<Credential>("Azure.DataFactory.Credential");
+export const Credential = GroupedResource<Credential>("Azure.DataFactory.Credential");
 
 const createCredentialName = Effect.fn(function* (id: string) {
   const name = yield* createChildName(id);

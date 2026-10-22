@@ -1,7 +1,7 @@
 import * as dr from "@distilled.cloud/azure/recoveryservicesdatareplication";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -15,6 +15,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { DATA_REPLICATION_NAMESPACE, sameName } from "./Shared.ts";
 
 export class PrivateEndpointConnectionMissing extends Data.TaggedError(
@@ -89,18 +90,14 @@ export interface PrivateEndpointConnection extends Resource<
  * ### Approving a Private Endpoint
  * **Example:** Manual-approval endpoint, approved by the vault owner
  * ```typescript
- * const vault = yield* Azure.DataReplication.Vault("vault", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const vault = yield* Azure.DataReplication.Vault("vault");
  * const endpoint = yield* Azure.Network.PrivateEndpoint("vault-pe", {
- *   resourceGroup: group.resourceGroupName,
  *   subnetId: subnet.subnetId,
  *   manualPrivateLinkServiceConnections: [
  *     { privateLinkServiceId: vault.vaultId, groupIds: ["DataReplication"] },
  *   ],
  * });
  * yield* Azure.DataReplication.PrivateEndpointConnection("vault-pe-approval", {
- *   resourceGroup: group.resourceGroupName,
  *   vault: vault.vaultName,
  *   privateEndpointId: endpoint.privateEndpointId,
  *   description: "approved by platform team",
@@ -109,7 +106,7 @@ export interface PrivateEndpointConnection extends Resource<
  *
  * @resource
  */
-export const PrivateEndpointConnection = Resource<PrivateEndpointConnection>(
+export const PrivateEndpointConnection = GroupedResource<PrivateEndpointConnection>(
   "Azure.DataReplication.PrivateEndpointConnection",
 );
 

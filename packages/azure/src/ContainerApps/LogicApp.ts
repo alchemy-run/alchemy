@@ -2,11 +2,12 @@ import * as app from "@distilled.cloud/azure/app";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { ensureRegistered, ignoreNotFound, orUndefinedIfNotFound, waitUntilGone } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { fingerprint, isContainerAppOwnedByStack, lower, matchesDesired } from "./common.ts";
 
 export interface LogicAppProps {
@@ -58,20 +59,18 @@ export interface LogicApp extends Resource<
  * **Example:** Logic App on a workflow container app
  * ```typescript
  * const host = yield* Azure.ContainerApps.ContainerApp("workflows", {
- *   resourceGroup: group.resourceGroupName,
  *   environmentId: env.environmentId,
  *   kind: "workflowapp",
  *   // ... Logic Apps Standard runtime image + storage settings
  * });
  * yield* Azure.ContainerApps.LogicApp("logic", {
- *   resourceGroup: group.resourceGroupName,
  *   containerApp: host.containerAppName,
  * });
  * ```
  *
  * @resource
  */
-export const LogicApp = Resource<LogicApp>("Azure.ContainerApps.LogicApp");
+export const LogicApp = GroupedResource<LogicApp>("Azure.ContainerApps.LogicApp");
 
 const getLogicApp = (
   subscriptionId: string,

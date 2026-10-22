@@ -1,9 +1,10 @@
 import * as network from "@distilled.cloud/azure/network";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { orUndefinedIfNotFound } from "../Arm.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { networkProvider } from "./generic.ts";
 
 export interface NetworkInterfaceTapConfigurationProps {
@@ -51,7 +52,6 @@ export interface NetworkInterfaceTapConfiguration extends Resource<
  * **Example:** Mirror a VM's NIC
  * ```typescript
  * yield* Azure.Network.NetworkInterfaceTapConfiguration("mirror", {
- *   resourceGroup: group.resourceGroupName,
  *   networkInterface: nic.networkInterfaceName,
  *   virtualNetworkTapId: tap.tapId,
  * });
@@ -59,7 +59,7 @@ export interface NetworkInterfaceTapConfiguration extends Resource<
  *
  * @resource
  */
-export const NetworkInterfaceTapConfiguration = Resource<NetworkInterfaceTapConfiguration>(
+export const NetworkInterfaceTapConfiguration = GroupedResource<NetworkInterfaceTapConfiguration>(
   "Azure.Network.NetworkInterfaceTapConfiguration",
 );
 

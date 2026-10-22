@@ -2,7 +2,7 @@ import * as containerregistry from "@distilled.cloud/azure/containerregistry";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import {
@@ -18,6 +18,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createRegistryName, getRegistry, normalizeLocation, sameName, sameSet } from "./Common.ts";
 
 export type WebhookAction = "push" | "delete" | "quarantine" | "chart_push" | "chart_delete";
@@ -100,7 +101,6 @@ export interface Webhook extends Resource<
  * **Example:** Notify on every push
  * ```typescript
  * const hook = yield* Azure.ContainerRegistry.Webhook("deploy-hook", {
- *   resourceGroup: group.resourceGroupName,
  *   registry: registry.registryName,
  *   serviceUri: "https://example.com/acr-hook",
  *   actions: ["push"],
@@ -110,7 +110,6 @@ export interface Webhook extends Resource<
  * **Example:** Scoped webhook with an auth header
  * ```typescript
  * const hook = yield* Azure.ContainerRegistry.Webhook("deploy-hook", {
- *   resourceGroup: group.resourceGroupName,
  *   registry: registry.registryName,
  *   serviceUri: "https://example.com/acr-hook",
  *   customHeaders: { Authorization: Redacted.make("Bearer secret") },
@@ -121,7 +120,7 @@ export interface Webhook extends Resource<
  *
  * @resource
  */
-export const Webhook = Resource<Webhook>("Azure.ContainerRegistry.Webhook");
+export const Webhook = GroupedResource<Webhook>("Azure.ContainerRegistry.Webhook");
 
 const getWebhook = (
   subscriptionId: string,

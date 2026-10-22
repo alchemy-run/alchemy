@@ -3,12 +3,13 @@ import * as resources from "@distilled.cloud/azure/resources";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import { ensureRegistered, ignoreNotFound, orUndefinedIfNotFound, stackAndStage } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 
 export interface ResourceGroupConfigurationProps {
   /**
@@ -59,7 +60,6 @@ export interface ResourceGroupConfiguration extends Resource<
  * ```typescript
  * const group = yield* Azure.Resources.ResourceGroup("sandbox", {});
  * yield* Azure.Advisor.ResourceGroupConfiguration("sandbox-advisor", {
- *   resourceGroup: group.resourceGroupName,
  *   exclude: true,
  * });
  * ```
@@ -68,14 +68,13 @@ export interface ResourceGroupConfiguration extends Resource<
  * **Example:** Explicitly keep Advisor evaluations enabled
  * ```typescript
  * yield* Azure.Advisor.ResourceGroupConfiguration("app-advisor", {
- *   resourceGroup: group.resourceGroupName,
  *   exclude: false,
  * });
  * ```
  *
  * @resource
  */
-export const ResourceGroupConfiguration = Resource<ResourceGroupConfiguration>(
+export const ResourceGroupConfiguration = GroupedResource<ResourceGroupConfiguration>(
   "Azure.Advisor.ResourceGroupConfiguration",
 );
 

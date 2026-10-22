@@ -2,12 +2,13 @@ import * as securityinsights from "@distilled.cloud/azure/securityinsights";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { ensureRegistered, ignoreNotFound, orUndefinedIfNotFound, waitUntilGone } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   deterministicGuid,
   isWorkspaceOwnedByStack,
@@ -77,7 +78,6 @@ export interface AlertRuleAction extends Resource<
  * **Example:** Run a playbook on every alert of a rule
  * ```typescript
  * const playbook = yield* Azure.Logic.Workflow("notify", {
- *   resourceGroup: group.resourceGroupName,
  *   definition: sentinelAlertPlaybookDefinition,
  * });
  * yield* Azure.SecurityInsights.AlertRuleAction("notify-on-alert", {
@@ -91,7 +91,9 @@ export interface AlertRuleAction extends Resource<
  *
  * @resource
  */
-export const AlertRuleAction = Resource<AlertRuleAction>("Azure.SecurityInsights.AlertRuleAction");
+export const AlertRuleAction = GroupedResource<AlertRuleAction>(
+  "Azure.SecurityInsights.AlertRuleAction",
+);
 
 const reveal = (value: string | Redacted.Redacted<string>) =>
   typeof value === "string" ? value : Redacted.value(value);

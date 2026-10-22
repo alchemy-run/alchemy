@@ -2,7 +2,7 @@ import * as storagemover from "@distilled.cloud/azure/storagemover";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -13,6 +13,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createMoverName,
   DELETE_BUDGET,
@@ -70,11 +71,8 @@ export interface Project extends Resource<
  * ### Creating a Project
  * **Example:** Project in a Storage Mover
  * ```typescript
- * const mover = yield* Azure.StorageMover.StorageMover("mover", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const mover = yield* Azure.StorageMover.StorageMover("mover");
  * const project = yield* Azure.StorageMover.Project("file-servers", {
- *   resourceGroup: group.resourceGroupName,
  *   storageMover: mover.storageMoverName,
  *   description: "Migrate the on-premises file servers",
  * });
@@ -82,7 +80,7 @@ export interface Project extends Resource<
  *
  * @resource
  */
-export const Project = Resource<Project>("Azure.StorageMover.Project");
+export const Project = GroupedResource<Project>("Azure.StorageMover.Project");
 
 const getProject = (
   subscriptionId: string,

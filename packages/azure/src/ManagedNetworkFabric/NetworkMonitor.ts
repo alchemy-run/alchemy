@@ -2,7 +2,7 @@ import * as mnf from "@distilled.cloud/azure/managednetworkfabric";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   desiredTags,
@@ -19,6 +19,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createFabricName,
   differs,
@@ -102,9 +103,7 @@ export interface NetworkMonitor extends Resource<
  * ### Creating a Network Monitor
  * **Example:** BMP station
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("fabric");
  * const monitor = yield* Azure.ManagedNetworkFabric.NetworkMonitor("bmp", {
- *   resourceGroup: group.resourceGroupName,
  *   bmpConfiguration: {
  *     stationIp: "10.0.0.10",
  *     stationPort: 5000,
@@ -116,7 +115,9 @@ export interface NetworkMonitor extends Resource<
  *
  * @resource
  */
-export const NetworkMonitor = Resource<NetworkMonitor>("Azure.ManagedNetworkFabric.NetworkMonitor");
+export const NetworkMonitor = GroupedResource<NetworkMonitor>(
+  "Azure.ManagedNetworkFabric.NetworkMonitor",
+);
 
 type Observed = mnf.GetNetworkMonitorResponse;
 

@@ -2,7 +2,7 @@ import * as keyvault from "@distilled.cloud/azure/keyvault";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import {
@@ -21,6 +21,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createVaultName, lower } from "./common.ts";
 
 export type ManagedHsmSkuName = keyvault.ManagedHsmSkuNameV2;
@@ -155,7 +156,6 @@ export interface ManagedHsm extends Resource<
  * **Example:** Standard HSM pool
  * ```typescript
  * const hsm = yield* Azure.KeyVault.ManagedHsm("hsm", {
- *   resourceGroup: group.resourceGroupName,
  *   initialAdminObjectIds: [adminObjectId],
  *   softDeleteRetentionInDays: 7,
  * });
@@ -165,7 +165,6 @@ export interface ManagedHsm extends Resource<
  * **Example:** Private-only HSM
  * ```typescript
  * const hsm = yield* Azure.KeyVault.ManagedHsm("hsm", {
- *   resourceGroup: group.resourceGroupName,
  *   initialAdminObjectIds: [adminObjectId],
  *   publicNetworkAccess: "Disabled",
  *   networkAcls: { defaultAction: "Deny" },
@@ -174,7 +173,7 @@ export interface ManagedHsm extends Resource<
  *
  * @resource
  */
-export const ManagedHsm = Resource<ManagedHsm>("Azure.KeyVault.ManagedHsm");
+export const ManagedHsm = GroupedResource<ManagedHsm>("Azure.KeyVault.ManagedHsm");
 
 type ObservedHsm = keyvault.GetManagedHsmResponse;
 

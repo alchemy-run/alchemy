@@ -2,7 +2,7 @@ import * as sql from "@distilled.cloud/azure/sql";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -16,6 +16,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { isServerOwnedByStack, lower, readyState, sameId } from "./common.ts";
 
 export interface PrivateEndpointConnectionProps {
@@ -81,14 +82,12 @@ export interface PrivateEndpointConnection extends Resource<
  * **Example:** Approve a manual private endpoint request
  * ```typescript
  * const endpoint = yield* Azure.Network.PrivateEndpoint("server-pe", {
- *   resourceGroup: group.resourceGroupName,
  *   subnetId: subnet.subnetId,
  *   manualPrivateLinkServiceConnections: [
  *     { privateLinkServiceId: server.serverId, groupIds: ["sqlServer"] },
  *   ],
  * });
  * yield* Azure.Sql.PrivateEndpointConnection("server-pe-approval", {
- *   resourceGroup: group.resourceGroupName,
  *   server: server.serverName,
  *   privateEndpointId: endpoint.privateEndpointId,
  *   description: "Approved for the app VNet",
@@ -98,7 +97,6 @@ export interface PrivateEndpointConnection extends Resource<
  * **Example:** Reject a request
  * ```typescript
  * yield* Azure.Sql.PrivateEndpointConnection("server-pe-approval", {
- *   resourceGroup: group.resourceGroupName,
  *   server: server.serverName,
  *   privateEndpointId: endpoint.privateEndpointId,
  *   status: "Rejected",
@@ -108,7 +106,7 @@ export interface PrivateEndpointConnection extends Resource<
  *
  * @resource
  */
-export const PrivateEndpointConnection = Resource<PrivateEndpointConnection>(
+export const PrivateEndpointConnection = GroupedResource<PrivateEndpointConnection>(
   "Azure.Sql.PrivateEndpointConnection",
 );
 

@@ -1,8 +1,9 @@
 import * as apim from "@distilled.cloud/azure/apimanagement";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createEntityName } from "./Common.ts";
 import { entityLifecycle } from "./Entity.ts";
 
@@ -53,7 +54,6 @@ export interface Documentation extends Resource<
  * **Example:** A getting-started page
  * ```typescript
  * const page = yield* Azure.ApiManagement.Documentation("getting-started", {
- *   resourceGroup: group.resourceGroupName,
  *   serviceName: apim.serviceName,
  *   title: "Getting started",
  *   content: "# Getting started\nSubscribe to the Starter product.",
@@ -62,7 +62,7 @@ export interface Documentation extends Resource<
  *
  * @resource
  */
-export const Documentation = Resource<Documentation>("Azure.ApiManagement.Documentation");
+export const Documentation = GroupedResource<Documentation>("Azure.ApiManagement.Documentation");
 
 interface Key {
   resourceGroup: string;

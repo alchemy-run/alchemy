@@ -1,9 +1,10 @@
 import * as apim from "@distilled.cloud/azure/apimanagement";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { createEntityName } from "./Common.ts";
 import { entityLifecycle } from "./Entity.ts";
 
@@ -78,7 +79,6 @@ export interface User extends Resource<
  * **Example:** A developer account
  * ```typescript
  * const user = yield* Azure.ApiManagement.User("jane", {
- *   resourceGroup: group.resourceGroupName,
  *   serviceName: apim.serviceName,
  *   email: "jane@example.com",
  *   firstName: "Jane",
@@ -89,7 +89,6 @@ export interface User extends Resource<
  * **Example:** Block a user
  * ```typescript
  * yield* Azure.ApiManagement.User("jane", {
- *   resourceGroup: group.resourceGroupName,
  *   serviceName: apim.serviceName,
  *   email: "jane@example.com",
  *   firstName: "Jane",
@@ -101,7 +100,7 @@ export interface User extends Resource<
  *
  * @resource
  */
-export const User = Resource<User>("Azure.ApiManagement.User");
+export const User = GroupedResource<User>("Azure.ApiManagement.User");
 
 interface Key {
   resourceGroup: string;

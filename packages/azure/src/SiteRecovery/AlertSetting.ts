@@ -1,7 +1,7 @@
 import * as asr from "@distilled.cloud/azure/recoveryservicessiterecovery";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
   ensureRegistered,
@@ -11,6 +11,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   ignoreNoRegisteredServers,
   ownedOrUnowned,
@@ -94,12 +95,10 @@ export interface AlertSetting extends Resource<
  * **Example:** Email the owners and an on-call alias
  * ```typescript
  * yield* Azure.SiteRecovery.Fabric("primary", {
- *   resourceGroup: group.resourceGroupName,
  *   vault: vault.vaultName,
  *   location: "eastus",
  * });
  * yield* Azure.SiteRecovery.AlertSetting("dr-alerts", {
- *   resourceGroup: group.resourceGroupName,
  *   vault: vault.vaultName,
  *   sendToOwners: "Send",
  *   customEmailAddresses: ["oncall@example.com"],
@@ -109,7 +108,7 @@ export interface AlertSetting extends Resource<
  *
  * @resource
  */
-export const AlertSetting = Resource<AlertSetting>("Azure.SiteRecovery.AlertSetting");
+export const AlertSetting = GroupedResource<AlertSetting>("Azure.SiteRecovery.AlertSetting");
 
 type Observed = asr.GetReplicationAlertSettingsResponse;
 

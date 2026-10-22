@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import * as storage from "@distilled.cloud/azure/storage";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import { initialCwd } from "alchemy/Util/Node";
 import { sha256Object } from "alchemy/Util/sha256";
 import { cacheControlOf, contentTypeOf } from "alchemy/Website/assets";
@@ -17,6 +17,7 @@ import { orUndefinedIfNotFound } from "../Arm.ts";
 import { xmlElements, xmlField } from "../Binding.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 
 export interface StaticWebsiteProps {
   /** Resource group of the storage account. */
@@ -82,12 +83,8 @@ export interface StaticWebsite extends Resource<
  * ### Publishing a Directory
  * **Example:** Static files on a storage account
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("site");
- * const account = yield* Azure.Storage.StorageAccount("files", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const account = yield* Azure.Storage.StorageAccount("files");
  * const site = yield* Azure.Website.StaticWebsite("Site", {
- *   resourceGroup: group.resourceGroupName,
  *   storageAccount: account.storageAccountName,
  *   path: "dist",
  *   errorDocument404Path: "404.html",
@@ -98,7 +95,7 @@ export interface StaticWebsite extends Resource<
  * @resource
  * @product Website
  */
-export const StaticWebsite = Resource<StaticWebsite>("Azure.Website.StaticWebsite");
+export const StaticWebsite = GroupedResource<StaticWebsite>("Azure.Website.StaticWebsite");
 
 export class StaticWebsiteError extends Data.TaggedError("Azure.Website.StaticWebsiteError")<{
   readonly storageAccount: string;

@@ -1,8 +1,9 @@
 import * as network from "@distilled.cloud/azure/network";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import { orUndefinedIfNotFound, userTags } from "../Arm.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import { lower } from "./common.ts";
 import { idsOf, networkProvider } from "./generic.ts";
 
@@ -117,7 +118,6 @@ export interface ExpressRouteCircuit extends Resource<
  * **Example:** 50 Mbps metered circuit through Equinix
  * ```typescript
  * const circuit = yield* Azure.Network.ExpressRouteCircuit("onprem", {
- *   resourceGroup: group.resourceGroupName,
  *   serviceProviderName: "Equinix",
  *   peeringLocation: "Silicon Valley",
  *   bandwidthInMbps: 50,
@@ -128,7 +128,6 @@ export interface ExpressRouteCircuit extends Resource<
  * **Example:** Premium unlimited circuit
  * ```typescript
  * const circuit = yield* Azure.Network.ExpressRouteCircuit("global", {
- *   resourceGroup: group.resourceGroupName,
  *   tier: "Premium",
  *   family: "UnlimitedData",
  *   serviceProviderName: "Equinix",
@@ -139,7 +138,7 @@ export interface ExpressRouteCircuit extends Resource<
  *
  * @resource
  */
-export const ExpressRouteCircuit = Resource<ExpressRouteCircuit>(
+export const ExpressRouteCircuit = GroupedResource<ExpressRouteCircuit>(
   "Azure.Network.ExpressRouteCircuit",
 );
 

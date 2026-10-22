@@ -2,7 +2,7 @@ import * as vmware from "@distilled.cloud/azure/vmware";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
 import {
@@ -14,6 +14,7 @@ import {
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   AVS_NAMESPACE,
   CHILD_BUDGET,
@@ -81,7 +82,6 @@ export interface Addon extends Resource<
  * **Example:** HCX Enterprise
  * ```typescript
  * yield* Azure.VMware.Addon("hcx", {
- *   resourceGroup: group.resourceGroupName,
  *   privateCloud: cloud.privateCloudName,
  *   addonType: "HCX",
  *   offer: "VMware MaaS Cloud Provider (Enterprise)",
@@ -92,13 +92,11 @@ export interface Addon extends Resource<
  * **Example:** Site Recovery Manager with vSphere Replication
  * ```typescript
  * yield* Azure.VMware.Addon("srm", {
- *   resourceGroup: group.resourceGroupName,
  *   privateCloud: cloud.privateCloudName,
  *   addonType: "SRM",
  *   licenseKey: Redacted.make(srmLicenseKey),
  * });
  * yield* Azure.VMware.Addon("vr", {
- *   resourceGroup: group.resourceGroupName,
  *   privateCloud: cloud.privateCloudName,
  *   addonType: "VR",
  *   vrsCount: 1,
@@ -107,7 +105,7 @@ export interface Addon extends Resource<
  *
  * @resource
  */
-export const Addon = Resource<Addon>("Azure.VMware.Addon");
+export const Addon = GroupedResource<Addon>("Azure.VMware.Addon");
 
 const addonName = (addonType: string) => addonType.toLowerCase();
 
