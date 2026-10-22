@@ -417,13 +417,91 @@ Grants are least privilege and scoped to the bound resource (resource IAM
 policy, or a condition when the API only grants at project level);
 document any unavoidable broader grant in the binding's JSDoc.
 
-A provider that hosts code (functions, containers) also needs an
-Effect-native runtime: the host resource accepts the `HostBinding`
-contract, applies the `HostBundle` option, and ships its process
-bootstrap as a source-only `Bootstrap` export in the provider package
-(`packages/hetzner/src/Bootstrap.ts`, `packages/aws/src/Bootstrap/`).
-Event sources mirror the AWS `SQS.QueueEventSource` and Cloudflare cron
-shapes.
+### Runtimes
+
+Find every **runtime** in the catalog: a resource that runs the user's
+code (functions, containers, services, workers, jobs, VMs that run a
+program). Mark each one `runtime` in `INDEX.md`. Each ships in two
+forms from the same resource:
+
+**Effectful** — a class built with core's `Platform` (`alchemy/Platform`).
+`main: import.meta.url` makes the file both the bundle entry and the
+program. Construction binds resources, and the returned handlers run per
+request:
+
+```ts
+export default class Api extends GCP.Function<Api>()(
+  "Api",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const db = yield* GCP.Firestore.ReadWriteDatabase(Links);
+    return {
+      fetch: Effect.gen(function* () {
+        const doc = yield* db.get("links/home");
+        return yield* HttpServerResponse.json(doc?.fields ?? {});
+      }).pipe(Effect.orDie),
+    };
+  }).pipe(Effect.provide(GCP.Firestore.ReadWriteDatabaseHttp)),
+) {}
+```
+
+**Async** — the same resource called as a plain function, with `main`
+pointing at an ordinary handler file and no Effect. Alchemy bundles that
+file as-is, with no Effect runtime in it. The `env` prop takes resources,
+`Config` values, and literals, and `<Provider>.InferEnv<typeof Fn>`
+types the handler's `env` argument:
+
+```ts
+// alchemy.run.ts
+export const Ping = Railway.Function("Ping", {
+  project: Site,
+  main: "./src/ping.ts",
+  env: { DATABASE_URL: db.connectionUri },
+});
+export type PingEnv = Railway.InferEnv<typeof Ping>;
+```
+
+```ts
+// src/ping.ts
+import type { PingEnv } from "../alchemy.run.ts";
+
+export default {
+  async fetch(_request: Request, env: PingEnv) {
+    return new Response(env.DATABASE_URL ? "ok" : "missing");
+  },
+};
+```
+
+Copy both forms from the runtime closest to yours:
+
+| Runtime | File | Notes |
+| --- | --- | --- |
+| Cloudflare Worker | `packages/cloudflare/src/Workers/Worker.ts`, `InferEnv.ts` | the full reference: `env` entries become native bindings |
+| Railway Function | `packages/railway/src/Function.ts`, `InferEnv.ts` | bindings are env vars, so `InferEnv` maps to `string` |
+| GCP Cloud Run, Hetzner Service | `packages/gcp/src/Run/Service.ts`, `packages/hetzner/src/Service.ts` | `Platform` over a container or process |
+| AWS Lambda | `packages/aws/src/Lambda/Function.ts` | async form exists but has no `InferEnv`; don't copy that gap |
+
+Every runtime needs:
+
+- **Both forms**, each with its own JSDoc section (`### Effect …` and
+  `### Async …`) showing the stack declaration and the handler file.
+- **`InferEnv`** exported from the package, so async users get a typed
+  `env` without writing the type by hand.
+- **The `HostBinding` contract** on the resource, so effectful bindings
+  from this and other providers can attach grants and env.
+- **The host bundle option** (`<identity>HostBundle`) on the effectful
+  bundle, and a source-only `Bootstrap` export for the process entry
+  (`packages/hetzner/src/Bootstrap.ts`, `packages/aws/src/Bootstrap/`).
+- **Event sources** for what the cloud triggers it with (queues, topics,
+  storage events, schedules), shaped like AWS `SQS.QueueEventSource` and
+  Cloudflare cron. Their contract lives in the source service and each
+  runtime provides an implementation layer.
+- **A Website target** when the runtime is how the cloud serves
+  server-rendered pages (step 7).
+- **Tests for both forms**: a fixture per form under
+  `test/<Provider>/<Service>/fixtures/` (`effect-worker.ts` and
+  `async-worker.ts` in `test/Cloudflare/Images/` are the pattern), each
+  deployed and called over HTTP.
 
 ## Step 6 — live tests
 
