@@ -49,3 +49,9 @@ export {
   type WorkspaceSession,
   type WorkspaceTimings,
 } from "./Workspace.ts";
+export {
+  connectWorkspaceService,
+  isServiceDescriptor,
+  WORKSPACE_SERVICE,
+  type WorkspaceServiceDescriptor,
+} from "./WorkspaceService.ts";

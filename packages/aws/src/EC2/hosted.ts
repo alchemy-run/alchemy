@@ -785,7 +785,10 @@ systemctl enable --now ${unitName}.service
       | "privateIpAddress"
       | "availabilityZone"
       | "tags"
-    >,
+    > & {
+      /** Launch spot instances (one-time, terminated on interruption). */
+      readonly spot?: boolean;
+    },
     runtime: Pick<Ec2HostedRuntimeState, "userData" | "instanceProfileName">,
   ) => {
     const encodedUserData = runtime.userData
@@ -806,6 +809,15 @@ systemctl enable --now ${unitName}.service
           }
         : undefined,
       UserData: encodedUserData,
+      InstanceMarketOptions: news.spot
+        ? {
+            MarketType: "spot",
+            SpotOptions: {
+              SpotInstanceType: "one-time",
+              InstanceInterruptionBehavior: "terminate",
+            },
+          }
+        : undefined,
       Placement: news.availabilityZone
         ? {
             AvailabilityZone: news.availabilityZone,

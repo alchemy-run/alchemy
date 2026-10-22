@@ -215,3 +215,4 @@ export * as VpcLattice from "./VpcLattice/index.ts";
 export * as WAFv2 from "./WAFv2/index.ts";
 export * as Website from "./Website/index.ts";
 export * as XRay from "./XRay/index.ts";
+export { Workspace, type WorkspaceProps } from "./Workspace/Workspace.ts";

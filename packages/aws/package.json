@@ -238,6 +238,7 @@
     "./VpcLattice": "./src/VpcLattice/index.ts",
     "./WAFv2": "./src/WAFv2/index.ts",
     "./Website": "./src/Website/index.ts",
+    "./Workspace": "./src/Workspace/index.ts",
     "./XRay": "./src/XRay/index.ts",
     "./*": "./src/*.ts",
     "./package.json": "./package.json"
@@ -1298,6 +1299,11 @@
         "types": "./lib/Website/index.d.ts",
         "bun": "./src/Website/index.ts",
         "default": "./lib/Website/index.js"
+      },
+      "./Workspace": {
+        "types": "./lib/Workspace/index.d.ts",
+        "bun": "./src/Workspace/index.ts",
+        "default": "./lib/Workspace/index.js"
       },
       "./XRay": {
         "types": "./lib/XRay/index.d.ts",

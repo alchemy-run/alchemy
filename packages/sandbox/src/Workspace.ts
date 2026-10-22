@@ -7,8 +7,10 @@ import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Effectable from "effect/Effectable";
 import * as Option from "effect/Option";
+import * as Redacted from "effect/Redacted";
 import type * as Scope from "effect/Scope";
 import type { SandboxEgress, SandboxPort, SandboxProcess } from "./Sandbox.ts";
+import { connectWorkspaceService, isServiceDescriptor } from "./WorkspaceService.ts";
 
 /** A workspace operation failed: the host, the store, or the machine. */
 export class WorkspaceError extends Data.TaggedError("WorkspaceError")<{
@@ -254,13 +256,6 @@ const descriptorKey = (id: string) => sanitizeKey(`ALCHEMY_WORKSPACE_${id}`);
 
 const connect = Effect.fn(function* (id: string) {
   const runtime = yield* Effect.serviceOption(WorkspaceRuntime);
-  if (Option.isNone(runtime)) {
-    return yield* Effect.die(
-      new WorkspaceError({
-        message: `Workspace '${id}' can only be yielded inside a Worker or Durable Object.`,
-      }),
-    );
-  }
   const host = yield* Effect.serviceOption(workspaceHost(id));
   const ctx = yield* CurrentRuntimeContext;
   if (Option.isSome(host) && !globalThis.__ALCHEMY_RUNTIME__) {
@@ -275,8 +270,37 @@ const connect = Effect.fn(function* (id: string) {
       }),
     );
   }
+  // A host that serves the workspace over HTTP works from any runtime.
+  if (isServiceDescriptor(descriptor) || (Option.isSome(host) && runtime._tag === "None")) {
+    if (!globalThis.__ALCHEMY_RUNTIME__ || !isServiceDescriptor(descriptor)) return atDeploy;
+    const token = ctx ? yield* ctx.get<unknown>(descriptor.tokenKey) : undefined;
+    return connectWorkspaceService({
+      url: descriptor.url,
+      token: Redacted.isRedacted(token)
+        ? (token as Redacted.Redacted<string>)
+        : Redacted.make(String(token ?? "")),
+    });
+  }
+  if (Option.isNone(runtime)) {
+    return yield* Effect.die(
+      new WorkspaceError({
+        message: `Workspace '${id}' can only be yielded inside a Worker or Durable Object.`,
+      }),
+    );
+  }
   return yield* runtime.value.connect(id, descriptor);
 });
+
+/** At deploy a host's descriptor is an unresolved Output: nothing runs then. */
+const atDeploy: WorkspaceConnection = {
+  acquire: () => Effect.die(new Error("a workspace can't be opened at deploy")),
+  exec: () => Effect.die(new Error("a workspace can't run commands at deploy")),
+  merge: () => Effect.die(new Error("a workspace can't merge at deploy")),
+  fork: () => Effect.die(new Error("a workspace can't be forked at deploy")),
+  undo: () => Effect.die(new Error("a workspace can't be undone at deploy")),
+  history: () => Effect.die(new Error("a workspace has no history at deploy")),
+  delete: () => Effect.die(new Error("a workspace can't be deleted at deploy")),
+};
 
 const makeClient = (
   connection: WorkspaceConnection,

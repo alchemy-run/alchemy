@@ -6,7 +6,7 @@
  * (deleting a directory conflicts with adding a file to it), unless both
  * match an `lww` pattern: there the newest change wins.
  *
- * NOT exported from `index.ts`.
+ * Shared by every workspace host (NOT exported from `index.ts`).
  */
 
 /** Whether `a` and `b` are the same path, or one is inside the other. */

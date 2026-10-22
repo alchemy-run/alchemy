@@ -15,6 +15,7 @@ import {
   type WorkspaceChanges,
   type WorkspaceExecResult,
 } from "@alchemy.run/sandbox/Workspace";
+import { conflicts } from "@alchemy.run/sandbox/WorkspaceMerge";
 /**
  * The Durable Objects behind `Cloudflare.Containers.Workspace`, and the host
  * Worker that serves them. Runtime code only: the host Worker's bundle
@@ -50,7 +51,6 @@ import { Container } from "./Container.ts";
 import type { ContainerClient } from "./ContainerClient.ts";
 import { registerControl } from "./EgressRelay.ts";
 import type { ContainerInstanceType } from "./SandboxClient.ts";
-import { conflicts } from "./WorkspaceMerge.ts";
 import { className, machineSandbox } from "./WorkspaceNames.ts";
 
 /** The `host` of a workspace's descriptor. */
