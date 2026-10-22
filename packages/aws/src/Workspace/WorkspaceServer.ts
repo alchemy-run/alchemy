@@ -1123,6 +1123,14 @@ export const serveWorkspace = (config: HostConfig) =>
         Effect.gen(function* () {
           yield* setup.pipe(
             Effect.retry({ schedule: Schedule.spaced(Duration.seconds(5)), times: 10 }),
+            // The image mounted ahead of the first command, fetched from its trace.
+            Effect.andThen(
+              config.image
+                ? Effect.ignore(
+                    daemon.post("/v1/images", { ...store, image: config.image, mode: "auto" }),
+                  )
+                : Effect.void,
+            ),
             Effect.flatMap(() => Deferred.succeed(ready, undefined)),
             Effect.catch((error) =>
               Effect.andThen(Effect.logError(error.message), Deferred.fail(ready, error)),

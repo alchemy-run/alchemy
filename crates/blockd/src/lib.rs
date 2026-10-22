@@ -8,6 +8,7 @@
 //! calls.
 
 mod bitmap;
+pub mod chunks;
 #[cfg(target_os = "linux")]
 pub mod call;
 #[cfg(target_os = "linux")]

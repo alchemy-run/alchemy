@@ -59,6 +59,8 @@ pub struct Spec<'a> {
     pub keep: bool,
     /// Run the command in a container over the fork, not on this machine.
     pub contained: Option<Contained<'a>>,
+    /// The machine's chunk cache, if it has one.
+    pub chunks: Option<Arc<crate::chunks::ChunkCache>>,
 }
 
 /// A call's container: how it's isolated, and where its bundle goes.
@@ -126,6 +128,9 @@ pub fn call(
     let device = Arc::new(timings.time("attach", || {
         Device::open_snapshot(volume.clone(), snapshot, spec.cache, runtime.clone())
     })?);
+    if let Some(chunks) = &spec.chunks {
+        device.use_chunks(chunks.clone());
+    }
     let mut call = timings.time("mount", || {
         Call::mount(&device, spec.mode, spec.cache, spec.dir, spec.work)
     })?;
@@ -215,11 +220,16 @@ pub fn diff(
     work: &Path,
     key: Option<&str>,
     patch_file: Option<&Path>,
+    chunks: Option<&Arc<crate::chunks::ChunkCache>>,
     runtime: &Handle,
 ) -> Result<serde_json::Value> {
     let mut timings = Timings::new();
     let open = |id: Hash, cache: &Path| -> Result<Arc<Device>> {
-        Ok(Arc::new(Device::open_snapshot(volume.clone(), id, cache, runtime.clone())?))
+        let device = Arc::new(Device::open_snapshot(volume.clone(), id, cache, runtime.clone())?);
+        if let Some(chunks) = chunks {
+            device.use_chunks(chunks.clone());
+        }
+        Ok(device)
     };
     let (a, b) = timings.time("attach", || -> Result<_> { Ok((open(from, caches.0)?, open(to, caches.1)?)) })?;
     let (base, current) = timings.time("mount", || -> Result<_> {

@@ -25,10 +25,14 @@ wait_for() { # id → the finished result
 }
 call() { wait_for "$(field "$(req /v1/calls "$1")" id)"; }
 
-"$blockd" daemon --listen "$address" --pidfile "$work/daemon.pid" --state "$work/state" \
-  --run "$work/run" --init "$init" > "$work/daemon.log" 2>&1 &
-for _ in $(seq 1 100); do [ -f "$work/daemon.pid" ] && break; sleep 0.05; done
-[ -f "$work/daemon.pid" ] || fail "the daemon never started"
+start_daemon() {
+  rm -f "$work/daemon.pid"
+  "$blockd" daemon --listen "$address" --pidfile "$work/daemon.pid" --state "$work/state" \
+    --run "$work/run" --init "$init" --trace-seconds 2 >> "$work/daemon.log" 2>&1 &
+  for _ in $(seq 1 100); do [ -f "$work/daemon.pid" ] && break; sleep 0.05; done
+  [ -f "$work/daemon.pid" ] || fail "the daemon never started"
+}
+start_daemon
 
 # An image: busybox, imported as a volume of its own.
 img="$work/image"
@@ -118,5 +122,30 @@ pass "the store's heads fork, read, list their history and drop through the daem
 status=$(req /v1/status)
 echo "$status" | grep -q '"images":1' || fail "the image was mounted more than once: $status"
 pass "one image mount served every container"
+
+# Calls at once on one snapshot, each on its own cache file: what one fetched,
+# the others read from the machine's chunk cache.
+pids=()
+for i in 1 2 3; do
+  (call "{\"store\":\"$store\",\"mode\":\"loop\",\"snapshot\":\"$S\",\"dir\":\"$work/chunk-$i\",\"command\":\"cat src/a.ts > /dev/null\"}" > /dev/null) &
+  pids+=($!)
+done
+wait "${pids[@]}"
+hits=$(req /v1/status | sed -E 's/.*"chunks":\{"hits":([0-9]+).*/\1/')
+[ "$hits" -gt 0 ] || fail "no chunk was shared between devices: $(req /v1/status)"
+pass "devices on one machine share the extents any of them fetched ($hits hits)"
+
+# An image's first start is traced; the next machine to mount it fetches the trace ahead.
+sleep 3
+ls /data/store/blobs/traces/ 2>/dev/null | grep -q "$I" || fail "the image's trace wasn't saved"
+kill "$(cat "$work/daemon.pid")"; sleep 1
+# The killed daemon's mounts are stale: away with them, and its cache.
+for m in $(grep -o " $work/state[^ ]*" /proc/mounts | sort -r); do umount -l "$m" 2>/dev/null || true; done
+losetup -D 2>/dev/null || true
+rm -rf "$work/state" || true
+start_daemon
+warm=$(req /v1/images "{\"store\":\"$store\",\"mode\":\"loop\",\"image\":\"$I\"}") || fail "warming the image: $warm"
+echo "$warm" | grep -q '"prefetching":true' || fail "the image wasn't prefetched from its trace: $warm"
+pass "an image's first start is traced, and a later mount fetches the trace ahead"
 kill "$(cat "$work/daemon.pid")"
 echo "ALL PASSED"

@@ -21,6 +21,8 @@ pub struct HeadOptions<'a> {
     /// Seconds between background syncs; 0 for none.
     pub flush_every: u64,
     pub prefetch: bool,
+    /// The machine's chunk cache, if it has one.
+    pub chunks: Option<Arc<crate::chunks::ChunkCache>>,
 }
 
 pub struct Head {
@@ -60,6 +62,9 @@ impl Head {
         let device = Arc::new(timings.time("attach", || {
             Device::open(volume.clone(), head, options.cache, runtime.clone())
         })?);
+        if let Some(chunks) = &options.chunks {
+            device.use_chunks(chunks.clone());
+        }
         let flusher = (options.flush_every > 0)
             .then(|| device.start_flusher(Duration::from_secs(options.flush_every)));
         if options.prefetch {

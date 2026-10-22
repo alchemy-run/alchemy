@@ -63,7 +63,36 @@ pub struct Device {
     reused_blocks: u64,
     /// The cache file started empty (sparse zeros) at attach.
     fresh: bool,
+    /// The machine's extents by content, shared by every device on it.
+    chunks: std::sync::OnceLock<Arc<crate::chunks::ChunkCache>>,
+    /// The extents fetched, in order, while a trace is recorded.
+    trace: Mutex<Option<Vec<u64>>>,
 }
+
+/// One extent of snapshot `base`: from the machine's chunk cache if it has
+/// it, else from the store (and then kept there). `None` is zeros.
+async fn fetch_extent(
+    volume: &Volume,
+    chunks: Option<&crate::chunks::ChunkCache>,
+    base: Hash,
+    extent: u64,
+) -> Result<Option<Vec<u8>>> {
+    let Some(chunks) = chunks else {
+        return Ok(volume.read_extent(&base, extent).await?);
+    };
+    let Some(entry) = volume.entry(&base, extent).await? else {
+        return Ok(None);
+    };
+    if let Some(bytes) = chunks.get(&entry.chunk) {
+        return Ok(Some(bytes));
+    }
+    let bytes = volume.read_entry(&entry).await?;
+    chunks.put(&entry.chunk, &bytes);
+    Ok(Some(bytes))
+}
+
+/// Traces stop here: an image's start, not everything it ever reads.
+const TRACE_LIMIT: usize = 20_000;
 
 /// What `status` reports.
 #[derive(Debug, Clone, serde::Serialize)]
@@ -184,6 +213,8 @@ impl Device {
             flushes: AtomicU64::new(0),
             reused_blocks,
             fresh,
+            chunks: std::sync::OnceLock::new(),
+            trace: Mutex::new(None),
         })
     }
 
@@ -441,21 +472,33 @@ impl Device {
     /// missing, so a prefetch racing with writes and flushes never overwrites
     /// anything newer. Returns when done (run it on its own thread).
     pub fn prefetch(&self, concurrency: usize) -> Result<u64> {
+        let extents: Vec<u64> = (0..self.size / EXTENT_SIZE).collect();
+        self.prefetch_extents(&extents, concurrency)
+    }
+
+    /// Fetches `extents` that aren't present, `concurrency` at a time, in
+    /// order (a trace's order: what the device read first comes first).
+    pub fn prefetch_extents(&self, extents: &[u64], concurrency: usize) -> Result<u64> {
         let base = *self.base.lock().unwrap();
-        let extents = self.size / EXTENT_SIZE;
-        let missing: Vec<u64> = (0..extents)
+        let missing: Vec<u64> = extents
+            .iter()
+            .copied()
             .filter(|&e| {
-                !self
-                    .present
-                    .all(e * BLOCKS_PER_EXTENT, (e + 1) * BLOCKS_PER_EXTENT)
+                e < self.size / EXTENT_SIZE
+                    && !self
+                        .present
+                        .all(e * BLOCKS_PER_EXTENT, (e + 1) * BLOCKS_PER_EXTENT)
             })
             .collect();
         let mut fetched = 0;
         for batch in missing.chunks(concurrency.max(1)) {
             let reads = batch.iter().map(|&extent| {
                 let volume = self.volume.clone();
-                self.runtime
-                    .spawn(async move { (extent, volume.read_extent(&base, extent).await) })
+                let chunks = self.chunks.get().cloned();
+                self.runtime.spawn(async move {
+                    let fetched = fetch_extent(&volume, chunks.as_deref(), base, extent).await;
+                    (extent, fetched)
+                })
             });
             let results = self.runtime.block_on(async {
                 let mut out = Vec::new();
@@ -475,7 +518,21 @@ impl Device {
         Ok(fetched)
     }
 
-    /// Fills the blocks of `extent` that are still missing with `bytes`.
+    /// Fetches through the machine's chunk cache from here on.
+    pub fn use_chunks(&self, chunks: Arc<crate::chunks::ChunkCache>) {
+        let _ = self.chunks.set(chunks);
+    }
+
+    /// Records the extents fetched from here on, in order.
+    pub fn start_trace(&self) {
+        *self.trace.lock().unwrap() = Some(Vec::new());
+    }
+
+    /// The extents fetched since `start_trace`; recording stops.
+    pub fn take_trace(&self) -> Vec<u64> {
+        self.trace.lock().unwrap().take().unwrap_or_default()
+    }
+
     fn install(&self, extent: u64, bytes: &[u8]) -> Result<()> {
         let _base = self.base.lock().unwrap();
         let first = extent * BLOCKS_PER_EXTENT;
@@ -579,10 +636,18 @@ impl Device {
         if self.present.all(first, last) {
             return Ok(());
         }
-        let stored = self
-            .runtime
-            .block_on(self.volume.read_extent(base, extent))?;
+        let stored = self.runtime.block_on(fetch_extent(
+            &self.volume,
+            self.chunks.get().map(Arc::as_ref),
+            *base,
+            extent,
+        ))?;
         self.fetches.fetch_add(1, Ordering::Relaxed);
+        if let Some(trace) = self.trace.lock().unwrap().as_mut()
+            && trace.len() < TRACE_LIMIT
+        {
+            trace.push(extent);
+        }
         let zeros = [0u8; BLOCK_SIZE as usize];
         for block in first..last {
             if self.present.get(block) {

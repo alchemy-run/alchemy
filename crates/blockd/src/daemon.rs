@@ -13,6 +13,8 @@
 //! GET  /v1/spawns/<id>?stream=out|err&offset=<n>   a spawned process's output, and exit code
 //! POST /v1/spawns/<id>/kill            signal it
 //! POST /v1/diffs                       a patch from one snapshot to another
+//! POST /v1/images                      mount an image ahead (fetched in parallel from a
+//!                                      trace of an earlier start, or traced for the next)
 //! ```
 //!
 //! What it keeps between requests is what makes it fast: open stores (their
@@ -25,6 +27,7 @@
 //! environment without `AWS_*` and `BLOCKD_*`.
 
 use crate::call::{self, Contained, Kept, Run, Spec};
+use crate::chunks::ChunkCache;
 use crate::container::{Container, Isolation, Runtime};
 use crate::head::{Head, HeadOptions};
 use crate::http::{Request, Response};
@@ -49,6 +52,10 @@ pub struct Config {
     pub run: PathBuf,
     /// A static blockd: the init of every container. Default: this binary.
     pub init: Option<PathBuf>,
+    /// The chunk cache's size; `Some(0)` for none. Default: 20 GiB.
+    pub chunk_bytes: Option<u64>,
+    /// How long an image's first start on a machine is traced. Default: 90 s.
+    pub trace_for: Option<Duration>,
 }
 
 pub struct Daemon {
@@ -63,6 +70,8 @@ pub struct Daemon {
     images: Mutex<HashMap<Hash, Arc<Image>>>,
     /// Background processes (`spawn`), until read to their end and reaped.
     spawns: Mutex<HashMap<String, Arc<Spawned>>>,
+    /// The machine's extents by content, shared by every device here.
+    chunks: Option<Arc<ChunkCache>>,
     counters: Mutex<Counters>,
 }
 
@@ -80,7 +89,13 @@ struct Image {
     _mount: Mutex<crate::mount::Mount>,
     _device: Arc<crate::Device>,
     _cache: CacheLease,
+    /// Its extents are being fetched ahead, from a trace of an earlier start.
+    prefetching: bool,
 }
+
+/// How long after an image's first mount on a machine its trace is kept: what
+/// a start reads, not everything it ever reads.
+const TRACE_FOR: Duration = Duration::from_secs(90);
 
 #[derive(Default, serde::Serialize)]
 struct Counters {
@@ -190,6 +205,15 @@ struct CallRequest {
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
+struct ImageRequest {
+    #[serde(flatten)]
+    store: StoreSpec,
+    image: String,
+    mode: Option<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct DiffRequest {
     #[serde(flatten)]
     store: StoreSpec,
@@ -208,7 +232,12 @@ impl Daemon {
     pub fn new(config: Config, runtime: Handle) -> Result<Arc<Self>> {
         std::fs::create_dir_all(&config.state)?;
         std::fs::create_dir_all(&config.run)?;
+        let chunk_bytes = config.chunk_bytes.unwrap_or(20 << 30);
+        let chunks = (chunk_bytes > 0)
+            .then(|| ChunkCache::new(config.state.join("chunks"), chunk_bytes).map(Arc::new))
+            .transpose()?;
         Ok(Arc::new(Self {
+            chunks,
             config,
             runtime,
             started: Instant::now(),
@@ -253,6 +282,7 @@ impl Daemon {
             ("GET", ["v1", "spawns", id]) => self.read_spawn(id, &request),
             ("POST", ["v1", "spawns", id, "kill"]) => self.kill_spawn(id, &request),
             ("POST", ["v1", "diffs"]) => body(&request).and_then(|r| self.diff(r)),
+            ("POST", ["v1", "images"]) => body(&request).and_then(|r| self.warm_image(r)),
             _ => return Response::error(404, format!("no route {} {}", request.method, request.path)),
         };
         match routed {
@@ -312,6 +342,7 @@ impl Daemon {
             "heads": heads,
             "calls": calls,
             "counters": *self.counters.lock().unwrap(),
+            "chunks": self.chunks.as_ref().map(|chunks| chunks.stats()),
         })
     }
 
@@ -366,6 +397,44 @@ impl Daemon {
             cache.path(),
             self.runtime.clone(),
         )?);
+        if let Some(chunks) = &self.chunks {
+            device.use_chunks(chunks.clone());
+        }
+        // What an earlier start read is fetched ahead, in parallel; a first
+        // start records it for the next.
+        let key = format!("traces/{}", snapshot.to_hex());
+        let trace = self
+            .runtime
+            .block_on(volume.blobs().get(&key))
+            .ok()
+            .and_then(|bytes| serde_json::from_slice::<Vec<u64>>(&bytes).ok());
+        let prefetching = trace.is_some();
+        match trace {
+            Some(extents) => {
+                let device = device.clone();
+                std::thread::spawn(move || match device.prefetch_extents(&extents, 32) {
+                    Ok(n) => tracing::info!("prefetched {n} of an image's {} traced extents", extents.len()),
+                    Err(e) => tracing::warn!("prefetching an image stopped: {e:#}"),
+                });
+            }
+            None => {
+                device.start_trace();
+                let (device, volume) = (device.clone(), volume.clone());
+                let runtime = self.runtime.clone();
+                let trace_for = self.config.trace_for.unwrap_or(TRACE_FOR);
+                std::thread::spawn(move || {
+                    std::thread::sleep(trace_for);
+                    let extents = device.take_trace();
+                    if extents.is_empty() {
+                        return;
+                    }
+                    let bytes = serde_json::to_vec(&extents).unwrap_or_default();
+                    if let Err(e) = runtime.block_on(volume.blobs().put(&key, bytes)) {
+                        tracing::warn!("saving an image's trace: {e:#}");
+                    }
+                });
+            }
+        }
         let dir = self.config.state.join(format!("image-{}", snapshot.to_hex()));
         let mount = crate::mount::mount_as(&device, mode, cache.path(), &dir, true)?;
         let image = Arc::new(Image {
@@ -373,6 +442,7 @@ impl Daemon {
             _mount: Mutex::new(mount),
             _device: device,
             _cache: cache,
+            prefetching,
         });
         images.insert(snapshot, image.clone());
         self.counters.lock().unwrap().images += 1;
@@ -429,6 +499,7 @@ impl Daemon {
                     dir: &request.dir,
                     flush_every: request.flush_every.unwrap_or(5),
                     prefetch: request.prefetch,
+                    chunks: self.chunks.clone(),
                 },
                 self.runtime.clone(),
             )?;
@@ -631,6 +702,7 @@ impl Daemon {
                     state: &self.config.state,
                     init: &init,
                 }),
+                chunks: self.chunks.clone(),
             },
             &self.runtime,
         );
@@ -969,6 +1041,14 @@ impl Daemon {
 
     //#endregion
 
+    /// Mounts an image ahead of the containers that need it (a host warming up).
+    fn warm_image(&self, request: ImageRequest) -> Result<Value> {
+        let snapshot = Hash::from_hex(&request.image).context("`image` is not a snapshot id")?;
+        let volume = self.volume(&request.store)?;
+        let image = self.image(&volume, snapshot, mode(request.mode.as_deref())?)?;
+        Ok(json!({ "dir": image.dir, "prefetching": image.prefetching }))
+    }
+
     fn diff(&self, request: DiffRequest) -> Result<Value> {
         let from = Hash::from_hex(&request.from).context("`from` is not a snapshot id")?;
         let to = Hash::from_hex(&request.to).context("`to` is not a snapshot id")?;
@@ -986,6 +1066,7 @@ impl Daemon {
             &work,
             request.patch.as_deref(),
             None,
+            self.chunks.as_ref(),
             &self.runtime,
         );
         let _ = std::fs::remove_dir_all(&work);

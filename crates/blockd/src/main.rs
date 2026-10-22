@@ -29,6 +29,8 @@
 //! blockd apply   --dir <dir> --patch-file <file>     (apply a patch to a directory)
 //! blockd daemon  [--listen <host:port>] [--socket <path>] [--pidfile <file>]
 //!                [--state /var/cache/blockd] [--run /run/blockd] [--init <static blockd>]
+//!                [--chunk-cache-gb <n>]   (the machine's extents by content; 0 for none; default 20)
+//!                [--trace-seconds <n>]    (how long an image's first start is traced; default 90)
 //!                (every head, call and cache on this machine, over HTTP: see `daemon.rs`;
 //!                 BLOCKD_DAEMON_TOKEN is the bearer token every request needs)
 //! blockd request --daemon <host:port|socket> --path /v1/… [--body <json>] [--method …]
@@ -355,6 +357,7 @@ fn serve_mount(
                 .transpose()?
                 .unwrap_or(5),
             prefetch: flags.get("prefetch") == Some("true"),
+            chunks: None,
         },
         runtime.handle().clone(),
     )?;
@@ -431,6 +434,7 @@ fn call(flags: &Flags, volume: volume::Volume, runtime: &tokio::runtime::Runtime
             patch: flags.get("patch").map(str::to_string),
             keep: flags.get("keep") == Some("true"),
             contained: None,
+            chunks: None,
         },
         runtime.handle(),
     )?;
@@ -542,6 +546,7 @@ fn diff(flags: &Flags, volume: volume::Volume, runtime: &tokio::runtime::Runtime
         work,
         flags.get("patch"),
         flags.get("patch-file").map(Path::new),
+        None,
         runtime.handle(),
     )?;
     println!("{made}");
@@ -558,6 +563,16 @@ fn daemon(flags: &Flags, runtime: &tokio::runtime::Runtime) -> Result<()> {
             state: flags.get("state").unwrap_or("/var/cache/blockd").into(),
             run: flags.get("run").unwrap_or("/run/blockd").into(),
             init: flags.get("init").map(Into::into),
+            chunk_bytes: flags
+                .get("chunk-cache-gb")
+                .map(str::parse::<u64>)
+                .transpose()?
+                .map(|gb| gb << 30),
+            trace_for: flags
+                .get("trace-seconds")
+                .map(str::parse::<u64>)
+                .transpose()?
+                .map(std::time::Duration::from_secs),
         },
         runtime.handle().clone(),
     )?;
