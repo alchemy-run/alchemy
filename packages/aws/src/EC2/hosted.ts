@@ -796,6 +796,8 @@ systemctl enable --now ${unitName}.service
     > & {
       /** Launch spot instances (one-time, terminated on interruption). */
       readonly spot?: boolean;
+      /** KVM inside the instance (nested virtualization). */
+      readonly nestedVirtualization?: boolean;
     },
     runtime: Pick<Ec2HostedRuntimeState, "userData" | "instanceProfileName">,
   ) => {
@@ -824,6 +826,11 @@ systemctl enable --now ${unitName}.service
               SpotInstanceType: "one-time",
               InstanceInterruptionBehavior: "terminate",
             },
+          }
+        : undefined,
+      CpuOptions: news.nestedVirtualization
+        ? {
+            NestedVirtualization: "enabled",
           }
         : undefined,
       Placement: news.availabilityZone

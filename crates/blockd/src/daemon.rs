@@ -525,6 +525,10 @@ impl Daemon {
                 .as_ref()
                 .map(|isolation| self.isolation(isolation, &volume, mode))
                 .transpose()?;
+            // A microVM has its own copy of the disk; a head is the host's.
+            if isolation.as_ref().is_some_and(|i| i.runtime == Runtime::Firecracker) {
+                bail!("a head isn't run in a microVM: run its commands in calls (`fork` the head)");
+            }
             let (head, ready) = Head::mount(
                 volume,
                 &request.head,

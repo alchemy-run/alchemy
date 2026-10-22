@@ -12,20 +12,35 @@ import { LaunchTemplate } from "../AutoScaling/LaunchTemplate.ts";
 import * as AWSBindings from "../AWSBindings.ts";
 import { HOST_CONFIG, HOST_TOKEN, serveWorkspace, type HostConfig } from "./WorkspaceServer.ts";
 
+/** Firecracker's release, and the guest kernel its CI builds (6.1: overlayfs, vsock, ext4). */
+const FIRECRACKER = "v1.17.0";
+const GUEST_KERNEL =
+  "https://s3.amazonaws.com/spec.ccfc.min/firecracker-ci/v1.15/$arch/vmlinux-6.1.155";
+
 /**
- * What a host installs at boot: blockd's tools, the container runtimes,
- * the kernel's ublk and NBD modules, and instance NVMe (if it has any) as
- * the cache. blockd itself comes from the bucket when the service starts.
+ * What a host installs at boot: blockd's tools, the runtime its commands
+ * are isolated with, the kernel's ublk and NBD modules, and instance NVMe
+ * (if it has any) as the cache. blockd itself comes from the bucket when
+ * the service starts.
  */
-export const hostUserData = `#!/bin/bash
+export const hostUserData = (isolation: HostConfig["isolation"]) => `#!/bin/bash
 export DEBIAN_FRONTEND=noninteractive
+arch=$(uname -m)
 apt-get update -y
 apt-get install -y e2fsprogs btrfs-progs fuse3 runc gnupg curl "linux-modules-extra-$(uname -r)" \\
   || apt-get install -y e2fsprogs btrfs-progs fuse3 runc gnupg curl
-curl -fsSL https://gvisor.dev/archive.key | gpg --dearmor -o /usr/share/keyrings/gvisor-archive-keyring.gpg
+${
+  isolation === "gvisor"
+    ? `curl -fsSL https://gvisor.dev/archive.key | gpg --dearmor -o /usr/share/keyrings/gvisor-archive-keyring.gpg
 echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/gvisor-archive-keyring.gpg] https://storage.googleapis.com/gvisor/releases release main" \\
   > /etc/apt/sources.list.d/gvisor.list
-apt-get update -y && apt-get install -y runsc
+apt-get update -y && apt-get install -y runsc`
+    : isolation === "firecracker"
+      ? `curl -fsSL "https://github.com/firecracker-microvm/firecracker/releases/download/${FIRECRACKER}/firecracker-${FIRECRACKER}-$arch.tgz" | tar -xz -C /tmp
+install -m 0755 "/tmp/release-${FIRECRACKER}-$arch/firecracker-${FIRECRACKER}-$arch" /usr/local/bin/firecracker
+mkdir -p /usr/local/lib/blockd && curl -fsSL "${GUEST_KERNEL}" -o /usr/local/lib/blockd/vmlinux`
+      : ""
+}
 modprobe ublk_drv || true
 modprobe nbd nbds_max=64 || true
 nvme=$(lsblk -dpno NAME,MODEL | grep -i "instance storage" | head -1 | cut -d' ' -f1)
@@ -49,6 +64,8 @@ export const hostTemplate = (
     readonly instanceType: string;
     readonly securityGroupIds: ReadonlyArray<Input<string>>;
     readonly spot: boolean;
+    /** KVM inside the instances, for microVMs. */
+    readonly nestedVirtualization: boolean;
     /** The store's bucket ARN: the hosts read and write it. */
     readonly bucketArn: Input<string>;
     /** The registry's table ARN, with more than one host. */
@@ -65,7 +82,8 @@ export const hostTemplate = (
       associatePublicIpAddress: true,
       port: config.port,
       spot: deploy?.spot ?? false,
-      userData: hostUserData,
+      nestedVirtualization: deploy?.nestedVirtualization ?? false,
+      userData: hostUserData(config.isolation),
       env: deploy
         ? {
             [HOST_CONFIG]: Output.map(deploy.config, (resolved) => JSON.stringify(resolved)),

@@ -41,6 +41,13 @@ export interface LaunchTemplateProps extends PlatformProps {
    */
   spot?: boolean;
   /**
+   * Run instances with nested virtualization: KVM inside the instance, for
+   * microVMs (Firecracker). Only some instance types support it (`c8i`,
+   * `m8i`, `r8i`); bare-metal types have KVM without it.
+   * @default false
+   */
+  nestedVirtualization?: boolean;
+  /**
    * Launch template name. If omitted, a deterministic name is generated.
    */
   launchTemplateName?: string;
@@ -355,6 +362,7 @@ export const LaunchTemplateProvider = () =>
               associatePublicIpAddress: news.associatePublicIpAddress,
               tags: news.tags,
               spot: news.spot,
+              nestedVirtualization: news.nestedVirtualization,
             },
             runtime,
           ),
@@ -505,6 +513,7 @@ export const LaunchTemplateProvider = () =>
                   associatePublicIpAddress: news.associatePublicIpAddress,
                   tags: desiredTags,
                   spot: news.spot,
+                  nestedVirtualization: news.nestedVirtualization,
                 },
                 runtime,
               ),

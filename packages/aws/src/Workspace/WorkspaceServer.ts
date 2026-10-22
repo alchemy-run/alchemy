@@ -49,7 +49,7 @@ export interface HostConfig {
   readonly image?: string;
   /** Where the workspace appears to commands. */
   readonly path: string;
-  readonly isolation: "container" | "gvisor" | "none";
+  readonly isolation: "container" | "gvisor" | "firecracker" | "none";
   readonly placement: "pinned" | "serverless" | "automatic";
   readonly lww: ReadonlyArray<string>;
   /** How long an unused session stays mounted. */
@@ -263,6 +263,14 @@ export const serveWorkspace = (config: HostConfig) =>
       config.isolation === "none" || !config.image
         ? undefined
         : { runtime: config.isolation, image: config.image, path: config.path };
+    // A microVM has its own copy of the workspace, so commands never run on
+    // a mounted head: the head is the host's view, and calls fork it.
+    const microVMs = config.isolation === "firecracker";
+    const headIsolation = microVMs ? undefined : isolation;
+    const notInMicroVMs = (what: string) =>
+      fail(
+        `${what} isn't supported with isolation "firecracker" yet: microVMs have no network yet`,
+      );
 
     //#region setup
 
@@ -310,7 +318,10 @@ export const serveWorkspace = (config: HostConfig) =>
         "[Service]",
         `Environment=BLOCKD_DAEMON_TOKEN=${daemonToken}`,
         `Environment=AWS_REGION=${process.env.AWS_REGION ?? ""}`,
-        "ExecStart=/usr/local/bin/blockd daemon --listen 127.0.0.1:7681 --pidfile /run/blockd/daemon.pid --state /var/cache/blockd --run /run/blockd --init /usr/local/lib/blockd/init",
+        "ExecStart=/usr/local/bin/blockd daemon --listen 127.0.0.1:7681 --pidfile /run/blockd/daemon.pid --state /var/cache/blockd --run /run/blockd --init /usr/local/lib/blockd/init" +
+          (config.isolation === "firecracker"
+            ? " --firecracker /usr/local/bin/firecracker --kernel /usr/local/lib/blockd/vmlinux"
+            : ""),
         "Restart=always",
         "UNIT",
         "systemctl daemon-reload",
@@ -386,7 +397,7 @@ export const serveWorkspace = (config: HostConfig) =>
         dir: `${HEADS}/${s.name}`,
         mode: "auto",
         flushEvery: 5,
-        ...(isolation ? { isolation } : {}),
+        ...(headIsolation ? { isolation: headIsolation } : {}),
       });
       s.mounted = true;
       // A head mounted from the store has nothing unlanded.
@@ -698,6 +709,8 @@ export const serveWorkspace = (config: HostConfig) =>
     });
 
     const pinned = Effect.fn(function* (s: Session, body: ServiceExecBody) {
+      if (microVMs)
+        return yield* fail(`placement "pinned" runs on the head, which a microVM can't`);
       const timings: Record<string, number> = {};
       yield* timed(timings, "head", s.head.withPermits(1)(mount(s)));
       const { id } = yield* daemon.post<{ readonly id: string }>(
@@ -923,6 +936,7 @@ export const serveWorkspace = (config: HostConfig) =>
     //#region opens
 
     const open = Effect.fn(function* (name: string) {
+      if (microVMs) return yield* notInMicroVMs("Opening a session (processes with ports)");
       const s = session(name);
       yield* s.head.withPermits(1)(mount(s));
       const id = crypto.randomUUID();

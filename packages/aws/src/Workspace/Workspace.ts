@@ -39,10 +39,17 @@ export interface WorkspaceProps {
    * How commands are isolated from the host and each other:
    * `"container"` (runc: namespaces and seccomp, native speed, the host's
    * kernel), `"gvisor"` (runsc: a kernel in user space; slower at file
-   * operations), or `"none"` (on the host itself).
+   * operations), `"firecracker"` (a microVM per command: its own kernel,
+   * a hardware boundary), or `"none"` (on the host itself).
+   *
+   * Firecracker needs KVM: hosts default to `c8i.large` with nested
+   * virtualization (`c8i`, `m8i` and `r8i` support it), or use a `.metal`
+   * type. Its commands run on forks, so it doesn't take `placement:
+   * "pinned"`, and microVMs have no network yet, so sessions can't be
+   * opened (no ports).
    * @default "container"
    */
-  isolation?: "container" | "gvisor" | "none";
+  isolation?: "container" | "gvisor" | "firecracker" | "none";
   /**
    * Where a command runs: `"pinned"` on the session's mounted head,
    * `"serverless"` on a fork that merges back, `"automatic"` serverless
@@ -51,7 +58,10 @@ export interface WorkspaceProps {
    */
   placement?: "pinned" | "serverless" | "automatic";
   hosts?: {
-    /** Graviton (`t4g`, `c7g`, …) or x86. @default "t4g.small" */
+    /**
+     * Graviton (`t4g`, `c7g`, …) or x86.
+     * @default "t4g.small", or "c8i.large" with isolation "firecracker"
+     */
     instanceType?: string;
     /** @default 1 */
     min?: number;
@@ -114,7 +124,8 @@ export const Workspace = <const D extends SandboxWorkspace.Workspace.Decl.Any>(
   props: WorkspaceProps,
 ): Layer.Layer<SandboxWorkspace.Workspace.Host<SelfOf<D>>, never, any> => {
   const id = workspace.LogicalId;
-  const instanceType = props.hosts?.instanceType ?? "t4g.small";
+  const microVMs = props.isolation === "firecracker";
+  const instanceType = props.hosts?.instanceType ?? (microVMs ? "c8i.large" : "t4g.small");
   const platform = isGraviton(instanceType) ? "linux/arm64" : "linux/amd64";
   const tokenKey = sanitizeKey(`ALCHEMY_WORKSPACE_${id}_TOKEN`);
   return Layer.effect(
@@ -244,6 +255,8 @@ export const Workspace = <const D extends SandboxWorkspace.Workspace.Decl.Any>(
           instanceType,
           securityGroupIds: [hosts.groupId],
           spot: props.hosts?.spot ?? false,
+          // Bare metal has KVM; other types run microVMs nested.
+          nestedVirtualization: microVMs && !instanceType.endsWith(".metal"),
           bucketArn: bucket.bucketArn,
           ...(registry ? { registryArn: registry.tableArn } : {}),
         },

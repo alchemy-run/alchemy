@@ -83,7 +83,7 @@ echo "$second" | grep -q '"out.log"' || fail "the kept microVM's commit: $second
 seen=$(wait_for "$(field "$(req "/v1/calls/$id/exec" '{"command":"cat marker"}')" id)")
 [ "$(field "$seen" stdout | base64 -d)" = marker ] || fail "exec on the kept microVM: $seen"
 req "/v1/calls/$id/detach" "{\"patch\":\"patches/vm-k3\"}" >/dev/null || fail "detach"
-pgrep -f firecracker >/dev/null && fail "a microVM outlived its detach"
+pgrep -x firecracker >/dev/null && fail "a microVM outlived its detach"
 pass "a microVM call keeps what it left running, commits what it writes, and runs later commands beside it"
 
 # Boot time, warm: five calls one after another.
