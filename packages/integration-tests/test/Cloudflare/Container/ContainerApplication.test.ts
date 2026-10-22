@@ -1,7 +1,7 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
 import { ContainerPlatform } from "@alchemy.run/cloudflare/Containers/ContainerPlatform";
-import { Docker, DockerLive } from "@alchemy.run/docker/Docker";
+import { Docker } from "@alchemy.run/docker/Docker";
 import * as Containers from "@distilled.cloud/cloudflare/containers";
 import { assert, describe, expect } from "alchemy-test";
 import * as Deploy from "alchemy/Deploy";
@@ -43,10 +43,10 @@ import {
 } from "./fixtures/publication/applications.ts";
 import { EnvBucket, RemoteContainer } from "./fixtures/remote/object.ts";
 import RemoteContainerWorker from "./fixtures/remote/worker.ts";
-const { test } = Test.make({ providers: Layer.mergeAll(Cloudflare.providers(), DockerLive) });
+const { test } = Test.make({ providers: Cloudflare.providers() });
 const { test: registryCacheTest } = Test.make({
   // Each deployment must consult the registry, not a previous provider's map.
-  providers: Layer.fresh(Layer.mergeAll(Cloudflare.providers(), DockerLive)),
+  providers: Layer.fresh(Cloudflare.providers()),
 });
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");

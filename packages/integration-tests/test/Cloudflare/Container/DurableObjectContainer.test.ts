@@ -1,5 +1,4 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
-import { DockerLive } from "@alchemy.run/docker/Docker";
 import * as Containers from "@distilled.cloud/cloudflare/containers";
 import * as Workers from "@distilled.cloud/cloudflare/workers";
 import { describe, expect } from "alchemy-test";
@@ -8,7 +7,6 @@ import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as HttpClient from "effect/http/HttpClient";
-import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
 import { GuardWorker } from "./fixtures/native/guard-worker.ts";
 import { policyStack, settingsStack, TEST_SSH_PUBLIC_KEY } from "./fixtures/native/settings.ts";
@@ -167,7 +165,7 @@ for (const dev of [true, false]) {
     },
     () => {
       const { test } = Test.make({
-        providers: Layer.mergeAll(Cloudflare.providers(), DockerLive),
+        providers: Cloudflare.providers(),
         dev,
         stage: `${Test.defaultStage()}-native-${dev ? "local" : "live"}`,
       });
