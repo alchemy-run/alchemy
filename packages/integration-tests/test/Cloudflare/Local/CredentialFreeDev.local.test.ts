@@ -33,6 +33,9 @@ const noCredentials = Layer.effect(
 const { test } = Test.make({
   providers: Cloudflare.providers().pipe(Layer.provide(noCredentials)),
   dev: true,
+  // `noCredentials` only reaches this process; the sidecar must not inherit
+  // the shell's Cloudflare credentials either.
+  sidecar: { omitEnv: ["CLOUDFLARE_"] },
   profile: "cloudflare-credential-free-test",
 });
 
