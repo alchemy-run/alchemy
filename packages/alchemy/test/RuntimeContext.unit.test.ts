@@ -36,6 +36,41 @@ describe("unpackEnvValue compatibility", { tags: ["unit", "local"] }, () => {
     expect(calls).toBe(0);
   });
 
+  it("skips JSON.parse only for strings JSON.parse rejects (every first character)", () => {
+    // A JSON text is `ws value ws`; only these characters start a value. Sweep
+    // every UTF-16 code unit behind each JSON-whitespace prefix, followed by
+    // suffixes that complete any value form, and require that every string
+    // the guard returns raw also fails JSON.parse — and decodes as before.
+    const parses = (raw: string) => {
+      try {
+        JSON.parse(raw);
+        return true;
+      } catch {
+        return false;
+      }
+    };
+    const starts = new Set<string>();
+    const falsePositives: string[] = [];
+    for (let code = 0; code <= 0xffff; code++) {
+      const c = String.fromCharCode(code);
+      for (const prefix of ["", " \t\r\n"]) {
+        for (const suffix of ["", "1", '"', "]", "}", "rue", "alse", "ull"]) {
+          const raw = prefix + c + suffix;
+          if (!parses(raw)) continue;
+          starts.add(c);
+          // A parseable string never decodes to its own raw text.
+          if (unpackEnvValue(raw) === raw) {
+            falsePositives.push(raw);
+          }
+        }
+      }
+    }
+    expect(falsePositives).toEqual([]);
+    expect([...starts].sort().join("")).toBe(
+      ["\t", "\n", "\r", " ", ...'"-0123456789[fnt{'].sort().join(""),
+    );
+  });
+
   it("decodes every JSON primitive form, including negative zero and escaped strings", () => {
     const cases: ReadonlyArray<readonly [string, unknown]> = [
       ["null", null],
