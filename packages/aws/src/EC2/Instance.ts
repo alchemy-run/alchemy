@@ -15,6 +15,7 @@ import { createAlchemyTagFilters, createInternalTags, diffTags } from "alchemy/T
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { AccountID } from "../Environment.ts";
@@ -75,8 +76,12 @@ export interface InstanceProps extends PlatformProps {
    * User data script to provide at launch time.
    * Changes force replacement — EC2 does not re-run user data on an
    * in-place update.
+   *
+   * Pass a `Redacted` when the script carries credentials: it is revealed
+   * only when building the `RunInstances` request and compared by value,
+   * so it never appears in plan output.
    */
-  userData?: string;
+  userData?: string | Redacted.Redacted<string>;
   /**
    * Whether to associate a public IPv4 address on launch.
    */
@@ -647,6 +652,10 @@ export const InstanceProvider = () =>
           // prove the launch config didn't change.
           const launchConfigChanged = (next: unknown, prev: unknown) =>
             !isResolved(next) || prev !== next;
+          // `Redacted` userData decoded from state is a fresh object, so it
+          // must be compared by value rather than by reference.
+          const userDataChanged =
+            !isResolved(raw.userData) || !deepEqual(raw.userData, olds.userData);
           const hostModeChanged = Boolean(olds.main) !== Boolean(raw.main);
           if (
             hostModeChanged ||
@@ -654,7 +663,7 @@ export const InstanceProvider = () =>
             launchConfigChanged(raw.subnetId, olds.subnetId) ||
             launchConfigChanged(raw.keyName, olds.keyName) ||
             launchConfigChanged(raw.instanceProfileName, olds.instanceProfileName) ||
-            launchConfigChanged(raw.userData, olds.userData) ||
+            userDataChanged ||
             launchConfigChanged(raw.associatePublicIpAddress, olds.associatePublicIpAddress) ||
             launchConfigChanged(raw.privateIpAddress, olds.privateIpAddress) ||
             launchConfigChanged(raw.availabilityZone, olds.availabilityZone)
@@ -764,7 +773,13 @@ export const InstanceProvider = () =>
           };
           const runtime = yield* hosted.resolveHostedRuntime({
             id,
-            news,
+            news: {
+              ...news,
+              userData:
+                news.userData === undefined || typeof news.userData === "string"
+                  ? news.userData
+                  : Redacted.value(news.userData),
+            },
             bindings,
             output,
           });
