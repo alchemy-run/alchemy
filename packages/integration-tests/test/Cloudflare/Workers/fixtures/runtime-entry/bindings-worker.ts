@@ -8,7 +8,7 @@ export default class BindingsWorker extends Cloudflare.Worker<BindingsWorker>()(
   "BindingsWorker",
   {
     main: import.meta.url,
-    bindings: {
+    env: {
       KV: Cloudflare.KV.Namespace("RuntimeEntryKV"),
       QUEUE: Cloudflare.Queues.Queue("RuntimeEntryQueue"),
     },
