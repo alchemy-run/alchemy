@@ -394,6 +394,23 @@ landing it: about 2 s for the head's snapshot, 0.3–1.5 s applying, and the
 rest queued behind the batch before it. `fsync` on a MicroVM: 120 ms at the
 median.
 
+**The same daemon on EC2** (22 October 2026, `crates/blockd/tests/ec2/daemon.sh`):
+m7gd.large (Graviton), cache on instance NVMe, ublk, store in S3 in the same
+region, commands run on the host. Warm, per command:
+
+| | ext4 | btrfs |
+|---|---|---|
+| Forked call, around a trivial command | 0.28–0.34 s | 0.38–0.52 s |
+| of which mount | 57–70 ms | 170–320 ms |
+| of which making the patch | 45–57 ms | 5 ms |
+| Landing it on the mounted head | 0.12 s | 0.33–0.38 s |
+| Snapshotting the head | 0.47–0.58 s | 0.27–0.30 s |
+| Four 2-second commands at once, snapshot to snapshot | 3.8 s | 4.0 s |
+| `fsync` on the head | 93 ms | 110 ms |
+
+A cold read of the whole base (10,000 small files and 64 MiB) took 12.2 s
+(ext4) and 7.8 s (btrfs): extents are fetched one at a time on demand.
+
 Not built: streaming live files and forwarding ports across machines, the
 file tree in the store, `kill` across machines.
 

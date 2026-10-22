@@ -160,14 +160,26 @@ pub fn mount_as(
         }
         #[cfg(feature = "ublk")]
         Mode::Ublk => {
-            let ublk = crate::ublk::Ublk::create(-1, 1)?;
-            let killer = ublk.killer();
-            let (ready, path) = std::sync::mpsc::channel();
+            // libublk's control ring is per thread: the device is created on
+            // the thread that serves it.
+            let (ready, started) = std::sync::mpsc::channel::<Result<(String, crate::ublk::Killer)>>();
             let serving = {
                 let device = device.clone();
-                std::thread::spawn(move || ublk.serve(device, move |path| drop(ready.send(path))))
+                std::thread::spawn(move || {
+                    let ublk = match crate::ublk::Ublk::create(-1, 1) {
+                        Ok(ublk) => ublk,
+                        Err(e) => {
+                            let message = format!("{e:#}");
+                            let _ = ready.send(Err(e));
+                            return Err(anyhow::anyhow!(message));
+                        }
+                    };
+                    let killer = ublk.killer();
+                    ublk.serve(device, move |path| drop(ready.send(Ok((path, killer)))))
+                })
             };
-            let path = PathBuf::from(path.recv().context("the ublk device never started")?);
+            let (path, killer) = started.recv().context("the ublk device never started")??;
+            let path = PathBuf::from(path);
             block = path.clone();
             if let Err(e) = wait_until_sized(&path).and_then(|()| mount_fs(&path, dir)) {
                 killer.kill();
