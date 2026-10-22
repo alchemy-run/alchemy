@@ -75,6 +75,7 @@ import { isPythonMain, watchPythonWorkerBundle } from "./Sources/Python.ts";
 import { WorkerBundle, type WorkerBundleOptions } from "./Sources/Rolldown.ts";
 import { DEFAULT_DEV_PORT, type ViteChildConfig } from "./ViteChild.shared.ts";
 import { startViteChild } from "./ViteChild.ts";
+import { resolveViteMain } from "./ViteMain.ts";
 import { isSelfUrl, Worker } from "./Worker.ts";
 import { getCronBindings } from "./WorkerAsyncBindings.ts";
 import type { WorkerBinding } from "./WorkerBinding.ts";
@@ -384,7 +385,8 @@ export const LocalWorkerProvider = () =>
               durableObjectNamespaces[binding.className] = {
                 className: binding.className,
                 uniqueKey: namespaceId,
-                sql: true,
+                // A key-value backed class has no SQL storage, as on Cloudflare.
+                sql: binding.storage !== "legacy-kv",
               };
               bindingDescriptors.push({ ...binding, namespaceId });
             } else {
@@ -425,8 +427,15 @@ export const LocalWorkerProvider = () =>
         }
         // A Durable Object-managed class merges the images of every bound
         // Container (keyed by Container id); a fleet class has one image.
+        // Build paths resolve against the stack's working directory here: a
+        // Vite Worker's runtime runs in a child whose cwd is the site root.
         const toRuntimeImage = (image: DevContainerImage) => ({
           ...image,
+          ...("dockerfile" in image
+            ? image.context !== undefined
+              ? { context: path.resolve(runtimeBase, image.context) }
+              : { dockerfile: path.resolve(runtimeBase, image.dockerfile) }
+            : {}),
           env: unwrapRedacted(image.env),
         });
         const exportMap = (props.exports ?? {}) as Record<string, unknown>;
@@ -522,7 +531,10 @@ export const LocalWorkerProvider = () =>
           // Relative `vite.main` resolves from the Vite root (see the
           // matching normalization in WorkerProvider's `viteBuild`).
           viteMain: props.vite?.main
-            ? path.resolve(props.vite.rootDir ?? process.cwd(), props.vite.main)
+            ? yield* resolveViteMain(
+                path.resolve(props.vite.rootDir ?? process.cwd()),
+                props.vite.main,
+              )
             : undefined,
           viteEnvironments: props.vite?.viteEnvironments,
           viteRootDir: props.vite?.rootDir,
@@ -571,6 +583,14 @@ export const LocalWorkerProvider = () =>
            */
           edgeDomain:
             typeof props.domain === "string" ? props.domain : (props.domain?.name ?? undefined),
+          /**
+           * The zone outbound `fetch()`es report in `CF-Worker`: the custom
+           * domain, else the first route's zone, as Wrangler derives it.
+           */
+          zone:
+            (typeof props.domain === "string" ? props.domain : props.domain?.name) ??
+            props.routes?.[0]?.zoneName ??
+            (props.routes?.[0] ? routePatternHost(props.routes[0].pattern.trim()) : undefined),
         };
       });
 
@@ -924,6 +944,12 @@ export const LocalWorkerProvider = () =>
                       },
                       compatibilityDate: worker.compatibility.date,
                       compatibilityFlags: worker.compatibility.flags,
+                      zone: worker.zone,
+                      // `dev.access` populates the Worker's native `ctx.access`.
+                      access: worker.dev.access,
+                      // Stream preview and Images variant URLs use the stable URL
+                      // clients reach the Worker at, as Miniflare uses its public URL.
+                      publicUrl: proxy.url.toString().replace(/\/$/, ""),
                       bindings: worker.workerBindings as never,
                       hyperdrives: worker.hyperdrives,
                       durableObjectNamespaces: worker.durableObjectNamespaces,
@@ -1065,6 +1091,7 @@ export const LocalWorkerProvider = () =>
           latestServes.delete(id);
           latestViteServes.delete(id);
           servedViteConsumers.delete(id);
+          servedViteHttps.delete(id);
         }
       };
 
@@ -1235,6 +1262,11 @@ export const LocalWorkerProvider = () =>
        * was started with, for the restart path's changed-wiring check. */
       const servedViteConsumers = new Map<string, string>();
 
+      /** Whether each running Vite child serves HTTPS (the app's
+       * `server.https`): the proxy relays TLS untouched, so its URL takes the
+       * child's scheme. */
+      const servedViteHttps = new Map<string, boolean>();
+
       // Serve a Vite dev-server child with the same two guarantees
       // `serveWith` gives a plain worker: a `workerRestarts` hook so sibling
       // `Consumer` reconciles can restart the child with fresh queue-consumer
@@ -1317,6 +1349,11 @@ export const LocalWorkerProvider = () =>
                         hyperdrives: worker.hyperdrives,
                         queueConsumers,
                         crons: worker.crons,
+                        tails: worker.tailConsumers?.map((c) => c.service),
+                        streamingTails: worker.streamingTailConsumers?.map((c) => c.service),
+                        cache: worker.dev.cache,
+                        cf: worker.dev.cf,
+                        zone: worker.zone,
                         assets: yield* toRuntimeAssets(worker.assets),
                       },
                     },
@@ -1364,6 +1401,7 @@ export const LocalWorkerProvider = () =>
                   continue;
                 }
                 servedViteConsumers.set(worker.fqn, JSON.stringify(queueConsumers));
+                servedViteHttps.set(worker.fqn, child.url.protocol === "https:");
                 yield* proxy.set(child.url);
                 return;
               }
@@ -1380,13 +1418,15 @@ export const LocalWorkerProvider = () =>
         const start = Date.now();
         const proxy = yield* maybeStartProxy(worker.fqn, worker.dev);
         yield* serveVite({ worker, rootDir, invalidate, source, proxy });
+        const url = new URL(proxy.url);
+        if (servedViteHttps.get(worker.fqn)) url.protocol = "https:";
         // The programmatic vite API never prints the CLI's URL banner — and
         // vite's own URL is the internal (port-shuffled) server behind the
         // stable proxy, so advertise the proxy instead.
         yield* Effect.log(
-          workerStartedMessage(worker.fqn, Date.now() - start, proxy.url, workerLogDir(worker)),
+          workerStartedMessage(worker.fqn, Date.now() - start, url, workerLogDir(worker)),
         );
-        return proxy.url;
+        return url;
       });
 
       // External source provider (`props.source`): the provider owns the
@@ -1421,6 +1461,9 @@ export const LocalWorkerProvider = () =>
           entry: worker.bundleOptions.entry,
           stack: { name: stack.name, stage: stack.stage },
           env: worker.env,
+          // Dev hands `env` to the source unresolved; the Worker's own URL
+          // is only substituted into a build's inlined env on deploy.
+          selfUrl: undefined,
           extraOptions: worker.bundleOptions.extraOptions,
           assets: worker.assets,
           worker: {
@@ -1429,6 +1472,16 @@ export const LocalWorkerProvider = () =>
             hyperdrives: worker.hyperdrives,
             queueConsumers: getQueueConsumers(worker.name),
             assets: yield* toRuntimeAssets(worker.assets),
+            options: {
+              workflows: worker.workflows,
+              crons: worker.crons,
+              tails: worker.tailConsumers?.map((c) => c.service),
+              streamingTails: worker.streamingTailConsumers?.map((c) => c.service),
+              cache: worker.dev.cache,
+              cf: worker.dev.cf,
+              zone: worker.zone,
+              access: worker.dev.access,
+            },
           },
           runtimeContext: context,
         };
@@ -1458,9 +1511,13 @@ export const LocalWorkerProvider = () =>
           for (const { data } of bindings) {
             for (const binding of data?.bindings ?? []) {
               if (binding.type === "durable_object_namespace") {
+                // Only classes this Worker hosts get a namespace, as in the
+                // live provider's `getDurableObjectBindings`. A cross-script
+                // reference names another Worker, by an Output that is still
+                // unresolved here.
+                if (binding.scriptName !== undefined && binding.scriptName !== name) continue;
                 durableObjectNamespaces[binding.className] =
-                  binding.namespaceId ??
-                  encodeURIComponent(`${binding.scriptName!}-${binding.className}`);
+                  binding.namespaceId ?? encodeURIComponent(`${name}-${binding.className}`);
               }
             }
           }

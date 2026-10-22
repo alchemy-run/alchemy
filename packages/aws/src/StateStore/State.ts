@@ -1,21 +1,11 @@
-import * as crypto from "node:crypto";
 import type { Credentials } from "@distilled.cloud/aws/Credentials";
 import type { Region } from "@distilled.cloud/aws/Region";
 import * as s3 from "@distilled.cloud/aws/s3";
 import { CredentialsStoreLive } from "alchemy/Auth/Credentials";
-import { decodeFqn, encodeFqn } from "alchemy/FQN";
-import { STATE_STORE_VERSION } from "alchemy/State/HttpStateApi";
+import { type BucketObjects, makeBucketState } from "alchemy/State/BucketState";
 import * as Provisioning from "alchemy/State/Provisioning";
-import {
-  State,
-  StateStoreError,
-  type PersistedState,
-  type StateService,
-} from "alchemy/State/State";
-import { encodeState, reviveState } from "alchemy/State/StateEncoding";
+import { State, StateStoreError } from "alchemy/State/State";
 import { recordStateStoreInit } from "alchemy/Telemetry/Metrics";
-import * as Clock from "effect/Clock";
-import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import type { HttpClient } from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
@@ -23,7 +13,6 @@ import * as LogLevel from "effect/LogLevel";
 import * as References from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as Scope from "effect/Scope";
-import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
 import { AwsAuth } from "../AuthProvider.ts";
 import * as AwsCredentials from "../Credentials.ts";
@@ -32,60 +21,8 @@ import { AWSEnvironment, providedOrDefault } from "../Environment.ts";
 import * as AwsRegion from "../Region.ts";
 import { syncBucketEncryption, type BucketEncryption } from "../S3/Bucket.ts";
 
-/**
- * The bookkeeping object that stores a stack's resolved output. Lives
- * alongside the resource objects under the same stage prefix, so it
- * must be filtered out of `list` results before FQN decoding.
- */
-const OUTPUT_FILE = "__stack_output__.json";
-
-/**
- * Per `(stack, stage)` lease. Filtered out of `list` the same way as
- * {@link OUTPUT_FILE}. A delete of the stage leaves it in place so the
- * lock outlives the objects it was guarding; the store deletes it on close.
- */
-const LEASE_FILE = "__lease__.json";
-
-/** How long a lease stays valid without a refresh. */
-const LEASE_TTL_MS = 60_000;
-
-/** How long a passing lease check is trusted. A failure is never cached. */
-const LEASE_CHECK_TTL_MS = 5_000;
-
 /** Maximum number of keys S3 accepts in a single DeleteObjects call. */
 const DELETE_BATCH_SIZE = 1000;
-
-interface LeaseRecord {
-  readonly token: string;
-  readonly expiresAt: number;
-}
-
-interface HeldLease {
-  readonly checkLive: Effect.Effect<void, StateStoreError>;
-}
-
-/**
- * A passing check is trusted for `ttlMs`, so a burst of operations does
- * one round-trip. A failing check is never cached.
- */
-const amortizeCheck = (
-  checkLive: Effect.Effect<void, StateStoreError>,
-  ttlMs: number,
-): Effect.Effect<void, StateStoreError> => {
-  let lastOkAt: number | undefined;
-  return Effect.suspend(() => {
-    if (lastOkAt !== undefined && Date.now() - lastOkAt < ttlMs) {
-      return Effect.void;
-    }
-    return checkLive.pipe(
-      Effect.tap(() =>
-        Effect.sync(() => {
-          lastOkAt = Date.now();
-        }),
-      ),
-    );
-  });
-};
 
 export interface S3StateOptions {
   /**
@@ -279,14 +216,9 @@ export const state = (options: S3StateOptions = {}) =>
  */
 export const makeS3State = (options: S3StateOptions = {}) =>
   Effect.gen(function* () {
-    // Callers that need the lease to outlive the first operation (the
-    // `state()` layer) bind this effect to that scope with `Scope.provide`.
-    const leaseScope = yield* Effect.scope;
     // Captured under `withoutSdkDebugLogs` (below), so every store call runs
     // with the raised floor.
     const context = yield* Effect.context<S3Deps | AWSEnvironment>();
-
-    const prefix = options.prefix ? `${options.prefix.replace(/\/+$/, "")}/` : "";
 
     const toError = (cause: unknown) =>
       new StateStoreError({
@@ -294,460 +226,134 @@ export const makeS3State = (options: S3StateOptions = {}) =>
         cause: cause instanceof Error ? cause : undefined,
       });
 
+    // Close over the captured context so every operation is self-contained.
+    const run = <A, E>(effect: Effect.Effect<A, E, S3Deps>): Effect.Effect<A, StateStoreError> =>
+      effect.pipe(Effect.provideContext(context), Effect.mapError(toError));
+
     // Anything that touches AWS credentials must NOT run at layer
     // construction time. Resolving the environment (account/region),
-    // deriving the bucket name, and ensuring the bucket exists are all
-    // deferred into this cached Effect: `Effect.cached` memoizes the
-    // result and locks concurrent first callers onto a single in-flight
-    // run, so the bucket is ensured exactly once — lazily, on first use
-    // of the state store.
-    const bucket = yield* Effect.cached(
-      Effect.gen(function* () {
-        const { accountId, region } = yield* AWSEnvironment.current;
-        if (options.name !== undefined) yield* Provisioning.storeName(options.name);
-        const bucketName =
-          options.bucketName ?? createStateBucketName(accountId, region, options.name);
-        const ensure = ensureStateBucket(bucketName, region, options);
-        // First use creates the bucket (except in CI); every use converges
-        // its settings.
-        yield* (yield* stateBucketExists(bucketName))
-          ? ensure
-          : Provisioning.deployMissing(
-              { backend: "aws", name: options.name, label: `S3 state bucket '${bucketName}'` },
-              ensure,
-            );
-        return bucketName;
-      }).pipe(Effect.provideContext(context), Effect.mapError(toError)),
-    );
+    // deriving the bucket name, and ensuring the bucket exists all run on
+    // the first state operation; `makeBucketState` caches the result.
+    const objects = Effect.gen(function* () {
+      const { accountId, region } = yield* AWSEnvironment.current;
+      if (options.name !== undefined) yield* Provisioning.storeName(options.name);
+      const bucketName =
+        options.bucketName ?? createStateBucketName(accountId, region, options.name);
+      const ensure = ensureStateBucket(bucketName, region, options);
+      // First use creates the bucket (except in CI); every use converges
+      // its settings.
+      yield* (yield* stateBucketExists(bucketName))
+        ? ensure
+        : Provisioning.deployMissing(
+            { backend: "aws", name: options.name, label: `S3 state bucket '${bucketName}'` },
+            ensure,
+          );
+      return s3Objects(bucketName, run);
+    }).pipe(Effect.provideContext(context), Effect.mapError(toError));
 
-    // Close over the captured context so every StateService method is
-    // self-contained (`R = never`), matching the StateService contract.
-    const run = <A, E>(
-      f: (bucket: string) => Effect.Effect<A, E, S3Deps>,
-    ): Effect.Effect<A, StateStoreError> =>
-      bucket.pipe(
-        Effect.flatMap((bucket) =>
-          f(bucket).pipe(Effect.provideContext(context), Effect.mapError(toError)),
-        ),
-      );
+    return yield* makeBucketState({ id: "s3", label: "S3", prefix: options.prefix, objects });
+  }).pipe(withoutSdkDebugLogs);
 
-    const stagePrefix = ({ stack, stage }: { stack: string; stage: string }) =>
-      `${prefix}${stack}/${stage}/`;
-
-    const resourceKey = (request: { stack: string; stage: string; fqn: string }) =>
-      `${stagePrefix(request)}${encodeFqn(request.fqn)}.json`;
-
-    const outputKey = (request: { stack: string; stage: string }) =>
-      `${stagePrefix(request)}${OUTPUT_FILE}`;
-
-    /** All object keys under `keyPrefix`, across pagination. */
-    const listKeys = (bucket: string, keyPrefix: string) =>
-      s3.listObjectsV2.pages({ Bucket: bucket, Prefix: keyPrefix }).pipe(
+/** The S3 {@link BucketObjects} of `bucket`, versioned by ETag. */
+const s3Objects = (
+  bucket: string,
+  run: <A, E>(effect: Effect.Effect<A, E, S3Deps>) => Effect.Effect<A, StateStoreError>,
+): BucketObjects => ({
+  listKeys: (prefix) =>
+    run(
+      s3.listObjectsV2.pages({ Bucket: bucket, Prefix: prefix }).pipe(
         Stream.flatMap((page) => Stream.fromIterable(page.Contents ?? [])),
         Stream.map((object) => object.Key),
         Stream.filter((key): key is string => key !== undefined),
         Stream.runCollect,
         Effect.map((keys) => Array.from(keys)),
-      );
-
-    /**
-     * Immediate "subdirectory" names under `keyPrefix`, derived from
-     * S3 CommonPrefixes (delimiter `/`), across pagination.
-     */
-    const listChildren = (bucket: string, keyPrefix: string) =>
-      s3.listObjectsV2.pages({ Bucket: bucket, Prefix: keyPrefix, Delimiter: "/" }).pipe(
+      ),
+    ),
+  listChildren: (prefix) =>
+    run(
+      s3.listObjectsV2.pages({ Bucket: bucket, Prefix: prefix, Delimiter: "/" }).pipe(
         Stream.flatMap((page) => Stream.fromIterable(page.CommonPrefixes ?? [])),
-        // `{keyPrefix}{name}/` -> `{name}`
+        // `{prefix}{name}/` -> `{name}`
         Stream.map((common) => common.Prefix),
         Stream.filter((p): p is string => p !== undefined),
-        Stream.map((p) => p.slice(keyPrefix.length, -1)),
+        Stream.map((p) => p.slice(prefix.length, -1)),
         Stream.runCollect,
         Effect.map((names) => Array.from(names)),
-      );
-
-    /** Read and revive a JSON object; `undefined` when the key is absent. */
-    const readJson = <T>(bucket: string, key: string) =>
+      ),
+    ),
+  read: (key) =>
+    run(
       s3.getObject({ Bucket: bucket, Key: key }).pipe(
         Effect.flatMap((result) =>
           result.Body === undefined
             ? Effect.succeed(undefined)
-            : result.Body.pipe(
-                Stream.decodeText,
-                Stream.mkString,
-                Effect.flatMap((text) =>
-                  Effect.try({
-                    try: () => JSON.parse(text, reviveState) as T,
-                    catch: (cause) =>
-                      new StateStoreError({
-                        message: `Failed to parse state object '${key}'`,
-                        cause: cause instanceof Error ? cause : undefined,
-                      }),
-                  }),
-                ),
+            : Stream.mkString(Stream.decodeText(result.Body)).pipe(
+                Effect.map((text) => ({ text, version: result.ETag ?? "" })),
               ),
         ),
         Effect.catchTag("NoSuchKey", () => Effect.succeed(undefined)),
-      );
-
-    const writeJson = (bucket: string, key: string, value: unknown) =>
-      s3.putObject({
-        Bucket: bucket,
-        Key: key,
-        Body: JSON.stringify(encodeState(value), null, 2),
-        ContentType: "application/json",
-      });
-
-    /** Delete every object under `keyPrefix` in batches. Idempotent. */
-    const deleteAll = (bucket: string, keyPrefix: string) =>
-      Effect.gen(function* () {
-        const keys = (yield* listKeys(bucket, keyPrefix)).filter(
-          // Leave the lease object. Releasing it here would open the stage
-          // before this delete finishes, and the store still holds the lock.
-          (key) => !key.endsWith(`/${LEASE_FILE}`),
-        );
-        for (let i = 0; i < keys.length; i += DELETE_BATCH_SIZE) {
-          yield* s3.deleteObjects({
-            Bucket: bucket,
-            Delete: {
-              Objects: keys.slice(i, i + DELETE_BATCH_SIZE).map((Key) => ({ Key })),
-              Quiet: true,
-            },
-          });
-        }
-      });
-
-    const leaseKey = (request: { stack: string; stage: string }) =>
-      `${stagePrefix(request)}${LEASE_FILE}`;
-
-    const heldError = (stack: string, stage: string) =>
-      new StateStoreError({
-        message: `another deploy holds the S3 state lock '${stack}/${stage}'`,
-      });
-
-    const lostError = (stack: string, stage: string) =>
-      new StateStoreError({
-        message: `the S3 state lock '${stack}/${stage}' was lost mid-run; refusing to continue unlocked`,
-      });
-
-    /** `undefined` means the conditional write lost (412, or 409 after retries). */
-    const putLease = (
-      bucket: string,
-      key: string,
-      record: LeaseRecord,
-      condition: { readonly IfNoneMatch: "*" } | { readonly IfMatch: string },
-    ) =>
+      ),
+    ),
+  write: (key, body, condition) =>
+    run(
       s3
         .putObject({
           Bucket: bucket,
           Key: key,
-          Body: JSON.stringify(record),
+          Body: body,
           ContentType: "application/json",
-          ...condition,
+          ...(condition === undefined
+            ? {}
+            : "ifAbsent" in condition
+              ? { IfNoneMatch: "*" }
+              : { IfMatch: condition.ifVersion }),
         })
         .pipe(
           Effect.flatMap((result) =>
             result.ETag === undefined
               ? Effect.fail(
                   new StateStoreError({
-                    message: `S3 state lock '${key}' was written without an ETag`,
+                    message: `S3 state object '${key}' was written without an ETag`,
                   }),
                 )
-              : Effect.succeed(result.ETag),
+              : Effect.succeed<string | undefined>(result.ETag),
           ),
           Effect.retry({
             while: (error) => error._tag === "ConditionalRequestConflict",
             schedule: Schedule.spaced("200 millis"),
             times: 4,
           }),
-          Effect.catchTag("PreconditionFailed", () => Effect.succeed(undefined)),
-          Effect.catchTag("ConditionalRequestConflict", () => Effect.succeed(undefined)),
-        );
-
-    const readLease = (bucket: string, key: string) =>
-      s3.getObject({ Bucket: bucket, Key: key }).pipe(
-        Effect.flatMap((result) => {
-          const etag = result.ETag;
-          if (result.Body === undefined || etag === undefined) {
-            return Effect.succeed(undefined);
-          }
-          return Stream.mkString(Stream.decodeText(result.Body)).pipe(
-            Effect.map((text) => {
-              let parsed: unknown;
-              try {
-                parsed = JSON.parse(text);
-              } catch {
-                parsed = undefined;
-              }
-              const record =
-                typeof parsed === "object" &&
-                parsed !== null &&
-                "token" in parsed &&
-                "expiresAt" in parsed &&
-                typeof parsed.token === "string" &&
-                typeof parsed.expiresAt === "number"
-                  ? { token: parsed.token, expiresAt: parsed.expiresAt }
-                  : { token: "", expiresAt: 0 };
-              return { etag, record };
-            }),
-          );
-        }),
-        Effect.catchTag("NoSuchKey", () => Effect.succeed(undefined)),
-      );
-
-    const acquireLease = (stack: string, stage: string) =>
-      Effect.gen(function* () {
-        const key = leaseKey({ stack, stage });
-        const token = yield* Effect.sync(() => crypto.randomUUID());
-        const now = yield* Clock.currentTimeMillis;
-        const fresh: LeaseRecord = { token, expiresAt: now + LEASE_TTL_MS };
-        const created = yield* run((bucket) => putLease(bucket, key, fresh, { IfNoneMatch: "*" }));
-        let etag = created;
-        if (etag === undefined) {
-          const existing = yield* run((bucket) => readLease(bucket, key));
-          const stillHeld = existing === undefined || existing.record.expiresAt > now;
-          if (stillHeld) {
-            return yield* Effect.fail(heldError(stack, stage));
-          }
-          const replaced = yield* run((bucket) =>
-            putLease(bucket, key, fresh, { IfMatch: existing.etag }),
-          );
-          if (replaced === undefined) {
-            return yield* Effect.fail(heldError(stack, stage));
-          }
-          etag = replaced;
-        }
-
-        const cursor = { etag, lost: false };
-        const gate = Semaphore.makeUnsafe(1);
-
-        const renew = Semaphore.withPermits(
-          gate,
-          1,
-        )(
-          Effect.gen(function* () {
-            if (cursor.lost) return;
-            const renewedAt = yield* Clock.currentTimeMillis;
-            const next = yield* run((bucket) =>
-              putLease(
-                bucket,
-                key,
-                { token, expiresAt: renewedAt + LEASE_TTL_MS },
-                { IfMatch: cursor.etag },
-              ),
-            );
-            if (next === undefined) cursor.lost = true;
-            else cursor.etag = next;
-          }),
-        ).pipe(
-          Effect.retry({
-            while: () => !cursor.lost,
-            schedule: Schedule.spaced("1 second"),
-            times: 3,
-          }),
-          Effect.catch(() =>
-            Effect.sync(() => {
-              cursor.lost = true;
-            }),
+          // A lost condition: 412, or 409 after retries.
+          Effect.catchTag(["PreconditionFailed", "ConditionalRequestConflict"], () =>
+            Effect.succeed(undefined),
           ),
-        );
-
-        const verify = Semaphore.withPermits(
-          gate,
-          1,
-        )(
-          Effect.gen(function* () {
-            if (cursor.lost) return yield* Effect.fail(lostError(stack, stage));
-            const existing = yield* run((bucket) => readLease(bucket, key));
-            const observedAt = yield* Clock.currentTimeMillis;
-            const leaseLost =
-              existing === undefined ||
-              existing.record.token !== token ||
-              existing.record.expiresAt <= observedAt;
-            if (leaseLost) {
-              cursor.lost = true;
-              return yield* Effect.fail(lostError(stack, stage));
-            }
-            cursor.etag = existing.etag;
-          }),
-        );
-
-        // Interrupt the refresh before releasing, so a refresh cannot
-        // land after the lease has been expired.
-        yield* Scope.addFinalizer(
-          leaseScope,
-          Semaphore.withPermits(
-            gate,
-            1,
-          )(
-            Effect.gen(function* () {
-              cursor.lost = true;
-              // Read the etag we actually hold. A refresh that landed after
-              // the cursor was last stored would make a release against the
-              // old etag a no-op, and the lease would stay live.
-              const existing = yield* run((bucket) => readLease(bucket, key));
-              if (existing === undefined || existing.record.token !== token) return;
-              // Delete rather than expire: a leftover lease object would keep
-              // a destroyed stage listed by `listStages`.
-              yield* run((bucket) =>
-                s3.deleteObject({ Bucket: bucket, Key: key, IfMatch: existing.etag }),
-              );
-            }).pipe(Effect.ignore),
-          ),
-        );
-        yield* renew.pipe(
-          Effect.delay(Duration.millis(Math.floor(LEASE_TTL_MS / 3))),
-          Effect.forever,
-          Effect.interruptible,
-          Effect.forkIn(leaseScope),
-        );
-
-        return { checkLive: amortizeCheck(verify, LEASE_CHECK_TTL_MS) };
-      });
-
-    // One lease per (stack, stage), taken on the first operation and held
-    // for the store's lifetime. The mutex keeps two concurrent first
-    // operations in this process from contending with each other.
-    const leaseMutex = Semaphore.makeUnsafe(1);
-    const leases = new Map<string, Effect.Effect<HeldLease, StateStoreError>>();
-
-    const leaseFor = (stack: string, stage: string): Effect.Effect<HeldLease, StateStoreError> =>
-      Semaphore.withPermits(
-        leaseMutex,
-        1,
-      )(
-        Effect.gen(function* () {
-          const key = `${stack}/${stage}`;
-          const existing = leases.get(key);
-          if (existing !== undefined) return existing;
-          // Drop a failed acquire. Caching it would make the next operation
-          // report the same holder after that holder has gone.
-          const cached = yield* Effect.cached(
-            acquireLease(stack, stage).pipe(
-              Effect.tapError(() =>
-                Effect.sync(() => {
-                  if (leases.get(key) === cached) {
-                    leases.delete(key);
-                  }
-                }),
-              ),
-            ),
-          );
-          leases.set(key, cached);
-          return cached;
-        }),
-      ).pipe(Effect.flatMap((lease) => lease));
-
-    const guarded = <A>(
-      request: { stack: string; stage: string },
-      op: Effect.Effect<A, StateStoreError>,
-    ): Effect.Effect<A, StateStoreError> =>
-      leaseFor(request.stack, request.stage).pipe(
-        Effect.flatMap((lease) => lease.checkLive),
-        Effect.andThen(op),
-      );
-
-    const verifyHeldLeases: Effect.Effect<void, StateStoreError> = Effect.suspend(() =>
+        ),
+    ),
+  delete: (key, ifVersion) =>
+    run(
+      s3
+        .deleteObject({
+          Bucket: bucket,
+          Key: key,
+          ...(ifVersion === undefined ? {} : { IfMatch: ifVersion }),
+        })
+        .pipe(Effect.asVoid),
+    ),
+  deleteMany: (keys) =>
+    run(
       Effect.forEach(
-        Array.from(leases.values()),
-        (lease) => lease.pipe(Effect.flatMap((held) => held.checkLive)),
+        Array.from({ length: Math.ceil(keys.length / DELETE_BATCH_SIZE) }, (_, i) =>
+          keys.slice(i * DELETE_BATCH_SIZE, (i + 1) * DELETE_BATCH_SIZE),
+        ),
+        (batch) =>
+          s3.deleteObjects({
+            Bucket: bucket,
+            Delete: { Objects: batch.map((Key) => ({ Key })), Quiet: true },
+          }),
         { discard: true },
       ),
-    );
-
-    const state: StateService = {
-      id: "s3",
-      getVersion: () => Effect.succeed(STATE_STORE_VERSION),
-      listStacks: () =>
-        verifyHeldLeases.pipe(Effect.andThen(run((bucket) => listChildren(bucket, prefix)))),
-      listStages: (stack: string) =>
-        verifyHeldLeases.pipe(
-          Effect.andThen(run((bucket) => listChildren(bucket, `${prefix}${stack}/`))),
-        ),
-      get: (request) =>
-        guarded(
-          request,
-          run((bucket) => readJson<PersistedState>(bucket, resourceKey(request))),
-        ),
-      getReplacedResources: Effect.fn(function* (request) {
-        return (yield* Effect.all(
-          (yield* state.list(request)).map((fqn) =>
-            state.get({
-              stack: request.stack,
-              stage: request.stage,
-              fqn,
-            }),
-          ),
-        )).filter((r) => r?.status === "replaced");
-      }),
-      set: (request) =>
-        guarded(
-          request,
-          run((bucket) => writeJson(bucket, resourceKey(request), request.value)).pipe(
-            Effect.map(() => request.value),
-          ),
-        ),
-      delete: (request) =>
-        guarded(
-          request,
-          run((bucket) => s3.deleteObject({ Bucket: bucket, Key: resourceKey(request) })).pipe(
-            Effect.asVoid,
-          ),
-        ),
-      // A stack-wide delete locks every stage it is about to remove, so a
-      // concurrent deploy fails the lease instead of racing the delete.
-      deleteStack: ({ stack, stage }) =>
-        stage === undefined
-          ? verifyHeldLeases.pipe(
-              Effect.andThen(state.listStages(stack)),
-              Effect.flatMap((stages) =>
-                Effect.forEach(
-                  stages,
-                  (found) =>
-                    guarded(
-                      { stack, stage: found },
-                      run((bucket) => deleteAll(bucket, stagePrefix({ stack, stage: found }))),
-                    ),
-                  { discard: true },
-                ),
-              ),
-              Effect.andThen(run((bucket) => deleteAll(bucket, `${prefix}${stack}/`))),
-            )
-          : guarded(
-              { stack, stage },
-              run((bucket) => deleteAll(bucket, stagePrefix({ stack, stage }))),
-            ),
-      list: (request) =>
-        guarded(
-          request,
-          run((bucket) => listKeys(bucket, stagePrefix(request))).pipe(
-            Effect.map((keys) =>
-              keys
-                .map((key) => key.slice(stagePrefix(request).length))
-                // Filter bookkeeping before decoding — `decodeFqn` replaces
-                // `__` with `/`, which would turn `__stack_output__` into
-                // `/stack_output/` and slip past the filter.
-                .filter(
-                  (file) => file !== OUTPUT_FILE && file !== LEASE_FILE && file.endsWith(".json"),
-                )
-                .map((file) => decodeFqn(file.replace(/\.json$/, ""))),
-            ),
-          ),
-        ),
-      getOutput: (request) =>
-        guarded(
-          request,
-          run((bucket) => readJson(bucket, outputKey(request))),
-        ),
-      setOutput: (request) =>
-        guarded(
-          request,
-          run((bucket) => writeJson(bucket, outputKey(request), request.value)).pipe(
-            Effect.map(() => request.value),
-          ),
-        ),
-    };
-    return state;
-  }).pipe(withoutSdkDebugLogs);
+    ),
+});
 
 /**
  * Build the default account-regional state bucket name.

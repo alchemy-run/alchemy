@@ -135,3 +135,18 @@ export const handleTypes = Effect.gen(function* () {
   const port = yield* distinct.getTcpPort(8080);
   void port;
 });
+
+// Placement constraints accept a compliance jurisdiction and regions within it.
+const euOnly = Cloudflare.Container("EuOnlyTypes", {
+  schedulingPolicy: "durable_object",
+  image: "node:24-slim",
+  constraints: { jurisdiction: "eu", regions: ["WEUR", "EEUR"] },
+});
+
+// Open enums: values Cloudflare adds later need no alchemy release.
+const newerPlacement: Cloudflare.Containers.ContainerApplication.Constraints = {
+  jurisdiction: "apac",
+  regions: ["NEWR"],
+};
+
+export const placements = [euOnly, newerPlacement];

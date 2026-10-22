@@ -293,6 +293,23 @@ Omit `catchTag` to propagate the typed failure, or handle it at your normal
 Effect boundary. These helpers are for application-owned attachments, not
 the internal serializer metadata of WebSocket RPC connections.
 
+## Address groups of sockets with tags
+
+To message a subset of the room, tag sockets when you accept them
+instead of tracking group membership yourself:
+
+```typescript
+const [response, socket] = yield* Cloudflare.upgrade({
+  tags: [`user:${userId}`, "role:admin"],
+});
+```
+
+`state.getWebSockets("role:admin")` then returns only the sockets
+with that tag, and `state.getTags(socket.ws)` reads a socket's tags.
+The runtime stores tags with the socket, so both work after
+hibernation without rebuilding any in-memory state. Cloudflare allows
+at most 10 tags per socket, each at most 256 characters.
+
 ## Extract a broadcast helper
 
 Before wiring this up, pull the broadcast loop into a reusable

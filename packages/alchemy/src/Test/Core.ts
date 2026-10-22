@@ -100,8 +100,19 @@ export interface MakeOptions<ROut = any> {
    * closed by the adapter's final cleanup hook), so `beforeAll(deploy(Stack))`
    * + per-test requests work the same way they do under a real `alchemy dev`
    * session.
+   *
+   * Pass an object to run the sidecar with options: `omitEnv` lists prefixes
+   * of environment variables the sidecar must not inherit (e.g.
+   * `["CLOUDFLARE_"]` to exercise credential-free dev while the shell
+   * exports credentials).
    */
-  sidecar?: boolean;
+  sidecar?: boolean | SidecarOptions;
+}
+
+/** Options for the dev sidecar process — see {@link MakeOptions.sidecar}. */
+export interface SidecarOptions {
+  /** Prefixes of environment variables withheld from the sidecar. */
+  readonly omitEnv?: ReadonlyArray<string>;
 }
 
 /**
@@ -109,7 +120,7 @@ export interface MakeOptions<ROut = any> {
  * process-local layer: an {@link RpcSpawner} HTTP server that forks sidecar
  * processes on demand, and an {@link RpcProviderProxy} pointed at it.
  */
-export const sidecarProxy = (options: { profile?: string }) =>
+export const sidecarProxy = (options: { profile?: string; omitEnv?: ReadonlyArray<string> }) =>
   Layer.unwrap(
     Effect.map(RpcSpawner.RpcSpawner, (spawner) => RpcProviderProxy.layer(spawner.url)),
   ).pipe(
@@ -117,6 +128,7 @@ export const sidecarProxy = (options: { profile?: string }) =>
       RpcSpawner.layerServer({
         profile: options.profile ?? process.env.ALCHEMY_PROFILE,
         envFile: undefined,
+        omitEnv: options.omitEnv,
       }),
     ),
   );
@@ -143,7 +155,11 @@ export const resolveDev = (options: { dev?: boolean }): boolean => {
 
 /** Resolve the effective `sidecar` flag: defaults to the resolved `dev` flag. */
 export const resolveSidecar = (options: MakeOptions): boolean =>
-  options.sidecar ?? resolveDev(options);
+  options.sidecar === undefined ? resolveDev(options) : options.sidecar !== false;
+
+/** The sidecar's withheld env prefixes, sorted so equal sets share a key. */
+const sidecarOmitEnv = (options: MakeOptions): ReadonlyArray<string> =>
+  typeof options.sidecar === "object" ? [...(options.sidecar.omitEnv ?? [])].sort() : [];
 
 /**
  * Default test stage: `ALCHEMY_TEST_STAGE`, then `test_$USER` (or
@@ -219,11 +235,14 @@ export const makeSidecarHandle = <ROut = any>(
   options: MakeOptions<ROut>,
 ): SidecarHandle | undefined => {
   if (!resolveSidecar(options)) return undefined;
-  const key = options.profile ?? process.env.ALCHEMY_PROFILE ?? "";
+  const profile = options.profile ?? process.env.ALCHEMY_PROFILE ?? "";
+  const omitEnv = sidecarOmitEnv(options);
+  // Files only share a sidecar when it was started with the same environment.
+  const key = JSON.stringify([profile, omitEnv]);
   let singleton = sidecarSingletons.get(key);
   if (singleton === undefined) {
     singleton = {
-      real: sidecarProxy(options),
+      real: sidecarProxy({ profile: options.profile, omitEnv }),
       memoMap: Layer.makeMemoMapUnsafe(),
       scope: Scope.makeUnsafe("sequential"),
       refs: 0,

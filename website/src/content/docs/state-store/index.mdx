@@ -112,6 +112,10 @@ alchemy state bootstrap --backend cloudflare --profile <your-ci-profile>
 use, except in CI, where `alchemy state bootstrap --backend aws`
 provisions it.
 
+`GCP.state()` does the same with a Cloud Storage bucket in your project,
+`alchemy-state-<project>`. In CI, provision it with
+`alchemy state bootstrap --backend gcp`.
+
 ### Where credentials live
 
 After the bootstrap, Alchemy writes the state-store URL and bearer
@@ -140,7 +144,8 @@ alchemy state list --backend cloudflare --name team-a
 
 `AWS.state({ name })` does the same with a separate S3 bucket
 (`alchemy-state-<name>-<account>-<region>-an`). Pass `bucketName` to
-choose the full bucket name yourself.
+choose the full bucket name yourself. `GCP.state({ name })` uses
+`alchemy-state-<name>-<project>`.
 
 ## Postgres state store
 

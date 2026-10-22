@@ -1,7 +1,7 @@
 import * as Railway from "@alchemy.run/railway";
 import { Query } from "@distilled.cloud/core/query";
 import { Railway as RailwayApi } from "@distilled.cloud/railway";
-import { expect } from "alchemy-test";
+import { describe, expect } from "alchemy-test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
@@ -9,6 +9,12 @@ import * as Schedule from "effect/Schedule";
 import * as pathe from "pathe";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
 import { expectUrlContains } from "../../Cloudflare/Utils/Http.ts";
+import {
+  foldkitFixture,
+  foldkitMemo,
+  verifyFoldkitBrowser,
+  verifyFoldkitRendering,
+} from "../../Website/Foldkit.ts";
 import { suitePartition } from "../suiteProject.ts";
 
 const { test } = Test.make({ providers: Railway.providers() });
@@ -32,8 +38,7 @@ const waitUntilGone = (serviceId: string) =>
     }),
   );
 
-// foldkit@0.148.2 requires SchemaTransformation.transformOrFail, absent in Effect rc.115.
-test.provider.skip(
+test.provider(
   "Foldkit: deploy, GET /, destroy, gone",
   (stack) =>
     Effect.gen(function* () {
@@ -88,5 +93,44 @@ test.provider.skip(
       "live",
     ],
     timeout: 120_000,
+  },
+);
+
+describe.sequential(
+  "Railway Foldkit rendering modes",
+  { tags: ["provider:railway", "provider:railway:website", "live"] },
+  () => {
+    for (const mode of ["ssg", "ssr", "hybrid"] as const) {
+      test.provider.skipIf(!!process.env.FAST)(
+        `${mode}: renders every route and cleans up`,
+        (stack) =>
+          Effect.gen(function* () {
+            yield* stack.destroy();
+            const rootDir = yield* foldkitFixture(mode);
+            const site = yield* stack.deploy(
+              Effect.gen(function* () {
+                const { project, environment } = yield* suitePartition;
+                return yield* Railway.Website.Foldkit("Web", {
+                  rootDir,
+                  memo: foldkitMemo,
+                  project,
+                  environment,
+                });
+              }),
+            );
+            expect(site.url).toBeDefined();
+            expect(site.service).toBeDefined();
+            const serviceId = site.service!.serviceId;
+            expect((yield* readService(serviceId)).deletedAt == null).toBe(true);
+            yield* verifyFoldkitRendering(site.url!, mode);
+            yield* verifyFoldkitBrowser(site.url!, mode);
+            yield* stack.destroy();
+            expect(yield* waitUntilGone(serviceId)).toEqual("gone");
+          }),
+        {
+          timeout: 120_000,
+        },
+      );
+    }
   },
 );

@@ -7,7 +7,7 @@ import {
   stampedOf,
   type MigrationsInput,
 } from "@alchemy.run/sql/Migrations";
-import { hashImports, readSqlFile } from "@alchemy.run/sql/SqlFile";
+import { hashImports, readSqlFile, splitSqliteStatements } from "@alchemy.run/sql/SqlFile";
 import * as d1 from "@distilled.cloud/cloudflare/d1";
 import { isResolved } from "alchemy/Diff";
 import * as ProviderLayer from "alchemy/Local/ProviderLayer";
@@ -28,7 +28,7 @@ import type { Providers } from "../Providers.ts";
 import { makeD1MigrationExecutor } from "./ApplyMigrations.ts";
 import { cloneDatabase } from "./CloneDatabase.ts";
 import { importD1Database } from "./ImportDatabase.ts";
-import { withLocalD1Executor } from "./LocalD1Gateway.ts";
+import { withLocalD1Executor, withLocalD1Query } from "./LocalD1Gateway.ts";
 
 export const isDatabase = (value: unknown): value is Database =>
   isResourceOfType(value, "Cloudflare.D1Database");
@@ -635,8 +635,17 @@ export const ProviderLocal = () =>
               pending.push({ path: filePath, sql: file.sql, hash: file.hash });
             }
             if (pending.length > 0) {
-              yield* withLocalD1Executor(databaseId, (executor) =>
-                Effect.forEach(pending, (file) => executor(file.sql), { discard: true }),
+              yield* withLocalD1Query(databaseId, (query) =>
+                Effect.forEach(
+                  pending,
+                  (file) => {
+                    // One statement per batch entry: the simulator's SQLite
+                    // rejects a whole file over its statement length limit.
+                    const batch = splitSqliteStatements(file.sql).map((sql) => ({ sql }));
+                    return batch.length > 0 ? query({ batch }) : Effect.void;
+                  },
+                  { discard: true },
+                ),
               ).pipe(Effect.provideContext(runtimeContext));
               for (const file of pending) {
                 importHashes[file.path] = file.hash;

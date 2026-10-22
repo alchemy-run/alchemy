@@ -299,7 +299,7 @@ for (const dev of [false, true]) {
               retryDelay: "3 seconds",
             });
             expect(response.status).toBe(200);
-            expect(yield* response.text).toBe("runtime-entry:ok");
+            expect(yield* response.text).toBe(`runtime-entry:${stack.stage}`);
             yield* stack.destroy();
           }),
         { tags: [...(dev ? ["local"] : ["live"])] },

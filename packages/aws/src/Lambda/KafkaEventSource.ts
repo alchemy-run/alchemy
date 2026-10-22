@@ -24,6 +24,12 @@ export const isMSKEvent = (event: any): event is lambda.MSKEvent =>
 // same cluster path; MSK IAM auth grants data-plane access via these ARNs.
 const topicArnGlob = (clusterArn: string) => `${clusterArn.replace(":cluster/", ":topic/")}/*`;
 const groupArnGlob = (clusterArn: string) => `${clusterArn.replace(":cluster/", ":group/")}/*`;
+// `arn:{partition}:kafka:{region}:{account}:cluster/...` →
+// `arn:{partition}:ec2:{region}:{account}:`
+const ec2ArnPrefix = (clusterArn: string) => {
+  const [arn, partition, , region, account] = clusterArn.split(":");
+  return `${arn}:${partition}:ec2:${region}:${account}:`;
+};
 
 /** @binding */
 export const KafkaEventSource = Layer.effect(
@@ -72,6 +78,66 @@ export const KafkaEventSource = Layer.effect(
                   Effect: "Allow",
                   Action: ["kafka-cluster:DescribeGroup", "kafka-cluster:AlterGroup"],
                   Resource: [cluster.clusterArn.pipe(Output.map(groupArnGlob))],
+                },
+                {
+                  // The poller reaches the cluster through ENIs in its VPC;
+                  // Lambda validates these on the execution role when the
+                  // mapping is created. EC2 Describe* actions do not support
+                  // resource-level permissions, so scope them to the
+                  // cluster's region instead.
+                  Effect: "Allow",
+                  Action: [
+                    "ec2:DescribeNetworkInterfaces",
+                    "ec2:DescribeSecurityGroups",
+                    "ec2:DescribeSubnets",
+                    "ec2:DescribeVpcs",
+                  ],
+                  Resource: ["*"],
+                  Condition: {
+                    StringEquals: {
+                      "aws:RequestedRegion": cluster.clusterArn.pipe(
+                        Output.map((arn) => arn.split(":")[3]!),
+                      ),
+                    },
+                  },
+                },
+                {
+                  // ENIs may only be created in the cluster's subnets with
+                  // the cluster's security groups.
+                  Effect: "Allow",
+                  Action: ["ec2:CreateNetworkInterface"],
+                  Resource: Output.all(
+                    cluster.clusterArn,
+                    cluster.subnetIds,
+                    cluster.securityGroupIds,
+                  ).pipe(
+                    Output.map(([clusterArn, subnetIds, securityGroupIds]) => [
+                      `${ec2ArnPrefix(clusterArn)}network-interface/*`,
+                      ...subnetIds.map((id) => `${ec2ArnPrefix(clusterArn)}subnet/${id}`),
+                      ...securityGroupIds.map(
+                        (id) => `${ec2ArnPrefix(clusterArn)}security-group/${id}`,
+                      ),
+                    ]),
+                  ),
+                },
+                {
+                  // ...and only ENIs in those subnets may be deleted.
+                  Effect: "Allow",
+                  Action: ["ec2:DeleteNetworkInterface"],
+                  Resource: [
+                    cluster.clusterArn.pipe(
+                      Output.map((arn) => `${ec2ArnPrefix(arn)}network-interface/*`),
+                    ),
+                  ],
+                  Condition: {
+                    ArnEquals: {
+                      "ec2:Subnet": Output.all(cluster.clusterArn, cluster.subnetIds).pipe(
+                        Output.map(([clusterArn, subnetIds]) =>
+                          subnetIds.map((id) => `${ec2ArnPrefix(clusterArn)}subnet/${id}`),
+                        ),
+                      ),
+                    },
+                  },
                 },
               ],
             });
