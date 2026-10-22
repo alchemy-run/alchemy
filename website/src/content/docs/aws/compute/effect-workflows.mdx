@@ -31,14 +31,59 @@ export const PlaceOrder = Workflow.make("PlaceOrder", {
   idempotencyKey: ({ orderId }) => orderId,
 });
 
-export const PlaceOrderLive = Workflows.layer(PlaceOrder, ({ orderId }) =>
-  Activity.make({
-    name: "charge",
-    success: Schema.String,
-    execute: Effect.succeed(`charged ${orderId}`),
+export const PlaceOrderLive = Workflows.layer(
+  PlaceOrder,
+  Effect.fn(function* ({ orderId }) {
+    return yield* Activity.make({
+      name: "charge",
+      success: Schema.String,
+      execute: Effect.succeed(`charged ${orderId}`),
+    });
   }),
 );
 ```
+
+## Use bindings in a step
+
+Pass `Workflows.layer` an Effect that returns the handler instead of the
+handler itself. The Effect runs once, when the function starts, so resolve
+bindings there and use them in the steps:
+
+```typescript
+// src/receipts.ts
+import * as AWS from "@alchemy.run/aws";
+import * as Workflows from "alchemy/Workflows";
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+import { Activity, Workflow } from "effect/workflow";
+
+export const Receipts = AWS.S3.Bucket("Receipts");
+
+export const SendReceipt = Workflow.make("SendReceipt", {
+  payload: { orderId: Schema.String },
+  idempotencyKey: ({ orderId }) => orderId,
+});
+
+export const SendReceiptLive = Workflows.layer(
+  SendReceipt,
+  Effect.gen(function* () {
+    const putObject = yield* AWS.S3.PutObject(Receipts);
+    return Effect.fn(function* ({ orderId }) {
+      yield* Activity.make({
+        name: "receipt",
+        execute: putObject({
+          Key: `${orderId}.json`,
+          Body: JSON.stringify({ orderId }),
+        }).pipe(Effect.orDie),
+      });
+    });
+  }),
+);
+```
+
+The binding grants the workflow function `s3:PutObject` on the bucket.
+Provide its implementation on the Layer you deploy the function with:
+`SendReceiptLive.pipe(Layer.provide(AWS.S3.PutObjectHttp))`.
 
 ## Host it in a workflow function
 

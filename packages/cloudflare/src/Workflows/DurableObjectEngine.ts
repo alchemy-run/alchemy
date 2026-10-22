@@ -54,8 +54,11 @@ import type { Worker } from "../Workers/Worker.ts";
  *   idempotencyKey: ({ userId }) => userId,
  * });
  *
- * const SendWelcomeLive = Workflows.layer(SendWelcome, ({ userId }) =>
- *   Activity.make({ name: "send", execute: Effect.log(`welcome, ${userId}`) }),
+ * const SendWelcomeLive = Workflows.layer(
+ *   SendWelcome,
+ *   Effect.fn(function* ({ userId }) {
+ *     yield* Activity.make({ name: "send", execute: Effect.log(`welcome, ${userId}`) });
+ *   }),
  * );
  *
  * export default class AppWorker extends Cloudflare.Worker<AppWorker>()(
@@ -71,7 +74,9 @@ import type { Worker } from "../Workers/Worker.ts";
  *     };
  *   }).pipe(
  *     Effect.provide(
- *       SendWelcomeLive.pipe(Layer.provideMerge(Cloudflare.Workflows.DurableObjectEngine)),
+ *       SendWelcomeLive.pipe(
+ *         Layer.provideMerge(Cloudflare.Workflows.DurableObjectEngine),
+ *       ),
  *     ),
  *   ),
  * ) {}
