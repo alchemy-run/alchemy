@@ -464,7 +464,8 @@ export const StoreSecretProvider = () =>
  * slow activation degrades to a retried deploy instead of a hard
  * error here.
  */
-const waitForSecretActive = (
+/** @internal Wait (bounded) for a freshly created secret to become active. */
+export const waitForSecretActive = (
   key: { accountId: string; storeId: string; secretId: string },
   initialStatus: SecretStatus,
 ) =>

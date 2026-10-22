@@ -1,14 +1,23 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
+import { bootstrap, teardownStateStore } from "@alchemy.run/cloudflare/StateStore/State";
+import {
+  AuthTokenSecretName,
+  EncryptionKeySecretName,
+  stateStoreSecretName,
+} from "@alchemy.run/cloudflare/StateStore/Token";
+import * as secretsStore from "@distilled.cloud/cloudflare/secrets-store";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import { expect } from "alchemy-test";
 import * as Alchemist from "alchemy/Alchemist";
+import { State } from "alchemy/State/State";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -68,10 +77,9 @@ test.provider(
       const adopted = yield* Alchemist.State.bootstrap(target).pipe(Effect.provide(alchemist));
       expect(adopted.status).toBe("adopted");
 
-      // The named store holds only its own bootstrap stack.
+      // The store is deployed without a stack, so a new one holds no state.
       const store = yield* Alchemist.State.store(target).pipe(Effect.provide(alchemist));
-      expect(yield* store.listStacks()).toEqual(["CloudflareStateStore"]);
-      expect(yield* store.listStages("CloudflareStateStore")).toEqual([worker]);
+      expect(yield* store.listStacks()).toEqual([]);
 
       const torn = yield* Alchemist.State.teardown(target).pipe(Effect.provide(alchemist));
       expect(torn.deleted).toEqual([worker]);
@@ -116,5 +124,83 @@ test.provider(
     tags: ["provider:cloudflare", "provider:cloudflare:statestore", "live"],
     timeout: 300_000,
     exclusive: true,
+  },
+);
+
+/** The ids of a store's two secrets, observed out-of-band. */
+const secretIds = (accountId: string, workerName: string) =>
+  Effect.gen(function* () {
+    const names = [
+      stateStoreSecretName(AuthTokenSecretName, workerName),
+      stateStoreSecretName(EncryptionKeySecretName, workerName),
+    ];
+    const store = yield* secretsStore.listStores.items({ accountId }).pipe(Stream.runHead);
+    if (store._tag === "None") return [];
+    const secrets = yield* secretsStore.listStoreSecrets
+      .items({ accountId, storeId: store.value.id })
+      .pipe(Stream.runCollect);
+    return names.map((name) => Array.from(secrets).find((secret) => secret.name === name)?.id);
+  });
+
+test.provider(
+  "a state store pinned to an account and named by workerName deploys there and keeps its secrets",
+  () =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const workerName = `alchemy-state-store-pin-${Test.defaultStage().replaceAll("_", "-")}`;
+      const record = {
+        kind: "resource" as const,
+        resourceType: "Test.Resource",
+        namespace: undefined,
+        fqn: "pinned/a",
+        logicalId: "a",
+        instanceId: "kept",
+        providerVersion: 1,
+        status: "created" as const,
+        downstream: [],
+        bindings: [],
+        props: { hello: "world" },
+        attr: { id: "kept" },
+      };
+      yield* teardownStateStore({ workerName, accountId });
+
+      // An account the credentials can't reach fails instead of falling back
+      // to the profile's account.
+      const unreachable = yield* Effect.exit(
+        State.pipe(
+          Effect.flatten,
+          Effect.provide(Cloudflare.state({ workerName, accountId: "0".repeat(32) })),
+        ),
+      );
+      expect(Exit.isFailure(unreachable)).toBe(true);
+      if (Exit.isFailure(unreachable)) {
+        expect(Cause.pretty(unreachable.cause)).toContain(`pinned to account ${"0".repeat(32)}`);
+      }
+      expect(yield* scriptExists(accountId, workerName)).toBe(false);
+
+      // The pinned account deploys the Worker under exactly `workerName`.
+      const state = yield* State.pipe(
+        Effect.flatten,
+        Effect.provide(Cloudflare.state({ workerName, accountId })),
+      );
+      yield* state.set({ stack: "pinned", stage: "test", fqn: "pinned/a", value: record });
+      expect(yield* scriptExists(accountId, workerName)).toBe(true);
+      const secrets = yield* secretIds(accountId, workerName);
+      expect(secrets.every((id) => id !== undefined)).toBe(true);
+
+      // A forced redeploy reuses both secrets, so state written before it
+      // still decrypts.
+      const redeployed = yield* bootstrap({ workerName, accountId, force: true });
+      expect(yield* secretIds(accountId, workerName)).toEqual(secrets);
+      expect(yield* redeployed.get({ stack: "pinned", stage: "test", fqn: "pinned/a" })).toEqual(
+        record,
+      );
+
+      yield* teardownStateStore({ workerName, accountId });
+      expect(yield* scriptExists(accountId, workerName)).toBe(false);
+    }),
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:statestore", "live"],
+    timeout: 300_000,
   },
 );

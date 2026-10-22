@@ -89,19 +89,9 @@ export const STATE_STORE_VERSION = 7 as const;
 //   Layer.provide(FetchHttpClient.layer),
 // );
 
-/**
- * Path on disk to *this* file, used as the worker's bundling entry.
- *
- * When running from source (e.g. dev / monorepo), `import.meta.url` points
- * at `Api.ts` and we can use it directly. When the alchemy CLI is run from
- * its published `bin/alchemy.js` bundle, this module is inlined into the
- * CLI bundle and `import.meta.url` resolves to `bin/alchemy.js` — which
- * has no `default` export and breaks the worker bundler with
- * `[MISSING_EXPORT] "default" is not exported by "bin/alchemy.js"`.
- *
- * In the bundled case, fall back to the published source file shipped
- * alongside the CLI under `../src/Cloudflare/StateStore/Api.ts`.
- */
+/** This module, the state-store Worker's bundling entry (see `Deploy.ts`). */
+export const API_MAIN = import.meta.url;
+
 /**
  * A failed Durable Object call, as the API's declared error: the operation and
  * the kind of failure for the client, the full cause in the Worker's logs.
@@ -127,7 +117,7 @@ export default Worker(
   "Api",
   Effect.map(StateStoreName, (name) => ({
     name,
-    main: import.meta.url,
+    main: API_MAIN,
     workersDev: true,
     compatibility: {
       date: DEFAULT_COMPATIBILITY_DATE,

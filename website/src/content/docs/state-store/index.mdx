@@ -136,7 +136,13 @@ credentials:
 state: Cloudflare.state({ name: "team-a" }), // Worker alchemy-state-store-team-a
 ```
 
-Address it from the CLI with `--name`:
+Pass `workerName` instead to choose the full Worker name yourself:
+
+```typescript
+state: Cloudflare.state({ workerName: "acme-state" }),
+```
+
+Address a named store from the CLI with `--name`:
 
 ```sh
 alchemy state list --backend cloudflare --name team-a
@@ -146,6 +152,16 @@ alchemy state list --backend cloudflare --name team-a
 (`alchemy-state-<name>-<account>-<region>-an`). Pass `bucketName` to
 choose the full bucket name yourself. `GCP.state({ name })` uses
 `alchemy-state-<name>-<project>`.
+
+### Pin the account
+
+The store lives in the Cloudflare account your profile resolves. If your
+credentials reach several accounts, pin it, so logging in to a different one
+fails instead of reading or deploying the store there:
+
+```typescript
+state: Cloudflare.state({ accountId: "c8eeff0e..." }),
+```
 
 ## Postgres state store
 
