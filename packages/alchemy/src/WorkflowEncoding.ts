@@ -26,7 +26,17 @@ export const encodeExit = (exit: Exit.Exit<unknown, unknown>) =>
 export const decodeExit = (text: string) =>
   Schema.decodeEffect(ExitJson)(JSON.parse(text)).pipe(Effect.orDie);
 
-export const payloadCodec = (workflow: Workflow.AnyWithProps) =>
+/**
+ * The schemas a workflow's payload and result are stored through. Concrete
+ * `Workflow`s don't assign to Effect's own `Workflow.AnyWithProps` (its
+ * `execute` options), so accept just what encoding reads.
+ */
+export type WorkflowSchemas = Pick<
+  Workflow.AnyWithProps,
+  "payloadSchema" | "successSchema" | "errorSchema"
+>;
+
+export const payloadCodec = (workflow: WorkflowSchemas) =>
   Schema.toCodecJson(workflow.payloadSchema) as unknown as Schema.Codec<unknown, unknown>;
 
 interface ResultCodec {
@@ -42,7 +52,7 @@ interface ResultCodec {
 // the workflow name or definition, so replaced schemas never reuse a stale codec.
 const resultCodecs = new WeakMap<Schema.Top, WeakMap<Schema.Top, ResultCodec>>();
 
-const resultCodec = (workflow: Workflow.AnyWithProps): ResultCodec => {
+const resultCodec = (workflow: WorkflowSchemas): ResultCodec => {
   const { successSchema, errorSchema } = workflow;
   let errors = resultCodecs.get(successSchema);
   if (errors === undefined) {
@@ -64,10 +74,10 @@ const resultCodec = (workflow: Workflow.AnyWithProps): ResultCodec => {
 };
 
 /** A workflow's own result is stored through its success and error schemas. */
-export const encodeResult = (workflow: Workflow.AnyWithProps, exit: Exit.Exit<unknown, unknown>) =>
+export const encodeResult = (workflow: WorkflowSchemas, exit: Exit.Exit<unknown, unknown>) =>
   resultCodec(workflow).encode(exit).pipe(Effect.map(JSON.stringify), Effect.orDie);
 
-export const decodeResult = (workflow: Workflow.AnyWithProps, text: string) =>
+export const decodeResult = (workflow: WorkflowSchemas, text: string) =>
   resultCodec(workflow)
     .decode(JSON.parse(text))
     .pipe(
