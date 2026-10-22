@@ -5,8 +5,8 @@ description: Deploy a Cloudflare Worker with Drizzle queries, Hyperdrive connect
 
 import PackageManagers from "../../../../components/PackageManagers.astro";
 
-export const drizzleDeps = `@alchemy.run/drizzle drizzle-orm@1.0.0-rc.5-ab785fc @effect/sql-pg pg`;
-export const drizzleDevDeps = `drizzle-kit@1.0.0-rc.5-ab785fc @types/pg`;
+export const drizzleDeps = `@alchemy.run/drizzle drizzle-orm@1.0.0-rc.5-ab785fc @effect/sql-pg`;
+export const drizzleDevDeps = `drizzle-kit@1.0.0-rc.5-ab785fc`;
 
 This walkthrough connects a Worker to Postgres through Hyperdrive; [SQL](/sql) owns the portable client APIs. For Cloudflare's SQLite database, use [Drizzle on D1](/cloudflare/data/d1-drizzle).
 
@@ -128,7 +128,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
 ) {}
 ```
 
-`nodejs_compat` enables the Node APIs used by `pg`, and `ConnectBinding` supplies the Worker's Hyperdrive binding. Queries yield directly as Effects and acquire their pool only within the request's [scope](/sql/effect-sql/lifecycle).
+`nodejs_compat` enables the Node socket and TLS APIs `@effect/sql-pg` uses, and `ConnectBinding` supplies the Worker's Hyperdrive binding. Queries yield directly as Effects and acquire their pool only within the request's [scope](/sql/effect-sql/lifecycle).
 
 ## Register the providers
 
@@ -272,7 +272,7 @@ Select the MySQL resource variant in the [PlanetScale guide](/planetscale/guides
 ## Select the MySQL client
 
 ```sh
-bun add @effect/sql-mysql2 mysql2
+bun add @effect/sql-mysql2
 ```
 
 ```diff lang="typescript"

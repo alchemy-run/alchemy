@@ -8,12 +8,12 @@ import { DBCluster, DBInstance, MigrationRunner, type DBInstanceProps } from "@a
 import { Aurora, type AuroraProps } from "@alchemy.run/aws/RDS/Aurora";
 import { DBParameterGroup } from "@alchemy.run/aws/RDS/DBParameterGroup";
 import { DBSubnetGroup } from "@alchemy.run/aws/RDS/DBSubnetGroup";
-import { importPg } from "@alchemy.run/sql/PostgresDriver";
 import * as ec2 from "@distilled.cloud/aws/ec2";
 import * as Lambda from "@distilled.cloud/aws/lambda";
 import * as rds from "@distilled.cloud/aws/rds";
 import * as rdsdata from "@distilled.cloud/aws/rds-data";
 import * as secretsmanager from "@distilled.cloud/aws/secrets-manager";
+import * as PgClient from "@effect/sql-pg/PgClient";
 import { describe, expect } from "alchemy-test";
 import * as Drift from "alchemy/Drift";
 import * as Output from "alchemy/Output";
@@ -2684,25 +2684,20 @@ lifecycle(4, process.env.AWS_TEST_RDS_DBINSTANCE)(
 
       // Out-of-band: read the bookkeeping rows over our own connection.
       const credentials = yield* readSecretCredentials(updated.masterUserSecretArn!);
-      const rows = yield* Effect.acquireUseRelease(
-        Effect.tryPromise(async () => {
-          const { Client } = await importPg();
-          const client = new Client({
+      const rows = yield* Effect.gen(function* () {
+        const sql = yield* PgClient.PgClient;
+        return yield* sql`SELECT name FROM __alchemy_migrations ORDER BY id`;
+      }).pipe(
+        Effect.provide(
+          PgClient.layer({
             host: updated.endpointAddress,
             port: updated.endpointPort,
             database: "app",
-            user: credentials.username,
-            password: credentials.password,
+            username: credentials.username,
+            password: Redacted.make(credentials.password),
             ssl: { rejectUnauthorized: false },
-          });
-          await client.connect();
-          return client;
-        }),
-        (client) =>
-          Effect.tryPromise(() =>
-            client.query("SELECT name FROM __alchemy_migrations ORDER BY id;"),
-          ).pipe(Effect.map((result) => result.rows)),
-        (client) => Effect.promise(() => client.end()),
+          }),
+        ),
       );
       expect(rows).toEqual([{ name: "0001_users.sql" }, { name: "0002_posts.sql" }]);
 

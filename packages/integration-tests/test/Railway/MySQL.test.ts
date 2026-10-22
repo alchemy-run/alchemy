@@ -3,6 +3,7 @@ import { RailwayAuth } from "@alchemy.run/railway/AuthProvider";
 import { fromAuthProvider } from "@alchemy.run/railway/Credentials";
 import { Query } from "@distilled.cloud/core/query";
 import { GraphQLLive, Railway as RailwayApi } from "@distilled.cloud/railway";
+import * as MysqlClient from "@effect/sql-mysql2/MysqlClient";
 import * as Alchemy from "alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Provider from "alchemy/Provider";
@@ -11,6 +12,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
+import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import MySQLApi, { Db, Site } from "./fixtures/mysql-api.ts";
@@ -33,24 +35,28 @@ const firstOk = (rows: unknown): unknown => {
   return (rows[0] as { ok?: unknown }).ok;
 };
 
-const selectOne = (url: string) =>
-  Effect.tryPromise({
-    try: async () => {
-      const mysql = await import("mysql2/promise");
-      const connection = await mysql.createConnection({ uri: url, connectTimeout: 5_000 });
-      try {
-        const [rows] = await connection.query({ sql: "select 1 as ok", timeout: 5_000 });
-        return rows;
-      } finally {
-        connection.destroy();
-      }
-    },
-    catch: (cause) => new Error(String(cause)),
-    // A freshly provisioned Railway MySQL can close connections for a while
-    // after it reports ready ("Connection lost: The server closed the
-    // connection"). Eleven attempts, 3s apart: at most ~30s of backoff, and
-    // each attempt is bounded by the 5s connect/query timeouts.
-  }).pipe(Effect.retry({ schedule: Schedule.spaced("3 seconds"), times: 10 }));
+const selectOne = Effect.fn(
+  function* (_url: string) {
+    const sql = yield* MysqlClient.MysqlClient;
+    return yield* sql`select 1 as ok`;
+  },
+  (effect, url) =>
+    effect.pipe(
+      Effect.provide(
+        MysqlClient.layer({
+          url: Redacted.make(url),
+          maxConnections: 1,
+          poolConfig: { connectTimeout: 5_000 },
+        }),
+      ),
+      Effect.timeout("10 seconds"),
+      // A freshly provisioned Railway MySQL can close connections for a while
+      // after it reports ready ("Connection lost: The server closed the
+      // connection"). Eleven attempts, 3s apart: at most ~30s of backoff, and
+      // each attempt is bounded by the 10s timeout.
+      Effect.retry({ schedule: Schedule.spaced("3 seconds"), times: 10 }),
+    ),
+);
 
 const readVariables = Query.fn((projectId: string, environmentId: string, serviceId: string) =>
   RailwayApi.variables({ projectId, environmentId, serviceId, unrendered: true }),

@@ -69,13 +69,12 @@ export const MACHINE_PLATFORM = "linux/amd64";
 export interface FlyBuildOptions extends Bundle.BundleConfig {
   /**
    * Native or Node-only packages to install into the Machine image with
-   * `npm install` instead of bundling them. `pg` is CommonJS: Rolldown's
-   * interop turns `Client` into a namespace (`The superclass is not a
-   * constructor`). Same `build.install` shape as Lambda.
+   * `npm install` instead of bundling them. Same `build.install` shape as
+   * Lambda.
    *
    * @example
    * ```typescript
-   * build: { install: ["pg"] }
+   * build: { install: ["sharp"] }
    * ```
    */
   readonly install?: PackageInstall;

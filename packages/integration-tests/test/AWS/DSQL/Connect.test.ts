@@ -225,7 +225,7 @@ describe(
     );
 
     test.provider(
-      "connects DIRECTLY to the public endpoint (raw pg, no Drizzle, no VPC)",
+      "connects DIRECTLY to the public endpoint (raw @effect/sql-pg, no Drizzle, no VPC)",
       (_stack) =>
         Effect.gen(function* () {
           const roundtrip = (yield* postJson(`${directUrl}/roundtrip`, {})) as {
