@@ -80,6 +80,7 @@ reason the platform forces. References:
 | --- | --- | --- |
 | Forbidden treated as missing | `rg -n '"Forbidden"' src/<P> test/<P>` | never in a not-found/gone path; a 403-for-missing API gets its own distilled tag |
 | Message string matching | `rg -n 'message.*(includes\|match\|test)\(\|/[^/]*not found[^/]*/i' src/<P>` | 0; patch distilled with a matcher |
+| Hand-written HTTP | `rg -n 'HttpClientRequest\.(get\|post\|put\|delete\|head\|patch)\(' src/<P>` | every hit is a presigned/SAS URL from the API or the user's own deployed endpoint, with a comment saying so; data-plane and credential calls go through distilled |
 | Catch-all errors handled | `rg -n 'Unknown\w*Error\|HttpError' src/<P>` | 0 |
 | Lists swallowing errors | `rg -n 'orElseSucceed\|catch\w*\(.*\[\]' src/<P>` | 0 on any list/read path |
 | Single-page lists | read every `list` and `findBy*` helper | paginated (`.items(...)` or a page-token loop) |

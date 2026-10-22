@@ -146,6 +146,44 @@ Every provider talks to its API through a distilled SDK
 (`@distilled.cloud/<pkg>` in `submodules/distilled/packages/<pkg>`). Alchemy
 never calls the API with a hand-written HTTP client.
 
+**That includes the data plane.** Bindings call the cloud's data APIs
+(put a blob, send a message, read a secret), and those go through
+distilled exactly like the management API that creates the resources.
+AWS is the model: `sqs.sendMessage`, `s3.putObject` and
+`dynamodb.getItem` are distilled operations, and AWS bindings hold no
+HTTP code. Check data-plane coverage when you check the SDK. If the SDK
+covers only the management API, extend it before writing a binding:
+
+- **The spec has a data-plane model** (Azure's
+  `specification/<service>/data-plane/`, GCP's data APIs in discovery
+  docs): extend the converter to include it, as its own service module
+  (`storage-queue`, `keyvault-secrets`).
+- **The API has no published spec** (Kudu zip deploy, a CLI-only
+  endpoint): write the model by hand in the package's `manual-specs/`.
+- **The protocol isn't HTTP-shaped** (XML bodies, SAS signing, a token
+  audience per data plane): add it to the distilled protocol, not to
+  alchemy.
+- **Credentials from the runtime's identity endpoint** (managed identity,
+  metadata server, container credentials) are a distilled credentials
+  provider, like AWS's `fromContainerMetadata`. A binding never fetches
+  its own token.
+
+On Azure, the converter skips `data-plane/` (`scripts/convert.ts`), so
+the agent hand-wrote XML request builders for Storage queues and blobs,
+Key Vault secrets, Service Bus, Event Hubs, a static-website uploader, and
+a managed-identity token cache: 22 raw request sites, with no typed
+errors and no tests against a spec. Don't repeat it. Stop and extend
+distilled.
+
+Raw `HttpClient` calls are allowed only for:
+
+- URLs the API hands back to you to use as-is (a presigned or SAS upload
+  URL, a signed download URL);
+- the user's own deployed endpoints (calling a Worker, Function, or
+  service the stack deployed).
+
+Each one carries a comment saying which case it is.
+
 - **No SDK yet:** follow the `distilled-sdk` skill in the submodule
   (`submodules/distilled/.agents/skills/distilled-sdk/SKILL.md`). It covers
   sourcing the spec, the mirror, convert/generate, the README, and the
