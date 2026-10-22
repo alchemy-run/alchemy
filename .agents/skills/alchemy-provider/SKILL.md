@@ -221,7 +221,8 @@ a hosted runtime, websites). A package holds:
 | `src/globals.d.ts` | `import type {} from "alchemy/Phase";` so `globalThis.__ALCHEMY_RUNTIME__` type-checks |
 | `src/index.ts` | re-exports every resource, binding, and layer; `export * as <Service> from "./<Service>/index.ts"` |
 | `src/Labels.ts` / tags helper | ownership labels, if the API supports labels or tags |
-| `src/Bootstrap.ts` | process entry for a hosted runtime, if the cloud runs code |
+| `src/Bootstrap.ts` | process entry for a hosted runtime, if the cloud runs code (source-only export) |
+| `README.md` | npm readme: short intro, install line, one complete type-checked example, absolute `https://alchemy.run` links |
 
 `Contributions.ts` is imported on every CLI start, so it holds metadata and
 `Contributions.lazy(() => import(...), pick)` fields only. Contribute `auth`
@@ -325,8 +326,20 @@ are the mistakes that most often slip through review (each has a check in
 
 ## Step 5 — bindings and runtimes
 
-Follow the binding sections of `AGENTS.md`. Every capability is a
-`Binding.Service` declared in the interface + factory form:
+Follow the binding sections of `AGENTS.md`, then copy the AWS and GCP
+packages: they are the reference for how bindings reach their host, and
+most questions are answered by reading the closest existing binding. The
+pattern was set by these PRs; read their descriptions when a case isn't
+obvious from the code:
+
+| PR | What it settled |
+| --- | --- |
+| #2260 | bindings state what they need; a `<P>Bindings` module decides how the host gets it (`packages/aws/src/AWSBindings.ts`) |
+| #2347 | `Bind` / `withCredentials` effectful constructors, identity from real resources, `__ALCHEMY_HOST_IDENTITY__` bundle fold (`packages/gcp/src/GCPBindings.ts`) |
+| #2267 | deploy-only services read behind the runtime guard; `*Http` bindings on local resources fail with a typed error (`packages/cloudflare/src/HttpBindingDev.ts`) |
+| #2244, #2315 | no branching on another provider's host type; reach the host through `RuntimeContext` and core host services (`alchemy/WebhookHost`) |
+
+**Declare** each capability as an interface plus factory:
 
 ```ts
 export interface SendMessage extends Binding.Service<
@@ -337,28 +350,30 @@ export interface SendMessage extends Binding.Service<
 export const SendMessage = Binding.Service<SendMessage>("AWS.SQS.SendMessage");
 ```
 
-Bindings reach the cloud from **any** host, not only the provider's own
-compute: a Lambda can bind a GCP topic, a Cloudflare Worker can bind an
-SQS queue. The package's `src/<Provider>Bindings.ts` owns that, modelled
-on `packages/aws/src/AWSBindings.ts` and `packages/gcp/src/GCPBindings.ts`
-(read both module JSDocs first). It exports:
+**Reach any host.** A binding works on the provider's own compute and on
+every other cloud's: a Lambda can bind a GCP topic, a Cloudflare Worker
+an SQS queue. `src/<Provider>Bindings.ts` owns the decision and exports:
 
-- `HostBinding` — what a binding attaches: the grants (IAM statements,
-  role bindings, role assignments) plus `env`.
-- `Bind` — an Effect yielding a tagged-template `bind`. On a host that runs
-  as the cloud's own identity (Lambda role, GCP service account, Azure
-  managed identity) it puts the grants on that identity. On any other host
-  it creates an identity and key for the host, grants to that identity, and
-  binds the key into the host's env through `CurrentRuntimeContext`. With
-  no host (script, deploy-time action) it does nothing.
+- `HostBinding` — what a binding attaches: grants (IAM statements, role
+  bindings, role assignments) plus `env`.
+- `Bind` — yields a tagged-template `bind`. On a host that runs as the
+  cloud's own identity (`runsAsRole`, `runsAsServiceAccount`; an Azure
+  managed identity) the grants go on that identity. Any other host gets an
+  identity built from the provider's own resources (IAM `User` +
+  `AccessKey` + `Role` on AWS, `ServiceAccount` + `ServiceAccountKey` on
+  GCP), the grants go on it, and its key goes into the host's env through
+  `CurrentRuntimeContext`. With no host (a script, plan-time `execute`) it
+  does nothing. In a host bundle it is a no-op, so the identity resources
+  drop out.
 - `withCredentials(operation)` — resolves a distilled operation once when
-  the binding's layer is built: the host's ambient identity, the created
-  key read from the runtime env, or the deployer's credentials.
-- `<identity>HostBundle` — a rolldown option that defines
-  `globalThis.__ALCHEMY_HOST_IDENTITY__` on the provider's own hosts, so
-  their bundles drop the created-key path.
+  the layer is built: the host's ambient identity, the bound key read back
+  from `RuntimeContext`, or the deployer's credentials.
+- `<identity>HostBundle` — the rolldown option the provider's own host
+  bundlers apply (`Lambda/FunctionBundle.ts`, `CloudFunctions/FunctionSource.ts`,
+  the `ImageSource.ts` files). It sets `__ALCHEMY_HOST_IDENTITY__` (declared
+  in core's `Phase.ts`) so the created-key path drops out of native bundles.
 
-A binding's layer then reads:
+A binding layer then reads:
 
 ```ts
 Effect.gen(function* () {
@@ -373,12 +388,29 @@ Effect.gen(function* () {
 });
 ```
 
-Never call `host.bind(...)` from a binding, and never limit a binding to
-an allowlist of the provider's own host types; both predate `Bind` and
-lose foreign hosts. Bindings that share scaffolding (same grant shape, same
-injected identifier) build it once in an unexported `<Service>/BindingHttp.ts`
-and keep each `<Op>Http.ts` a one-line `Layer.effect(Cap, make…({ … }))`
-(`packages/aws/src/SQS/BindingHttp.ts`).
+Rules the reference code follows:
+
+- Never call `host.bind(...)` from a binding, and never allowlist the
+  provider's own host types; both lose foreign hosts. The exceptions are
+  host-only attachments that make no sense elsewhere, and they get their
+  own helper (`AWSBindings.bindVpc`, the Cloud SQL socket mount in
+  `GCP.SQL.Connect`).
+- Never name another provider's resource type (`host.Type ===
+  "Cloudflare.Worker"`). Write env through `RuntimeContext` (`runtime.set`
+  at deploy, `runtime.get` at runtime; secrets stay `Redacted`), and use
+  core host services such as `WebhookHost` for anything else a host must
+  provide.
+- Services that only exist at deploy (`<P>Environment.current`, the
+  account or project id for a grant) are read inside the
+  `!globalThis.__ALCHEMY_RUNTIME__` block. Read at layer build, they crash
+  a foreign host at init.
+- Per-service grant helpers are constructors too (`GrantOnQueue` in
+  `packages/aws/src/SQS/BindingHttp.ts`), and shared scaffolding lives in
+  an unexported `BindingHttp.ts` so each `<Op>Http.ts` is a one-line
+  `Layer.effect(Cap, make…({ … }))`.
+- A provider with local emulation fails an HTTP binding to a locally
+  emulated resource with a typed error naming the native binding and
+  `Alchemy.remote()` (`HttpBindingUnsupportedInDev`).
 
 Grants are least privilege and scoped to the bound resource (resource IAM
 policy, or a condition when the API only grants at project level);
@@ -386,9 +418,11 @@ document any unavoidable broader grant in the binding's JSDoc.
 
 A provider that hosts code (functions, containers) also needs an
 Effect-native runtime: the host resource accepts the `HostBinding`
-contract, a `Bootstrap` module is the generated entry's process bootstrap
-(`packages/hetzner/src/Bootstrap.ts`), and event sources mirror the AWS
-`SQS.QueueEventSource` and Cloudflare cron shapes.
+contract, applies the `HostBundle` option, and ships its process
+bootstrap as a source-only `Bootstrap` export in the provider package
+(`packages/hetzner/src/Bootstrap.ts`, `packages/aws/src/Bootstrap/`).
+Event sources mirror the AWS `SQS.QueueEventSource` and Cloudflare cron
+shapes.
 
 ## Step 6 — live tests
 
@@ -417,8 +451,11 @@ What a test must prove:
 - **Bindings run inside a deployed host** (a fixture Worker, Function, or
   container calling the binding over HTTP) so the IAM grant or native
   binding is exercised with the host's identity, not the deployer's. Test
-  both paths of `Bind`: the provider's own host, and one foreign host
-  (a Cloudflare Worker is the cheapest) using the created key.
+  both paths of `Bind`: the provider's own host, and a foreign host using
+  the created key in `test/<Provider>/ExternalHost/CloudflareWorker.test.ts`
+  (copy `test/GCP/ExternalHost/`). If the provider hosts code, also add
+  its host to the other providers' external-host suites
+  (`test/Cloudflare/ExternalHost/Lambda.test.ts` is the pattern).
 - **Assertions can fail.** No always-true checks, no lists of acceptable
   tags, no early `return` that skips the assertions.
 
