@@ -49,9 +49,14 @@ export default class ServiceWorkspaceWorker extends Cloudflare.Worker<ServiceWor
                       `node -e "require('http').createServer((q, s) => s.end('from ' + q.url)).listen(3000)"`,
                     );
                     const port = yield* box.port(3000);
-                    const response = yield* port
-                      .fetch(HttpClientRequest.get("/hello"))
-                      .pipe(Effect.retry({ schedule: Schedule.spaced("500 millis"), times: 20 }));
+                    const response = yield* port.fetch(HttpClientRequest.get("/hello")).pipe(
+                      // Until the server listens: a refused connection, or a 502 from the host.
+                      Effect.filterOrFail(
+                        (r) => r.status === 200,
+                        (r) => new Error(`the port answered ${r.status}`),
+                      ),
+                      Effect.retry({ schedule: Schedule.spaced("500 millis"), times: 20 }),
+                    );
                     return yield* response.text;
                   }),
                 ),

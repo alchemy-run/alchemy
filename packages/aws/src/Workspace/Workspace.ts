@@ -241,18 +241,18 @@ export const Workspace = <const D extends SandboxWorkspace.Workspace.Decl.Any>(
         attributes: { "idle_timeout.timeout_seconds": "120" },
       });
       yield* Listener(`${id}Http`, {
-        loadBalancerArn: balancer,
+        loadBalancerArn: balancer.loadBalancerArn,
         port: 80,
         protocol: "HTTP",
-        targetGroupArn: targets,
+        targetGroupArn: targets.targetGroupArn,
       });
       if (props.certificateArn) {
         yield* Listener(`${id}Https`, {
-          loadBalancerArn: balancer,
+          loadBalancerArn: balancer.loadBalancerArn,
           port: 443,
           protocol: "HTTPS",
           certificateArn: props.certificateArn,
-          targetGroupArn: targets,
+          targetGroupArn: targets.targetGroupArn,
         });
       }
       yield* AutoScalingGroup(`${id}Hosts`, {

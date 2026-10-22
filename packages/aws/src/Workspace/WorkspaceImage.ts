@@ -102,7 +102,6 @@ export const WorkspaceImageProvider = () =>
           tag,
           "true",
         ]);
-        const rootfs = path.join(work, "rootfs");
         const base = path.join(work, "base");
         yield* fs.makeDirectory(base, { recursive: true });
         const copied = yield* Effect.exit(
@@ -158,9 +157,11 @@ export const WorkspaceImageProvider = () =>
           `apt-get update -qq >/dev/null && apt-get install -y -qq --no-install-recommends ca-certificates e2fsprogs ${btrfs ? "btrfs-progs" : ""} >/dev/null`,
           'bin="/blockd/blockd-$(uname -m)"',
           // The image: its root, with room to spare, as ext4 (read-only to every container).
-          "mkdir -p /work/rootfs && tar -xf /work/rootfs.tar -C /work/rootfs --numeric-owner",
-          "size=$(( $(du -sk /work/rootfs | cut -f1) * 13 / 10 + 65536 ))",
-          'mkfs.ext4 -q -F -b 4096 -d /work/rootfs /work/image.img "${size}k"',
+          // Extracted inside the container: a bind mount from the deploying
+          // machine (macOS) doesn't keep a root's ownership and links.
+          "mkdir -p /rootfs && tar -xf /work/rootfs.tar -C /rootfs --numeric-owner",
+          "size=$(( $(du -sk /rootfs | cut -f1) * 13 / 10 + 65536 ))",
+          'mkfs.ext4 -q -F -b 4096 -d /rootfs /work/image.img "${size}k"',
           '"$bin" heads --store "$STORE" | grep -q "^$IMAGE " || "$bin" import --store "$STORE" --head "$IMAGE" --image /work/image.img',
           ...formatBase,
           '"$bin" heads --store "$STORE" | grep -q "^$BASE " || "$bin" import --store "$STORE" --head "$BASE" --image /work/base.img',

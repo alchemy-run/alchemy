@@ -221,7 +221,7 @@ import * as VerifiedPermissions from "./VerifiedPermissions/index.ts";
 import * as VpcLattice from "./VpcLattice/index.ts";
 import * as WAFv2 from "./WAFv2/index.ts";
 import * as Website from "./Website/index.ts";
-import { WorkspaceImageProvider } from "./Workspace/WorkspaceImage.ts";
+import { WorkspaceImage, WorkspaceImageProvider } from "./Workspace/WorkspaceImage.ts";
 import * as XRay from "./XRay/index.ts";
 
 export class Providers extends Provider.ProviderCollection<Providers>()("AWS") {}
@@ -709,6 +709,7 @@ export const providers = () =>
         Lambda.LayerVersion,
         Lambda.Version,
         Lambda.MicrovmImage,
+        WorkspaceImage,
         Lambda.NetworkConnector,
         Lambda.Permission,
         Lambda.WebFunction,

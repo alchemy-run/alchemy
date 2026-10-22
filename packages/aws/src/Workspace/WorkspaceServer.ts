@@ -13,6 +13,7 @@ import { WorkspaceError, type WorkspaceChanges } from "@alchemy.run/sandbox/Work
 import { conflicts } from "@alchemy.run/sandbox/WorkspaceMerge";
 import type { ServiceExecBody } from "@alchemy.run/sandbox/WorkspaceService";
 import { ServerHost } from "alchemy/Runtime/Process";
+import { unpackEnvValue } from "alchemy/RuntimeContext";
 import * as Deferred from "effect/Deferred";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -23,6 +24,7 @@ import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerRequestModule from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import { ChildProcess } from "effect/process";
+import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
@@ -65,6 +67,18 @@ const KEEP_JOBS = Duration.toMillis(Duration.minutes(10));
 const OPEN_TTL = Duration.toMillis(Duration.minutes(2));
 
 const fail = (message: string, cause?: unknown) => new WorkspaceError({ message, cause });
+
+/** Headers that describe one connection or one body's framing, not the content. */
+const HOP_BY_HOP = new Set([
+  "connection",
+  "keep-alive",
+  "transfer-encoding",
+  "content-length",
+  "upgrade",
+  "proxy-connection",
+  "te",
+  "trailer",
+]);
 
 const validSession = (name: string) => /^[A-Za-z0-9._-]{1,200}$/.test(name);
 
@@ -166,6 +180,12 @@ interface Session {
   readonly queue: Array<Pending>;
   /** Where a fork started, and where each merge into another session left off. */
   origin?: string;
+  /**
+   * The snapshots that hold each change, oldest first: what `undo` steps
+   * back through. (The store's history has more: mounting ext4 writes its
+   * superblock, so every unmount is a snapshot that changes no file.)
+   */
+  readonly points: Array<string>;
   readonly merged: Map<string, string>;
 }
 
@@ -197,7 +217,10 @@ export const serveWorkspace = (config: HostConfig) =>
   Effect.gen(function* () {
     const host = yield* ServerHost;
     const services = yield* Effect.context<never>();
-    const token = yield* Effect.sync(() => process.env[HOST_TOKEN] ?? "");
+    const token = yield* Effect.sync(() => {
+      const bound = unpackEnvValue<string | Redacted.Redacted<string>>(process.env[HOST_TOKEN]);
+      return Redacted.isRedacted(bound) ? Redacted.value(bound) : (bound ?? "");
+    });
     // The daemon's token: anyone who holds the service's can drive it anyway.
     const daemonToken = yield* Effect.sync(() =>
       createHash("sha256").update(`blockd-daemon\n${token}`).digest("hex"),
@@ -293,6 +316,7 @@ export const serveWorkspace = (config: HostConfig) =>
           opens: new Map(),
           queue: [],
           merged: new Map(),
+          points: [],
         };
         sessions.set(name, found);
       }
@@ -320,7 +344,10 @@ export const serveWorkspace = (config: HostConfig) =>
             to: s.name,
           })
           .pipe(Effect.catch(() => Effect.succeed(undefined)));
-        if (forked) s.origin ??= forked.snapshot;
+        if (forked) {
+          s.origin ??= forked.snapshot;
+          s.points.splice(0, s.points.length, forked.snapshot);
+        }
       }
     });
 
@@ -355,9 +382,11 @@ export const serveWorkspace = (config: HostConfig) =>
     /** Snapshot the head if patches landed since its last one (under its lock). */
     const snapshotIfDirty = Effect.fn(function* (s: Session) {
       if (!s.mounted || !s.dirty) return;
-      yield* daemon.post("/v1/heads/" + encodeURIComponent(s.name) + "/snapshot", {
-        freeze: `${HEADS}/${s.name}`,
-      });
+      const taken = yield* daemon.post<{ readonly snapshot: string }>(
+        "/v1/heads/" + encodeURIComponent(s.name) + "/snapshot",
+        { freeze: `${HEADS}/${s.name}` },
+      );
+      s.points.push(taken.snapshot);
       s.dirty = false;
       s.snapshotSeq = s.seq;
     });
@@ -387,10 +416,14 @@ export const serveWorkspace = (config: HostConfig) =>
     /** Unmount: the head's last snapshot (under its lock). */
     const unmount = Effect.fn(function* (s: Session) {
       if (!s.mounted) return;
-      const detached = yield* daemon.post<{ readonly paths: ReadonlyArray<string> | null }>(
-        `/v1/heads/${encodeURIComponent(s.name)}/detach`,
-      );
-      if (detached.paths === null || detached.paths.length > 0) appendLog(s, detached.paths);
+      const detached = yield* daemon.post<{
+        readonly snapshot: string;
+        readonly paths: ReadonlyArray<string> | null;
+      }>(`/v1/heads/${encodeURIComponent(s.name)}/detach`);
+      const changed = detached.paths === null || detached.paths.length > 0;
+      if (changed) appendLog(s, detached.paths);
+      // Its last snapshot holds changes nothing has snapshotted yet.
+      if (changed || s.dirty) s.points.push(detached.snapshot);
       s.mounted = false;
       s.dirty = false;
       s.snapshotSeq = s.seq;
@@ -415,6 +448,7 @@ export const serveWorkspace = (config: HostConfig) =>
         );
       const forked = session(name);
       forked.origin = at;
+      forked.points.splice(0, forked.points.length, at);
     });
 
     /**
@@ -657,6 +691,7 @@ export const serveWorkspace = (config: HostConfig) =>
             `/v1/heads/${encodeURIComponent(s.name)}/snapshot`,
             { freeze: `${HEADS}/${s.name}` },
           );
+          if (s.dirty) s.points.push(snapshot.snapshot);
           s.dirty = false;
           s.snapshotSeq = s.seq;
           return {
@@ -849,11 +884,13 @@ export const serveWorkspace = (config: HostConfig) =>
           const checkpoint = yield* daemon.post<{ readonly paths: ReadonlyArray<string> | null }>(
             `/v1/heads/${encodeURIComponent(s.name)}/checkpoint`,
           );
-          if (checkpoint.paths === null || checkpoint.paths.length > 0)
-            appendLog(s, checkpoint.paths);
-          yield* daemon.post(`/v1/heads/${encodeURIComponent(s.name)}/snapshot`, {
-            freeze: `${HEADS}/${s.name}`,
-          });
+          const changed = checkpoint.paths === null || checkpoint.paths.length > 0;
+          if (changed) appendLog(s, checkpoint.paths);
+          const taken = yield* daemon.post<{ readonly snapshot: string }>(
+            `/v1/heads/${encodeURIComponent(s.name)}/snapshot`,
+            { freeze: `${HEADS}/${s.name}` },
+          );
+          if (changed || s.dirty) s.points.push(taken.snapshot);
           s.dirty = false;
           s.snapshotSeq = s.seq;
         }),
@@ -930,7 +967,9 @@ export const serveWorkspace = (config: HostConfig) =>
                 Effect.gen(function* () {
                   const source = yield* base(sessions.get(from) ?? session(from));
                   yield* daemon.post("/v1/store/fork", { ...store, at: source.snapshot, to });
-                  session(to).origin = source.snapshot;
+                  const forkedTo = session(to);
+                  forkedTo.origin = source.snapshot;
+                  forkedTo.points.splice(0, forkedTo.points.length, source.snapshot);
                   return {};
                 }),
             );
@@ -941,15 +980,19 @@ export const serveWorkspace = (config: HostConfig) =>
                 if (s.host) yield* endHost(s, s.host, false);
                 return yield* s.head.withPermits(1)(
                   Effect.gen(function* () {
+                    const steps = Number(body.steps ?? 1);
+                    yield* snapshotIfDirty(s);
                     yield* unmount(s);
-                    const { history } = yield* daemon.post<{
-                      readonly history: ReadonlyArray<string>;
-                    }>("/v1/store/history", {
-                      ...store,
-                      head: name,
-                      limit: Number(body.steps ?? 1) + 1,
-                    });
-                    const to = history[Number(body.steps ?? 1)];
+                    // Back through the snapshots that hold changes, when this
+                    // host saw them; the store's history otherwise.
+                    const { history } =
+                      s.points.length > steps
+                        ? { history: [...s.points].reverse() }
+                        : yield* daemon.post<{
+                            readonly history: ReadonlyArray<string>;
+                          }>("/v1/store/history", { ...store, head: name, limit: steps + 1 });
+                    const to = history[steps];
+                    if (to && s.points.length > steps) s.points.splice(s.points.length - steps);
                     if (!to)
                       return yield* fail(
                         `${name} has fewer than ${body.steps ?? 1} snapshots to go back`,
@@ -1055,9 +1098,15 @@ export const serveWorkspace = (config: HostConfig) =>
         }).pipe(Effect.provide(FetchHttpClient.layer), Effect.result);
         if (forwarded._tag === "Failure")
           return yield* respond(502, { error: forwarded.failure.message });
+        // The body is streamed anew: its framing headers are this response's to set.
+        const headers = Object.fromEntries(
+          Object.entries(forwarded.success.headers).filter(
+            ([name]) => !HOP_BY_HOP.has(name.toLowerCase()),
+          ),
+        );
         return HttpServerResponse.stream(forwarded.success.stream, {
           status: forwarded.success.status,
-          headers: forwarded.success.headers,
+          headers,
         });
       }
       const outcome = yield* Effect.result(routed);
