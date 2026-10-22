@@ -129,8 +129,10 @@ export interface ContainerClient {
   /** Signal the container's main process. */
   signal(signo: number): Effect.Effect<void, ContainerError, RuntimeContext>;
   /**
-   * Wait for the container to exit, preserving failures in the Effect error channel. A start Cloudflare could not
-   * give an instance to, or limited, fails as `start` does, so a caller can start it again.
+   * Wait for the container to exit, preserving failures in the Effect error channel.
+   * Cloudflare often reports a failed start here rather than from `start`, so a start
+   * it had no instance for fails with `NoContainerInstanceError` and a rate-limited one
+   * with `ContainerRateLimitedError`, as `start` does.
    */
   monitor(): Effect.Effect<void, ContainerStartError, RuntimeContext>;
   /** Running image and labels, or null when stopped. */
