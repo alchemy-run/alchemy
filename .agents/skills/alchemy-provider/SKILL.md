@@ -714,8 +714,7 @@ counts, so they can see what was checked without re-reviewing by hand.
   five-part tutorial, sections by concern), code taken from tested
   examples, and the voice rules there. A hub of loose "guides" that walk
   the examples is not done; GCP's had to be rebuilt.
-- Examples under `examples/<provider>-*` that deploy and pass their own
-  test, including at least one host with bindings.
+- The example set described under **Examples** below.
 - Type-check with `pnpm exec tsrs -b`, run `pnpm exports:check` and
   `pnpm lint:providers`, and format with `pnpm exec oxfmt`.
 - Open the alchemy PR per **Pull Request Conventions**, linking the
@@ -742,6 +741,60 @@ counts, so they can see what was checked without re-reviewing by hand.
   `Azure.Functions.Function`, which isn't a registered binding host, so
   those bindings did nothing.
 
+### Examples
+
+Examples are how users learn the provider, and the docs hub copies its
+code from them. Ship a comprehensive set, not one or two. Azure's first
+pass shipped `azure-storage` (a Stack with no runtime) and one website;
+AWS, Cloudflare, Fly, and Hetzner ship one example per framework plus one
+per workload.
+
+**Every web framework gets its own example**, for every provider that
+hosts websites: `examples/<provider>-website-<framework>`, one per
+`<Provider>.Website.<Framework>` composite (Astro, Foldkit, Nextjs, Nuxt,
+Octane, ReactRouter, SolidStart, SvelteKit, TanStackStart, Vinext, Vite,
+Vocs, Waku, plus `<provider>-static-site`). `ls examples | grep
+hetzner-website-` is the complete set to match.
+
+**Then one example per workload the cloud supports.** Go down this list
+and add an example for every row the provider has, and skip the rest:
+
+| Workload | Shows | AWS / GCP / Cloudflare reference |
+| --- | --- | --- |
+| Serverless function, effectful | an HTTP handler with a binding to storage or a database | `aws-lambda`, `gcp-cloud-function`, `cloudflare-worker` |
+| Serverless function, async | the same with a plain handler and `InferEnv` | `cloudflare-worker-async` |
+| HTTP API | Effect HTTP API or RPC on the default runtime | `aws-lambda-httpapi`, `aws-lambda-rpc`, `gcp-cloud-run-api` |
+| Queue | a producer and a consumer through an event source | `gcp-pubsub-worker`, `gcp-pubsub-fanout` |
+| Scheduled job | a cron trigger | `gcp-cron`, `gcp-scheduled-job` |
+| Storage events | a function triggered by an upload | `gcp-storage-uploads`, `gcp-eventarc-firestore` |
+| Durable workflows | the cloud's workflow engine, if it has one | no example yet; copy the Cloudflare Workflow fixture in `packages/integration-tests/test/Cloudflare/Workers/fixtures/workflow/` |
+| Containers | a container service | `aws-ecs`, `fly-service` |
+| Kubernetes | a Deployment on the cloud's managed cluster | `aws-eks`, `gcp-gke` |
+| VMs | a VM running a program | `aws-ec2`, `hetzner-server` |
+| SQL database | a database with migrations, from a runtime | `aws-rds`, `gcp-cloud-sql-drizzle` |
+| Cache | Redis from a runtime | `gcp-memorystore-redis`, `fly-redis` |
+| Secrets | a secret read by a runtime | `gcp-secrets-kms` |
+| AI | the cloud's model service | `aws-bedrock-ai`, `gcp-vertex-ai` |
+| Service to service | two runtimes calling each other | `gcp-service-to-service` |
+| Local dev | the same app under `alchemy dev` | `aws-dev`, `cloudflare-dev` |
+
+Name examples `<provider>-<workload>` in kebab case. Each one is a
+workspace project with the layout of `examples/gcp-pubsub-worker`:
+
+- `package.json` (private, `deploy` / `dev` / `destroy` / `test` scripts,
+  `workspace:*` dependencies), `tsconfig.json` referencing
+  `packages/alchemy` and the provider package, and a `README.md`.
+- `alchemy.run.ts`, with the runtime and resources in `src/`.
+- `test/integ.test.ts` with `alchemy/Test/Bun`: deploy in `beforeAll`,
+  call the deployed app over HTTP, verify cloud state through distilled,
+  destroy in `afterAll`. Websites and `dev`-capable apps also get
+  `test/dev.test.ts`.
+
+Register every example in the root `tsconfig.json` references and in
+`scripts/test-examples.ts`, and run its test against the testing profile
+before you call it done. Track examples as rows in `INDEX.md` like any
+other deliverable.
+
 A draft PR for an early wave is fine; its description states the index
 counts and that the provider is incomplete.
 
@@ -750,7 +803,8 @@ resource has its own passing live test (or is `blocked: cost` or
 `blocked: skipped` and the user has the list),
 bindings go through `<Provider>Bindings.Bind`, reach foreign hosts, and are least privilege, the
 framework websites (if the cloud hosts websites) deploy to its CDN and
-functions, examples deploy, the reference docs are
+functions, the example set (one per framework, one per workload)
+deploys and passes, the reference docs are
 generated, the hub matches [docs.md](docs.md), the review
 gate is clean, the test account is clean after a full run, and every SDK
 mismatch found along the way is a merged distilled patch.

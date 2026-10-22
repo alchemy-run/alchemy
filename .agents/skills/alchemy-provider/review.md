@@ -28,6 +28,8 @@ Run this first; the other sections only judge the code that exists.
 | One test file per resource | every `tested` row has `test/<P>/<Service>/<Name>.test.ts` | yes |
 | Non-resource deliverables | index rows for bindings, runtime, event sources, websites, examples | none `missing`; `rg -l 'Binding.Service' src/<P>` is non-zero when the cloud has data-plane capabilities |
 | Skill freshness | `git log -1 --format=%H -- .agents/skills/alchemy-provider` vs the `Skill: <sha>` line at the top of `INDEX.md` | equal; a newer skill commit means re-read it and add rows for its new deliverables |
+| Framework examples | `ls examples \| grep '^<p>-website-'` vs `ls examples \| grep '^hetzner-website-'` | one per framework the provider hosts (skip when it can't host websites) |
+| Workload examples | `ls examples \| grep '^<p>-'` against the workload table in Step 10 | one per workload the cloud supports; each registered in `tsconfig.json` and `scripts/test-examples.ts`, with a passing `test/integ.test.ts` |
 | Docs generated for everything | `ls website/src/content/docs/providers/<P>` after `pnpm docs:gen` | one page per resource and binding page group, matching the index |
 | Out-of-scope list published | the overview page's "Out of scope" section | matches the `out-of-scope` rows |
 
