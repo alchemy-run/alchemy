@@ -1,0 +1,9 @@
+/**
+ * RSA-2048 public keys (base64 DER) for stub connected clusters. No Arc
+ * agent holds the private keys, so the clusters never connect.
+ */
+export const AGENT_PUBLIC_KEY_A =
+  "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAvz/grwz+8MuSRj/51wnUT1cYm0izZ6rKXVtycBmEgTVrT5Fh01CzpFpyErVFpfdEWi1G8k8TBiHF4xIrssVZmvtb+tSPx5x+7F017NM1HSIY5YU8jpa/4+c7TDbH9NtSlq1jF3xmneB8z99TYwgrMhxXIGyuvyQuupJSif+K8+r7GAZEKY4TBaVdlvbwKUidU5u6IqeOTMJ8EEjTWILga80UIM5nQLW/uVP6qKpddBNjtMbV+JZksypYtLKrDLCrTHrjsWYGBrwxQERFbS6sCKT7ltOVOdHAn14T7hWpvRrKW77BBaOpy+cTv5i0dtoqEl3TTVZfgxUA1RMWmkk+UwIDAQAB";
+
+export const AGENT_PUBLIC_KEY_B =
+  "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAwIwCZuOO3+mEaDgvR3hUOzkt4oluln5zEsM3QuKPcoURcLJJ9HS/nGuVoT9rLYShS4TrK30t9C3CIrpExLoq3EAH6Y5xDIyqotMYzsh3oGpdb13MaDHZ9Ib5NCdFyseAMd/DKoUroh97uiQ8ukj5xkPHQr+lytCr96h6naozMuHriB1QZPbromomFUc5+aSgvBoA+t/q/TSKW9hDo4Jl9so4RNvrcAKTu+d9zMyxJR8g/R9P0JmDmCxmP35VVRO3MKTi1H8vYqy9hcGfBN9qjoBC+dJVjLHJgBVIF6KivPGGi1JU931niqxkT2e5/IkyDypRO0dzF4nu3zAEVYyJwQIDAQAB";

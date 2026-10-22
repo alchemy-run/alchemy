@@ -21,6 +21,7 @@ const roots = [
   path.join(import.meta.dir, "../packages/stripe/src"),
   path.join(import.meta.dir, "../packages/cloudflare/src"),
   path.join(import.meta.dir, "../packages/gcp/src"),
+  path.join(import.meta.dir, "../packages/azure/src"),
   path.join(import.meta.dir, "../packages/aws/src"),
   path.join(import.meta.dir, "../packages/domain/src"),
   path.join(import.meta.dir, "../packages/kubernetes/src"),

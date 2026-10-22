@@ -1,4 +1,5 @@
 import * as AWS from "@alchemy.run/aws";
+import * as Azure from "@alchemy.run/azure";
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Fly from "@alchemy.run/fly";
 import * as Hetzner from "@alchemy.run/hetzner";
@@ -18,6 +19,7 @@ export default Alchemy.Stack(
     providers: Layer.mergeAll(
       Cloudflare.providers(),
       AWS.providers(),
+      Azure.providers(),
       Hetzner.providers(),
       Fly.providers(),
       Railway.providers(),

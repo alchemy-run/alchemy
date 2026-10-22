@@ -135,6 +135,11 @@ const config = {
       sourceDisplayPrefix: "packages/gcp/src",
     },
     {
+      srcRoot: path.join(import.meta.dir, "../packages/azure/src"),
+      providerPrefix: "Azure",
+      sourceDisplayPrefix: "packages/azure/src",
+    },
+    {
       srcRoot: path.join(import.meta.dir, "../packages/aws/src"),
       providerPrefix: "AWS",
       sourceDisplayPrefix: "packages/aws/src",

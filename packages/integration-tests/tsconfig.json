@@ -93,6 +93,7 @@
     { "path": "../domain/tsconfig.json" },
     { "path": "../aws/tsconfig.json" },
     { "path": "../gcp/tsconfig.json" },
+    { "path": "../azure/tsconfig.json" },
     { "path": "../alchemy-test/tsconfig.json" },
     { "path": "../git/tsconfig.json" },
     { "path": "../acme/tsconfig.json" },

@@ -35,6 +35,7 @@ function providersSidebarEntry() {
     items: [
       { label: "AWS", link: "/aws" },
       { label: "GCP", link: "/gcp" },
+      { label: "Azure", link: "/azure" },
       { label: "Cloudflare", link: "/cloudflare" },
       { label: "Hetzner", link: "/hetzner" },
       { label: "Fly", link: "/fly" },
@@ -1619,6 +1620,21 @@ export default defineConfig({
               ],
             },
             { ...providerResourcesEntry("Domain"), label: "Reference" },
+          ],
+        },
+        {
+          label: "Azure",
+          items: [
+            { label: "Overview", link: "/azure" },
+            { label: "Setup", link: "/azure/setup" },
+            {
+              label: "Frontend",
+              items: [
+                { label: "Overview", link: "/azure/frontend/websites" },
+                { label: "Vite", link: "/azure/frontend/vite" },
+              ],
+            },
+            providerResourcesEntry("Azure"),
           ],
         },
         {
