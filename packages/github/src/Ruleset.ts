@@ -147,7 +147,7 @@ export interface RulesetProps {
 
       /**
        * Require another approval for changes pushed by someone other than the commit author.
-       * GitHub keeps the current value when omitted.
+       * @default false
        */
       requireExtraApprovalForUnattributedChanges?: boolean;
     };
@@ -410,10 +410,8 @@ export const RulesetProvider = () =>
           ...(pullRequest.allowedMergeMethods !== undefined && {
             allowed_merge_methods: pullRequest.allowedMergeMethods,
           }),
-          ...(pullRequest.requireExtraApprovalForUnattributedChanges !== undefined && {
-            require_extra_approval_for_unattributed_changes:
-              pullRequest.requireExtraApprovalForUnattributedChanges,
-          }),
+          require_extra_approval_for_unattributed_changes:
+            pullRequest.requireExtraApprovalForUnattributedChanges ?? false,
         };
         rules.push({ type: "pull_request", parameters });
       }

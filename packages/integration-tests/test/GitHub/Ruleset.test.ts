@@ -117,6 +117,29 @@ test.provider(
       ]);
       expect(created.createdAt).toBe(fetched?.created_at);
 
+      // Dropping the merge-method props resets them: GitHub allows every
+      // merge method again and stops requiring the extra approval.
+      const relaxed = yield* deploy({
+        name: "main protection",
+        conditions: { include: ["refs/heads/main"] },
+        bypassActors: [{ actorType: "RepositoryRole", actorId: 5 }],
+        rules: {
+          nonFastForward: true,
+          deletion: true,
+          update: true,
+          pullRequest: {},
+          requiredStatusChecks: { checks: [{ context: "ci/test" }] },
+        },
+      });
+      expect(relaxed.rulesetId).toBe(created.rulesetId);
+      const afterRelax = yield* getRuleset(repo, created.rulesetId);
+      expect(
+        afterRelax?.rules?.find((rule) => rule.type === "pull_request")?.parameters,
+      ).toMatchObject({
+        allowed_merge_methods: ["merge", "squash", "rebase"],
+        require_extra_approval_for_unattributed_changes: false,
+      });
+
       const updated = yield* deploy({
         name: "updated main protection",
         enforcement: "disabled",
