@@ -4,7 +4,7 @@ import { makeFrameworkSite, type FrameworkSiteProps } from "./FrameworkSite.ts";
 /** The framework-integration package that drives the React Router build. */
 export const REACT_ROUTER_FRAMEWORK_SPECIFIER = "@alchemy.run/frontend-frameworks/react-router";
 
-/** The Node container deploy target for the React Router build. */
+/** The Node deploy target for the React Router build. */
 export const REACT_ROUTER_NODE_TARGET_SPECIFIER =
   "@alchemy.run/frontend-frameworks/react-router/node";
 
@@ -12,8 +12,8 @@ export interface ReactRouterProps extends FrameworkSiteProps {}
 
 /**
  * Deploy a [React Router](https://reactrouter.com) v7 app (framework mode)
- * to Azure Container Apps: the SSR server as a container on port 3000,
- * static assets baked into the unit.
+ * to Azure App Service: the SSR server on a Linux web app with the Node.js runtime (no Docker),
+ * static assets served by the same process.
  *
  * The build runs through
  * `@alchemy.run/frontend-frameworks/react-router` with the
@@ -40,11 +40,11 @@ export interface ReactRouterProps extends FrameworkSiteProps {}
  * });
  * ```
  *
- * **Example:** Custom Domain
+ * **Example:** Behind Azure Front Door
  * ```typescript
  * const site = yield* Azure.Website.ReactRouter("Web", {
  *   rootDir: "./app",
- *   domain: "app.example.com",
+ *   frontDoor: true,
  * });
  * ```
  *

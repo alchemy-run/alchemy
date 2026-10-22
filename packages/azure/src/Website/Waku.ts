@@ -4,7 +4,7 @@ import { makeFrameworkSite, type FrameworkSiteProps } from "./FrameworkSite.ts";
 /** The framework-integration package that drives the Waku build. */
 export const WAKU_FRAMEWORK_SPECIFIER = "@alchemy.run/frontend-frameworks/waku";
 
-/** The Node container deploy target for the Waku build. */
+/** The Node deploy target for the Waku build. */
 export const WAKU_NODE_TARGET_SPECIFIER = "@alchemy.run/frontend-frameworks/waku/node";
 
 const wakuOptions = (props: WakuProps) =>
@@ -23,9 +23,9 @@ export interface WakuProps extends FrameworkSiteProps {
 }
 
 /**
- * Deploy a [Waku](https://waku.gg) application to Azure Container Apps:
- * the RSC server as a container on port 3000, static assets (SSG
- * pages included) baked into the unit. Prerendered pages are served
+ * Deploy a [Waku](https://waku.gg) application to Azure App Service:
+ * the RSC server on a Linux web app with the Node.js runtime (no Docker), static assets (SSG
+ * pages included) served by the same process. Prerendered pages are served
  * extensionless (`/about` not `/about/`).
  *
  *
@@ -37,11 +37,11 @@ export interface WakuProps extends FrameworkSiteProps {
  * });
  * ```
  *
- * **Example:** Custom Domain
+ * **Example:** Behind Azure Front Door
  * ```typescript
  * const site = yield* Azure.Website.Waku("Web", {
  *   rootDir: "./app",
- *   domain: "app.example.com",
+ *   frontDoor: true,
  * });
  * ```
  *

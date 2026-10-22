@@ -11,16 +11,16 @@ export const NEXTJS_NODE_FRAMEWORK_SPECIFIER = "@alchemy.run/frontend-frameworks
 export interface NextjsProps extends FrameworkSiteProps {}
 
 /**
- * Deploy a Next.js application to Azure Container Apps: `next build`
- * then a long-running `next({ dev: false })` container on port 3000.
+ * Deploy a Next.js application to Azure App Service: `next build`
+ * then a long-running `next({ dev: false })` Node.js process on a Linux App Service web app (no Docker).
  * Does **not** use OpenNext (those wrappers are Lambda/workerd).
  *
- * The `.next` output (and `public/` when present) is packed into the
- * unit archive. `next`, `react`, and `react-dom` are installed on the
- * unit with `npm install` rather than bundled.
+ * The `.next` output (and `public/` when present) is zip-deployed with
+ * the server. `next`, `react`, and `react-dom` are installed by App
+ * Service's remote build rather than bundled.
  *
  * During `alchemy dev` the site is `next dev` and no cloud resources
- * are declared; `Alchemy.remote()` opts back into the live Service.
+ * are declared; `Alchemy.remote()` opts back into the live deployment.
  *
  *
  * ### Creating Next.js Sites
@@ -31,11 +31,11 @@ export interface NextjsProps extends FrameworkSiteProps {}
  * });
  * ```
  *
- * **Example:** Custom Domain
+ * **Example:** Behind Azure Front Door
  * ```typescript
  * const site = yield* Azure.Website.Nextjs("Web", {
  *   rootDir: "./app",
- *   domain: "app.example.com",
+ *   frontDoor: true,
  * });
  * ```
  *

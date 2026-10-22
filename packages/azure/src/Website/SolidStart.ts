@@ -4,7 +4,7 @@ import { makeFrameworkSite, type FrameworkSiteProps } from "./FrameworkSite.ts";
 /** The framework-integration package that drives the SolidStart build. */
 export const SOLIDSTART_FRAMEWORK_SPECIFIER = "@alchemy.run/frontend-frameworks/solidstart";
 
-/** The Node container deploy target for the SolidStart build. */
+/** The Node deploy target for the SolidStart build. */
 export const SOLIDSTART_NODE_TARGET_SPECIFIER = "@alchemy.run/frontend-frameworks/solidstart/node";
 
 export interface SolidStartProps extends FrameworkSiteProps {
@@ -25,8 +25,8 @@ export interface SolidStartProps extends FrameworkSiteProps {
 
 /**
  * Deploy a [SolidStart](https://start.solidjs.com) application to a
- * Azure Container Apps: the SSR server as a container on port 3000,
- * static assets (prerendered pages included) baked into the unit.
+ * Azure App Service: the SSR server on a Linux web app with the Node.js runtime (no Docker),
+ * static assets (prerendered pages included) served by the same process.
  *
  * The build runs through `@alchemy.run/frontend-frameworks/solidstart` with
  * the `@alchemy.run/frontend-frameworks/solidstart/node` deploy target —
@@ -46,11 +46,11 @@ export interface SolidStartProps extends FrameworkSiteProps {
  * });
  * ```
  *
- * **Example:** Custom Domain
+ * **Example:** Behind Azure Front Door
  * ```typescript
  * const site = yield* Azure.Website.SolidStart("Web", {
  *   rootDir: "./app",
- *   domain: "app.example.com",
+ *   frontDoor: true,
  * });
  * ```
  *
@@ -68,8 +68,8 @@ export interface SolidStartProps extends FrameworkSiteProps {
  * ### Prerendering
  * The integration owns the nitro plugin instance (a `nitroV2Plugin()` in
  * your `vite.config.*` is rejected), so nitro options — prerendering
- * included — go on the `nitro` prop. Prerendered pages are baked into the
- * unit and served as static assets.
+ * included — go on the `nitro` prop. Prerendered pages ship with the
+ * server and are served as static assets.
  *
  * **Example:** Prerender Routes
  * ```typescript

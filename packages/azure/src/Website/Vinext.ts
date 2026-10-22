@@ -11,15 +11,15 @@ export interface VinextProps extends FrameworkSiteProps {}
 
 /**
  * Deploy a [vinext](https://vinext.dev) application to Azure
- * Container Apps: vinext's Vite build then a long-running `startProdServer` container on port 3000. Does **not** use the Cloudflare Worker entry
+ * App Service: vinext's Vite build then a long-running `startProdServer` Node.js process on a Linux App Service web app (no Docker). Does **not** use the Cloudflare Worker entry
  * (`vinext/server/fetch-handler`).
  *
- * The `dist/` output is packed into the unit archive. `vinext`,
- * `react`, `react-dom`, and `react-server-dom-webpack` are installed on
- * the unit with `npm install` rather than bundled.
+ * The `dist/` output is zip-deployed with the server. `vinext`,
+ * `react`, `react-dom`, and `react-server-dom-webpack` are installed by
+ * App Service's remote build rather than bundled.
  *
  * During `alchemy dev` the site is `vinext dev` and no cloud resources
- * are declared; `Alchemy.remote()` opts back into the live Service.
+ * are declared; `Alchemy.remote()` opts back into the live deployment.
  *
  * ### Creating vinext Sites
  * **Example:** Basic vinext App
@@ -29,11 +29,11 @@ export interface VinextProps extends FrameworkSiteProps {}
  * });
  * ```
  *
- * **Example:** Custom Domain
+ * **Example:** Behind Azure Front Door
  * ```typescript
  * const site = yield* Azure.Website.Vinext("Web", {
  *   rootDir: "./app",
- *   domain: "app.example.com",
+ *   frontDoor: true,
  * });
  * ```
  *

@@ -1012,7 +1012,6 @@
     "build:package": "node scripts/build.ts"
   },
   "dependencies": {
-    "@alchemy.run/docker": "workspace:*",
     "@distilled.cloud/azure": "workspace:*",
     "@distilled.cloud/core": "workspace:*"
   },

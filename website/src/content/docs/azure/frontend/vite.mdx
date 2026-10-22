@@ -1,14 +1,14 @@
 ---
 title: Vite
-description: "Deploy a Vite SPA to Azure Container Apps with Azure.Website.Vite — static assets served from a container image pushed to Azure Container Registry, and Vite's own dev server under alchemy dev."
+description: "Deploy a Vite SPA to the static website endpoint of an Azure Storage account with Azure.Website.Vite — no Docker, and Vite's own dev server under alchemy dev."
 sidebar:
   order: 2
 ---
 
-`Azure.Website.Vite` deploys a [Vite](https://vite.dev) project to Azure
-Container Apps. It runs `vite build`, bakes the output and a small Node
-static-file server into an image, pushes it to Azure Container Registry, and
-serves it from a Container App on port 3000.
+`Azure.Website.Vite` deploys a [Vite](https://vite.dev) project to the
+static website endpoint of an Azure Storage account. It runs `vite build`
+and uploads the output to the account's `$web` container. No Docker image
+and no server are involved.
 
 ## Install
 
@@ -33,20 +33,20 @@ export default Alchemy.Stack(
 );
 ```
 
-Unknown paths fall back to `index.html` (SPA). Use
+Unknown paths return `index.html` (SPA) with a `404` status. Add
+`frontDoor: true` to answer them with `200` through Azure Front Door. Use
 `assets: { notFoundHandling: "404-page" }` for multi-page sites.
 
 ## Share infrastructure
 
 ```typescript
 const group = yield* Azure.Resources.ResourceGroup("Group");
-const environment = yield* Azure.ContainerApps.ManagedEnvironment("Env", {
+const storageAccount = yield* Azure.Storage.StorageAccount("Files", {
   resourceGroup: group.resourceGroupName,
-  environmentMode: "Express",
 });
 const web = yield* Azure.Website.Vite("Web", {
   resourceGroup: group,
-  environment,
+  storageAccount,
 });
 ```
 

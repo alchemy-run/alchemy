@@ -24,8 +24,9 @@ export interface ResourceGroupProps {
   /**
    * Name of the resource group. Must be unique within the subscription;
    * 1-90 characters of letters, digits, `-`, `_`, `.`, and `()`, not ending
-   * in `.`. If omitted, a unique name is generated from the app, stage, and
-   * logical ID. Changing it replaces the resource group.
+   * in `.`. If omitted, a unique name of at most 80 characters (the limit
+   * Front Door accepts) is generated from the app, stage, and logical ID.
+   * Changing it replaces the resource group.
    */
   name?: string;
   /**
@@ -95,8 +96,10 @@ export const ResourceGroup = Resource<ResourceGroup>("Azure.Resources.ResourceGr
 
 type ObservedResourceGroup = resources.GetResourceGroupResponse;
 
+// ARM allows 90 characters, but Front Door rejects resource groups longer
+// than 80, so generated names stay within 80.
 const createGroupName = (id: string, name: string | undefined) =>
-  name !== undefined ? Effect.succeed(name) : createPhysicalName({ id, maxLength: 90 });
+  name !== undefined ? Effect.succeed(name) : createPhysicalName({ id, maxLength: 80 });
 
 const getGroup = (subscriptionId: string, resourceGroupName: string) =>
   orUndefinedIfNotFound(resources.GetResourceGroup({ subscriptionId, resourceGroupName }));

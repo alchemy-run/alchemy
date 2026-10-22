@@ -4,7 +4,7 @@ import { makeFrameworkSite, type FrameworkSiteProps } from "./FrameworkSite.ts";
 /** The framework-integration package that drives the SvelteKit build. */
 export const SVELTEKIT_FRAMEWORK_SPECIFIER = "@alchemy.run/frontend-frameworks/sveltekit";
 
-/** The Node container deploy target for the SvelteKit build. */
+/** The Node deploy target for the SvelteKit build. */
 export const SVELTEKIT_NODE_TARGET_SPECIFIER = "@alchemy.run/frontend-frameworks/sveltekit/node";
 
 export interface SvelteKitProps extends FrameworkSiteProps {
@@ -17,9 +17,9 @@ export interface SvelteKitProps extends FrameworkSiteProps {
 }
 
 /**
- * Deploy a SvelteKit application to Azure Container Apps: kit's SSR
- * server as a container on port 3000, static assets (prerendered
- * pages included) baked into the unit.
+ * Deploy a SvelteKit application to Azure App Service: kit's SSR
+ * server on a Linux web app with the Node.js runtime (no Docker), static assets (prerendered
+ * pages included) served by the same process.
  *
  * The build runs through `@alchemy.run/frontend-frameworks/sveltekit` with
  * the `@alchemy.run/frontend-frameworks/sveltekit/node` deploy target.
@@ -33,11 +33,11 @@ export interface SvelteKitProps extends FrameworkSiteProps {
  * });
  * ```
  *
- * **Example:** Custom Domain
+ * **Example:** Behind Azure Front Door
  * ```typescript
  * const site = yield* Azure.Website.SvelteKit("Web", {
  *   rootDir: "./app",
- *   domain: "app.example.com",
+ *   frontDoor: true,
  * });
  * ```
  *

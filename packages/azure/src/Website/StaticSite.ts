@@ -11,16 +11,15 @@ import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import type * as Redacted from "effect/Redacted";
 import {
-  DEFAULT_WEBSITE_PORT,
-  deployContainerSite,
+  deployStaticSite,
+  localWebsite,
   unwrapEnv,
   type FrameworkSiteProps,
-  type Website,
 } from "./FrameworkSite.ts";
 
 export interface StaticSiteProps extends Pick<
   FrameworkSiteProps,
-  "domain" | "tags" | "env" | "resourceGroup" | "location" | "environment" | "registry"
+  "tags" | "env" | "resourceGroup" | "location" | "storageAccount" | "frontDoor"
 > {
   /**
    * Shell command that produces the site (e.g. `hugo --minify`).
@@ -41,8 +40,9 @@ export interface StaticSiteProps extends Pick<
    */
   memo?: MemoOptions | boolean;
   /**
-   * Answer misses with the index page (200) instead of a 404 so
-   * client-side routes deep-link correctly. Mutually exclusive with
+   * Answer misses with the index page so client-side routes deep-link
+   * correctly. The storage endpoint sends it with a `404` status; set
+   * `frontDoor` to answer with `200`. Mutually exclusive with
    * {@link errorPage}.
    */
   spa?: boolean;
@@ -54,7 +54,7 @@ export interface StaticSiteProps extends Pick<
   /**
    * Local dev configuration. When `alchemy dev` runs, the build command
    * is skipped and `command` is spawned as a long-lived child. Without
-   * `dev`, the site is still built and served locally (no cloud Service).
+   * `dev`, the site is still built and served locally (no Azure resources).
    */
   dev?: {
     /**
@@ -80,19 +80,18 @@ export interface StaticSiteProps extends Pick<
 }
 
 /**
- * A Azure Service that serves static assets built by a shell command.
+ * A static site built by a shell command and served from the static
+ * website endpoint of an Azure Storage account.
  *
- * `StaticSite` runs a build command (e.g. `npm run build`), packs the
- * output directory into the unit archive, and deploys a tiny static-file
- * server (`GET` assets, `/health`, optional SPA / 404-page). Use this
- * when your site has its own build step — Hugo, Zola, Eleventy, or any
- * custom pipeline.
+ * `StaticSite` runs a build command (e.g. `npm run build`) and uploads the
+ * output directory to the account's `$web` container. Unchanged files are
+ * skipped and removed files are deleted. No Docker image and no server are
+ * involved. Use this when your site has its own build step — Hugo, Zola,
+ * Eleventy, or any custom pipeline.
  *
  * For Vite-based projects, prefer {@link Vite | Azure.Website.Vite}.
  *
- * `Dev` and `Build` carry constant logical ids, so they are namespaced
- * under `id`. The Service stays in the caller's namespace (same as
- * Cloudflare.Website.StaticSite).
+ * Every resource is namespaced under `id`.
  *
  *
  * ### Basic Usage
@@ -123,6 +122,17 @@ export interface StaticSiteProps extends Pick<
  * });
  * ```
  *
+ * ### Front Door
+ * **Example:** SPA deep links with a `200` status
+ * ```typescript
+ * const site = yield* Azure.Website.StaticSite("App", {
+ *   command: "npm run build",
+ *   outdir: "dist",
+ *   spa: true,
+ *   frontDoor: true,
+ * });
+ * ```
+ *
  * ### Local Development
  * **Example:** External Dev Server
  * ```typescript
@@ -141,11 +151,10 @@ export const StaticSite = (id: string, props: StaticSiteProps) =>
     const ctx = yield* AlchemyContext;
     const remoted = yield* ProviderModePolicy;
     const isLocal = ctx.dev && remoted !== true;
-    const port = DEFAULT_WEBSITE_PORT;
 
     if (props.spa && props.errorPage) {
       return yield* Effect.die(
-        `Cannot provide both "spa" and "errorPage". A SPA answers misses with the index page (200); "errorPage" answers them with a real 404.`,
+        `Cannot provide both "spa" and "errorPage". A SPA answers misses with the index page; "errorPage" answers them with a real 404.`,
       );
     }
 
@@ -155,14 +164,9 @@ export const StaticSite = (id: string, props: StaticSiteProps) =>
         cwd: props.dev.cwd ?? props.cwd,
         env: props.dev.env ?? props.env,
       }).pipe(Namespace.push(id));
-      const url = Output.map((detected: string | undefined) => detected ?? props.dev?.url)(dev.url);
-      return {
-        url,
-        resourceGroup: undefined,
-        environment: undefined,
-        registry: undefined,
-        app: undefined,
-      } satisfies Website;
+      return localWebsite(
+        Output.map((detected: string | undefined) => detected ?? props.dev?.url)(dev.url),
+      );
     }
 
     const build = yield* Command.Build("Build", {
@@ -173,30 +177,31 @@ export const StaticSite = (id: string, props: StaticSiteProps) =>
       env: props.env,
     }).pipe(Namespace.push(id));
 
-    const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const cwd = path.resolve(initialCwd, props.cwd ?? ".");
     const outdir = path.resolve(cwd, props.outdir);
-    const { NODE_SERVE_ENTRY_FILE_NAME, relativeClientDirExpression, writeNodeServeEntry } =
-      yield* loadFrontendCore;
-    const servePath = path.join(path.dirname(outdir), NODE_SERVE_ENTRY_FILE_NAME);
-    yield* writeNodeServeEntry({
-      output: {
-        clientDirectory: outdir,
-        serverModules: [],
-        externalWorkspaces: new Set<string>(),
-      },
-      servePath,
-      serveModuleName: NODE_SERVE_ENTRY_FILE_NAME,
-      clientDirExpression: relativeClientDirExpression(servePath, outdir),
-      notFoundHandling:
-        props.errorPage !== undefined ? "404-page" : props.spa === true ? "spa" : "none",
-      printUrl: isLocal,
-      defaultPort: port,
-      platform: "node",
-    });
 
     if (isLocal) {
+      // Serve the built directory with the shared Node static server.
+      const fs = yield* FileSystem.FileSystem;
+      const { NODE_SERVE_ENTRY_FILE_NAME, relativeClientDirExpression, writeNodeServeEntry } =
+        yield* loadFrontendCore;
+      const servePath = path.join(path.dirname(outdir), NODE_SERVE_ENTRY_FILE_NAME);
+      yield* fs.makeDirectory(path.dirname(servePath), { recursive: true });
+      yield* writeNodeServeEntry({
+        output: {
+          clientDirectory: outdir,
+          serverModules: [],
+          externalWorkspaces: new Set<string>(),
+        },
+        servePath,
+        serveModuleName: NODE_SERVE_ENTRY_FILE_NAME,
+        clientDirExpression: relativeClientDirExpression(servePath, outdir),
+        notFoundHandling:
+          props.errorPage !== undefined ? "404-page" : props.spa === true ? "spa" : "none",
+        printUrl: true,
+        platform: "node",
+      });
       const bun = yield* Effect.sync(() => process.execPath);
       const dev = yield* Command.Dev("Dev", {
         command: `${bun} ${servePath}`,
@@ -208,29 +213,18 @@ export const StaticSite = (id: string, props: StaticSiteProps) =>
           HOST: "127.0.0.1",
         },
       }).pipe(Namespace.push(id));
-      return {
-        url: dev.url,
-        resourceGroup: undefined,
-        environment: undefined,
-        registry: undefined,
-        app: undefined,
-      } satisfies Website;
+      return localWebsite(dev.url);
     }
 
-    const site = yield* deployContainerSite({
-      site: {
-        domain: props.domain,
-        tags: props.tags,
-        env: props.env,
-        resourceGroup: props.resourceGroup,
-        location: props.location,
-        environment: props.environment,
-        registry: props.registry,
-      },
-      main: servePath,
-      extraFiles: [{ source: outdir, dest: path.basename(outdir) }],
+    // The build output is the site: publish it as-is. `build.outdir` orders
+    // the upload after the build.
+    const published = Output.map((dir: string) => path.resolve(initialCwd, dir))(
+      build.outdir as unknown as Output.Output<string>,
+    );
+    return yield* deployStaticSite({
+      site: props,
+      path: published as unknown as string,
+      spa: props.spa === true,
+      errorPage: props.errorPage,
     }).pipe(Namespace.push(id));
-    return {
-      ...site,
-    } satisfies Website;
   }).pipe(Effect.orDie);

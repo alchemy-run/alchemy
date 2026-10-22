@@ -4,7 +4,7 @@ import { makeFrameworkSite, type FrameworkSiteProps } from "./FrameworkSite.ts";
 /** The framework-integration package that drives the Nuxt build. */
 export const NUXT_FRAMEWORK_SPECIFIER = "@alchemy.run/frontend-frameworks/nuxt";
 
-/** The Node container deploy target for the Nuxt build. */
+/** The Node deploy target for the Nuxt build. */
 export const NUXT_NODE_TARGET_SPECIFIER = "@alchemy.run/frontend-frameworks/nuxt/node";
 
 export interface NuxtProps extends FrameworkSiteProps {
@@ -17,9 +17,9 @@ export interface NuxtProps extends FrameworkSiteProps {
 }
 
 /**
- * Deploy a Nuxt application to Azure Container Apps: the nitro Node
- * server as a container on port 3000, static assets baked into the
- * unit.
+ * Deploy a Nuxt application to Azure App Service: the nitro Node
+ * server on a Linux web app with the Node.js runtime (no Docker), static
+ * assets served by the same process.
  *
  * The build runs through `@alchemy.run/frontend-frameworks/nuxt` with the
  * `@alchemy.run/frontend-frameworks/nuxt/node` deploy target (`nitro.preset`
@@ -34,11 +34,11 @@ export interface NuxtProps extends FrameworkSiteProps {
  * });
  * ```
  *
- * **Example:** Custom Domain
+ * **Example:** Behind Azure Front Door
  * ```typescript
  * const site = yield* Azure.Website.Nuxt("Web", {
  *   rootDir: "./app",
- *   domain: "app.example.com",
+ *   frontDoor: true,
  * });
  * ```
  *

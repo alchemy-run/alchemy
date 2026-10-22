@@ -8392,9 +8392,6 @@ importers:
 
   packages/azure:
     dependencies:
-      '@alchemy.run/docker':
-        specifier: workspace:*
-        version: link:../docker
       '@distilled.cloud/azure':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/azure

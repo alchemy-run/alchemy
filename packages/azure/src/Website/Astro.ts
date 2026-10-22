@@ -8,7 +8,7 @@ import {
 /** The framework-integration package that drives the Astro build. */
 export const ASTRO_FRAMEWORK_SPECIFIER = "@alchemy.run/frontend-frameworks/astro";
 
-/** The Node container deploy target for the Astro build. */
+/** The Node deploy target for the Astro build. */
 export const ASTRO_NODE_TARGET_SPECIFIER = "@alchemy.run/frontend-frameworks/astro/node";
 
 export interface AstroProps extends FrameworkSiteProps {
@@ -25,7 +25,7 @@ export interface AstroProps extends FrameworkSiteProps {
     /**
      * Astro output target. `"server"` renders pages on demand;
      * `"static"` prerenders every page at build time and deploys
-     * assets-only (no SSR unit).
+     * assets-only to a storage static website (no server).
      * @default "server"
      */
     output?: "server" | "static";
@@ -42,10 +42,10 @@ export interface AstroProps extends FrameworkSiteProps {
 
 /**
  * Deploy an [Astro](https://astro.build) application to Azure
- * Container Apps: the Node adapter bundle as a container on port 3000, static
- * assets baked into the unit. Pages render on demand by default
+ * App Service: the Node adapter bundle on a Linux web app with the Node.js runtime (no Docker), static
+ * assets served by the same process. Pages render on demand by default
  * (`output: "server"`); `astro: { output: "static" }` prerenders every
- * page and deploys assets-only.
+ * page and uploads it to the static website endpoint of a storage account.
  *
  * The build runs through `@alchemy.run/frontend-frameworks/astro` with the
  * `@alchemy.run/frontend-frameworks/astro/node` deploy target. Your
@@ -60,11 +60,11 @@ export interface AstroProps extends FrameworkSiteProps {
  * });
  * ```
  *
- * **Example:** Custom Domain
+ * **Example:** Behind Azure Front Door
  * ```typescript
  * const site = yield* Azure.Website.Astro("Web", {
  *   rootDir: "./app",
- *   domain: "app.example.com",
+ *   frontDoor: true,
  * });
  * ```
  *

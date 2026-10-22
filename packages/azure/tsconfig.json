@@ -16,7 +16,6 @@
     {
       "path": "../alchemy/tsconfig.json"
     },
-    { "path": "../docker/tsconfig.json" },
     {
       "path": "../../submodules/distilled/packages/core/tsconfig.json"
     },

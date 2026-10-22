@@ -1,15 +1,14 @@
 # Azure Website: Vite
 
-A Tailwind React SPA deployed with `Azure.Website.Vite` to Azure Container
-Apps. Alchemy creates a resource group, a Basic Azure Container Registry, an
-Express Container Apps environment, and a Container App; the built site is
-packaged into an image with your local Docker daemon and pushed to the
-registry.
+A Tailwind React SPA deployed with `Azure.Website.Vite` to the static
+website endpoint of an Azure Storage account. Alchemy creates a resource
+group and a storage account, then uploads the `vite build` output to the
+account's `$web` container. No Docker image and no server are involved.
 
-- `alchemy deploy` builds the SPA and serves it at `https://{app}.{env}.{region}.azurecontainerapps.io`.
+- `alchemy deploy` builds the SPA and serves it at `https://{account}.z13.web.core.windows.net`.
 - `alchemy dev` is Vite's own server (HMR included).
 
-Requires a running Docker daemon and an Azure profile (`alchemy login azure`).
+Requires an Azure profile (`alchemy login azure`).
 
 ```sh
 bun run deploy

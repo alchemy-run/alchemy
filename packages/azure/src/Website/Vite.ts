@@ -8,7 +8,7 @@ import {
 /** The framework-integration package that drives the Vite build. */
 export const VITE_FRAMEWORK_SPECIFIER = "@alchemy.run/frontend-frameworks/vite";
 
-/** The Node container deploy target for the Vite build. */
+/** The Node deploy target for the Vite build. */
 export const VITE_NODE_TARGET_SPECIFIER = "@alchemy.run/frontend-frameworks/vite/node";
 
 const viteOptions = (props: ViteProps) =>
@@ -27,11 +27,11 @@ export interface ViteProps extends FrameworkSiteProps {
 }
 
 /**
- * Deploy a plain [Vite](https://vite.dev) application to Azure
- * Container Apps: `vite build` output served by a static-file container on
- * port 3000. For client-only projects — React/Vue/Solid SPAs,
- * `index.html` multi-page apps — whose entire deployable output is
- * static assets.
+ * Deploy a plain [Vite](https://vite.dev) application to the static
+ * website endpoint of an Azure Storage account: the `vite build` output is
+ * uploaded to the `$web` container, with no Docker image and no server.
+ * For client-only projects — React/Vue/Solid SPAs, `index.html`
+ * multi-page apps — whose entire deployable output is static assets.
  *
  * The build runs through `@alchemy.run/frontend-frameworks/vite` with the
  * `@alchemy.run/frontend-frameworks/vite/node` deploy target — the package
@@ -52,17 +52,15 @@ export interface ViteProps extends FrameworkSiteProps {
  * });
  * ```
  *
- * **Example:** Existing Resource Group and Environment
+ * **Example:** Existing Resource Group and Storage Account
  * ```typescript
  * const group = yield* Azure.Resources.ResourceGroup("Group");
- * const environment = yield* Azure.ContainerApps.ManagedEnvironment("Env", {
+ * const storageAccount = yield* Azure.Storage.StorageAccount("Files", {
  *   resourceGroup: group.resourceGroupName,
- *   environmentMode: "Express",
  * });
  * const site = yield* Azure.Website.Vite("Web", {
  *   resourceGroup: group,
- *   environment,
- *   location: "eastus",
+ *   storageAccount,
  * });
  * ```
  *
@@ -74,11 +72,11 @@ export interface ViteProps extends FrameworkSiteProps {
  * });
  * ```
  *
- * ### Custom Domain
- * **Example:** Hostname Binding
+ * ### Front Door
+ * **Example:** SPA deep links with a `200` status
  * ```typescript
  * const site = yield* Azure.Website.Vite("Web", {
- *   domain: "app.example.com",
+ *   frontDoor: true,
  * });
  * ```
  *
@@ -86,8 +84,7 @@ export interface ViteProps extends FrameworkSiteProps {
  * **Example:** Custom Output Directory and Base Path
  * ```typescript
  * const site = yield* Azure.Website.Vite("Docs", {
- *   outDir: "build",
- *   base: "/docs/",
+ *   vite: { outDir: "build", base: "/docs/" },
  * });
  * ```
  *
@@ -95,7 +92,7 @@ export interface ViteProps extends FrameworkSiteProps {
  * **Example:** Vite Dev Server Under `alchemy dev`
  * ```typescript
  * // `alchemy dev` starts `vite` programmatically: site.url is the local
- * // dev server (HMR included); no Server or Service is created.
+ * // dev server (HMR included); no Azure resources are created.
  * const site = yield* Azure.Website.Vite("Web");
  * ```
  *

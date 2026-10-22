@@ -4,7 +4,7 @@ import { makeFrameworkSite, type FrameworkSiteProps } from "./FrameworkSite.ts";
 /** The framework-integration package that drives the TanStack Start build. */
 export const TANSTACK_START_FRAMEWORK_SPECIFIER = "@alchemy.run/frontend-frameworks/tanstack-start";
 
-/** The Node container deploy target for the TanStack Start build. */
+/** The Node deploy target for the TanStack Start build. */
 export const TANSTACK_START_NODE_TARGET_SPECIFIER =
   "@alchemy.run/frontend-frameworks/tanstack-start/node";
 
@@ -12,8 +12,8 @@ export interface TanStackStartProps extends FrameworkSiteProps {}
 
 /**
  * Deploy a [TanStack Start](https://tanstack.com/start) application to a
- * Azure Container Apps: the SSR server as a container on port 3000,
- * static assets baked into the unit.
+ * Azure App Service: the SSR server on a Linux web app with the Node.js runtime (no Docker),
+ * static assets served by the same process.
  *
  * The build runs through
  * `@alchemy.run/frontend-frameworks/tanstack-start` with the
@@ -35,11 +35,11 @@ export interface TanStackStartProps extends FrameworkSiteProps {}
  * });
  * ```
  *
- * **Example:** Custom Domain
+ * **Example:** Behind Azure Front Door
  * ```typescript
  * const site = yield* Azure.Website.TanStackStart("Web", {
  *   rootDir: "./app",
- *   domain: "app.example.com",
+ *   frontDoor: true,
  * });
  * ```
  *

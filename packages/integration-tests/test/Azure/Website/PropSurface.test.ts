@@ -13,9 +13,21 @@ describe(
           memo: { lockfile: true },
           assets: { notFoundHandling: "404-page" },
           dev: {},
-          domain: "app.example.com",
           tags: { team: "web" },
           location: "eastus",
+          sku: "B1",
+          frontDoor: true,
+        }),
+      () =>
+        Azure.Website.Vite("V", {
+          // @ts-expect-error custom domains attach through Front Door, not a prop
+          domain: "app.example.com",
+        }),
+      () =>
+        Azure.Website.Foldkit("F", {
+          output: "static",
+          vite: { base: "/" },
+          assets: { notFoundHandling: "404-page" },
         }),
       () =>
         Azure.Website.Vite("V", {
@@ -60,6 +72,7 @@ describe(
           outdir: "public",
           spa: true,
           location: "eastus",
+          frontDoor: {},
         }),
     ];
 

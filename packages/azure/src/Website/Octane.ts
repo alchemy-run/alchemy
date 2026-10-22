@@ -4,15 +4,15 @@ import { makeFrameworkSite, type FrameworkSiteProps } from "./FrameworkSite.ts";
 /** The framework-integration package that drives the Octane build. */
 export const OCTANE_FRAMEWORK_SPECIFIER = "@alchemy.run/frontend-frameworks/octane";
 
-/** The Node container deploy target for the Octane build. */
+/** The Node deploy target for the Octane build. */
 export const OCTANE_NODE_TARGET_SPECIFIER = "@alchemy.run/frontend-frameworks/octane/node";
 
 export interface OctaneProps extends FrameworkSiteProps {}
 
 /**
  * Deploy an [OctaneJS](https://octanejs.dev) application to Azure
- * Container Apps: Octane's SSR server as a container on port 3000,
- * static assets baked into the unit.
+ * App Service: Octane's SSR server on a Linux web app with the Node.js runtime (no Docker),
+ * static assets served by the same process.
  *
  * `Azure.Website.Octane` selects hosting and automatically wraps Octane's
  * default native Node output. Keep compiler and route settings in
@@ -27,11 +27,11 @@ export interface OctaneProps extends FrameworkSiteProps {}
  * });
  * ```
  *
- * **Example:** Custom Domain
+ * **Example:** Behind Azure Front Door
  * ```typescript
  * const site = yield* Azure.Website.Octane("Web", {
  *   rootDir: "./app",
- *   domain: "app.example.com",
+ *   frontDoor: true,
  * });
  * ```
  *

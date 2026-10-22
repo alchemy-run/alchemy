@@ -1,100 +1,80 @@
 import * as Azure from "@alchemy.run/azure";
-import { orUndefinedIfNotFound } from "@alchemy.run/azure/Arm";
-import * as resources from "@distilled.cloud/azure/resources";
-import { expect } from "alchemy-test";
+import { describe, expect } from "alchemy-test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
-import * as HttpClient from "effect/http/HttpClient";
-import { MinimumLogLevel } from "effect/References";
-import * as Schedule from "effect/Schedule";
-import * as pathe from "pathe";
+import * as FileSystem from "effect/FileSystem";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
-import { expectUrlContains } from "../../Cloudflare/Utils/Http.ts";
+import {
+  assertGroupGone,
+  cloudflareFixture,
+  fetchPage,
+  LOCATION,
+  logLevel,
+  storageWebUrl,
+  tags,
+  tempRoot,
+  waitForPage,
+} from "./site.ts";
 
 const { test } = Test.make({ providers: Azure.providers() });
 
-const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
-
-// Express environment: provisions in seconds, outside the trial's
-// one-standard-environment quota.
-const LOCATION = "eastus";
-
-const fixtureDir = pathe.resolve(import.meta.dirname, "../../Cloudflare/Website/vite-spa-fixture");
-const tempRoot = pathe.resolve(import.meta.dirname, "../../../.tmp");
+const fixtureDir = cloudflareFixture("vite-spa-fixture");
 const fixtureEntries = ["index.html", "package.json", "src"];
 
-const groupExists = (resourceGroupName: string) =>
-  Effect.gen(function* () {
-    const { subscriptionId } = yield* Azure.AzureEnvironment.current;
-    const group = yield* orUndefinedIfNotFound(
-      resources.GetResourceGroup({ subscriptionId, resourceGroupName }),
-    );
-    return group !== undefined;
-  });
+describe("Azure.Website.Vite", { tags }, () => {
+  test.provider(
+    "Vite SPA: deploy to a storage static website, update, destroy, gone",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
 
-// Skipped: needs a running local Docker daemon to build the image. The live
-// run on 2026-10-05 provisioned ResourceGroup/Registry/Environment, then
-// `docker image build` failed with "Cannot connect to the Docker daemon at
-// unix:///var/run/docker.sock" (daemon inactive on the test host); destroy
-// cleaned every resource. Unskip on a host with Docker running.
-test.provider.skip(
-  "Vite SPA: deploy, GET /, destroy, gone",
-  (stack) =>
-    Effect.gen(function* () {
-      yield* stack.destroy();
-
-      const rootDir = yield* cloneFixture(fixtureDir, {
-        prefix: "alchemy-vite-azure-",
-        tempRoot,
-        entries: fixtureEntries,
-      });
-
-      const deployed = yield* stack.deploy(
-        Effect.gen(function* () {
-          const site = yield* Azure.Website.Vite("Web", {
+        const rootDir = yield* cloneFixture(fixtureDir, {
+          prefix: "alchemy-vite-azure-",
+          tempRoot,
+          entries: fixtureEntries,
+        });
+        const program = Effect.gen(function* () {
+          return yield* Azure.Website.Vite("Web", {
             rootDir,
             location: LOCATION,
-            memo: {
-              include: ["index.html", "src/**", "package.json"],
-            },
+            memo: { include: ["index.html", "src/**", "package.json"] },
           });
-          return { site };
-        }),
-      );
+        });
 
-      const url = deployed.site.url;
-      expect(url).toBeDefined();
-      expect(url).toMatch(/^https:\/\//);
-      expect(deployed.site.app).toBeDefined();
-      expect(deployed.site.registry).toBeDefined();
+        const site = yield* stack.deploy(program);
+        const url = site.url as string;
+        expect(url).toMatch(storageWebUrl);
+        expect(site.assets?.fileCount).toBeGreaterThan(0);
 
-      yield* expectUrlContains(`${url!}/`, "Vite SPA fixture", {
-        timeout: "60 seconds",
-        label: "vite spa index",
-      });
-      yield* expectUrlContains(`${url!}/missing-client-route`, "Vite SPA fixture", {
-        timeout: "15 seconds",
-        label: "vite spa fallback",
-      });
+        const index = yield* waitForPage(`${url}/`, (page) => page.status === 200);
+        expect(index.body).toContain("Vite SPA fixture");
+        expect(index.type).toContain("text/html");
+        const script = index.body.match(/<script[^>]+src="([^"]+)"/);
+        expect(script).not.toBeNull();
+        const javascript = yield* fetchPage(new URL(script![1]!, `${url}/`).href);
+        expect(javascript.status).toBe(200);
+        expect(javascript.type).toMatch(/javascript/);
+        // SPA fallback: the shell, with the storage endpoint's 404 status.
+        const fallback = yield* fetchPage(`${url}/missing-client-route`);
+        expect(fallback.body).toContain("Vite SPA fixture");
 
-      const client = yield* HttpClient.HttpClient;
-      const health = yield* client.get(`${url!}/health`).pipe(
-        Effect.flatMap((res) =>
-          res.status === 200 ? res.text : Effect.fail(new Error(`health returned ${res.status}`)),
-        ),
-        Effect.retry({
-          schedule: Schedule.exponential("500 millis"),
-          times: 10,
-        }),
-      );
-      expect(health).toContain("ok");
+        // Change one file: the redeploy uploads it and serves the new copy.
+        const fs = yield* FileSystem.FileSystem;
+        const indexPath = `${rootDir}/index.html`;
+        const html = yield* fs.readFileString(indexPath);
+        yield* fs.writeFileString(
+          indexPath,
+          html.replace("<body>", "<body><!-- AZURE_REDEPLOY -->"),
+        );
+        const updated = yield* stack.deploy(program);
+        expect(updated.url).toBe(url);
+        expect(updated.assets?.contentHash).not.toBe(site.assets?.contentHash);
+        yield* waitForPage(`${url}/`, (page) => page.body.includes("AZURE_REDEPLOY"));
 
-      const groupName = deployed.site.resourceGroup!.resourceGroupName;
-      yield* stack.destroy();
-      expect(yield* groupExists(groupName)).toBe(false);
-    }).pipe(logLevel, Effect.ensuring(stack.destroy().pipe(Effect.orDie))),
-  {
-    tags: ["provider:azure", "provider:azure:website", "live"],
-    timeout: 900_000,
-  },
-);
+        const groupName = site.resourceGroup!.resourceGroupName;
+        yield* stack.destroy();
+        yield* assertGroupGone(groupName);
+      }).pipe(logLevel),
+    { timeout: 900_000 },
+  );
+});

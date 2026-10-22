@@ -1,3 +1,4 @@
+export * from "./AppDeployment.ts";
 export * from "./Astro.ts";
 export * from "./Foldkit.ts";
 export * from "./FrameworkSite.ts";
@@ -7,6 +8,7 @@ export * from "./Octane.ts";
 export * from "./ReactRouter.ts";
 export * from "./SolidStart.ts";
 export * from "./StaticSite.ts";
+export * from "./StaticWebsite.ts";
 export * from "./SvelteKit.ts";
 export * from "./TanStackStart.ts";
 export * from "./Vinext.ts";

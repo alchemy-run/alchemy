@@ -4,7 +4,7 @@ import { makeFrameworkSite, type FrameworkSiteProps } from "./FrameworkSite.ts";
 /** The framework-integration package that drives the Vocs build. */
 export const VOCS_FRAMEWORK_SPECIFIER = "@alchemy.run/frontend-frameworks/vocs/node";
 
-/** The Node container deploy target for the Vocs build. */
+/** The Node deploy target for the Vocs build. */
 export const VOCS_NODE_TARGET_SPECIFIER = "@alchemy.run/frontend-frameworks/vocs/node";
 
 export interface VocsProps extends FrameworkSiteProps {
@@ -19,7 +19,7 @@ export interface VocsProps extends FrameworkSiteProps {
 
 /**
  * Deploy a [Vocs](https://vocs.dev) documentation project to Azure
- * Container Apps. Static assets first, then Vocs' Waku RSC handler
+ * App Service. Static assets first, then Vocs' Waku RSC handler
  * (`/about` → `about/index.html`, otherwise SSR).
  *
  *

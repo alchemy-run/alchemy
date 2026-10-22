@@ -17,12 +17,20 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
-import { ContainerApp } from "../ContainerApps/ContainerApp.ts";
-import { ManagedEnvironment } from "../ContainerApps/ManagedEnvironment.ts";
-import { Registry } from "../ContainerRegistry/Registry.ts";
+import { AfdEndpoint } from "../Cdn/AfdEndpoint.ts";
+import { AfdOrigin } from "../Cdn/AfdOrigin.ts";
+import { AfdOriginGroup } from "../Cdn/AfdOriginGroup.ts";
+import { Profile } from "../Cdn/Profile.ts";
+import { Route } from "../Cdn/Route.ts";
+import { Rule } from "../Cdn/Rule.ts";
+import { RuleSet } from "../Cdn/RuleSet.ts";
 import type { Providers } from "../Providers.ts";
 import { ResourceGroup } from "../Resources/ResourceGroup.ts";
-import { SiteImage } from "./SiteImage.ts";
+import { StorageAccount } from "../Storage/StorageAccount.ts";
+import { AppServicePlan } from "../Web/AppServicePlan.ts";
+import { WebApp } from "../Web/WebApp.ts";
+import { AppDeployment } from "./AppDeployment.ts";
+import { StaticWebsite } from "./StaticWebsite.ts";
 
 /**
  * A resource-valued prop: the resource itself, or an Effect that produces
@@ -34,11 +42,24 @@ export type Ref<T> = T | Effect.Effect<T, never, Providers>;
 const resolveRef = <T>(ref: Ref<T>): Effect.Effect<T, never, Providers> =>
   Effect.isEffect(ref) ? ref : Effect.succeed(ref);
 
-/** Port the Node serve entry listens on inside the container. */
-export const DEFAULT_WEBSITE_PORT = 3000;
+/** Node.js stack of the App Service web app that runs server builds. */
+export const DEFAULT_NODE_STACK = "NODE|22-lts";
+
+/** App Service plan SKU created for server builds when `plan` is omitted. */
+export const DEFAULT_PLAN_SKU = "B1";
 
 export type { ServerDevProps, WebsiteAssetsProps, WebsiteNotFoundHandling };
 export { staticConfigFromAssets };
+
+/** Put an Azure Front Door (Standard) endpoint in front of the site. */
+export interface WebsiteFrontDoorProps {
+  /**
+   * Existing Front Door profile to add the endpoint to. When omitted, a
+   * `Standard_AzureFrontDoor` profile is created. Profiles cost a monthly
+   * base fee, so share one across sites.
+   */
+  profile?: Ref<Profile>;
+}
 
 /**
  * Props shared by every Azure framework website composite.
@@ -60,21 +81,15 @@ export interface FrameworkSiteProps {
    */
   dev?: ServerDevProps;
   /**
-   * Process environment for the container (and the local framework dev
-   * server). Accepts `Output`s (e.g. `VITE_API_URL: api.url`).
+   * Environment for the build, the local framework dev server and (for
+   * server builds) the web app's app settings. Accepts `Output`s (e.g.
+   * `VITE_API_URL: api.url`).
    */
   env?: Record<string, string | Redacted.Redacted<string> | Output.Output<string | undefined>>;
   /**
    * Static-asset routing (`notFoundHandling`, `htmlHandling`).
    */
   assets?: WebsiteAssetsProps;
-  /**
-   * Custom hostname bound to the Container App ingress. The CNAME and
-   * `asuid` TXT records must already exist; no certificate is issued
-   * (`bindingType: "Disabled"`), so `url` stays the app's
-   * `*.azurecontainerapps.io` address.
-   */
-  domain?: string;
   /**
    * User tags applied to every auto-created Azure resource.
    */
@@ -90,15 +105,30 @@ export interface FrameworkSiteProps {
    */
   location?: string;
   /**
-   * Container Apps environment the app runs in. When omitted, an
-   * `Express` environment is created.
+   * Storage account whose static website endpoint serves an assets-only
+   * build. Alchemy owns its `$web` container. When omitted, a
+   * `Standard_LRS` account is created.
    */
-  environment?: Ref<ManagedEnvironment>;
+  storageAccount?: Ref<StorageAccount>;
   /**
-   * Container registry the image is pushed to. Must have
-   * `adminUserEnabled: true`. When omitted, a `Basic` registry is created.
+   * App Service plan (Linux) that runs a server build. When omitted, a
+   * plan with {@link sku} is created.
    */
-  registry?: Ref<Registry>;
+  plan?: Ref<AppServicePlan>;
+  /**
+   * SKU of the App Service plan created for a server build.
+   * @default "B1"
+   */
+  sku?: string;
+  /**
+   * Serve the site through an Azure Front Door endpoint. Front Door adds a
+   * global CDN and, for single-page applications, answers deep links with
+   * the index page and a `200` status (the storage endpoint alone answers
+   * them with the index page and a `404` status). Front Door rejects a
+   * `resourceGroup` whose name is longer than 80 characters.
+   * @default false
+   */
+  frontDoor?: boolean | WebsiteFrontDoorProps;
 }
 
 /** Per-framework wiring for {@link makeFrameworkSite}. */
@@ -107,7 +137,7 @@ export interface FrameworkSiteConfig {
   name: string;
   /** Framework-integration module specifier. */
   framework: string;
-  /** Node container deploy-target module specifier. */
+  /** Node deploy-target module specifier. */
   target: string;
   /**
    * Framework-specific build options forwarded to the integration (e.g.
@@ -115,7 +145,8 @@ export interface FrameworkSiteConfig {
    */
   options?: Record<string, unknown> | undefined;
   /**
-   * Assets-only mode: no server modules (or every page prerendered).
+   * Assets-only mode: no server modules (or every page prerendered). The
+   * build's client directory is published to a storage static website.
    */
   static?:
     | {
@@ -130,32 +161,56 @@ export interface FrameworkSiteConfig {
    */
   htmlHandling?: "none" | "drop-trailing-slash";
   /**
-   * Skip baking `clientDirectory` into the image root. Next.js serves
-   * `.next` from the image root instead.
+   * Package `.next`, `public/` and `next.config.*` instead of the client
+   * directory. Next.js serves them from the package root.
    */
   skipClientAssets?: boolean | undefined;
   /**
-   * Packages installed into the image instead of bundled (Next.js needs
-   * `next` / `react` / `react-dom`).
+   * Packages installed on App Service (remote build) instead of bundled
+   * (Next.js needs `next` / `react` / `react-dom`). Versions come from the
+   * project's `package.json`.
    */
   install?: string[] | undefined;
 }
 
+export interface WebsiteFrontDoor {
+  /** Front Door profile. */
+  readonly profile: Profile;
+  /** Endpoint that serves the site. */
+  readonly endpoint: AfdEndpoint;
+}
+
 export interface Website {
   /**
-   * Local framework URL under `alchemy dev`, or the Container App's
-   * `https://{fqdn}` on deploy.
+   * Local framework URL under `alchemy dev`; on deploy, the Front Door
+   * endpoint, else the storage static website endpoint (assets-only
+   * builds) or the web app (server builds).
    */
   readonly url: string | Output.Output<string | undefined> | undefined;
   /** Resource group holding the site. `undefined` during `alchemy dev`. */
   readonly resourceGroup: ResourceGroup | undefined;
-  /** Container Apps environment. `undefined` during `alchemy dev`. */
-  readonly environment: ManagedEnvironment | undefined;
-  /** Registry holding the image. `undefined` during `alchemy dev`. */
-  readonly registry: Registry | undefined;
-  /** Container App serving the site. `undefined` during `alchemy dev`. */
-  readonly app: ContainerApp | undefined;
+  /** Storage account serving an assets-only build. */
+  readonly storageAccount: StorageAccount | undefined;
+  /** Published static website of an assets-only build. */
+  readonly assets: StaticWebsite | undefined;
+  /** App Service plan running a server build. */
+  readonly plan: AppServicePlan | undefined;
+  /** Web app running a server build. */
+  readonly app: WebApp | undefined;
+  /** Front Door in front of the site, when {@link FrameworkSiteProps.frontDoor} is set. */
+  readonly frontDoor: WebsiteFrontDoor | undefined;
 }
+
+/** A {@link Website} for `alchemy dev`, where only the local URL exists. */
+export const localWebsite = (url: Website["url"]): Website => ({
+  url,
+  resourceGroup: undefined,
+  storageAccount: undefined,
+  assets: undefined,
+  plan: undefined,
+  app: undefined,
+  frontDoor: undefined,
+});
 
 export class FrameworkSiteError extends Data.TaggedError("Azure.Website.FrameworkSiteError")<{
   readonly framework: string;
@@ -177,122 +232,285 @@ export const unwrapEnv = (
   );
 };
 
-const REGISTRY_PASSWORD_SECRET = "registry-password";
+type SiteLocation = Pick<FrameworkSiteProps, "resourceGroup" | "location" | "tags">;
+
+const siteResourceGroup = (site: SiteLocation) =>
+  site.resourceGroup !== undefined
+    ? resolveRef(site.resourceGroup)
+    : ResourceGroup("ResourceGroup", { location: site.location, tags: site.tags });
 
 /**
- * Host a built Node serve entry (`main` + `extraFiles`) on Azure Container
- * Apps: resource group → registry → image (built with local Docker and
- * pushed to ACR) → environment → Container App with external ingress.
+ * Put a Front Door endpoint in front of `originHost`. For a single-page
+ * application, a rule rewrites extensionless paths to `/index.html` so deep
+ * links load the app with a `200` status.
  */
-export const deployContainerSite = Effect.fn(function* (props: {
-  readonly site: FrameworkSiteProps;
-  readonly main: string;
-  readonly extraFiles: ExtraFile[] | undefined;
-  readonly install?: string[] | undefined;
+const deployFrontDoor = Effect.fn(function* (props: {
+  readonly frontDoor: true | WebsiteFrontDoorProps;
+  readonly resourceGroup: ResourceGroup;
+  readonly originHost: string;
+  readonly spa: boolean;
+  readonly tags: Record<string, string> | undefined;
+}) {
+  const resourceGroup = props.resourceGroup.resourceGroupName;
+  const options = props.frontDoor === true ? {} : props.frontDoor;
+  const profile =
+    options.profile !== undefined
+      ? yield* resolveRef(options.profile)
+      : yield* Profile("FrontDoor", { resourceGroup, tags: props.tags });
+  // Child resources live in the profile's own resource group.
+  const profileGroup = profile.resourceGroup;
+  const endpoint = yield* AfdEndpoint("Endpoint", {
+    resourceGroup: profileGroup,
+    profile: profile.profileName,
+    tags: props.tags,
+  });
+  const originGroup = yield* AfdOriginGroup("Origins", {
+    resourceGroup: profileGroup,
+    profile: profile.profileName,
+    healthProbeSettings: {
+      probePath: "/",
+      probeProtocol: "Https",
+      probeRequestType: "HEAD",
+      probeIntervalInSeconds: 100,
+    },
+  });
+  const origin = yield* AfdOrigin("Origin", {
+    resourceGroup: profileGroup,
+    profile: profile.profileName,
+    originGroup: originGroup.originGroupName,
+    hostName: props.originHost,
+    originHostHeader: props.originHost,
+  });
+  let ruleSetIds: Output.Output<string[]> | undefined;
+  if (props.spa) {
+    const ruleSet = yield* RuleSet("SpaRules", {
+      resourceGroup: profileGroup,
+      profile: profile.profileName,
+    });
+    const rule = yield* Rule("SpaFallback", {
+      resourceGroup: profileGroup,
+      profile: profile.profileName,
+      ruleSet: ruleSet.ruleSetName,
+      order: 1,
+      conditions: [
+        {
+          name: "UrlFileExtension",
+          parameters: {
+            typeName: "DeliveryRuleUrlFileExtensionMatchConditionParameters",
+            operator: "LessThan",
+            negateCondition: false,
+            matchValues: ["1"],
+            transforms: [],
+          },
+        },
+      ],
+      actions: [
+        {
+          name: "UrlRewrite",
+          parameters: {
+            typeName: "DeliveryRuleUrlRewriteActionParameters",
+            sourcePattern: "/",
+            destination: "/index.html",
+            preserveUnmatchedPath: false,
+          },
+        },
+      ],
+    });
+    // The route may attach the rule set only once it holds the rule.
+    ruleSetIds = Output.map(
+      Output.all(rule.ruleId, ruleSet.ruleSetId),
+      ([, ruleSetId]: [string, string]) => [ruleSetId],
+    ) as Output.Output<string[]>;
+  }
+  yield* Route("Route", {
+    resourceGroup: profileGroup,
+    profile: profile.profileName,
+    endpoint: endpoint.endpointName,
+    // A route needs an origin group that already holds an origin.
+    originGroupId: Output.map(
+      Output.all(origin.originId, originGroup.originGroupId),
+      ([, originGroupId]: [string, string]) => originGroupId,
+    ) as unknown as string,
+    ruleSetIds: ruleSetIds as unknown as string[] | undefined,
+    supportedProtocols: ["Http", "Https"],
+    httpsRedirect: "Enabled",
+    forwardingProtocol: "HttpsOnly",
+    linkToDefaultDomain: "Enabled",
+  });
+  return {
+    frontDoor: { profile, endpoint } satisfies WebsiteFrontDoor,
+    url: Output.map(endpoint.hostName, (host: string) => `https://${host}`),
+  };
+});
+
+/**
+ * Host an assets-only build: resource group → storage account → static
+ * website (blob upload) → optional Front Door.
+ */
+export const deployStaticSite = Effect.fn(function* (props: {
+  readonly site: Pick<
+    FrameworkSiteProps,
+    "resourceGroup" | "location" | "tags" | "storageAccount" | "frontDoor"
+  >;
+  /** Directory to publish (may be an `Output`). */
+  readonly path: string;
+  readonly spa: boolean;
+  readonly errorPage: string | undefined;
 }) {
   const { site } = props;
-  const port = DEFAULT_WEBSITE_PORT;
-
-  const resourceGroup =
-    site.resourceGroup !== undefined
-      ? yield* resolveRef(site.resourceGroup)
-      : yield* ResourceGroup("ResourceGroup", {
-          location: site.location,
-          tags: site.tags,
-        });
-
-  const registry =
-    site.registry !== undefined
-      ? yield* resolveRef(site.registry)
-      : yield* Registry("Registry", {
+  const resourceGroup = yield* siteResourceGroup(site);
+  const storageAccount =
+    site.storageAccount !== undefined
+      ? yield* resolveRef(site.storageAccount)
+      : yield* StorageAccount("Storage", {
           resourceGroup: resourceGroup.resourceGroupName,
           location: site.location,
-          sku: "Basic",
-          adminUserEnabled: true,
+          sku: "Standard_LRS",
           tags: site.tags,
         });
-
-  const username = Output.map(registry.adminUsername, (value: string | undefined) => value ?? "");
-  const password = Output.map(
-    registry.adminPassword,
-    (value: Redacted.Redacted<string> | undefined) => value ?? Redacted.make(""),
-  );
-
-  const image = yield* SiteImage("Image", {
-    main: props.main,
-    extraFiles: props.extraFiles,
-    install: props.install,
-    port,
-    repository: "website",
-    registry: {
-      server: registry.loginServer,
-      username,
-      password,
-    },
+  const assets = yield* StaticWebsite("Assets", {
+    resourceGroup: storageAccount.resourceGroup,
+    storageAccount: storageAccount.storageAccountName,
+    path: props.path,
+    indexDocument: "index.html",
+    errorDocument404Path: props.spa ? "index.html" : props.errorPage,
   });
-
-  const environment =
-    site.environment !== undefined
-      ? yield* resolveRef(site.environment)
-      : yield* ManagedEnvironment("Environment", {
-          resourceGroup: resourceGroup.resourceGroupName,
-          location: site.location,
-          environmentMode: "Express",
+  const edge =
+    site.frontDoor !== undefined && site.frontDoor !== false
+      ? yield* deployFrontDoor({
+          frontDoor: site.frontDoor,
+          resourceGroup,
+          originHost: assets.hostName as unknown as string,
+          spa: props.spa,
           tags: site.tags,
-        });
-
-  const env = Object.entries({
-    ...unwrapEnv(site.env),
-    PORT: String(port),
-  }).map(([name, value]) => ({ name, value }));
-
-  const app = yield* ContainerApp("App", {
-    resourceGroup: resourceGroup.resourceGroupName,
-    location: site.location,
-    environmentId: environment.environmentId,
-    configuration: {
-      ingress: {
-        external: true,
-        targetPort: port,
-        customDomains:
-          site.domain !== undefined ? [{ name: site.domain, bindingType: "Disabled" }] : undefined,
-      },
-      registries: [
-        {
-          server: registry.loginServer,
-          username,
-          passwordSecretRef: REGISTRY_PASSWORD_SECRET,
-        },
-      ],
-    },
-    secrets: [{ name: REGISTRY_PASSWORD_SECRET, value: password }],
-    template: {
-      containers: [
-        {
-          name: "web",
-          image: image.imageRef,
-          env,
-          resources: { cpu: 0.5, memory: "1Gi" },
-        },
-      ],
-      scale: { minReplicas: 1, maxReplicas: 1 },
-    },
-    tags: site.tags,
-  });
-
+        })
+      : undefined;
   return {
-    url: app.url,
+    url: edge?.url ?? assets.url,
     resourceGroup,
-    environment,
-    registry,
-    app,
+    storageAccount,
+    assets,
+    plan: undefined,
+    app: undefined,
+    frontDoor: edge?.frontDoor,
   } satisfies Website;
 });
 
 /**
+ * Host a server build: resource group → Linux App Service plan → Node.js
+ * web app → zip deployment of the bundled serve entry → optional Front Door.
+ */
+export const deployAppServiceSite = Effect.fn(function* (props: {
+  readonly site: FrameworkSiteProps;
+  /** Node serve entry (may be an `Output`). */
+  readonly main: string;
+  /** Path of the bundled entry inside the package (may be an `Output`). */
+  readonly entry: string;
+  /** Startup command, `node <entry>` (may be an `Output`). */
+  readonly startup: string;
+  readonly extraFiles: ExtraFile[] | undefined;
+  readonly install: Record<string, string> | undefined;
+}) {
+  const { site } = props;
+  const resourceGroup = yield* siteResourceGroup(site);
+  const plan =
+    site.plan !== undefined
+      ? yield* resolveRef(site.plan)
+      : yield* AppServicePlan("Plan", {
+          resourceGroup: resourceGroup.resourceGroupName,
+          location: site.location,
+          sku: site.sku ?? DEFAULT_PLAN_SKU,
+          os: "linux",
+          tags: site.tags,
+        });
+  const env = unwrapEnv(site.env) ?? {};
+  const app = yield* WebApp("App", {
+    resourceGroup: resourceGroup.resourceGroupName,
+    location: site.location,
+    serverFarmId: plan.appServicePlanId,
+    siteConfig: {
+      linuxFxVersion: DEFAULT_NODE_STACK,
+      appCommandLine: props.startup,
+      ftpsState: "Disabled",
+      minTlsVersion: "1.2",
+    },
+    // App Service passes the listening port in PORT.
+    appSettings: {
+      ...(env as Record<string, string>),
+      HOST: "0.0.0.0",
+      ...(props.install !== undefined && Object.keys(props.install).length > 0
+        ? { SCM_DO_BUILD_DURING_DEPLOYMENT: "true" }
+        : {}),
+    },
+    tags: site.tags,
+  });
+  const deployment = yield* AppDeployment("Code", {
+    resourceGroup: resourceGroup.resourceGroupName,
+    siteName: app.siteName,
+    main: props.main,
+    entry: props.entry,
+    extraFiles: props.extraFiles,
+    install: props.install,
+  });
+  const edge =
+    site.frontDoor !== undefined && site.frontDoor !== false
+      ? yield* deployFrontDoor({
+          frontDoor: site.frontDoor,
+          resourceGroup,
+          originHost: app.defaultHostName as unknown as string,
+          spa: false,
+          tags: site.tags,
+        })
+      : undefined;
+  return {
+    url: edge?.url ?? deployment.url,
+    resourceGroup,
+    storageAccount: undefined,
+    assets: undefined,
+    plan,
+    app,
+    frontDoor: edge?.frontDoor,
+  } satisfies Website;
+});
+
+/** Versions of `names` from the project's `package.json` (else `latest`). */
+const installVersions = Effect.fn(function* (rootDir: string | undefined, names: string[]) {
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const manifest = yield* fs
+    .readFileString(path.resolve(initialCwd, rootDir ?? ".", "package.json"))
+    .pipe(
+      Effect.map(
+        (text) =>
+          JSON.parse(text) as {
+            dependencies?: Record<string, string>;
+            devDependencies?: Record<string, string>;
+          },
+      ),
+      Effect.orElseSucceed(() => ({}) as { dependencies?: Record<string, string> }),
+    );
+  const declared = {
+    ...("devDependencies" in manifest ? manifest.devDependencies : {}),
+    ...manifest.dependencies,
+  };
+  return Object.fromEntries(
+    names.map((name) => {
+      const version = declared[name];
+      return [
+        name,
+        version === undefined || version.startsWith("workspace:") || version.startsWith("catalog:")
+          ? "latest"
+          : version,
+      ];
+    }),
+  );
+});
+
+/**
  * Shared implementation behind the Azure framework website composites:
- * build through the Node deploy target, then host the serve entry as a
- * container on Azure Container Apps.
+ * build through the Node deploy target, then publish an assets-only build
+ * to a storage static website, or run a server build on App Service.
+ * Neither path uses Docker.
  *
  * During `alchemy dev` the site is the framework's own dev server and no
  * cloud resources are declared; `Alchemy.remote()` opts back into the
@@ -311,7 +529,7 @@ const runFrameworkSite = Effect.fn("Azure.Website.FrameworkSite")(function* (
 
   if (config.static?.spa && config.static.errorPage) {
     return yield* Effect.die(
-      `Cannot provide both "spa" and "errorPage". A SPA answers misses with the index page (200); "errorPage" answers them with a real 404.`,
+      `Cannot provide both "spa" and "errorPage". A SPA answers misses with the index page; "errorPage" answers them with a real 404.`,
     );
   }
 
@@ -325,14 +543,26 @@ const runFrameworkSite = Effect.fn("Azure.Website.FrameworkSite")(function* (
     dev: props.dev,
   });
 
-  if (isLocal) {
-    return {
-      url: build.url,
-      resourceGroup: undefined,
-      environment: undefined,
-      registry: undefined,
-      app: undefined,
-    } satisfies Website;
+  if (isLocal) return localWebsite(build.url);
+
+  if (config.static !== undefined) {
+    // The build runs at apply time; its client directory is an Output.
+    const clientDir = Output.mapEffect((clientDir: string | undefined) =>
+      clientDir === undefined
+        ? Effect.die(
+            new FrameworkSiteError({
+              framework: config.framework,
+              message: `The ${config.name} build produced no client directory to publish.`,
+            }),
+          )
+        : Effect.succeed(clientDir),
+    )(build.clientDir as unknown as Output.Output<string | undefined>);
+    return yield* deployStaticSite({
+      site: props,
+      path: clientDir as unknown as string,
+      spa: config.static.spa === true,
+      errorPage: config.static.errorPage,
+    });
   }
 
   // The build runs at APPLY time (`Website.Server` is a resource), so its
@@ -357,7 +587,14 @@ const runFrameworkSite = Effect.fn("Azure.Website.FrameworkSite")(function* (
             }),
           );
         }
-        return { distDir: path.resolve(initialCwd, distDir), main };
+        const dist = path.resolve(initialCwd, distDir);
+        // The bundled entry keeps the serve entry's place in the package,
+        // so its relative path to the client directory still resolves.
+        const entry = path
+          .join(path.dirname(path.relative(dist, main)), "index.mjs")
+          .split(path.sep)
+          .join("/");
+        return { distDir: dist, main, entry };
       }),
   )(
     Output.all(
@@ -366,15 +603,23 @@ const runFrameworkSite = Effect.fn("Azure.Website.FrameworkSite")(function* (
     ) as unknown as Output.Output<[string | undefined, string | undefined]>,
   );
   const main = Output.map(buildOut, (out) => out.main);
-  const extraFiles = Output.mapEffect((out: { distDir: string; main: string }) =>
+  const entry = Output.map(buildOut, (out) => out.entry);
+  const startup = Output.map(buildOut, (out) => `node ${out.entry}`);
+  const extraFiles = Output.mapEffect((out: { distDir: string }) =>
     packSiteExtraFiles(out.distDir, config.skipClientAssets === true ? "next" : "client"),
   )(buildOut);
+  const install =
+    config.install !== undefined && config.install.length > 0
+      ? yield* installVersions(props.rootDir, config.install)
+      : undefined;
 
-  return yield* deployContainerSite({
+  return yield* deployAppServiceSite({
     site: props,
     main: main as unknown as string,
+    entry: entry as unknown as string,
+    startup: startup as unknown as string,
     extraFiles: extraFiles as unknown as ExtraFile[] | undefined,
-    install: config.install,
+    install,
   });
 });
 
