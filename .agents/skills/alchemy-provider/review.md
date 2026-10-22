@@ -133,4 +133,8 @@ reason the platform forces. References:
 | Namespace casing | `ls src/<P>` | PascalCase |
 | Singular names | read the list of exported resource names | correct English (`Index`, `Process`, `Batch`) |
 | Scope | read the service list | no end-user data, OAuth-scoped, retired, or duplicate APIs; out-of-scope list on the overview page |
-| Docs build | `pnpm docs:check-jsdoc && pnpm docs:gen` | clean |
+| Docs build | `pnpm docs:check-jsdoc && pnpm docs:gen && pnpm docs:check` | clean |
+| Hub structure | `ls website/src/content/docs/<p>/*/` next to `ls website/src/content/docs/aws/*/` | Overview, Setup, `tutorial/part-1..5`, `compute/choosing-a-runtime`, sections by concern; no `guides/`; every AWS section has a counterpart unless the provider has nothing for it |
+| Hub snippets | read every fenced block with `import` lines | a complete file with a `// path` first line; no `...`, no module-scope `yield*`; code matches an `examples/<p>-*` project or a JSDoc example |
+| Hub voice | `rg -n 'Alchemy (mints\|synthesizes\|reconciles)\|this page\|three ideas\|under the hood' website/src/content/docs/<p>` | 0; second person, one or two lines per snippet |
+| Hub wiring | sidebar in `website/astro.config.ts`, `GROUP_ICONS`, `docs-tabs.ts`, `ProviderDirectory.astro`, `generate-llms-txt.ts` | every section listed in each; moved pages redirected in `website/src/worker.ts` |

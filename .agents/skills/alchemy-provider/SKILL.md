@@ -28,7 +28,7 @@ agent does not.
 
 The whole provider also means its non-resource deliverables: bindings for
 every capability (step 5), a host runtime and event sources when the cloud
-runs code, framework websites (step 7), examples, and generated docs
+runs code, framework websites (step 7), examples, the docs hub, and generated docs
 (step 10). They are rows in the same index as resources, with the same
 statuses. Never write "a later phase" into an agent contract without
 adding those rows: on Azure, the contract said "bindings are a later
@@ -535,6 +535,11 @@ counts, so they can see what was checked without re-reviewing by hand.
 - JSDoc on every resource, prop, attribute, and binding, with `###`
   sections and `**Example:**` blocks; then `pnpm docs:check-jsdoc` and
   `pnpm docs:gen`.
+- The hand-written hub at `website/src/content/docs/<provider>/`, built
+  to [docs.md](docs.md): the AWS hub's structure (Overview, Setup, a
+  five-part tutorial, sections by concern), code taken from tested
+  examples, and the voice rules there. A hub of loose "guides" that walk
+  the examples is not done; GCP's had to be rebuilt.
 - Examples under `examples/<provider>-*` that deploy and pass their own
   test, including at least one host with bindings.
 - Type-check with `pnpm exec tsrs -b`, run `pnpm exports:check` and
@@ -549,6 +554,7 @@ A provider is done when every SDK service is cataloged, every in-scope
 resource has its own passing live test (or is `blocked: cost` or
 `blocked: skipped` and the user has the list),
 bindings go through `<Provider>Bindings.Bind`, reach foreign hosts, and are least privilege, the
-framework websites deploy, examples deploy, docs are generated, the review
+framework websites deploy, examples deploy, the reference docs are
+generated, the hub matches [docs.md](docs.md), the review
 gate is clean, the test account is clean after a full run, and every SDK
 mismatch found along the way is a merged distilled patch.
