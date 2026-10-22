@@ -36,8 +36,10 @@ const schemaFor = (dialect: Dialect, prefix: string): ReadonlyArray<string> => {
         `CREATE TABLE IF NOT EXISTS "${timer}" (part TEXT COLLATE "C" NOT NULL, name TEXT COLLATE "C" NOT NULL, due BIGINT NOT NULL, PRIMARY KEY (part, name))`,
         `CREATE INDEX IF NOT EXISTS "${timer}_due" ON "${timer}" (due)`,
       ];
+    // Binary columns order by UTF-8 bytes, which is code point order, and fit
+    // InnoDB's 3072-byte key limit at MAX_NAME_BYTES each.
     case "mysql": {
-      const text = "VARCHAR(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL";
+      const text = `VARBINARY(${MAX_NAME_BYTES}) NOT NULL`;
       return [
         `CREATE TABLE IF NOT EXISTS \`${kv}\` (part ${text}, k ${text}, v LONGTEXT NOT NULL, PRIMARY KEY (part, k))`,
         `CREATE TABLE IF NOT EXISTS \`${partition}\` (part ${text} PRIMARY KEY, ver BIGINT NOT NULL)`,
@@ -54,11 +56,65 @@ const schemaFor = (dialect: Dialect, prefix: string): ReadonlyArray<string> => {
   }
 };
 
-/** The smallest string after every string that starts with `prefix`. */
-const successor = (prefix: string): string | undefined =>
-  prefix.length === 0
-    ? undefined
-    : prefix.slice(0, -1) + String.fromCharCode(prefix.charCodeAt(prefix.length - 1) + 1);
+/**
+ * The longest partition name, key or timer name, in UTF-8 bytes. The same on
+ * every dialect, so a model that runs on one runs on all.
+ */
+export const MAX_NAME_BYTES = 1024;
+
+const utf8 = new TextEncoder();
+const fromUtf8 = new TextDecoder();
+
+/** A name as the driver returns it: text, or bytes from a MySQL binary column. */
+const text = (value: string | Uint8Array): string =>
+  typeof value === "string" ? value : fromUtf8.decode(value);
+
+/** Reject a name every dialect can't store as is: too long, NUL, or a lone surrogate. */
+const check = (kind: string, name: string) =>
+  Effect.suspend(() => {
+    const bytes = utf8.encode(name).length;
+    const problem =
+      bytes > MAX_NAME_BYTES
+        ? `is ${bytes} bytes (at most ${MAX_NAME_BYTES})`
+        : name.includes("\u0000")
+          ? "contains NUL"
+          : /\p{Cs}/u.test(name)
+            ? "contains a lone surrogate"
+            : undefined;
+    return problem === undefined
+      ? Effect.void
+      : Effect.fail(
+          new StorageError({ message: `Domain storage: ${kind} ${name.slice(0, 80)}… ${problem}` }),
+        );
+  });
+
+/** Compare by code point, as the database does (UTF-16 code units disagree past U+FFFF). */
+const compare = (a: string, b: string): number => {
+  let i = 0;
+  let j = 0;
+  while (i < a.length && j < b.length) {
+    const x = a.codePointAt(i)!;
+    const y = b.codePointAt(j)!;
+    if (x !== y) return x - y;
+    i += x > 0xffff ? 2 : 1;
+    j += y > 0xffff ? 2 : 1;
+  }
+  return a.length - i - (b.length - j);
+};
+
+/** The smallest string, by code point, after every string that starts with `prefix`. */
+const successor = (prefix: string): string | undefined => {
+  const points = Array.from(prefix, (char) => char.codePointAt(0)!);
+  while (points.length > 0) {
+    const last = points.pop()!;
+    // U+10FFFF has no successor: carry into the code point before it.
+    if (last < 0x10ffff) {
+      // Skip the surrogate range, which no valid string contains.
+      return String.fromCodePoint(...points, last === 0xd7ff ? 0xe000 : last + 1);
+    }
+  }
+  return undefined;
+};
 
 const chunks = <A>(items: ReadonlyArray<A>): ReadonlyArray<ReadonlyArray<A>> => {
   const out: Array<ReadonlyArray<A>> = [];
@@ -69,9 +125,15 @@ const chunks = <A>(items: ReadonlyArray<A>): ReadonlyArray<ReadonlyArray<A>> => 
 const storageError = (error: SqlError) =>
   new StorageError({ message: `Domain storage: ${error.message}`, cause: error });
 
-/** A deadlock, serialization failure, lock timeout or dropped connection: the transaction can run again. */
+/** A deadlock, serialization failure, lock timeout or dropped connection: the work can run again. */
 const isRetryable = (error: unknown) =>
   error instanceof StorageError && error.cause instanceof SqlError && error.cause.isRetryable;
+
+/** Run reads and transactions again on a retryable failure (they are rolled back, or read only). */
+const retrying = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+  effect.pipe(
+    Effect.retry({ while: isRetryable, times: 5, schedule: Schedule.exponential("50 millis") }),
+  );
 
 /**
  * Build a {@link Storage} over the ambient `SqlClient`.
@@ -134,7 +196,10 @@ export const make = (options: Options = {}) =>
 
     const reader = (partition: string): Reader => ({
       get: <A>(key: string) =>
-        run(sql<{ v: string }>`SELECT v FROM ${kv} WHERE part = ${partition} AND k = ${key}`).pipe(
+        check("key", key).pipe(
+          Effect.andThen(
+            run(sql<{ v: string }>`SELECT v FROM ${kv} WHERE part = ${partition} AND k = ${key}`),
+          ),
           Effect.map((rows) => (rows[0] ? (JSON.parse(rows[0].v) as A) : undefined)),
         ),
       list: <A>({
@@ -146,24 +211,34 @@ export const make = (options: Options = {}) =>
         start?: string;
         limit?: number;
       }) => {
-        const lower = start !== undefined && start > keyPrefix ? start : keyPrefix;
+        const lower = start !== undefined && compare(start, keyPrefix) > 0 ? start : keyPrefix;
         const upper = successor(keyPrefix);
         const range = upper === undefined ? sql`` : sql`AND k < ${upper}`;
         const bound =
           limit === undefined ? sql`` : sql.literal(`LIMIT ${Math.max(0, Math.floor(limit))}`);
-        return run(
-          sql<{
-            k: string;
-            v: string;
-          }>`SELECT k, v FROM ${kv} WHERE part = ${partition} AND k >= ${lower} ${range} ORDER BY k ${bound}`,
-        ).pipe(Effect.map((rows) => rows.map((row) => [row.k, JSON.parse(row.v) as A] as const)));
+        return Effect.all([check("key prefix", keyPrefix), check("key", lower)]).pipe(
+          Effect.andThen(
+            run(
+              sql<{
+                k: string | Uint8Array;
+                v: string;
+              }>`SELECT k, v FROM ${kv} WHERE part = ${partition} AND k >= ${lower} ${range} ORDER BY k ${bound}`,
+            ),
+          ),
+          Effect.map((rows) => rows.map((row) => [text(row.k), JSON.parse(row.v) as A] as const)),
+        );
       },
       timer: (name) =>
-        run(
-          sql<{
-            due: number | string | bigint;
-          }>`SELECT due FROM ${timers} WHERE part = ${partition} AND name = ${name}`,
-        ).pipe(Effect.map((rows) => (rows[0] ? Number(rows[0].due) : undefined))),
+        check("timer", name).pipe(
+          Effect.andThen(
+            run(
+              sql<{
+                due: number | string | bigint;
+              }>`SELECT due FROM ${timers} WHERE part = ${partition} AND name = ${name}`,
+            ),
+          ),
+          Effect.map((rows) => (rows[0] ? Number(rows[0].due) : undefined)),
+        ),
     });
 
     const upsert =
@@ -177,12 +252,20 @@ export const make = (options: Options = {}) =>
     const transaction = (partition: string): Transaction => ({
       ...reader(partition),
       put: (entries) =>
-        Effect.forEach(
-          chunks(
-            Object.entries(entries).map(([k, v]) => ({ part: partition, k, v: JSON.stringify(v) })),
+        Effect.forEach(Object.keys(entries), (key) => check("key", key), { discard: true }).pipe(
+          Effect.andThen(
+            Effect.forEach(
+              chunks(
+                Object.entries(entries).map(([k, v]) => ({
+                  part: partition,
+                  k,
+                  v: JSON.stringify(v),
+                })),
+              ),
+              (rows) => run(sql`INSERT INTO ${kv} ${sql.insert(rows)} ${upsert("v", "part", "k")}`),
+              { discard: true },
+            ),
           ),
-          (rows) => run(sql`INSERT INTO ${kv} ${sql.insert(rows)} ${upsert("v", "part", "k")}`),
-          { discard: true },
         ),
       delete: (keys) =>
         Effect.forEach(
@@ -191,9 +274,14 @@ export const make = (options: Options = {}) =>
           { discard: true },
         ),
       setTimer: (name, at) =>
-        run(
-          sql`INSERT INTO ${timers} ${sql.insert({ part: partition, name, due: Math.floor(at) })} ${upsert("due", "part", "name")}`,
-        ).pipe(Effect.asVoid),
+        check("timer", name).pipe(
+          Effect.andThen(
+            run(
+              sql`INSERT INTO ${timers} ${sql.insert({ part: partition, name, due: Math.floor(at) })} ${upsert("due", "part", "name")}`,
+            ),
+          ),
+          Effect.asVoid,
+        ),
       deleteTimer: (name) =>
         run(sql`DELETE FROM ${timers} WHERE part = ${partition} AND name = ${name}`).pipe(
           Effect.asVoid,
@@ -211,6 +299,7 @@ export const make = (options: Options = {}) =>
       transact: (partition, f) =>
         isolated(
           ensure.pipe(
+            Effect.andThen(check("partition", partition)),
             Effect.andThen(
               sql
                 .withTransaction(
@@ -223,14 +312,17 @@ export const make = (options: Options = {}) =>
                   ),
                 ),
             ),
-            Effect.retry({
-              while: isRetryable,
-              times: 5,
-              schedule: Schedule.exponential("50 millis"),
-            }),
+            retrying,
           ),
         ),
-      read: (partition, f) => isolated(ensure.pipe(Effect.andThen(f(reader(partition))))),
+      read: (partition, f) =>
+        isolated(
+          ensure.pipe(
+            Effect.andThen(check("partition", partition)),
+            Effect.andThen(f(reader(partition))),
+            retrying,
+          ),
+        ),
       due: (now, limit, prefixes) => {
         if (prefixes.length === 0) return Effect.succeed([]);
         const scopes = sql.or(
@@ -246,15 +338,20 @@ export const make = (options: Options = {}) =>
             Effect.andThen(
               run(
                 sql<{
-                  part: string;
-                  name: string;
+                  part: string | Uint8Array;
+                  name: string | Uint8Array;
                   due: number | string | bigint;
                 }>`SELECT part, name, due FROM ${timers} WHERE due <= ${Math.floor(now)} AND ${scopes} ORDER BY due ${sql.literal(`LIMIT ${Math.max(0, Math.floor(limit))}`)}`,
               ),
             ),
             Effect.map((rows) =>
-              rows.map((row) => ({ partition: row.part, name: row.name, at: Number(row.due) })),
+              rows.map((row) => ({
+                partition: text(row.part),
+                name: text(row.name),
+                at: Number(row.due),
+              })),
             ),
+            retrying,
           ),
         );
       },

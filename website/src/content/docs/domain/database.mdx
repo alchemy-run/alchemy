@@ -72,6 +72,8 @@ Everything lives in three tables, created on first use.
 | `domain_partition` | One row per aggregate instance, view key, policy key, projection key, stream key and saga run, locked by each write to it |
 | `domain_timer` | Scheduled commands, saga clocks, projection batches, and retries of unfinished work |
 
+Aggregate ids, view and policy keys, and command ids each become part of a partition name or key, which can be at most 1024 bytes of UTF-8 on every database.
+
 To keep two domains in one database, give each its own prefix.
 
 ```typescript
@@ -115,13 +117,14 @@ const MyStorage = Layer.succeed(
     transact: (partition, f) => myDb.transaction(partition, (tx) => f(toTransaction(tx))),
     // Read a partition without taking its lock.
     read: (partition, f) => f(toReader(myDb, partition)),
-    // Timers due at or before `now`, across partitions, earliest first.
-    due: (now, limit) => myDb.dueTimers(now, limit),
+    // Timers due at or before `now`, earliest first, only in partitions whose
+    // names start with one of `prefixes` (the entities this process hosts).
+    due: (now, limit, prefixes) => myDb.dueTimers(now, limit, prefixes),
   }),
 );
 ```
 
-A transaction gets and lists JSON values by key (`get`, `list` by prefix in key order), writes them (`put`, `delete`), and sets the partition's named timers (`timer`, `setTimer`, `deleteTimer`). Two rules keep the model correct. A second `transact` on a partition waits until the first one ends, even when it comes from another process. And when `f` fails, none of its writes are kept.
+A transaction gets and lists JSON values by key (`get`, `list` by prefix in key order), writes them (`put`, `delete`), and sets the partition's named timers (`timer`, `setTimer`, `deleteTimer`). Three rules keep the model correct. A second `transact` on a partition waits until the first one ends, even when it comes from another process. When `f` fails, none of its writes are kept. And `due` returns only timers under the given prefixes, so timers of entities hosted elsewhere never crowd out this process's own.
 
 :::note
 Tests usually run on [in memory](/domain/in-memory), which needs no database. Run the same Api tests once on `Domain.StoragePlatform` over a SQLite file to check the database setup.
