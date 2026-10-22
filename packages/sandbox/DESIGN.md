@@ -376,6 +376,24 @@ session at once took 8.7 s with warm machines and 18.7 s cold. A 4 KiB write
 to an 8 MiB file merges as a 4,115-byte patch on btrfs (the whole file on
 ext4).
 
+**blockd as a daemon** (22 October 2026): every mount, call and diff goes
+through one `blockd daemon` per machine over HTTP; local tests in
+`crates/blockd/tests/daemon/run.sh` (ext4 and btrfs). Each command's result
+carries `timings`. Four 2–3-second commands of one session at once:
+
+| | Exec per step | Daemon |
+|---|---|---|
+| Lambda MicroVMs, ext4, first round | 34.3 s | 21.0 s |
+| Lambda MicroVMs, ext4, again | | 14.2 s, 18.5 s |
+| Cloudflare containers, btrfs, warm | 15.0 s | 11.9 s, 13.0 s |
+
+Once the daemon runs, it costs under 0.1 s a call. On a warm machine a
+forked call now spends 0.2–0.6 s attaching, 0.25–1.7 s mounting (btrfs on
+Cloudflare is the slow end), 0.2–0.3 s uploading its patch, and then 3–10 s
+landing it: about 2 s for the head's snapshot, 0.3–1.5 s applying, and the
+rest queued behind the batch before it. `fsync` on a MicroVM: 120 ms at the
+median.
+
 Not built: streaming live files and forwarding ports across machines, the
 file tree in the store, `kill` across machines.
 
@@ -383,7 +401,8 @@ file tree in the store, `kill` across machines.
 
 | Question | Decides |
 |---|---|
-| Where the ~4–5 s per forked call goes (claim, attach, patch, commit) | What to cut first |
+| Whether a commit can answer once its patch is applied and journaled, snapshotting only before the next fork | Most of the 3–10 s a forked call spends landing |
+| What a btrfs fork's 1–1.7 s mount on Cloudflare is (FUSE, loop, `mount`, the two snapshots) | The rest of a warm call's overhead |
 | btrfs `fsync` through `blockd`, against ext4's 113–136 ms | Whether btrfs costs anything that matters |
 | How often calls conflict, with and without `lww` | Whether file-level conflicts are fine |
 | Patches per second one machine applies | When the file tree in the store is needed |
