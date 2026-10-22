@@ -246,8 +246,10 @@ export const GroupProvider = () =>
               isCluster: desiredCluster,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => findOwned(env.project, id)));
-        current = created ?? undefined;
+          // Group ids are server-assigned, so a 409 here is the transient
+          // "too many concurrent edits", never an existing group.
+          .pipe(retryConcurrentEdits);
+        current = created;
       }
 
       if (current === undefined) {

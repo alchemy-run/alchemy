@@ -92,3 +92,173 @@ export const splitSqlStatements = (sql: string): string[] =>
     .split(STATEMENT_BREAKPOINT)
     .map((s) => s.trim())
     .filter((s) => s.length > 0);
+
+type SqliteToken = "semi" | "ws" | "other" | "explain" | "create" | "temp" | "trigger" | "end";
+type SqliteState =
+  | "invalid"
+  | "start"
+  | "normal"
+  | "explain"
+  | "create"
+  | "trigger"
+  | "semi"
+  | "end";
+
+// SQLite's `sqlite3_complete` state machine: a `;` ends a statement unless
+// it sits inside a `CREATE [TEMP] TRIGGER ... BEGIN ... END` body.
+const SQLITE_TRANSITIONS: Record<SqliteState, Record<SqliteToken, SqliteState>> = {
+  invalid: {
+    semi: "start",
+    ws: "invalid",
+    other: "normal",
+    explain: "explain",
+    create: "create",
+    temp: "normal",
+    trigger: "normal",
+    end: "normal",
+  },
+  start: {
+    semi: "start",
+    ws: "start",
+    other: "normal",
+    explain: "explain",
+    create: "create",
+    temp: "normal",
+    trigger: "normal",
+    end: "normal",
+  },
+  normal: {
+    semi: "start",
+    ws: "normal",
+    other: "normal",
+    explain: "normal",
+    create: "normal",
+    temp: "normal",
+    trigger: "normal",
+    end: "normal",
+  },
+  explain: {
+    semi: "start",
+    ws: "explain",
+    other: "explain",
+    explain: "normal",
+    create: "create",
+    temp: "normal",
+    trigger: "normal",
+    end: "normal",
+  },
+  create: {
+    semi: "start",
+    ws: "create",
+    other: "normal",
+    explain: "normal",
+    create: "normal",
+    temp: "create",
+    trigger: "trigger",
+    end: "normal",
+  },
+  trigger: {
+    semi: "semi",
+    ws: "trigger",
+    other: "trigger",
+    explain: "trigger",
+    create: "trigger",
+    temp: "trigger",
+    trigger: "trigger",
+    end: "trigger",
+  },
+  semi: {
+    semi: "semi",
+    ws: "semi",
+    other: "trigger",
+    explain: "trigger",
+    create: "trigger",
+    temp: "trigger",
+    trigger: "trigger",
+    end: "end",
+  },
+  end: {
+    semi: "start",
+    ws: "end",
+    other: "trigger",
+    explain: "trigger",
+    create: "trigger",
+    temp: "trigger",
+    trigger: "trigger",
+    end: "trigger",
+  },
+};
+
+const SQLITE_IDENTIFIER_CHAR = /[A-Za-z0-9_$\u0080-￿]/;
+
+const classifySqliteIdentifier = (identifier: string): SqliteToken => {
+  switch (identifier.toLowerCase()) {
+    case "explain":
+      return "explain";
+    case "create":
+      return "create";
+    case "temp":
+    case "temporary":
+      return "temp";
+    case "trigger":
+      return "trigger";
+    case "end":
+      return "end";
+    default:
+      return "other";
+  }
+};
+
+/**
+ * Split a SQLite script into its statements, without their terminating `;`.
+ * Semicolons inside quoted strings, identifiers (`"…"`, `` `…` ``, `[…]`),
+ * comments, and trigger bodies don't split. Comments before a statement stay
+ * with it, and comment-only segments are dropped. Matches how
+ * `wrangler d1 execute --file` splits a file.
+ */
+export const splitSqliteStatements = (sql: string): string[] => {
+  const statements: string[] = [];
+  let start = 0;
+  let state: SqliteState = "invalid";
+  let hasContent = false;
+  const flush = (end: number) => {
+    const statement = sql.slice(start, end).trim();
+    if (hasContent && statement.length > 0) statements.push(statement);
+  };
+  for (let index = 0; index < sql.length; index++) {
+    const char = sql[index];
+    let token: SqliteToken;
+    if (char === ";") {
+      token = "semi";
+    } else if (/\s/.test(char)) {
+      token = "ws";
+    } else if (char === "/" && sql[index + 1] === "*") {
+      const end = sql.indexOf("*/", index + 2);
+      index = end === -1 ? sql.length : end + 1;
+      token = "ws";
+    } else if (char === "-" && sql[index + 1] === "-") {
+      const end = sql.indexOf("\n", index + 2);
+      index = end === -1 ? sql.length : end;
+      token = "ws";
+    } else if (char === "'" || char === '"' || char === "`" || char === "[") {
+      const end = sql.indexOf(char === "[" ? "]" : char, index + 1);
+      index = end === -1 ? sql.length : end;
+      token = "other";
+    } else if (SQLITE_IDENTIFIER_CHAR.test(char)) {
+      const identifierStart = index;
+      while (index + 1 < sql.length && SQLITE_IDENTIFIER_CHAR.test(sql[index + 1])) index++;
+      token = classifySqliteIdentifier(sql.slice(identifierStart, index + 1));
+    } else {
+      token = "other";
+    }
+    hasContent ||= token !== "semi" && token !== "ws";
+    state = SQLITE_TRANSITIONS[state][token];
+    if (token === "semi" && state === "start") {
+      flush(index);
+      start = index + 1;
+      hasContent = false;
+    }
+  }
+  flush(sql.length);
+  return statements;
+};

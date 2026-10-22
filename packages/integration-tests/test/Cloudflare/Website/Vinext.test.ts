@@ -6,7 +6,7 @@ import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as pathe from "pathe";
 import { cloneFixture } from "../Utils/Fixture.ts";
-import { expectClientChunkContains, expectUrlContains } from "../Utils/Http.ts";
+import { expectClientChunkContains, expectUrlContains, expectUrlHeader } from "../Utils/Http.ts";
 import { expectWorkerExists, waitForWorkerToBeDeleted } from "../Utils/Worker.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
@@ -74,6 +74,48 @@ describe.concurrent(
           yield* expectUrlContains(`${site.url!}/api/asset`, "User-agent", {
             timeout: "60 seconds",
             label: "vinext ASSETS binding",
+          });
+
+          yield* stack.destroy();
+          yield* waitForWorkerToBeDeleted(site.workerName, accountId);
+        }).pipe(logLevel),
+      { timeout: 300_000 },
+    );
+
+    // alchemy-run/alchemy#2234: the documented custom `main` was rejected
+    // beside the source provider (`"source" is mutually exclusive with "main"`).
+    test.provider(
+      "Vinext: deploys a custom main",
+      (stack) =>
+        Effect.gen(function* () {
+          const { accountId } = yield* yield* CloudflareEnvironment;
+
+          yield* stack.destroy();
+
+          const rootDir = yield* cloneFixture(fixtureDir, {
+            prefix: "alchemy-vinext-main-",
+            tempRoot,
+            entries: [".gitignore", "package.json", "vite.config.ts", "app", "public", "worker"],
+          });
+
+          const site = yield* stack.deploy(
+            Cloudflare.Website.Vinext("VinextCustomMain", {
+              rootDir,
+              main: "worker/custom.ts",
+              workersDev: { enabled: true },
+              memo: {
+                include: ["app/**", "public/**", "worker/**", "package.json", "vite.config.ts"],
+              },
+            }),
+          );
+
+          yield* expectUrlHeader(`${site.url!}/`, "x-alchemy-entry", "custom", {
+            timeout: "90 seconds",
+            label: "vinext custom main",
+          });
+          yield* expectUrlContains(`${site.url!}/`, "VINEXT_PAGE_MARKER", {
+            timeout: "60 seconds",
+            label: "vinext SSR through the custom main",
           });
 
           yield* stack.destroy();

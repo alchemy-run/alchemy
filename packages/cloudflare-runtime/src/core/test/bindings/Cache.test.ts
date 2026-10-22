@@ -778,7 +778,7 @@ describe("Cache binding persistence", () => {
 
         // Check directories created for the Durable Object SQLite databases
         // and the default cache's blobs
-        const names = yield* fs.readDirectory(path.join(tmp, "cache"));
+        const names = yield* fs.readDirectory(path.join(tmp, "cache", "cache-persist-test"));
         expect(names).toContain("cloudflare-runtime-CacheObject");
         expect(names).toContain("default");
 
@@ -795,5 +795,64 @@ describe("Cache binding persistence", () => {
         });
       }).pipe(Effect.provide(NodeServices.layer)),
     { timeout: 30_000 },
+  );
+
+  // alchemy-run/alchemy#2230: Workers sharing a storage root each run in their
+  // own workerd process; one shared Cache SQLite store made concurrent cold
+  // starts fail with `SQLITE_BUSY`.
+  it.effect(
+    "Workers sharing a storage root start together, each with its own cache",
+    () =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+
+        const tmp = yield* makeTempDirectory("cache-concurrent-");
+
+        const runtimeLayerTempDir = Runtime.RuntimeLive.pipe(
+          Layer.provideMerge(RuntimeServices.layerLocalBindings()),
+          Layer.provide(Globals.GlobalsLive),
+          Layer.provideMerge(RuntimeServices.layerLoopback()),
+          Layer.provide(Storage.layerDisk(tmp)),
+          Layer.provide(Internet.InternetLive),
+          Layer.provideMerge(RuntimeServices.layerRegistry()),
+          Layer.provide(Paths.PathsLive),
+          Layer.provide(Docker.DockerLive),
+          Layer.provide(Workerd.WorkerdLive),
+          Layer.provideMerge(Layer.mergeAll(NodeServices.layer, FetchHttpClient.layer)),
+        );
+
+        const start = (name: string) =>
+          startTestWorker({
+            name,
+            compatibilityDate: "2026-03-10",
+            compatibilityFlags: [],
+            modules: [{ name: "main.js", type: "ESModule", content: TEST_SCRIPT }],
+            bindings: [],
+          });
+
+        const key = "http://localhost/cache-concurrent";
+        for (let round = 0; round < 3; round++) {
+          yield* Effect.gen(function* () {
+            const [a, b] = yield* Effect.all([start("worker-a"), start("worker-b")], {
+              concurrency: "unbounded",
+            });
+            yield* Effect.promise(async () => {
+              const cacheA = new TestCache(a.baseUrl);
+              const cacheB = new TestCache(b.baseUrl);
+              await cacheA.put(key, textResponse(`a${round}`, { "Cache-Control": "max-age=3600" }));
+              await cacheB.put(key, textResponse(`b${round}`, { "Cache-Control": "max-age=3600" }));
+              expect((await cacheA.match(key))?.text()).toBe(`a${round}`);
+              expect((await cacheB.match(key))?.text()).toBe(`b${round}`);
+            });
+          }).pipe(Effect.provide(runtimeLayerTempDir), Effect.scoped);
+        }
+
+        expect((yield* fs.readDirectory(path.join(tmp, "cache"))).sort()).toEqual([
+          "worker-a",
+          "worker-b",
+        ]);
+      }).pipe(Effect.provide(NodeServices.layer)),
+    { timeout: 60_000 },
   );
 });

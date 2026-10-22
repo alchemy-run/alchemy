@@ -1,5 +1,6 @@
 import * as AWS from "@alchemy.run/aws";
 import { Region } from "@distilled.cloud/aws/Region";
+import * as s3 from "@distilled.cloud/aws/s3";
 import * as s3control from "@distilled.cloud/aws/s3-control";
 import { describe, expect } from "alchemy-test";
 import * as Test from "alchemy/Test/Alchemy";
@@ -14,6 +15,8 @@ import S3ControlBindingsFunctionLive, {
 } from "./fixtures/bindings-handler.ts";
 import S3ControlMrapBindingsFunctionLive, {
   S3ControlMrapBindingsFunction,
+  SECOND_REGION,
+  secondRegionBucketName,
 } from "./fixtures/mrap-bindings-handler.ts";
 
 const testOptions = { providers: AWS.providers() };
@@ -59,7 +62,9 @@ const awaitReady = (readinessUrl: string) =>
     Effect.flatMap((response) =>
       response.status === 200
         ? Effect.succeed(response)
-        : Effect.fail(new Error(`Function not ready: ${response.status}`)),
+        : Effect.flatMap(response.text, (body) =>
+            Effect.fail(new Error(`Function not ready: ${response.status} ${body.slice(0, 300)}`)),
+          ),
     ),
     Effect.tapError((error) =>
       Effect.logWarning(`S3Control test setup: fixture not ready yet (${String(error)})`),
@@ -197,9 +202,9 @@ describe.sequential(
   },
 );
 
-// Multi-Region Access Point provisioning is asynchronous and can consume the
-// entire 240s suite ceiling. Keep this explicitly gated; a hard-killed run
-// must be audited by deterministic physical name before it is retried.
+// Multi-Region Access Point provisioning is asynchronous and routinely takes
+// 5-15 minutes, so the hooks get a matching budget. Keep this explicitly
+// gated; a hard-killed run must be audited by deterministic physical name before it is retried.
 describe.skipIf(!!process.env.FAST).sequential(
   "AWS.S3Control MRAP route bindings (slow)",
   {
@@ -214,9 +219,22 @@ describe.skipIf(!!process.env.FAST).sequential(
   () => {
     let mrapBaseUrl: string;
 
+    const secondBucket = secondRegionBucketName(mrapStack.stage);
+    const inSecondRegion = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+      Core.withProviders(
+        effect.pipe(Effect.provideService(Region, Effect.succeed(SECOND_REGION))),
+        testOptions,
+        "S3ControlMrapBindings",
+      );
+
     beforeAll(
       Effect.gen(function* () {
         yield* mrapStack.destroy();
+        yield* inSecondRegion(
+          s3
+            .createBucket({ Bucket: secondBucket })
+            .pipe(Effect.catchTag("BucketAlreadyOwnedByYou", () => Effect.void)),
+        );
         const attrs = yield* mrapStack.deploy(
           Effect.gen(function* () {
             return yield* S3ControlMrapBindingsFunction;
@@ -226,10 +244,23 @@ describe.skipIf(!!process.env.FAST).sequential(
         mrapBaseUrl = attrs.functionUrl!.replace(/\/+$/, "");
         yield* awaitReady(`${mrapBaseUrl}/routes`);
       }),
-      { timeout: 240_000 },
+      { timeout: 1_200_000 },
     );
 
-    afterAll(mrapStack.destroy(), { timeout: 240_000 });
+    afterAll(
+      mrapStack
+        .destroy()
+        .pipe(
+          Effect.andThen(
+            inSecondRegion(
+              s3
+                .deleteBucket({ Bucket: secondBucket })
+                .pipe(Effect.catchTag("NoSuchBucket", () => Effect.void)),
+            ),
+          ),
+        ),
+      { timeout: 1_200_000 },
+    );
 
     describe("GetMultiRegionAccessPointRoutes + SubmitMultiRegionAccessPointRoutes", () => {
       test.provider(
@@ -237,7 +268,7 @@ describe.skipIf(!!process.env.FAST).sequential(
         (_stack) =>
           Effect.gen(function* () {
             const before = (yield* getJson(mrapBaseUrl, "/routes")) as {
-              mrapName: string;
+              mrapArn: string;
               routes: { region: string; trafficDialPercentage: number }[];
             };
             expect(before.routes.length).toBeGreaterThan(0);
@@ -253,7 +284,7 @@ describe.skipIf(!!process.env.FAST).sequential(
             // Verify the binding's mutation independently of the Lambda
             // response, through the distilled S3Control client.
             const live = yield* s3control
-              .getMultiRegionAccessPointRoutes({ AccountId: ACCOUNT_ID, Mrap: before.mrapName })
+              .getMultiRegionAccessPointRoutes({ AccountId: ACCOUNT_ID, Mrap: before.mrapArn })
               .pipe(Effect.provideService(Region, Effect.succeed("us-west-2")));
             expect(live.Routes?.length).toBe(before.routes.length);
             for (const route of live.Routes ?? []) {

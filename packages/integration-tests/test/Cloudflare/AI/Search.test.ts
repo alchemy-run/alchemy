@@ -42,7 +42,7 @@ const _envSame: _EnvSearch extends _EnvInstance ? true : never = true;
 void _envSame;
 
 const getInstance = (accountId: string, id: string, namespace = "default") =>
-  aisearch.readNamespaceInstance({ accountId, name: namespace, id }).pipe(
+  aisearch.readNamespaceInstance({ accountId, namespace, id }).pipe(
     Effect.retry({
       while: (e) => e._tag === "Forbidden",
       schedule: Schedule.exponential("500 millis"),

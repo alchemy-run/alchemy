@@ -330,7 +330,10 @@ const probeDuring = <A, E, R>(url: string, marker: string, effect: Effect.Effect
     const once = client.get(url).pipe(
       Effect.flatMap((response) =>
         Effect.map(response.text, (body) =>
-          response.status === 200 && body.includes(marker) ? undefined : `${response.status}`,
+          response.status === 200 && body.includes(marker)
+            ? undefined
+            : // Who answered (CloudFront vs the origin) and what it said.
+              `${response.status} [${response.headers["x-cache"] ?? ""}] ${body.slice(0, 160)}`,
         ),
       ),
       Effect.catch((error) => Effect.succeed(`error ${String(error)}`)),

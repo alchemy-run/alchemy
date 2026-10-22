@@ -20,8 +20,9 @@ const RESERVED_EXPORT_NAMES = new Set(["default", "ModuleRunnerDO"]);
  *
  * Durable Object and Workflow classes have to be declared up front because
  * workerd needs their namespaces at startup, so they are known before the entry
- * module has ever been evaluated. Named entrypoints have no such declaration
- * and can only be discovered by classifying the entry's exports.
+ * module has ever been evaluated, as are named entrypoints the Worker binds to
+ * itself. Any other named entrypoint can only be discovered by classifying the
+ * entry's exports.
  */
 export function configuredExportTypes(options: CloudflareVitePluginOptions): ExportTypes {
   const exportTypes: ExportTypes = {};
@@ -30,6 +31,9 @@ export function configuredExportTypes(options: CloudflareVitePluginOptions): Exp
   }
   for (const workflow of options.worker?.workflows ?? []) {
     exportTypes[workflow.className] = "WorkflowEntrypoint";
+  }
+  for (const entrypoint of options.entrypoints ?? []) {
+    exportTypes[entrypoint] ??= "WorkerEntrypoint";
   }
   return exportTypes;
 }

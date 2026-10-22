@@ -3,10 +3,12 @@ import { isLocalId } from "@alchemy.run/cloudflare/LocalRuntime";
 import { describe, expect } from "alchemy-test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
 import { MinimumLogLevel } from "effect/References";
+import * as Schedule from "effect/Schedule";
 import * as pathe from "pathe";
 import { cloneFixture } from "../Utils/Fixture.ts";
-import { expectUrlContains } from "../Utils/Http.ts";
+import { expectUrlContains, expectUrlHeader } from "../Utils/Http.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers(), dev: true });
 
@@ -73,6 +75,74 @@ describe.concurrent(
             timeout: "60 seconds",
             label: "vinext dev ASSETS binding",
           });
+
+          yield* stack.destroy();
+        }).pipe(logLevel),
+      { timeout: 300_000 },
+    );
+
+    // alchemy-run/alchemy#2231: tail consumers were dropped on the source
+    // provider's dev path.
+    test.provider(
+      "Vinext dev: a custom main serves and streams its events to tail consumers",
+      (stack) =>
+        Effect.gen(function* () {
+          yield* stack.destroy();
+
+          const rootDir = yield* cloneFixture(fixtureDir, {
+            prefix: "alchemy-vinext-tail-",
+            tempRoot,
+            entries: [".gitignore", "package.json", "vite.config.ts", "app", "public", "worker"],
+          });
+
+          const { site, consumer } = yield* stack.deploy(
+            Effect.gen(function* () {
+              const events = yield* Cloudflare.KV.Namespace("VinextTailEvents");
+              const consumer = yield* Cloudflare.Worker("VinextTailConsumer", {
+                main: pathe.resolve(import.meta.dirname, "fixtures/tail-consumer.ts"),
+                env: { EVENTS: events },
+                dev: { port: 0 },
+              });
+              const site = yield* Cloudflare.Website.Vinext("VinextCustomMain", {
+                rootDir,
+                main: "worker/custom.ts",
+                tailConsumers: [consumer],
+                streamingTailConsumers: [consumer],
+                dev: { port: 0 },
+                memo: {
+                  include: ["app/**", "public/**", "worker/**", "package.json", "vite.config.ts"],
+                },
+              });
+              return { site, consumer };
+            }),
+          );
+
+          yield* expectUrlHeader(`${site.url!}/`, "x-alchemy-entry", "custom", {
+            timeout: "180 seconds",
+            label: "vinext dev custom main",
+          });
+
+          // Each poll drives the site again: the consumer may register with
+          // the dev registry after the site's first requests.
+          const client = yield* HttpClient.HttpClient;
+          const recorded = yield* Effect.gen(function* () {
+            yield* client.get(`${site.url!}/`).pipe(Effect.flatMap((res) => res.text));
+            const res = yield* client.get(`${consumer.url!}/events`);
+            return (yield* res.json) as { tail: string[]; stream: string[] };
+          }).pipe(
+            Effect.orDie,
+            Effect.repeat({
+              schedule: Schedule.spaced("1 second"),
+              until: ({ tail, stream }) =>
+                tail.some((batch) => batch.includes("vinext-custom-entry")) &&
+                stream.some((session) => session.includes("vinext-custom-entry")),
+              times: 30,
+            }),
+          );
+          expect(recorded.tail.some((batch) => batch.includes("vinext-custom-entry"))).toBe(true);
+          expect(recorded.stream.some((session) => session.includes("vinext-custom-entry"))).toBe(
+            true,
+          );
 
           yield* stack.destroy();
         }).pipe(logLevel),

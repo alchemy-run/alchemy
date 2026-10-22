@@ -287,6 +287,27 @@ describe(
           // @ts-expect-error errorPage sugar removed — use assets.notFoundHandling: "404-page"
           errorPage: "404.html",
         }),
+      // StaticSite's `dev` is either an external dev server (`command`) or the
+      // local Worker's `port`/`strictPort`/`host`, never a mix of the two.
+      () =>
+        Cloudflare.Website.StaticSite("S", {
+          command: "npm run build",
+          outdir: "dist",
+          dev: { command: "npm run dev", url: "http://localhost:5173" },
+        }),
+      () =>
+        Cloudflare.Website.StaticSite("S", {
+          command: "npm run build",
+          outdir: "dist",
+          dev: { port: 4321, strictPort: true, host: "127.0.0.1" },
+        }),
+      () =>
+        Cloudflare.Website.StaticSite("S", {
+          command: "npm run build",
+          outdir: "dist",
+          // @ts-expect-error `port` configures the local Worker, which `command` replaces
+          dev: { command: "npm run dev", port: 4321 },
+        }),
     ];
 
     it("rejects source-dispatch props at the type level", () => {

@@ -88,7 +88,6 @@
     "@alchemy.run/redis": "workspace:*",
     "@alchemy.run/stripe": "workspace:*",
     "@alchemy.run/turso": "workspace:*",
-    "@alchemy.run/vite-plugin-copy-editor": "workspace:*",
     "@distilled.cloud/aws": "workspace:*",
     "@effect/platform-bun": "catalog:",
     "@effect/platform-node": "catalog:",
