@@ -65,6 +65,74 @@ describe.sequential("Instance", { tags: ["provider:aws", "provider:aws:ec2", "li
     { timeout: 240_000 },
   );
 
+  // Metadata options are applied by RunInstances at launch and updated in
+  // place via ModifyInstanceMetadataOptions — the instance id must not change.
+  test.provider(
+    "metadataOptions apply at launch and update in place",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+
+        const imageId = amazonLinux2023();
+
+        const program = (metadataOptions: InstanceProps["metadataOptions"]) =>
+          Effect.gen(function* () {
+            const vpc = yield* Vpc("MetadataInstanceVpc", { cidrBlock: "10.0.0.0/16" });
+            const subnet = yield* Subnet("MetadataInstanceSubnet", {
+              vpcId: vpc.vpcId,
+              cidrBlock: "10.0.1.0/24",
+            });
+            const instance = yield* Instance("MetadataInstance", {
+              imageId,
+              instanceType: "t3.micro",
+              subnetId: subnet.subnetId,
+              metadataOptions,
+            });
+            return { vpc, instance };
+          });
+
+        const observeMetadata = (instanceId: string) =>
+          ec2
+            .describeInstances({ InstanceIds: [instanceId] })
+            .pipe(Effect.map((r) => r.Reservations?.[0]?.Instances?.[0]?.MetadataOptions));
+
+        const first = yield* stack.deploy(
+          program({ httpTokens: "required", httpPutResponseHopLimit: 1 }),
+        );
+        expect(yield* observeMetadata(first.instance.instanceId)).toMatchObject({
+          HttpTokens: "required",
+          HttpPutResponseHopLimit: 1,
+        });
+
+        const next = program({
+          httpTokens: "required",
+          httpPutResponseHopLimit: 2,
+          instanceMetadataTags: "enabled",
+        });
+        const plan = yield* stack.plan(next);
+        expect(plan.resources.MetadataInstance).toMatchObject({ action: "update" });
+
+        const second = yield* stack.deploy(next);
+        expect(second.instance.instanceId).toBe(first.instance.instanceId);
+        expect(yield* observeMetadata(second.instance.instanceId)).toMatchObject({
+          HttpTokens: "required",
+          HttpPutResponseHopLimit: 2,
+          InstanceMetadataTags: "enabled",
+        });
+        expect(second.instance.metadataOptions).toMatchObject({
+          httpTokens: "required",
+          httpPutResponseHopLimit: 2,
+          instanceMetadataTags: "enabled",
+        });
+
+        yield* stack.destroy();
+
+        yield* assertInstanceTerminated(second.instance.instanceId);
+        yield* assertVpcGone(second.vpc.vpcId);
+      }).pipe(logLevel),
+    { timeout: 300_000 },
+  );
+
   // Replacement must launch a distinct physical instance. The create phase of a
   // replacement runs under a freshly minted generation id, so the tag-based
   // recovery lookup (branded with `alchemy::instance`) can never re-adopt the

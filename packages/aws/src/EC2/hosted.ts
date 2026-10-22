@@ -31,6 +31,35 @@ export interface Ec2HostedBinding {
 }
 
 /**
+ * Instance Metadata Service (IMDS) options for launched instances. Unset
+ * fields keep the AMI / account defaults.
+ */
+export interface InstanceMetadataOptions {
+  /**
+   * `required` enforces IMDSv2 (session tokens); `optional` also allows
+   * IMDSv1.
+   */
+  httpTokens?: "required" | "optional";
+  /**
+   * Maximum hops for the IMDS PUT response, 1-64. `1` keeps containers on
+   * the host from reaching the instance role's credentials.
+   */
+  httpPutResponseHopLimit?: number;
+  /**
+   * Whether the metadata endpoint is reachable at all.
+   */
+  httpEndpoint?: "enabled" | "disabled";
+  /**
+   * Whether the IPv6 metadata endpoint is enabled.
+   */
+  httpProtocolIpv6?: "enabled" | "disabled";
+  /**
+   * Whether instance tags are readable from the metadata service.
+   */
+  instanceMetadataTags?: "enabled" | "disabled";
+}
+
+/**
  * Shared props for EC2-backed hosted runtimes (an Instance that bundles and
  * runs an application entrypoint).
  */
@@ -57,6 +86,8 @@ export interface Ec2HostedProps extends PlatformProps {
   availabilityZone?: string;
   /** Tags applied to the instance. */
   tags?: Record<string, string>;
+  /** Instance Metadata Service options applied at launch. */
+  metadataOptions?: InstanceMetadataOptions;
   /** Path to the application entrypoint to bundle and run on the instance. */
   main?: string;
   /** Named export of the handler within `main`. */
@@ -785,6 +816,7 @@ systemctl enable --now ${unitName}.service
       | "privateIpAddress"
       | "availabilityZone"
       | "tags"
+      | "metadataOptions"
     >,
     runtime: Pick<Ec2HostedRuntimeState, "userData" | "instanceProfileName">,
   ) => {
@@ -819,6 +851,15 @@ systemctl enable --now ${unitName}.service
           ? network.groups
           : undefined,
       PrivateIpAddress: network.usePrimaryNetworkInterface ? undefined : news.privateIpAddress,
+      MetadataOptions: news.metadataOptions
+        ? {
+            HttpTokens: news.metadataOptions.httpTokens,
+            HttpPutResponseHopLimit: news.metadataOptions.httpPutResponseHopLimit,
+            HttpEndpoint: news.metadataOptions.httpEndpoint,
+            HttpProtocolIpv6: news.metadataOptions.httpProtocolIpv6,
+            InstanceMetadataTags: news.metadataOptions.instanceMetadataTags,
+          }
+        : undefined,
       TagSpecifications:
         Object.keys(instanceTags).length > 0
           ? [
