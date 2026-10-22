@@ -73,6 +73,22 @@ export const KafkaEventSource = Layer.effect(
                   Action: ["kafka-cluster:DescribeGroup", "kafka-cluster:AlterGroup"],
                   Resource: [cluster.clusterArn.pipe(Output.map(groupArnGlob))],
                 },
+                {
+                  // The poller reaches the cluster through ENIs in its VPC;
+                  // Lambda validates these on the execution role when the
+                  // mapping is created. EC2 Describe* and ENI actions do not
+                  // support resource-level permissions.
+                  Effect: "Allow",
+                  Action: [
+                    "ec2:CreateNetworkInterface",
+                    "ec2:DescribeNetworkInterfaces",
+                    "ec2:DescribeVpcs",
+                    "ec2:DeleteNetworkInterface",
+                    "ec2:DescribeSubnets",
+                    "ec2:DescribeSecurityGroups",
+                  ],
+                  Resource: ["*"],
+                },
               ],
             });
 
