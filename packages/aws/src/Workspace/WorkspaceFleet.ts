@@ -51,6 +51,8 @@ export const hostTemplate = (
     readonly spot: boolean;
     /** The store's bucket ARN: the hosts read and write it. */
     readonly bucketArn: Input<string>;
+    /** The registry's table ARN, with more than one host. */
+    readonly registryArn?: Input<string>;
   },
 ) =>
   LaunchTemplate<any>()(
@@ -92,6 +94,20 @@ export const hostTemplate = (
               Action: ["s3:ListBucket"],
               Resource: [deploy.bucketArn as never],
             },
+            ...(deploy.registryArn
+              ? [
+                  {
+                    Effect: "Allow" as const,
+                    Action: [
+                      "dynamodb:GetItem",
+                      "dynamodb:PutItem",
+                      "dynamodb:UpdateItem",
+                      "dynamodb:DeleteItem",
+                    ],
+                    Resource: [deploy.registryArn as never],
+                  },
+                ]
+              : []),
           ],
         });
       }

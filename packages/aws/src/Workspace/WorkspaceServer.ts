@@ -28,6 +28,14 @@ import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
+import {
+  FORWARDED,
+  forward,
+  makeRegistry,
+  whoAmI,
+  type Me,
+  type Registry,
+} from "./WorkspaceRegistry.ts";
 
 /** What a host is configured with: bound into its environment at deploy. */
 export interface HostConfig {
@@ -50,6 +58,8 @@ export interface HostConfig {
   readonly binaries: string;
   /** The port the service listens on. */
   readonly port: number;
+  /** The table of hosts and their sessions, when there's more than one host. */
+  readonly registry?: string;
 }
 
 export const HOST_CONFIG = "ALCHEMY_WORKSPACE_HOST";
@@ -236,6 +246,18 @@ export const serveWorkspace = (config: HostConfig) =>
       { readonly done: Deferred.Deferred<unknown, WorkspaceError>; at: number }
     >();
     const spawns = new Map<string, string>(); // service spawn id → daemon spawn id
+    // With more than one host: who this one is, and which host has which session.
+    let me: Me = { id: "local", address: `127.0.0.1:${config.port}` };
+    let registry: Registry | undefined;
+    /** Going away (scaled in, or a spot interruption): it claims nothing new. */
+    let draining = false;
+    /** A job's or spawn's id names its host, so any host can send its requests there. */
+    const hostTag = () => me.address.replace(/[.:]/g, "-");
+    const addressOf = (id: string) => {
+      const tag = id.split(".")[0] ?? "";
+      const parts = tag.split("-");
+      return parts.length === 5 ? `${parts.slice(0, 4).join(".")}:${parts[4]}` : undefined;
+    };
 
     const isolation =
       config.isolation === "none" || !config.image
@@ -873,7 +895,7 @@ export const serveWorkspace = (config: HostConfig) =>
     /** Run `effect` detached; its result is a job anyone can wait on. */
     const startJob = <A>(effect: Effect.Effect<A, WorkspaceError, never>) =>
       Effect.gen(function* () {
-        const id = crypto.randomUUID();
+        const id = `${hostTag()}.${crypto.randomUUID()}`;
         const done = yield* Deferred.make<unknown, WorkspaceError>();
         jobs.set(id, { done, at: Date.now() });
         yield* Effect.forkDetach(
@@ -947,21 +969,58 @@ export const serveWorkspace = (config: HostConfig) =>
 
     //#region housekeeping
 
-    /** Every few seconds: kept calls commit, idle heads unmount, old jobs go. */
+    /** A session's head snapshotted and unmounted, its processes stopped, and it given up. */
+    const letGo = Effect.fn(function* (s: Session) {
+      if (s.host) yield* Effect.ignore(s.commits.withPermits(1)(endHost(s, s.host, true)));
+      yield* Effect.ignore(s.head.withPermits(1)(unmount(s)));
+      if (registry) yield* Effect.ignore(registry.release(s.name));
+      sessions.delete(s.name);
+    });
+
+    /** Going away: every session snapshotted and given up, for other hosts to claim. */
+    const drainHost = Effect.gen(function* () {
+      if (draining) return;
+      draining = true;
+      yield* Effect.logInfo(`draining ${sessions.size} sessions`);
+      for (const s of [...sessions.values()]) yield* letGo(s);
+      if (registry) yield* Effect.ignore(registry.heartbeat(0, true));
+    });
+
+    /** Every few seconds: kept calls commit, idle heads unmount, claims renew, old jobs go. */
     const tick = Effect.gen(function* () {
       const now = Date.now();
       for (const [id, job] of jobs) {
         if (now - job.at > KEEP_JOBS && (yield* Deferred.isDone(job.done))) jobs.delete(id);
       }
-      for (const s of sessions.values()) {
+      for (const s of [...sessions.values()]) {
         for (const [id, expires] of s.opens)
           if (expires < now) yield* Effect.ignore(release(s, id));
         if (s.host) yield* Effect.ignore(s.commits.withPermits(1)(syncHost(s)));
         if (s.mounted && !s.host && s.opens.size === 0 && now - s.usedAt > config.idleMs) {
           yield* Effect.ignore(s.head.withPermits(1)(unmount(s)));
         }
+        if (!registry) continue;
+        if (s.mounted || s.host || s.opens.size > 0 || now - s.usedAt < config.idleMs) {
+          // Another host took it (this one was presumed gone): forget it here.
+          if (!(yield* Effect.orElseSucceed(registry.renew(s.name), () => true)))
+            sessions.delete(s.name);
+        } else {
+          yield* Effect.ignore(registry.release(s.name));
+          sessions.delete(s.name);
+        }
       }
+      if (registry) yield* Effect.ignore(registry.heartbeat(sessions.size, draining));
     });
+
+    /** A spot instance gets two minutes' notice: drain at once. */
+    const watchInterruption = (
+      read: (path: string) => Effect.Effect<string | undefined, unknown>,
+    ) =>
+      read("spot/instance-action").pipe(
+        Effect.flatMap((notice) => (notice ? drainHost : Effect.void)),
+        Effect.ignore,
+        Effect.repeat(Schedule.spaced(Duration.seconds(5))),
+      );
 
     //#endregion
 
@@ -970,11 +1029,44 @@ export const serveWorkspace = (config: HostConfig) =>
     const respond = (status: number, body: unknown) =>
       HttpServerResponse.json(body, { status }).pipe(Effect.orDie);
 
+    /** `request` streamed to `target`, and its answer streamed back. */
+    const proxy = (
+      request: HttpServerRequestModule.HttpServerRequest,
+      target: string,
+      toHost: boolean,
+    ) =>
+      Effect.gen(function* () {
+        const forwarded = yield* Effect.gen(function* () {
+          const client = yield* HttpClient.HttpClient;
+          const outgoing = HttpServerRequestModule.toClientRequest(request).pipe(
+            HttpClientRequest.setUrl(target),
+          );
+          return yield* client.execute(
+            toHost
+              ? HttpClientRequest.setHeader(outgoing, FORWARDED, "1")
+              : HttpClientRequest.removeHeader(outgoing, "authorization"),
+          );
+        }).pipe(Effect.provide(FetchHttpClient.layer), Effect.result);
+        if (forwarded._tag === "Failure")
+          return yield* respond(502, { error: forwarded.failure.message });
+        // The body is streamed anew: its framing headers are this response's to set.
+        const headers = Object.fromEntries(
+          Object.entries(forwarded.success.headers).filter(
+            ([name]) => !HOP_BY_HOP.has(name.toLowerCase()),
+          ),
+        );
+        return HttpServerResponse.stream(forwarded.success.stream, {
+          status: forwarded.success.status,
+          headers,
+        });
+      });
+
     const handle = Effect.gen(function* () {
       const request = yield* HttpServerRequest;
       const url = new URL(request.url, "http://workspace");
       const path = url.pathname;
-      if (path === "/health") return yield* respond(200, { ok: true });
+      if (path === "/health")
+        return yield* draining ? respond(503, { draining: true }) : respond(200, { ok: true });
       const given = request.headers["authorization"]?.replace(/^Bearer /, "");
       if (!token || given !== token)
         return yield* respond(401, { error: "a bad or missing token" });
@@ -985,6 +1077,44 @@ export const serveWorkspace = (config: HostConfig) =>
           ? yield* request.json.pipe(Effect.orElseSucceed(() => ({})))
           : {}
       ) as Record<string, any>;
+      // With more than one host: the request goes where its session is.
+      if (registry && !request.headers[FORWARDED]) {
+        const op = `${request.method} /${segments.slice(0, 2).join("/")}`;
+        const session =
+          segments[1] === "opens" && segments[2]
+            ? segments[2].split("~")[0]
+            : op === "POST /v1/merge"
+              ? body.into
+              : op === "POST /v1/fork"
+                ? body.from
+                : body.session;
+        let address: string | undefined;
+        if (segments[1] === "jobs" || segments[1] === "spawns") {
+          const there = addressOf(segments[2] ?? "");
+          if (there && there !== me.address) address = there;
+        } else if (typeof session === "string" && validSession(session)) {
+          const owner = draining ? yield* registry.owner(session) : yield* registry.claim(session);
+          if (!owner) return yield* respond(503, { error: "this host is draining" });
+          if (owner.host !== me.id) address = owner.address;
+        }
+        if (address) {
+          if (segments[3] === "ports")
+            return yield* proxy(request, `http://${address}${path}${url.search}`, true);
+          const forwarded = yield* forward(
+            address,
+            request.method === "POST"
+              ? HttpClientRequest.post(path + url.search).pipe(
+                  HttpClientRequest.bearerToken(token),
+                  HttpClientRequest.bodyJsonUnsafe(body),
+                )
+              : HttpClientRequest.get(path + url.search).pipe(HttpClientRequest.bearerToken(token)),
+          );
+          return HttpServerResponse.text(forwarded.body, {
+            status: forwarded.status,
+            contentType: "application/json",
+          });
+        }
+      }
       const sessionName = (field = "session") => {
         const name = String(body[field] ?? "");
         return validSession(name)
@@ -1105,7 +1235,7 @@ export const serveWorkspace = (config: HostConfig) =>
                 return Effect.map(
                   daemon.post<{ readonly id: string; readonly pid: number }>(`${head}/spawn`, body),
                   (spawned) => {
-                    const id = crypto.randomUUID();
+                    const id = `${hostTag()}.${crypto.randomUUID()}`;
                     spawns.set(id, spawned.id);
                     return { spawn: id, pid: spawned.pid };
                   },
@@ -1132,28 +1262,11 @@ export const serveWorkspace = (config: HostConfig) =>
       if (segments[0] === "v1" && segments[1] === "opens" && segments[3] === "ports") {
         const held = opened(segments[2]!);
         if (!held) return yield* respond(404, { error: `no open ${segments[2]}` });
-        const target = `http://127.0.0.1:${Number(segments[4])}/${segments.slice(5).join("/")}${url.search}`;
-        const forwarded = yield* Effect.gen(function* () {
-          const client = yield* HttpClient.HttpClient;
-          return yield* client.execute(
-            HttpServerRequestModule.toClientRequest(request).pipe(
-              HttpClientRequest.setUrl(target),
-              HttpClientRequest.removeHeader("authorization"),
-            ),
-          );
-        }).pipe(Effect.provide(FetchHttpClient.layer), Effect.result);
-        if (forwarded._tag === "Failure")
-          return yield* respond(502, { error: forwarded.failure.message });
-        // The body is streamed anew: its framing headers are this response's to set.
-        const headers = Object.fromEntries(
-          Object.entries(forwarded.success.headers).filter(
-            ([name]) => !HOP_BY_HOP.has(name.toLowerCase()),
-          ),
+        return yield* proxy(
+          request,
+          `http://127.0.0.1:${Number(segments[4])}/${segments.slice(5).join("/")}${url.search}`,
+          false,
         );
-        return HttpServerResponse.stream(forwarded.success.stream, {
-          status: forwarded.success.status,
-          headers,
-        });
       }
       const outcome = yield* Effect.result(routed);
       return outcome._tag === "Success"
@@ -1182,8 +1295,20 @@ export const serveWorkspace = (config: HostConfig) =>
               Effect.andThen(Effect.logError(error.message), Deferred.fail(ready, error)),
             ),
           );
+          if (config.registry) {
+            const found = yield* whoAmI(config.port).pipe(Effect.orElseSucceed(() => undefined));
+            if (found) {
+              me = { id: found.id, address: found.address };
+              registry = makeRegistry(config.registry, me);
+              yield* Effect.forkChild(watchInterruption(found.read));
+            }
+          }
           yield* Effect.ignore(tick).pipe(Effect.repeat(Schedule.spaced(HOST_SYNC)));
-        }).pipe(Effect.asVoid),
+        }).pipe(
+          // Shut down (scaled in, stopped): everything snapshotted and handed over.
+          Effect.onInterrupt(() => drainHost),
+          Effect.asVoid,
+        ),
       );
     }
 

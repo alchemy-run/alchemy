@@ -11,6 +11,7 @@ import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { AutoScalingGroup } from "../AutoScaling/AutoScalingGroup.ts";
+import { Table } from "../DynamoDB/Table.ts";
 import { ubuntu2404 } from "../EC2/Image.ts";
 import { Network } from "../EC2/Network.ts";
 import { SecurityGroup } from "../EC2/SecurityGroup.ts";
@@ -136,6 +137,17 @@ export const Workspace = <const D extends SandboxWorkspace.Workspace.Decl.Any>(
         binaries,
       });
       const token = yield* Random(`${id}WorkspaceToken`, { bytes: 32 });
+      const cidrBlock = props.cidrBlock ?? "10.90.0.0/16";
+      // More than one host: which host has which session.
+      const registry =
+        (props.hosts?.max ?? 1) > 1
+          ? yield* Table(`${id}Registry`, {
+              partitionKey: "pk",
+              attributes: { pk: "S" },
+              billingMode: "PAY_PER_REQUEST",
+              timeToLiveSpecification: { AttributeName: "expires", Enabled: true },
+            })
+          : undefined;
 
       const front = yield* SecurityGroup(`${id}FrontSg`, {
         vpcId: network.vpcId,
@@ -173,12 +185,24 @@ export const Workspace = <const D extends SandboxWorkspace.Workspace.Decl.Any>(
             referencedGroupId: front.groupId,
             description: "the load balancer",
           },
+          {
+            ipProtocol: "tcp",
+            fromPort: PORT,
+            toPort: PORT,
+            cidrIpv4: cidrBlock,
+            description: "the other hosts (requests forwarded to a session's host)",
+          },
         ],
         egress: [{ ipProtocol: "-1", cidrIpv4: "0.0.0.0/0", description: "all outbound" }],
       } as never);
 
-      const config = Output.all(store, image.image, image.base).pipe(
-        Output.map(([storeSpec, imageSnapshot, base]): HostConfig => ({
+      const config = Output.all(
+        store,
+        image.image,
+        image.base,
+        registry?.tableName ?? Output.literal(""),
+      ).pipe(
+        Output.map(([storeSpec, imageSnapshot, base, registryName]): HostConfig => ({
           id,
           store: storeSpec as string,
           bucket: (storeSpec as string).slice("s3://".length).split("/")[0]!,
@@ -191,6 +215,7 @@ export const Workspace = <const D extends SandboxWorkspace.Workspace.Decl.Any>(
           idleMs: Duration.toMillis(Duration.fromInputUnsafe(props.idle ?? "2 minutes")),
           binaries,
           port: PORT,
+          ...(registryName ? { registry: registryName as string } : {}),
         })),
       );
       const template = yield* hostTemplate(
@@ -220,6 +245,7 @@ export const Workspace = <const D extends SandboxWorkspace.Workspace.Decl.Any>(
           securityGroupIds: [hosts.groupId],
           spot: props.hosts?.spot ?? false,
           bucketArn: bucket.bucketArn,
+          ...(registry ? { registryArn: registry.tableArn } : {}),
         },
       );
 

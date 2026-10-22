@@ -1,8 +1,13 @@
+import * as Credentials from "@distilled.cloud/aws/Credentials";
+import * as dynamodb from "@distilled.cloud/aws/dynamodb";
+import * as ec2 from "@distilled.cloud/aws/ec2";
+import * as Region from "@distilled.cloud/aws/Region";
 import { describe, expect } from "alchemy-test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
 import ServiceWorkspaceStack, { providers, state } from "./fixtures/workspace-service/stack.ts";
 
@@ -159,6 +164,45 @@ describe.skipIf(!!process.env.FAST).sequential("AWS.Workspace: hosts on EC2, fro
       expect(undone.stdout.trim()).toBe("gone");
       yield* call("delete", { session: "s3" });
     }),
+    options,
+  );
+
+  test(
+    "when the host that has a session dies, another host takes it over, with its files",
+    Effect.gen(function* () {
+      yield* call("delete", { session: "s5" }).pipe(Effect.ignore);
+      yield* call<Result>("exec", { session: "s5", command: "echo survives > kept.txt" });
+      // Which host has it: the registry, read out of band.
+      const { TableNames } = yield* dynamodb.listTables({});
+      const table = TableNames!.find((name) =>
+        name.toLowerCase().includes("serviceworkspaceregistry"),
+      )!;
+      const { Item } = yield* dynamodb.getItem({
+        TableName: table,
+        Key: { pk: { S: "session#s5" } },
+        ConsistentRead: true,
+      });
+      const owner = Item!.host!.S!;
+      yield* ec2.terminateInstances({ InstanceIds: [owner] });
+      // Until the other host claims it (its claim lapses within a minute).
+      const after = yield* call<Result>("exec", { session: "s5", command: "cat kept.txt" }).pipe(
+        Effect.filterOrFail(
+          (r) => r.exitCode === 0,
+          (r) => new Error(`not yet: ${r.stderr}`),
+        ),
+        Effect.retry({ schedule: Schedule.spaced("10 seconds"), times: 24 }),
+      );
+      expect(after.stdout.trim()).toBe("survives");
+      const { Item: moved } = yield* dynamodb.getItem({
+        TableName: table,
+        Key: { pk: { S: "session#s5" } },
+        ConsistentRead: true,
+      });
+      expect(moved!.host!.S).not.toBe(owner);
+    }).pipe(
+      // The registry and the instance, out of band, as the test's own AWS identity.
+      Effect.provide(Layer.mergeAll(Credentials.fromChain(), Region.fromEnv())),
+    ),
     options,
   );
 });
