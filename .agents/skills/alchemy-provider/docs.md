@@ -1,0 +1,114 @@
+# Provider docs hub
+
+A provider ships two kinds of docs:
+
+- **The API reference**, generated from JSDoc by `pnpm docs:gen` into
+  `website/src/content/docs/providers/<P>/`. Never edit it by hand.
+- **The hub**, hand-written pages under
+  `website/src/content/docs/<provider>/`. This file covers the hub.
+
+The hub copies the AWS hub (`website/src/content/docs/aws/`), not the
+order the provider was built in. GCP's first hub was four long "guides"
+that walked the examples end to end. It had no tutorial, no per-service
+pages, prose that narrated internals, and snippets without imports. It
+was rebuilt to match AWS in alchemy-run/alchemy#2374. Use the rebuilt
+GCP hub (`website/src/content/docs/gcp/`) as the model, and compare each
+page with its AWS sibling before you write it.
+
+## Structure
+
+```
+<P>
+├─ Overview · Setup
+├─ Tutorial       Part 1–5: first resource → first runtime → Testing → Stages → CI/CD
+├─ Compute        Choosing a runtime · one page per runtime
+├─ Frontend       Overview (websites) + one page per framework
+├─ APIs           Effect HTTP · Effect RPC
+├─ Data           one page per database / storage service
+├─ AI             one page per AI service
+├─ Messaging      one page per queue / topic / event source
+├─ Security       IAM & bindings · secrets and keys
+├─ Observability  logging and monitoring
+└─ Networking     networks, private services, custom domains
+```
+
+Leave out a section only when the provider has nothing for it, and pick
+section names that fit the provider: a section name must tell its pages
+apart from the rest of the hub, so a database-only provider has no
+"Data" section. Every page except Overview and Setup sits in a section.
+There is no `guides/` directory.
+
+| Path | Content |
+| --- | --- |
+| `index.mdx` | Overview: one sentence on what the user gets, one complete runtime-plus-binding snippet, links to Setup and the tutorial, then a link list per section |
+| `setup.mdx` | credentials, the profile command, CI env vars |
+| `tutorial/part-1.mdx` … `part-5.mdx` | the same five parts as AWS: "Your First Stack" (one storage resource), "Add a <Runtime>" (bind it, GET/PUT routes), "Testing", "Stages", "CI/CD" (the cloud's keyless CI auth, e.g. OIDC or Workload Identity Federation) |
+| `compute/choosing-a-runtime.mdx` | one line per runtime, then a table comparing entry point, triggers, cost, packaging, and deploy time |
+| `compute/<runtime>.mdx` | one per runtime the provider hosts |
+| `frontend/websites.mdx` + `frontend/<framework>.mdx` | one per `<P>.Website.<Framework>` (step 7), same file names as `aws/frontend/` |
+| `apis/effect-http-api.mdx`, `apis/effect-rpc.mdx` | Effect HTTP and RPC servers on the default runtime |
+| `<section>/<service>.mdx` | one page per service a user builds with |
+
+## Every page
+
+- **Code comes from what's tested**: the `examples/<provider>-*` projects
+  and the resource JSDoc examples. If a page needs code no example has,
+  add it to an example and deploy it first.
+- **Whole files.** Every block with `import` lines is a complete file
+  with a `// path` comment on its first line. No `...` elisions, no
+  `yield*` at module scope. Declare resources as module-scope consts and
+  pass the declaration straight to bindings and props.
+- **Small steps.** Each `##` heading does one thing: one or two short
+  lines, then the snippet. A follow-up change is a `diff lang="typescript"`
+  block whose first line is a column-0 context line (the `// path`
+  comment), or the website build rejects it.
+- **Talk to the reader.** Second person, present tense, an instruction or
+  something they'll see: "Run `alchemy deploy`. `site.url` is the service
+  URL." Don't narrate what Alchemy does inside, why a limitation exists,
+  or the docs' own structure ("this page", "Part 3 is where"). Use plain
+  words: create, not mint/provision.
+- **State the grant.** Every binding section says which role it grants
+  and that it only covers the bound resource.
+- **No dumps.** No "three ideas" framing, no bullet lists explaining one
+  snippet (split it into headings), no whole-file embeds as explanation.
+  Tables only where they map things, like the runtime comparison.
+- **Frontmatter**: `title` and a one-sentence `description` that says
+  what the reader does on the page. Tutorial parts add `sidebar.order`.
+
+A data or messaging page follows `gcp/data/firestore.mdx`: create the
+resource, bind it to a service with the Read/Write/ReadWrite choice and
+the role it grants, then one heading per operation (read, write, update,
+query, delete), each a short block inside the handler.
+
+A framework page follows `gcp/frontend/astro.mdx`: install the build
+integration as a dev dependency (`<PackageManagers dev=… />`), deploy the
+site from `alchemy.run.ts`, then one heading per option (env, assets,
+domain, `alchemy dev`).
+
+## Wiring
+
+- `website/astro.config.ts`: the hub's sidebar. Overview, Setup,
+  `Tutorial` (autogenerated from `<provider>/tutorial`), one group per
+  section, `sortFrontendItems([...])` for Frontend, and
+  `providerResourcesEntry("<P>")` last.
+- `website/src/docs-icons.ts`: every new section label has an icon in
+  `GROUP_ICONS`.
+- `website/src/docs-tabs.ts` and
+  `website/src/components/ProviderDirectory.astro`: the hub's tab and its
+  card.
+- `website/scripts/generate-llms-txt.ts`: a "start here" section
+  (`<provider>/index`, `<provider>/setup`), then one
+  `{ heading: "<P> — <Section>", pages: { directory: "<provider>/<section>" } }`
+  per section.
+- `website/src/worker.ts` `REDIRECTS`: when a page moves or is removed,
+  map the old path to its closest new page.
+
+## Check
+
+```sh
+pnpm docs:check-jsdoc && pnpm docs:gen
+pnpm docs:check   # builds the website, including the diff-block and link checks
+```
+
+Then read the hub next to AWS's sidebar: every AWS section either has a
+`<P>` counterpart or the provider has nothing for it.
