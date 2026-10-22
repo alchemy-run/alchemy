@@ -201,10 +201,12 @@ const REQUEST_RETRIES = 3;
 
 // Native classifies the same message phrases via `isErrorOfType`.
 const errorText = (e: unknown) => (e instanceof Error ? e.message : String(e)).toLowerCase();
+// Native does not match the second phrase: Cloudflare sends it when the
+// application is at its `max_instances` cap.
 const isNoInstanceError = (e: unknown) =>
   errorText(e).includes(
     "there is no container instance that can be provided to this durable object",
-  );
+  ) || errorText(e).includes("maximum number of running container instances exceeded");
 const isRateLimitedError = (e: unknown) =>
   errorText(e).includes("you are requesting too many containers per second");
 
