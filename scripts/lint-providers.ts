@@ -1,6 +1,6 @@
 import * as path from "node:path";
-import * as ts from "typescript-api/unstable/ast";
-import { API, TypeFlags, type Type, type Project } from "typescript-api/unstable/async";
+import * as ts from "tsrs/unstable/ast";
+import { API, TypeFlags, type Type, type Project } from "tsrs/unstable/async";
 
 /**
  * Lints every `Providers.ts` under a workspace package's `src` (alchemy's
@@ -140,11 +140,11 @@ if (import.meta.main) {
   await using api = new API();
   const packages = await providerPackages();
   const tsConfigs = packages.map((dir) => path.join(dir, "tsconfig.json"));
-  const snapshot = await api.updateSnapshot({ openProjects: tsConfigs });
+  const snapshot = await api.createSnapshot({ openProjects: tsConfigs });
   let ok = true;
   for (const dir of packages) {
     const tsConfig = path.join(dir, "tsconfig.json");
-    const project = snapshot.getProject(tsConfig);
+    const project = snapshot.getConfiguredProject(tsConfig);
     if (!project) throw new Error(`Failed to open ${tsConfig}`);
     ok = (await lintProviders(project, path.join(dir, "src"))) && ok;
   }

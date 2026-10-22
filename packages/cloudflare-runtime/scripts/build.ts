@@ -1,4 +1,4 @@
-import { build, exec, named } from "../../../scripts/package-build.ts";
+import { build, exec, typescript, named } from "../../../scripts/package-build.ts";
 
 build(import.meta.dirname, {
   thirdPartyLicenses: true,
@@ -7,7 +7,7 @@ build(import.meta.dirname, {
     // tsdown resolves distilled from its compiled `lib/`.
     named(
       "build distilled (cloudflare)",
-      exec("tsc", "-b", "../../submodules/distilled/packages/cloudflare/tsconfig.json"),
+      typescript("-b", "../../submodules/distilled/packages/cloudflare/tsconfig.json"),
     ),
     exec("tsdown"),
   ],

@@ -470,7 +470,7 @@
     "test:vinext": "vitest run src/vinext/test",
     "test:waku": "vitest run src/waku/test",
     "test:vocs": "vitest run src/vocs/test",
-    "typecheck": "tsc -b tsconfig.json && tsc --noEmit -p tsconfig.test.json"
+    "typecheck": "tsrs -b tsconfig.json && tsrs --noEmit -p tsconfig.test.json"
   },
   "dependencies": {
     "@alchemy.run/cloudflare-runtime": "workspace:*",

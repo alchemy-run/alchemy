@@ -1,7 +1,7 @@
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
-import * as ts from "typescript-api/unstable/ast";
-import type { Node, SourceFile } from "typescript-api/unstable/ast";
+import * as ts from "tsrs/unstable/ast";
+import type { Node, SourceFile } from "tsrs/unstable/ast";
 import {
   docCommentLines,
   jsdocCopyId,
