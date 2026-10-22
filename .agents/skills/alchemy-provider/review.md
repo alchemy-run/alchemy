@@ -99,6 +99,10 @@ reason the platform forces. References:
 | --- | --- | --- |
 | Bind, not host.bind | `rg -n 'host\.bind\(' src/<P>` and `rg -ln 'Bindings\.Bind' src/<P>` | bindings call `<P>Bindings.Bind`; no direct `host.bind` and no allowlist of host types |
 | Foreign hosts | read `<P>Bindings.ts` | a non-native host gets a created identity + key bound into its env; `withCredentials` reads it at runtime |
+| Other providers' types | `rg -n '"(AWS\|Cloudflare\|GCP\|Azure\|Fly\|Hetzner\|Railway)\.[A-Z]' src/<P>` minus `<P>`'s own prefix | 0; host access goes through `RuntimeContext` and core host services |
+| Deploy-only reads | `rg -n 'Environment\.current' src/<P>` in binding files | every hit inside the `!globalThis.__ALCHEMY_RUNTIME__` block |
+| Native bundles fold | `rg -ln 'HostBundle' src/<P>` | applied by every host bundler the provider owns |
+| External-host suite | `ls test/<P>/ExternalHost` | a Cloudflare Worker (or other foreign host) calls the provider's bindings |
 | Least privilege | list every role/permission each binding grants (`rg -n 'roles/\|permission' src/<P>`) | scoped to the bound resource; no `admin`/`editor`/`owner` unless the JSDoc says why |
 | Revocation | read the host's grant sync | revokes only grants Alchemy added; pre-existing grants survive |
 | Secrets | read each binding that hands out a credential | `Redacted`, never a plain env var or log line |
