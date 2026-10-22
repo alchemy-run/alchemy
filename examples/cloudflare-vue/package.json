@@ -17,7 +17,7 @@
     "test": "bun test"
   },
   "dependencies": {
-    "vue": "catalog:",
+    "vue": "beta",
     "vue-router": "catalog:"
   },
   "devDependencies": {

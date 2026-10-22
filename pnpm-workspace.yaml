@@ -254,7 +254,7 @@ catalog:
   vite-plugin-vue-devtools: "^8.1.1"
   vitest: "^5.0.4"
   vocs: "2.8.2"
-  vue: "beta"
+  vue: "^3.5.43"
   vue-router: "^5.4.0"
   vue-tsc: "^3.3.13"
   waku: "1.0.0-beta.7"
