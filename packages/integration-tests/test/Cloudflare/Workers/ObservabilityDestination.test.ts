@@ -241,6 +241,46 @@ test.provider(
 );
 
 test.provider(
+  "create and update with unchanged headers do not PATCH despite masked values",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+
+      yield* stack.destroy();
+
+      // Cloudflare masks header values (`null`) on read. The endpoint
+      // rejects POSTs, so a PATCH — which always re-runs the preflight —
+      // fails the deploy: create and the update below only succeed if
+      // reconcile sees the unchanged headers as converged and skips it.
+      const program = (skipPreflightCheck: boolean) =>
+        Cloudflare.Workers.ObservabilityDestination("MaskedDest", {
+          url: NAME_DEFAULT_URL,
+          headers: { "x-alchemy-test": "1" },
+          logpushDataset: "opentelemetry-logs",
+          skipPreflightCheck,
+        });
+
+      const initial = yield* stack.deploy(program(true));
+      const live = yield* findByName(accountId, initial.name);
+      expect(live?.configuration.headers["x-alchemy-test"]).toBeNull();
+
+      // `skipPreflightCheck` only applies to create, so flipping it runs
+      // reconcile with nothing to sync.
+      expect(actionOf(yield* stack.plan(program(false)), "MaskedDest")).toBe("update");
+      const updated = yield* stack.deploy(program(false));
+      expect(updated.slug).toEqual(initial.slug);
+
+      yield* stack.destroy();
+
+      yield* expectGone(accountId, initial.name);
+    }).pipe(logLevel),
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
+    timeout: 300_000,
+  },
+);
+
+test.provider(
   "replacement on name change (new slug, old destination removed)",
   (stack) =>
     Effect.gen(function* () {

@@ -242,7 +242,10 @@ export const ObservabilityDestinationProvider = () =>
       // Inputs have been resolved to concrete values by Plan.
       const url = news.url as string;
       const headers = unwrapRedacted(news.headers ?? {});
-      const previousHeaders = olds?.headers ? unwrapRedacted(olds.headers) : undefined;
+      // Cloudflare masks header values on read, so the last values we know
+      // were applied stand in for them: the previous props, or what create
+      // just sent.
+      let appliedHeaders = olds?.headers ? unwrapRedacted(olds.headers) : undefined;
       const enabled = news.enabled ?? true;
 
       // 1. Observe — the slug cached on `output` is a hint, not a
@@ -283,6 +286,7 @@ export const ObservabilityDestinationProvider = () =>
               }),
             ),
           );
+        appliedHeaders = headers;
         const createdSlug = created.slug;
         observed = isObservedDestination(created)
           ? created
@@ -295,7 +299,7 @@ export const ObservabilityDestinationProvider = () =>
       if (
         observed.enabled !== enabled ||
         observed.configuration.url !== url ||
-        !sameHeaders(observed.configuration.headers, headers, previousHeaders)
+        !sameHeaders(observed.configuration.headers, headers, appliedHeaders)
       ) {
         const patched = yield* workers
           .patchObservabilityDestination({
@@ -410,13 +414,13 @@ const freshObserved = (accountId: string, slug: string) =>
  *
  * Cloudflare masks header values as `null` in its responses, so only the
  * header names are observable. A masked value is compared against the
- * previously deployed props instead; without them (adoption) it cannot be
- * verified and counts as drift.
+ * last values known to be applied instead; without them (adoption) it
+ * cannot be verified and counts as drift.
  */
 const sameHeaders = (
   observed: Record<string, unknown>,
   desired: Record<string, string>,
-  previous: Record<string, string> | undefined,
+  applied: Record<string, string> | undefined,
 ) => {
   const keys = Object.keys(observed).filter(
     (key) => key !== "content-type" || "content-type" in desired,
@@ -425,7 +429,7 @@ const sameHeaders = (
     keys.length === Object.keys(desired).length &&
     keys.every((key) =>
       observed[key] == null
-        ? previous !== undefined && previous[key] === desired[key]
+        ? applied !== undefined && applied[key] === desired[key]
         : String(observed[key]) === desired[key],
     )
   );
