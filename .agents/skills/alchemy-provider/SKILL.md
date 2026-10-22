@@ -1,6 +1,6 @@
 ---
 name: alchemy-provider
-description: Bring up a new Alchemy cloud provider (its own `@alchemy.run/<provider>` package under packages/<provider>) end to end — credentials, a distilled SDK, resources, bindings, live tests, and the patch loop that feeds live-test failures back into distilled — or extend an existing provider with a new service. Use for "add a <X> provider", "create an alchemy provider for <X>", "port <X> to alchemy", "add <service> to the <X> provider", or any work that needs a distilled SDK plus Alchemy resources tested against a live API.
+description: Bring up a new Alchemy cloud provider (its own `@alchemy.run/<provider>` package under packages/<provider>) end to end — credentials, a distilled SDK, resources, bindings, live tests, and the patch loop that feeds live-test failures back into distilled — or extend an existing provider with a new service, or bring an existing provider up to the bar (gap audit, then waves). Use for "add a <X> provider", "create an alchemy provider for <X>", "port <X> to alchemy", "add <service> to the <X> provider", "bring the <X> provider up to par", or any work that needs a distilled SDK plus Alchemy resources tested against a live API.
 ---
 
 # Building an Alchemy provider
@@ -35,9 +35,9 @@ GCP reached 57 of 161 services and Azure 4 of 160; both were reported as
 done. Every call goes through distilled. When distilled is missing an
 operation, patch distilled (step 1); never work around it in alchemy.
 
-The whole provider also means its non-resource deliverables: bindings for
-every capability (step 5), a host runtime and event sources when the cloud
-runs code, framework websites on the cloud's CDN and functions (step 7, when the
+The whole provider also means its non-resource deliverables: a binding
+for every data-plane operation (step 5), every runtime in both forms, event
+sources, and a workflow engine when the cloud runs code, framework websites on the cloud's CDN and functions (step 7, when the
 cloud hosts websites), examples, the docs hub, and generated docs
 (step 10). They are rows in the same index as resources, with the same
 statuses. Never write "a later phase" into an agent contract without
@@ -67,12 +67,38 @@ not enough: [review.md](review.md) turns each of them into a check with a
 command and an expected result. Run that review at every wave boundary and
 before step 10; a provider with unexplained hits is not done.
 
+## Bringing an existing provider up to the bar
+
+When the provider already exists (a PR in progress, or a package on
+`main`), start with a gap audit instead of step 0:
+
+1. Merge `origin/main` into the branch and type-check the package (see
+   **Branch, checkpoints, and PRs**).
+2. Run every check in [review.md](review.md) against the code as it is,
+   and port `scripts/audit-service.ts` (step 2) to get per-service
+   operation coverage.
+3. Rebuild `INDEX.md` from the results: one row per missing resource,
+   binding, runtime form, event source, workflow engine, website
+   rework, example, docs page, and JSDoc gap, plus one per review hit
+   that needs a fix (hand-written HTTP, `host.bind`, a container
+   website). Existing rows keep their status only when review.md passes
+   them.
+4. Do the distilled work first. Missing data-plane modules, credentials
+   providers, and manual specs block the bindings that depend on them.
+5. Then run the waves from step 4 onward, with the same contracts as a
+   new provider.
+
+Report the audit to the user before the first wave: counts per category
+and the planned waves.
+
 ## Orchestration
 
-Fan-out work (the catalog in step 2, implementation waves, fix rounds in
-step 8, the review gate in step 9) runs as a **workflow** when the harness
-has one (Grok's `workflow` tool, authored per its `create-workflow` skill,
-or the equivalent in other harnesses). A workflow runs the whole wave as one
+Fan-out work (the gap audit, the catalog in step 2, implementation waves,
+fix rounds in step 8, the review gate in step 9) runs as a **workflow**
+when the harness has one: Claude Code's `Workflow` tool (load its
+`workflow-authoring` skill before writing the script), Grok's `workflow`
+tool (its `create-workflow` skill), or the equivalent elsewhere. Run a
+workflow only when the user asked for one, since it spends many agents. A workflow runs the whole wave as one
 script with bounded parallelism, enforces an agent budget, and journals
 every finished agent's result, so a crash costs only the agents still
 running. Use plain subagents only when no workflow tool exists. Either way,
@@ -155,6 +181,15 @@ Every provider talks to its API through a distilled SDK
 (`@distilled.cloud/<pkg>` in `submodules/distilled/packages/<pkg>`). Alchemy
 never calls the API with a hand-written HTTP client.
 
+- **No SDK yet:** follow the `distilled-sdk` skill in the submodule
+  (`submodules/distilled/.agents/skills/distilled-sdk/SKILL.md`). It covers
+  sourcing the spec, the mirror, convert/generate, the README, and the
+  distilled PR.
+- **SDK exists but is wrong** (missing typed error, nullable field, wrong
+  response schema, unmarked secret): follow the `distilled-sdk-patch`
+  skill (`submodules/distilled/.agents/skills/distilled-sdk-patch/SKILL.md`).
+- **SDK is behind its spec:** follow `distilled-sdk-update`.
+
 **That includes the data plane.** Bindings call the cloud's data APIs
 (put a blob, send a message, read a secret), and those go through
 distilled exactly like the management API that creates the resources.
@@ -192,15 +227,6 @@ Raw `HttpClient` calls are allowed only for:
   service the stack deployed).
 
 Each one carries a comment saying which case it is.
-
-- **No SDK yet:** follow the `distilled-sdk` skill in the submodule
-  (`submodules/distilled/.agents/skills/distilled-sdk/SKILL.md`). It covers
-  sourcing the spec, the mirror, convert/generate, the README, and the
-  distilled PR.
-- **SDK exists but is wrong** (missing typed error, nullable field, wrong
-  response schema, unmarked secret): follow the `distilled-sdk-patch`
-  skill (`submodules/distilled/.agents/skills/distilled-sdk-patch/SKILL.md`).
-- **SDK is behind its spec:** follow `distilled-sdk-update`.
 
 If a skill file is missing at the pinned submodule commit, read it from
 distilled `main`: `git -C submodules/distilled fetch origin main && git -C
@@ -499,9 +525,8 @@ Rules the reference code follows:
   emulated resource with a typed error naming the native binding and
   `Alchemy.remote()` (`HttpBindingUnsupportedInDev`).
 
-Grants are least privilege and scoped to the bound resource (resource IAM
-policy, or a condition when the API only grants at project level);
-document any unavoidable broader grant in the binding's JSDoc.
+Document any grant broader than the bound resource (a condition on a
+project-level grant, say) in the binding's JSDoc, with the reason.
 
 ### Runtimes
 
@@ -656,6 +681,10 @@ What a test must prove:
   (copy `test/GCP/ExternalHost/`). If the provider hosts code, also add
   its host to the other providers' external-host suites
   (`test/Cloudflare/ExternalHost/Lambda.test.ts` is the pattern).
+- **Every binding has a test.** One `describe("<BindingName>")` per
+  binding, all driving the same deployed fixture host
+  (`test/AWS/DynamoDB/Bindings.test.ts` + `handler.ts` is the pattern).
+  A binding no test calls from a host is not done.
 - **Assertions can fail.** No always-true checks, no lists of acceptable
   tags, no early `return` that skips the assertions.
 
@@ -921,13 +950,26 @@ other deliverable.
 A draft PR for an early wave is fine; its description states the index
 counts and that the provider is incomplete.
 
-A provider is done when every SDK service is cataloged, every in-scope
-resource has its own passing live test (or is `blocked: cost` or
-`blocked: skipped` and the user has the list),
-bindings go through `<Provider>Bindings.Bind`, reach foreign hosts, and are least privilege, the
-framework websites (if the cloud hosts websites) deploy to its CDN and
-functions, the example set (one per framework, one per workload)
-deploys and passes, the reference docs are
-generated, the hub matches [docs.md](docs.md), the review
-gate is clean, the test account is clean after a full run, and every SDK
-mismatch found along the way is a merged distilled patch.
+A provider is done when:
+
+- every SDK service is cataloged and every operation is classified;
+- every in-scope resource has its own passing live test (or is
+  `blocked: cost` / `blocked: skipped` and the user has the list);
+- every `binding` operation is a least-privilege binding over distilled,
+  goes through `<Provider>Bindings.Bind`, reaches foreign hosts, and is
+  called from a deployed host in a test;
+- no alchemy code makes a hand-written API call (review.md's
+  "Hand-written HTTP" check is clean);
+- every runtime ships both forms with `InferEnv`, its event sources, and
+  tests for each form;
+- the cloud's durable engine has an Effect workflow engine that passes
+  the conformance cases, or is out of scope with a reason;
+- the framework websites (if the cloud hosts websites) deploy to its CDN
+  and functions;
+- the example set (one per framework, one per workload) deploys and
+  passes;
+- JSDoc meets the bar in [docs.md](docs.md), the reference docs are
+  generated, and the hub matches [docs.md](docs.md);
+- the PR description shows the runtimes and the fat head;
+- the review gate is clean, the test account is clean after a full run,
+  and every SDK mismatch found along the way is a merged distilled patch.
