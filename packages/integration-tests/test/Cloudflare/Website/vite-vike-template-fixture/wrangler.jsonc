@@ -1,0 +1,6 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "my-app",
+  "compatibility_date": "2026-03-12",
+  "main": "vike:server"
+}

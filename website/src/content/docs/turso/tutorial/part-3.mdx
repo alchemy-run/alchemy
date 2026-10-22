@@ -10,13 +10,13 @@ Each request reads the tenant from the URL and only touches that tenant's databa
 ## Install the driver
 
 ```diff lang="sh"
-+pnpm add drizzle-orm @effect/sql-libsql
++pnpm add @alchemy.run/drizzle drizzle-orm @effect/sql-libsql
 ```
 
 ## Connect to the tenant's database
 
 ```diff lang="typescript"
-+import * as Drizzle from "alchemy/Drizzle/LibSQL";
++import * as Drizzle from "@alchemy.run/drizzle/LibSQL";
 
 if (resource === "notes") {
 +  const db = yield* Drizzle.LibSQL(tenants.connect(tenant));

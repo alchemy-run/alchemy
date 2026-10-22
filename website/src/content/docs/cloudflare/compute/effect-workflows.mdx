@@ -49,11 +49,14 @@ import * as Workflows from "alchemy/Workflows";
 import * as Effect from "effect/Effect";
 import { Activity } from "effect/workflow";
 
-export const GreetLive = Workflows.layer(Greet, ({ name }) =>
-  Activity.make({
-    name: "greet",
-    success: Schema.String,
-    execute: Effect.succeed(`hello ${name}`),
+export const GreetLive = Workflows.layer(
+  Greet,
+  Effect.fn(function* ({ name }) {
+    return yield* Activity.make({
+      name: "greet",
+      success: Schema.String,
+      execute: Effect.succeed(`hello ${name}`),
+    });
   }),
 );
 ```
@@ -68,7 +71,7 @@ the workflow Layers, and provide both to the Worker:
 
 ```typescript
 // src/worker.ts
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { GreetLive } from "./Greet.ts";
@@ -94,7 +97,7 @@ during init, and start runs from your handlers:
 
 ```typescript
 // src/worker.ts
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Workflows from "alchemy/Workflows";
 import * as Effect from "effect/Effect";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
@@ -197,24 +200,60 @@ yield* Activity.make({ name: "reserve", execute: reserve(order) }).pipe(
 
 `run.interrupt` stops a run where it waits, and its compensations run too.
 
-## Call other Durable Objects from a step
+## Use bindings in a step
 
-Steps often call another Durable Object's methods. Resolve the namespace
-when the Layer builds, and call it from a step:
+Pass `Workflows.layer` an Effect that returns the handler instead of the
+handler itself. The Effect runs once, when the Worker starts, so resolve
+bindings there, the same way a Worker's init does, and use them in the
+steps:
 
 ```typescript
-export const RecordLive = Layer.unwrap(
+// src/Checkout.ts
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as Workflows from "alchemy/Workflows";
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+import { Activity, Workflow } from "effect/workflow";
+
+export const Receipts = Cloudflare.R2.Bucket("Receipts");
+
+export const Checkout = Workflow.make("Checkout", {
+  payload: { orderId: Schema.String },
+  idempotencyKey: ({ orderId }) => orderId,
+});
+
+export const CheckoutLive = Workflows.layer(
+  Checkout,
   Effect.gen(function* () {
-    const journals = yield* Journal;
-    return Workflows.layer(Record, ({ id }) =>
-      Activity.make({ name: "append", execute: journals.getByName(id).append("done") }),
-    );
+    const receipts = yield* Cloudflare.R2.WriteBucket(Receipts);
+    return Effect.fn(function* ({ orderId }) {
+      yield* Activity.make({
+        name: "receipt",
+        execute: receipts
+          .put(`${orderId}.json`, JSON.stringify({ orderId }))
+          .pipe(Effect.orDie),
+      });
+    });
   }),
 );
 ```
 
-Those methods are runtime-only: they need `RuntimeContext`, which init
-doesn't have. Steps only run inside a run, which has one, so
+Provide the binding's implementation with the engine:
+
+```typescript
+Effect.provide(
+  CheckoutLive.pipe(
+    Layer.provideMerge(Cloudflare.Workflows.DurableObjectEngine),
+    Layer.provide(Cloudflare.R2.WriteBucketBinding),
+  ),
+)
+```
+
+A Durable Object namespace works the same way: `yield* Journal` in the
+Effect, and call `journals.getByName(id).append(...)` from a step.
+
+The bucket's methods are runtime-only: they need `RuntimeContext`, which
+init doesn't have. Steps only run inside a run, which has one, so
 `Workflows.layer` doesn't pass that requirement on to the Worker.
 
 ## How a run executes on Durable Objects

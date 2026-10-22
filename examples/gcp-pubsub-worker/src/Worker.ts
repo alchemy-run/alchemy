@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import * as GCP from "alchemy/GCP";
+import * as GCP from "@alchemy.run/gcp";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 import * as Stream from "effect/Stream";

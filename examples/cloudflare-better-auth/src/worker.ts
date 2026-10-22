@@ -1,5 +1,5 @@
 import { CloudflareD1 } from "@alchemy.run/better-auth/CloudflareD1";
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Effect from "effect/Effect";
 import * as HttpRouter from "effect/http/HttpRouter";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";

@@ -11,7 +11,7 @@ Customers will reach the bank from outside. Give every request a signed-in custo
 
 ```typescript
 // src/CurrentActor.context.ts
-import * as Domain from "alchemy/Domain";
+import * as Domain from "@alchemy.run/domain";
 import * as Schema from "effect/Schema";
 import { CustomerId } from "./Customer.id.ts";
 
@@ -68,7 +68,7 @@ export const sessionClient = (customerId: string) =>
 
 ```typescript
 // src/NotOwner.rejection.ts
-import * as Domain from "alchemy/Domain";
+import * as Domain from "@alchemy.run/domain";
 
 export class NotOwner extends Domain.Rejection("NotOwner") {}
 ```
@@ -129,7 +129,7 @@ Each command lists its middleware, here `Session`, and every way it can fail. Bo
 
 ```diff lang="typescript"
 // src/Account.aggregate.ts
-import * as Domain from "alchemy/Domain";
+import * as Domain from "@alchemy.run/domain";
 +import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import { AccountId } from "./Account.id.ts";
@@ -221,7 +221,7 @@ export class RegisterCustomer extends Domain.Command("RegisterCustomer", {
 
 ```diff lang="typescript"
 // src/Customer.aggregate.ts
-import * as Domain from "alchemy/Domain";
+import * as Domain from "@alchemy.run/domain";
 +import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 +import { CurrentActor } from "./CurrentActor.context.ts";
@@ -259,7 +259,7 @@ The third argument to `decide` holds the id of the customer being registered, so
 
 ```diff lang="typescript"
 // src/AccountSummary.view.ts
-import * as Domain from "alchemy/Domain";
+import * as Domain from "@alchemy.run/domain";
 +import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import { Account } from "./Account.aggregate.ts";
@@ -425,7 +425,7 @@ A story has no middleware, so `Story.provide` stands in for it, giving the follo
 
 ```typescript
 // src/BankApi.api.ts
-import * as Domain from "alchemy/Domain";
+import * as Domain from "@alchemy.run/domain";
 import { AccountSummary } from "./AccountSummary.view.ts";
 import { DepositMoney } from "./DepositMoney.command.ts";
 import { RegisterCustomer } from "./RegisterCustomer.command.ts";
@@ -447,7 +447,7 @@ An Api lists what a client may reach. Nothing in it needs a handler: the account
 ```typescript
 // test/BankApi.test.ts
 import { expect, it } from "@effect/vitest";
-import * as Domain from "alchemy/Domain";
+import * as Domain from "@alchemy.run/domain";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import type * as Scope from "effect/Scope";

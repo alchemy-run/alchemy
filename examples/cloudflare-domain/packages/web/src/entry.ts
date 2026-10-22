@@ -1,6 +1,6 @@
+import * as Domain from "@alchemy.run/domain";
 import { CustomerId } from "@bank/domain/Customer/Customer.id";
 import { CustomerApi } from "@bank/domain/CustomerApi.api";
-import * as Domain from "alchemy/Domain";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as HttpClient from "effect/http/HttpClient";

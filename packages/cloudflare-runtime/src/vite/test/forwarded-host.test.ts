@@ -75,5 +75,10 @@ describe("proxyRequestHeaders", () => {
     expect(result["alchemy-runtime-original-url"]).toBe(`${origin}//callback/%2F?x=1&x=2`);
     expect(result.host).toBe(new URL(origin).host);
     expect(result["alchemy-runtime-proxy-shared-secret"]).toBe(proxySharedSecret);
+    // A client's own `X-Forwarded-Host` passes through; otherwise it is the
+    // dev server's host, as under `@cloudflare/vite-plugin`.
+    expect(result["x-forwarded-host"]).toBe(
+      "x-forwarded-host" in headers ? headers["x-forwarded-host"] : headers.host,
+    );
   });
 });

@@ -15,11 +15,10 @@ export default defineConfig({
     "unicorn",
     "oxc",
   ],
-  // Repo-specific rules: scripts/oxlint/alchemy.ts
-  jsPlugins: ["./scripts/oxlint/alchemy.ts"],
   ignorePatterns: [
     "submodules/**",
     "packages/alchemy/test/**",
+    "packages/integration-tests/test/**",
     "packages/alchemy-test/**",
     "examples/**",
     "demos/**",
@@ -27,7 +26,6 @@ export default defineConfig({
     "**/*.test.ts",
   ],
   rules: {
-    "alchemy/package-boundaries": "error",
     "require-yield": "off",
     "no-irregular-whitespace": "off",
     "typescript/no-misused-new": "off",
