@@ -16,8 +16,11 @@
 use crate::fs::{self, Fs};
 use crate::mount::{self, Mode, Mount, User};
 use crate::patch::{self, Candidates, Summary};
+use crate::timings::Timings;
 use crate::{Device, sendstream};
 use anyhow::{Context, Result, bail};
+use tokio::runtime::Handle;
+use volume::{Hash, Volume};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -26,15 +29,217 @@ use std::time::Duration;
 
 /// What a call reports.
 #[derive(Debug, serde::Serialize)]
-pub struct Outcome {
+#[serde(rename_all = "camelCase")]
+pub struct Report {
     /// The command's exit code; 124 when it timed out.
     pub exit_code: i32,
     pub timed_out: bool,
     pub fs: Fs,
-    /// What it changed. Its patch is written where the caller asked.
+    pub snapshot: Hash,
+    /// Where its patch was uploaded; `None` when it changed nothing.
+    pub patch: Option<String>,
     pub summary: Summary,
     /// Processes it left running in the workspace: stopped, or kept.
     pub survivors: Vec<User>,
+    pub kept: bool,
+    pub timings: Timings,
+}
+
+/// Where and how a call runs.
+pub struct Spec<'a> {
+    pub mode: Mode,
+    pub cache: &'a Path,
+    pub dir: &'a Path,
+    pub work: &'a Path,
+    pub run: Run,
+    /// The store key its patch is uploaded to.
+    pub patch: Option<String>,
+    /// Keep the fork mounted for processes the command leaves running.
+    pub keep: bool,
+}
+
+/// A call whose processes are still running, its fork still mounted.
+pub struct Kept {
+    pub call: Call,
+    pub device: Arc<Device>,
+}
+
+impl Kept {
+    /// Stops what's left, a last commit to `patch`, unmounts, closes.
+    pub fn detach(
+        mut self,
+        patch: Option<&str>,
+        volume: &Volume,
+        runtime: &Handle,
+    ) -> Result<(Summary, Option<String>, Vec<User>, Timings)> {
+        let mut timings = Timings::new();
+        let stopped = timings.time("stop", || self.call.stop_survivors());
+        let made = commit_to_store(&mut self.call, patch, volume, runtime, false, &mut timings);
+        let unmounted = timings.time("unmount", || self.call.unmount());
+        timings.time("close", || self.device.close())?;
+        let (summary, key) = made?;
+        unmounted?;
+        Ok((summary, key, stopped, timings))
+    }
+}
+
+/// Runs a command on an ephemeral fork of `snapshot` and makes a patch of
+/// what it changed. With `keep`, a command that leaves processes running
+/// keeps its fork mounted for them: the [`Kept`] call.
+pub fn call(
+    volume: &Arc<Volume>,
+    snapshot: Hash,
+    spec: Spec,
+    runtime: &Handle,
+) -> Result<(Report, Option<Kept>)> {
+    let mut timings = Timings::new();
+    let device = Arc::new(timings.time("attach", || {
+        Device::open_snapshot(volume.clone(), snapshot, spec.cache, runtime.clone())
+    })?);
+    let mut call = timings.time("mount", || {
+        Call::mount(&device, spec.mode, spec.cache, spec.dir, spec.work)
+    })?;
+    let ran = timings.time("run", || call.run(&spec.run));
+    let running = timings.time("settle", || call.survivors());
+    let kept = spec.keep && ran.is_ok() && !running.is_empty();
+    let survivors = if kept || running.is_empty() {
+        running
+    } else {
+        timings.time("stop", || call.stop_survivors())
+    };
+    let made = ran.as_ref().map_err(|e| anyhow::anyhow!("{e:#}")).and_then(|_| {
+        commit_to_store(&mut call, spec.patch.as_deref(), volume, runtime, false, &mut timings)
+    });
+    let fs = call.fs();
+    if kept && let (Ok((code, timed_out)), Ok((summary, patch))) = (&ran, &made) {
+        let report = Report {
+            exit_code: *code,
+            timed_out: *timed_out,
+            fs,
+            snapshot,
+            patch: patch.clone(),
+            summary: summary.clone(),
+            survivors,
+            kept: true,
+            timings,
+        };
+        return Ok((report, Some(Kept { call, device })));
+    }
+    let unmounted = timings.time("unmount", || call.unmount());
+    timings.time("close", || device.close())?;
+    let (exit_code, timed_out) = ran?;
+    let (summary, patch) = made?;
+    unmounted?;
+    let report = Report {
+        exit_code,
+        timed_out,
+        fs,
+        snapshot,
+        patch,
+        summary,
+        survivors,
+        kept: false,
+        timings,
+    };
+    Ok((report, None))
+}
+
+/// A patch from snapshot `from` to snapshot `to`, both attached read-only
+/// with caches `caches` and mounted under `work`, uploaded to `key` if it
+/// changes anything, and kept at `patch_file` if given.
+#[allow(clippy::too_many_arguments)]
+pub fn diff(
+    volume: &Arc<Volume>,
+    from: Hash,
+    to: Hash,
+    mode: Mode,
+    caches: (&Path, &Path),
+    work: &Path,
+    key: Option<&str>,
+    patch_file: Option<&Path>,
+    runtime: &Handle,
+) -> Result<serde_json::Value> {
+    let mut timings = Timings::new();
+    let open = |id: Hash, cache: &Path| -> Result<Arc<Device>> {
+        Ok(Arc::new(Device::open_snapshot(volume.clone(), id, cache, runtime.clone())?))
+    };
+    let (a, b) = timings.time("attach", || -> Result<_> { Ok((open(from, caches.0)?, open(to, caches.1)?)) })?;
+    let (base, current) = timings.time("mount", || -> Result<_> {
+        Ok((
+            mount::mount_as(&a, mode, caches.0, &work.join("from"), true)?,
+            mount::mount_as(&b, mode, caches.1, &work.join("to"), true)?,
+        ))
+    })?;
+    let made = (|| -> Result<serde_json::Value> {
+        let candidates = timings.time("walk", || {
+            patch::walk_candidates(base.dir(), current.dir(), base.fs() == Fs::Btrfs)
+        })?;
+        let file_path = patch_file.map_or_else(|| work.with_extension("patch"), Path::to_path_buf);
+        let mut file = std::io::BufWriter::new(std::fs::File::create(&file_path)?);
+        let summary = timings.time("commit", || {
+            patch::create(base.dir(), current.dir(), &candidates, Some(&mut file))
+        })?;
+        drop(file);
+        let mut uploaded = None;
+        if let Some(key) = key
+            && summary.operations > 0
+        {
+            let bytes = std::fs::read(&file_path)?;
+            timings.time("upload", || runtime.block_on(volume.blobs().put(key, bytes)))?;
+            uploaded = Some(key.to_string());
+        }
+        if patch_file.is_none() {
+            let _ = std::fs::remove_file(&file_path);
+        }
+        Ok(serde_json::json!({ "patch": uploaded, "summary": summary }))
+    })();
+    let unmounted = timings.time("unmount", || base.unmount().and(current.unmount()));
+    a.close()?;
+    b.close()?;
+    let mut made = made?;
+    unmounted?;
+    made["timings"] = serde_json::to_value(&timings)?;
+    Ok(made)
+}
+
+/// A patch of what `call` changed since its last commit (`full`: since the
+/// fork), uploaded to `key` if it changed anything.
+pub fn commit_to_store(
+    call: &mut Call,
+    key: Option<&str>,
+    volume: &Volume,
+    runtime: &Handle,
+    full: bool,
+    timings: &mut Timings,
+) -> Result<(Summary, Option<String>)> {
+    let path = call.work.with_extension("patch");
+    let mut file = std::io::BufWriter::new(std::fs::File::create(&path)?);
+    let summary = timings.time("commit", || call.commit(Some(&mut file), full))?;
+    drop(file);
+    let mut uploaded = None;
+    if let Some(key) = key
+        && summary.operations > 0
+    {
+        let bytes = std::fs::read(&path)?;
+        timings.time("upload", || runtime.block_on(volume.blobs().put(key, bytes)))?;
+        uploaded = Some(key.to_string());
+    }
+    let _ = std::fs::remove_file(&path);
+    Ok((summary, uploaded))
+}
+
+/// A command to run on a fork.
+#[derive(Default)]
+pub struct Run {
+    pub command: String,
+    pub cwd: Option<PathBuf>,
+    pub env: Vec<(String, String)>,
+    pub timeout: Option<Duration>,
+    /// Where its output goes (this process's own by default).
+    pub stdout: Option<std::fs::File>,
+    pub stderr: Option<std::fs::File>,
+    /// Drop `AWS_*` and `BLOCKD_*` from the environment it inherits.
+    pub clean_env: bool,
 }
 
 /// A command's fork, mounted.
@@ -200,22 +405,31 @@ impl Call {
         self.fs
     }
 
-    /// Runs `command` with `sh -c` in the workspace, its output on this
-    /// process's own. Returns its exit code and whether it timed out.
-    pub fn run(
-        &self,
-        command: &str,
-        cwd: Option<&Path>,
-        env: &[(String, String)],
-        timeout: Option<Duration>,
-    ) -> Result<(i32, bool)> {
+    /// Runs `command` with `sh -c` in the workspace, in a process group of
+    /// its own. Returns its exit code and whether it timed out.
+    pub fn run(&self, spec: &Run) -> Result<(i32, bool)> {
         use std::os::unix::process::CommandExt;
         let mut child = Command::new("sh");
         child
-            .args(["-c", command])
-            .current_dir(cwd.unwrap_or(&self.dir))
-            .envs(env.iter().map(|(k, v)| (k, v)))
+            .args(["-c", &spec.command])
+            .current_dir(spec.cwd.as_deref().unwrap_or(&self.dir))
             .process_group(0);
+        if spec.clean_env {
+            // The daemon's environment holds the store's credentials.
+            child.env_clear().envs(std::env::vars().filter(|(name, _)| {
+                !name.starts_with("AWS_") && !name.starts_with("BLOCKD_")
+            }));
+        }
+        child.envs(spec.env.iter().map(|(k, v)| (k, v)));
+        if let Some(stdout) = &spec.stdout {
+            child.stdout(stdout.try_clone()?);
+        }
+        if let Some(stderr) = &spec.stderr {
+            child.stderr(stderr.try_clone()?);
+        }
+        if spec.stdout.is_some() || spec.stderr.is_some() {
+            child.stdin(std::process::Stdio::null());
+        }
         let mut child = child.spawn().context("starting the command")?;
         let pid = child.id() as i32;
         let started = std::time::Instant::now();
@@ -223,12 +437,12 @@ impl Call {
             if let Some(status) = child.try_wait()? {
                 return Ok((status.code().unwrap_or(128), false));
             }
-            if timeout.is_some_and(|t| started.elapsed() >= t) {
+            if spec.timeout.is_some_and(|t| started.elapsed() >= t) {
                 unsafe { libc::kill(-pid, libc::SIGKILL) };
                 let _ = child.wait();
                 return Ok((124, true));
             }
-            std::thread::sleep(Duration::from_millis(20));
+            std::thread::sleep(Duration::from_millis(10));
         }
     }
 

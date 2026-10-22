@@ -20,6 +20,7 @@ ublk = ["dep:libublk", "dep:io-uring"]
 volume.workspace = true
 anyhow.workspace = true
 libc.workspace = true
+base64 = "0.22"
 serde.workspace = true
 serde_json.workspace = true
 tokio.workspace = true

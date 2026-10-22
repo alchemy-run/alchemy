@@ -256,6 +256,104 @@ Cloudflare.Containers.Workspace(Workspace, {
 });
 ```
 
+## blockd, one daemon per machine
+
+Today each forked call starts a new `blockd call` process through the host's
+`exec`, which opens the store, reads the snapshot's manifest, attaches,
+mounts, runs, patches, unmounts and exits. A mounted head is another `blockd`
+process with its own socket. A forked call costs four or more `exec`s: the
+call, reading its result, removing its log, the wipe. On a Lambda MicroVM,
+every one of those is a new WebSocket to the MicroVM's public endpoint.
+
+Instead, one `blockd daemon` runs per machine for as long as the machine
+does, and owns everything on it: every mounted head, every forked call, every
+cache. The orchestrator talks to it over HTTP.
+
+```text
+orchestrator ──HTTP──▶ blockd daemon ──▶ store (S3, R2, GCS)
+ (a Durable Object,     ├─ heads: mounted, leased, journaled
+  a controller on EKS)  ├─ calls: forks, their commands, their patches
+                        └─ caches: snapshot metadata, store connections, blocks
+```
+
+### What it keeps between requests
+
+- **Open stores.** One client per store, with its pooled connections and its
+  cache of manifests and pages. A fork of a snapshot the daemon has seen
+  reads no metadata.
+- **Cache files.** A cache file left by a clean detach is reused by the next
+  attach of any snapshot that shares its extents, as today. The daemon hands
+  each attach a free cache file, so attaches can run at once.
+- **Mounted heads**, with their flusher and change tracking, as `blockd
+  mount` keeps them today.
+- **Calls**, running or kept: the fork, its command's process group, its
+  output, and the commits made so far.
+
+### The API
+
+JSON over HTTP/1.1, with a bearer token on every request.
+
+| Request | Does |
+|---|---|
+| `GET /v1/status` | The daemon's heads, calls, caches and counters |
+| `POST /v1/heads` | Mount a head (lease, attach, mount, start tracking) |
+| `POST /v1/heads/<head>/<op>` | `sync`, `snapshot`, `checkpoint`, `apply`, `detach`, `status` |
+| `POST /v1/calls` | Start a command on a fork of a snapshot; returns its id |
+| `GET /v1/calls/<id>?wait=<ms>` | Its result once done, or `{ "done": false }` after `wait` |
+| `POST /v1/calls/<id>/<op>` | A kept call's `commit`, `status`, `detach` |
+| `POST /v1/diffs` | A patch from one snapshot to another |
+
+A call is started and then waited on, so a command that runs for an hour
+never holds one HTTP request open for an hour, and an orchestrator that
+restarts finds its calls again by id.
+
+Every reply carries `timings`: milliseconds per phase (attach, mount, run,
+settle, commit, upload, unmount for a call; lease, attach, mount for a head;
+checkpoint, fetch, apply for an apply). The orchestrator adds its own (pool
+claim, machine start, head mount, commit queue) and the call's result reports
+them all.
+
+### Where it runs
+
+| | Cloudflare container | Lambda MicroVM | EC2 | EKS |
+|---|---|---|---|---|
+| Started by | an `exec` before each mount or call, a no-op while it runs | the same | systemd | a DaemonSet |
+| Reached at | the container's port | the MicroVM's port | the instance's address | the node's address |
+| Store credentials | its environment | its environment | the instance role | the pod's role (IRSA) |
+| Cache | the container's disk | the MicroVM's disk | local NVMe | the node's NVMe (hostPath) |
+| Calls at once | one (one session per machine) | one | many | many |
+
+On Cloudflare and Lambda the daemon dies with its machine, and the next mount
+or call starts it again: that's the one `exec` left per call. On EC2 and EKS it outlives every session, so its
+caches stay warm for the life of the instance.
+
+**The command's environment is its own.** The daemon's environment holds the
+store's credentials; a command gets the daemon's environment without
+`AWS_*` and `BLOCKD_*`, plus what the request asks for. (Today's `blockd
+call` passes its whole environment on.)
+
+**One crash takes every mount on the machine.** A head's synced writes are in
+its journal, so the next mount folds them, as when a `blockd mount` dies
+today. Calls that were running are lost and say so.
+
+### Later, on EC2 and EKS
+
+- **One block cache per machine, by content.** Extents are content-addressed
+  (each manifest entry names its chunk's hash), so one cache on NVMe keyed by
+  chunk hash serves every head and every fork on the machine, of every
+  session. The base image is fetched once per machine, not once per attach.
+  Each attach keeps only the blocks it wrote in a file of its own. A pool of
+  SSD cache machines can sit behind it as a second tier before the store.
+- **Forks without an attach.** A call placed on the machine that has its
+  session's head mounted forks it locally: a btrfs snapshot of the mounted
+  head, or an overlay over a frozen snapshot of it. Nothing is fetched.
+- **Commands in other containers.** On EKS the daemon's mounts reach a pod
+  through a hostPath with mount propagation, and the command runs in the
+  pod. The call API splits into fork, commit and close for that, with the
+  command run by whoever owns the pod.
+- **Placement by cache.** The orchestrator places a call on the machine whose
+  cache already holds most of its snapshot, from `GET /v1/status`.
+
 ## Status
 
 Built and tested live (21 October 2026):

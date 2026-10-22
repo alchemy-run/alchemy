@@ -16,6 +16,16 @@ use volume::Volume;
 use volume::store::{BlobStore, LocalBlobStore, LocalMetaStore, MetaStore};
 
 pub fn open(spec: &str, heads: Option<&str>, journal: Option<&str>) -> Result<Volume> {
+    open_with(spec, heads, journal, std::env::var("BLOCKD_HEADS_TOKEN").ok())
+}
+
+/// [`open`], with the coordinator's bearer token given.
+pub fn open_with(
+    spec: &str,
+    heads: Option<&str>,
+    journal: Option<&str>,
+    token: Option<String>,
+) -> Result<Volume> {
     let (blobs, meta): (Arc<dyn BlobStore>, Arc<dyn MetaStore>) =
         if let Some(dir) = spec.strip_prefix("local:") {
             let dir = std::path::Path::new(dir);
@@ -29,12 +39,12 @@ pub fn open(spec: &str, heads: Option<&str>, journal: Option<&str>) -> Result<Vo
             bail!("unknown store {spec:?}: use local:<dir> or s3://<bucket>/<prefix>")
         };
     let meta = match heads {
-        Some(url) => http_heads(url)?,
+        Some(url) => http_heads(url, token.clone())?,
         None => meta,
     };
     let volume = Volume::new(blobs, meta);
     Ok(match journal {
-        Some(url) => volume.with_journal(http_journal(url)?),
+        Some(url) => volume.with_journal(http_journal(url, token)?),
         None => volume,
     })
 }
@@ -44,8 +54,7 @@ pub fn open(spec: &str, heads: Option<&str>, journal: Option<&str>) -> Result<Vo
 const COORDINATOR_ENTRY_BLOCKS: usize = 256;
 
 #[cfg(feature = "object")]
-fn http_journal(url: &str) -> Result<Arc<dyn volume::store::JournalStore>> {
-    let token = std::env::var("BLOCKD_HEADS_TOKEN").ok();
+fn http_journal(url: &str, token: Option<String>) -> Result<Arc<dyn volume::store::JournalStore>> {
     Ok(Arc::new(volume::store::HttpJournalStore::new(
         url,
         token,
@@ -54,18 +63,17 @@ fn http_journal(url: &str) -> Result<Arc<dyn volume::store::JournalStore>> {
 }
 
 #[cfg(not(feature = "object"))]
-fn http_journal(_: &str) -> Result<Arc<dyn volume::store::JournalStore>> {
+fn http_journal(_: &str, _: Option<String>) -> Result<Arc<dyn volume::store::JournalStore>> {
     bail!("this build of blockd has no HTTP journal (feature \"object\")")
 }
 
 #[cfg(feature = "object")]
-fn http_heads(url: &str) -> Result<Arc<dyn MetaStore>> {
-    let token = std::env::var("BLOCKD_HEADS_TOKEN").ok();
+fn http_heads(url: &str, token: Option<String>) -> Result<Arc<dyn MetaStore>> {
     Ok(Arc::new(volume::store::HttpMetaStore::new(url, token)))
 }
 
 #[cfg(not(feature = "object"))]
-fn http_heads(_: &str) -> Result<Arc<dyn MetaStore>> {
+fn http_heads(_: &str, _: Option<String>) -> Result<Arc<dyn MetaStore>> {
     bail!("this build of blockd has no HTTP heads (feature \"object\")")
 }
 

@@ -145,7 +145,7 @@ fn fork(device: &Device, to: &str, freeze: Option<&str>) -> Result<volume::Hash>
 
 /// Runs `take` (a snapshot) with the filesystem at `freeze` frozen, so the
 /// snapshot is a clean point even while programs are writing.
-fn frozen(freeze: Option<&str>, take: impl FnOnce() -> Result<volume::Hash>) -> Result<volume::Hash> {
+pub(crate) fn frozen(freeze: Option<&str>, take: impl FnOnce() -> Result<volume::Hash>) -> Result<volume::Hash> {
     let Some(mountpoint) = freeze else {
         return take();
     };

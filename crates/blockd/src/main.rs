@@ -26,6 +26,11 @@
 //! blockd diff    --store <spec> --from <id> --to <id> --cache <file> --cache-to <file> --work <dir>
 //!                (--patch <key> | --patch-file <file>)   (a patch from one snapshot to another)
 //! blockd apply   --dir <dir> --patch-file <file>     (apply a patch to a directory)
+//! blockd daemon  [--listen <host:port>] [--socket <path>] [--pidfile <file>]
+//!                [--state /var/cache/blockd] [--run /run/blockd]
+//!                (every head, call and cache on this machine, over HTTP: see `daemon.rs`;
+//!                 BLOCKD_DAEMON_TOKEN is the bearer token every request needs)
+//! blockd request --daemon <host:port|socket> --path /v1/… [--body <json>] [--method …]
 //! blockd disconnect --nbd /dev/nbd0   (detach a device whose blockd died)
 //! blockd control --socket <socket> --request '{"op":"sync"}'
 //! ```
@@ -206,11 +211,26 @@ fn main() -> Result<()> {
             println!("{}", serde_json::to_string(&summary)?);
         }
         #[cfg(target_os = "linux")]
+        "daemon" => daemon(&flags, &runtime)?,
+        "request" => {
+            let (status, reply) = blockd::http::request(
+                flags.required("daemon")?,
+                std::env::var("BLOCKD_DAEMON_TOKEN").ok().as_deref(),
+                flags.get("method").unwrap_or(if flags.get("body").is_some() { "POST" } else { "GET" }),
+                flags.required("path")?,
+                flags.get("body"),
+            )?;
+            println!("{reply}");
+            if status != 200 {
+                std::process::exit(1);
+            }
+        }
+        #[cfg(target_os = "linux")]
         "disconnect" => {
             blockd::nbd::force_disconnect(std::path::Path::new(flags.required("nbd")?))?
         }
         _ => bail!(
-            "usage: blockd <create|import|fork|reset|drop|export|gc|heads|history|attach|mount|exec|call|diff|apply|control|disconnect> …"
+            "usage: blockd <create|import|fork|reset|drop|export|gc|heads|history|attach|mount|exec|call|diff|apply|daemon|request|control|disconnect> …"
         ),
     }
     Ok(())
@@ -311,111 +331,48 @@ fn serve_mount(
     runtime: &tokio::runtime::Runtime,
 ) -> Result<()> {
     use std::path::Path;
-    let head = flags.required("head")?;
-    let cache = Path::new(flags.required("cache")?);
-    let dir = Path::new(flags.required("dir")?);
     let socket = Path::new(flags.required("control")?);
-    let volume = Arc::new(volume);
-    let device = Arc::new(blockd::Device::open(
-        volume.clone(),
-        head,
-        cache,
-        runtime.handle().clone(),
-    )?);
-    let every: u64 = flags
-        .get("flush-every")
-        .map(str::parse)
-        .transpose()?
-        .unwrap_or(5);
-    let flusher = (every > 0).then(|| device.start_flusher(std::time::Duration::from_secs(every)));
-    if flags.get("prefetch") == Some("true") {
-        let device = device.clone();
-        std::thread::spawn(move || match device.prefetch(16) {
-            Ok(n) => tracing::info!("prefetched {n} extents"),
-            Err(e) => tracing::warn!("prefetch stopped: {e:#}"),
-        });
-    }
-    let mode = mode(flags)?;
-    let mut mounted = blockd::mount::mount(&device, mode, cache, dir)?;
-    let fs = mounted.fs();
-    let top = cache.with_extension("top");
-    if fs == blockd::fs::Fs::Btrfs {
-        mounted.mount_top(&top, false)?;
-    }
-    let tracker = blockd::track::Tracker::start(
-        fs,
-        dir,
-        (fs == blockd::fs::Fs::Btrfs).then_some(top.as_path()),
-    );
-    let status = device.status();
-    println!(
-        "{}",
-        serde_json::json!({
-            "mounted": dir, "mode": mode, "head": head, "fs": fs,
-            "snapshot": status.base, "epoch": status.epoch,
-        })
-    );
-    tracing::info!("mounted {head} at {} in {mode:?} mode ({fs:?})", dir.display());
-    blockd::control::serve(
-        socket,
-        device.clone(),
-        HeadOps {
-            mounted: Some(mounted),
-            tracker,
-            volume,
-            dir: dir.to_path_buf(),
-            runtime: runtime.handle().clone(),
+    let (head, ready) = blockd::head::Head::mount(
+        Arc::new(volume),
+        flags.required("head")?,
+        blockd::head::HeadOptions {
+            mode: mode(flags)?,
+            cache: Path::new(flags.required("cache")?),
+            dir: Path::new(flags.required("dir")?),
+            flush_every: flags
+                .get("flush-every")
+                .map(str::parse)
+                .transpose()?
+                .unwrap_or(5),
+            prefetch: flags.get("prefetch") == Some("true"),
         },
+        runtime.handle().clone(),
     )?;
-    drop(flusher);
+    println!("{}", serde_json::to_string(&ready)?);
+    let device = head.device().clone();
+    let mut ops = HeadOps(head);
+    blockd::control::serve(socket, device.clone(), &mut ops)?;
     let snapshot = device.close()?;
-    tracing::info!("detached {head} at snapshot {snapshot}");
+    tracing::info!("detached {} at snapshot {snapshot}", ops.0.name());
     Ok(())
 }
 
 /// A mounted head's control operations: checkpoints and patches.
 #[cfg(target_os = "linux")]
-struct HeadOps {
-    mounted: Option<blockd::mount::Mount>,
-    tracker: blockd::track::Tracker,
-    volume: Arc<volume::Volume>,
-    dir: std::path::PathBuf,
-    runtime: tokio::runtime::Handle,
-}
+struct HeadOps(blockd::head::Head);
 
 #[cfg(target_os = "linux")]
-impl blockd::control::MountOps for HeadOps {
+impl blockd::control::MountOps for &mut HeadOps {
     fn detach(&mut self) -> Result<serde_json::Value> {
-        let paths = self.tracker.checkpoint().unwrap_or_else(|e| {
-            tracing::warn!("the last checkpoint failed: {e:#}");
-            None
-        });
-        self.tracker.stop();
-        if let Some(mounted) = self.mounted.take() {
-            mounted.unmount()?;
-        }
-        Ok(serde_json::json!({ "paths": paths }))
+        Ok(serde_json::json!({ "paths": self.0.unmount()? }))
     }
 
     fn checkpoint(&mut self) -> Result<serde_json::Value> {
-        Ok(serde_json::json!({ "paths": self.tracker.checkpoint()? }))
+        Ok(serde_json::json!({ "paths": self.0.checkpoint()? }))
     }
 
     fn apply(&mut self, patches: &[String]) -> Result<serde_json::Value> {
-        let paths = self.tracker.checkpoint()?;
-        let mut applied = Vec::new();
-        for key in patches {
-            let bytes = self
-                .runtime
-                .block_on(self.volume.blobs().get(key))
-                .with_context(|| format!("reading patch {key}"))?;
-            let summary = blockd::patch::apply(&mut bytes.as_slice(), &self.dir)
-                .with_context(|| format!("applying patch {key}"))?;
-            applied.push(summary);
-        }
-        blockd::mount::sync(&self.dir);
-        self.tracker.reset()?;
-        Ok(serde_json::json!({ "paths": paths, "applied": applied }))
+        self.0.apply(patches)
     }
 }
 
@@ -433,18 +390,7 @@ fn call(flags: &Flags, volume: volume::Volume, runtime: &tokio::runtime::Runtime
     use std::path::Path;
     let snapshot =
         Hash::from_hex(flags.required("snapshot")?).context("--snapshot is not a snapshot id")?;
-    let cache = Path::new(flags.required("cache")?);
-    let dir = Path::new(flags.required("dir")?);
-    let work = Path::new(flags.required("work")?);
-    let keep = flags.get("keep") == Some("true");
     let volume = Arc::new(volume);
-    let device = Arc::new(blockd::Device::open_snapshot(
-        volume.clone(),
-        snapshot,
-        cache,
-        runtime.handle().clone(),
-    )?);
-    let mut call = blockd::call::Call::mount(&device, mode(flags)?, cache, dir, work)?;
     let env: Vec<(String, String)> = match flags.get("env") {
         Some(json) => serde_json::from_str::<HashMap<String, String>>(json)
             .context("--env is a JSON object of strings")?
@@ -452,89 +398,51 @@ fn call(flags: &Flags, volume: volume::Volume, runtime: &tokio::runtime::Runtime
             .collect(),
         None => Vec::new(),
     };
-    let timeout = flags
-        .get("timeout-ms")
-        .map(str::parse::<u64>)
-        .transpose()?
-        .map(std::time::Duration::from_millis);
-    let ran = call.run(
-        flags.required("command")?,
-        flags.get("cwd").map(Path::new),
-        &env,
-        timeout,
-    );
-    let running = call.survivors();
-    let kept = keep && ran.is_ok() && !running.is_empty();
-    let survivors = if kept { running } else { call.stop_survivors() };
-    let made = ran
-        .as_ref()
-        .map_err(|e| anyhow::anyhow!("{e:#}"))
-        .and_then(|_| commit_call(&mut call, flags.get("patch"), &volume, runtime, false));
-    let fs = call.fs();
-    let result = |made: &(blockd::patch::Summary, Option<String>), code, timed_out| {
-        serde_json::json!({
-            "exitCode": code, "timedOut": timed_out, "fs": fs, "snapshot": snapshot,
-            "patch": made.1, "summary": made.0, "survivors": survivors, "kept": kept,
-        })
+    let run = blockd::call::Run {
+        command: flags.required("command")?.to_string(),
+        cwd: flags.get("cwd").map(Into::into),
+        env,
+        timeout: flags
+            .get("timeout-ms")
+            .map(str::parse::<u64>)
+            .transpose()?
+            .map(std::time::Duration::from_millis),
+        ..Default::default()
     };
-    let report = |value: serde_json::Value| -> Result<()> {
-        match flags.get("result") {
-            Some(path) => {
-                // Written whole, then renamed: a reader never sees half of it.
-                let tmp = format!("{path}.tmp");
-                std::fs::write(&tmp, format!("{value}\n"))?;
-                std::fs::rename(&tmp, path)?;
-            }
-            None => eprintln!("{value}"),
+    let (report, kept) = blockd::call::call(
+        &volume,
+        snapshot,
+        blockd::call::Spec {
+            mode: mode(flags)?,
+            cache: Path::new(flags.required("cache")?),
+            dir: Path::new(flags.required("dir")?),
+            work: Path::new(flags.required("work")?),
+            run,
+            patch: flags.get("patch").map(str::to_string),
+            keep: flags.get("keep") == Some("true"),
+        },
+        runtime.handle(),
+    )?;
+    let value = serde_json::to_value(&report)?;
+    match flags.get("result") {
+        Some(path) => {
+            // Written whole, then renamed: a reader never sees half of it.
+            let tmp = format!("{path}.tmp");
+            std::fs::write(&tmp, format!("{value}\n"))?;
+            std::fs::rename(&tmp, path)?;
         }
-        Ok(())
-    };
-    if kept && let (Ok((code, timed_out)), Ok(made)) = (&ran, &made) {
-        report(result(made, *code, *timed_out))?;
-        let socket = Path::new(flags.required("control")?);
-        serve_host(&mut call, socket, &volume, runtime)?;
-        call.stop_survivors();
-        let unmounted = call.unmount();
-        device.close()?;
-        return unmounted;
+        None => eprintln!("{value}"),
     }
-    let unmounted = call.unmount();
-    device.close()?;
-    let (code, timed_out) = ran?;
-    let made = made?;
-    unmounted?;
-    report(result(&made, code, timed_out))
-}
-
-/// A patch of what a call changed since its last commit, uploaded to `key`
-/// if it changed anything.
-#[cfg(target_os = "linux")]
-fn commit_call(
-    call: &mut blockd::call::Call,
-    key: Option<&str>,
-    volume: &volume::Volume,
-    runtime: &tokio::runtime::Runtime,
-    full: bool,
-) -> Result<(blockd::patch::Summary, Option<String>)> {
-    let path = std::env::temp_dir().join(format!("blockd-patch-{}", std::process::id()));
-    let mut file = std::io::BufWriter::new(std::fs::File::create(&path)?);
-    let summary = call.commit(Some(&mut file), full)?;
-    drop(file);
-    let mut uploaded = None;
-    if let Some(key) = key
-        && summary.operations > 0
-    {
-        runtime.block_on(volume.blobs().put(key, std::fs::read(&path)?))?;
-        uploaded = Some(key.to_string());
+    if let Some(kept) = kept {
+        serve_host(kept, Path::new(flags.required("control")?), &volume, runtime)?;
     }
-    let _ = std::fs::remove_file(&path);
-    Ok((summary, uploaded))
+    Ok(())
 }
 
 /// Serves a kept call's control socket until a detach (see [`call`]).
 #[cfg(target_os = "linux")]
 fn serve_host(
-    call: &mut blockd::call::Call,
+    mut kept: blockd::call::Kept,
     socket: &std::path::Path,
     volume: &volume::Volume,
     runtime: &tokio::runtime::Runtime,
@@ -558,7 +466,6 @@ fn serve_host(
     for stream in listener.incoming() {
         let stream = stream?;
         let mut writer = stream.try_clone()?;
-        let mut detached = false;
         for line in BufReader::new(stream).lines() {
             let line = line?;
             if line.trim().is_empty() {
@@ -566,31 +473,40 @@ fn serve_host(
             }
             let reply = match serde_json::from_str::<Request>(&line) {
                 Err(e) => serde_json::json!({ "ok": false, "error": format!("bad request: {e}") }),
-                Ok(Request::Status) => serde_json::json!({ "ok": true, "survivors": call.survivors() }),
+                Ok(Request::Status) => {
+                    serde_json::json!({ "ok": true, "survivors": kept.call.survivors() })
+                }
                 Ok(Request::Commit { patch, full }) => {
-                    match commit_call(call, Some(&patch), volume, runtime, full) {
+                    let mut timings = blockd::timings::Timings::new();
+                    match blockd::call::commit_to_store(
+                        &mut kept.call,
+                        Some(&patch),
+                        volume,
+                        runtime.handle(),
+                        full,
+                        &mut timings,
+                    ) {
                         Ok((summary, key)) => serde_json::json!({
-                            "ok": true, "patch": key, "summary": summary, "survivors": call.survivors(),
+                            "ok": true, "patch": key, "summary": summary,
+                            "survivors": kept.call.survivors(), "timings": timings,
                         }),
                         Err(e) => serde_json::json!({ "ok": false, "error": format!("{e:#}") }),
                     }
                 }
                 Ok(Request::Detach { patch }) => {
-                    let stopped = call.stop_survivors();
-                    detached = true;
-                    match commit_call(call, patch.as_deref(), volume, runtime, false) {
-                        Ok((summary, key)) => serde_json::json!({
-                            "ok": true, "patch": key, "summary": summary, "survivors": stopped,
+                    let reply = match kept.detach(patch.as_deref(), volume, runtime.handle()) {
+                        Ok((summary, key, stopped, timings)) => serde_json::json!({
+                            "ok": true, "patch": key, "summary": summary,
+                            "survivors": stopped, "timings": timings,
                         }),
                         Err(e) => serde_json::json!({ "ok": false, "error": format!("{e:#}") }),
-                    }
+                    };
+                    writer.write_all(format!("{reply}\n").as_bytes())?;
+                    let _ = std::fs::remove_file(socket);
+                    return Ok(());
                 }
             };
             writer.write_all(format!("{reply}\n").as_bytes())?;
-            if detached {
-                let _ = std::fs::remove_file(socket);
-                return Ok(());
-            }
         }
     }
     Ok(())
@@ -603,52 +519,42 @@ fn diff(flags: &Flags, volume: volume::Volume, runtime: &tokio::runtime::Runtime
     let from = Hash::from_hex(flags.required("from")?).context("--from is not a snapshot id")?;
     let to = Hash::from_hex(flags.required("to")?).context("--to is not a snapshot id")?;
     let work = Path::new(flags.required("work")?);
-    let volume = Arc::new(volume);
-    let mode = mode(flags)?;
-    let open = |id: Hash, cache: &str| -> Result<Arc<blockd::Device>> {
-        Ok(Arc::new(blockd::Device::open_snapshot(
-            volume.clone(),
-            id,
-            Path::new(cache),
-            runtime.handle().clone(),
-        )?))
-    };
-    let (cache_from, cache_to) = (flags.required("cache")?, flags.required("cache-to")?);
-    let (a, b) = (open(from, cache_from)?, open(to, cache_to)?);
-    let base = blockd::mount::mount_as(&a, mode, Path::new(cache_from), &work.join("from"), true)?;
-    let current = blockd::mount::mount_as(&b, mode, Path::new(cache_to), &work.join("to"), true)?;
-    let made = (|| -> Result<serde_json::Value> {
-        let candidates = blockd::patch::walk_candidates(
-            base.dir(),
-            current.dir(),
-            base.fs() == blockd::fs::Fs::Btrfs,
-        )?;
-        let file_path = flags
-            .get("patch-file")
-            .map(std::path::PathBuf::from)
-            .unwrap_or_else(|| work.with_extension("patch"));
-        let mut file = std::io::BufWriter::new(std::fs::File::create(&file_path)?);
-        let summary = blockd::patch::create(base.dir(), current.dir(), &candidates, Some(&mut file))?;
-        drop(file);
-        let mut key = None;
-        if let Some(name) = flags.get("patch")
-            && summary.operations > 0
-        {
-            runtime.block_on(volume.blobs().put(name, std::fs::read(&file_path)?))?;
-            key = Some(name.to_string());
-        }
-        if flags.get("patch-file").is_none() {
-            let _ = std::fs::remove_file(&file_path);
-        }
-        Ok(serde_json::json!({ "patch": key, "summary": summary }))
-    })();
-    let unmounted = base.unmount().and(current.unmount());
-    a.close()?;
-    b.close()?;
-    let made = made?;
-    unmounted?;
+    let made = blockd::call::diff(
+        &Arc::new(volume),
+        from,
+        to,
+        mode(flags)?,
+        (
+            Path::new(flags.required("cache")?),
+            Path::new(flags.required("cache-to")?),
+        ),
+        work,
+        flags.get("patch"),
+        flags.get("patch-file").map(Path::new),
+        runtime.handle(),
+    )?;
     println!("{made}");
     Ok(())
+}
+
+/// `blockd daemon`: every head, call and cache on this machine, over HTTP.
+#[cfg(target_os = "linux")]
+fn daemon(flags: &Flags, runtime: &tokio::runtime::Runtime) -> Result<()> {
+    use std::path::Path;
+    let daemon = blockd::daemon::Daemon::new(
+        blockd::daemon::Config {
+            token: std::env::var("BLOCKD_DAEMON_TOKEN").ok().filter(|t| !t.is_empty()),
+            state: flags.get("state").unwrap_or("/var/cache/blockd").into(),
+            run: flags.get("run").unwrap_or("/run/blockd").into(),
+        },
+        runtime.handle().clone(),
+    )?;
+    blockd::daemon::serve(
+        daemon,
+        flags.get("listen"),
+        flags.get("socket").map(Path::new),
+        flags.get("pidfile").map(Path::new),
+    )
 }
 
 #[cfg(not(target_os = "linux"))]

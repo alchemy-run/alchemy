@@ -11,6 +11,8 @@ mod bitmap;
 #[cfg(target_os = "linux")]
 pub mod call;
 pub mod control;
+#[cfg(target_os = "linux")]
+pub mod daemon;
 mod device;
 #[cfg(target_os = "linux")]
 pub mod exec;
@@ -18,6 +20,9 @@ pub mod exec;
 pub mod fs;
 #[cfg(all(target_os = "linux", feature = "fuse"))]
 pub mod fuse;
+#[cfg(target_os = "linux")]
+pub mod head;
+pub mod http;
 #[cfg(target_os = "linux")]
 pub mod mount;
 #[cfg(target_os = "linux")]
@@ -27,6 +32,7 @@ pub mod patch;
 #[cfg(target_os = "linux")]
 pub mod sendstream;
 pub mod store;
+pub mod timings;
 #[cfg(target_os = "linux")]
 pub mod track;
 #[cfg(all(target_os = "linux", feature = "ublk"))]
