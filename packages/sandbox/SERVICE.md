@@ -205,6 +205,9 @@ type.
   all. The VM starts in 72 ms, 25 of it making its tap (a cold boot takes
   265 ms), and four 1-second calls at once take 1.4 s. The snapshot is made once per host,
   when the image warms, and writing the VM's 1 GiB of memory takes 9 s.
+- Through the Worker and the load balancer, four 2-second commands at once
+  take 3.7 s, and a warm call's VM starts in 84 ms. A command reaches the
+  internet, but not the metadata service or its host.
 - A restored VM gets the host's clock, fresh entropy, a MAC of its own and
   its own address on the bridge.
 - A kept VM serves later commands and commits what its processes write.
