@@ -19,7 +19,7 @@ so a deploy can never clobber DNS it doesn't own.
 A zone is one resource declaration:
 
 ```typescript
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 
 const zone = yield* Cloudflare.Zone.Zone("MyZone", {
   name: "example.com",

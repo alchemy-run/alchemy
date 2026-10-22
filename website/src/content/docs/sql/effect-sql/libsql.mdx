@@ -19,9 +19,9 @@ Connect a Turso database with `Turso.Connect` and pass it to `SQL.LibSQL`:
 
 ```typescript
 // src/api.ts
-import * as Cloudflare from "alchemy/Cloudflare";
-import * as SQL from "alchemy/SQL/LibSQL";
-import * as Turso from "alchemy/Turso";
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as SQL from "@alchemy.run/sql/SQLite";
+import * as Turso from "@alchemy.run/turso";
 import * as Effect from "effect/Effect";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import { Db } from "./db.ts";

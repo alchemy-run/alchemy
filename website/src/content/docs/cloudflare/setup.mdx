@@ -5,14 +5,15 @@ description: Install Alchemy, create a Cloudflare account, and connect the two â
 
 import PackageManagers from "../../../components/PackageManagers.astro";
 
-export const pkgs = `alchemy@latest effect @effect/platform-bun @effect/platform-node`;
+export const pkgs = `alchemy@latest @alchemy.run/cloudflare@latest effect @effect/platform-bun @effect/platform-node`;
 
-Everything you need before deploying to Cloudflare: the alchemy
-package, a Cloudflare account, and stored credentials.
+Everything you need before deploying to Cloudflare: the alchemy and
+`@alchemy.run/cloudflare` packages, a Cloudflare account, and stored
+credentials.
 
 ## Install
 
-Install `alchemy@latest` and `effect`
+Install `alchemy@latest`, `@alchemy.run/cloudflare` and `effect`
 in your project:
 
 <PackageManagers add={pkgs} />

@@ -32,7 +32,7 @@ A `Domain.ExternalSystem` lists the calls you make to one outside system, with t
 
 ```typescript
 // packages/domain/src/Settlement/Payments.external.ts
-import * as Domain from "alchemy/Domain";
+import * as Domain from "@alchemy.run/domain";
 import * as Schema from "effect/Schema";
 import { Cents } from "../Money.ts";
 
@@ -71,7 +71,7 @@ A policy uses it like any other service. This one refunds money that settled on 
 
 ```typescript
 // packages/domain/src/Settlement/SettlementRefund.policy.ts
-import * as Domain from "alchemy/Domain";
+import * as Domain from "@alchemy.run/domain";
 import * as Effect from "effect/Effect";
 import { Account } from "../Account/Account.aggregate.ts";
 import { SettlementOnClosedAccount } from "../Account/RecordSettlement.command.ts";
@@ -101,7 +101,7 @@ Money arrives from Stripe as webhook events. Each successful payment becomes a `
 
 ```typescript
 // packages/domain/src/Account/RecordSettlement.command.ts
-import * as Domain from "alchemy/Domain";
+import * as Domain from "@alchemy.run/domain";
 import * as Schema from "effect/Schema";
 import { Cents } from "../Money.ts";
 import { AccountId } from "./Account.id.ts";
@@ -133,7 +133,7 @@ export class RecordSettlement extends Domain.Command("RecordSettlement", {
 import { Account } from "@bank/domain/Account/Account.aggregate";
 import { AccountId } from "@bank/domain/Account/Account.id";
 import { RecordSettlement } from "@bank/domain/Account/RecordSettlement.command";
-import * as Stripe from "alchemy/Stripe";
+import * as Stripe from "@alchemy.run/stripe";
 import * as Effect from "effect/Effect";
 
 /**
@@ -172,7 +172,7 @@ In a story, an external system call waits until you resolve it. `expectCall` che
 ```typescript
 // packages/domain/test/settlements.test.ts
 import { it } from "@effect/vitest";
-import { Story } from "alchemy/Domain/Story";
+import { Story } from "@alchemy.run/domain/Story";
 import { Account } from "../src/Account/Account.aggregate.ts";
 import { AccountClosed } from "../src/Account/CloseAccount.command.ts";
 import { AccountOpened } from "../src/Account/OpenAccount.command.ts";

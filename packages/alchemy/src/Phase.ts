@@ -15,17 +15,16 @@ declare global {
    * property access on `globalThis`.
    */
   var __ALCHEMY_RUNTIME__: boolean | undefined;
-
   /**
-   * Build-time constant naming the cloud whose platform built this bundle,
-   * e.g. `"AWS"` in a Lambda bundle.
+   * Build-time constant naming the cloud identity a bundle's host runs as,
+   * defined by the bundler of a host that has one: `"AWS.IAM.Role"` for a
+   * Lambda, ECS task or EC2 instance, `"GCP.IAM.ServiceAccount"` for Cloud Run,
+   * Cloud Functions or GKE. `undefined` everywhere else.
    *
-   * A provider's bindings compare it against their own cloud to drop the
-   * code a native host never runs (e.g. minting credentials for an external
-   * host). `undefined` when unbundled or when the platform sets none, in
-   * which case bindings decide at runtime.
+   * A provider's bindings compare it against their own identity type to drop
+   * the code that host never runs (signing with a key Alchemy created).
    */
-  var __ALCHEMY_NATIVE_HOST__: string | undefined;
+  var __ALCHEMY_HOST_IDENTITY__: string | undefined;
 }
 
 export type AlchemyPhase = "plan" | "runtime";
