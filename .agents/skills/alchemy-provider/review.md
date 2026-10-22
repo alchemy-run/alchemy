@@ -11,8 +11,10 @@ for every item, the command it ran, the count, and the file:line of each
 hit it did not accept. "Looks fine" is not an answer. Every accepted hit
 needs a one-line reason.
 
-`<P>` is the provider directory (`packages/alchemy/src/<P>`,
-`packages/alchemy/test/<P>`). The greps find candidates; read each hit.
+`<P>` is the provider name. Paths are relative to the repo root:
+`src/<P>` means `packages/<p>/src` (the provider package) and `test/<P>`
+means `packages/integration-tests/test/<P>`. The greps find candidates;
+read each hit.
 
 ## 0. Coverage
 
@@ -38,13 +40,28 @@ reason the platform forces. References:
 
 | Concern | Reference |
 | --- | --- |
-| Small reconcile with labels, `list`, adoption | `src/Hetzner/SshKey.ts` |
-| Multi-aspect reconcile | `src/AWS/DynamoDB/Table.ts`, `src/AWS/Kinesis/Stream.ts` |
-| Read/Write/ReadWrite bindings, shared scaffolding unexported | `src/Cloudflare/R2/` |
-| Bindings tested inside a deployed host | `test/AWS/DynamoDB/Bindings.test.ts` + `handler.ts` |
-| Framework websites | `src/Hetzner/Website/`, `src/Fly/Website/` |
+| Small reconcile with labels, `list`, adoption | `packages/hetzner/src/SshKey.ts` |
+| Multi-aspect reconcile | `packages/aws/src/DynamoDB/Table.ts`, `packages/aws/src/Kinesis/Stream.ts` |
+| Read/Write/ReadWrite bindings, shared scaffolding unexported | `packages/cloudflare/src/R2/` |
+| Bindings that reach any host | `packages/aws/src/AWSBindings.ts`, `packages/gcp/src/GCPBindings.ts`, `packages/aws/src/SQS/BindingHttp.ts` |
+| Package shape | `packages/hetzner/` (`package.json`, `tsconfig.json`, `src/Contributions.ts`) |
+| Bindings tested inside a deployed host | `packages/integration-tests/test/AWS/DynamoDB/Bindings.test.ts` + `handler.ts` |
+| Framework websites | `packages/hetzner/src/Website/`, `packages/fly/src/Website/` |
 
-## 1. Effect code
+## 1. Package
+
+| Check | Command | Expect |
+| --- | --- | --- |
+| Exports generated | `pnpm exports:check` | up to date; no hand-written entries |
+| Provider layers | `pnpm lint:providers` | no `unknown`/`any` requirement on `providers()` |
+| Core untouched | `git diff origin/main --stat -- packages/alchemy/src` | empty; anything core needs is a `Contributions` field |
+| Package boundary | `rg -n "from \"(@alchemy\.run/[\w-]+\|alchemy)/.*internal" src/<P>` and `rg -n "\.\./\.\./[a-z-]+/src" src/<P>` | 0; other packages reached only through their public exports |
+| Contributions | read `src/<P>/Contributions.ts` and `package.json` `alchemy.contributes` | lazy `import()` fields only; listed in `contributes` |
+| Globals | `ls src/<P>/globals.d.ts` and `rg -n 'packages/<p>/src/globals' .gitignore` | both present |
+| Registration | `git grep -il hetzner -- ':!packages/hetzner' ':!submodules' ':!examples'` vs the same for `<p>` | every file that lists Hetzner lists `<P>` where it applies |
+| Version | `grep '"version"' packages/<p>/package.json packages/aws/package.json` | equal (packages release in lockstep) |
+
+## 2. Effect code
 
 | Check | Command | Expect |
 | --- | --- | --- |
@@ -54,7 +71,7 @@ reason the platform forces. References:
 | Environment reads in resource code | `rg -n 'process\.env' src/<P>` | only `AuthProvider.ts` CI credentials |
 | Widening casts | `rg -n 'as unknown as\|as any' src/<P>` | 0, or a comment naming the compiler limit |
 
-## 2. Errors
+## 3. Errors
 
 | Check | Command | Expect |
 | --- | --- | --- |
@@ -64,7 +81,7 @@ reason the platform forces. References:
 | Lists swallowing errors | `rg -n 'orElseSucceed\|catch\w*\(.*\[\]' src/<P>` | 0 on any list/read path |
 | Single-page lists | read every `list` and `findBy*` helper | paginated (`.items(...)` or a page-token loop) |
 
-## 3. Lifecycle
+## 4. Lifecycle
 
 | Check | How | Expect |
 | --- | --- | --- |
@@ -76,10 +93,12 @@ reason the platform forces. References:
 | Copied helpers | `rg -c 'const (isNotFound\|isMissing\|ignoreMissing\|jsonEqual)' src/<P>` | one shared copy each |
 | `output === undefined` branches | `rg -n 'output === undefined' src/<P>` | none inside `reconcile` |
 
-## 4. Bindings and runtimes
+## 5. Bindings and runtimes
 
 | Check | How | Expect |
 | --- | --- | --- |
+| Bind, not host.bind | `rg -n 'host\.bind\(' src/<P>` and `rg -ln 'Bindings\.Bind' src/<P>` | bindings call `<P>Bindings.Bind`; no direct `host.bind` and no allowlist of host types |
+| Foreign hosts | read `<P>Bindings.ts` | a non-native host gets a created identity + key bound into its env; `withCredentials` reads it at runtime |
 | Least privilege | list every role/permission each binding grants (`rg -n 'roles/\|permission' src/<P>`) | scoped to the bound resource; no `admin`/`editor`/`owner` unless the JSDoc says why |
 | Revocation | read the host's grant sync | revokes only grants Alchemy added; pre-existing grants survive |
 | Secrets | read each binding that hands out a credential | `Redacted`, never a plain env var or log line |
@@ -88,7 +107,7 @@ reason the platform forces. References:
 | Event sources | compare with AWS `SQS.QueueEventSource` / Cloudflare cron | contract in the source service, per-host implementation layers |
 | User-facing config | read setup docs and examples | region/account from profile or a `<P>.Region("...")` layer, matching `AWS.Region`; no new env vars |
 
-## 5. Tests
+## 6. Tests
 
 | Check | Command | Expect |
 | --- | --- | --- |
@@ -97,14 +116,14 @@ reason the platform forces. References:
 | Accept-anything assertions | `rg -n 'expect\(\[' test/<P>` | each entitlement probe asserts one specific tag |
 | Always-true assertions | `rg -n 'Array\.isArray\(.*\?\? \[\]\)\|toBeDefined\(\)' test/<P>` | each one asserts a real value |
 | Early exits | `rg -n '^\s+return;$' test/<P>` | 0 |
-| Bindings as the host | every `Bindings.test.ts` | deploys a fixture host and calls the binding over HTTP |
+| Bindings as the host | every `Bindings.test.ts` | deploys a fixture host and calls the binding over HTTP; at least one suite runs the binding on a foreign host (e.g. a Cloudflare Worker) |
 | Redeploy coverage | tests for anything that syncs grants or bindings on the host | deploy twice and assert the grant survives |
 | Leaks | after a full run, list owned resources in the test account | none |
-| Slow test cases | the runner's `✓`/`✗` result lines, which end with each test's duration (`pnpm test test/<P> ... \| rg '[✓✗]'`) | no failure-path case runs longer than a few minutes |
+| Slow test cases | the runner's `✓`/`✗` result lines, which end with each test's duration (`pnpm test:integration test/<P> ... \| rg '[✓✗]'`) | no failure-path case runs longer than a few minutes |
 | Blocked rows | `rg -n 'blocked' processes/<P>/catalog/INDEX.md` | each needs payment, vendor approval, or hardware and names the exact request; quotas and preview features were requested through the API |
 | Suite shape | how the suite was run | one process, whole provider directory; quotas shared with semaphores, never batched runs |
 
-## 6. Docs, naming, and scope
+## 7. Docs, naming, and scope
 
 | Check | Command | Expect |
 | --- | --- | --- |

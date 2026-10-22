@@ -1,6 +1,6 @@
 ---
 name: alchemy-provider
-description: Bring up a new Alchemy cloud provider (packages/alchemy/src/<Provider>) end to end — credentials, a distilled SDK, resources, bindings, live tests, and the patch loop that feeds live-test failures back into distilled — or extend an existing provider with a new service. Use for "add a <X> provider", "create an alchemy provider for <X>", "port <X> to alchemy", "add <service> to the <X> provider", or any work that needs a distilled SDK plus Alchemy resources tested against a live API.
+description: Bring up a new Alchemy cloud provider (its own `@alchemy.run/<provider>` package under packages/<provider>) end to end — credentials, a distilled SDK, resources, bindings, live tests, and the patch loop that feeds live-test failures back into distilled — or extend an existing provider with a new service. Use for "add a <X> provider", "create an alchemy provider for <X>", "port <X> to alchemy", "add <service> to the <X> provider", or any work that needs a distilled SDK plus Alchemy resources tested against a live API.
 ---
 
 # Building an Alchemy provider
@@ -39,6 +39,8 @@ services.
 `AGENTS.md` owns the doctrines this skill relies on; read these sections
 before writing code and follow them as written:
 
+- **Package boundaries** — every provider is its own workspace package;
+  core never imports it, and it reaches core only through `alchemy/*`.
 - **Reconciler doctrine** — the observe → ensure → sync shape of `reconcile`.
 - **Typed Error Doctrine (distilled)** — every error alchemy handles is a
   typed tag in the SDK.
@@ -99,9 +101,14 @@ Coordinator duties during a long run:
   the whole skill and review.md before the next wave. Add an index row for
   every new deliverable, then build those rows and run review.md with a
   fresh reviewer.
-- `tsc` reads distilled's built declarations, while the test runner reads
-  its `src/`. After distilled patches, rebuild that package before the
-  type check, or new error types show up as false type errors.
+- `pnpm exec tsrs -b` reads distilled's built declarations (`lib/`), while
+  the test runner reads its `src/`. After distilled patches or a pin bump,
+  rebuild that package before the type check, or new error types show up
+  as false type errors.
+- After merging `main`, type-check the provider package on its own first
+  (`cd packages/<provider> && pnpm exec tsrs -b`), then the workspace. A
+  newer distilled pin is the usual break: a shape that became open
+  (`[key: string]: unknown`) or a renamed error tag.
 - Commit with the repo's hooks. If signing or a hook hangs, ask the user;
   if they approve skipping it, run `pnpm exec oxfmt` yourself and say the
   commits are unsigned.
@@ -193,38 +200,75 @@ Service namespaces are PascalCase (`AccessContextManager`), and resource
 names are correct English singulars (`Index`, not `Indexe`; `Process`, not
 `Processe`). Audit generated names by eye before the first PR.
 
-## Step 3 — provider scaffolding
+## Step 3 — the provider package
 
-Copy the closest small provider. `packages/alchemy/src/Axiom` (token auth,
-flat resources) and `packages/alchemy/src/Hetzner` (labels, `list`, nuke
-ordering, bindings) are the templates. A provider directory holds:
+A provider is its own workspace package, `@alchemy.run/<provider>` in
+`packages/<provider>`, following **Package boundaries** in `AGENTS.md`.
+Copy the closest small package: `packages/axiom` (token auth, flat
+resources) or `packages/hetzner` (labels, `list`, nuke ordering, bindings,
+a hosted runtime, websites). A package holds:
 
 | File | Purpose |
 | --- | --- |
-| `AuthProvider.ts` | `makeStoredAuthProvider` fields, CI env vars, `<Provider>Auth` layer |
-| `Credentials.ts` | `fromAuthProvider()` → the distilled `Credentials` layer |
-| `Providers.ts` | `ProviderCollection` + `providers()` layer (provider layers, credentials, `FetchHttpClient`, auth, profile and credential stores) |
-| `index.ts` | re-exports every resource, binding, and layer |
-| `Labels.ts` / tags helper | ownership labels, if the API supports labels or tags |
+| `package.json` | name, shared alchemy version, publish metadata, `exports`/`publishConfig` (generated, below), `alchemy.contributes`, dependencies |
+| `tsconfig.json` | composite project; references the distilled package, `distilled/core`, and `../alchemy` |
+| `scripts/build.ts` | copied verbatim from a sibling package |
+| `src/Contributions.ts` | `Contributions.make({ name, auth, … })` — what the CLI, the Alchemist API, and the test harness load without the user's stack |
+| `src/AuthProvider.ts` | `makeStoredAuthProvider` fields, CI env vars, `<Provider>Auth` layer |
+| `src/Credentials.ts` | `fromAuthProvider()` → the distilled `Credentials` layer |
+| `src/Providers.ts` | `ProviderCollection` + `providers()` layer (provider layers, credentials, `FetchHttpClient`, auth, profile and credential stores) |
+| `src/<Provider>Bindings.ts` | how bindings reach the cloud from any host (step 5) |
+| `src/globals.d.ts` | `import type {} from "alchemy/Phase";` so `globalThis.__ALCHEMY_RUNTIME__` type-checks |
+| `src/index.ts` | re-exports every resource, binding, and layer; `export * as <Service> from "./<Service>/index.ts"` |
+| `src/Labels.ts` / tags helper | ownership labels, if the API supports labels or tags |
+| `src/Bootstrap.ts` | process entry for a hosted runtime, if the cloud runs code |
 
-Register the provider everywhere the repo enumerates providers. Find the
-full list by grepping for an existing provider (`git grep -n Axiom` and
-`git grep -n Hetzner`, excluding its own directories); at the time of
+`Contributions.ts` is imported on every CLI start, so it holds metadata and
+`Contributions.lazy(() => import(...), pick)` fields only. Contribute `auth`
+always; add `stateStores`, `cli`, `testServices`, and `devEnv` when the
+provider has them (`packages/aws/src/Contributions.ts` uses all of them).
+Declare it in `package.json`:
+
+```json
+"alchemy": { "contributes": ["@alchemy.run/<provider>/Contributions"] }
+```
+
+Never hand-edit `exports`. Run `pnpm exports:sync` after adding or
+removing a service directory; CI runs `pnpm exports:check`. Modules other
+packages must not import are named `internal.ts` or live under
+`internal/`. Dependencies: `@distilled.cloud/<pkg>` and
+`@distilled.cloud/core` are `dependencies`; `alchemy` and `effect` are
+peer + dev dependencies; another `@alchemy.run/*` package is a dependency
+only when every user needs it, otherwise an optional peer.
+
+Register the package everywhere the repo enumerates providers. Find the
+full list by grepping for an existing package (`git grep -il hetzner --
+':!packages/hetzner' ':!submodules' ':!examples'`); at the time of
 writing it is:
 
-- `packages/alchemy/package.json` — the `./<Provider>` export (both the
-  `exports` and `publishConfig` blocks) and the `@distilled.cloud/<pkg>`
-  dependency;
-- `tsconfig.json` and `packages/alchemy/tsconfig.json` — project references
-  to the distilled package;
-- `.github/workflows/pkg.yml` — the distilled package group;
-- `packages/alchemy/src/Alchemist/Session.ts` — `builtinAuth`;
-- `packages/alchemy/src/Auth/Profile.ts` — `LEGACY_CREDENTIAL_KEYS` only if
-  a legacy credential layout exists;
+- `package.json` — the `build:pkg` filter list and a root
+  `@alchemy.run/<provider>` devDependency (the CLI finds `Contributions`
+  through the project's dependencies);
+- `tsconfig.json` — project references to the package and its distilled
+  package;
+- `packages/integration-tests/package.json` and `tsconfig.json` — the
+  package, its distilled package, and the project reference;
+- `.github/workflows/pkg.yml` — the `@alchemy.run[Collapsed]` group;
+- `.gitignore` — `!packages/<provider>/src/globals.d.ts`;
 - `stacks/nuke.ts` — `<Provider>.providers()`;
 - `scripts/with-fake-profiles.sh` — fake CI credentials;
-- `website/astro.config.ts` and `website/src/content/docs/<provider>/`
-  (`index.mdx`, `setup.mdx`) — sidebar, overview, and setup page.
+- `scripts/generate-api-reference.ts` and `scripts/fix-api-jsdocs.ts` —
+  the package's `src` root and provider prefix;
+- `packages/integration-tests/test/Bundle/ProviderBootstraps.test.ts` —
+  every `Bootstrap` the package ships;
+- `website/astro.config.ts`, `website/src/components/ProviderDirectory.astro`,
+  `website/scripts/generate-llms-txt.ts`, and
+  `website/src/content/docs/<provider>/` (`index.mdx`, `setup.mdx`) —
+  sidebar, directory card, llms.txt, overview, and setup page.
+
+Core (`packages/alchemy`) never changes to add a provider. If a provider
+seems to need a core change (a new auth registry entry, a CLI command, a
+state store), it is a `Contributions` field instead.
 
 Configuration such as region, project, or account comes from the
 credential/profile or from a layer the user provides (the AWS
@@ -236,11 +280,13 @@ If `providers()` wires hundreds of resources, memoize it
 (`let cached; export const providers = () => (cached ??= make())`) and keep
 nested `Layer.mergeAll` groups of about 90; an unmemoized collection
 rebuilds every layer per call and runs the test process out of memory.
+`pnpm lint:providers` fails when a `providers()` layer leaks an `unknown`
+requirement.
 
 ## Step 4 — resources
 
 Implement each resource per **Reconciler doctrine**, co-locating the
-contract and provider in `src/<Provider>/<Service>/<Resource>.ts`. These
+contract and provider in `packages/<provider>/src/<Service>/<Resource>.ts`. These
 are the mistakes that most often slip through review (each has a check in
 [review.md](review.md)):
 
@@ -279,22 +325,82 @@ are the mistakes that most often slip through review (each has a check in
 
 ## Step 5 — bindings and runtimes
 
-Follow the binding sections of `AGENTS.md`. Grants are least privilege and
-scoped to the bound resource (resource IAM policy, or a condition when the
-API only grants at project level); document any unavoidable broader grant
-in the binding's JSDoc. A provider that hosts code (functions, containers)
-needs an Effect-native runtime and event sources that mirror the AWS and
-Cloudflare shapes.
+Follow the binding sections of `AGENTS.md`. Every capability is a
+`Binding.Service` declared in the interface + factory form:
+
+```ts
+export interface SendMessage extends Binding.Service<
+  SendMessage,
+  "AWS.SQS.SendMessage",
+  (queue: Queue) => Effect.Effect<(request: SendMessageRequest) => Effect.Effect<…>>
+> {}
+export const SendMessage = Binding.Service<SendMessage>("AWS.SQS.SendMessage");
+```
+
+Bindings reach the cloud from **any** host, not only the provider's own
+compute: a Lambda can bind a GCP topic, a Cloudflare Worker can bind an
+SQS queue. The package's `src/<Provider>Bindings.ts` owns that, modelled
+on `packages/aws/src/AWSBindings.ts` and `packages/gcp/src/GCPBindings.ts`
+(read both module JSDocs first). It exports:
+
+- `HostBinding` — what a binding attaches: the grants (IAM statements,
+  role bindings, role assignments) plus `env`.
+- `Bind` — an Effect yielding a tagged-template `bind`. On a host that runs
+  as the cloud's own identity (Lambda role, GCP service account, Azure
+  managed identity) it puts the grants on that identity. On any other host
+  it creates an identity and key for the host, grants to that identity, and
+  binds the key into the host's env through `CurrentRuntimeContext`. With
+  no host (script, deploy-time action) it does nothing.
+- `withCredentials(operation)` — resolves a distilled operation once when
+  the binding's layer is built: the host's ambient identity, the created
+  key read from the runtime env, or the deployer's credentials.
+- `<identity>HostBundle` — a rolldown option that defines
+  `globalThis.__ALCHEMY_HOST_IDENTITY__` on the provider's own hosts, so
+  their bundles drop the created-key path.
+
+A binding's layer then reads:
+
+```ts
+Effect.gen(function* () {
+  const publish = yield* GCPBindings.withCredentials(pubsub.publishProjectsTopics);
+  const bind = yield* GCPBindings.Bind;
+  return Effect.fn(function* (topic: Topic) {
+    if (!globalThis.__ALCHEMY_RUNTIME__) {
+      yield* bind`GCP.PubSub.WriteTopic(${topic})`({ iam: [/* scoped to topic */] });
+    }
+    return (message) => publish({ topic: …, body: … });
+  });
+});
+```
+
+Never call `host.bind(...)` from a binding, and never limit a binding to
+an allowlist of the provider's own host types; both predate `Bind` and
+lose foreign hosts. Bindings that share scaffolding (same grant shape, same
+injected identifier) build it once in an unexported `<Service>/BindingHttp.ts`
+and keep each `<Op>Http.ts` a one-line `Layer.effect(Cap, make…({ … }))`
+(`packages/aws/src/SQS/BindingHttp.ts`).
+
+Grants are least privilege and scoped to the bound resource (resource IAM
+policy, or a condition when the API only grants at project level);
+document any unavoidable broader grant in the binding's JSDoc.
+
+A provider that hosts code (functions, containers) also needs an
+Effect-native runtime: the host resource accepts the `HostBinding`
+contract, a `Bootstrap` module is the generated entry's process bootstrap
+(`packages/hetzner/src/Bootstrap.ts`), and event sources mirror the AWS
+`SQS.QueueEventSource` and Cloudflare cron shapes.
 
 ## Step 6 — live tests
 
-Write tests per the test sections of `AGENTS.md` (`test.provider`,
+Tests live in `packages/integration-tests/test/<Provider>/` (paths below
+are relative to `packages/integration-tests`). Write them per the test
+sections of `AGENTS.md` (`test.provider`,
 `stack.destroy()` at start and end, deterministic names, out-of-band
 verification through distilled, typed wait-until-gone). Run with the
 profile from step 0:
 
 ```sh
-timeout 240 pnpm test test/<Provider>/<Service>/<Resource>.test.ts --profile testing --retry 0
+timeout 240 pnpm test:integration test/<Provider>/<Service>/<Resource>.test.ts --profile testing --retry 0
 ```
 
 What a test must prove:
@@ -310,7 +416,9 @@ What a test must prove:
   returns.
 - **Bindings run inside a deployed host** (a fixture Worker, Function, or
   container calling the binding over HTTP) so the IAM grant or native
-  binding is exercised with the host's identity, not the deployer's.
+  binding is exercised with the host's identity, not the deployer's. Test
+  both paths of `Bind`: the provider's own host, and one foreign host
+  (a Cloudflare Worker is the cheapest) using the created key.
 - **Assertions can fail.** No always-true checks, no lists of acceptable
   tags, no early `return` that skips the assertions.
 
@@ -323,7 +431,7 @@ costs. Run them only after the user says so.
 
 Scarce account quotas (networks, clusters, IP addresses) are shared with a
 semaphore in a test helper, or moved to less-used regions. The suite still
-runs in one process: `pnpm test test/<Provider> --profile testing`.
+runs in one process: `pnpm test:integration test/<Provider> --profile testing`.
 
 Unblock account prerequisites in the dedicated test account yourself as
 soon as a test hits them. Request quota increases and register preview
@@ -331,7 +439,7 @@ features through the provider's API (anything that raises spend needs the
 user's go-ahead from step 0 or step 6's cost rule),
 and put any setup a fresh account would need again into the test helper.
 Do one-time console work (free trials, free organizations, sign-ups) in the
-browser with the `puppeteer` skill, and ask the user only to sign in.
+browser with whatever browser-automation skill the harness has, and ask the user only to sign in.
 A row stays `blocked` only when it needs payment, a vendor's approval,
 hardware, or is skipped under the long-tail rule below; report each one
 with the exact request that would unblock it.
@@ -363,10 +471,10 @@ const site = yield* Hetzner.Website.Astro("Site", { rootDir: "./web" });
 ```
 
 Ship the same framework set as the existing providers (`ls
-packages/alchemy/src/Hetzner/Website` is the current list: Astro, Foldkit,
+packages/hetzner/src/Website` is the current list: Astro, Foldkit,
 Nextjs, Nuxt, Octane, ReactRouter, SolidStart, StaticSite, SvelteKit,
 TanStackStart, Vinext, Vite, Vocs, Waku). Copy the layout of
-`src/Hetzner/Website/` or `src/Fly/Website/`:
+`packages/hetzner/src/Website/` or `packages/fly/src/Website/`:
 
 - `FrameworkSite.ts` owns `makeFrameworkSite`, which builds through the
   framework integration (`@alchemy.run/frontend-frameworks/<framework>`)
@@ -380,12 +488,13 @@ TanStackStart, Vinext, Vite, Vocs, Waku). Copy the layout of
 
 The deploy target decides the work. Providers that run containers or VMs
 use the Node target (`@alchemy.run/frontend-frameworks/<framework>/node`)
-through the shared `src/Website/Server.ts`. A provider with its own
+through core's shared `alchemy/Website/Server`. A provider with its own
 serverless runtime needs a new target per framework in
 `packages/frontend-frameworks/src/<framework>/` next to `aws.ts`,
 `cloudflare.ts`, and `neon.ts`.
 
-Each framework gets a live `test/<Provider>/Website/<Framework>.test.ts`, a
+Each framework gets a live
+`packages/integration-tests/test/<Provider>/Website/<Framework>.test.ts`, a
 `<Framework>.local.test.ts` for `alchemy dev`, and a shared
 `PropSurface.test.ts`; an `examples/<provider>-website-<framework>`
 example listed in `scripts/test-examples.ts`; and a page under
@@ -428,7 +537,8 @@ counts, so they can see what was checked without re-reviewing by hand.
   `pnpm docs:gen`.
 - Examples under `examples/<provider>-*` that deploy and pass their own
   test, including at least one host with bindings.
-- Type-check with `pnpm exec tsc -b` and format with `pnpm exec oxfmt`.
+- Type-check with `pnpm exec tsrs -b`, run `pnpm exports:check` and
+  `pnpm lint:providers`, and format with `pnpm exec oxfmt`.
 - Open the alchemy PR per **Pull Request Conventions**, linking the
   distilled PRs it depends on.
 
@@ -438,7 +548,7 @@ counts and that the provider is incomplete.
 A provider is done when every SDK service is cataloged, every in-scope
 resource has its own passing live test (or is `blocked: cost` or
 `blocked: skipped` and the user has the list),
-bindings follow the AWS/Cloudflare patterns and are least privilege, the
+bindings go through `<Provider>Bindings.Bind`, reach foreign hosts, and are least privilege, the
 framework websites deploy, examples deploy, docs are generated, the review
 gate is clean, the test account is clean after a full run, and every SDK
 mismatch found along the way is a merged distilled patch.
