@@ -109,6 +109,15 @@ export interface DevContext extends SourceContext {
     readonly hyperdrives: PluginWorker["hyperdrives"];
     readonly queueConsumers: Effect.Effect<Exclude<PluginWorker["queueConsumers"], undefined>>;
     readonly assets: PluginWorker["assets"] | undefined;
+    /**
+     * The Worker's other runtime settings (crons, Workflows, tail consumers,
+     * Cache API, `request.cf`, zone, Access), spread whole into the runtime
+     * Worker.
+     */
+    readonly options: Pick<
+      PluginWorker,
+      "workflows" | "crons" | "tails" | "streamingTails" | "cache" | "cf" | "zone" | "access"
+    >;
   };
   readonly runtimeContext: CloudflareVitePluginOptions["context"];
 }
@@ -920,6 +929,7 @@ const makeAstroSourceProvider = (options: AstroSourceOptions): SourceProvider =>
           compatibilityDate: ctx.compatibility.date,
           compatibilityFlags: ctx.compatibility.flags,
           worker: {
+            ...ctx.worker.options,
             name: ctx.workerName,
             bindings: ctx.worker.bindings,
             durableObjectNamespaces: ctx.worker.durableObjectNamespaces,

@@ -10,6 +10,7 @@ import type {
   DurableObjectNamespace as RuntimeDurableObject,
   QueueConsumer as RuntimeQueueConsumer,
   RuntimeServices,
+  RuntimeWorker,
 } from "@alchemy.run/cloudflare-runtime/core";
 /**
  * `@alchemy.run/frontend-frameworks/vinext/source` — alchemy Worker
@@ -121,6 +122,15 @@ export interface DevContext extends SourceContext {
     readonly hyperdrives: Record<string, Required<HyperdriveOrigin>>;
     readonly queueConsumers: Effect.Effect<Array<RuntimeQueueConsumer>>;
     readonly assets: RuntimeAssets | undefined;
+    /**
+     * The Worker's other runtime settings (crons, Workflows, tail consumers,
+     * Cache API, `request.cf`, zone, Access), spread whole into the runtime
+     * Worker.
+     */
+    readonly options: Pick<
+      RuntimeWorker,
+      "workflows" | "crons" | "tails" | "streamingTails" | "cache" | "cf" | "zone" | "access"
+    >;
   };
   readonly runtimeContext: Context.Context<RuntimeServices>;
 }
@@ -879,6 +889,7 @@ export const makeVinextSourceProvider = (options: VinextSourceOptions): SourcePr
         compatibilityFlags: ctx.compatibility.flags,
         viteEnvironments: options.viteEnvironments,
         worker: {
+          ...ctx.worker.options,
           name: ctx.workerName,
           bindings: ctx.worker.bindings,
           durableObjectNamespaces: ctx.worker.durableObjectNamespaces,

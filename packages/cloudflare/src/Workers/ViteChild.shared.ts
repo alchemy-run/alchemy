@@ -51,6 +51,14 @@ export interface ViteChildConfig {
     hyperdrives: Record<string, Required<HyperdriveOrigin>>;
     queueConsumers: QueueConsumer[];
     crons: RuntimeWorker["crons"];
+    /** Tail consumers by script name, resolved through the dev registry. */
+    tails: RuntimeWorker["tails"];
+    /** Streaming tail consumers by script name. */
+    streamingTails: RuntimeWorker["streamingTails"];
+    /** Cache API opt-out (`dev: { cache: false }`). */
+    cache: RuntimeWorker["cache"];
+    /** `request.cf` override (`dev: { cf: {...} }`). */
+    cf: RuntimeWorker["cf"];
     assets: RuntimeWorker["assets"];
   };
 }
