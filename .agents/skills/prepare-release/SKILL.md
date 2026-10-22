@@ -38,7 +38,7 @@ node -v                                      # alchemy CLI needs >= 24.11.1 and 
 set -a; source .env; set +a                  # Cloudflare creds (pnpm download:env if missing)
 aws sso login                                # AWS live + nuke ride the SSO session
 mkdir -p /tmp/release
-pnpm exec tsc -b                             # REQUIRED before live runs: emits distilled lib/
+pnpm exec tsrs -b                             # REQUIRED before live runs: emits distilled lib/
 ```
 
 Runtime bundles (Lambda, Fly, Hetzner, Neon Functions) resolve distilled
@@ -210,7 +210,7 @@ lifecycle op, mock a response, or skip a test without a typed reason.
 ## 7. Gate
 
 ```sh
-pnpm exec tsc -b                             # coordinator only, once per round
+pnpm exec tsrs -b                             # coordinator only, once per round
 pnpm docs:check-jsdoc                        # if any props/attrs changed
 ```
 
