@@ -91,6 +91,25 @@ interface ResourceTracker {
   instanceId: string;
 }
 
+/**
+ * A live `fqn -> output` view over `tracker` for `Output.evaluate`. Lookups
+ * read through to the tracker, so callers never copy the whole map: rebuilding
+ * it per resource made apply quadratic in resource count (#2400).
+ */
+const trackedOutputs = (tracker: Record<string, ResourceTracker>): Record<string, any> =>
+  new Proxy(
+    {},
+    {
+      get: (_, fqn) => (typeof fqn === "string" ? tracker[fqn]?.output : undefined),
+      has: (_, fqn) => typeof fqn === "string" && Object.hasOwn(tracker, fqn),
+      ownKeys: () => Object.keys(tracker),
+      getOwnPropertyDescriptor: (_, fqn) =>
+        typeof fqn === "string" && Object.hasOwn(tracker, fqn)
+          ? { value: tracker[fqn]!.output, writable: false, enumerable: true, configurable: true }
+          : undefined,
+    },
+  );
+
 const provideLifecycleScope =
   (resource: ResourceContext["Service"]) =>
   <A, E, R>(effect: Effect.Effect<A, E, R>) =>
@@ -284,10 +303,7 @@ export const apply = <P extends Plan>(
         return undefined;
       }
 
-      const outputs = Object.fromEntries(
-        Object.entries(tracker).map(([fqn, t]) => [fqn, t.output]),
-      );
-      const resolved = yield* Output.evaluate(plan.output, outputs);
+      const resolved = yield* Output.evaluate(plan.output, trackedOutputs(tracker));
 
       // Persist the stack's evaluated outputs so cross-stack references
       // (`yield* OtherStack` / `OtherStack.stage.<name>` / `Output.stackRef`)
@@ -363,8 +379,8 @@ const executePlan = Effect.fn(function* (
     ),
   ) as Record<string, Deferred.Deferred<void>>;
 
-  const getOutputs = (): Record<string, any> =>
-    Object.fromEntries(Object.entries(tracker).map(([fqn, t]) => [fqn, t.output]));
+  const outputs = trackedOutputs(tracker);
+  const getOutputs = (): Record<string, any> => outputs;
 
   const waitForDeps = (downstreamFqn: string, fqns: string[]) =>
     Effect.all(
@@ -1516,6 +1532,7 @@ const converge = Effect.fn(function* (
   stackName: string,
   stage: string,
 ) {
+  const outputs = trackedOutputs(tracker);
   for (;;) {
     let anyUpdated = false;
 
@@ -1523,7 +1540,6 @@ const converge = Effect.fn(function* (
       if (node.action === "noop") continue;
       if (!tracker[fqn]) continue;
 
-      const outputs = Object.fromEntries(Object.entries(tracker).map(([k, t]) => [k, t.output]));
 
       const newProps = (yield* Output.evaluate(node.props, outputs)) as Record<string, any>;
 
@@ -1616,7 +1632,6 @@ const converge = Effect.fn(function* (
       if (node.action !== "run") continue;
       if (!tracker[fqn]) continue;
 
-      const outputs = Object.fromEntries(Object.entries(tracker).map(([k, t]) => [k, t.output]));
       const newInput = (yield* Output.evaluate(node.input, outputs)) as any;
       const newHash = yield* hashInput(newInput);
       const oldInput = tracker[fqn].props?.__input;
