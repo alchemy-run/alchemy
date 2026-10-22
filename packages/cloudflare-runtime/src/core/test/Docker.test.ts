@@ -244,8 +244,7 @@ layer(Layer.provide(DockerLive, Layer.merge(NodeServices.layer, SpawnerStub)))((
  * inspect-before-pull check on the egress interceptor image can be
  * exercised every way (absent, present, present for another architecture).
  * Either command exits 1 when its stdout is empty; `version` is empty unless
- * given. `docker image rm` exits 1 with `removeStderr` when that is given.
- * All other commands (`docker pull`, …) still succeed with empty output,
+ * given. All other commands (`docker pull`, …) still succeed with empty output,
  * matching `SpawnerStub` above.
  *
  * `getWorkerdDockerConfiguration`'s pull/skip-pull decision runs on a
@@ -259,7 +258,6 @@ const makeInspectStub = (options: {
   readonly inspect: string;
   readonly inspectExitCode?: Effect.Effect<ChildProcessSpawner.ExitCode>;
   readonly version?: string;
-  readonly removeStderr?: string;
 }) => {
   const spawned: Array<ReadonlyArray<string>> = [];
   const layer = Layer.succeed(
@@ -273,11 +271,6 @@ const makeInspectStub = (options: {
         command.args[0] === "image" &&
         command.args[1] === "inspect";
       const isVersion = command._tag === "StandardCommand" && command.args[0] === "version";
-      const removeFails =
-        command._tag === "StandardCommand" &&
-        command.args[0] === "image" &&
-        command.args[1] === "rm" &&
-        options.removeStderr !== undefined;
       const stdout = isInspect ? options.inspect : isVersion ? (options.version ?? "") : "";
       return Effect.succeed(
         ChildProcessSpawner.makeHandle({
@@ -286,17 +279,13 @@ const makeInspectStub = (options: {
             isInspect && options.inspectExitCode
               ? options.inspectExitCode
               : Effect.succeed(
-                  ChildProcessSpawner.ExitCode(
-                    removeFails || ((isInspect || isVersion) && stdout === "") ? 1 : 0,
-                  ),
+                  ChildProcessSpawner.ExitCode((isInspect || isVersion) && stdout === "" ? 1 : 0),
                 ),
           isRunning: Effect.succeed(false),
           kill: () => Effect.void,
           stdin: Sink.drain,
           stdout: stdout ? Stream.make(new TextEncoder().encode(stdout)) : Stream.empty,
-          stderr: removeFails
-            ? Stream.make(new TextEncoder().encode(options.removeStderr))
-            : Stream.empty,
+          stderr: Stream.empty,
           all: Stream.empty,
           getInputFd: () => Sink.drain,
           getOutputFd: () => Stream.empty,
@@ -382,32 +371,6 @@ layer(Layer.provide(DockerLive, Layer.merge(NodeServices.layer, foreign.layer)))
         ["docker", "image", "rm", "sha256:deadbeef"],
         ["docker", "pull", PINNED_WITHOUT_TAG],
       ]);
-    }),
-  );
-});
-
-// A stopped container can still hold the image; the user must remove it.
-const stuck = makeInspectStub({
-  inspect: "sha256:deadbeef amd64",
-  version: "arm64",
-  removeStderr: "conflict: unable to delete deadbeef - image is being used by stopped container",
-});
-layer(Layer.provide(DockerLive, Layer.merge(NodeServices.layer, stuck.layer)))((it) => {
-  it.effect("fails with a hint when the foreign interceptor image cannot be removed", () =>
-    Effect.gen(function* () {
-      const docker = yield* Docker;
-      const result = yield* Effect.result(docker.getWorkerdDockerConfiguration);
-      expect(result._tag).toBe("Failure");
-      if (result._tag !== "Failure") return;
-      const error = result.failure as {
-        subtag: string;
-        hint?: string;
-        detail?: { stderr: string };
-      };
-      expect(error.subtag).toBe("DockerRemoveImageFailed");
-      expect(error.hint).toContain("docker image rm sha256:deadbeef");
-      expect(error.detail?.stderr).toContain("image is being used by stopped container");
-      expect(imageChanges(stuck.spawned)).toEqual([["docker", "image", "rm", "sha256:deadbeef"]]);
     }),
   );
 });

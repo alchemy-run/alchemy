@@ -456,69 +456,33 @@ export const DockerLive = Layer.effect(
         ),
       );
 
-    // The daemon's Go architecture name (`arm64`, `amd64`, `arm`, …) uses the
-    // same vocabulary as an image's `.Architecture`, unlike `docker info`'s
-    // kernel names (`aarch64`, `armv7l`). An empty result means "unknown":
-    // the caller then keeps the cached image.
-    const hostArchitecture = () =>
-      run(["version", "--format", "{{.Server.Arch}}"]).pipe(
-        Effect.map((result) => (result.exitCode === 0 ? result.stdout.trim() : "")),
-        Effect.orElseSucceed(() => ""),
-      );
-
-    const removeImage = (id: string, imageUri: string) =>
-      run(["image", "rm", id]).pipe(
-        Effect.mapError((cause) =>
-          SystemError.make({
-            subtag: "DockerRemoveImageFailed",
-            message: `Failed to remove image ${id} ("${imageUri}").`,
-            hint: `Remove it with \`docker image rm ${id}\` and retry.`,
-            detail: { bin, imageUri, id },
-            cause,
-          }),
-        ),
-        Effect.flatMap((result) =>
-          ensureExitZero(result, ({ exitCode, stdout, stderr }) =>
-            SystemError.make({
-              subtag: "DockerRemoveImageFailed",
-              message: `Failed to remove image ${id} ("${imageUri}").`,
-              hint: `Remove it with \`docker image rm ${id}\` and retry.`,
-              detail: { bin, imageUri, id, exitCode, stdout, stderr },
-            }),
-          ),
-        ),
-      );
-
     /**
-     * Older releases pulled the egress interceptor as `linux/amd64`. On an
-     * arm64 host that cached copy passes `pullIfMissing`, so the sidecar
-     * runs under emulation and every container start fails with
-     * `setsockoptint: protocol not available`. A plain `docker pull` of the
-     * same digest does not replace it ("cannot overwrite digest"), so a
-     * cached default image built for another architecture is removed and
-     * pulled again. An overridden image is never removed: it can be a
-     * local-only tag that no registry can restore. When either architecture
-     * cannot be read, the cached image is kept.
+     * Releases before #1459 cached the egress interceptor as `linux/amd64`,
+     * which cannot start under emulation on arm64 hosts. `docker pull` will not
+     * overwrite the same digest, so a cached default image built for another
+     * architecture is removed before pulling. An overridden image is never
+     * removed: it can be a local-only tag no registry can restore.
      */
     const ensureEgressInterceptorImage = (imageUri: string) =>
       imageUri !== DEFAULT_CONTAINER_EGRESS_INTERCEPTOR_IMAGE
         ? pullIfMissing(imageUri)
         : Effect.gen(function* () {
-            const [id, imageArchitecture] = yield* inspect(
-              imageUri,
-              "{{.Id}} {{.Architecture}}",
-            ).pipe(
-              Effect.map((stdout) => stdout.trim().split(" ")),
-              Effect.orElseSucceed(() => []),
-            );
-            if (!id) return yield* Effect.asVoid(pull({ imageUri }));
-            if (!imageArchitecture) return;
-            const host = yield* hostArchitecture();
-            if (!host || host === imageArchitecture) return;
-            yield* Effect.logWarning(
-              `The cached egress interceptor image ${id} is built for ${imageArchitecture}, but the Docker host is ${host}; the sidecar cannot start under emulation. Removing it and pulling "${imageUri}" for ${host}.`,
-            );
-            yield* removeImage(id, imageUri);
+            const [id, arch] = (yield* inspect(imageUri, "{{.Id}} {{.Architecture}}").pipe(
+              Effect.orElseSucceed(() => ""),
+            ))
+              .trim()
+              .split(" ");
+            if (id) {
+              const host = yield* run(["version", "--format", "{{.Server.Arch}}"]).pipe(
+                Effect.map((result) => result.stdout.trim()),
+                Effect.orElseSucceed(() => ""),
+              );
+              if (!host || !arch || host === arch) return;
+              yield* Effect.logWarning(
+                `Replacing the cached egress interceptor image ${id} (${arch}) with the ${host} build. If containers still fail to start, run \`docker image rm ${id}\`.`,
+              );
+              yield* Effect.ignore(run(["image", "rm", id]));
+            }
             yield* pull({ imageUri });
           });
 
