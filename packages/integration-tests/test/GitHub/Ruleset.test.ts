@@ -5,6 +5,7 @@ import { expect } from "alchemy-test";
 import * as Output from "alchemy/Output";
 import * as Provider from "alchemy/Provider";
 import { destroy } from "alchemy/RemovalPolicy";
+import { State } from "alchemy/State";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 
@@ -20,6 +21,7 @@ const fixtureNames = [
   "alchemy-pr-1570-ruleset-list",
   "alchemy-pr-1570-ruleset-replace-a",
   "alchemy-pr-1570-ruleset-replace-b",
+  "alchemy-pr-2394-ruleset-adopt",
 ];
 
 // Retain public fixtures: the gh token lacks delete_repo, and private rulesets are plan-gated.
@@ -58,6 +60,47 @@ const getRulesets = (repo: string) =>
       catch: (error) => error as Error,
     });
   });
+
+test.provider(
+  "adopt an existing ruleset by name when there is no state",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const repo = fixtureNames[4]!;
+      const deploy = () =>
+        stack.deploy(
+          Effect.gen(function* () {
+            const fixture = yield* repository(repo);
+            return yield* GitHub.Ruleset("Adoptable", {
+              owner,
+              repository: repoName(fixture),
+              name: "adoptable protection",
+              conditions: { include: ["refs/heads/main"] },
+              rules: { deletion: true },
+            }).pipe(destroy());
+          }),
+        );
+
+      const created = yield* deploy();
+
+      // Forget the ruleset; it stays on GitHub, as a hand-made one would.
+      yield* Effect.gen(function* () {
+        const state = yield* yield* State;
+        yield* state.delete({ stack: stack.name, stage: stack.stage, fqn: "Adoptable" });
+      }).pipe(Effect.provide(stack.state));
+
+      const adopted = yield* deploy();
+      expect(adopted.rulesetId).toBe(created.rulesetId);
+      expect(
+        (yield* getRulesets(repo)).filter((ruleset) => ruleset.name === "adoptable protection"),
+      ).toHaveLength(1);
+
+      yield* stack.deploy(repository(repo));
+      expect(yield* getRuleset(repo, created.rulesetId)).toBeUndefined();
+      yield* stack.destroy();
+    }),
+  { tags: ["provider:github", "provider:github:repository", "provider:github:ruleset", "live"] },
+);
 
 test.provider(
   "create, update, clear, and delete a ruleset",

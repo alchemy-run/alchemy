@@ -335,7 +335,7 @@ export const RulesetProvider = () =>
     reconcile: Effect.fn(function* ({ news, output }) {
       const octokit = yield* octokitFor(news.baseUrl);
 
-      let observed = output === undefined ? undefined : yield* getRuleset(news, output.rulesetId);
+      let observed = yield* findRuleset(news, output?.rulesetId);
 
       const rules: NonNullable<
         NonNullable<Parameters<typeof octokit.rest.repos.createRepoRuleset>[0]>["rules"]
@@ -459,8 +459,7 @@ export const RulesetProvider = () =>
     }),
 
     read: Effect.fn(function* ({ olds, output }) {
-      if (output === undefined) return undefined;
-      const observed = yield* getRuleset(olds, output.rulesetId);
+      const observed = yield* findRuleset(olds, output?.rulesetId);
       return observed === undefined ? undefined : attrsOf(observed);
     }),
 
@@ -521,6 +520,41 @@ export const RulesetProvider = () =>
       );
     }),
   });
+
+/**
+ * Find the ruleset by its known id, or else by `name` and `target`, so a
+ * ruleset that exists without state (made by hand, or state lost) is adopted
+ * instead of duplicated.
+ */
+const findRuleset = Effect.fn(function* (
+  props: Pick<RulesetProps, "owner" | "repository" | "baseUrl" | "name" | "target">,
+  rulesetId?: number,
+) {
+  if (rulesetId !== undefined) {
+    const existing = yield* getRuleset(props, rulesetId);
+    if (existing !== undefined) return existing;
+  }
+  const octokit = yield* octokitFor(props.baseUrl);
+  const rulesets = yield* Effect.tryPromise({
+    try: () =>
+      octokit.paginate(octokit.rest.repos.getRepoRulesets, {
+        owner: props.owner,
+        repo: props.repository,
+        includes_parents: false,
+        per_page: 100,
+      }),
+    catch: (e) => e as Error & { status?: number },
+  }).pipe(
+    Effect.catchIf(
+      (error) => error.status === 404,
+      () => Effect.succeed([]),
+    ),
+  );
+  const match = rulesets.find(
+    (ruleset) => ruleset.name === props.name && ruleset.target === (props.target ?? "branch"),
+  );
+  return match === undefined ? undefined : yield* getRuleset(props, match.id);
+});
 
 const getRuleset = Effect.fn(function* (
   props: Pick<RulesetProps, "owner" | "repository" | "baseUrl">,
