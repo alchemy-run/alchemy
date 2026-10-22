@@ -1,4 +1,4 @@
-import { DurableObject } from "cloudflare:workers";
+import { DurableObject, waitUntil } from "cloudflare:workers";
 import { ModuleRunner, ssrDynamicImportKey, ssrModuleExportsKey } from "vite/module-runner";
 import {
   ENVIRONMENT_NAME_HEADER,
@@ -65,12 +65,24 @@ export class CallbackRegistry {
 
 const callbacks = new CallbackRegistry();
 
-/** Runs `callback` inside the module runner Durable Object's `IoContext`. */
-const runInModuleRunner = <T>(env: Env, callback: () => Promise<T>): Promise<T> =>
-  callbacks.run(
+/**
+ * Runs `callback` inside the module runner Durable Object's `IoContext`.
+ *
+ * The RPC belongs to the requesting `IoContext`, and workerd drops its result
+ * once that request has answered. User code caches import promises across
+ * requests (TanStack Start caches its router and start entries), so a request
+ * that answers early (its client hung up) would leave every later request
+ * waiting on a promise that never settles. `waitUntil` keeps the requester
+ * alive until the import settles.
+ */
+const runInModuleRunner = <T>(env: Env, callback: () => Promise<T>): Promise<T> => {
+  const result = callbacks.run(
     (id) => env.__DISTILLED_MODULE_RUNNER__.get("singleton").executeCallback(id),
     callback,
   );
+  waitUntil(result.catch(() => {}));
+  return result;
+};
 
 /**
  * Retrieves a specific export from a Worker entry module using the module runner.
