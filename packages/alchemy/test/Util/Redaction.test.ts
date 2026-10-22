@@ -117,7 +117,7 @@ describe("redactJson", () => {
 });
 
 describe("redactStream", () => {
-  test(
+  test.effect(
     "redacts a secret split across chunks, including its base64 form",
     () =>
       Effect.gen(function* () {
@@ -128,6 +128,43 @@ describe("redactStream", () => {
           Stream.mkString,
         );
         expect(out).toBe("one <redacted> two <redacted> end");
+      }),
+    { tags },
+  );
+
+  test.effect(
+    "output does not depend on chunking when one secret overlaps another",
+    () =>
+      Effect.gen(function* () {
+        const cases = [
+          // A shorter secret is a prefix of a longer one (#2399).
+          {
+            secrets: ["hunter2", "hunter2-admin-token"],
+            text: "token=hunter2-admin-token\n",
+            expected: "token=<redacted>\n",
+          },
+          { secrets: ["aa\\\\", 'aa\\\\"'], text: 'aa\\\\"', expected: "<redacted>" },
+          // A shorter secret sits inside a longer one that starts earlier.
+          {
+            secrets: ["mid-secret", "outer-mid-secret-tail"],
+            text: "x outer-mid-secret-tail y",
+            expected: "x <redacted> y",
+          },
+        ];
+        for (const { secrets, text, expected } of cases) {
+          const whole = yield* Stream.make(text).pipe(
+            (stream) => redactStream(stream, secrets),
+            Stream.mkString,
+          );
+          expect(whole).toBe(expected);
+          for (let split = 1; split < text.length; split++) {
+            const out = yield* Stream.make(text.slice(0, split), text.slice(split)).pipe(
+              (stream) => redactStream(stream, secrets),
+              Stream.mkString,
+            );
+            expect(out).toBe(expected);
+          }
+        }
       }),
     { tags },
   );
