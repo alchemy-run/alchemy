@@ -222,6 +222,48 @@ describe.concurrent.each([
         { tags: [...(dev ? ["local"] : ["live"])], timeout },
       );
 
+      // Cloudflare reports a start it has no instance for by rejecting
+      // monitor(), not start(), so monitor() must classify it the way start()
+      // does. maxInstances is not enforced locally.
+      test.skipIf(dev)(
+        "a start past maxInstances fails monitor() with NoContainerInstanceError",
+        Effect.gen(function* () {
+          const { url } = yield* stack;
+          const startCapped = (name: string) =>
+            Effect.gen(function* () {
+              const client = yield* freshConn;
+              const response = yield* client.get(new URL(`/capped?name=${name}`, url));
+              const body = yield* response.text;
+              if (response.status !== 200) {
+                return yield* Effect.fail(
+                  new Error(`capped not ready: ${response.status} ${body}`),
+                );
+              }
+              return JSON.parse(body) as { phase: string; tag: string };
+            }).pipe(
+              Effect.timeout("60 seconds"),
+              Effect.retry({ schedule: readinessSchedule, times: 6 }),
+            );
+
+          // A fresh application also has no instance while it provisions, so
+          // retry until the first object holds the one instance.
+          const first = yield* startCapped("first").pipe(
+            Effect.repeat({
+              schedule: Schedule.spaced("5 seconds"),
+              until: (result) => result.tag === "running",
+              times: 18,
+            }),
+          );
+          expect(first).toEqual({ phase: "monitor", tag: "running" });
+          const second = yield* startCapped("second");
+          expect(second).toMatchObject({
+            phase: "monitor",
+            tag: "NoContainerInstanceError",
+          });
+        }).pipe(logLevel),
+        { tags: ["live"], timeout },
+      );
+
       // The proxy pattern from #1334 (`yield* fetch(yield* HttpServerRequest)`):
       // worker → DO fetch handler → container port, forwarding the raw incoming
       // request. In the live variant the incoming web Request carries an
