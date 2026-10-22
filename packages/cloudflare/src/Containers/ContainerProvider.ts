@@ -482,9 +482,10 @@ export const LiveContainerProvider = () =>
               ),
             );
           }
-          const { context, dockerfile } = yield* materializeInlineDockerfileContext(id, content).pipe(
-            Effect.provideService(Docker, docker),
-          );
+          const { context, dockerfile } = yield* materializeInlineDockerfileContext(
+            id,
+            content,
+          ).pipe(Effect.provideService(Docker, docker));
           const imageHash = (yield* sha256Object({
             dockerfile: content,
             imageName: props.publish?.repository?.toLowerCase(),
