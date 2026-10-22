@@ -1,12 +1,14 @@
 import * as Cause from "effect/Cause";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import type * as HttpClientResponse from "effect/http/HttpClientResponse";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Option from "effect/Option";
 import * as Result from "effect/Result";
+import * as Scope from "effect/Scope";
 import * as Sink from "effect/Sink";
 import * as Socket from "effect/socket/Socket";
 import * as Stream from "effect/Stream";
@@ -291,15 +293,25 @@ const appendStreamErrors = <R>(s: Stream.Stream<string, unknown, R>) =>
   s.pipe(Stream.catchCause((cause) => cause.pipe(encodeStreamErrorMarker, Stream.succeed)));
 
 export const toRpcStream = (stream: Stream.Stream<any, any, any>) =>
-  Effect.scoped(
-    Effect.gen(function* () {
-      const [head, rest] = yield* Stream.peel(stream, Sink.head());
+  Effect.suspend(() => {
+    // A peeled remainder is only valid while its scope is open. Transfer
+    // that scope to the response body instead of closing it on return.
+    const scope = Scope.makeUnsafe();
+    const toBody = (body: Stream.Stream<Uint8Array, any>) =>
+      body.pipe(
+        Stream.onExit((exit) => Scope.close(scope, exit)),
+        Stream.toReadableStream(),
+      );
+    return Effect.gen(function* () {
+      const [head, rest] = yield* Stream.peel(stream, Sink.head()).pipe(
+        Effect.provideService(Scope.Scope, scope),
+      );
 
       if (Option.isSome(head) && head.value instanceof Uint8Array) {
         return {
           _tag: StreamTag,
           encoding: "bytes",
-          body: Stream.toReadableStream(rest.pipe(Stream.prepend([head.value]))),
+          body: toBody(rest.pipe(Stream.prepend([head.value]))),
         } satisfies RpcStreamEnvelope;
       }
 
@@ -308,15 +320,18 @@ export const toRpcStream = (stream: Stream.Stream<any, any, any>) =>
       return {
         _tag: StreamTag,
         encoding: "jsonl",
-        body: body.pipe(
-          Stream.map((value) => JSON.stringify(value) + "\n"),
-          appendStreamErrors,
-          Stream.encodeText,
-          Stream.toReadableStream(),
+        body: toBody(
+          body.pipe(
+            Stream.map((value) => JSON.stringify(value) + "\n"),
+            appendStreamErrors,
+            Stream.encodeText,
+          ),
         ),
       } satisfies RpcStreamEnvelope;
-    }),
-  ).pipe(
+    }).pipe(
+      Effect.onExit((exit) => (Exit.isFailure(exit) ? Scope.close(scope, exit) : Effect.void)),
+    );
+  }).pipe(
     Effect.catchCause((cause) => {
       const failReason = cause.reasons.find(Cause.isFailReason);
       if (failReason) {

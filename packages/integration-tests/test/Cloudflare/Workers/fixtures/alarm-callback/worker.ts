@@ -6,7 +6,7 @@ import * as Exit from "effect/Exit";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Result from "effect/Result";
-import { LegacyAlarmObject } from "./legacy.ts";
+import { LegacyAlarmObject, type ScheduledScenario } from "./legacy.ts";
 import { AlarmObject, type RegistrationResult } from "./object.ts";
 
 export default class AlarmCallbackWorker extends Cloudflare.Worker<AlarmCallbackWorker>()(
@@ -54,6 +54,15 @@ export default class AlarmCallbackWorker extends Cloudflare.Worker<AlarmCallback
                     ? "resume"
                     : "cancel",
               ),
+            );
+          case "scheduled-regression":
+            return yield* HttpServerResponse.json(
+              yield* legacyObjects
+                .getByName(id)
+                .scheduledRegression(
+                  url.searchParams.get("scenario") as ScheduledScenario,
+                  Number(url.searchParams.get("count") ?? "0"),
+                ),
             );
           case "worker-registration": {
             const snapshot = yield* object.snapshot();

@@ -1,5 +1,6 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
+import { CloudflareApiLive } from "@alchemy.run/cloudflare/Providers";
 import * as durableObjects from "@distilled.cloud/cloudflare/durable-objects";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import { describe, expect } from "alchemy-test";
@@ -9,12 +10,14 @@ import { State } from "alchemy/State";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { getWorkerTags } from "../Utils/Worker.ts";
+import { requestWorker } from "../Utils/WorkerRequest.ts";
 import Stack from "./fixtures/do-rpc/stack.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
@@ -24,7 +27,34 @@ const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const stack = beforeAll(deploy(Stack));
-afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
+afterAll.skipIf(!!process.env.NO_DESTROY)(
+  Effect.gen(function* () {
+    const deployed = yield* Effect.exit(stack);
+    yield* destroy(Stack);
+    if (Exit.isFailure(deployed)) return;
+    const scriptName = new URL(deployed.value.url).hostname.split(".")[0]!;
+    yield* Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const deleted = yield* workers.getScript({ accountId, scriptName }).pipe(
+        Effect.as(false),
+        Effect.catchTag("WorkerNotFound", () => Effect.succeed(true)),
+        Effect.repeat({ while: (gone) => !gone, schedule: Schedule.spaced("1 second"), times: 8 }),
+        Effect.timeout("15 seconds"),
+      );
+      expect(deleted).toBe(true);
+      const namespaceDeleted = yield* durableObjects.listNamespaces.items({ accountId }).pipe(
+        Stream.runCollect,
+        Effect.map(
+          (namespaces) => !namespaces.some((namespace) => namespace.script === scriptName),
+        ),
+        Effect.repeat({ while: (gone) => !gone, schedule: Schedule.spaced("1 second"), times: 8 }),
+        Effect.timeout("15 seconds"),
+      );
+      expect(namespaceDeleted).toBe(true);
+    }).pipe(Effect.provide(CloudflareApiLive()), Effect.scoped);
+  }),
+  { timeout: 120_000 },
+);
 
 // Cap exponential backoff at 3s — keeps the fast-path snappy but stops
 // the geometric blow-up (0.5 + 1 + 2 + 4 + 8 + 16 + 32 + 64s ...) that
@@ -34,7 +64,7 @@ const readinessSchedule = Schedule.min([
   Schedule.spaced("3 seconds"),
 ]);
 
-const readinessRetries = 15;
+const readinessRetries = 10;
 
 // The test runtime's HttpClient (FetchHttpClient/undici) keeps HTTP/1.1
 // connections alive and pooled. A pooled connection stays pinned to a single
@@ -46,6 +76,79 @@ const readinessRetries = 15;
 // why a brand-new `curl` sees the update immediately while a kept-alive
 // client does not). See do-rpc DurableObject test investigation.
 const freshConn = HttpClient.mapRequest(HttpClientRequest.setHeader("connection", "close"));
+
+for (const encoding of ["json", "bytes"] as const) {
+  for (const scenario of ["complete", "cancel", "empty", "head-failure", "tail-failure"] as const) {
+    test(
+      `native RPC ${encoding} stream handles ${scenario} with its source and event scopes`,
+      Effect.gen(function* () {
+        const { url } = yield* stack;
+        const client = freshConn(yield* HttpClient.HttpClient);
+        yield* client.get(`${url}/rpc-stream-ready/${encoding}-${scenario}`).pipe(
+          Effect.flatMap((response) =>
+            response.text.pipe(
+              Effect.flatMap((body) =>
+                response.status === 200 && body === "rpc-stream-scopes"
+                  ? Effect.void
+                  : Effect.fail(
+                      new Error(`RPC fixture not ready: ${response.status}: ${body.slice(0, 300)}`),
+                    ),
+              ),
+            ),
+          ),
+          // Namespace activation can lag the Worker route. This is bounded
+          // to ten retries and under a minute of total backoff.
+          Effect.retry({
+            schedule: Schedule.min([
+              Schedule.exponential("500 millis"),
+              Schedule.spaced("7 seconds"),
+            ]),
+            times: readinessRetries,
+          }),
+        );
+
+        // These calls cross the native DO RPC boundary; they do not use the
+        // separate Effect RPC-over-HTTP namespace protocol.
+        const response = yield* requestWorker(
+          HttpClientRequest.get(`${url}/rpc-stream/${encoding}/${scenario}`).pipe(
+            HttpClientRequest.setHeader("connection", "close"),
+          ),
+          { retryDelay: "5 seconds" },
+        );
+        expect(response.status).toBe(200);
+        const body = (yield* response.json) as {
+          values: Array<{ part: string; eventClosed: number; sourceClosed: number }>;
+          failed: boolean;
+          error?: { _tag: string; error?: { _tag: string; phase: string } };
+          after: string;
+        };
+        const parts =
+          scenario === "complete"
+            ? ["head", "tail"]
+            : scenario === "cancel" || scenario === "tail-failure"
+              ? ["head"]
+              : [];
+        expect(body.values).toEqual(
+          parts.map((part) => ({ part, eventClosed: 0, sourceClosed: 0 })),
+        );
+        expect(body.failed).toBe(scenario === "head-failure" || scenario === "tail-failure");
+        expect(body.after).toMatch(/^[0-9a-f]{64}$/);
+        if (scenario === "head-failure" || (scenario === "tail-failure" && encoding === "json")) {
+          expect(body.error).toMatchObject({
+            _tag: "RpcRemoteStreamError",
+            error: {
+              _tag: "RpcStreamFixtureError",
+              phase: scenario === "head-failure" ? "head" : "tail",
+            },
+          });
+        } else if (scenario === "tail-failure") {
+          expect(body.error?._tag).toBe("SocketError");
+        }
+      }).pipe(logLevel),
+      { tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"], timeout: 120_000 },
+    );
+  }
+}
 
 test(
   "durable object methods can use binding clients",
