@@ -186,9 +186,9 @@ impl Container {
         command
     }
 
-    /// Runs `run.command` with `sh -c` inside, in the workspace (or
-    /// `run.cwd`). Returns its exit code and whether it timed out.
-    pub fn exec(&self, run: &Run) -> Result<(i32, bool)> {
+    /// `run.command` with `sh -c` inside, in the workspace (or `run.cwd`),
+    /// ready to spawn: its output where `run` says.
+    pub fn command(&self, run: &Run) -> Result<Command> {
         let cwd = match &run.cwd {
             Some(cwd) => cwd.display().to_string(),
             None => self.path.clone(),
@@ -208,7 +208,13 @@ impl Container {
         if let Some(stderr) = &run.stderr {
             command.stderr(stderr.try_clone()?);
         }
-        let mut child = command.spawn().context("starting the command in its container")?;
+        Ok(command)
+    }
+
+    /// Runs `run.command` inside and waits for it. Returns its exit code and
+    /// whether it timed out.
+    pub fn exec(&self, run: &Run) -> Result<(i32, bool)> {
+        let mut child = self.command(run)?.spawn().context("starting the command in its container")?;
         let started = Instant::now();
         loop {
             if let Some(status) = child.try_wait()? {

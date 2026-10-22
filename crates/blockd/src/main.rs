@@ -4,6 +4,7 @@
 //! blockd fork    --store <spec> --from <head> --to <head>
 //! blockd reset   --store <spec> --head <name> --to <snapshot>
 //! blockd drop    --store <spec> --head <name>
+//! blockd blob-put --store <spec> --key <key> --file <file>   (store a file as an object, e.g. a binary)
 //! blockd export  --store <spec> --head <name> --image <file>   (write the head as a sparse image)
 //! blockd gc      --store <spec> [--history <n>] [--grace-seconds <s>] [--dry-run true]
 //! blockd heads   --store <spec>
@@ -127,6 +128,10 @@ fn main() -> Result<()> {
             runtime.block_on(volume.reset(flags.required("head")?, to))?;
         }
         "drop" => runtime.block_on(store()?.drop_head(flags.required("head")?))?,
+        "blob-put" => {
+            let bytes = std::fs::read(flags.required("file")?)?;
+            runtime.block_on(store()?.blobs().put(flags.required("key")?, bytes))?;
+        }
         "gc" => {
             let options = volume::GcOptions {
                 history: flags.get("history").map(str::parse).transpose()?,
@@ -235,7 +240,7 @@ fn main() -> Result<()> {
             blockd::nbd::force_disconnect(std::path::Path::new(flags.required("nbd")?))?
         }
         _ => bail!(
-            "usage: blockd <create|import|fork|reset|drop|export|gc|heads|history|attach|mount|exec|call|diff|apply|daemon|request|control|disconnect> …"
+            "usage: blockd <create|import|fork|reset|drop|blob-put|export|gc|heads|history|attach|mount|exec|call|diff|apply|daemon|request|control|disconnect> …"
         ),
     }
     Ok(())

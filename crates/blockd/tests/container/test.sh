@@ -78,6 +78,9 @@ for runtime in "$@"; do
   second=$(req "/v1/calls/$id/commit" "{\"patch\":\"patches/$runtime-h2\"}") || fail "$runtime: commit: $second"
   has "$second" out.log "$runtime kept commit"
   lacks "$second" marker "$runtime kept commit"
+  # A later command runs beside what the call left running, on its fork.
+  seen=$(wait_for "$(field "$(req "/v1/calls/$id/exec" '{"command":"cat marker; ls out.log"}')" id)")
+  [ "$(field "$seen" stdout | base64 -d)" = "$(printf 'marker\nout.log')" ] || fail "$runtime: exec on the kept call: $seen"
   req "/v1/calls/$id/detach" "{\"patch\":\"patches/$runtime-h3\"}" >/dev/null || fail "$runtime: detach"
   pgrep -f "sleep 300" >/dev/null && fail "$runtime: a kept process outlived its detach"
   pass "$runtime: what a call leaves running is stopped, or kept with its container and committed as it writes"
@@ -89,9 +92,28 @@ for runtime in "$@"; do
   ran=$(wait_for "$(field "$(req "/v1/heads/$head/exec" '{"command":"pwd; echo from-head > head.txt; cat /etc/motd"}')" id)")
   [ "$(field "$ran" stdout | base64 -d)" = "$(printf '/workspace\na busybox image')" ] || fail "$runtime: head exec: $ran"
   [ "$(cat "$dir/head.txt")" = from-head ] || fail "$runtime: the head's file isn't on its mount"
+  # A background process: its output by offset, then killed.
+  spawned=$(req "/v1/heads/$head/spawn" '{"command":"echo one; sleep 0.3; echo two; sleep 300"}')
+  sid=$(field "$spawned" id)
+  sleep 1
+  read1=$(req "/v1/spawns/$sid?stream=out&offset=0")
+  [ "$(field "$read1" data | base64 -d)" = "$(printf 'one\ntwo')" ] || fail "$runtime: spawn output: $read1"
+  echo "$read1" | grep -q '"exitCode":null' || fail "$runtime: the spawn ended early: $read1"
+  req "/v1/spawns/$sid/kill" '{"signal":9}' >/dev/null
+  sleep 0.5
+  req "/v1/spawns/$sid?stream=out&offset=8" | grep -q '"exitCode":[0-9]' || fail "$runtime: the spawn wasn't killed"
   req "/v1/heads/$head/detach" '{}' >/dev/null || fail "$runtime: head detach"
   pass "$runtime: a head's commands run in its container, on its mount"
 done
+
+# The store's heads through the daemon.
+common="\"store\":\"$store\""
+req /v1/store/fork "{$common,\"from\":\"base\",\"to\":\"forked\"}" >/dev/null || fail "store fork"
+[ "$(field "$(req /v1/store/head "{$common,\"head\":\"forked\"}")" snapshot)" = "$S" ] || fail "store head"
+req /v1/store/history "{$common,\"head\":\"forked\",\"limit\":5}" | grep -q "$S" || fail "store history"
+req /v1/store/drop "{$common,\"head\":\"forked\"}" >/dev/null || fail "store drop"
+req /v1/store/head "{$common,\"head\":\"forked\"}" | grep -q '"snapshot":null' || fail "a dropped head is still there"
+pass "the store's heads fork, read, list their history and drop through the daemon"
 
 status=$(req /v1/status)
 echo "$status" | grep -q '"images":1' || fail "the image was mounted more than once: $status"

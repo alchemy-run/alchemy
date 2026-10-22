@@ -77,7 +77,7 @@ pub struct Kept {
     pub call: Call,
     pub device: Arc<Device>,
     /// Where they run, if not on this machine.
-    pub container: Option<Container>,
+    pub container: Option<Arc<Container>>,
 }
 
 impl Kept {
@@ -135,7 +135,7 @@ pub fn call(
                 Container::start(&contained.id, contained.isolation, spec.dir, contained.state, contained.init)
             });
             match started {
-                Ok(container) => Some(container),
+                Ok(container) => Some(Arc::new(container)),
                 Err(e) => {
                     let _ = call.unmount();
                     let _ = device.close();
@@ -461,6 +461,11 @@ impl Call {
 
     pub fn fs(&self) -> Fs {
         self.fs
+    }
+
+    /// Where the fork is mounted.
+    pub fn dir(&self) -> &Path {
+        &self.dir
     }
 
     /// Runs `command` with `sh -c` in the workspace, in a process group of

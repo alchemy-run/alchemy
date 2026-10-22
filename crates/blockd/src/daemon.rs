@@ -5,10 +5,13 @@
 //! GET  /v1/status                      the daemon's heads, calls and counters
 //! POST /v1/heads                       mount a head
 //! POST /v1/heads/<head>/<op>           sync | snapshot | checkpoint | apply | status | detach
-//!                                      | exec (→ {"id"}, waited on as a call) | processes
+//!                                      | exec (→ {"id"}, waited on as a call) | spawn | processes
 //! POST /v1/calls                       start a command on a fork of a snapshot → {"id":…}
 //! GET  /v1/calls/<id>?wait=<ms>        its result once done, else {"done":false} after <ms>
-//! POST /v1/calls/<id>/<op>             a kept call's commit | status | detach
+//! POST /v1/calls/<id>/<op>             a kept call's commit | status | detach | exec | spawn
+//! POST /v1/store/<op>                  head | fork | reset | drop | history | blob-delete
+//! GET  /v1/spawns/<id>?stream=out|err&offset=<n>   a spawned process's output, and exit code
+//! POST /v1/spawns/<id>/kill            signal it
 //! POST /v1/diffs                       a patch from one snapshot to another
 //! ```
 //!
@@ -58,7 +61,17 @@ pub struct Daemon {
     calls: Mutex<HashMap<String, Arc<CallEntry>>>,
     /// Images mounted read-only, shared by every container that uses one.
     images: Mutex<HashMap<Hash, Arc<Image>>>,
+    /// Background processes (`spawn`), until read to their end and reaped.
+    spawns: Mutex<HashMap<String, Arc<Spawned>>>,
     counters: Mutex<Counters>,
+}
+
+/// A background process and its output files.
+struct Spawned {
+    child: Mutex<std::process::Child>,
+    exit: Mutex<Option<i32>>,
+    out: PathBuf,
+    err: PathBuf,
 }
 
 /// An image snapshot, attached and mounted read-only.
@@ -204,6 +217,7 @@ impl Daemon {
             heads: Mutex::new(HashMap::new()),
             calls: Mutex::new(HashMap::new()),
             images: Mutex::new(HashMap::new()),
+            spawns: Mutex::new(HashMap::new()),
             counters: Mutex::new(Counters::default()),
         }))
     }
@@ -235,6 +249,9 @@ impl Daemon {
                 self.wait_call(id, wait)
             }
             ("POST", ["v1", "calls", id, op]) => self.call_op(id, op, &request),
+            ("POST", ["v1", "store", op]) => self.store_op(op, &request),
+            ("GET", ["v1", "spawns", id]) => self.read_spawn(id, &request),
+            ("POST", ["v1", "spawns", id, "kill"]) => self.kill_spawn(id, &request),
             ("POST", ["v1", "diffs"]) => body(&request).and_then(|r| self.diff(r)),
             _ => return Response::error(404, format!("no route {} {}", request.method, request.path)),
         };
@@ -467,6 +484,13 @@ impl Daemon {
                 drop(slot);
                 self.start_exec(container, dir, body)
             }
+            "spawn" => {
+                let body: ExecRequest = serde_json::from_slice(&request.body).context("a spawn's body")?;
+                let container = mounted.container.clone();
+                let dir = mounted.head.dir().to_path_buf();
+                drop(slot);
+                self.spawn(container, dir, body)
+            }
             "processes" => Ok(json!({
                 "processes": match &mounted.container {
                     Some(container) => container.processes(),
@@ -668,6 +692,19 @@ impl Daemon {
         let CallState::Done { kept: kept @ Some(_), .. } = &mut *state else {
             return Err(anyhow!(NotFound)).context(format!("call {id} keeps nothing running"));
         };
+        if op == "exec" || op == "spawn" {
+            // A command on the kept fork, beside what's already running there.
+            let (held, _, _) = &**kept.as_ref().unwrap();
+            let container = held.container.clone();
+            let dir = held.call.dir().to_path_buf();
+            drop(state);
+            let body: ExecRequest = serde_json::from_slice(&request.body).context("the command")?;
+            return if op == "exec" {
+                self.start_exec(container, dir, body)
+            } else {
+                self.spawn(container, dir, body)
+            };
+        }
         let body: Body = optional_body(request)?;
         match op {
             "status" => {
@@ -759,6 +796,175 @@ impl Daemon {
                 entry.done.notify_all();
             })?;
         Ok(json!({ "id": id }))
+    }
+
+    /// Background processes: started, read by offset, killed.
+    fn spawn(&self, container: Option<Arc<Container>>, dir: PathBuf, request: ExecRequest) -> Result<Value> {
+        let id = new_id();
+        let out = self.config.run.join(format!("spawn-{id}.out"));
+        let err = self.config.run.join(format!("spawn-{id}.err"));
+        let run = Run {
+            command: request.command,
+            cwd: request.cwd,
+            env: request.env.into_iter().collect(),
+            timeout: None,
+            stdout: Some(std::fs::File::create(&out)?),
+            stderr: Some(std::fs::File::create(&err)?),
+            clean_env: true,
+        };
+        let mut command = match &container {
+            Some(container) => container.command(&run)?,
+            None => host_command(&run, &dir),
+        };
+        let child = command.spawn().context("starting the process")?;
+        let pid = child.id();
+        let spawned = Arc::new(Spawned {
+            child: Mutex::new(child),
+            exit: Mutex::new(None),
+            out,
+            err,
+        });
+        self.spawns.lock().unwrap().insert(id.clone(), spawned.clone());
+        std::thread::Builder::new()
+            .name(format!("blockd-spawn-{}", &id[..8]))
+            .spawn(move || loop {
+                let status = spawned.child.lock().unwrap().try_wait();
+                match status {
+                    Ok(Some(status)) => {
+                        *spawned.exit.lock().unwrap() = Some(status.code().unwrap_or(128));
+                        return;
+                    }
+                    Ok(None) => std::thread::sleep(Duration::from_millis(50)),
+                    Err(_) => {
+                        *spawned.exit.lock().unwrap() = Some(128);
+                        return;
+                    }
+                }
+            })?;
+        Ok(json!({ "id": id, "pid": pid }))
+    }
+
+    fn read_spawn(&self, id: &str, request: &Request) -> Result<Value> {
+        use std::io::{Read, Seek};
+        let spawned = self
+            .spawns
+            .lock()
+            .unwrap()
+            .get(id)
+            .cloned()
+            .ok_or_else(|| anyhow!(NotFound))
+            .with_context(|| format!("no process {id} here"))?;
+        let path = if request.param("stream") == Some("err") { &spawned.err } else { &spawned.out };
+        let offset: u64 = request.param("offset").and_then(|n| n.parse().ok()).unwrap_or(0);
+        // The exit code first: output written before the exit is all there.
+        let exit = *spawned.exit.lock().unwrap();
+        let mut file = std::fs::File::open(path)?;
+        file.seek(std::io::SeekFrom::Start(offset))?;
+        let mut data = Vec::new();
+        file.take(1 << 20).read_to_end(&mut data)?;
+        Ok(json!({
+            "data": base64::engine::general_purpose::STANDARD.encode(&data),
+            "exitCode": exit,
+        }))
+    }
+
+    fn kill_spawn(&self, id: &str, request: &Request) -> Result<Value> {
+        #[derive(Deserialize, Default)]
+        struct Body {
+            signal: Option<i32>,
+        }
+        let body: Body = optional_body(request)?;
+        let spawned = self
+            .spawns
+            .lock()
+            .unwrap()
+            .get(id)
+            .cloned()
+            .ok_or_else(|| anyhow!(NotFound))
+            .with_context(|| format!("no process {id} here"))?;
+        let pid = spawned.child.lock().unwrap().id() as i32;
+        // The runtime's exec forwards it to the process inside.
+        unsafe { libc::kill(pid, body.signal.unwrap_or(libc::SIGTERM)) };
+        Ok(json!({}))
+    }
+
+    /// The store's heads, as the service manages them.
+    fn store_op(&self, op: &str, request: &Request) -> Result<Value> {
+        #[derive(Deserialize)]
+        #[serde(rename_all = "camelCase")]
+        struct Body {
+            #[serde(flatten)]
+            store: StoreSpec,
+            head: Option<String>,
+            from: Option<String>,
+            at: Option<String>,
+            to: Option<String>,
+            limit: Option<usize>,
+            key: Option<String>,
+        }
+        let body: Body = serde_json::from_slice(&request.body).context("the request's body")?;
+        let volume = self.volume(&body.store)?;
+        let required = |field: &Option<String>, name: &str| -> Result<String> {
+            field.clone().with_context(|| format!("`{name}` is required"))
+        };
+        let block = |future: std::pin::Pin<Box<dyn std::future::Future<Output = volume::Result<Value>> + Send + '_>>| {
+            self.runtime.block_on(future).map_err(anyhow::Error::from)
+        };
+        match op {
+            "head" => {
+                let head = required(&body.head, "head")?;
+                match self.runtime.block_on(volume.head(&head)) {
+                    Ok(snapshot) => Ok(json!({ "snapshot": snapshot })),
+                    Err(volume::Error::NoHead(_)) => Ok(json!({ "snapshot": null })),
+                    Err(e) => Err(e.into()),
+                }
+            }
+            "fork" => {
+                let to = required(&body.to, "to")?;
+                block(Box::pin(async {
+                    let snapshot = match (&body.from, &body.at) {
+                        (Some(from), _) => volume.fork(from, &to).await?,
+                        (None, Some(at)) => {
+                            let at = Hash::from_hex(at)
+                                .ok_or_else(|| volume::Error::Invalid("`at` is not a snapshot id".into()))?;
+                            volume.fork_at(at, &to).await?;
+                            at
+                        }
+                        (None, None) => return Err(volume::Error::Invalid("`from` or `at` is required".into())),
+                    };
+                    Ok(json!({ "snapshot": snapshot }))
+                }))
+            }
+            "reset" => {
+                let head = required(&body.head, "head")?;
+                let to = Hash::from_hex(&required(&body.to, "to")?).context("`to` is not a snapshot id")?;
+                block(Box::pin(async {
+                    volume.reset(&head, to).await?;
+                    Ok(json!({}))
+                }))
+            }
+            "drop" => {
+                let head = required(&body.head, "head")?;
+                match self.runtime.block_on(volume.drop_head(&head)) {
+                    Ok(()) | Err(volume::Error::NoHead(_)) => Ok(json!({})),
+                    Err(e) => Err(e.into()),
+                }
+            }
+            "history" => {
+                let head = required(&body.head, "head")?;
+                block(Box::pin(async {
+                    let snapshot = volume.head(&head).await?;
+                    let history = volume.history(&snapshot, body.limit.unwrap_or(20)).await?;
+                    Ok(json!({ "history": history }))
+                }))
+            }
+            "blob-delete" => {
+                let key = required(&body.key, "key")?;
+                self.runtime.block_on(volume.blobs().delete(&key))?;
+                Ok(json!({}))
+            }
+            other => Err(anyhow!(NotFound)).context(format!("no store operation {other:?}")),
+        }
     }
 
     //#endregion
@@ -887,8 +1093,9 @@ fn sanitize(name: &str) -> String {
         .collect()
 }
 
-/// A head's command on this machine, in the head's directory.
-fn run_on_host(run: &Run, dir: &Path) -> Result<(i32, bool)> {
+/// A command on this machine, in `dir`, with `AWS_*` and `BLOCKD_*` left out
+/// of its environment.
+fn host_command(run: &Run, dir: &Path) -> std::process::Command {
     use std::os::unix::process::CommandExt;
     let mut child = std::process::Command::new("sh");
     child
@@ -899,13 +1106,18 @@ fn run_on_host(run: &Run, dir: &Path) -> Result<(i32, bool)> {
         .envs(std::env::vars().filter(|(name, _)| !name.starts_with("AWS_") && !name.starts_with("BLOCKD_")))
         .envs(run.env.iter().map(|(k, v)| (k, v)))
         .stdin(std::process::Stdio::null());
-    if let Some(stdout) = &run.stdout {
-        child.stdout(stdout.try_clone()?);
+    if let Some(stdout) = run.stdout.as_ref().and_then(|f| f.try_clone().ok()) {
+        child.stdout(stdout);
     }
-    if let Some(stderr) = &run.stderr {
-        child.stderr(stderr.try_clone()?);
+    if let Some(stderr) = run.stderr.as_ref().and_then(|f| f.try_clone().ok()) {
+        child.stderr(stderr);
     }
-    let mut child = child.spawn().context("starting the command")?;
+    child
+}
+
+/// A head's command on this machine, in the head's directory.
+fn run_on_host(run: &Run, dir: &Path) -> Result<(i32, bool)> {
+    let mut child = host_command(run, dir).spawn().context("starting the command")?;
     let pid = child.id() as i32;
     let started = Instant::now();
     loop {
