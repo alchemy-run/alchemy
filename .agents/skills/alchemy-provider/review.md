@@ -108,6 +108,10 @@ reason the platform forces. References:
 | Revocation | read the host's grant sync | revokes only grants Alchemy added; pre-existing grants survive |
 | Secrets | read each binding that hands out a credential | `Redacted`, never a plain env var or log line |
 | Argument shapes | type test | callables accept the resource, the Effect producing it, and the resolved value (`WriteTable(table)` and `WriteTable(yield* table)`) |
+| Runtimes identified | `rg -n 'runtime' processes/<P>/catalog/INDEX.md` vs every resource that runs user code | each one marked |
+| Both forms | for each runtime: `Platform(` in its file, and an `### Async` JSDoc section | effectful class and async `main` form both ship and are documented |
+| InferEnv | `rg -n 'export type InferEnv' src/<P>` | exported, and used in every async example |
+| Both forms tested | `ls test/<P>/**/fixtures` | an effectful and an async fixture per runtime, each deployed and called |
 | Runtime coloring | read each runtime callable | requires `RuntimeContext`; no `WorkerEnvironment`-style leaks |
 | Event sources | compare with AWS `SQS.QueueEventSource` / Cloudflare cron | contract in the source service, per-host implementation layers |
 | User-facing config | read setup docs and examples | region/account from profile or a `<P>.Region("...")` layer, matching `AWS.Region`; no new env vars |
