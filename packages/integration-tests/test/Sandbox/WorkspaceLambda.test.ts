@@ -97,6 +97,7 @@ describe.skipIf(skip).sequential("Sandbox.Workspace with Lambda MicroVM machines
       readonly fork?: string;
     };
     readonly stopped?: ReadonlyArray<{ readonly command: string }>;
+    readonly timings?: Readonly<Record<string, number>>;
   }
 
   test(
@@ -113,6 +114,8 @@ describe.skipIf(skip).sequential("Sandbox.Workspace with Lambda MicroVM machines
         ]),
       });
       console.log(`4 commands on forks of one session on MicroVMs: ${Date.now() - started} ms`);
+      for (const result of results) console.log(`cold: ${JSON.stringify(result.timings ?? {})}`);
+      expect(results[0]!.timings?.claim).toBeTypeOf("number");
       expect(results.slice(0, 2).map((r) => r.changes.status)).toEqual(["applied", "applied"]);
       const same = results
         .slice(2)
@@ -124,6 +127,17 @@ describe.skipIf(skip).sequential("Sandbox.Workspace with Lambda MicroVM machines
         command: "cat x-1.txt x-2.txt same.txt",
       });
       expect(read.stdout.trim().split("\n").slice(0, 2)).toEqual(["1", "2"]);
+      // Again, on the machines the pool kept.
+      const again = Date.now();
+      const warm = yield* call<ReadonlyArray<Forked>>("fanout", {
+        session: "m1",
+        commands: JSON.stringify([1, 2, 3, 4].map((n) => `echo ${n} > y-${n}.txt && sleep 2`)),
+      });
+      console.log(`4 more, warm: ${Date.now() - again} ms`);
+      for (const result of warm) {
+        expect(result.changes.status).toBe("applied");
+        console.log(`warm: ${JSON.stringify(result.timings ?? {})}`);
+      }
     }),
     options,
   );

@@ -63,7 +63,17 @@ export interface WorkspaceExecResult extends WorkspaceExecOutput {
   readonly changes: WorkspaceChanges;
   /** Processes it left running in the workspace, if they were stopped. */
   readonly stopped?: ReadonlyArray<{ readonly pid: number; readonly command: string }>;
+  /** Where the command's time went, when its host measures it. */
+  readonly timings?: WorkspaceTimings;
 }
+
+/**
+ * Milliseconds per phase of a command, in the order they ran: claiming a
+ * machine, starting it, attaching and mounting the fork, running, making
+ * and uploading the patch, landing it on the session's head. A phase's name
+ * says who measured it: `blockd.*` on the machine, the rest by the host.
+ */
+export type WorkspaceTimings = Readonly<Record<string, number>>;
 
 /**
  * The words to show a model for what happened to a command's changes and

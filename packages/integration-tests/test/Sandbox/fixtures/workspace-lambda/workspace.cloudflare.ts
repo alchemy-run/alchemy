@@ -10,7 +10,7 @@ export default Cloudflare.Containers.Workspace(LambdaWorkspace, {
     idle: "2 minutes",
     // ext4 on MicroVMs: commands on forks run in an overlay.
     placement: "automatic",
-    pool: { max: 4 },
+    pool: { max: 6 },
     lambda: { memory: "2 GB", cpuConfigurations: [{ architecture: "ARM_64" }] },
   },
 });

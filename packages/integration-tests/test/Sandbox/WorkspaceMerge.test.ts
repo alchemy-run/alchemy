@@ -26,7 +26,16 @@ interface Result {
   readonly stderr: string;
   readonly changes: Changes;
   readonly stopped?: ReadonlyArray<{ readonly command: string }>;
+  readonly timings?: Readonly<Record<string, number>>;
 }
+
+/** One line per command: where its time went. */
+const logTimings = (label: string, results: ReadonlyArray<Result & { ms: number }>) =>
+  Effect.sync(() => {
+    for (const result of results) {
+      console.log(`${label} ${result.ms} ms: ${JSON.stringify(result.timings ?? {})}`);
+    }
+  });
 
 const call = <A>(op: string, body: Record<string, unknown>) =>
   Effect.gen(function* () {
@@ -76,6 +85,10 @@ describe.sequential("Sandbox.Workspace with commands on forks (btrfs, automatic)
         [1, 2, 3, 4].map((n) => `echo ${n}${n} > g-${n}.txt && sleep 3`),
       );
       for (const result of warm.results) expect(result.changes.status).toBe("applied");
+      yield* logTimings("cold", cold.results);
+      yield* logTimings("warm", warm.results);
+      expect(warm.results[0]!.timings?.claim).toBeTypeOf("number");
+      expect(warm.results[0]!.timings?.["blockd.run"]).toBeGreaterThan(2_900);
       console.log(
         `4 commands of 3 s each, at once: cold ${cold.ms} ms, warm ${warm.ms} ms; warm per command: ${warm.results.map((r) => r.ms).join(", ")} ms`,
       );

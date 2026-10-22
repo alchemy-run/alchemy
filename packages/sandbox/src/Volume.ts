@@ -3,8 +3,10 @@ import * as Output from "alchemy/Output";
 import { CurrentRuntimeContext, sanitizeKey, type RuntimeContext } from "alchemy/RuntimeContext";
 import * as Context from "effect/Context";
 import * as Data from "effect/Data";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Effectable from "effect/Effectable";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
 import type { Sandbox, SandboxClient, SandboxError } from "./Sandbox.ts";
@@ -131,15 +133,16 @@ export interface DiskHostCommit {
   readonly summary: PatchSummary;
   /** Processes still running (after a detach: the ones it stopped). */
   readonly survivors: ReadonlyArray<DiskSurvivor>;
+  readonly timings?: DiskTimings;
 }
 
 /**
  * A kept call: its fork stays mounted for the processes it left running.
- * Rebuild one from its `socket` with `Disk.host`.
+ * Rebuild one from its `id` with `Disk.host`.
  */
 export interface DiskHost {
-  /** blockd's control socket for the call. */
-  readonly socket: string;
+  /** The call's id in the machine's blockd. */
+  readonly id: string;
   /** A patch of what changed since the last commit (`full`: since the fork). */
   commit(
     patch: string,
@@ -161,8 +164,13 @@ export interface DiskSurvivor {
   readonly command: string;
 }
 
+/** Milliseconds per phase of one blockd operation, in the order they ran. */
+export type DiskTimings = Readonly<Record<string, number>>;
+
 /** What `call` returns. */
 export interface DiskCallOutput extends DiskExecOutput {
+  /** Where blockd's time went: attach, mount, run, commit, upload, unmount. */
+  readonly timings: DiskTimings;
   readonly timedOut: boolean;
   /** The store key of the command's patch; absent if it changed nothing. */
   readonly patch?: string;
@@ -186,7 +194,7 @@ export interface DiskMount {
   readonly epoch: number;
   /** Make every write so far durable in the journal. */
   readonly sync: Effect.Effect<void, VolumeError | SandboxError, RuntimeContext>;
-  /** Unmount, snapshot and stop blockd; returns the snapshot. */
+  /** Unmount and snapshot; returns the snapshot. */
   readonly detach: Effect.Effect<Snapshot, VolumeError | SandboxError, RuntimeContext>;
   /** `detach`, and what the head changed since its last checkpoint. */
   readonly release: Effect.Effect<
@@ -200,10 +208,12 @@ export interface DiskMount {
    * Take a checkpoint, then apply `patches` (store keys) to the mounted
    * files. Their writes aren't in the next checkpoint.
    */
-  apply(
-    patches: ReadonlyArray<string>,
-  ): Effect.Effect<
-    { readonly paths: ChangedPaths; readonly applied: ReadonlyArray<PatchSummary> },
+  apply(patches: ReadonlyArray<string>): Effect.Effect<
+    {
+      readonly paths: ChangedPaths;
+      readonly applied: ReadonlyArray<PatchSummary>;
+      readonly timings?: DiskTimings;
+    },
     VolumeError | SandboxError,
     RuntimeContext
   >;
@@ -256,8 +266,14 @@ export interface Disk extends VolumeHeads {
     command: string,
     options: DiskCallOptions,
   ): Effect.Effect<DiskCallOutput, VolumeError | SandboxError, RuntimeContext>;
-  /** A kept call, from its control socket. */
-  host(socket: string): DiskHost;
+  /** A kept call, from its id. */
+  host(id: string): DiskHost;
+  /**
+   * A head the sandbox's blockd has mounted at `dir`, without mounting it:
+   * for whoever mounted it and lost the handle (a Durable Object that
+   * restarted).
+   */
+  mounted(head: string, dir: string): DiskMount;
   /** A patch from snapshot `from` to snapshot `to`, uploaded to `options.patch` if given. */
   diff(
     from: Snapshot,
@@ -424,98 +440,58 @@ const makeDisk = (
       catch: (cause) => new VolumeError({ message: `blockd gc said ${ran.stdout}`, cause }),
     });
   }),
-  host: (socket: string) => hostOf(sandbox, socket),
+  host: (id: string) => hostOf(daemonOf(sandbox, storeEnv), id),
+  mounted: (head: string, dir: string) => mountOf(daemonOf(sandbox, storeEnv), head, dir, "", 0),
   call: Effect.fn(function* (snapshot: Snapshot, command: string, options: DiskCallOptions) {
-    const env = yield* storeEnv;
-    const id = crypto.randomUUID();
-    const result = `/run/blockd/call-${id}.json`;
-    const socket = `/run/blockd/call-${id}.sock`;
-    const argv = [
-      "blockd",
-      "call",
-      "--store",
-      descriptor.store,
-      "--snapshot",
-      snapshot,
-      "--cache",
-      options.cache ?? "/var/cache/blockd/calls.cache",
-      "--dir",
-      options.dir,
-      "--work",
-      `/var/cache/blockd/call-${id}`,
-      "--mode",
-      options.mode ?? "auto",
-      "--log",
-      `/run/blockd/call-${id}.log`,
-      "--result",
-      result,
-      "--patch",
-      options.patch,
-      "--command",
-      command,
-      ...(options.cwd ? ["--cwd", options.cwd] : []),
-      ...(options.env ? ["--env", JSON.stringify(options.env)] : []),
-      ...(options.timeoutMs !== undefined ? ["--timeout-ms", String(options.timeoutMs)] : []),
-      ...(options.keep ? ["--keep", "true", "--control", socket] : []),
-    ];
-    const out = `/run/blockd/call-${id}.out`;
-    const err = `/run/blockd/call-${id}.err`;
-    // A kept call outlives this command: blockd runs on in the background,
-    // and the call is done when its result is written.
-    const ran = options.keep
-      ? yield* Effect.gen(function* () {
-          const started = yield* run(
-            sandbox,
-            [
-              "mkdir -p /run/blockd /var/cache/blockd",
-              `nohup ${argv.map(quote).join(" ")} > ${quote(out)} 2> ${quote(err)} < /dev/null &`,
-              "pid=$!",
-              "while :; do",
-              `  [ -f ${quote(result)} ] && break`,
-              '  kill -0 "$pid" 2>/dev/null || { sleep 0.2; break; }',
-              "  sleep 0.05",
-              "done",
-              `cat ${quote(out)}; cat ${quote(err)} >&2; rm -f ${quote(out)} ${quote(err)}`,
-            ].join("\n"),
-            env,
-          );
-          return started;
-        })
-      : yield* run(
-          sandbox,
-          `mkdir -p /run/blockd /var/cache/blockd && ${argv.map(quote).join(" ")}`,
-          env,
-        );
-    const reply = yield* run(sandbox, `cat ${quote(result)} && rm -f ${quote(result)}`, {});
-    if (ran.exitCode !== 0 || reply.exitCode !== 0) {
-      const log = yield* run(sandbox, `tail -c 4000 /run/blockd/call-${id}.log`, {});
-      return yield* new VolumeError({
-        message: `blockd call failed (${ran.exitCode}): ${ran.stderr.slice(-2000)}${log.stdout}`,
-      });
-    }
-    yield* run(sandbox, `rm -f /run/blockd/call-${id}.log`, {});
-    const parsed = yield* Effect.try({
-      try: () =>
-        JSON.parse(reply.stdout.trim()) as {
+    const daemon = daemonOf(sandbox, storeEnv);
+    const timings: Record<string, number> = {};
+    yield* timed(timings, "daemon", daemon.ensure);
+    const { id } = yield* timed(
+      timings,
+      "start",
+      daemon.request<{ readonly id: string }>("/v1/calls", {
+        store: descriptor.store,
+        snapshot,
+        dir: options.dir,
+        command,
+        mode: options.mode ?? "auto",
+        ...(options.cache ? { cache: options.cache } : {}),
+        patch: options.patch,
+        ...(options.cwd ? { cwd: options.cwd } : {}),
+        ...(options.env ? { env: options.env } : {}),
+        ...(options.timeoutMs !== undefined ? { timeoutMs: options.timeoutMs } : {}),
+        ...(options.keep ? { keep: true } : {}),
+      }),
+    );
+    // Waited on in pieces: no request stays open for the length of a long command.
+    const done = yield* timed(
+      timings,
+      "wait",
+      daemon
+        .request<{
+          readonly done: boolean;
           readonly exitCode: number;
           readonly timedOut: boolean;
           readonly patch: string | null;
           readonly summary: PatchSummary;
           readonly survivors: ReadonlyArray<DiskSurvivor>;
           readonly kept: boolean;
-        },
-      catch: (cause) =>
-        new VolumeError({ message: `blockd call said ${JSON.stringify(reply.stdout)}`, cause }),
-    });
+          readonly stdout: string;
+          readonly stderr: string;
+          readonly timings?: DiskTimings;
+        }>(`/v1/calls/${id}?wait=25000`)
+        .pipe(Effect.repeat({ until: (reply) => reply.done })),
+    );
     return {
-      exitCode: parsed.exitCode,
-      stdout: ran.stdout,
-      stderr: ran.stderr,
-      timedOut: parsed.timedOut,
-      ...(parsed.patch ? { patch: parsed.patch } : {}),
-      summary: parsed.summary,
-      survivors: parsed.survivors,
-      ...(parsed.kept ? { host: hostOf(sandbox, socket) } : {}),
+      timings: { ...timings, ...done.timings },
+      exitCode: done.exitCode,
+      stdout: fromBase64(done.stdout),
+      stderr: fromBase64(done.stderr),
+      timedOut: done.timedOut,
+      ...(done.patch ? { patch: done.patch } : {}),
+      summary: done.summary,
+      survivors: done.survivors,
+      ...(done.kept ? { host: hostOf(daemon, id) } : {}),
     } satisfies DiskCallOutput;
   }),
   diff: Effect.fn(function* (
@@ -523,196 +499,206 @@ const makeDisk = (
     to: Snapshot,
     options: { readonly patch?: string; readonly mode?: DiskExecOptions["mode"] } = {},
   ) {
-    const id = crypto.randomUUID();
-    const argv = [
-      "blockd",
-      "diff",
-      "--store",
-      descriptor.store,
-      "--from",
+    const daemon = daemonOf(sandbox, storeEnv);
+    yield* daemon.ensure;
+    const reply = yield* daemon.request<{
+      readonly patch: string | null;
+      readonly summary: PatchSummary;
+    }>("/v1/diffs", {
+      store: descriptor.store,
       from,
-      "--to",
       to,
-      "--cache",
-      `/var/cache/blockd/diff-${id}-from.cache`,
-      "--cache-to",
-      `/var/cache/blockd/diff-${id}-to.cache`,
-      "--work",
-      `/var/cache/blockd/diff-${id}`,
-      "--mode",
-      options.mode ?? "auto",
-      ...(options.patch ? ["--patch", options.patch] : []),
-    ];
-    const ran = yield* run(
-      sandbox,
-      [
-        "mkdir -p /var/cache/blockd",
-        `${argv.map(quote).join(" ")}; code=$?`,
-        `rm -rf /var/cache/blockd/diff-${id}*`,
-        "exit $code",
-      ].join("\n"),
-      yield* storeEnv,
-    );
-    if (ran.exitCode !== 0) {
-      return yield* new VolumeError({ message: `blockd diff failed: ${ran.stderr.slice(-3000)}` });
-    }
-    const parsed = yield* Effect.try({
-      try: () =>
-        JSON.parse(ran.stdout.trim().split("\n").pop()!) as {
-          readonly patch: string | null;
-          readonly summary: PatchSummary;
-        },
-      catch: (cause) =>
-        new VolumeError({ message: `blockd diff said ${JSON.stringify(ran.stdout)}`, cause }),
+      mode: options.mode ?? "auto",
+      ...(options.patch ? { patch: options.patch } : {}),
     });
     return {
-      ...(parsed.patch ? { patch: parsed.patch } : {}),
-      summary: parsed.summary,
+      ...(reply.patch ? { patch: reply.patch } : {}),
+      summary: reply.summary,
     };
   }),
   mount: Effect.fn(function* (head: string, options: DiskMountOptions) {
-    const env = { ...options.env, ...(yield* storeEnv) };
-    const socket = `/run/blockd/${head}.sock`;
-    const out = `/run/blockd/${head}.out`;
-    const log = `/run/blockd/${head}.log`;
-    const argv = [
-      "blockd",
-      "mount",
-      "--store",
-      descriptor.store,
-      "--head",
-      head,
-      "--cache",
-      options.cache ?? `/var/cache/blockd/${head}.cache`,
-      "--dir",
-      options.dir,
-      "--control",
-      socket,
-      "--mode",
-      options.mode ?? "auto",
-      "--flush-every",
-      String(options.flushEvery ?? 5),
-      ...(options.heads ? ["--heads", options.heads] : []),
-      ...(options.journal ? ["--journal", options.journal] : []),
-    ];
-    // blockd outlives this command: it serves the mount until a detach.
-    const script = [
-      "mkdir -p /run/blockd /var/cache/blockd",
-      `rm -f ${quote(socket)} ${quote(out)}`,
-      `nohup ${argv.map(quote).join(" ")} > ${quote(out)} 2> ${quote(log)} < /dev/null &`,
-      "pid=$!",
-      "for i in $(seq 1 1200); do",
-      `  if grep -q '"mounted"' ${quote(out)} 2>/dev/null; then cat ${quote(out)}; exit 0; fi`,
-      `  if ! kill -0 "$pid" 2>/dev/null; then cat ${quote(log)} >&2; exit 1; fi`,
-      "  sleep 0.05",
-      "done",
-      `cat ${quote(log)} >&2; exit 1`,
-    ].join("\n");
-    const started = yield* run(sandbox, script, env);
-    if (started.exitCode !== 0) {
-      return yield* new VolumeError({ message: `mounting ${head} failed: ${started.stderr}` });
-    }
-    const ready = yield* Effect.try({
-      try: () =>
-        JSON.parse(started.stdout.trim().split("\n").pop()!) as {
-          readonly mode: string;
-          readonly epoch: number;
-        },
-      catch: (cause) =>
-        new VolumeError({ message: `blockd mount said ${JSON.stringify(started.stdout)}`, cause }),
-    });
-    const control = Effect.fn(function* (request: string) {
-      const reply = yield* run(
-        sandbox,
-        `blockd control --socket ${quote(socket)} --request ${quote(request)}`,
-        {},
-      );
-      const parsed = yield* Effect.try({
-        try: () =>
-          JSON.parse(reply.stdout.trim()) as {
-            readonly ok: boolean;
-            readonly snapshot?: Snapshot;
-            readonly paths?: ChangedPaths;
-            readonly applied?: ReadonlyArray<PatchSummary>;
-            readonly error?: string;
-          },
-        catch: () => new VolumeError({ message: `blockd control: ${reply.stdout}${reply.stderr}` }),
-      });
-      if (!parsed.ok) {
-        return yield* new VolumeError({ message: `blockd ${request}: ${parsed.error}` });
-      }
-      return parsed;
-    });
-    return {
-      head,
-      dir: options.dir,
-      mode: ready.mode,
-      epoch: ready.epoch,
-      sync: Effect.asVoid(control(`{"op":"sync"}`)),
-      detach: Effect.map(control(`{"op":"detach"}`), (reply) => reply.snapshot!),
-      release: Effect.map(control(`{"op":"detach"}`), (reply) => ({
-        snapshot: reply.snapshot!,
-        paths: reply.paths ?? null,
-      })),
-      checkpoint: Effect.map(control(`{"op":"checkpoint"}`), (reply) => reply.paths ?? null),
-      apply: (patches) =>
-        Effect.map(control(JSON.stringify({ op: "apply", patches })), (reply) => ({
-          paths: reply.paths ?? null,
-          applied: reply.applied ?? [],
-        })),
-      snapshot: Effect.map(
-        control(JSON.stringify({ op: "snapshot", freeze: options.dir })),
-        (reply) => reply.snapshot!,
-      ),
-    } satisfies DiskMount;
+    const daemon = daemonOf(sandbox, storeEnv);
+    yield* daemon.ensure;
+    const ready = yield* daemon.request<{ readonly mode: string; readonly epoch: number }>(
+      "/v1/heads",
+      {
+        store: descriptor.store,
+        head,
+        dir: options.dir,
+        mode: options.mode ?? "auto",
+        flushEvery: options.flushEvery ?? 5,
+        ...(options.cache ? { cache: options.cache } : {}),
+        ...(options.heads ? { heads: options.heads } : {}),
+        ...(options.journal ? { journal: options.journal } : {}),
+        ...(options.env?.BLOCKD_HEADS_TOKEN ? { headsToken: options.env.BLOCKD_HEADS_TOKEN } : {}),
+      },
+    );
+    return mountOf(daemon, head, options.dir, ready.mode, ready.epoch);
   }),
 });
 
-/** A kept call's control socket, as a {@link DiskHost}. */
-const hostOf = (sandbox: SandboxClient<any, any>, socket: string): DiskHost => {
-  const control = Effect.fn(function* (request: string) {
-    const reply = yield* run(
+const DAEMON_PORT = 7681;
+
+/**
+ * The sandbox's `blockd daemon`, reached on its port with a token derived
+ * from the store's credentials (whoever holds them can drive the store
+ * anyway). `ensure` starts it unless it's running: one `exec`.
+ */
+const daemonOf = (
+  sandbox: SandboxClient<any, any>,
+  storeEnv: Effect.Effect<Record<string, string>, VolumeError>,
+) => {
+  const token = Effect.flatMap(storeEnv, (env) =>
+    Effect.promise(async () => {
+      const bytes = new TextEncoder().encode(
+        `blockd-daemon\n${JSON.stringify(Object.entries(env).sort())}`,
+      );
+      const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));
+      return Array.from(digest, (byte) => byte.toString(16).padStart(2, "0")).join("");
+    }),
+  );
+  const ensure = Effect.gen(function* () {
+    const env = { ...(yield* storeEnv), BLOCKD_DAEMON_TOKEN: yield* token };
+    const ran = yield* run(
       sandbox,
-      `blockd control --socket ${quote(socket)} --request ${quote(request)}`,
-      {},
+      [
+        "pid=/run/blockd/daemon.pid",
+        'if [ -f "$pid" ] && kill -0 "$(cat "$pid")" 2>/dev/null; then exit 0; fi',
+        "mkdir -p /run/blockd /var/cache/blockd",
+        'rm -f "$pid"',
+        `nohup blockd daemon --listen 0.0.0.0:${DAEMON_PORT} --pidfile "$pid" > /run/blockd/daemon.log 2>&1 < /dev/null &`,
+        'for i in $(seq 1 400); do [ -f "$pid" ] && exit 0; sleep 0.025; done',
+        "cat /run/blockd/daemon.log >&2; exit 1",
+      ].join("\n"),
+      env,
     );
-    const parsed = yield* Effect.try({
-      try: () =>
-        JSON.parse(reply.stdout.trim()) as {
-          readonly ok: boolean;
-          readonly patch?: string | null;
-          readonly summary?: PatchSummary;
-          readonly survivors?: ReadonlyArray<DiskSurvivor>;
-          readonly error?: string;
-        },
-      catch: () => new VolumeError({ message: `blockd control: ${reply.stdout}${reply.stderr}` }),
-    });
-    if (!parsed.ok) {
-      return yield* new VolumeError({ message: `blockd ${request}: ${parsed.error}` });
+    if (ran.exitCode !== 0) {
+      return yield* new VolumeError({
+        message: `starting blockd failed: ${ran.stderr.slice(-3000)}`,
+      });
     }
-    return parsed;
   });
-  const commitOf = (reply: {
-    readonly patch?: string | null;
-    readonly summary?: PatchSummary;
-    readonly survivors?: ReadonlyArray<DiskSurvivor>;
-  }): DiskHostCommit => ({
-    ...(reply.patch ? { patch: reply.patch } : {}),
-    summary: reply.summary ?? { paths: [], bytes: 0, operations: 0 },
-    survivors: reply.survivors ?? [],
-  });
+  const request = <A>(path: string, body?: unknown) =>
+    Effect.gen(function* () {
+      const client = yield* sandbox.httpClient(DAEMON_PORT);
+      const base = HttpClientRequest.bearerToken(
+        body === undefined
+          ? HttpClientRequest.get(`http://blockd${path}`)
+          : HttpClientRequest.post(`http://blockd${path}`).pipe(
+              HttpClientRequest.bodyJsonUnsafe(body),
+            ),
+        yield* token,
+      );
+      const response = yield* client
+        .execute(base)
+        .pipe(
+          Effect.mapError(
+            (cause) => new VolumeError({ message: `blockd ${path}: ${cause.message}`, cause }),
+          ),
+        );
+      const text = yield* response.text.pipe(
+        Effect.mapError(
+          (cause) => new VolumeError({ message: `blockd ${path}: ${cause.message}`, cause }),
+        ),
+      );
+      const parsed = yield* Effect.try({
+        try: () => JSON.parse(text) as { readonly ok?: boolean; readonly error?: string },
+        catch: (cause) =>
+          new VolumeError({
+            message: `blockd ${path} answered ${response.status}: ${text}`,
+            cause,
+          }),
+      });
+      if (response.status !== 200 || parsed.ok === false) {
+        return yield* new VolumeError({
+          message: `blockd ${path}: ${parsed.error ?? `status ${response.status}`}`,
+        });
+      }
+      return parsed as A;
+    });
+  return { ensure, request };
+};
+
+type Daemon = ReturnType<typeof daemonOf>;
+
+/** A head mounted by the sandbox's blockd, as a {@link DiskMount}. */
+const mountOf = (daemon: Daemon, head: string, dir: string, mode: string, epoch: number) => {
+  const op = <A>(name: string, body: unknown = {}) =>
+    daemon.request<A>(`/v1/heads/${encodeURIComponent(head)}/${name}`, body);
+  const release = Effect.map(
+    op<{ readonly snapshot: Snapshot; readonly paths?: ChangedPaths }>("detach"),
+    (reply) => ({ snapshot: reply.snapshot, paths: reply.paths ?? null }),
+  );
   return {
-    socket,
-    commit: (patch, options = {}) =>
+    head,
+    dir,
+    mode,
+    epoch,
+    sync: Effect.asVoid(op("sync")),
+    detach: Effect.map(release, (reply) => reply.snapshot),
+    release,
+    checkpoint: Effect.map(
+      op<{ readonly paths?: ChangedPaths }>("checkpoint"),
+      (reply) => reply.paths ?? null,
+    ),
+    apply: (patches) =>
       Effect.map(
-        control(JSON.stringify({ op: "commit", patch, full: options.full ?? false })),
-        commitOf,
+        op<{
+          readonly paths?: ChangedPaths;
+          readonly applied?: ReadonlyArray<PatchSummary>;
+          readonly timings?: DiskTimings;
+        }>("apply", { patches }),
+        (reply) => ({
+          paths: reply.paths ?? null,
+          applied: reply.applied ?? [],
+          ...(reply.timings ? { timings: reply.timings } : {}),
+        }),
       ),
-    status: Effect.map(control(`{"op":"status"}`), (reply) => reply.survivors ?? []),
-    detach: (patch) =>
-      Effect.map(control(JSON.stringify({ op: "detach", ...(patch ? { patch } : {}) })), commitOf),
+    snapshot: Effect.map(
+      op<{ readonly snapshot: Snapshot }>("snapshot", { freeze: dir }),
+      (reply) => reply.snapshot,
+    ),
+  } satisfies DiskMount;
+};
+
+/** A kept call in the sandbox's blockd, as a {@link DiskHost}. */
+const hostOf = (daemon: Daemon, id: string): DiskHost => {
+  const op = (name: string, body: unknown = {}) =>
+    Effect.map(
+      daemon.request<{
+        readonly patch?: string | null;
+        readonly summary?: PatchSummary;
+        readonly survivors?: ReadonlyArray<DiskSurvivor>;
+        readonly timings?: DiskTimings;
+      }>(`/v1/calls/${id}/${name}`, body),
+      (reply): DiskHostCommit => ({
+        ...(reply.patch ? { patch: reply.patch } : {}),
+        summary: reply.summary ?? { paths: [], bytes: 0, operations: 0 },
+        survivors: reply.survivors ?? [],
+        ...(reply.timings ? { timings: reply.timings } : {}),
+      }),
+    );
+  return {
+    id,
+    commit: (patch, options = {}) => op("commit", { patch, full: options.full ?? false }),
+    status: Effect.map(op("status"), (reply) => reply.survivors),
+    detach: (patch) => op("detach", patch ? { patch } : {}),
   };
 };
+
+/** Runs `effect`, adding how long it took to `timings` as `phase`. */
+const timed = <A, E, R>(
+  timings: Record<string, number>,
+  phase: string,
+  effect: Effect.Effect<A, E, R>,
+) =>
+  Effect.map(Effect.timed(effect), ([duration, value]) => {
+    timings[phase] = Math.round(Duration.toMillis(duration) * 10) / 10;
+    return value;
+  });
+
+const fromBase64 = (text: string) =>
+  new TextDecoder().decode(Uint8Array.from(atob(text), (c) => c.charCodeAt(0)));
 
 /** Runs `script` with `sh -c` in the sandbox and waits for it. */
 const run = (sandbox: SandboxClient<any, any>, script: string, env: Record<string, string>) =>

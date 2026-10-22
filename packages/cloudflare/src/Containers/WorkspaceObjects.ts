@@ -39,6 +39,7 @@ import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
 import * as Semaphore from "effect/Semaphore";
+import { toHttpClient } from "../Fetcher.ts";
 import { DurableObject } from "../Workers/DurableObject.ts";
 import type { DurableObject as DurableObjectNamespace } from "../Workers/DurableObject.ts";
 import { DurableObjectState } from "../Workers/DurableObjectState.ts";
@@ -115,6 +116,22 @@ const INTEGRATOR = "integrator";
 
 /** The session a refused command's changes are kept in. */
 const conflictFork = (session: string, call: string) => `${session}.conflict-${call.slice(0, 8)}`;
+
+/** Milliseconds per phase, as a command's result reports them. */
+type Timings = Record<string, number>;
+
+/** Runs `effect`, adding how long it took to `timings` as `phase`. */
+const timed = <A, E, R>(timings: Timings, phase: string, effect: Effect.Effect<A, E, R>) =>
+  Effect.map(Effect.timed(effect), ([duration, value]) => {
+    timings[phase] = Math.round(((timings[phase] ?? 0) + Duration.toMillis(duration)) * 10) / 10;
+    return value;
+  });
+
+/** `from`'s phases in `into`, each name under `prefix`. */
+const withPhases = (into: Timings, prefix: string, from: Readonly<Timings> | undefined) => {
+  for (const [phase, ms] of Object.entries(from ?? {})) into[`${prefix}${phase}`] = ms;
+  return into;
+};
 
 /** Options for one command. */
 interface RunOptions {
@@ -279,6 +296,8 @@ interface MachineShape {
       readonly summary: PatchSummary;
       readonly survivors: ReadonlyArray<DiskSurvivor>;
       readonly kept: boolean;
+      /** The machine's phases, and blockd's as `blockd.*`. */
+      readonly timings: Timings;
     },
     WorkspaceError,
     RuntimeContext
@@ -437,6 +456,9 @@ const asSandbox = (container: ContainerClient): SandboxClient =>
         })),
         Effect.mapError(sandboxError),
       ),
+    // blockd's daemon, on its port.
+    httpClient: (port: number) =>
+      Effect.map(container.getTcpPort(port), (tcp) => toHttpClient(tcp as never)),
   }) as unknown as SandboxClient;
 
 const sandboxError = (cause: { readonly message: string }) =>
@@ -880,7 +902,12 @@ const sessionImpl = (config: HostConfig) =>
         readonly patch: string;
         readonly summary: PatchSummary;
         readonly call: string;
-        readonly done: Deferred.Deferred<WorkspaceChanges, WorkspaceError>;
+        /** When it was queued: the time it waits for an earlier batch counts. */
+        readonly queued: number;
+        readonly done: Deferred.Deferred<
+          { readonly changes: WorkspaceChanges; readonly timings: Timings },
+          WorkspaceError
+        >;
       }
       const queue: Array<Pending> = [];
 
@@ -893,12 +920,20 @@ const sessionImpl = (config: HostConfig) =>
       const drain = Effect.fn(function* (session: string, hostUrl: string | undefined) {
         const batch = queue.splice(0);
         if (batch.length === 0) return;
+        const started = Date.now();
+        // Shared by the batch: each command's result reports them.
+        const timings: Timings = {};
+        const finish = (pending: Pending) => ({
+          ...timings,
+          "commit.queue": started - pending.queued,
+          "commit.batch": batch.length,
+        });
         const landed = Effect.gen(function* () {
           const machine = machines.getByName(
-            yield* holdForMerge(session, hostUrl, Date.now() + LONG),
+            yield* timed(timings, "commit.head", holdForMerge(session, hostUrl, Date.now() + LONG)),
           );
           // What the head's own commands changed counts as a change since every base.
-          yield* appendLog(yield* machine.checkpoint(session));
+          yield* appendLog(yield* timed(timings, "commit.checkpoint", machine.checkpoint(session)));
           const accepted: Array<Pending> = [];
           const refused: Array<{
             readonly pending: Pending;
@@ -918,18 +953,21 @@ const sessionImpl = (config: HostConfig) =>
             yield* appendLog(pending.summary.paths);
           }
           if (accepted.length > 0) {
-            yield* machine.apply(
-              session,
-              accepted.map((pending) => pending.patch),
+            yield* timed(
+              timings,
+              "commit.apply",
+              machine.apply(
+                session,
+                accepted.map((pending) => pending.patch),
+              ),
             );
-            const snapshot = yield* machine.snapshot(session);
+            const snapshot = yield* timed(timings, "commit.snapshot", machine.snapshot(session));
             yield* markSnapshot;
             for (const pending of accepted) {
               yield* deletePatch(pending.patch);
               yield* Deferred.succeed(pending.done, {
-                status: "applied",
-                snapshot,
-                paths: pending.summary.paths,
+                changes: { status: "applied", snapshot, paths: pending.summary.paths },
+                timings: finish(pending),
               });
             }
           }
@@ -938,12 +976,13 @@ const sessionImpl = (config: HostConfig) =>
             const adopted = yield* Effect.exit(
               sessions.getByName(fork).adopt(fork, pending.base.snapshot, pending.patch, hostUrl),
             );
-            yield* Deferred.succeed(
-              pending.done,
-              adopted._tag === "Success"
-                ? { status: "conflict", paths, fork }
-                : { status: "conflict", paths },
-            );
+            yield* Deferred.succeed(pending.done, {
+              changes:
+                adopted._tag === "Success"
+                  ? { status: "conflict", paths, fork }
+                  : { status: "conflict", paths },
+              timings: finish(pending),
+            });
           }
         });
         const exit = yield* Effect.exit(landed);
@@ -963,8 +1002,11 @@ const sessionImpl = (config: HostConfig) =>
         call: string,
         hostUrl: string | undefined,
       ) {
-        const done = yield* Deferred.make<WorkspaceChanges, WorkspaceError>();
-        queue.push({ base, patch, summary, call, done });
+        const done = yield* Deferred.make<
+          { readonly changes: WorkspaceChanges; readonly timings: Timings },
+          WorkspaceError
+        >();
+        queue.push({ base, patch, summary, call, done, queued: Date.now() });
         yield* commitLock
           .withPermits(1)(drain(session, hostUrl))
           .pipe(Effect.ensuring(linger(session, hostUrl)));
@@ -1145,18 +1187,24 @@ const sessionImpl = (config: HostConfig) =>
         );
         const patch = `patches/${session}/${call}`;
         let kept = false;
+        const timings: Timings = {};
         return yield* Effect.gen(function* () {
-          const machine = yield* pool.claim(session);
-          const ran = yield* machines
-            .getByName(machine)
-            .call(
-              base.snapshot,
-              command,
-              { ...options, patch, ...(keep ? { keep } : {}) },
-              config,
-              egress,
-            )
-            .pipe(Effect.onError(() => pool.release(machine, session)));
+          const machine = yield* timed(timings, "claim", pool.claim(session));
+          const ran = yield* timed(
+            timings,
+            "machine",
+            machines
+              .getByName(machine)
+              .call(
+                base.snapshot,
+                command,
+                { ...options, patch, ...(keep ? { keep } : {}) },
+                config,
+                egress,
+              )
+              .pipe(Effect.onError(() => pool.release(machine, session))),
+          );
+          Object.assign(timings, ran.timings);
           if (ran.kept) {
             // Its processes keep the machine: the session's commands go there now.
             kept = true;
@@ -1169,32 +1217,45 @@ const sessionImpl = (config: HostConfig) =>
               ...(hostUrl ? { hostUrl } : {}),
             };
             yield* saveHost(host);
-            const changes = (yield* commitLock
-              .withPermits(1)(
-                landHost(host, {
-                  ...(ran.patch ? { patch: ran.patch } : {}),
-                  summary: ran.summary,
-                  survivors: ran.survivors,
-                }),
-              )
-              .pipe(Effect.ensuring(linger(session, hostUrl)))).changes;
+            const changes = (yield* timed(
+              timings,
+              "commit",
+              commitLock
+                .withPermits(1)(
+                  landHost(host, {
+                    ...(ran.patch ? { patch: ran.patch } : {}),
+                    summary: ran.summary,
+                    survivors: ran.survivors,
+                  }),
+                )
+                .pipe(Effect.ensuring(linger(session, hostUrl))),
+            )).changes;
             return {
               exitCode: ran.exitCode,
               stdout: ran.stdout,
               stderr: ran.stderr,
               changes,
+              timings,
             } satisfies WorkspaceExecResult;
           }
           yield* pool.release(machine, session);
-          const changes: WorkspaceChanges = ran.patch
-            ? yield* commit(session, base, ran.patch, ran.summary, call, hostUrl)
-            : { status: "applied", paths: [] };
+          let changes: WorkspaceChanges = { status: "applied", paths: [] };
+          if (ran.patch) {
+            const landed = yield* timed(
+              timings,
+              "commit",
+              commit(session, base, ran.patch, ran.summary, call, hostUrl),
+            );
+            changes = landed.changes;
+            Object.assign(timings, landed.timings);
+          }
           return {
             exitCode: ran.exitCode,
             stdout: ran.stdout,
             stderr: ran.stderr,
             changes,
             ...(ran.survivors.length > 0 ? { stopped: ran.survivors } : {}),
+            timings,
           } satisfies WorkspaceExecResult;
         }).pipe(
           Effect.onError(() => deletePatch(patch)),
@@ -1848,23 +1909,25 @@ const machineImpl = (config: HostConfig, dockerfile?: string) =>
         });
       }
 
-      /** Kill a blockd that won't detach, and whatever it left attached. */
-      const forceDetach = (session: string) =>
-        run(
+      /**
+       * Kill a blockd that won't detach, and whatever it left attached. The
+       * machine serves one session at a time, so its daemon goes too: the
+       * next mount starts another.
+       */
+      const forceDetach = run(
+        [
+          "sh",
+          "-c",
           [
-            "sh",
-            "-c",
-            [
-              `pkill -9 -f "blockd mount .*--head ${session} " || true`,
-              `umount -l ${config.path} 2>/dev/null || true`,
-              `umount -l ${CACHE.replace(/\.cache$/, ".top")} 2>/dev/null || true`,
-              `umount -l ${CACHE.replace(/\.cache$/, ".disk")} 2>/dev/null || true`,
-              "losetup -D 2>/dev/null || true",
-              `rm -f /run/blockd/${session}.sock`,
-            ].join("; "),
-          ],
-          {},
-        ).pipe(Effect.ignore);
+            'pkill -9 -f "blockd (daemon|mount) " || true',
+            "rm -f /run/blockd/daemon.pid",
+            `umount -l ${config.path} 2>/dev/null || true`,
+            "for m in $(grep -o ' /var/cache/blockd/[^ ]*' /proc/mounts); do umount -l $m 2>/dev/null; done; true",
+            "losetup -D 2>/dev/null || true",
+          ].join("; "),
+        ],
+        {},
+      ).pipe(Effect.ignore);
 
       /**
        * What one session or command left behind, gone before the next: the
@@ -1894,34 +1957,16 @@ const machineImpl = (config: HostConfig, dockerfile?: string) =>
       const detach = Effect.fn(function* (session: string) {
         const current = mounted?.head === session ? mounted : undefined;
         mounted = undefined;
-        const detached = current
-          ? yield* Effect.exit(current.release)
-          : // This object restarted while the machine kept the mount.
-            yield* Effect.exit(
-              run(
-                [
-                  "sh",
-                  "-c",
-                  `[ -S /run/blockd/${session}.sock ] && blockd control --socket /run/blockd/${session}.sock --request '{"op":"detach"}' || true`,
-                ],
-                {},
-              ).pipe(
-                Effect.map((reply) => {
-                  const text = decode(reply.stdout);
-                  return {
-                    snapshot: /"snapshot":"([0-9a-f]+)"/.exec(text)?.[1] as Snapshot,
-                    // An object that lost its mount can't say what changed.
-                    paths: null as ChangedPaths,
-                  };
-                }),
-              ),
-            );
+        const detached = yield* Effect.exit(
+          // Or this object restarted while the machine kept the mount.
+          (current ?? disk.mounted(session, config.path)).release,
+        );
         if (detached._tag === "Success") return detached.value;
         yield* Effect.logWarning(
           `detaching ${session} failed; cleaning up by force`,
           detached.cause,
         );
-        yield* forceDetach(session);
+        yield* forceDetach;
         return { snapshot: undefined, paths: null as ChangedPaths };
       });
 
@@ -1932,7 +1977,7 @@ const machineImpl = (config: HostConfig, dockerfile?: string) =>
           : Effect.fail(fail(`${session} isn't mounted on this machine`));
 
       const IDLE_AT = "workspace:idle-at";
-      /** The control socket of a call whose processes this machine keeps. */
+      /** The id of a call whose processes this machine keeps. */
       const HOST = "workspace:host";
       /** A kept call left over (its session moved on): stop it, keep nothing. */
       const detachHost = Effect.gen(function* () {
@@ -2101,26 +2146,43 @@ const machineImpl = (config: HostConfig, dockerfile?: string) =>
           egress: DelegatedEgress | undefined,
         ) =>
           Effect.gen(function* () {
+            const timings: Timings = {};
             if (mounted) yield* detach(mounted.head);
             yield* detachHost;
             yield* state.storage.delete(IDLE_AT);
-            yield* backend.start(hostConfig, egress ? delegate(egress) : [], egress?.ttlMs);
-            const ran = yield* disk.call(snapshot, command, {
-              dir: hostConfig.path,
-              cache: CACHE,
-              patch: options.patch,
-              ...(options.keep ? { keep: true } : {}),
-              ...(options.cwd ? { cwd: options.cwd } : {}),
-              ...(options.env ? { env: options.env } : {}),
-              ...(options.timeoutMs !== undefined ? { timeoutMs: options.timeoutMs } : {}),
-            });
+            yield* timed(
+              timings,
+              "machine.start",
+              backend.start(hostConfig, egress ? delegate(egress) : [], egress?.ttlMs),
+            );
+            const ran = yield* timed(
+              timings,
+              "machine.call",
+              disk.call(snapshot, command, {
+                dir: hostConfig.path,
+                cache: CACHE,
+                patch: options.patch,
+                ...(options.keep ? { keep: true } : {}),
+                ...(options.cwd ? { cwd: options.cwd } : {}),
+                ...(options.env ? { env: options.env } : {}),
+                ...(options.timeoutMs !== undefined ? { timeoutMs: options.timeoutMs } : {}),
+              }),
+            );
             if (ran.host) {
-              yield* state.storage.put(HOST, ran.host.socket);
+              yield* state.storage.put(HOST, ran.host.id);
             } else {
-              yield* Effect.ignore(Effect.andThen(wipe, idleFromNow));
+              yield* timed(
+                timings,
+                "machine.wipe",
+                Effect.ignore(Effect.andThen(wipe, idleFromNow)),
+              );
             }
-            const { host, ...rest } = ran;
-            return { ...rest, kept: host !== undefined };
+            const { host, timings: blockd, ...rest } = ran;
+            return {
+              ...rest,
+              kept: host !== undefined,
+              timings: withPhases(timings, "blockd.", blockd),
+            };
           }).pipe(
             Effect.onError(() => Effect.ignore(Effect.andThen(wipe, idleFromNow))),
             Effect.mapError((error) => asWorkspaceError(error)),

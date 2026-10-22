@@ -30,6 +30,7 @@ export {
   type DiskMount,
   type DiskMountOptions,
   type DiskSurvivor,
+  type DiskTimings,
   type PatchSummary,
   type Snapshot,
   type VolumeHeads,
@@ -46,4 +47,5 @@ export {
   type WorkspaceOpenOptions,
   type WorkspaceOptions,
   type WorkspaceSession,
+  type WorkspaceTimings,
 } from "./Workspace.ts";
