@@ -1,4 +1,4 @@
-import * as Axiom from "alchemy/Axiom";
+import * as Axiom from "@alchemy.run/axiom";
 import { Stack } from "alchemy/Stack";
 
 export const Traces = Axiom.Dataset(

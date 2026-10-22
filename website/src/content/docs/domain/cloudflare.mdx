@@ -17,9 +17,9 @@ import { Bank, BankHandlers } from "@bank/domain/Bank.model";
 import { CustomerApi } from "@bank/domain/CustomerApi.api";
 import { LedgerStore } from "@bank/domain/Ledger/LedgerStore";
 import { SupportApi } from "@bank/domain/SupportApi.api";
-import * as Cloudflare from "alchemy/Cloudflare";
-import * as DomainCloudflare from "alchemy/Domain/Cloudflare";
-import * as Stripe from "alchemy/Stripe";
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as DomainCloudflare from "@alchemy.run/cloudflare/Domain";
+import * as Stripe from "@alchemy.run/stripe";
 import * as Telemetry from "alchemy/Telemetry";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
@@ -116,9 +116,9 @@ Each aggregate, view and policy becomes a Durable Object class on this Worker wh
 // alchemy.run.ts
 import BankWorker from "@bank/server/BankWorker";
 import * as Alchemy from "alchemy";
-import * as Axiom from "alchemy/Axiom";
-import * as Cloudflare from "alchemy/Cloudflare";
-import * as Stripe from "alchemy/Stripe";
+import * as Axiom from "@alchemy.run/axiom";
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as Stripe from "@alchemy.run/stripe";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 

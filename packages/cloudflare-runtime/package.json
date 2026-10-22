@@ -740,6 +740,7 @@
     "yauzl": "catalog:"
   },
   "devDependencies": {
+    "@cloudflare/vite-plugin": "catalog:",
     "@cloudflare/vitest-plugin": "catalog:",
     "@cloudflare/workers-types": "catalog:",
     "@effect/platform-bun": "catalog:",

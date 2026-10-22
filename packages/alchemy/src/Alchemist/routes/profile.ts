@@ -251,7 +251,7 @@ export const configure = Effect.fn("Alchemist.profile.configure")(function* (
   if (provider === undefined) {
     return yield* new AlchemistInvalidInput({
       field: "provider",
-      message: `Auth provider '${input.provider}' is not registered.`,
+      message: `Auth provider '${input.provider}' is not registered. Install the package that provides it.`,
     });
   }
   const connected = input.provider in stored.providers;

@@ -1,4 +1,4 @@
-import * as Domain from "alchemy/Domain";
+import * as Domain from "@alchemy.run/domain";
 import { Account } from "./Account/Account.aggregate.ts";
 import { AccountCard } from "./Account/AccountCard.stream.ts";
 import { AccountSummary } from "./Account/AccountSummary.view.ts";

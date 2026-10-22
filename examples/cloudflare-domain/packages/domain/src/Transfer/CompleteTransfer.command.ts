@@ -1,4 +1,4 @@
-import * as Domain from "alchemy/Domain";
+import * as Domain from "@alchemy.run/domain";
 import { TransferId } from "./Transfer.id.ts";
 
 export class TransferCompleted extends Domain.Event("TransferCompleted", {

@@ -1,4 +1,4 @@
-import * as Domain from "alchemy/Domain";
+import * as Domain from "@alchemy.run/domain";
 import { Cents } from "../Money.ts";
 
 /** The balance does not cover the amount. */

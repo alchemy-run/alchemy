@@ -32,6 +32,7 @@ import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import type { PlatformError } from "effect/PlatformError";
 import * as ChildProcess from "effect/process/ChildProcess";
+import * as Redacted from "effect/Redacted";
 import * as Stream from "effect/Stream";
 import { readBuildOutput } from "./BuildOutput.ts";
 import type { BuildOutput } from "./BuildOutput.ts";
@@ -98,6 +99,29 @@ export interface BuildChildOptions {
    */
   readonly env?: Record<string, string> | undefined;
 }
+
+/**
+ * Resolve a site's raw `env` into the plain strings a build child sees on
+ * `process.env`, so frameworks inline declared public values
+ * (`NEXT_PUBLIC_*`, `PUBLIC_*`, `VITE_*`, ...) at build time. Strings pass
+ * through, `Redacted<string>`s are unwrapped, numbers and booleans are
+ * stringified; bindings and other values are dropped.
+ */
+export const resolveBuildEnv = (
+  env: Record<string, unknown> | undefined,
+): Record<string, string> => {
+  const out: Record<string, string> = {};
+  for (const [key, value] of Object.entries(env ?? {})) {
+    if (typeof value === "string") {
+      out[key] = value;
+    } else if (Redacted.isRedacted(value) && typeof Redacted.value(value) === "string") {
+      out[key] = Redacted.value(value) as string;
+    } else if (typeof value === "number" || typeof value === "boolean") {
+      out[key] = String(value);
+    }
+  }
+  return out;
+};
 
 /**
  * Run a framework production build in a disposable child process with

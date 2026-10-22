@@ -1,4 +1,4 @@
-import * as Domain from "alchemy/Domain";
+import * as Domain from "@alchemy.run/domain";
 import * as Schema from "effect/Schema";
 import { ClaimUsername, UsernameClaimed, UsernameTaken } from "./ClaimUsername.command.ts";
 import { CustomerId } from "./Customer.id.ts";

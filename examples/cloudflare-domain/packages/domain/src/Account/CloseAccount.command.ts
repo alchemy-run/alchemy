@@ -1,4 +1,4 @@
-import * as Domain from "alchemy/Domain";
+import * as Domain from "@alchemy.run/domain";
 import { Cents } from "../Money.ts";
 import { Session } from "../Session.middleware.ts";
 import { AccountId } from "./Account.id.ts";
