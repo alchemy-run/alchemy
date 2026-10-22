@@ -2,6 +2,11 @@
   "name": "aws-website-astro",
   "version": "0.0.0",
   "private": true,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/alchemy-run/alchemy.git",
+    "directory": "examples/aws-website-astro"
+  },
   "type": "module",
   "scripts": {
     "dev": "alchemy dev",
@@ -13,6 +18,7 @@
     "astro": "catalog:"
   },
   "devDependencies": {
+    "@alchemy.run/aws": "workspace:*",
     "@alchemy.run/frontend-frameworks": "workspace:*",
     "@distilled.cloud/aws": "workspace:*",
     "@effect/platform-node": "catalog:",
@@ -25,10 +31,5 @@
   },
   "engines": {
     "node": ">=22"
-  },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/alchemy-run/alchemy.git",
-    "directory": "examples/aws-website-astro"
   }
 }

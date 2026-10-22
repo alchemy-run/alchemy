@@ -40,9 +40,7 @@ describe("FQN", { tags: ["unit", "local"] }, () => {
         Id: "Child",
         Parent: { Id: "Parent" },
       };
-      expect(toFqn(ns, "MyResource")).toBe(
-        `Parent${FQN_SEPARATOR}Child${FQN_SEPARATOR}MyResource`,
-      );
+      expect(toFqn(ns, "MyResource")).toBe(`Parent${FQN_SEPARATOR}Child${FQN_SEPARATOR}MyResource`);
     });
   });
 

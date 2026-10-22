@@ -17,28 +17,24 @@ export default {
 const ASSETS_DIRECTORY = getFixture("assets");
 
 layer(localRuntimeLayer)("Assets binding", (it) => {
-  it.effect(
-    "registers an assets:worker service when worker.assets is configured",
-    () =>
-      Effect.gen(function* () {
-        const worker = yield* startTestWorker({
-          name: "assets-bound",
-          compatibilityDate: "2026-03-10",
-          compatibilityFlags: [],
-          modules: [
-            { name: "main.js", type: "ESModule", content: ASSETS_SCRIPT },
-          ],
-          assets: {
-            directory: ASSETS_DIRECTORY,
-            runWorkerFirst: ["/api/hello"],
-          },
-          bindings: [Assets.local("ASSETS")],
-        });
-        const text = yield* worker.fetchText("/");
-        expect(text).toBe("<h1>home</h1>\n");
-        const api = yield* worker.fetchText("/api/hello");
-        expect(api).toBe("hello from API");
-      }),
+  it.effect("registers an assets:worker service when worker.assets is configured", () =>
+    Effect.gen(function* () {
+      const worker = yield* startTestWorker({
+        name: "assets-bound",
+        compatibilityDate: "2026-03-10",
+        compatibilityFlags: [],
+        modules: [{ name: "main.js", type: "ESModule", content: ASSETS_SCRIPT }],
+        assets: {
+          directory: ASSETS_DIRECTORY,
+          runWorkerFirst: ["/api/hello"],
+        },
+        bindings: [Assets.local("ASSETS")],
+      });
+      const text = yield* worker.fetchText("/");
+      expect(text).toBe("<h1>home</h1>\n");
+      const api = yield* worker.fetchText("/api/hello");
+      expect(api).toBe("hello from API");
+    }),
   );
 
   it.effect("applies _headers and _redirects rules when serving assets", () =>
@@ -47,9 +43,7 @@ layer(localRuntimeLayer)("Assets binding", (it) => {
         name: "assets-headers-redirects",
         compatibilityDate: "2026-03-10",
         compatibilityFlags: [],
-        modules: [
-          { name: "main.js", type: "ESModule", content: ASSETS_SCRIPT },
-        ],
+        modules: [{ name: "main.js", type: "ESModule", content: ASSETS_SCRIPT }],
         assets: {
           directory: ASSETS_DIRECTORY,
           headers: `/*
@@ -74,21 +68,38 @@ layer(localRuntimeLayer)("Assets binding", (it) => {
     }),
   );
 
-  it.effect(
-    "Assets.binding fails with ConfigError when no assets are configured",
-    () =>
-      Effect.gen(function* () {
-        const error = yield* startTestWorker({
-          name: "assets-missing",
-          compatibilityDate: "2026-03-10",
-          compatibilityFlags: [],
-          modules: [
-            { name: "main.js", type: "ESModule", content: ASSETS_SCRIPT },
-          ],
-          bindings: [Assets.local("ASSETS")],
-        }).pipe(Effect.flip);
-        expect(error).toMatchObject({ _tag: "ConfigError", subtag: "Assets" });
-      }),
+  it.effect("serves assets inside dot-directories", () =>
+    Effect.gen(function* () {
+      const worker = yield* startTestWorker({
+        name: "assets-dotfiles",
+        compatibilityDate: "2026-03-10",
+        compatibilityFlags: [],
+        modules: [{ name: "main.js", type: "ESModule", content: ASSETS_SCRIPT }],
+        assets: { directory: ASSETS_DIRECTORY },
+        bindings: [Assets.local("ASSETS")],
+      });
+      const response = yield* worker.fetch("/.well-known/security.txt");
+      expect(response.status).toBe(200);
+      expect(yield* Effect.promise(() => response.text())).toBe(
+        "Contact: mailto:security@example.com\n",
+      );
+      // Dotfiles left out of the upload stay unreachable, as on deploy.
+      expect((yield* worker.fetch("/.private.txt")).status).toBe(404);
+      expect((yield* worker.fetch("/.assetsignore")).status).toBe(404);
+    }),
+  );
+
+  it.effect("Assets.binding fails with ConfigError when no assets are configured", () =>
+    Effect.gen(function* () {
+      const error = yield* startTestWorker({
+        name: "assets-missing",
+        compatibilityDate: "2026-03-10",
+        compatibilityFlags: [],
+        modules: [{ name: "main.js", type: "ESModule", content: ASSETS_SCRIPT }],
+        bindings: [Assets.local("ASSETS")],
+      }).pipe(Effect.flip);
+      expect(error).toMatchObject({ _tag: "ConfigError", subtag: "Assets" });
+    }),
   );
 });
 
@@ -203,9 +214,7 @@ describe("Assets / buildAssetConfigs", () => {
         Effect.provide(
           Logger.layer([
             Logger.make((options) => {
-              const parts = Array.isArray(options.message)
-                ? options.message
-                : [options.message];
+              const parts = Array.isArray(options.message) ? options.message : [options.message];
               messages.push(parts.map(String).join(" "));
             }),
           ]),

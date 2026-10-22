@@ -15,9 +15,7 @@ const { test, beforeAll, afterAll } = Test.make({
 // Attaches to the adapter's shared scope (provided to every hook/test by
 // `Core.toEffect`), so this line printing proves the fallback cleanup ran.
 beforeAll(
-  Effect.addFinalizer(() =>
-    Effect.sync(() => console.log("BUN_GUARD:shared-scope-finalizer-ran")),
-  ),
+  Effect.addFinalizer(() => Effect.sync(() => console.log("BUN_GUARD:shared-scope-finalizer-ran"))),
 );
 
 afterAll(

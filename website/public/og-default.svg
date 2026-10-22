@@ -3,7 +3,7 @@
   <g opacity=".18">
     <path d="M24 24h1152v582h-1152v-582Zm1 1h1150v580h-1150v-580Z" fill="#3f5a2a" fill-rule="evenodd"/>
   </g>
-  <image x="470" y="48" width="260" height="260" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI1MTIiIGhlaWdodD0iNTEyIiB2aWV3Qm94PSIwIDAgMjQgMjQiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzNmNWEyYSIgc3Ryb2tlLXdpZHRoPSIxLjEiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PGNpcmNsZSBjeD0iMTIiIGN5PSIxMiIgcj0iOS41Ii8+PHBhdGggZD0iTTEyIDIxLjIyNSBMNC4wMTA5IDcuMzg3NSBMMTkuOTg5MSA3LjM4NzUgWiIvPjxjaXJjbGUgY3g9IjEyIiBjeT0iMTIiIHI9IjEuMSIgZmlsbD0iIzlhNGYyNyIgc3Ryb2tlPSJub25lIi8+PC9zdmc+" preserveAspectRatio="none"/>
+  <image x="470" y="48" width="260" height="260" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI1MTIiIGhlaWdodD0iNTEyIiB2aWV3Qm94PSIwIDAgMjQgMjQiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzNmNWEyYSIgc3Ryb2tlLXdpZHRoPSIxLjUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PGNpcmNsZSBjeD0iMTIiIGN5PSIxMiIgcj0iOS41Ii8+PHBhdGggZD0iTTEyIDIxLjEyNSBMNC4wOTc1IDcuNDM3NSBMMTkuOTAyNSA3LjQzNzUgWiIvPjxjaXJjbGUgY3g9IjEyIiBjeT0iMTIiIHI9IjEuMyIgZmlsbD0iIzlhNGYyNyIgc3Ryb2tlPSJub25lIi8+PC9zdmc+" preserveAspectRatio="none"/>
   <g fill="#2a2620">
     <use href="#g0" x="419.9" y="395"/>
     <use href="#g1" x="481.74" y="395"/>

@@ -1,19 +1,17 @@
 // Alchemy modifications are licensed under Apache-2.0.
 // This file includes third-party code; see /THIRD_PARTY_LICENSES.md.
-// Alchemy modifications: tests RPC disposal with a typed stub because the current Vitest pool does not expose methods replaced on a live Durable Object.
+// Alchemy modifications: expects Effect Schema validation messages and tests RPC disposal with a typed stub because the current Vitest pool does not expose methods replaced on a live Durable Object.
 import { createExecutionContext, runInDurableObject } from "cloudflare:test";
 import { env } from "cloudflare:workers";
-import { describe, it, vi } from "vitest";
-import { InstanceEvent, InstanceStatus } from "../index.ts";
-import { WorkflowBinding, WorkflowHandle } from "../binding.ts";
-import { WorkflowSubscriptionTarget } from "../subscription.ts";
-import { setTestWorkflowCallback } from "./test-entry.ts";
-import type { Engine, EngineLogs } from "../engine.ts";
-import type {
-  WorkflowSubscription,
-  WorkflowSubscriptionEvent,
-} from "../subscription.ts";
 import type { WorkflowEvent } from "cloudflare:workers";
+import { describe, it, vi } from "vitest";
+import { WorkflowBinding, WorkflowHandle } from "../binding.ts";
+import type { WorkflowBatchCreateOptions } from "../binding.ts";
+import type { Engine, EngineLogs } from "../engine.ts";
+import { InstanceEvent, InstanceStatus } from "../index.ts";
+import { WorkflowSubscriptionTarget } from "../subscription.ts";
+import type { WorkflowSubscription, WorkflowSubscriptionEvent } from "../subscription.ts";
+import { setTestWorkflowCallback } from "./test-entry.ts";
 
 let instanceCounter = 0;
 function uniqueId(prefix = "instance"): string {
@@ -46,9 +44,7 @@ async function waitUntilLogEvent(
 
 describe("WorkflowBinding", () => {
   describe("create()", () => {
-    it("should create an instance with provided id and params", async ({
-      expect,
-    }) => {
+    it("should create an instance with provided id and params", async ({ expect }) => {
       const id = uniqueId();
       const binding = createBinding();
       const engineStub = env.ENGINE.get(env.ENGINE.idFromName(id));
@@ -107,37 +103,46 @@ describe("WorkflowBinding", () => {
       );
     });
 
-    it("should throw WorkflowError for invalid instance id", async ({
-      expect,
-    }) => {
+    it("should throw WorkflowError for invalid instance id", async ({ expect }) => {
       const binding = createBinding();
       await expect(binding.create({ id: "#invalid!" })).rejects.toThrow(
         "Workflow instance has invalid id",
       );
     });
 
-    it("should block creation when pending persistence deletion fails", async ({
-      expect,
-    }) => {
-      const binding = new WorkflowBinding(createExecutionContext(), {
-        ENGINE: env.ENGINE,
-        BINDING_NAME: "TEST_WORKFLOW",
-        WORKFLOW_NAME: "test-workflow",
-        MINIFLARE_LOOPBACK: {
-          fetch: () => Promise.resolve(new Response(null, { status: 500 })),
-        } as unknown as Fetcher,
-      });
-
-      await expect(binding.create({ id: "cleanup-failed" })).rejects.toThrow(
-        "Failed to wait for persisted workflow instance 'cleanup-failed' deletion",
+    it("should reject a null id instead of generating one", async ({ expect }) => {
+      const binding = createBinding();
+      await expect(binding.create({ id: null as unknown as string })).rejects.toThrow(
+        "Workflow instance has invalid id",
       );
     });
+
+    for (const method of ["create", "createBatch"] as const) {
+      it(`${method} should block creation when pending persistence deletion fails`, async ({
+        expect,
+      }) => {
+        const binding = new WorkflowBinding(createExecutionContext(), {
+          ENGINE: env.ENGINE,
+          BINDING_NAME: "TEST_WORKFLOW",
+          WORKFLOW_NAME: "test-workflow",
+          MINIFLARE_LOOPBACK: {
+            fetch: () => Promise.resolve(new Response(null, { status: 500 })),
+          } as unknown as Fetcher,
+        });
+
+        await expect(
+          method === "create"
+            ? binding.create({ id: "cleanup-failed" })
+            : binding.createBatch([{ id: "cleanup-failed" }]),
+        ).rejects.toThrow(
+          "Failed to wait for persisted workflow instance 'cleanup-failed' deletion",
+        );
+      });
+    }
   });
 
   describe("get()", () => {
-    it("should return a WorkflowHandle for an existing instance", async ({
-      expect,
-    }) => {
+    it("should return a WorkflowHandle for an existing instance", async ({ expect }) => {
       const id = uniqueId();
       const binding = createBinding();
       env.ENGINE.get(env.ENGINE.idFromName(id));
@@ -170,9 +175,7 @@ describe("WorkflowBinding", () => {
   });
 
   describe("instance deletion", () => {
-    it("deleteInstance should delete an instance and wipe its stored state", async ({
-      expect,
-    }) => {
+    it("deleteInstance should delete an instance and wipe its stored state", async ({ expect }) => {
       const id = uniqueId();
       const binding = createBinding();
 
@@ -199,14 +202,12 @@ describe("WorkflowBinding", () => {
     });
 
     it("should accept a cron-generated instance ID", async ({ expect }) => {
-      await expect(
-        createBinding().deleteInstance("*/30 * * * *-1786001400000"),
-      ).rejects.toThrow("instance.not_found");
+      await expect(createBinding().deleteInstance("*/30 * * * *-1786001400000")).rejects.toThrow(
+        "instance.not_found",
+      );
     });
 
-    it("should let a running instance delete itself and stop execution", async ({
-      expect,
-    }) => {
+    it("should let a running instance delete itself and stop execution", async ({ expect }) => {
       const id = uniqueId();
       const binding = createBinding();
       let deleteStarted = false;
@@ -240,9 +241,7 @@ describe("WorkflowBinding", () => {
   });
 
   describe("deleteBatch()", () => {
-    it("should delete instances and wipe their stored state", async ({
-      expect,
-    }) => {
+    it("should delete instances and wipe their stored state", async ({ expect }) => {
       const ids = [uniqueId(), uniqueId()];
       const binding = createBinding();
 
@@ -269,9 +268,7 @@ describe("WorkflowBinding", () => {
       }
     });
 
-    it("should report each duplicate missing cron-generated ID", async ({
-      expect,
-    }) => {
+    it("should report each duplicate missing cron-generated ID", async ({ expect }) => {
       const binding = createBinding();
       const cronId = "*/30 * * * *-1786001400000";
       await expect(
@@ -296,9 +293,7 @@ describe("WorkflowBinding", () => {
     });
 
     it("should normalize unexpected deletion errors", async ({ expect }) => {
-      const deleteInstance = vi
-        .fn()
-        .mockRejectedValue(new Error("sensitive failure"));
+      const deleteInstance = vi.fn().mockRejectedValue(new Error("sensitive failure"));
       const binding = new WorkflowBinding(createExecutionContext(), {
         ENGINE: {
           idFromName: (id: string) => id,
@@ -308,9 +303,7 @@ describe("WorkflowBinding", () => {
         WORKFLOW_NAME: "test-workflow",
       });
 
-      await expect(
-        binding.deleteBatch({ instances: ["broken-instance"] }),
-      ).resolves.toEqual({
+      await expect(binding.deleteBatch({ instances: ["broken-instance"] })).resolves.toEqual({
         deleted: [],
         errors: [
           {
@@ -323,12 +316,8 @@ describe("WorkflowBinding", () => {
       expect(deleteInstance).toHaveBeenCalledOnce();
     });
 
-    it("should report persistence cleanup failures per instance", async ({
-      expect,
-    }) => {
-      const abort = vi.fn(() =>
-        Promise.reject(new Error("Durable Object aborted")),
-      );
+    it("should report persistence cleanup failures per instance", async ({ expect }) => {
+      const abort = vi.fn(() => Promise.reject(new Error("Durable Object aborted")));
       const loopbackFetch = vi.fn((url: string) =>
         Promise.resolve(
           new Response(null, {
@@ -343,9 +332,7 @@ describe("WorkflowBinding", () => {
             id,
             deleteInstance: () => {
               if (id.toString() === "missing") {
-                return Promise.reject(
-                  new Error("(instance.not_found) Instance does not exist"),
-                );
+                return Promise.reject(new Error("(instance.not_found) Instance does not exist"));
               }
               return Promise.resolve();
             },
@@ -399,9 +386,7 @@ describe("WorkflowBinding", () => {
         binding.deleteBatch({
           instances: Array.from({ length: 101 }, (_, i) => `instance-${i}`),
         }),
-      ).rejects.toThrow(
-        "(body) batchDeleteInstances only supports 100 instances at a time",
-      );
+      ).rejects.toThrow("(body) batchDeleteInstances only supports 100 instances at a time");
       await expect(binding.deleteBatch({ instances: [""] })).rejects.toThrow(
         "(instance.invalid_id) Instance ID is invalid",
       );
@@ -411,7 +396,9 @@ describe("WorkflowBinding", () => {
   describe("createBatch()", () => {
     it("should create multiple instances in a batch", async ({ expect }) => {
       const binding = createBinding();
-      const ids = ["batch-1", "batch-2", "batch-3"];
+      // Unique per attempt: createBatch() skips existing IDs, so fixed IDs would
+      // make a vitest retry return [] after a failed first attempt.
+      const ids = [1, 2, 3].map((n) => uniqueId(`batch-${n}`));
       setTestWorkflowCallback(async () => "done");
 
       const results = await binding.createBatch(ids.map((id) => ({ id })));
@@ -438,20 +425,381 @@ describe("WorkflowBinding", () => {
       }
     });
 
+    it("should create instances by count with shared options", async ({ expect }) => {
+      const binding = createBinding();
+      const params = { source: "count" };
+      setTestWorkflowCallback(async (event) => (event as WorkflowEvent<typeof params>).payload);
+
+      const result = await binding.createBatch({
+        count: 2,
+        params,
+        retention: { successRetention: "1 day" },
+        locationHint: "weur",
+      });
+
+      expect(result.errors).toEqual([]);
+      expect(result.created).toHaveLength(2);
+      expect(result.created[0].id).not.toBe(result.created[1].id);
+
+      for (const { id } of result.created) {
+        const engineStub = env.ENGINE.get(env.ENGINE.idFromName(id));
+        await waitUntilLogEvent(engineStub, InstanceEvent.WORKFLOW_SUCCESS);
+        const instance = await binding.get(id);
+        expect((await instance.status()).output).toEqual(params);
+      }
+    });
+
+    it("should report per-instance errors for duplicate ids", async ({ expect }) => {
+      const binding = createBinding();
+      const existing = uniqueId("batch-existing");
+      const fresh = uniqueId("batch-fresh");
+      setTestWorkflowCallback(async () => "done");
+
+      await binding.create({ id: existing });
+      await waitUntilLogEvent(
+        env.ENGINE.get(env.ENGINE.idFromName(existing)),
+        InstanceEvent.WORKFLOW_SUCCESS,
+      );
+
+      const result = await binding.createBatch({
+        instances: [{ id: fresh }, { id: existing }, { id: fresh }],
+      });
+
+      expect(result.created).toEqual([{ id: fresh }]);
+      expect(result.errors).toEqual([
+        {
+          index: 1,
+          id: existing,
+          code: 10405,
+          message: "workflows.api.error.instance.already_exists",
+        },
+        {
+          index: 2,
+          id: fresh,
+          code: 10415,
+          message: "workflows.api.error.instance.duplicate_in_batch",
+        },
+      ]);
+
+      await waitUntilLogEvent(
+        env.ENGINE.get(env.ENGINE.idFromName(fresh)),
+        InstanceEvent.WORKFLOW_SUCCESS,
+      );
+    });
+
     it("should throw error for empty batch", async ({ expect }) => {
       const binding = createBinding();
 
       await expect(binding.createBatch([])).rejects.toThrow(
         "WorkflowError: batchCreate should have at least 1 instance",
       );
+      await expect(binding.createBatch({ instances: [] })).rejects.toThrow(
+        "(body) Batch size exceeds maximum allowed",
+      );
+      await expect(binding.createBatch({ count: 0 })).rejects.toThrow(
+        "(body) count must be a positive integer",
+      );
+    });
+
+    it("should reject invalid batch options", async ({ expect }) => {
+      const binding = createBinding();
+      const tooMany = Array.from({ length: 101 }, (_, i) => ({
+        id: `too-many-${i}`,
+      }));
+
+      await expect(binding.createBatch(tooMany)).rejects.toThrow(
+        "WorkflowError: batchCreate only supports 100 instances at a time",
+      );
+      await expect(binding.createBatch({ instances: tooMany })).rejects.toThrow(
+        "(body) Batch size exceeds maximum allowed",
+      );
+      await expect(binding.createBatch({ count: 101 })).rejects.toThrow(
+        "(body) batchCreate only supports 100 instances at a time",
+      );
+      await expect(binding.createBatch({ count: Number.MAX_SAFE_INTEGER })).rejects.toThrow(
+        "(body) batchCreate only supports 100 instances at a time",
+      );
+      await expect(binding.createBatch({ count: -1 })).rejects.toThrow(
+        "(body) count must be a positive integer",
+      );
+      await expect(binding.createBatch({ count: 1.5 })).rejects.toThrow(
+        "(body) count must be a positive integer",
+      );
+      await expect(binding.createBatch({} as WorkflowBatchCreateOptions)).rejects.toThrow(
+        "(body) Provided argument is invalid",
+      );
+      await expect(
+        binding.createBatch({
+          instances: [[]],
+        } as unknown as WorkflowBatchCreateOptions),
+      ).rejects.toThrow("(body) Expected object");
+      await expect(
+        binding.createBatch({
+          count: 1,
+          retention: { successRetention: "invalid" },
+        } as unknown as WorkflowBatchCreateOptions),
+      ).rejects.toThrow(
+        "(body) Duration must be a number or a string in format '{{number}} {{unit}}' where unit is second(s), minute(s), etc.",
+      );
+      await expect(
+        binding.createBatch({
+          instances: [{ locationHint: "invalid" }],
+        } as unknown as WorkflowBatchCreateOptions),
+      ).rejects.toThrow('at ["locationHint"]');
+    });
+
+    it("should only accept positive retention durations", async ({ expect }) => {
+      const binding = createBinding();
+      setTestWorkflowCallback(async () => "done");
+
+      for (const successRetention of [-1, 0, 0.5, "0 days", "-1 day"]) {
+        await expect(
+          binding.createBatch({
+            count: 1,
+            retention: { successRetention },
+          } as unknown as WorkflowBatchCreateOptions),
+        ).rejects.toThrow(
+          "(body) Duration must be a number or a string in format '{{number}} {{unit}}' where unit is second(s), minute(s), etc.",
+        );
+      }
+
+      const result = await binding.createBatch({
+        count: 1,
+        retention: { successRetention: 1000, errorRetention: "1 day" },
+      });
+      expect(result.created).toHaveLength(1);
+      await waitUntilLogEvent(
+        env.ENGINE.get(env.ENGINE.idFromName(result.created[0].id)),
+        InstanceEvent.WORKFLOW_SUCCESS,
+      );
+    });
+
+    it("should prefer count when instances are also provided", async ({ expect }) => {
+      const binding = createBinding();
+      setTestWorkflowCallback(async () => "done");
+
+      const result = await binding.createBatch({
+        count: 1,
+        instances: [],
+      } as unknown as WorkflowBatchCreateOptions);
+
+      expect(result.created).toHaveLength(1);
+      await waitUntilLogEvent(
+        env.ENGINE.get(env.ENGINE.idFromName(result.created[0].id)),
+        InstanceEvent.WORKFLOW_SUCCESS,
+      );
+    });
+
+    it("should skip and exclude ids that already exist", async ({ expect }) => {
+      const existing = uniqueId("dedup-existing");
+      const fresh = uniqueId("dedup-fresh");
+      const binding = createBinding();
+      const engineStub = env.ENGINE.get(env.ENGINE.idFromName(existing));
+      setTestWorkflowCallback(async () => "done");
+
+      const first = await binding.createBatch([{ id: existing }]);
+      expect(first.map((r) => r.id)).toEqual([existing]);
+      await waitUntilLogEvent(engineStub, InstanceEvent.WORKFLOW_SUCCESS);
+
+      const second = await binding.createBatch([{ id: existing }]);
+      expect(second).toEqual([]);
+
+      const mixed = await binding.createBatch([{ id: existing }, { id: fresh }]);
+      expect(mixed.map((r) => r.id)).toEqual([fresh]);
+
+      const freshStub = env.ENGINE.get(env.ENGINE.idFromName(fresh));
+      await waitUntilLogEvent(freshStub, InstanceEvent.WORKFLOW_SUCCESS);
+    });
+
+    it("should collapse duplicate ids within a single batch", async ({ expect }) => {
+      const id = uniqueId("dedup-in-batch");
+      const binding = createBinding();
+      const engineStub = env.ENGINE.get(env.ENGINE.idFromName(id));
+      setTestWorkflowCallback(async () => "done");
+
+      const results = await binding.createBatch([{ id }, { id }, { id }]);
+      expect(results.map((r) => r.id)).toEqual([id]);
+
+      await waitUntilLogEvent(engineStub, InstanceEvent.WORKFLOW_SUCCESS);
+    });
+
+    it("should reject the whole batch before creating anything when an id is invalid", async ({
+      expect,
+    }) => {
+      const good = uniqueId("batch-invalid-good");
+      const binding = createBinding();
+      setTestWorkflowCallback(async () => "done");
+
+      await expect(binding.createBatch([{ id: good }, { id: "#invalid!" }])).rejects.toThrow(
+        "Workflow instance has invalid id",
+      );
+
+      // The valid entry listed before the invalid one must not have been
+      // created.
+      await expect(binding.get(good)).rejects.toThrow("instance.not_found");
+    });
+
+    it("should reject reserved instance ids", async ({ expect }) => {
+      const binding = createBinding();
+      const reservedIds = ["batch", "terminate", "terminateAll", `cf_${"0".repeat(64)}`];
+
+      for (const id of reservedIds) {
+        await expect(binding.createBatch({ instances: [{ id }] })).rejects.toThrow(
+          "(instance.invalid_id) Instance ID is invalid",
+        );
+      }
+    });
+
+    it("should keep accepting reserved ids in the array form", async ({ expect }) => {
+      const binding = createBinding();
+      const ids = ["batch", "terminate", "terminateAll", `cf_${"1".repeat(64)}`];
+      setTestWorkflowCallback(async () => "done");
+
+      const results = await binding.createBatch(ids.map((id) => ({ id })));
+
+      expect(results.map((r) => r.id)).toEqual(ids);
+      for (const id of ids) {
+        await waitUntilLogEvent(
+          env.ENGINE.get(env.ENGINE.idFromName(id)),
+          InstanceEvent.WORKFLOW_SUCCESS,
+        );
+      }
+    });
+
+    it("should keep accepting unvalidated options in the array form", async ({ expect }) => {
+      const binding = createBinding();
+      const id = uniqueId("legacy-batch-options");
+      setTestWorkflowCallback(async () => "done");
+
+      const results = await binding.createBatch([
+        {
+          id,
+          retention: { successRetention: "invalid" },
+          locationHint: "invalid",
+        },
+      ] as unknown as WorkflowInstanceCreateOptions<unknown>[]);
+
+      expect(results).toEqual([{ id }]);
+      await waitUntilLogEvent(
+        env.ENGINE.get(env.ENGINE.idFromName(id)),
+        InstanceEvent.WORKFLOW_SUCCESS,
+      );
+    });
+
+    it("should not create anything when a pending deletion cannot complete", async ({ expect }) => {
+      const id = uniqueId("batch-cleanup-failed");
+      const binding = new WorkflowBinding(createExecutionContext(), {
+        ENGINE: env.ENGINE,
+        BINDING_NAME: "TEST_WORKFLOW",
+        WORKFLOW_NAME: "test-workflow",
+        MINIFLARE_LOOPBACK: {
+          fetch: () => Promise.resolve(new Response(null, { status: 500 })),
+        } as unknown as Fetcher,
+      });
+      const deletionError = `Failed to wait for persisted workflow instance '${id}' deletion`;
+
+      await expect(binding.createBatch([{ id }])).rejects.toThrow(deletionError);
+      await expect(binding.createBatch({ instances: [{ id }] })).rejects.toThrow(deletionError);
+      await expect(createBinding().get(id)).rejects.toThrow("instance.not_found");
+    });
+
+    it("should wait once for each batch id's pending deletion", async ({ expect }) => {
+      const first = uniqueId("batch-pending-delete");
+      const second = uniqueId("batch-pending-delete");
+      const loopbackFetch = vi.fn((_url: string) =>
+        Promise.resolve(new Response(null, { status: 204 })),
+      );
+      const binding = new WorkflowBinding(createExecutionContext(), {
+        ENGINE: env.ENGINE,
+        BINDING_NAME: "TEST_WORKFLOW",
+        WORKFLOW_NAME: "test-workflow",
+        MINIFLARE_LOOPBACK: { fetch: loopbackFetch } as unknown as Fetcher,
+      });
+      setTestWorkflowCallback(async () => "done");
+
+      const explicit = await binding.createBatch({
+        instances: [{ id: first }, { id: second }, { id: first }],
+      });
+      expect(loopbackFetch.mock.calls.map(([url]) => url).sort()).toEqual(
+        [first, second]
+          .map(
+            (id) =>
+              `http://localhost/core/workflow-storage/test-workflow/${env.ENGINE.idFromName(id).toString()}?waitForPendingDelete=1`,
+          )
+          .sort(),
+      );
+
+      loopbackFetch.mockClear();
+      const counted = await binding.createBatch({ count: 2 });
+      expect(loopbackFetch.mock.calls.map(([url]) => url).sort()).toEqual(
+        counted.created
+          .map(
+            ({ id }) =>
+              `http://localhost/core/workflow-storage/test-workflow/${env.ENGINE.idFromName(id).toString()}?waitForPendingDelete=1`,
+          )
+          .sort(),
+      );
+
+      for (const { id } of [...explicit.created, ...counted.created]) {
+        await waitUntilLogEvent(
+          env.ENGINE.get(env.ENGINE.idFromName(id)),
+          InstanceEvent.WORKFLOW_SUCCESS,
+        );
+      }
+    });
+
+    it("should create batch entries without ids under generated ids", async ({ expect }) => {
+      const binding = createBinding();
+      setTestWorkflowCallback(async () => "done");
+
+      const results = await binding.createBatch([{}, {}]);
+      expect(results).toHaveLength(2);
+      expect(results[0].id).not.toBe(results[1].id);
+
+      // Wait for both workflows to complete so the fire-and-forget
+      // init() RPCs settle before teardown.
+      for (const { id } of results) {
+        const engineStub = env.ENGINE.get(env.ENGINE.idFromName(id));
+        await waitUntilLogEvent(engineStub, InstanceEvent.WORKFLOW_SUCCESS);
+      }
+    });
+  });
+
+  describe("deterministic id uniqueness", () => {
+    it("should throw when creating an instance with an existing id", async ({ expect }) => {
+      const id = uniqueId("dup-create");
+      const binding = createBinding();
+      const engineStub = env.ENGINE.get(env.ENGINE.idFromName(id));
+      setTestWorkflowCallback(async () => "done");
+
+      await binding.create({ id });
+      await waitUntilLogEvent(engineStub, InstanceEvent.WORKFLOW_SUCCESS);
+
+      await expect(binding.create({ id })).rejects.toThrow(
+        `(instance.already_exists) Workflow instance with id "${id}" already exists`,
+      );
+    });
+
+    it("should not throw for auto-generated ids", async ({ expect }) => {
+      const binding = createBinding();
+      setTestWorkflowCallback(async () => "done");
+
+      const first = await binding.create();
+      const second = await binding.create();
+      expect(first.id).not.toBe(second.id);
+
+      // Wait for both workflows to complete so the fire-and-forget
+      // init() RPCs settle before teardown.
+      for (const { id } of [first, second]) {
+        const engineStub = env.ENGINE.get(env.ENGINE.idFromName(id));
+        await waitUntilLogEvent(engineStub, InstanceEvent.WORKFLOW_SUCCESS);
+      }
     });
   });
 });
 
 describe("WorkflowBinding", () => {
-  it("should not call dispose when sending an event to an instance", async ({
-    expect,
-  }) => {
+  it("should not call dispose when sending an event to an instance", async ({ expect }) => {
     const id = uniqueId();
     const disposeSpy = vi.fn();
     const receiveEvent = vi.fn(() =>
@@ -473,9 +821,7 @@ describe("WorkflowBinding", () => {
 
 describe("WorkflowHandle", () => {
   describe("status()", () => {
-    it("should return running status for a workflow waiting for an event", async ({
-      expect,
-    }) => {
+    it("should return running status for a workflow waiting for an event", async ({ expect }) => {
       const id = uniqueId();
       const binding = createBinding();
       const engineStub = env.ENGINE.get(env.ENGINE.idFromName(id));
@@ -504,9 +850,7 @@ describe("WorkflowHandle", () => {
       await instance.terminate();
     });
 
-    it("should return complete status and output for a successful workflow", async ({
-      expect,
-    }) => {
+    it("should return complete status and output for a successful workflow", async ({ expect }) => {
       const id = uniqueId();
       const binding = createBinding();
       const engineStub = env.ENGINE.get(env.ENGINE.idFromName(id));
@@ -524,9 +868,7 @@ describe("WorkflowHandle", () => {
       expect(status.error).toBeUndefined();
     });
 
-    it("should return errored status and error for a failed workflow", async ({
-      expect,
-    }) => {
+    it("should return errored status and error for a failed workflow", async ({ expect }) => {
       const id = uniqueId();
       const binding = createBinding();
       const engineStub = env.ENGINE.get(env.ENGINE.idFromName(id));
@@ -547,18 +889,13 @@ describe("WorkflowHandle", () => {
       expect(status.output).toBeNull();
     });
 
-    it("should return step outputs in __LOCAL_DEV_STEP_OUTPUTS", async ({
-      expect,
-    }) => {
+    it("should return step outputs in __LOCAL_DEV_STEP_OUTPUTS", async ({ expect }) => {
       const id = uniqueId();
       const binding = createBinding();
       const engineStub = env.ENGINE.get(env.ENGINE.idFromName(id));
 
       setTestWorkflowCallback(async (_event, step) => {
-        const step1Result = await step.do(
-          "step-1",
-          async () => "result-from-step-1",
-        );
+        const step1Result = await step.do("step-1", async () => "result-from-step-1");
         const step2Result = await step.do("step-2", async () => ({
           data: "result-from-step-2",
         }));
@@ -581,9 +918,7 @@ describe("WorkflowHandle", () => {
       expect(status.__LOCAL_DEV_STEP_OUTPUTS[2]).toBe(123);
     });
 
-    it("should return terminated status for a terminated instance", async ({
-      expect,
-    }) => {
+    it("should return terminated status for a terminated instance", async ({ expect }) => {
       const id = uniqueId();
       const binding = createBinding();
       const engineStub = env.ENGINE.get(env.ENGINE.idFromName(id));
@@ -613,9 +948,7 @@ describe("WorkflowHandle", () => {
     it("finishes a pending next request when disposed", async ({ expect }) => {
       const started = Promise.withResolvers<void>();
       const pendingEvent =
-        Promise.withResolvers<
-          IteratorResult<WorkflowSubscriptionEvent, undefined>
-        >();
+        Promise.withResolvers<IteratorResult<WorkflowSubscriptionEvent, undefined>>();
       const onClose = vi.fn();
       const subscription = new WorkflowSubscriptionTarget(async () => {
         started.resolve();
@@ -727,10 +1060,7 @@ describe("WorkflowHandle", () => {
         throw new Error("Expected subscription events");
       }
       expect(events.map(({ eventId }) => eventId)).toEqual(
-        Array.from(
-          { length: events.length },
-          (_, index) => firstEvent.eventId + index,
-        ),
+        Array.from({ length: events.length }, (_, index) => firstEvent.eventId + index),
       );
       expect(events).toContainEqual(
         expect.objectContaining({
@@ -769,9 +1099,7 @@ describe("WorkflowHandle", () => {
       });
     });
 
-    it("uses errored event names for Workflow and step failures", async ({
-      expect,
-    }) => {
+    it("uses errored event names for Workflow and step failures", async ({ expect }) => {
       const id = uniqueId();
       const binding = createBinding();
       const engineStub = env.ENGINE.get(env.ENGINE.idFromName(id));
@@ -805,9 +1133,7 @@ describe("WorkflowHandle", () => {
       expect(eventTypes.at(-1)).toBe("workflow_errored");
     });
 
-    it("includes the resolved rollback config in rollback step events", async ({
-      expect,
-    }) => {
+    it("includes the resolved rollback config in rollback step events", async ({ expect }) => {
       const id = uniqueId();
       const binding = createBinding();
       const engineStub = env.ENGINE.get(env.ENGINE.idFromName(id));
@@ -851,9 +1177,7 @@ describe("WorkflowHandle", () => {
       });
     });
 
-    it("returns stored structured and streamed step outputs", async ({
-      expect,
-    }) => {
+    it("returns stored structured and streamed step outputs", async ({ expect }) => {
       const id = uniqueId();
       const binding = createBinding();
       const engineStub = env.ENGINE.get(env.ENGINE.idFromName(id));
@@ -863,19 +1187,13 @@ describe("WorkflowHandle", () => {
         const stream = await step.do("stream output", async () => {
           return new ReadableStream<Uint8Array>({
             start(controller) {
-              controller.enqueue(
-                new TextEncoder().encode("streamed step output"),
-              );
+              controller.enqueue(new TextEncoder().encode("streamed step output"));
               controller.close();
             },
           });
         });
         await new Response(stream as ReadableStream<Uint8Array>).arrayBuffer();
-        await step.do(
-          "sensitive output",
-          { sensitive: "output" },
-          async () => "secret",
-        );
+        await step.do("sensitive output", { sensitive: "output" }, async () => "secret");
         await step.do("undefined output", async () => undefined);
         await step.do("null output", async () => null);
         return "done";
@@ -890,10 +1208,7 @@ describe("WorkflowHandle", () => {
       });
 
       const structuredResult = await subscription.next();
-      if (
-        structuredResult.done ||
-        structuredResult.value.type !== "step_completed"
-      ) {
+      if (structuredResult.done || structuredResult.value.type !== "step_completed") {
         throw new Error("Expected a structured step output event");
       }
       const structuredEvent = structuredResult.value;
@@ -913,11 +1228,9 @@ describe("WorkflowHandle", () => {
         stepName: "stream output-1",
       });
       expect(streamEvent.output).toBeInstanceOf(ReadableStream);
-      expect(
-        await new Response(
-          streamEvent.output as ReadableStream<Uint8Array>,
-        ).text(),
-      ).toBe("streamed step output");
+      expect(await new Response(streamEvent.output as ReadableStream<Uint8Array>).text()).toBe(
+        "streamed step output",
+      );
 
       expect(await subscription.next()).toMatchObject({
         done: false,
@@ -981,9 +1294,7 @@ describe("WorkflowHandle", () => {
       expect(result.value.output).toEqual(createWorkflowOutput());
 
       const logs = (await engineStub.readLogs()) as EngineLogs;
-      const completedLog = logs.logs.find(
-        (log) => log.event === InstanceEvent.WORKFLOW_SUCCESS,
-      );
+      const completedLog = logs.logs.find((log) => log.event === InstanceEvent.WORKFLOW_SUCCESS);
       expect(completedLog?.metadata.result).toEqual({
         count: "[BigInt(42)]",
         typedArray: "[Uint16Array(4 bytes)]",
@@ -993,9 +1304,7 @@ describe("WorkflowHandle", () => {
       });
     });
 
-    it("rejects when a stored streamed step output is corrupt", async ({
-      expect,
-    }) => {
+    it("rejects when a stored streamed step output is corrupt", async ({ expect }) => {
       const id = uniqueId();
       const binding = createBinding();
       const engineStub = env.ENGINE.get(env.ENGINE.idFromName(id));
@@ -1044,9 +1353,7 @@ describe("WorkflowHandle", () => {
       });
     });
 
-    it("returns done when the cursor is at or after a terminal event", async ({
-      expect,
-    }) => {
+    it("returns done when the cursor is at or after a terminal event", async ({ expect }) => {
       const id = uniqueId();
       const binding = createBinding();
       const engineStub = env.ENGINE.get(env.ENGINE.idFromName(id));
@@ -1071,10 +1378,7 @@ describe("WorkflowHandle", () => {
         using subscription = await instance.subscribe({ cursor });
         const result = Promise.resolve(subscription.next());
         await expect(
-          Promise.race([
-            result,
-            scheduler.wait(1000).then(() => "timed out" as const),
-          ]),
+          Promise.race([result, scheduler.wait(1000).then(() => "timed out" as const)]),
         ).resolves.toEqual({ done: true, value: undefined });
       };
 
@@ -1084,15 +1388,11 @@ describe("WorkflowHandle", () => {
       await runInDurableObject(engineStub, (engine) => {
         engine.writeLog(InstanceEvent.__INTERNAL_PROD, null, null, {});
       });
-      const laterInternalEventId = await getEventId(
-        InstanceEvent.__INTERNAL_PROD,
-      );
+      const laterInternalEventId = await getEventId(InstanceEvent.__INTERNAL_PROD);
       await expectDoneAtCursor(laterInternalEventId);
     });
 
-    it("waits for live events and applies cursor and filter options", async ({
-      expect,
-    }) => {
+    it("waits for live events and applies cursor and filter options", async ({ expect }) => {
       const id = uniqueId();
       const binding = createBinding();
       const engineStub = env.ENGINE.get(env.ENGINE.idFromName(id));
@@ -1112,9 +1412,7 @@ describe("WorkflowHandle", () => {
         id: number;
         event: InstanceEvent;
       }>;
-      const startEventId = logs.find(
-        ({ event }) => event === InstanceEvent.WORKFLOW_START,
-      )?.id;
+      const startEventId = logs.find(({ event }) => event === InstanceEvent.WORKFLOW_START)?.id;
       if (startEventId === undefined) {
         throw new Error("Expected a workflow start event");
       }
@@ -1279,16 +1577,13 @@ describe("WorkflowHandle", () => {
       ];
 
       for (const [description, options] of invalidOptions) {
-        await expect(
-          unsafeInstance.subscribe(options),
-          description,
-        ).rejects.toThrow("Invalid Workflow subscription options");
+        await expect(unsafeInstance.subscribe(options), description).rejects.toThrow(
+          "Invalid Workflow subscription options",
+        );
       }
     });
 
-    it("streams a persisted termination event after the Engine aborts", async ({
-      expect,
-    }) => {
+    it("streams a persisted termination event after the Engine aborts", async ({ expect }) => {
       const id = uniqueId();
       const binding = createBinding();
       const engineStub = env.ENGINE.get(env.ENGINE.idFromName(id));
@@ -1318,9 +1613,7 @@ describe("WorkflowHandle", () => {
   });
 
   describe("sendEvent()", () => {
-    it("should deliver event payload to a waiting workflow", async ({
-      expect,
-    }) => {
+    it("should deliver event payload to a waiting workflow", async ({ expect }) => {
       const id = uniqueId();
       const binding = createBinding();
       const engineStub = env.ENGINE.get(env.ENGINE.idFromName(id));
@@ -1389,9 +1682,7 @@ describe("WorkflowHandle", () => {
       await vi.waitUntil(
         async () => {
           const logs = (await engineStub.readLogs()) as EngineLogs;
-          const waitStarts = logs.logs.filter(
-            (log) => log.event === InstanceEvent.WAIT_START,
-          );
+          const waitStarts = logs.logs.filter((log) => log.event === InstanceEvent.WAIT_START);
           return waitStarts.length === 2;
         },
         { timeout: 5000 },
@@ -1456,9 +1747,7 @@ describe("WorkflowHandle", () => {
       expect(hasTerminatedEvent).toBe(true);
 
       // assert that step.do never started
-      const hasStepStart = logs.logs.some(
-        (log) => log.event === InstanceEvent.STEP_START,
-      );
+      const hasStepStart = logs.logs.some((log) => log.event === InstanceEvent.STEP_START);
       expect(hasStepStart).toBe(false);
     });
   });
@@ -1542,9 +1831,7 @@ describe("WorkflowHandle", () => {
   });
 
   describe("resume()", () => {
-    it("should resume a paused workflow and complete it", async ({
-      expect,
-    }) => {
+    it("should resume a paused workflow and complete it", async ({ expect }) => {
       const id = uniqueId();
       const binding = createBinding();
       const engineStub = env.ENGINE.get(env.ENGINE.idFromName(id));
@@ -1635,5 +1922,163 @@ describe("WorkflowHandle", () => {
       expect(finalStatus.status).toBe("complete");
       expect(finalStatus.output).toBe("completed");
     });
+  });
+});
+
+describe("WorkflowBinding instance methods by id", () => {
+  it("getInstance() returns the id of an existing instance", async ({ expect }) => {
+    const id = uniqueId();
+    const binding = createBinding();
+    const engineStub = env.ENGINE.get(env.ENGINE.idFromName(id));
+
+    setTestWorkflowCallback(async () => "done");
+
+    await binding.create({ id });
+    await waitUntilLogEvent(engineStub, InstanceEvent.WORKFLOW_SUCCESS);
+
+    expect(await binding.getInstance(id)).toEqual({ id });
+  });
+
+  it.for([
+    ["getInstance"],
+    ["pause"],
+    ["resume"],
+    ["terminate"],
+    ["restart"],
+    ["status"],
+    ["sendEvent"],
+    ["subscribe"],
+  ] as const)(
+    "%s() rejects with instance.not_found for an unknown id",
+    async ([method], { expect }) => {
+      const binding = createBinding();
+
+      await expect(
+        binding[method](uniqueId("missing"), {
+          type: "event",
+          payload: null,
+        }),
+      ).rejects.toThrow("instance.not_found");
+    },
+  );
+
+  it("status() and sendEvent() address an instance by id", async ({ expect }) => {
+    const id = uniqueId();
+    const binding = createBinding();
+    const engineStub = env.ENGINE.get(env.ENGINE.idFromName(id));
+
+    setTestWorkflowCallback(async (_event, step) => {
+      const received = await step.waitForEvent("wait-for-event", {
+        type: "some-event",
+        timeout: "10 seconds",
+      });
+      return received.payload;
+    });
+
+    await binding.create({ id });
+    await waitUntilLogEvent(engineStub, InstanceEvent.WAIT_START);
+    expect((await binding.status(id)).status).toBe("running");
+
+    await binding.sendEvent(id, { type: "some-event", payload: "hello" });
+
+    await vi.waitUntil(async () => (await binding.status(id)).status === "complete", {
+      timeout: 5000,
+    });
+    expect((await binding.status(id)).output).toBe("hello");
+  });
+
+  it("pause() and resume() address an instance by id", async ({ expect }) => {
+    const id = uniqueId();
+    const binding = createBinding();
+    const engineStub = env.ENGINE.get(env.ENGINE.idFromName(id));
+
+    setTestWorkflowCallback(async (_event, step) => {
+      await step.do("long-step", async () => {
+        await scheduler.wait(500);
+        return "result-1";
+      });
+      await step.do("step-2", async () => "result-2");
+      return "all-done";
+    });
+
+    await binding.create({ id });
+    await waitUntilLogEvent(engineStub, InstanceEvent.STEP_START);
+
+    await binding.pause(id);
+    await vi.waitUntil(async () => (await binding.status(id)).status === "paused", {
+      timeout: 5000,
+    });
+
+    await binding.resume(id);
+    await vi.waitUntil(async () => (await binding.status(id)).status === "complete", {
+      timeout: 5000,
+    });
+    expect((await binding.status(id)).output).toBe("all-done");
+  });
+
+  it("terminate() addresses an instance by id", async ({ expect }) => {
+    const id = uniqueId();
+    const binding = createBinding();
+    const engineStub = env.ENGINE.get(env.ENGINE.idFromName(id));
+
+    setTestWorkflowCallback(async (_event, step) => {
+      await step.waitForEvent("wait-for-event", {
+        type: "some-event",
+        timeout: "10 seconds",
+      });
+      return "should never complete";
+    });
+
+    await binding.create({ id });
+    await waitUntilLogEvent(engineStub, InstanceEvent.WAIT_START);
+
+    await binding.terminate(id);
+
+    expect((await binding.status(id)).status).toBe("terminated");
+  });
+
+  it("restart() addresses an instance by id", async ({ expect }) => {
+    const id = uniqueId();
+    const binding = createBinding();
+    const engineStub = env.ENGINE.get(env.ENGINE.idFromName(id));
+    let runs = 0;
+
+    setTestWorkflowCallback(async () => {
+      runs++;
+      return "complete";
+    });
+
+    await binding.create({ id });
+    await waitUntilLogEvent(engineStub, InstanceEvent.WORKFLOW_SUCCESS);
+
+    await binding.restart(id);
+
+    await vi.waitUntil(async () => runs === 2 && (await binding.status(id)).status === "complete", {
+      timeout: 5000,
+    });
+    expect(runs).toBe(2);
+  });
+
+  it("subscribe() addresses an instance by id", async ({ expect }) => {
+    const id = uniqueId();
+    const binding = createBinding();
+    const engineStub = env.ENGINE.get(env.ENGINE.idFromName(id));
+
+    setTestWorkflowCallback(async () => "done");
+
+    await binding.create({ id });
+    await waitUntilLogEvent(engineStub, InstanceEvent.WORKFLOW_SUCCESS);
+
+    using subscription = (await binding.subscribe(id)) as unknown as WorkflowSubscription;
+    const types: string[] = [];
+    while (true) {
+      const result = await subscription.next();
+      if (result.done) {
+        break;
+      }
+      types.push(result.value.type);
+    }
+
+    expect(types.at(-1)).toBe("workflow_completed");
   });
 });

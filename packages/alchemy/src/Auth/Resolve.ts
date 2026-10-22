@@ -3,20 +3,10 @@ import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
-import {
-  AuthError,
-  getAuthProvider,
-  presentEnvironment,
-} from "./AuthProvider.ts";
-import {
-  ALCHEMY_PROFILE,
-  DEFAULT_PROFILE_NAME,
-  ProfileError,
-  ProfileStore,
-  SuppressMissingProviderConfig,
-} from "./Profile.ts";
 import { UserFacingError } from "../UserFacingError.ts";
 import { loadConfigProvider } from "../Util/ConfigProvider.ts";
+import { AuthError, getAuthProvider, presentEnvironment } from "./AuthProvider.ts";
+import { ProfileStore, SuppressMissingProviderConfig } from "./Profile.ts";
 
 /**
  * Resolve the selected Alchemy profile after the command's dotenv provider is
@@ -30,15 +20,11 @@ export const resolveProfileSelection = Effect.fn(function* (
   const base = yield* loadConfigProvider(envFile);
   const profiles = yield* ProfileStore;
   const selected = yield* profiles.current.pipe(
-    Effect.provideService(
-      ConfigProvider.ConfigProvider,
-      withProfileOverride(base, override),
-    ),
+    Effect.provideService(ConfigProvider.ConfigProvider, withProfileOverride(base, override)),
   );
   return {
     ...selected,
-    source:
-      override === undefined ? selected.source : ("command-line" as const),
+    source: override === undefined ? selected.source : ("command-line" as const),
   };
 });
 
@@ -57,10 +43,7 @@ export const resolveProfileName = Effect.fn(function* (
  * CI, the provider's environment resolution alone (profiles do not exist
  * there), otherwise the selected profile.
  */
-export const resolveProviderConfig = <
-  C extends { method: string } = any,
-  Credentials = any,
->(
+export const resolveProviderConfig = <C extends { method: string } = any, Credentials = any>(
   providerName: string,
 ) =>
   Effect.gen(function* () {
@@ -83,11 +66,9 @@ export const resolveProviderConfig = <
     const ci = yield* Config.Boolean("CI").pipe(Config.withDefault(false));
     if (ci) {
       if (auth.readEnvironment === undefined) {
-        return yield* Effect.fail(
-          new AuthError({
-            message: `Auth provider '${providerName}' does not support environment credentials in CI.`,
-          }),
-        );
+        return yield* AuthError.make({
+          message: `Auth provider '${providerName}' does not support environment credentials in CI.`,
+        });
       }
       return {
         auth,
@@ -107,12 +88,11 @@ export const resolveProviderConfig = <
       config,
       resolve: auth.read(profileName, config, (updated) =>
         profile.setProviderConfig(profileName, providerName, updated).pipe(
-          Effect.mapError(
-            (cause) =>
-              new AuthError({
-                message: `${providerName}: could not persist refreshed credentials for profile '${profileName}'.`,
-                cause,
-              }),
+          Effect.mapError((cause) =>
+            AuthError.make({
+              message: `${providerName}: could not persist refreshed credentials for profile '${profileName}'.`,
+              cause,
+            }),
           ),
         ),
       ),
@@ -127,9 +107,7 @@ export const resolveProviderConfig = <
  * effect, e.g. never requires a configured profile.
  */
 export const deferUntilFirstUse = <A, E, R>(resolve: Effect.Effect<A, E, R>) =>
-  Effect.map(Effect.context<R>(), (context) =>
-    resolve.pipe(Effect.provideContext(context)),
-  );
+  Effect.map(Effect.context<R>(), (context) => resolve.pipe(Effect.provideContext(context)));
 
 /**
  * A provider's credentials could not be resolved when a cloud operation first
@@ -155,17 +133,14 @@ export class CredentialsUnavailable extends Schema.TaggedError<CredentialsUnavai
  */
 export const orDieCredentialsUnavailable =
   (provider: string) =>
-  <A, E extends { readonly message: string }, R>(
-    self: Effect.Effect<A, E, R>,
-  ) =>
+  <A, E extends { readonly message: string }, R>(self: Effect.Effect<A, E, R>) =>
     self.pipe(
-      Effect.mapError(
-        (cause) =>
-          new CredentialsUnavailable({
-            provider,
-            message: cause.message,
-            cause,
-          }),
+      Effect.mapError((cause) =>
+        CredentialsUnavailable.make({
+          provider,
+          message: cause.message,
+          cause,
+        }),
       ),
       Effect.orDie,
     );

@@ -1,10 +1,9 @@
+import * as Axiom from "@alchemy.run/axiom";
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as GitHub from "@alchemy.run/github";
 import * as Alchemy from "alchemy";
-import * as Axiom from "alchemy/Axiom";
-import * as Cloudflare from "alchemy/Cloudflare";
-import * as GitHub from "alchemy/GitHub";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-
 import { CliOverviewDashboard } from "./otel/Dashboard.ts";
 import { Logs, Metrics, Traces } from "./otel/Datasets.ts";
 import Ingester from "./otel/Ingester.ts";
@@ -33,11 +32,7 @@ import {
 export default Alchemy.Stack(
   "AlchemyOtel",
   {
-    providers: Layer.mergeAll(
-      Axiom.providers(),
-      Cloudflare.providers(),
-      GitHub.providers(),
-    ),
+    providers: Layer.mergeAll(Axiom.providers(), Cloudflare.providers(), GitHub.providers()),
     state: Cloudflare.state(),
   },
   Effect.gen(function* () {

@@ -1,3 +1,242 @@
+## v2.0.0-beta.83
+
+### &nbsp;&nbsp;&nbsp;🚨 Breaking Changes
+
+- **cloudflare**:
+  - **containers**: One Durable Object Container is one image; beta.83 release notes &nbsp;-&nbsp; by **sam** in https://github.com/alchemy-run/alchemy/issues/2223 [<samp>(e3fd8)</samp>](https://github.com/alchemy-run/alchemy/commit/e3fd86053)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/alchemy-run/alchemy/compare/v2.0.0-beta.82...HEAD)
+
+---
+
+## v2.0.0-beta.82
+
+### &nbsp;&nbsp;&nbsp;🚨 Breaking Changes
+
+- **cloudflare**:
+  - K2 streams and Basin (Pipelines, Catalog, Tables) &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/2010 [<samp>(992d4)</samp>](https://github.com/alchemy-run/alchemy/commit/992d49d1a)
+  - Durable Object-managed containers; start containers explicitly &nbsp;-&nbsp; by **Dan van der Merwe**, **BlankParticle** and **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/1905 [<samp>(62c28)</samp>](https://github.com/alchemy-run/alchemy/commit/62c288659)
+- **engine**:
+  - Replace the InstanceId service with ResourceContext &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/2160 [<samp>(add85)</samp>](https://github.com/alchemy-run/alchemy/commit/add85a984)
+- **gcp**:
+  - Bump distilled to main and drop the removed Dataplex Data Taxonomy resources &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/2024 [<samp>(97c8d)</samp>](https://github.com/alchemy-run/alchemy/commit/97c8da8bd)
+  - Bump distilled to main and remove deleted TasksPushNotificationConfig &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/2159 [<samp>(f8d7a)</samp>](https://github.com/alchemy-run/alchemy/commit/f8d7a6704)
+- **git**:
+  - BlobStoreR2 requires ReadWriteBucket instead of providing the binding &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/2102 [<samp>(212e7)</samp>](https://github.com/alchemy-run/alchemy/commit/212e7afed)
+
+### &nbsp;&nbsp;&nbsp;🚀 Features
+
+- **aws**:
+  - Inject the AWS environment into providers() and state() &nbsp;-&nbsp; by **Bjorn Pagen** and **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/1933 [<samp>(e6487)</samp>](https://github.com/alchemy-run/alchemy/commit/e6487ae44)
+  - Support console login via aws login &nbsp;-&nbsp; by **Joaquín Pérez** and **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/1759 [<samp>(a82f9)</samp>](https://github.com/alchemy-run/alchemy/commit/a82f986b3)
+  - **budgets**: Add costTypes to Budget &nbsp;-&nbsp; by **arth** and **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/2055 [<samp>(7e941)</samp>](https://github.com/alchemy-run/alchemy/commit/7e941809d)
+  - **dsql**: Apply SQL migrations during cluster deploy &nbsp;-&nbsp; by **Carl Ulsøe Christensen** and **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/1544 [<samp>(a72d1)</samp>](https://github.com/alchemy-run/alchemy/commit/a72d1e3de)
+  - **dynamodb**: Support Cloudflare Worker hosts in HTTP bindings &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/1782 [<samp>(15bc4)</samp>](https://github.com/alchemy-run/alchemy/commit/15bc4bcae)
+  - **ecs,lambda**: Add logging.retention to Task and Function &nbsp;-&nbsp; by **TBIQ007** and **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/2042 [<samp>(270fe)</samp>](https://github.com/alchemy-run/alchemy/commit/270fe8160)
+  - **secretsmanager**: Opt-in recovery window for Secret deletion &nbsp;-&nbsp; by **TBIQ007** and **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/2053 [<samp>(21436)</samp>](https://github.com/alchemy-run/alchemy/commit/21436fe22)
+- **cloudflare**:
+  - Support Workers Issues observability &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/1992 [<samp>(1431e)</samp>](https://github.com/alchemy-run/alchemy/commit/1431ef2e1)
+  - BotManagement manages the AI search, agent and training crawler policies &nbsp;-&nbsp; by **0xMilkEnjoyer** and **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/1911 [<samp>(d5b6f)</samp>](https://github.com/alchemy-run/alchemy/commit/d5b6ff1a0)
+  - R2 bucket lock rules &nbsp;-&nbsp; by **Alessandro Cheli** and **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/1984 [<samp>(5fbb1)</samp>](https://github.com/alchemy-run/alchemy/commit/5fbb1161f)
+  - Federated APIs — emulate zone routes in alchemy dev &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/2088 [<samp>(fcb93)</samp>](https://github.com/alchemy-run/alchemy/commit/fcb936cdc)
+  - SendingSubdomain previewEnabled and email.sending queue subscriptions &nbsp;-&nbsp; by **0xMilkEnjoyer** and **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/1914 [<samp>(dc461)</samp>](https://github.com/alchemy-run/alchemy/commit/dc4615f3c)
+  - Instant KV namespaces &nbsp;-&nbsp; by **Rahul Mishra** in https://github.com/alchemy-run/alchemy/issues/2027 [<samp>(41a0a)</samp>](https://github.com/alchemy-run/alchemy/commit/41a0a4e74)
+  - **access**:
+    - Adopt Applications by id, SaaS apps, Policy connectionRules &nbsp;-&nbsp; by **Damjan Znidarsic** and **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/1848 [<samp>(0dcab)</samp>](https://github.com/alchemy-run/alchemy/commit/0dcab7d0d)
+  - **ai**:
+    - Report Workers AI neurons on finish parts &nbsp;-&nbsp; by **Jordan** and **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/1724 [<samp>(1f76d)</samp>](https://github.com/alchemy-run/alchemy/commit/1f76d326a)
+  - **hyperdrive**:
+    - Connect to private databases through Workers VPC &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/2218 [<samp>(a286a)</samp>](https://github.com/alchemy-run/alchemy/commit/a286a0792)
+  - **mtls**:
+    - Bind an MtlsCertificate to a Worker (env and Effect Fetch) &nbsp;-&nbsp; by **TBIQ007** and **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/2051 [<samp>(73cf8)</samp>](https://github.com/alchemy-run/alchemy/commit/73cf8993c)
+  - **queues**:
+    - Add QueueSink &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/1781 [<samp>(01618)</samp>](https://github.com/alchemy-run/alchemy/commit/01618ef40)
+  - **ssl**:
+    - Add Ssl.CertificateTransparencyAlerting &nbsp;-&nbsp; by **0xMilkEnjoyer** and **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/1913 [<samp>(50a48)</samp>](https://github.com/alchemy-run/alchemy/commit/50a487d15)
+  - **workers**:
+    - Bind an Effect Worker to itself through ctx.exports &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/2161 [<samp>(ee413)</samp>](https://github.com/alchemy-run/alchemy/commit/ee413f965)
+    - Deploy Durable Objects with declarative exports &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/2135 [<samp>(74beb)</samp>](https://github.com/alchemy-run/alchemy/commit/74beb7f1a)
+    - Bind a Worker's own named entrypoint &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/2115 [<samp>(0dc42)</samp>](https://github.com/alchemy-run/alchemy/commit/0dc429224)
+    - Per-entrypoint Workers Cache &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/2216 [<samp>(19748)</samp>](https://github.com/alchemy-run/alchemy/commit/197481686)
+- **cloudflare-runtime**:
+  - Update workerd and sync upstream SDK &nbsp;-&nbsp; by **Rahul Mishra** in https://github.com/alchemy-run/alchemy/issues/2028 [<samp>(1a789)</samp>](https://github.com/alchemy-run/alchemy/commit/1a789a3cc)
+- **docker**:
+  - Add container runtime options &nbsp;-&nbsp; by **bjorntechTobbe** and **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/1946 [<samp>(09145)</samp>](https://github.com/alchemy-run/alchemy/commit/0914511d0)
+  - Support ordered env files &nbsp;-&nbsp; by **bjorntechTobbe** and **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/1947 [<samp>(59c0a)</samp>](https://github.com/alchemy-run/alchemy/commit/59c0a8acf)
+- **drizzle**:
+  - Pass @effect/sql-pg options through Drizzle.Postgres &nbsp;-&nbsp; by **Julius Marminge**, **Claude Opus 5.5 (1M context)** and **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/1994 [<samp>(2b597)</samp>](https://github.com/alchemy-run/alchemy/commit/2b5971e89)
+- **frontend-frameworks**:
+  - Support vinext 1.0 &nbsp;-&nbsp; by **Rahul Mishra** in https://github.com/alchemy-run/alchemy/issues/2025 [<samp>(6dc41)</samp>](https://github.com/alchemy-run/alchemy/commit/6dc416811)
+  - Support SvelteKit 3.0 stable &nbsp;-&nbsp; by **Rahul Mishra** in https://github.com/alchemy-run/alchemy/issues/2060 [<samp>(0a746)</samp>](https://github.com/alchemy-run/alchemy/commit/0a746c7c2)
+- **gcp**:
+  - Support views and external tables on BigQuery.Table &nbsp;-&nbsp; by **Bartek** and **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/2082 [<samp>(51682)</samp>](https://github.com/alchemy-run/alchemy/commit/516829b06)
+  - Add IAM ServiceAccount, ServiceUsage ProjectService, and GKE/Compute/NAT props &nbsp;-&nbsp; by **Connor Hindley** and **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/1995 [<samp>(11d3b)</samp>](https://github.com/alchemy-run/alchemy/commit/11d3b8d05)
+- **kubernetes,neon**:
+  - Accept resource Effects for Deployment cluster and Function branch/project &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/2005 [<samp>(d6eec)</samp>](https://github.com/alchemy-run/alchemy/commit/d6eec8fc7)
+- **neon**:
+  - Add Neon.Role for Postgres roles on a branch &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/2078 [<samp>(1ac62)</samp>](https://github.com/alchemy-run/alchemy/commit/1ac62ec71)
+- **pkg**:
+  - Auto-discover transitive workspace dependencies &nbsp;-&nbsp; by **Rahul Mishra** in https://github.com/alchemy-run/alchemy/issues/2108 [<samp>(0dd1b)</samp>](https://github.com/alchemy-run/alchemy/commit/0dd1b37ad)
+- **planetscale**:
+  - Add deletionProtection to MySQLDatabase and PostgresDatabase &nbsp;-&nbsp; by **Alex** and **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/1861 [<samp>(3c323)</samp>](https://github.com/alchemy-run/alchemy/commit/3c32367c2)
+- **prisma**:
+  - Identify App, Database, and Bucket by logicalId &nbsp;-&nbsp; by **Kristof Siket** and **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/1849 [<samp>(05b92)</samp>](https://github.com/alchemy-run/alchemy/commit/05b92b518)
+- **turso**:
+  - Turso provider with libSQL bindings &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/2138 [<samp>(6af75)</samp>](https://github.com/alchemy-run/alchemy/commit/6af758c17)
+- **website**:
+  - Geometrically correct Sri Yantra patterns and OG cards &nbsp;-&nbsp; by **Michael K** in https://github.com/alchemy-run/alchemy/issues/2006 [<samp>(2ed8f)</samp>](https://github.com/alchemy-run/alchemy/commit/2ed8fc371)
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- Faster Oxc loader and a simpler CLI launcher &nbsp;-&nbsp; by **Rahul Mishra** in https://github.com/alchemy-run/alchemy/issues/2151 [<samp>(cdd6e)</samp>](https://github.com/alchemy-run/alchemy/commit/cdd6e2291)
+- Resource leaks, slow deletes and flaky live tests across AWS, Cloudflare and GCP &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/2174 [<samp>(31c28)</samp>](https://github.com/alchemy-run/alchemy/commit/31c284685)
+- **alchemy-test**:
+  - Collect test files without AsyncLocalStorage through import() &nbsp;-&nbsp; by **arth** in https://github.com/alchemy-run/alchemy/issues/2058 [<samp>(95d23)</samp>](https://github.com/alchemy-run/alchemy/commit/95d23e36c)
+- **aws**:
+  - Detect Effect-native Lambda source changes &nbsp;-&nbsp; by **elijah smith** and **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/1809 [<samp>(edc93)</samp>](https://github.com/alchemy-run/alchemy/commit/edc930403)
+  - **acm**:
+    - Dedupe dns validation records for a name and its wildcard &nbsp;-&nbsp; by **Alex Godfrey** and **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/1821 [<samp>(d7e01)</samp>](https://github.com/alchemy-run/alchemy/commit/d7e01ae84)
+  - **autoscaling**:
+    - Converge ASG and capacity provider with ECS managed scaling &nbsp;-&nbsp; by **Makisuo** and **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/2009 [<samp>(2f11a)</samp>](https://github.com/alchemy-run/alchemy/commit/2f11a194e)
+  - **chatbot**:
+    - Route API calls to a supported region &nbsp;-&nbsp; by **ryo kishida** and **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/2085 [<samp>(cf166)</samp>](https://github.com/alchemy-run/alchemy/commit/cf1665cd3)
+  - **cloudcontrol**:
+    - Normalize SSM Document desired state before diffing &nbsp;-&nbsp; by **Bjorn Pagen** and **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/1934 [<samp>(02cc0)</samp>](https://github.com/alchemy-run/alchemy/commit/02cc0e911)
+  - **cloudfront**:
+    - Re-issue Invalidation when its version changes &nbsp;-&nbsp; by **Ethan Shumate** in https://github.com/alchemy-run/alchemy/issues/1854 [<samp>(579e5)</samp>](https://github.com/alchemy-run/alchemy/commit/579e5949d)
+  - **ec2**:
+    - Retry Client VPN endpoint creates blocked by another create &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/2086 [<samp>(47d37)</samp>](https://github.com/alchemy-run/alchemy/commit/47d37cf08)
+    - Delete Client VPN endpoints that still have target networks &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/2089 [<samp>(6ac7c)</samp>](https://github.com/alchemy-run/alchemy/commit/6ac7c8a95)
+    - Replace on unresolved userData and serve a reachable local url &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/1471 [<samp>(8dff5)</samp>](https://github.com/alchemy-run/alchemy/commit/8dff59950)
+    - Wait up to 5 minutes for a deleted InternetGateway to disappear &nbsp;-&nbsp; by **TBIQ007** in https://github.com/alchemy-run/alchemy/issues/2106 [<samp>(227f0)</samp>](https://github.com/alchemy-run/alchemy/commit/227f0f097)
+  - **ecs**:
+    - Support host and bridge network modes on Service &nbsp;-&nbsp; by **Makisuo** and **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/2008 [<samp>(0bebe)</samp>](https://github.com/alchemy-run/alchemy/commit/0bebef201)
+  - **iam**:
+    - Accept string principals in PolicyStatement &nbsp;-&nbsp; by **Ethan Shumate** and **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/1856 [<samp>(831c9)</samp>](https://github.com/alchemy-run/alchemy/commit/831c9d1e5)
+  - **lambda**:
+    - Inline Lambda.Function implementations may require the Function host (event sources) &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/1931 [<samp>(519eb)</samp>](https://github.com/alchemy-run/alchemy/commit/519eb5de8)
+    - Durable function bodies can call runtime binding clients (provide RuntimeContext per invocation) &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/1930 [<samp>(54783)</samp>](https://github.com/alchemy-run/alchemy/commit/5478379bc)
+    - Return nothing from Version/Alias recovery read when the parent ref was stripped &nbsp;-&nbsp; by **TBIQ007** and **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/2003 [<samp>(d97fe)</samp>](https://github.com/alchemy-run/alchemy/commit/d97fe8a4d)
+    - Delete the log group when destroying a local function &nbsp;-&nbsp; by **TBIQ007** in https://github.com/alchemy-run/alchemy/issues/2054 [<samp>(4ea52)</samp>](https://github.com/alchemy-run/alchemy/commit/4ea521db2)
+    - Flush telemetry before a Lambda timeout &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/1494 [<samp>(a9b56)</samp>](https://github.com/alchemy-run/alchemy/commit/a9b56ecae)
+  - **rds**:
+    - Validate the master secret policy against the known secret &nbsp;-&nbsp; by **Bjorn Pagen** and **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/1936 [<samp>(78ac3)</samp>](https://github.com/alchemy-run/alchemy/commit/78ac31970)
+    - Refresh a DBInstance whose identifier now names another physical instance &nbsp;-&nbsp; by **TBIQ007** and **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/2017 [<samp>(2d753)</samp>](https://github.com/alchemy-run/alchemy/commit/2d75359c7)
+  - **route53**:
+    - Match wildcard record names returned as \052 &nbsp;-&nbsp; by **Alex Godfrey** and **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/1822 [<samp>(b28a4)</samp>](https://github.com/alchemy-run/alchemy/commit/b28a4fd86)
+  - **ses**:
+    - Retry receipt rule IAM role propagation &nbsp;-&nbsp; by **elijah smith** and **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/1896 [<samp>(90f31)</samp>](https://github.com/alchemy-run/alchemy/commit/90f319dfe)
+  - **state**:
+    - Keep state contents out of Debug logs &nbsp;-&nbsp; by **TBIQ007** and **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/2074 [<samp>(fbbfb)</samp>](https://github.com/alchemy-run/alchemy/commit/fbbfbf644)
+  - **website**:
+    - Resolve inline Router route metadata &nbsp;-&nbsp; by **William Blazer** and **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/1819 [<samp>(8248b)</samp>](https://github.com/alchemy-run/alchemy/commit/8248bcc46)
+- **axiom**:
+  - Deliver OTLP metrics as protobuf with X-Axiom-Metrics-Dataset &nbsp;-&nbsp; by **TBIQ007** and **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/2043 [<samp>(507c6)</samp>](https://github.com/alchemy-run/alchemy/commit/507c6d53b)
+- **bundle**:
+  - Read pnpm 12 multi-document lockfiles &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/2020 [<samp>(aadaf)</samp>](https://github.com/alchemy-run/alchemy/commit/aadaf903d)
+  - Write each resource's bundle to .alchemy/bundles instead of dist/ &nbsp;-&nbsp; by **Juliaan** and **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/2133 [<samp>(47c08)</samp>](https://github.com/alchemy-run/alchemy/commit/47c08f963)
+- **cli**:
+  - Detect bun launches from npm_execpath only &nbsp;-&nbsp; by **Rahul Mishra** in https://github.com/alchemy-run/alchemy/issues/2031 [<samp>(bdf6e)</samp>](https://github.com/alchemy-run/alchemy/commit/bdf6e15ee)
+  - Accept --env-file /dev/null &nbsp;-&nbsp; by **arth** and **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/2104 [<samp>(e7d0b)</samp>](https://github.com/alchemy-run/alchemy/commit/e7d0b7253)
+  - Keep default stages valid when $USER has unsafe characters &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/2113 [<samp>(e71cc)</samp>](https://github.com/alchemy-run/alchemy/commit/e71cc0cf0)
+  - Cloudflare token --all-permissions splits policies over 300 groups &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/2186 [<samp>(a8bd9)</samp>](https://github.com/alchemy-run/alchemy/commit/a8bd9fc7f)
+- **cloudflare**:
+  - Export Workers and R2 leaf modules &nbsp;-&nbsp; by **Dan van der Merwe** in https://github.com/alchemy-run/alchemy/issues/1959 [<samp>(49d64)</samp>](https://github.com/alchemy-run/alchemy/commit/49d6491d5)
+  - Keep toRpcAsync views from being mistaken for thenables &nbsp;-&nbsp; by **Alex**, **agcty** and **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/1506 [<samp>(26583)</samp>](https://github.com/alchemy-run/alchemy/commit/26583eaaa)
+  - Expose Worker URLs during precreate &nbsp;-&nbsp; by **Aman Varshney** and **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/1200 [<samp>(e1f2e)</samp>](https://github.com/alchemy-run/alchemy/commit/e1f2e1e31)
+  - Fail Durable Object RPC calls to undefined members &nbsp;-&nbsp; by **Dan van der Merwe** and **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/1957 [<samp>(fdf6f)</samp>](https://github.com/alchemy-run/alchemy/commit/fdf6f2c1f)
+  - Interrupt synchronous storage transaction callbacks &nbsp;-&nbsp; by **Dan van der Merwe** in https://github.com/alchemy-run/alchemy/issues/1958 [<samp>(31ec9)</samp>](https://github.com/alchemy-run/alchemy/commit/31ec93839)
+  - Preserve verified gradual-rollout upload receipts &nbsp;-&nbsp; by **Orlando Barboza** and **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/1901 [<samp>(b6552)</samp>](https://github.com/alchemy-run/alchemy/commit/b6552d403)
+  - Report vite build child's stderr on failure &nbsp;-&nbsp; by **Rahul Mishra** in https://github.com/alchemy-run/alchemy/issues/2036 [<samp>(6d5e6)</samp>](https://github.com/alchemy-run/alchemy/commit/6d5e6f600)
+  - Scope S3Credentials tokens to the bucket &nbsp;-&nbsp; by **Alessandro Cheli** and **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/1985 [<samp>(14875)</samp>](https://github.com/alchemy-run/alchemy/commit/14875dec5)
+  - Register container outbound interception with the native Fetcher &nbsp;-&nbsp; by **apostoli** and **BlankParticle** in https://github.com/alchemy-run/alchemy/issues/2062 [<samp>(a7dd0)</samp>](https://github.com/alchemy-run/alchemy/commit/a7dd0b37a)
+  - Redact observability destination credentials &nbsp;-&nbsp; by **Clemens Stolle** and **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/1964 [<samp>(db7fe)</samp>](https://github.com/alchemy-run/alchemy/commit/db7fe1537)
+  - Close request scopes for bodyless responses &nbsp;-&nbsp; by **Alex** and **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/1649 [<samp>(8defa)</samp>](https://github.com/alchemy-run/alchemy/commit/8defa495a)
+  - Keep running dev containers working across Worker reloads &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/2158 [<samp>(b8bf3)</samp>](https://github.com/alchemy-run/alchemy/commit/b8bf35ab8)
+  - Reset Durable Objects stuck on the pre-create placeholder &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/2162 [<samp>(61251)</samp>](https://github.com/alchemy-run/alchemy/commit/612518dda)
+  - Type-check the placeholder Durable Object test &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/2164 [<samp>(927af)</samp>](https://github.com/alchemy-run/alchemy/commit/927af80f0)
+  - Retry container creates until the Durable Object namespace is visible &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/2167 [<samp>(7d872)</samp>](https://github.com/alchemy-run/alchemy/commit/7d8728438)
+  - **ai**:
+    - Fix streamed text, tool calls, and reasoning in Workers AI LanguageModel &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/2064 [<samp>(7c97c)</samp>](https://github.com/alchemy-run/alchemy/commit/7c97c55bc)
+  - **d1**:
+    - Delete first when a replacement keeps the database name &nbsp;-&nbsp; by **Florian Bienefelt** and **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/1867 [<samp>(452d7)</samp>](https://github.com/alchemy-run/alchemy/commit/452d71c1c)
+  - **email**:
+    - Refuse catch-all Email.Rule and adopt matching rules &nbsp;-&nbsp; by **Michael K** in https://github.com/alchemy-run/alchemy/issues/1539 [<samp>(d75bc)</samp>](https://github.com/alchemy-run/alchemy/commit/d75bc5bdd)
+  - **hyperdrive**:
+    - Only contribute the dev origin to local hosts &nbsp;-&nbsp; by **DivMode** and **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/1839 [<samp>(4fa29)</samp>](https://github.com/alchemy-run/alchemy/commit/4fa290bf1)
+  - **mtls-certificate**:
+    - Retry delete while the certificate is still in use &nbsp;-&nbsp; by **TBIQ007** and **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/2081 [<samp>(cdd74)</samp>](https://github.com/alchemy-run/alchemy/commit/cdd741c9c)
+  - **ruleset**:
+    - Delete only the rules a Ruleset deployed &nbsp;-&nbsp; by **Damjan Znidarsic** in https://github.com/alchemy-run/alchemy/issues/1847 [<samp>(c7215)</samp>](https://github.com/alchemy-run/alchemy/commit/c7215c119)
+  - **workers**:
+    - Order observed routes like state so drift ignores listing order &nbsp;-&nbsp; by **0xMilkEnjoyer** and **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/1826 [<samp>(bd954)</samp>](https://github.com/alchemy-run/alchemy/commit/bd954cbac)
+    - Implement DurableObject jurisdiction &nbsp;-&nbsp; by **Makisuo** and **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/2007 [<samp>(93181)</samp>](https://github.com/alchemy-run/alchemy/commit/93181c944)
+    - Record main relative to the working directory so drift repair survives a moved checkout &nbsp;-&nbsp; by **0xMilkEnjoyer** and **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/1828 [<samp>(45ccb)</samp>](https://github.com/alchemy-run/alchemy/commit/45ccb40c8)
+    - Preserve DO migration state after precreate &nbsp;-&nbsp; by **Stephen Shkeda** and **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/1297 [<samp>(302df)</samp>](https://github.com/alchemy-run/alchemy/commit/302dff89c)
+    - Implement DurableObject get, idFromName, idFromString, newUniqueId &nbsp;-&nbsp; by **Matthew Aylward** and **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/852 [<samp>(e07cd)</samp>](https://github.com/alchemy-run/alchemy/commit/e07cd9477)
+- **cloudflare-runtime**:
+  - Forward Linux host services through Docker &nbsp;-&nbsp; by **Rahul Mishra** in https://github.com/alchemy-run/alchemy/issues/2059 [<samp>(b13db)</samp>](https://github.com/alchemy-run/alchemy/commit/b13db2bf2)
+  - **vite**:
+    - Relay a worker's non-upgrade response &nbsp;-&nbsp; by **Daniel Gangl** and **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/1680 [<samp>(4d9f3)</samp>](https://github.com/alchemy-run/alchemy/commit/4d9f308e7)
+    - Cancel the Worker request when the client hangs up &nbsp;-&nbsp; by **Florian Bienefelt** and **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/2111 [<samp>(454ee)</samp>](https://github.com/alchemy-run/alchemy/commit/454eebe17)
+- **docker**:
+  - Preserve image source push platform &nbsp;-&nbsp; by **bjorntechTobbe** and **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/1944 [<samp>(af547)</samp>](https://github.com/alchemy-run/alchemy/commit/af547c381)
+  - Prune ignored build context directories &nbsp;-&nbsp; by **bjorntechTobbe** and **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/1945 [<samp>(fed67)</samp>](https://github.com/alchemy-run/alchemy/commit/fed6772ee)
+  - Deploy Volume and Context declared without props &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/2084 [<samp>(2dda6)</samp>](https://github.com/alchemy-run/alchemy/commit/2dda61f9c)
+  - Authenticate Image builds with the registry credentials &nbsp;-&nbsp; by **Ethan Shumate** and **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/1858 [<samp>(0a7f1)</samp>](https://github.com/alchemy-run/alchemy/commit/0a7f1e852)
+  - Report why a build failed, not just its exit code &nbsp;-&nbsp; by **Alex** and **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/1675 [<samp>(2ad57)</samp>](https://github.com/alchemy-run/alchemy/commit/2ad57fdc0)
+  - Honor CMD, CMD-SHELL and NONE in healthcheck cmd &nbsp;-&nbsp; by **TBIQ007** and **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/2049 [<samp>(b0bc2)</samp>](https://github.com/alchemy-run/alchemy/commit/b0bc2fac6)
+  - Accept Podman missing images and push digests &nbsp;-&nbsp; by **Arman Charan** and **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/2095 [<samp>(db744)</samp>](https://github.com/alchemy-run/alchemy/commit/db7442f03)
+  - **container**: Configuration change does not result in update/replacement &nbsp;-&nbsp; by **Gerben Mulder** in https://github.com/alchemy-run/alchemy/issues/1397 [<samp>(ae5a5)</samp>](https://github.com/alchemy-run/alchemy/commit/ae5a53610)
+- **engine,cloudflare**:
+  - **workers**: Only precreate dependency-cycle members &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/2015 [<samp>(1123d)</samp>](https://github.com/alchemy-run/alchemy/commit/1123d418c)
+- **floci**:
+  - Recover when Docker can't publish optional ports &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/2215 [<samp>(61569)</samp>](https://github.com/alchemy-run/alchemy/commit/615690bae)
+  - Drop any port Docker refuses; recreate only on port-request change &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/2217 [<samp>(7fddf)</samp>](https://github.com/alchemy-run/alchemy/commit/7fddfae26)
+- **fly**:
+  - Repair blue/green live tests (PATCH metadata stamps, read-after-lease 404) &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/2120 [<samp>(26213)</samp>](https://github.com/alchemy-run/alchemy/commit/26213d927)
+- **frontend-frameworks**:
+  - Prevent astro cold-start dependency optimization errors &nbsp;-&nbsp; by **Rahul Mishra** in https://github.com/alchemy-run/alchemy/issues/2037 [<samp>(20063)</samp>](https://github.com/alchemy-run/alchemy/commit/2006384ab)
+  - Forward site env to AWS target builds &nbsp;-&nbsp; by **Ethan Shumate** and **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/1855 [<samp>(0f49f)</samp>](https://github.com/alchemy-run/alchemy/commit/0f49fd133)
+  - Normalize server module names to "/" on Windows &nbsp;-&nbsp; by **jarrednorris** and **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/2071 [<samp>(b1fff)</samp>](https://github.com/alchemy-run/alchemy/commit/b1fff75af)
+- **gcp**:
+  - **sql**: Upgrade databaseVersion in place and honor deletion protection &nbsp;-&nbsp; by **fullflexer** and **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/2029 [<samp>(449af)</samp>](https://github.com/alchemy-run/alchemy/commit/449afb2d0)
+- **github**:
+  - Only send environment protection rules when set &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/2040 [<samp>(ce800)</samp>](https://github.com/alchemy-run/alchemy/commit/ce80078bb)
+- **kubernetes**:
+  - Stop applying redacted placeholders and silent failures &nbsp;-&nbsp; by **Théo Pomies** and **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/1948 [<samp>(fe1b4)</samp>](https://github.com/alchemy-run/alchemy/commit/fe1b40ebd)
+- **neon**:
+  - Replace a branch whose fork point is unknown until apply &nbsp;-&nbsp; by **Gianmarco** and **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/1878 [<samp>(8127c)</samp>](https://github.com/alchemy-run/alchemy/commit/8127c2591)
+  - Leave a project's root or default branch to project deletion &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/2075 [<samp>(7ecea)</samp>](https://github.com/alchemy-run/alchemy/commit/7eceae155)
+- **planetscale**:
+  - Derive Postgres branch cluster arch from parent &nbsp;-&nbsp; by **Austin** and **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/2093 [<samp>(778cb)</samp>](https://github.com/alchemy-run/alchemy/commit/778cb0b17)
+  - Replace or fail on rewritten branch migration history &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/1489 [<samp>(a0e1a)</samp>](https://github.com/alchemy-run/alchemy/commit/a0e1a59df)
+  - Drift no longer flags unchanged Postgres branches &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/2107 [<samp>(ee208)</samp>](https://github.com/alchemy-run/alchemy/commit/ee2080521)
+  - --force no longer replaces unchanged roles &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/2103 [<samp>(833a0)</samp>](https://github.com/alchemy-run/alchemy/commit/833a0e754)
+- **prisma**:
+  - Don't fail a replacement while the old deployment drains &nbsp;-&nbsp; by **Kristof Siket** in https://github.com/alchemy-run/alchemy/issues/1920 [<samp>(e900e)</samp>](https://github.com/alchemy-run/alchemy/commit/e900e9909)
+  - Migrate prisma-tanstack-start to Prisma ORM v8 and ungate live Prisma tests &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/2038 [<samp>(be919)</samp>](https://github.com/alchemy-run/alchemy/commit/be919dbe5)
+  - Inherit database region from the project's default region &nbsp;-&nbsp; by **Kristof Siket** and **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/2026 [<samp>(6768a)</samp>](https://github.com/alchemy-run/alchemy/commit/6768a4a7d)
+  - Publish prisma peer dependencies as version ranges &nbsp;-&nbsp; by **Will Madden** in https://github.com/alchemy-run/alchemy/issues/2154 [<samp>(cf833)</samp>](https://github.com/alchemy-run/alchemy/commit/cf83342a3)
+- **railway**:
+  - Scope Service delete to its environment &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/2184 [<samp>(7755f)</samp>](https://github.com/alchemy-run/alchemy/commit/7755fb9b8)
+- **runtime**:
+  - Reduce per-event telemetry configuration overhead &nbsp;-&nbsp; by **Dan van der Merwe** in https://github.com/alchemy-run/alchemy/issues/1960 [<samp>(f0bc7)</samp>](https://github.com/alchemy-run/alchemy/commit/f0bc70126)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/alchemy-run/alchemy/compare/v2.0.0-beta.81...HEAD)
+
+---
+
+## v2.0.0-beta.81
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **cloudflare**: Sync OAuth scopes with registered client &nbsp;-&nbsp; by **Rahul Mishra** and **Benjamin Tang** in https://github.com/alchemy-run/alchemy/issues/1983 [<samp>(33716)</samp>](https://github.com/alchemy-run/alchemy/commit/33716211d)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/alchemy-run/alchemy/compare/v2.0.0-beta.80...HEAD)
+
+---
+
 ## v2.0.0-beta.80
 
 ### &nbsp;&nbsp;&nbsp;🚨 Breaking Changes

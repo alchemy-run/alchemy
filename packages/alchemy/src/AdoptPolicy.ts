@@ -30,9 +30,7 @@ import * as Effect from "effect/Effect";
  * The policy can be overridden per-effect via {@link adopt} — most commonly
  * applied at the resource or stack scope.
  */
-export class AdoptPolicy extends Context.Service<AdoptPolicy, boolean>()(
-  "AdoptPolicy",
-) {}
+export class AdoptPolicy extends Context.Service<AdoptPolicy, boolean>()("AdoptPolicy") {}
 
 /**
  * Engine-raised failure produced when `read` reports an existing resource
@@ -107,9 +105,7 @@ export const Unowned: {
   },
   {
     is: (value: unknown): boolean =>
-      typeof value === "object" &&
-      value !== null &&
-      (value as any)[UnownedTag] === true,
+      typeof value === "object" && value !== null && (value as any)[UnownedTag] === true,
   },
 );
 
@@ -129,16 +125,10 @@ export const stripUnowned = <T extends object>(attrs: T): T => {
 };
 
 export const adopt: {
-  (
-    enabled?: boolean,
-  ): <A, E, R = never>(
-    effect: Effect.Effect<A, E, R>,
-  ) => Effect.Effect<A, E, R>;
+  (enabled?: boolean): <A, E, R = never>(effect: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>;
   <R1 = never>(
     enabled: Effect.Effect<boolean, never, R1>,
-  ): <A, E, R2 = never>(
-    effect: Effect.Effect<A, E, R2>,
-  ) => Effect.Effect<A, E, R1 | R2>;
+  ): <A, E, R2 = never>(effect: Effect.Effect<A, E, R2>) => Effect.Effect<A, E, R1 | R2>;
 } = ((enabled: boolean | Effect.Effect<boolean, never, any> = true) =>
   (eff: Effect.Effect<any, any, any>) =>
     eff.pipe(

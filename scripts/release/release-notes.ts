@@ -1,4 +1,6 @@
 #!/usr/bin/env bun
+import { readFile, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 /**
  * Prepend release notes for a tag to CHANGELOG.md. Idempotent: if the tag
  * already appears as a heading in CHANGELOG.md, does nothing.
@@ -9,8 +11,6 @@
  */
 import { $ } from "bun";
 import { generate } from "./changelog.ts";
-import { readFile, writeFile } from "node:fs/promises";
-import { join } from "node:path";
 import { repo } from "./config.ts";
 import { renderMarkdown } from "./render.ts";
 
@@ -31,8 +31,7 @@ if (existing.includes(`## ${tag}\n`)) {
 }
 
 const tagExists =
-  (await $`git rev-parse --verify ${`refs/tags/${tag}`}`.nothrow().quiet())
-    .exitCode === 0;
+  (await $`git rev-parse --verify ${`refs/tags/${tag}`}`.nothrow().quiet()).exitCode === 0;
 const toRev = tagExists ? tag : "HEAD";
 
 console.log(`Generating release notes for ${tag} (using ${toRev})`);

@@ -118,12 +118,7 @@ const SECTIONS: Section[] = [
     intro:
       "Typed calls between Functions and Servers: schemaless RPC for internal communication, Effect RPC and Effect HTTP for trust boundaries.",
     pages: {
-      slugs: [
-        "apis/index",
-        "apis/schemaless",
-        "apis/effect-rpc",
-        "apis/effect-http",
-      ],
+      slugs: ["apis/index", "apis/schemaless", "apis/effect-rpc", "apis/effect-http"],
     },
   },
   {
@@ -317,15 +312,48 @@ const SECTIONS: Section[] = [
     intro:
       "Google Cloud as Stack resources — Cloud Run services and jobs, Firestore, Pub/Sub, BigQuery, Secret Manager, Memorystore. Bindings grant IAM onto a per-host service account.",
     pages: {
-      slugs: [
-        "gcp/index",
-        "gcp/setup",
-        "gcp/guides/cloud-run-api",
-        "gcp/guides/event-pipeline",
-        "gcp/guides/memorystore",
-        "gcp/guides/bindings",
-      ],
+      slugs: ["gcp/index", "gcp/setup"],
     },
+  },
+  {
+    heading: "GCP — Tutorial",
+    pages: { directory: "gcp/tutorial" },
+  },
+  {
+    heading: "GCP — Compute",
+    pages: { directory: "gcp/compute" },
+  },
+  {
+    heading: "GCP — Frontend",
+    pages: { directory: "gcp/frontend" },
+  },
+  {
+    heading: "GCP — APIs",
+    pages: { directory: "gcp/apis" },
+  },
+  {
+    heading: "GCP — Data",
+    pages: { directory: "gcp/data" },
+  },
+  {
+    heading: "GCP — AI",
+    pages: { directory: "gcp/ai" },
+  },
+  {
+    heading: "GCP — Messaging & events",
+    pages: { directory: "gcp/messaging" },
+  },
+  {
+    heading: "GCP — Security & secrets",
+    pages: { directory: "gcp/security" },
+  },
+  {
+    heading: "GCP — Observability",
+    pages: { directory: "gcp/observability" },
+  },
+  {
+    heading: "GCP — Networking",
+    pages: { directory: "gcp/networking" },
   },
   {
     heading: "Fly — start here",
@@ -517,12 +545,7 @@ const SECTIONS: Section[] = [
     intro:
       "Local and CI Docker as Stack resources — images, containers, networks, and volumes driven through the active Docker CLI context; cloud container runtimes (Cloudflare Containers, ECS) consume the pushed image refs from their own hubs.",
     pages: {
-      slugs: [
-        "docker/index",
-        "docker/setup",
-        "docker/local-services",
-        "docker/build-and-push",
-      ],
+      slugs: ["docker/index", "docker/setup", "docker/local-services", "docker/build-and-push"],
     },
   },
   {
@@ -716,10 +739,7 @@ async function loadPage(slug: string): Promise<Page> {
   throw new Error(`Page not found: ${slug} (looked for .mdx and .md)`);
 }
 
-async function listSlugs(
-  directory: string,
-  exclude: string[] = [],
-): Promise<string[]> {
+async function listSlugs(directory: string, exclude: string[] = []): Promise<string[]> {
   const dir = path.join(docsDir, directory);
   const entries = await readdir(dir, { withFileTypes: true });
   const slugs: string[] = [];
@@ -760,9 +780,7 @@ async function main() {
       "slugs" in section.pages
         ? section.pages.slugs
         : await listSlugs(section.pages.directory, section.pages.exclude);
-    const pages = (await Promise.all(slugs.map(loadPage))).filter(
-      (p) => !p.draft,
-    );
+    const pages = (await Promise.all(slugs.map(loadPage))).filter((p) => !p.draft);
     // Directory sections mirror the sidebar's `sidebar.order` ordering; slug
     // sections keep the curated order they were declared in.
     if (isDirectory) pages.sort(byOrderThenTitle);
@@ -772,9 +790,7 @@ async function main() {
     sections.push(pages.map(renderPage).join("\n"));
   }
 
-  const fullBody =
-    [FULL_HEADER, ...sections, await renderProvidersSection()].join("\n\n") +
-    "\n";
+  const fullBody = [FULL_HEADER, ...sections, await renderProvidersSection()].join("\n\n") + "\n";
   await writeFile(outFullFile, fullBody, "utf8");
   console.log(`Wrote ${outFullFile}`);
 
