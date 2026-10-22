@@ -90,6 +90,11 @@ impl Mount {
         &self.dir
     }
 
+    /// The block device (or loop device) the filesystem is mounted from.
+    pub fn block(&self) -> &Path {
+        &self.block
+    }
+
     /// Mounts a btrfs volume's top level at `dir` too, until this unmounts.
     pub fn mount_top(&mut self, dir: &Path, readonly: bool) -> Result<()> {
         crate::fs::mount_top(&self.block, dir, readonly)?;
@@ -208,6 +213,91 @@ pub fn mount_as(
     })
 }
 
+/// A device attached as a block device (or, in loop mode, a file) and not
+/// mounted here: what a VM is given as a drive.
+pub struct Attached {
+    path: PathBuf,
+    teardown: Option<Box<dyn FnOnce() -> Result<()> + Send>>,
+}
+
+impl Attached {
+    /// The block device (ublk, NBD) or the FUSE-served disk file (loop mode).
+    pub fn path(&self) -> &Path {
+        &self.path
+    }
+
+    /// Takes the transport down; every write is in the device afterwards.
+    pub fn detach(mut self) -> Result<()> {
+        match self.teardown.take() {
+            Some(teardown) => teardown(),
+            None => Ok(()),
+        }
+    }
+}
+
+impl Drop for Attached {
+    fn drop(&mut self) {
+        if let Some(teardown) = self.teardown.take() {
+            let _ = teardown();
+        }
+    }
+}
+
+/// Attaches `device` in `mode` without mounting it. `cache` is the device's
+/// cache file; loop mode puts its disk file's mountpoint next to it.
+pub fn attach_block(device: &Arc<Device>, mode: Mode, cache: &Path) -> Result<Attached> {
+    let (path, teardown): (PathBuf, Box<dyn FnOnce() -> Result<()> + Send>) = match mode {
+        #[cfg(feature = "fuse")]
+        Mode::Loop => {
+            let disk = crate::fuse::serve_file(device.clone(), &cache.with_extension("disk"))?;
+            (disk.file(), Box::new(move || {
+                drop(disk);
+                Ok(())
+            }))
+        }
+        Mode::Nbd => {
+            let nbd = free_nbd()?;
+            let attachment = crate::nbd::attach(&nbd, device.clone())?;
+            wait_until_sized(&nbd)?;
+            (nbd, Box::new(move || attachment.detach()))
+        }
+        #[cfg(feature = "ublk")]
+        Mode::Ublk => {
+            let (ready, started) = std::sync::mpsc::channel::<Result<(String, crate::ublk::Killer)>>();
+            let serving = {
+                let device = device.clone();
+                std::thread::spawn(move || {
+                    let ublk = match crate::ublk::Ublk::create(-1, 1) {
+                        Ok(ublk) => ublk,
+                        Err(e) => {
+                            let message = format!("{e:#}");
+                            let _ = ready.send(Err(e));
+                            return Err(anyhow::anyhow!(message));
+                        }
+                    };
+                    let killer = ublk.killer();
+                    ublk.serve(device, move |path| drop(ready.send(Ok((path, killer)))))
+                })
+            };
+            let (path, killer) = started.recv().context("the ublk device never started")??;
+            let path = PathBuf::from(path);
+            wait_until_sized(&path)?;
+            (path, Box::new(move || {
+                killer.kill();
+                serving
+                    .join()
+                    .map_err(|_| anyhow::anyhow!("the ublk server panicked"))?
+            }))
+        }
+        #[allow(unreachable_patterns)]
+        other => bail!("this build of blockd doesn't support {other:?}"),
+    };
+    Ok(Attached {
+        path,
+        teardown: Some(teardown),
+    })
+}
+
 /// Syncs and unmounts `dir`: every write is in the device afterwards. A
 /// process still using the mount when it ends (a server a command left
 /// running, a shell parked in it) is killed first: the mount's lifetime is
@@ -244,7 +334,7 @@ pub(crate) fn kill_users(dir: &Path) -> usize {
 }
 
 /// A process using a mount.
-#[derive(Clone, Debug, serde::Serialize)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct User {
     pub pid: u32,
     /// Its command line, spaces between arguments.

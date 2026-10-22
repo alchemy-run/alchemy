@@ -355,6 +355,50 @@ struct Fingerprint {
     content: Option<(u64, i64, i64, i64, i64, u64)>,
 }
 
+/// Patches of what an overlay changed: each one since the last (or, `full`,
+/// since its lower layer). The first is always since the lower layer.
+#[derive(Default)]
+pub struct OverlayCommits {
+    commits: u32,
+    committed: BTreeMap<String, Fingerprint>,
+}
+
+impl OverlayCommits {
+    /// A patch of what changed in `merged` (an overlay of `lower` with upper
+    /// layer `upper`), written to `out`.
+    pub fn commit(
+        &mut self,
+        lower: &Path,
+        merged: &Path,
+        upper: &Path,
+        out: Option<&mut dyn std::io::Write>,
+        full: bool,
+    ) -> Result<Summary> {
+        if self.commits == 0 {
+            self.commits = 1;
+        }
+        let now = fingerprints(upper)?;
+        let mut candidates = patch::overlay_candidates(upper)?;
+        if !full && self.commits > 1 {
+            // Only what changed since the last commit.
+            candidates
+                .paths
+                .retain(|path| self.committed.get(path) != now.get(path));
+            candidates.replaced.retain(|path| candidates.paths.contains(path));
+            for path in self.committed.keys() {
+                if !now.contains_key(path) && std::fs::symlink_metadata(lower.join(path)).is_err() {
+                    candidates.paths.insert(path.clone());
+                    candidates.deleted.insert(path.clone());
+                }
+            }
+        }
+        let summary = patch::create(lower, merged, &candidates, out)?;
+        self.committed = now;
+        self.commits += 1;
+        Ok(summary)
+    }
+}
+
 fn fingerprints(upper: &Path) -> Result<BTreeMap<String, Fingerprint>> {
     use std::os::unix::fs::MetadataExt;
     let mut out = BTreeMap::new();
@@ -561,24 +605,13 @@ impl Call {
         self.commits += 1;
         match (&self.overlay, &self.snapshots) {
             (Some((lower, upper)), _) => {
-                let now = fingerprints(upper)?;
-                let mut candidates = patch::overlay_candidates(upper)?;
-                if !full && self.commits > 1 {
-                    // Only what changed since the last commit.
-                    candidates
-                        .paths
-                        .retain(|path| self.committed.get(path) != now.get(path));
-                    candidates.replaced.retain(|path| candidates.paths.contains(path));
-                    for path in self.committed.keys() {
-                        if !now.contains_key(path) && std::fs::symlink_metadata(lower.join(path)).is_err() {
-                            candidates.paths.insert(path.clone());
-                            candidates.deleted.insert(path.clone());
-                        }
-                    }
-                }
-                let summary = patch::create(lower, &self.dir, &candidates, out)?;
-                self.committed = now;
-                Ok(summary)
+                let mut commits = OverlayCommits {
+                    commits: self.commits,
+                    committed: std::mem::take(&mut self.committed),
+                };
+                let summary = commits.commit(lower, &self.dir, upper, out, full);
+                self.committed = commits.committed;
+                summary
             }
             (None, Some(snapshots)) => {
                 let end = format!("call-{}", self.commits);

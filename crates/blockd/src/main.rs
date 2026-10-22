@@ -31,6 +31,8 @@
 //!                [--state /var/cache/blockd] [--run /run/blockd] [--init <static blockd>]
 //!                [--chunk-cache-gb <n>]   (the machine's extents by content; 0 for none; default 20)
 //!                [--trace-seconds <n>]    (how long an image's first start is traced; default 90)
+//!                [--firecracker <bin> --kernel <vmlinux> [--vm-vcpus 2] [--vm-memory-mib 1024]]
+//!                                         (calls with isolation "firecracker", on a host with KVM)
 //!                (every head, call and cache on this machine, over HTTP: see `daemon.rs`;
 //!                 BLOCKD_DAEMON_TOKEN is the bearer token every request needs)
 //! blockd request --daemon <host:port|socket> --path /v1/… [--body <json>] [--method …]
@@ -55,6 +57,11 @@ fn main() -> Result<()> {
     #[cfg(target_os = "linux")]
     if command == "init" {
         blockd::container::init();
+    }
+    // A microVM's first process: the kernel runs `/init` with no arguments.
+    #[cfg(target_os = "linux")]
+    if std::process::id() == 1 && std::env::args().next().is_some_and(|argv0| argv0.ends_with("/init")) {
+        blockd::guest::run();
     }
     let flags = parse_flags(args)?;
     let filter = || {
@@ -568,6 +575,16 @@ fn daemon(flags: &Flags, runtime: &tokio::runtime::Runtime) -> Result<()> {
                 .map(str::parse::<u64>)
                 .transpose()?
                 .map(|gb| gb << 30),
+            firecracker: match (flags.get("firecracker"), flags.get("kernel")) {
+                (Some(binary), Some(kernel)) => Some(blockd::vm::Firecracker {
+                    binary: binary.into(),
+                    kernel: kernel.into(),
+                    init: flags.get("init").map(Into::into).unwrap_or_else(|| "/usr/local/lib/blockd/init".into()),
+                    vcpus: flags.get("vm-vcpus").map(str::parse).transpose()?.unwrap_or(2),
+                    memory_mib: flags.get("vm-memory-mib").map(str::parse).transpose()?.unwrap_or(1024),
+                }),
+                _ => None,
+            },
             trace_for: flags
                 .get("trace-seconds")
                 .map(str::parse::<u64>)

@@ -24,6 +24,8 @@ pub mod fs;
 #[cfg(all(target_os = "linux", feature = "fuse"))]
 pub mod fuse;
 #[cfg(target_os = "linux")]
+pub mod guest;
+#[cfg(target_os = "linux")]
 pub mod head;
 pub mod http;
 #[cfg(target_os = "linux")]
@@ -40,6 +42,8 @@ pub mod timings;
 pub mod track;
 #[cfg(all(target_os = "linux", feature = "ublk"))]
 pub mod ublk;
+#[cfg(target_os = "linux")]
+pub mod vm;
 
 pub use device::{Device, Flusher, Status};
 

@@ -56,6 +56,8 @@ pub struct Config {
     pub chunk_bytes: Option<u64>,
     /// How long an image's first start on a machine is traced. Default: 90 s.
     pub trace_for: Option<Duration>,
+    /// Firecracker and a guest kernel, on a host with KVM.
+    pub firecracker: Option<crate::vm::Firecracker>,
 }
 
 pub struct Daemon {
@@ -66,6 +68,8 @@ pub struct Daemon {
     caches: Arc<Mutex<HashSet<PathBuf>>>,
     heads: Mutex<HashMap<String, Arc<Mutex<Option<MountedHead>>>>>,
     calls: Mutex<HashMap<String, Arc<CallEntry>>>,
+    /// Calls in microVMs that keep what they left running: their VM stays up.
+    vms: Mutex<HashMap<String, Arc<KeptVm>>>,
     /// Images mounted read-only, shared by every container that uses one.
     images: Mutex<HashMap<Hash, Arc<Image>>>,
     /// Background processes (`spawn`), until read to their end and reaped.
@@ -73,6 +77,15 @@ pub struct Daemon {
     /// The machine's extents by content, shared by every device here.
     chunks: Option<Arc<ChunkCache>>,
     counters: Mutex<Counters>,
+}
+
+/// A call in a microVM whose processes are still running.
+struct KeptVm {
+    vm: Mutex<Option<crate::vm::Vm>>,
+    attached: Mutex<Option<crate::mount::Attached>>,
+    device: Arc<crate::Device>,
+    volume: Arc<Volume>,
+    _cache: CacheLease,
 }
 
 /// Where a call's fork comes from.
@@ -97,6 +110,8 @@ struct Spawned {
 /// An image snapshot, attached and mounted read-only.
 struct Image {
     dir: PathBuf,
+    /// Its block device: a microVM's drive.
+    block: PathBuf,
     _mount: Mutex<crate::mount::Mount>,
     _device: Arc<crate::Device>,
     _cache: CacheLease,
@@ -259,6 +274,7 @@ impl Daemon {
             caches: Arc::new(Mutex::new(HashSet::new())),
             heads: Mutex::new(HashMap::new()),
             calls: Mutex::new(HashMap::new()),
+            vms: Mutex::new(HashMap::new()),
             images: Mutex::new(HashMap::new()),
             spawns: Mutex::new(HashMap::new()),
             counters: Mutex::new(Counters::default()),
@@ -452,6 +468,7 @@ impl Daemon {
         let dir = self.config.state.join(format!("image-{}", snapshot.to_hex()));
         let mount = crate::mount::mount_as(&device, mode, cache.path(), &dir, true)?;
         let image = Arc::new(Image {
+            block: mount.block().to_path_buf(),
             dir,
             _mount: Mutex::new(mount),
             _device: device,
@@ -465,11 +482,14 @@ impl Daemon {
 
     /// What a request's isolation means here: its image as a directory.
     fn isolation(&self, request: &IsolationRequest, volume: &Arc<Volume>, mode: Mode) -> Result<Isolation> {
+        let mut image_block = None;
         let rootfs = match (&request.rootfs, &request.image) {
             (Some(rootfs), _) => rootfs.clone(),
             (None, Some(image)) => {
                 let snapshot = Hash::from_hex(image).context("`image` is not a snapshot id")?;
-                self.image(volume, snapshot, mode)?.dir.clone()
+                let mounted = self.image(volume, snapshot, mode)?;
+                image_block = Some(mounted.block.clone());
+                mounted.dir.clone()
             }
             (None, None) => bail!("isolation needs `rootfs` (a directory) or `image` (a snapshot)"),
         };
@@ -478,6 +498,7 @@ impl Daemon {
         Ok(Isolation {
             runtime: request.runtime,
             rootfs,
+            image_block,
             path: request.path.clone(),
             host_network: request.host_network,
             env,
@@ -773,6 +794,9 @@ impl Daemon {
             .map(|isolation| timings.time("image", || self.isolation(isolation, &volume, mode)))
             .transpose()?;
         let init = self.init();
+        if let Some(isolation) = isolation.as_ref().filter(|i| i.runtime == Runtime::Firecracker) {
+            return self.run_vm_call(id, from, volume, mode, request.patch, request.keep, isolation, run, timings, cache);
+        }
         let (attached, snapshot, uploading) = match from {
             Ok((device, uploading)) => {
                 let base = device.status().base;
@@ -830,6 +854,209 @@ impl Daemon {
         Ok((result, kept.map(|kept| (kept, cache))))
     }
 
+    /// A call in a Firecracker microVM: the fork attached (not mounted here)
+    /// and handed to the VM with the image, the command and its patch made
+    /// by the guest's agent.
+    #[allow(clippy::too_many_arguments, clippy::type_complexity)]
+    fn run_vm_call(
+        &self,
+        id: &str,
+        from: std::result::Result<(Arc<crate::Device>, std::thread::JoinHandle<Result<Hash>>), Hash>,
+        volume: Arc<Volume>,
+        mode: Mode,
+        patch: Option<String>,
+        keep: bool,
+        isolation: &Isolation,
+        run: Run,
+        mut timings: Timings,
+        cache: CacheLease,
+    ) -> Result<(Value, Option<(Kept, CacheLease)>)> {
+        let firecracker = self
+            .config
+            .firecracker
+            .clone()
+            .context("this host has no Firecracker (it needs KVM, and --firecracker and --kernel)")?;
+        let image = isolation.image_block.clone().context("a microVM needs `image` (a snapshot)")?;
+        let (device, snapshot, uploading) = match from {
+            Ok((device, uploading)) => {
+                let base = device.status().base;
+                (device, base, Some(uploading))
+            }
+            Err(snapshot) => {
+                let device = Arc::new(timings.time("attach", || {
+                    crate::Device::open_snapshot(volume.clone(), snapshot, cache.path(), self.runtime.clone())
+                })?);
+                if let Some(chunks) = &self.chunks {
+                    device.use_chunks(chunks.clone());
+                }
+                (device, snapshot, None)
+            }
+        };
+        let attached = timings.time("block", || crate::mount::attach_block(&device, mode, cache.path()))?;
+        let vm = timings.time("vm", || {
+            crate::vm::Vm::start(
+                &firecracker,
+                &self.config.state.join(format!("vm-{id}")),
+                &[(image.as_path(), true), (attached.path(), true)],
+                &isolation.path,
+            )
+        })?;
+        let mut env = serde_json::Map::new();
+        for (name, value) in isolation.env.iter().chain(run.env.iter()) {
+            env.insert(name.clone(), Value::String(value.clone()));
+        }
+        let ran = timings.time("run", || {
+            vm.request(&json!({
+                "op": "exec",
+                "command": run.command,
+                "cwd": run.cwd,
+                "env": env,
+                "timeoutMs": run.timeout.map(|t| t.as_millis() as u64),
+            }))
+        })?;
+        let survivors: Vec<crate::mount::User> = serde_json::from_value(
+            vm.request(&json!({ "op": "processes" }))?["processes"].clone(),
+        )
+        .unwrap_or_default();
+        let kept = keep && !survivors.is_empty();
+        if !kept && !survivors.is_empty() {
+            timings.time("stop", || vm.request(&json!({ "op": "stop" })))?;
+        }
+        let committed = timings.time("commit", || vm.request(&json!({ "op": "commit" })))?;
+        let summary: crate::patch::Summary = serde_json::from_value(committed["summary"].clone())?;
+        let mut uploaded = None;
+        if let Some(key) = &patch
+            && summary.operations > 0
+        {
+            let bytes = base64::engine::general_purpose::STANDARD
+                .decode(committed["patch"].as_str().unwrap_or(""))?;
+            timings.time("upload", || self.runtime.block_on(volume.blobs().put(key, bytes)))?;
+            uploaded = Some(key.clone());
+        }
+        let base = match uploading {
+            Some(uploading) => uploading
+                .join()
+                .map_err(|_| anyhow!("the head's snapshot panicked"))?
+                .context("snapshotting the forked head")?,
+            None => snapshot,
+        };
+        let survivors_json = serde_json::to_value(&survivors)?;
+        if kept {
+            self.vms.lock().unwrap().insert(
+                id.to_string(),
+                Arc::new(KeptVm {
+                    vm: Mutex::new(Some(vm)),
+                    attached: Mutex::new(Some(attached)),
+                    device,
+                    volume,
+                    _cache: cache,
+                }),
+            );
+        } else {
+            let mut vm = vm;
+            timings.time("unmount", || {
+                vm.stop();
+                attached.detach()
+            })?;
+            timings.time("close", || device.close())?;
+        }
+        Ok((
+            json!({
+                "done": true,
+                "exitCode": ran["exitCode"], "timedOut": ran["timedOut"],
+                "stdout": ran["stdout"], "stderr": ran["stderr"],
+                "fs": "ext4", "snapshot": base, "patch": uploaded, "summary": summary,
+                "survivors": survivors_json, "kept": kept, "timings": timings,
+            }),
+            None,
+        ))
+    }
+
+    /// A kept microVM call's operations: commit, status, exec, detach.
+    fn vm_op(&self, id: &str, kept: Arc<KeptVm>, op: &str, request: &Request) -> Result<Value> {
+        #[derive(Deserialize, Default)]
+        struct Body {
+            patch: Option<String>,
+            #[serde(default)]
+            full: bool,
+        }
+        let processes = |kept: &KeptVm| -> Result<Value> {
+            let vm = kept.vm.lock().unwrap();
+            let vm = vm.as_ref().context("the microVM is gone")?;
+            Ok(vm.request(&json!({ "op": "processes" }))?["processes"].clone())
+        };
+        let commit = |kept: &KeptVm, key: Option<&str>, full: bool| -> Result<(Value, Option<String>)> {
+            let reply = {
+                let vm = kept.vm.lock().unwrap();
+                vm.as_ref().context("the microVM is gone")?.request(&json!({ "op": "commit", "full": full }))?
+            };
+            let summary = reply["summary"].clone();
+            let mut uploaded = None;
+            if let Some(key) = key
+                && summary["operations"].as_u64().unwrap_or(0) > 0
+            {
+                let bytes = base64::engine::general_purpose::STANDARD.decode(reply["patch"].as_str().unwrap_or(""))?;
+                self.runtime.block_on(kept.volume.blobs().put(key, bytes))?;
+                uploaded = Some(key.to_string());
+            }
+            Ok((summary, uploaded))
+        };
+        match op {
+            "status" => Ok(json!({ "survivors": processes(&kept)? })),
+            "commit" => {
+                let body: Body = optional_body(request)?;
+                let (summary, patch) = commit(&kept, body.patch.as_deref(), body.full)?;
+                Ok(json!({ "patch": patch, "summary": summary, "survivors": processes(&kept)? }))
+            }
+            "exec" => {
+                let body: ExecRequest = serde_json::from_slice(&request.body).context("the command")?;
+                let job = new_id();
+                let entry = Arc::new(CallEntry {
+                    state: Mutex::new(CallState::Running),
+                    done: Condvar::new(),
+                });
+                self.calls.lock().unwrap().insert(job.clone(), entry.clone());
+                std::thread::spawn(move || {
+                    let ran = (|| -> Result<Value> {
+                        let vm = kept.vm.lock().unwrap();
+                        vm.as_ref().context("the microVM is gone")?.request(&json!({
+                            "op": "exec", "command": body.command, "cwd": body.cwd,
+                            "env": body.env, "timeoutMs": body.timeout_ms,
+                        }))
+                    })();
+                    let result = match ran {
+                        Ok(mut reply) => {
+                            reply["done"] = Value::Bool(true);
+                            reply
+                        }
+                        Err(e) => json!({ "ok": false, "done": true, "error": format!("{e:#}") }),
+                    };
+                    *entry.state.lock().unwrap() = CallState::Done { result, kept: None, at: Instant::now() };
+                    entry.done.notify_all();
+                });
+                Ok(json!({ "id": job }))
+            }
+            "detach" => {
+                let body: Body = optional_body(request)?;
+                self.vms.lock().unwrap().remove(id);
+                let stopped = {
+                    let vm = kept.vm.lock().unwrap();
+                    vm.as_ref().context("the microVM is gone")?.request(&json!({ "op": "stop" }))?["stopped"].clone()
+                };
+                let (summary, patch) = commit(&kept, body.patch.as_deref(), false)?;
+                if let Some(mut vm) = kept.vm.lock().unwrap().take() {
+                    vm.stop();
+                }
+                if let Some(attached) = kept.attached.lock().unwrap().take() {
+                    attached.detach()?;
+                }
+                kept.device.close()?;
+                Ok(json!({ "patch": patch, "summary": summary, "survivors": stopped }))
+            }
+            other => Err(anyhow!(NotFound)).context(format!("no call operation {other:?} on a microVM")),
+        }
+    }
+
     fn call_entry(&self, id: &str) -> Result<Arc<CallEntry>> {
         self.calls
             .lock()
@@ -865,6 +1092,9 @@ impl Daemon {
             patch: Option<String>,
             #[serde(default)]
             full: bool,
+        }
+        if let Some(kept) = self.vms.lock().unwrap().get(id).cloned() {
+            return self.vm_op(id, kept, op, request);
         }
         let entry = self.call_entry(id)?;
         let mut state = entry.state.lock().unwrap();

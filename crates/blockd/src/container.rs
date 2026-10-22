@@ -27,6 +27,8 @@ pub enum Runtime {
     Container,
     /// `runsc`: gVisor.
     Gvisor,
+    /// A Firecracker microVM (`crate::vm`): hosts with KVM.
+    Firecracker,
 }
 
 impl Runtime {
@@ -34,6 +36,7 @@ impl Runtime {
         match self {
             Runtime::Container => "runc",
             Runtime::Gvisor => "runsc",
+            Runtime::Firecracker => "firecracker",
         }
     }
 }
@@ -45,6 +48,9 @@ pub struct Isolation {
     pub runtime: Runtime,
     /// The image: a directory to use as the root.
     pub rootfs: PathBuf,
+    /// The image's block device, for a microVM's drive.
+    #[serde(skip)]
+    pub image_block: Option<PathBuf>,
     /// Where the workspace appears inside.
     pub path: String,
     /// Share the host's network (a container's own network is egress work, later).
@@ -257,6 +263,7 @@ impl Container {
                 }
                 found
             }
+            Runtime::Firecracker => Vec::new(),
             // runsc lists the sandbox's own processes (its JSON is pids alone;
             // the table has each one's command).
             Runtime::Gvisor => {
@@ -290,6 +297,7 @@ impl Container {
                         .runtime_command(&["kill", "--pid", &process.pid.to_string(), &self.id, "KILL"])
                         .output();
                 }
+                Runtime::Firecracker => {}
             }
         }
         for _ in 0..50 {
