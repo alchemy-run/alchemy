@@ -28,7 +28,8 @@ agent does not.
 
 The whole provider also means its non-resource deliverables: bindings for
 every capability (step 5), a host runtime and event sources when the cloud
-runs code, framework websites (step 7), examples, the docs hub, and generated docs
+runs code, framework websites on the cloud's CDN and functions (step 7, when the
+cloud hosts websites), examples, the docs hub, and generated docs
 (step 10). They are rows in the same index as resources, with the same
 statuses. Never write "a later phase" into an agent contract without
 adding those rows: on Azure, the contract said "bindings are a later
@@ -499,42 +500,100 @@ them, until the user set a one-hour deadline to wrap up.
 
 ## Step 7 — framework websites
 
-A provider that can run a web server or serve static files ships
-`<Provider>.Website.<Framework>` composites, so a user deploys an Astro or
-Next.js app with one call:
+**Skip this step when the provider can't host a website.** Most
+providers can't: observability, payments, databases, and auth (Axiom,
+Stripe, Turso, PlanetScale) have no web hosting, so they ship no
+`Website` namespace and get no "N/A" rows in the index. This step is
+for providers that serve HTTP or static files.
+
+Those providers ship `<Provider>.Website.<Framework>` composites, so a
+user deploys an Astro or Next.js app with one call:
 
 ```ts
-const site = yield* Hetzner.Website.Astro("Site", { rootDir: "./web" });
+const site = yield* AWS.Website.Astro("Site", { rootDir: "./web" });
 ```
 
+### Use the cloud's web hosting, not a container
+
+A website deploys onto the infrastructure the cloud built for websites:
+static assets on a CDN, and server rendering on the cloud's serverless
+functions behind that same CDN. Putting the whole build in a container
+or an always-on VM, with no CDN, is the lazy default. It is not done,
+even though it works for every framework on the first try.
+
+Azure's first pass did exactly that. All 14 frameworks, the static-only
+ones included, became a Docker image on Container Apps. A follow-up moved
+static builds to a Storage static website and server builds to an
+always-on App Service plan, with Front Door optional. That is still a
+VM instead of functions, and no CDN by default. GCP's composites still
+deploy a Node image to Cloud Run for every framework, `StaticSite`
+included. Copy neither.
+
+Pick the hosting per cloud before writing code, and record the choice
+and its reason in the catalog:
+
+| Kind of provider | Static assets | Server rendering | Reference |
+| --- | --- | --- | --- |
+| Hyperscaler with a CDN and functions | object storage behind the CDN | serverless functions as the CDN's dynamic origin | `packages/aws/src/Website/` (S3 + CloudFront + Lambda, `SsrSite.ts`) |
+| Edge platform | the platform's asset hosting | the platform's functions | `packages/cloudflare/src/Website/` (Workers + static assets) |
+| Platform with its own function runtime | the platform's asset hosting | its functions, through a framework target | `packages/neon/src/Website/` (`frontend-frameworks/<framework>/neon.ts`) |
+| Containers or VMs only | served by the same Node server, behind the platform's CDN when it has one | the Node server | `packages/fly/src/Website/`, `packages/hetzner/src/Website/`, `packages/railway/src/Website/` (`Cdn.ts`) |
+
+What that means for the clouds still to be built:
+
+- **Azure:** Static Web Apps, or Blob static website behind Front Door,
+  with server rendering on Azure Functions (Flex Consumption). Not
+  Container Apps, not an App Service plan.
+- **GCP:** a Cloud Storage bucket behind Cloud CDN on an external
+  HTTPS load balancer, with Cloud Run or Cloud Functions as the
+  serverless origin for server rendering. Assets-only sites
+  never run a container.
+
+Rules:
+
+- An assets-only build (Vite, StaticSite, SPA output) never runs compute.
+- The CDN is on by default, not behind a `cdn: true` flag. Assets are
+  uploaded with content hashes and cache headers, and a deploy
+  invalidates or purges what changed (`AssetDeployment.ts` +
+  `CloudFront.Invalidation` on AWS).
+- Server rendering runs on functions that scale to zero. A container or
+  VM is acceptable only when the cloud has no function runtime, or when a
+  framework needs a long-lived process. Document that framework's reason
+  in its JSDoc.
+- Functions need a framework target: a new
+  `packages/frontend-frameworks/src/<framework>/<provider>.ts` next to
+  `aws.ts`, `cloudflare.ts`, and `neon.ts`, producing a handler for the
+  cloud's function runtime. Only container/VM providers use the Node
+  target (`@alchemy.run/frontend-frameworks/<framework>/node`) through
+  core's `alchemy/Website/Server`.
+- Before choosing a container, check whether the cloud's docs have a
+  hosting page for the framework (Azure Static Web Apps has one for
+  Next.js, Nuxt, Astro, and SvelteKit). If they do, use what it uses.
+
+### Layout
+
 Ship the same framework set as the existing providers (`ls
-packages/hetzner/src/Website` is the current list: Astro, Foldkit,
-Nextjs, Nuxt, Octane, ReactRouter, SolidStart, StaticSite, SvelteKit,
-TanStackStart, Vinext, Vite, Vocs, Waku). Copy the layout of
-`packages/hetzner/src/Website/` or `packages/fly/src/Website/`:
+packages/aws/src/Website` and `packages/hetzner/src/Website`: Astro,
+Foldkit, Nextjs, Nuxt, Octane, ReactRouter, SolidStart, StaticSite,
+SvelteKit, TanStackStart, Vinext, Vite, Vocs, Waku):
 
 - `FrameworkSite.ts` owns `makeFrameworkSite`, which builds through the
   framework integration (`@alchemy.run/frontend-frameworks/<framework>`)
-  and deploys the build output onto the provider's compute. Its shared
-  props (`rootDir`, `memo`, `dev`, `env`, `assets`, `domain`, `tags`) keep
-  the names and meaning the sibling providers use.
+  and deploys the output onto the hosting above. Its shared props
+  (`rootDir`, `memo`, `dev`, `env`, `assets`, `domain`, `tags`) keep the
+  names and meaning the sibling providers use.
 - One small file per framework that only sets the framework specifier, the
   deploy target, and the framework's own option block.
 - `StaticSite.ts` for assets-only sites, and `index.ts` exported from the
   provider barrel as `export * as Website from "./Website/index.ts"`.
 
-The deploy target decides the work. Providers that run containers or VMs
-use the Node target (`@alchemy.run/frontend-frameworks/<framework>/node`)
-through core's shared `alchemy/Website/Server`. A provider with its own
-serverless runtime needs a new target per framework in
-`packages/frontend-frameworks/src/<framework>/` next to `aws.ts`,
-`cloudflare.ts`, and `neon.ts`.
-
 Each framework gets a live
-`packages/integration-tests/test/<Provider>/Website/<Framework>.test.ts`, a
-`<Framework>.local.test.ts` for `alchemy dev`, and a shared
-`PropSurface.test.ts`; an `examples/<provider>-website-<framework>`
-example listed in `scripts/test-examples.ts`; and a page under
+`packages/integration-tests/test/<Provider>/Website/<Framework>.test.ts`
+that asserts the response comes through the CDN (a cache header, or the
+CDN hostname) and that a server-rendered route hits the function; a
+`<Framework>.local.test.ts` for `alchemy dev`; and a shared
+`PropSurface.test.ts`. It also gets an `examples/<provider>-website-<framework>`
+example listed in `scripts/test-examples.ts`, and a page under
 `website/src/content/docs/<provider>/frontend/`.
 
 ## Step 8 — close the loop
@@ -591,7 +650,8 @@ A provider is done when every SDK service is cataloged, every in-scope
 resource has its own passing live test (or is `blocked: cost` or
 `blocked: skipped` and the user has the list),
 bindings go through `<Provider>Bindings.Bind`, reach foreign hosts, and are least privilege, the
-framework websites deploy, examples deploy, the reference docs are
+framework websites (if the cloud hosts websites) deploy to its CDN and
+functions, examples deploy, the reference docs are
 generated, the hub matches [docs.md](docs.md), the review
 gate is clean, the test account is clean after a full run, and every SDK
 mismatch found along the way is a merged distilled patch.

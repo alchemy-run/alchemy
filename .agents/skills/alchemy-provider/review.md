@@ -46,7 +46,8 @@ reason the platform forces. References:
 | Bindings that reach any host | `packages/aws/src/AWSBindings.ts`, `packages/gcp/src/GCPBindings.ts`, `packages/aws/src/SQS/BindingHttp.ts` |
 | Package shape | `packages/hetzner/` (`package.json`, `tsconfig.json`, `src/Contributions.ts`) |
 | Bindings tested inside a deployed host | `packages/integration-tests/test/AWS/DynamoDB/Bindings.test.ts` + `handler.ts` |
-| Framework websites | `packages/hetzner/src/Website/`, `packages/fly/src/Website/` |
+| Framework websites on a CDN + functions | `packages/aws/src/Website/` (S3 + CloudFront + Lambda), `packages/cloudflare/src/Website/` |
+| Framework websites on containers/VMs (only when the cloud has no CDN or functions) | `packages/fly/src/Website/`, `packages/hetzner/src/Website/` |
 
 ## 1. Package
 
@@ -111,7 +112,20 @@ reason the platform forces. References:
 | Event sources | compare with AWS `SQS.QueueEventSource` / Cloudflare cron | contract in the source service, per-host implementation layers |
 | User-facing config | read setup docs and examples | region/account from profile or a `<P>.Region("...")` layer, matching `AWS.Region`; no new env vars |
 
-## 6. Tests
+## 6. Websites
+
+Skip this section when the provider can't host websites; then `src/<P>/Website` doesn't exist.
+
+| Check | Command | Expect |
+| --- | --- | --- |
+| Hosting choice | the catalog's website entry | names the cloud's static hosting, CDN, and function runtime, with a reason for each |
+| No containers by default | `rg -n 'ContainerApp\|Run\.Service\|ECS\|Dockerfile\|image' src/<P>/Website` | 0, or the framework's JSDoc says why it needs a long-lived process and the cloud has no alternative |
+| Static is compute-free | read `StaticSite.ts` and every assets-only path (Vite, SPA output) | uploads to object/asset storage; no server, function, or VM |
+| CDN by default | read `FrameworkSite.ts` | the CDN is created without opting in; deploys purge or invalidate changed paths |
+| Function target | `ls packages/frontend-frameworks/src/*/<p>.ts` | one per framework when SSR runs on functions; the Node target only on container/VM-only clouds |
+| Live proof | each `Website/<Framework>.test.ts` | asserts the response came through the CDN and an SSR route ran on the function |
+
+## 7. Tests
 
 | Check | Command | Expect |
 | --- | --- | --- |
@@ -127,7 +141,7 @@ reason the platform forces. References:
 | Blocked rows | `rg -n 'blocked' processes/<P>/catalog/INDEX.md` | each needs payment, vendor approval, or hardware and names the exact request; quotas and preview features were requested through the API |
 | Suite shape | how the suite was run | one process, whole provider directory; quotas shared with semaphores, never batched runs |
 
-## 7. Docs, naming, and scope
+## 8. Docs, naming, and scope
 
 | Check | Command | Expect |
 | --- | --- | --- |
