@@ -92,8 +92,9 @@ describe.sequential("Sandbox.Workspace with commands on forks (btrfs, automatic)
       console.log(
         `4 commands of 3 s each, at once: cold ${cold.ms} ms, warm ${warm.ms} ms; warm per command: ${warm.results.map((r) => r.ms).join(", ")} ms`,
       );
-      // At once, not one after the other.
-      expect(warm.ms).toBeLessThan(4 * 3_000);
+      // At once, not one after the other: their machine time overlapped.
+      const machineTime = warm.results.reduce((sum, r) => sum + (r.timings?.machine ?? 0), 0);
+      expect(warm.ms).toBeLessThan(machineTime);
       const read = yield* exec("p1", "cat f-1.txt f-2.txt f-3.txt f-4.txt g-4.txt");
       expect(read.stdout.trim().split("\n")).toEqual(["1", "2", "3", "4", "44"]);
       const noop = yield* exec("p1", "true");
