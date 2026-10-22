@@ -220,6 +220,55 @@ layer(NodeServices.layer)("@alchemy.run/cloudflare/Bridge (runtime-only entry)",
     { tags: ["unit", "provider:cloudflare", "provider:cloudflare:worker", "local"] },
   );
 
+  for (const fixture of ["worker.ts", "bindings-worker.ts"]) {
+    it.effect(
+      `keeps the Cloudflare API client out of a bundled Worker (${fixture})`,
+      () =>
+        Effect.gen(function* () {
+          const path = yield* Path.Path;
+          const packagesDir = yield* path.fromFileUrl(new URL("../../../../", import.meta.url));
+          const rendered: string[] = [];
+          yield* (yield* WorkerBundle).build({
+            id: "runtime-entry",
+            main: path.join(
+              packagesDir,
+              "integration-tests/test/Cloudflare/Workers/fixtures/runtime-entry",
+              fixture,
+            ),
+            compatibility: { date: "2025-04-01", flags: ["nodejs_compat"] },
+            entry: { kind: "effect", exports: {} },
+            stack: { name: "runtime-entry", stage: "test" },
+            extraOptions: {
+              input: {
+                plugins: {
+                  name: "collect-rendered-modules",
+                  generateBundle: (_options, bundle) => {
+                    rendered.push(
+                      ...Object.values(bundle)
+                        .flatMap((chunk) =>
+                          chunk.type === "chunk" ? Object.entries(chunk.modules) : [],
+                        )
+                        .filter(([, module]) => module.renderedLength > 0)
+                        .map(([id]) => id.replaceAll("\\", "/")),
+                    );
+                  },
+                },
+              },
+            },
+          });
+          expect(rendered.some((id) => id.endsWith("cloudflare/src/Workers/WorkerBridge.ts"))).toBe(
+            true,
+          );
+          // Deploy-only provider helpers (e.g. `findQueueByName`) reach the
+          // distilled client; the runtime defines must prune them (#2371).
+          expect(
+            rendered.filter((id) => /@distilled\.cloud|submodules\/distilled\//.test(id)),
+          ).toEqual([]);
+        }),
+      { tags: ["unit", "provider:cloudflare", "provider:cloudflare:worker", "local"] },
+    );
+  }
+
   it.effect(
     "the @alchemy.run/cloudflare namespace does pull that tooling",
     () =>
