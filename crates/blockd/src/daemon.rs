@@ -75,6 +75,17 @@ pub struct Daemon {
     counters: Mutex<Counters>,
 }
 
+/// Where a call's fork comes from.
+enum From {
+    Snapshot(Hash),
+    /// A mounted head, forked; its snapshot uploading.
+    Fork {
+        device: Arc<crate::Device>,
+        snapshot: std::thread::JoinHandle<Result<Hash>>,
+        cache: CacheLease,
+    },
+}
+
 /// A background process and its output files.
 struct Spawned {
     child: Mutex<std::process::Child>,
@@ -188,7 +199,10 @@ struct ExecRequest {
 struct CallRequest {
     #[serde(flatten)]
     store: StoreSpec,
-    snapshot: String,
+    /// The snapshot the call forks, or…
+    snapshot: Option<String>,
+    /// …a head mounted here: forked as it is now, with nothing uploaded first.
+    fork: Option<String>,
     dir: PathBuf,
     command: String,
     cwd: Option<PathBuf>,
@@ -618,11 +632,16 @@ impl Daemon {
     //#region calls
 
     fn start_call(self: &Arc<Self>, request: CallRequest) -> Result<Value> {
-        let snapshot =
-            Hash::from_hex(&request.snapshot).context("`snapshot` is not a snapshot id")?;
         let volume = self.volume(&request.store)?;
         let mode = mode(request.mode.as_deref())?;
         let id = new_id();
+        let from = match (&request.snapshot, &request.fork) {
+            (Some(snapshot), _) => From::Snapshot(
+                Hash::from_hex(snapshot).context("`snapshot` is not a snapshot id")?,
+            ),
+            (None, Some(head)) => self.fork_head(head, request.cache.as_deref())?,
+            (None, None) => bail!("a call needs `snapshot` or `fork`"),
+        };
         let entry = Arc::new(CallEntry {
             state: Mutex::new(CallState::Running),
             done: Condvar::new(),
@@ -643,7 +662,7 @@ impl Daemon {
         std::thread::Builder::new()
             .name(format!("blockd-call-{}", &id[..8]))
             .spawn(move || {
-                let (result, kept) = match daemon.run_call(&call_id, snapshot, volume.clone(), mode, request) {
+                let (result, kept) = match daemon.run_call(&call_id, from, volume.clone(), mode, request) {
                     Ok((result, kept)) => (result, kept.map(|(kept, cache)| Box::new((kept, volume, cache)))),
                     Err(e) => (json!({ "ok": false, "error": format!("{e:#}") }), None),
                 };
@@ -657,16 +676,85 @@ impl Daemon {
         Ok(json!({ "id": id }))
     }
 
+    /// A fork of mounted `head` as it is now: its filesystem frozen, what it
+    /// changed since its last snapshot copied into the fork's cache, then a
+    /// snapshot of it (the fork's base, as the store knows it) uploaded while
+    /// the command runs.
+    fn fork_head(&self, head: &str, cache: Option<&Path>) -> Result<From> {
+        let entry = self
+            .heads
+            .lock()
+            .unwrap()
+            .get(head)
+            .cloned()
+            .ok_or_else(|| anyhow!(NotFound))
+            .with_context(|| format!("{head} isn't mounted here"))?;
+        let slot = entry.lock().unwrap();
+        let mounted = slot
+            .as_ref()
+            .ok_or_else(|| anyhow!(NotFound))
+            .with_context(|| format!("{head} isn't mounted here"))?;
+        let device = mounted.head.device().clone();
+        let dir = mounted.head.dir().to_path_buf();
+        drop(slot);
+        let lease = self.cache(cache, "calls.cache");
+        let frozen = crate::control::freeze(&dir);
+        let fork = match device.fork_dirty(lease.path()) {
+            Ok(fork) => fork,
+            Err(e) => {
+                if frozen {
+                    crate::control::thaw(&dir);
+                }
+                return Err(e);
+            }
+        };
+        let snapshot = std::thread::Builder::new()
+            .name("blockd-fork-snapshot".into())
+            .spawn(move || {
+                let taken = device.snapshot();
+                if frozen {
+                    crate::control::thaw(&dir);
+                }
+                taken
+            })?;
+        Ok(From::Fork {
+            device: Arc::new(fork),
+            snapshot,
+            cache: lease,
+        })
+    }
+
     fn run_call(
         &self,
         id: &str,
-        snapshot: Hash,
+        from: From,
         volume: Arc<Volume>,
         mode: Mode,
         request: CallRequest,
     ) -> Result<(Value, Option<(Kept, CacheLease)>)> {
         let mut timings = Timings::new();
-        let cache = timings.time("cache", || self.cache(request.cache.as_deref(), "calls.cache"));
+        let (from, cache) = match from {
+            From::Fork { device, snapshot, cache } => (Some((device, snapshot)), cache),
+            From::Snapshot(snapshot) => {
+                let cache = timings.time("cache", || self.cache(request.cache.as_deref(), "calls.cache"));
+                return self.run_call_from(id, Err(snapshot), volume, mode, request, timings, cache);
+            }
+        };
+        let (device, snapshot) = from.unwrap();
+        self.run_call_from(id, Ok((device, snapshot)), volume, mode, request, timings, cache)
+    }
+
+    #[allow(clippy::too_many_arguments, clippy::type_complexity)]
+    fn run_call_from(
+        &self,
+        id: &str,
+        from: std::result::Result<(Arc<crate::Device>, std::thread::JoinHandle<Result<Hash>>), Hash>,
+        volume: Arc<Volume>,
+        mode: Mode,
+        request: CallRequest,
+        mut timings: Timings,
+        cache: CacheLease,
+    ) -> Result<(Value, Option<(Kept, CacheLease)>)> {
         let work = self.config.state.join(format!("call-{id}"));
         let out = self.config.run.join(format!("call-{id}.out"));
         let err = self.config.run.join(format!("call-{id}.err"));
@@ -685,10 +773,14 @@ impl Daemon {
             .map(|isolation| timings.time("image", || self.isolation(isolation, &volume, mode)))
             .transpose()?;
         let init = self.init();
-        let called = call::call(
-            &volume,
-            snapshot,
-            Spec {
+        let (attached, snapshot, uploading) = match from {
+            Ok((device, uploading)) => {
+                let base = device.status().base;
+                (Some(device), base, Some(uploading))
+            }
+            Err(snapshot) => (None, snapshot, None),
+        };
+        let spec = Spec {
                 mode,
                 cache: cache.path(),
                 dir: &request.dir,
@@ -703,9 +795,21 @@ impl Daemon {
                     init: &init,
                 }),
                 chunks: self.chunks.clone(),
-            },
-            &self.runtime,
-        );
+        };
+        let called = match attached {
+            Some(device) => call::call_on(&volume, device, snapshot, spec, &self.runtime, Timings::new()),
+            None => call::call(&volume, snapshot, spec, &self.runtime),
+        };
+        // The fork's base, as the store knows it: the head's snapshot taken as it forked.
+        let base = match uploading {
+            Some(uploading) => Some(
+                uploading
+                    .join()
+                    .map_err(|_| anyhow!("the head's snapshot panicked"))?
+                    .context("snapshotting the forked head")?,
+            ),
+            None => None,
+        };
         let encode = |path: &Path| {
             let bytes = std::fs::read(path).unwrap_or_default();
             let _ = std::fs::remove_file(path);
@@ -715,6 +819,9 @@ impl Daemon {
         let (mut report, kept) = called?;
         timings.extend(&report.timings);
         report.timings = timings;
+        if let Some(base) = base {
+            report.snapshot = base;
+        }
         let mut result = serde_json::to_value(&report)?;
         let object = result.as_object_mut().unwrap();
         object.insert("done".into(), Value::Bool(true));

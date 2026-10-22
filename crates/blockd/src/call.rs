@@ -131,6 +131,19 @@ pub fn call(
     if let Some(chunks) = &spec.chunks {
         device.use_chunks(chunks.clone());
     }
+    call_on(volume, device, snapshot, spec, runtime, timings)
+}
+
+/// [`call`] on a device already attached: an ephemeral fork of `snapshot`
+/// (or of a mounted head, [`Device::fork_dirty`]).
+pub fn call_on(
+    volume: &Arc<Volume>,
+    device: Arc<Device>,
+    snapshot: Hash,
+    spec: Spec,
+    runtime: &Handle,
+    mut timings: Timings,
+) -> Result<(Report, Option<Kept>)> {
     let mut call = timings.time("mount", || {
         Call::mount(&device, spec.mode, spec.cache, spec.dir, spec.work)
     })?;

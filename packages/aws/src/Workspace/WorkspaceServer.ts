@@ -174,6 +174,8 @@ interface Session {
   snapshotSeq: number;
   /** Patches applied since the last snapshot. */
   dirty: boolean;
+  /** Batches of patches applied: whether any landed while a fork's snapshot uploaded. */
+  landings: number;
   readonly opens: Map<string, number>;
   host?: ProcessHost;
   /** Patches waiting to land. */
@@ -313,6 +315,7 @@ export const serveWorkspace = (config: HostConfig) =>
           seq: 0,
           snapshotSeq: 0,
           dirty: false,
+          landings: 0,
           opens: new Map(),
           queue: [],
           merged: new Map(),
@@ -512,6 +515,7 @@ export const serveWorkspace = (config: HostConfig) =>
               daemon.post(`/v1/heads/${encodeURIComponent(s.name)}/sync`),
             );
             s.dirty = true;
+            s.landings += 1;
             for (const pending of accepted) {
               yield* deletePatch(pending.patch);
               yield* Deferred.succeed(pending.done, {
@@ -603,6 +607,7 @@ export const serveWorkspace = (config: HostConfig) =>
           yield* daemon.post(`/v1/heads/${encodeURIComponent(s.name)}/sync`);
           h.own.push(appendLog(s, reply.summary.paths));
           s.dirty = true;
+          s.landings += 1;
           yield* deletePatch(reply.patch!);
           return { status: "applied", paths: reply.summary.paths } satisfies WorkspaceChanges;
         }),
@@ -728,22 +733,63 @@ export const serveWorkspace = (config: HostConfig) =>
     const forked = Effect.fn(function* (s: Session, body: ServiceExecBody) {
       if (config.placement === "automatic" && s.host) return yield* onHost(s, s.host, body);
       const timings: Record<string, number> = {};
-      const from = yield* timed(timings, "base", base(s));
       const call = crypto.randomUUID();
       const patch = `patches/${s.name}/${call}`;
       const keep = config.placement === "automatic";
-      const { id } = yield* daemon.post<{ readonly id: string }>("/v1/calls", {
+      const request = {
         ...store,
-        snapshot: from.snapshot,
         dir: `${CALLS}/${call}`,
         mode: "auto",
         patch,
         ...body,
         ...(keep ? { keep } : {}),
         ...(isolation ? { isolation } : {}),
-      });
-      const reply = yield* timed(timings, "call", daemon.wait<CallReply>(id));
+      };
+      // A mounted head is forked as it is: nothing waits for its snapshot,
+      // which uploads while the command runs and is the command's base.
+      const local = yield* timed(
+        timings,
+        "base",
+        s.head.withPermits(1)(
+          Effect.gen(function* () {
+            if (!s.mounted) return undefined;
+            const checkpoint = yield* daemon.post<{ readonly paths: ReadonlyArray<string> | null }>(
+              `/v1/heads/${encodeURIComponent(s.name)}/checkpoint`,
+            );
+            if (checkpoint.paths === null || checkpoint.paths.length > 0) {
+              appendLog(s, checkpoint.paths);
+              s.dirty = true;
+            }
+            const { id } = yield* daemon.post<{ readonly id: string }>("/v1/calls", {
+              ...request,
+              fork: s.name,
+            });
+            return { id, seq: s.seq, dirty: s.dirty, landings: s.landings };
+          }),
+        ),
+      );
+      const unmounted = local ? undefined : yield* timed(timings, "base", base(s));
+      const id =
+        local?.id ??
+        (yield* daemon.post<{ readonly id: string }>("/v1/calls", {
+          ...request,
+          snapshot: unmounted!.snapshot,
+        })).id;
+      const reply = yield* timed(
+        timings,
+        "call",
+        daemon.wait<CallReply & { readonly snapshot: string }>(id),
+      );
       Object.assign(timings, prefixed("blockd.", reply.timings));
+      const from = local ? { snapshot: reply.snapshot, seq: local.seq } : unmounted!;
+      // The head's snapshot as it forked holds what was unsnapshotted then.
+      if (local?.dirty) {
+        s.points.push(reply.snapshot);
+        if (s.landings === local.landings) {
+          s.dirty = false;
+          s.snapshotSeq = local.seq;
+        }
+      }
       if (reply.kept) {
         const h: ProcessHost = { call: id, base: from, own: [] };
         s.host = h;

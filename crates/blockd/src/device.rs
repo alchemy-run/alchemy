@@ -518,6 +518,40 @@ impl Device {
         Ok(fetched)
     }
 
+    /// An ephemeral device holding exactly what this one holds now: its
+    /// snapshot, plus a copy of every extent written since (the cache at
+    /// `cache_path`). Nothing goes to the store: a fork of a mounted head is
+    /// as quick as copying what changed since its last snapshot. The
+    /// filesystem on this device should be frozen, so what's copied is a
+    /// clean point.
+    pub fn fork_dirty(&self, cache_path: &Path) -> Result<Device> {
+        let base = self.base.lock().unwrap();
+        let fork = Device::attach(
+            self.volume.clone(),
+            &format!("@{}-fork", *base),
+            *base,
+            None,
+            cache_path,
+            self.runtime.clone(),
+        )?;
+        if let Some(chunks) = self.chunks.get() {
+            fork.use_chunks(chunks.clone());
+        }
+        let mut bytes = vec![0; EXTENT_SIZE as usize];
+        for extent in self.dirty_extents() {
+            // The extent's blocks never written come from the snapshot.
+            self.ensure_present(&base, extent)?;
+            self.cache.read_exact_at(&mut bytes, extent * EXTENT_SIZE)?;
+            fork.cache.write_all_at(&bytes, extent * EXTENT_SIZE)?;
+            for block in extent * BLOCKS_PER_EXTENT..(extent + 1) * BLOCKS_PER_EXTENT {
+                fork.present.set(block);
+                // Dirty in the fork: not the snapshot's, forgotten at close.
+                fork.dirty.set(block);
+            }
+        }
+        Ok(fork)
+    }
+
     /// Fetches through the machine's chunk cache from here on.
     pub fn use_chunks(&self, chunks: Arc<crate::chunks::ChunkCache>) {
         let _ = self.chunks.set(chunks);

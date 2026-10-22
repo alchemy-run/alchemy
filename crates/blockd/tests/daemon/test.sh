@@ -103,6 +103,15 @@ for fs in "$@"; do
   echo "$status" | grep -qE '"calls":[0-9]+' || fail "$fs: the status counts calls: $status"
   pass "$fs: three calls ran at once (${elapsed} ms), each made a patch, and saw no store credentials"
 
+  # A call forked from the mounted head as it is now: what it wrote and never
+  # snapshotted, the fork sees; the call reports the head's snapshot taken as it forked.
+  echo unsnapshotted > "$dir/dirty.txt"; sync -f "$dir"
+  result=$(call "{$common,\"fork\":\"$head\",\"dir\":\"$work/fork-$fs\",\"command\":\"cat dirty.txt\"}")
+  [ "$(field "$result" stdout | base64 -d)" = unsnapshotted ] || fail "$fs: a fork of the head didn't see its write: $result"
+  forked_at=$(field "$result" snapshot)
+  [ "$forked_at" = "$(snapshot_of "$head")" ] || fail "$fs: the fork's base $forked_at isn't the head's snapshot"
+  pass "$fs: a call forks the mounted head as it is, with its snapshot uploaded meanwhile"
+
   # The head applies them; a detach reports what changed since.
   applied=$(req "/v1/heads/$head/apply" "{\"patches\":[\"patches/$fs-1\",\"patches/$fs-2\",\"patches/$fs-3\"]}") \
     || fail "$fs: apply: $applied"

@@ -163,6 +163,26 @@ pub(crate) fn frozen(freeze: Option<&str>, take: impl FnOnce() -> Result<volume:
     take()
 }
 
+/// Freezes the filesystem at `dir` if it can be (FUSE can't: it's synced
+/// instead). Returns whether it froze, so the caller knows to thaw it.
+pub fn freeze(dir: &Path) -> bool {
+    let Some(dir) = dir.to_str() else { return false };
+    if fsfreeze("-f", dir).is_ok() {
+        return true;
+    }
+    let _ = crate::helper("sync").args(["-f", dir]).status();
+    false
+}
+
+/// Thaws what [`freeze`] froze.
+pub fn thaw(dir: &Path) {
+    if let Some(dir) = dir.to_str()
+        && let Err(e) = fsfreeze("-u", dir)
+    {
+        tracing::warn!("thawing {dir}: {e:#}");
+    }
+}
+
 fn fsfreeze(flag: &str, mountpoint: &str) -> Result<()> {
     let status = crate::helper("fsfreeze")
         .args([flag, mountpoint])
