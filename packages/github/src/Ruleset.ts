@@ -410,8 +410,10 @@ export const RulesetProvider = () =>
           ...(pullRequest.allowedMergeMethods !== undefined && {
             allowed_merge_methods: pullRequest.allowedMergeMethods,
           }),
-          require_extra_approval_for_unattributed_changes:
-            pullRequest.requireExtraApprovalForUnattributedChanges ?? true,
+          ...(pullRequest.requireExtraApprovalForUnattributedChanges !== undefined && {
+            require_extra_approval_for_unattributed_changes:
+              pullRequest.requireExtraApprovalForUnattributedChanges,
+          }),
         };
         rules.push({ type: "pull_request", parameters });
       }
