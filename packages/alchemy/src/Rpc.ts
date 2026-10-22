@@ -358,12 +358,27 @@ const isRpcBytesChunk = (value: unknown): value is RpcBytesChunk =>
   "b64" in value;
 
 const toBase64 = (bytes: Uint8Array): string => {
+  const encode = (bytes as Uint8Array & { toBase64?: () => string }).toBase64;
+  if (typeof encode === "function") return encode.call(bytes);
+
   let binary = "";
   for (const byte of bytes) binary += String.fromCharCode(byte);
   return btoa(binary);
 };
 
 const fromBase64 = (b64: string): Uint8Array => {
+  const decode = (
+    Uint8Array as Uint8ArrayConstructor & { fromBase64?: (value: string) => Uint8Array }
+  ).fromBase64;
+  if (typeof b64 === "string" && typeof decode === "function") {
+    try {
+      return decode.call(Uint8Array, b64);
+    } catch {
+      // Preserve atob's InvalidCharacterError and coercion semantics for bad
+      // wire values; fromBase64 uses SyntaxError instead. Valid input stays
+      // on the native path without an intermediate binary string.
+    }
+  }
   const binary = atob(b64);
   const out = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i++) out[i] = binary.charCodeAt(i);
