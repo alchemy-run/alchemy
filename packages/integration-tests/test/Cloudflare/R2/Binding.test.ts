@@ -1,9 +1,14 @@
 import { createHash } from "node:crypto";
 import * as Cloudflare from "@alchemy.run/cloudflare";
+import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
+import { CloudflareApiLive } from "@alchemy.run/cloudflare/Providers";
+import * as r2 from "@distilled.cloud/cloudflare/r2";
+import * as workers from "@distilled.cloud/cloudflare/workers";
 import { expect } from "alchemy-test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import type * as HttpClientResponse from "effect/http/HttpClientResponse";
@@ -16,7 +21,7 @@ const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   state: Cloudflare.state(),
 });
 
-const HOOK_TIMEOUT = 300_000;
+const HOOK_TIMEOUT = 120_000;
 const TEST_TIMEOUT = 120_000;
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
@@ -29,7 +34,7 @@ class WorkerNotReady extends Data.TaggedError("WorkerNotReady")<{
 // Bounded spaced schedule — caps total wait so a genuine failure
 // surfaces fast instead of an uncapped exponential blowing past the
 // test timeout while riding out cold-start propagation.
-const ready = Schedule.max([Schedule.spaced("2 seconds"), Schedule.recurs(30)]);
+const ready = Schedule.max([Schedule.spaced("5 seconds"), Schedule.recurs(10)]);
 
 /** Retry an HTTP call until it returns 200 (rides out cold-start 404s). */
 const untilOk = <E, R>(eff: Effect.Effect<HttpClientResponse.HttpClientResponse, E, R>) =>
@@ -139,6 +144,55 @@ const delMany = (base: string, keys: string[]) =>
     ),
   );
 
+const putCopySource = (base: string, key: string, value: string) =>
+  untilOk(
+    HttpClient.execute(
+      HttpClientRequest.put(`${base}/copy-source?key=${encodeURIComponent(key)}`).pipe(
+        HttpClientRequest.bodyText(value),
+      ),
+    ),
+  );
+
+const copyStream = (
+  base: string,
+  source: string,
+  key: string,
+  options: Record<string, string> = {},
+) =>
+  HttpClient.execute(
+    HttpClientRequest.post(
+      `${base}/copy-stream?${new URLSearchParams({ source, key, ...options })}`,
+    ),
+  );
+
+const readCopy = (base: string, key: string) =>
+  untilOk(HttpClient.get(`${base}/copy-readback?key=${encodeURIComponent(key)}`)).pipe(
+    Effect.flatMap((response) => response.json),
+    Effect.map(
+      (body) =>
+        body as {
+          exists: boolean;
+          size: number;
+          bytes: number[];
+          httpMetadata: { contentType: string; cacheControl: string };
+          customMetadata: { purpose: string; label: string };
+        },
+    ),
+  );
+
+const expectCopy = (base: string, key: string, bytes: Uint8Array, source: string) =>
+  Effect.gen(function* () {
+    const object = yield* readCopy(base, key);
+    expect(object.exists).toBe(true);
+    expect(object.size).toBe(bytes.byteLength);
+    expect(object.bytes).toEqual(Array.from(bytes));
+    expect(object.httpMetadata).toMatchObject({
+      contentType: "application/octet-stream",
+      cacheControl: "max-age=60",
+    });
+    expect(object.customMetadata).toEqual({ purpose: "stream-copy", label: source });
+  });
+
 /**
  * Drive every client method through `fetch`: `put` → `get` → `head` →
  * `list` → `delete` (single) → `delete` (batch), reading back through
@@ -233,9 +287,30 @@ const exercise = (
  * directly, e.g. `alchemy logs --tail --stage test --config ./test/Cloudflare/R2/fixtures/stack.ts`.
  */
 const stack = beforeAll(deploy(Stack), { timeout: HOOK_TIMEOUT });
-afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack), {
-  timeout: HOOK_TIMEOUT,
-});
+afterAll.skipIf(!!process.env.NO_DESTROY)(
+  Effect.gen(function* () {
+    const output = yield* Effect.exit(stack);
+    yield* destroy(Stack);
+    if (Exit.isSuccess(output)) {
+      yield* Effect.gen(function* () {
+        const { accountId } = yield* yield* CloudflareEnvironment;
+        const gone = yield* r2.getBucket({ accountId, bucketName: output.value.bucketName }).pipe(
+          Effect.as(false),
+          Effect.catchTag("NoSuchBucket", () => Effect.succeed(true)),
+        );
+        expect(gone).toBe(true);
+        for (const scriptName of output.value.workerNames) {
+          const absent = yield* workers.getScriptSetting({ accountId, scriptName }).pipe(
+            Effect.as(false),
+            Effect.catchTag("WorkerNotFound", () => Effect.succeed(true)),
+          );
+          expect(absent).toBe(true);
+        }
+      }).pipe(Effect.provide(CloudflareApiLive()), Effect.scoped);
+    }
+  }),
+  { timeout: HOOK_TIMEOUT },
+);
 
 // ── Native Worker binding ── write through the Write worker, read back through
 // the Read worker (cross-worker, proving both halves agree on the bucket).
@@ -288,6 +363,112 @@ test(
     expect(bad.status).toBe(400);
     expect(((yield* bad.json) as { stored: boolean }).stored).toBe(false);
     expect((yield* headObject(out.readBinding, "stream/bad")).exists).toBe(false);
+  }).pipe(logLevel),
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:r2", "provider:cloudflare:worker", "live"],
+    timeout: TEST_TIMEOUT,
+  },
+);
+
+test(
+  "native binding: copies real object bodies, ranges and empty bodies with metadata",
+  Effect.gen(function* () {
+    const { readWriteBinding: base } = yield* stack;
+    const source = "copy/native-source";
+    const value = "native R2 copy ☃\u0000".repeat(1024);
+    const bytes = new TextEncoder().encode(value);
+    yield* putCopySource(base, source, value);
+    for (const [label, options, expected] of [
+      ["implicit", {}, bytes],
+      ["explicit", { contentLength: String(bytes.byteLength) }, bytes],
+      ["range", { offset: "17", rangeLength: "257", contentLength: "257" }, bytes.slice(17, 274)],
+    ] as const) {
+      const key = `copy/${label}`;
+      yield* del(base, key);
+      const copied = yield* untilOk(copyStream(base, source, key, options));
+      expect((yield* copied.json) as unknown).toMatchObject({
+        stored: true,
+        size: expected.byteLength,
+      });
+      yield* expectCopy(base, key, expected, source);
+    }
+    const emptySource = "copy/empty-source";
+    yield* putCopySource(base, emptySource, "");
+    for (const [label, options] of [
+      ["implicit", {}],
+      ["explicit", { contentLength: "0" }],
+    ] as const) {
+      const key = `copy/empty-${label}`;
+      yield* del(base, key);
+      expect((yield* untilOk(copyStream(base, emptySource, key, options))).status).toBe(200);
+      yield* expectCopy(base, key, new Uint8Array(), emptySource);
+    }
+  }).pipe(logLevel),
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:r2", "provider:cloudflare:worker", "live"],
+    timeout: TEST_TIMEOUT,
+  },
+);
+
+test(
+  "native binding: transformed object streams store their transformed bytes",
+  Effect.gen(function* () {
+    const { readWriteBinding: base } = yield* stack;
+    const source = "copy/transform-source";
+    const key = "copy/transformed";
+    const value = "transform native bytes ☃".repeat(256);
+    const bytes = new TextEncoder().encode(value);
+    const transformed = bytes.map((byte) => byte ^ 0xff);
+    const sha256 = createHash("sha256").update(transformed).digest("hex");
+    yield* putCopySource(base, source, value);
+    yield* del(base, key);
+    const copied = yield* untilOk(
+      copyStream(base, source, key, {
+        transform: "invert",
+        contentLength: String(bytes.byteLength),
+        sha256,
+      }),
+    );
+    expect((yield* copied.json) as unknown).toMatchObject({ stored: true, size: bytes.byteLength });
+    yield* expectCopy(base, key, transformed, source);
+  }).pipe(logLevel),
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:r2", "provider:cloudflare:worker", "live"],
+    timeout: TEST_TIMEOUT,
+  },
+);
+
+test(
+  "native binding: forwarded bodies enforce lengths, checksums and conditional writes",
+  Effect.gen(function* () {
+    const { readWriteBinding: base } = yield* stack;
+    const source = "copy/validation-source";
+    const value = "verified native body";
+    const bytes = new TextEncoder().encode(value);
+    yield* putCopySource(base, source, value);
+    for (const [label, options] of [
+      ["short", { contentLength: String(bytes.byteLength - 1) }],
+      ["long", { contentLength: String(bytes.byteLength + 1) }],
+      ["checksum", { sha256: "0".repeat(64) }],
+    ] as const) {
+      const key = `copy/invalid-${label}`;
+      yield* del(base, key);
+      const rejected = yield* copyStream(base, source, key, options);
+      expect(rejected.status).toBe(400);
+      expect((yield* rejected.json) as unknown).toMatchObject({ stored: false });
+      expect((yield* readCopy(base, key)).exists).toBe(false);
+    }
+    const checked = "copy/checksum-ok";
+    yield* del(base, checked);
+    const sha256 = createHash("sha256").update(bytes).digest("hex");
+    expect((yield* untilOk(copyStream(base, source, checked, { sha256 }))).status).toBe(200);
+    yield* expectCopy(base, checked, bytes, source);
+
+    const existing = "copy/existing";
+    yield* putCopySource(base, existing, "keep this value");
+    const conditional = yield* untilOk(copyStream(base, source, existing));
+    expect((yield* conditional.json) as unknown).toMatchObject({ stored: false, size: null });
+    yield* expectCopy(base, existing, new TextEncoder().encode("keep this value"), existing);
   }).pipe(logLevel),
   {
     tags: ["provider:cloudflare", "provider:cloudflare:r2", "provider:cloudflare:worker", "live"],

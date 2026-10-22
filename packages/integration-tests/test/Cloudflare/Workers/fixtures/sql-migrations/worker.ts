@@ -28,6 +28,21 @@ export default class SqlMigrationsWorker extends Cloudflare.Worker<SqlMigrations
             yield* objects.getByName(name).inspect().pipe(Effect.orDie),
           );
         }
+        if (route === "POST /cursor/methods") {
+          return yield* HttpServerResponse.json(
+            yield* objects.getByName(name).cursorMethods().pipe(Effect.orDie),
+          );
+        }
+        if (route === "GET /cursor/streams") {
+          return yield* HttpServerResponse.json(
+            yield* objects.getByName(name).cursorStreams().pipe(Effect.orDie),
+          );
+        }
+        if (route === "GET /cursor/errors") {
+          return yield* HttpServerResponse.json(
+            yield* objects.getByName(name).cursorErrors().pipe(Effect.orDie),
+          );
+        }
         if (route === "POST /users") {
           yield* objects
             .getByName(name)

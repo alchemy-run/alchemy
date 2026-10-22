@@ -1,3 +1,4 @@
+import * as NodeNet from "node:net";
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
 import * as Alchemy from "alchemy";
@@ -30,6 +31,15 @@ const staticSiteProps = (cwd: string): Cloudflare.Website.StaticSiteProps => ({
   main: workerEntry,
   workersDev: true,
   compatibility: { date: "2024-01-01" },
+});
+
+/** A port that was free a moment ago. */
+const freePort = Effect.callback<number>((resume) => {
+  const server = NodeNet.createServer();
+  server.listen(0, "127.0.0.1", () => {
+    const { port } = server.address() as NodeNet.AddressInfo;
+    server.close(() => resume(Effect.succeed(port)));
+  });
 });
 
 const htmlPage = (marker: string) => `<!doctype html>
@@ -160,6 +170,49 @@ describe.concurrent(
 
           // No cloud Worker was created.
           expect(yield* findWorker(site.workerName, accountId)).toBeUndefined();
+
+          yield* stack.destroy();
+        }).pipe(logLevel),
+      { tags: ["live"], timeout: 300_000 },
+    );
+
+    /**
+     * Without `dev.command`, `dev.port`/`strictPort` configure the local
+     * Worker that serves the built assets.
+     */
+    test.provider(
+      "StaticSite dev: without dev.command, dev.port picks the local Worker's port",
+      (stack) =>
+        Effect.gen(function* () {
+          const fs = yield* FileSystem.FileSystem;
+          const path = yield* Path.Path;
+
+          yield* stack.destroy();
+
+          const cwd = yield* cloneFixture(fixtureDir, {
+            prefix: "alchemy-staticsite-dev-port-",
+            tempRoot,
+            entries: ["src", "build.sh", ".gitignore"],
+          });
+
+          const marker = "staticsite-dev-port-marker";
+          yield* fs.writeFileString(path.join(cwd, "src", "index.html"), htmlPage(marker));
+          const port = yield* freePort;
+
+          const site = yield* stack.deploy(
+            Effect.gen(function* () {
+              return yield* Cloudflare.Website.StaticSite("DevPortSite", {
+                ...staticSiteProps(cwd),
+                dev: { port, strictPort: true },
+              });
+            }),
+          );
+
+          expect(site.url).toBe(`http://localhost:${port}`);
+          yield* expectUrlContains(`${site.url!}/index.html`, marker, {
+            timeout: "60 seconds",
+            label: "dev.port assets",
+          });
 
           yield* stack.destroy();
         }).pipe(logLevel),
