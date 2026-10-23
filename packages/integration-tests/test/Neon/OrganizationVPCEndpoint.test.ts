@@ -171,7 +171,7 @@ test.provider.skipIf(!enabled || disposable)(
   {
     tags: ["provider:neon", "provider:neon:organizationvpcendpoint", "live"],
     timeout: 120_000,
-    exclusive: true,
+    exclusive: "neon:governance",
   },
 );
 
@@ -208,6 +208,6 @@ test.provider.skipIf(!enabled || !disposable)(
   {
     tags: ["provider:neon", "provider:neon:organizationvpcendpoint", "live"],
     timeout: 120_000,
-    exclusive: true,
+    exclusive: "neon:governance",
   },
 );
