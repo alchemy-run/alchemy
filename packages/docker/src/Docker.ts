@@ -701,17 +701,22 @@ const makeDocker = (options: DockerOptions) =>
         // global docker config (buildx builders, `docker context`, etc. intact).
         const dir = yield* fs.makeTempDirectoryScoped({ prefix: "alchemy-docker-" });
         const ambient = yield* DockerEnvironment;
-        // The CLI child inherits process.env (layered under DockerEnvironment),
-        // so resolve its config dir from the same place.
-        const { environment, isWindows } = yield* Effect.sync(() => ({
-          environment: {
-            DOCKER_CONFIG: process.env.DOCKER_CONFIG ?? "",
-            HOME: process.env.HOME ?? "",
-            USERPROFILE: process.env.USERPROFILE ?? "",
-            ...ambient,
-          },
-          isWindows: process.platform === "win32",
-        }));
+        const optional = (name: string) => Config.String(name).pipe(Config.withDefault(""));
+        const configured = yield* Config.all({
+          DOCKER_CONFIG: optional("DOCKER_CONFIG"),
+          HOME: optional("HOME"),
+          USERPROFILE: optional("USERPROFILE"),
+        }).pipe(
+          Effect.mapError(() =>
+            systemError({
+              _tag: "InvalidData",
+              args: ["image", "push"],
+              description: "Unable to read the Docker client config directory from config.",
+            }),
+          ),
+        );
+        const environment = { ...configured, ...ambient };
+        const isWindows = yield* Effect.sync(() => process.platform === "win32");
         const home = isWindows
           ? environment.USERPROFILE || environment.HOME
           : environment.HOME || environment.USERPROFILE;
