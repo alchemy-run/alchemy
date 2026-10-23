@@ -10,7 +10,7 @@ import {
   type ConfigureField,
   type ConfigureMethod,
 } from "alchemy/Auth/AuthProvider";
-import { browserOAuth } from "alchemy/Auth/BrowserOAuth";
+import { deviceOAuth } from "alchemy/Auth/BrowserOAuth";
 import { CredentialsStore, displayRedacted } from "alchemy/Auth/Credentials";
 import { getEnvRedacted, getEnvRequired, mapPromptCancellation } from "alchemy/Auth/Env";
 import { withProfileCredentialsLock } from "alchemy/Auth/Lock";
@@ -57,7 +57,7 @@ const options: Array<{
   {
     value: "oauth",
     label: "OAuth",
-    description: "recommended — browser-based login with automatic token refresh",
+    description: "recommended — browser device login with automatic token refresh",
   },
   {
     value: "stored",
@@ -246,13 +246,12 @@ export const CloudflareAuth = AuthProviderLayer<
 
     const oauthLogin = (_profileName: string, scopes: string[]) =>
       Effect.gen(function* () {
-        const authorization = yield* OAuthClient.authorize([...scopes, OFFLINE_ACCESS_SCOPE]);
+        const authorization = yield* OAuthClient.deviceAuthorize([...scopes, OFFLINE_ACCESS_SCOPE]);
 
-        const credentials = yield* browserOAuth({
+        const credentials = yield* deviceOAuth({
           provider: "Cloudflare",
-          url: authorization.url,
-          callback: OAuthClient.callback(authorization),
-          exchange: (input) => OAuthClient.exchangeCallbackInput(input, authorization),
+          authorization,
+          token: OAuthClient.deviceToken(authorization),
         });
         yield* interaction.output.success("Connected to Cloudflare with OAuth.");
         return credentials;
@@ -433,7 +432,10 @@ export const CloudflareAuth = AuthProviderLayer<
                 expires: cfg.expires,
                 scopes: cfg.scopes,
               };
-              if (!OAuthClient.usesCurrentClient(creds)) {
+              // Grants issued to the legacy client keep refreshing against
+              // it; only a manual `profile refresh` migrates them.
+              const client = OAuthClient.clientFor(creds);
+              if (client === undefined) {
                 return yield* NeedsReauth.make({
                   provider: CLOUDFLARE_AUTH_PROVIDER_NAME,
                   profile: profileName,
@@ -447,7 +449,7 @@ export const CloudflareAuth = AuthProviderLayer<
               const fresh =
                 creds.expires > now + 10_000
                   ? creds
-                  : yield* OAuthClient.refresh(creds).pipe(
+                  : yield* client.refresh(creds).pipe(
                       Effect.mapError((e) =>
                         NeedsReauth.make({
                           provider: CLOUDFLARE_AUTH_PROVIDER_NAME,
@@ -523,14 +525,17 @@ export const CloudflareAuth = AuthProviderLayer<
             expires: config.expires,
             scopes: config.scopes,
           };
-          return OAuthClient.usesCurrentClient(credentials)
-            ? OAuthClient.revoke(credentials).pipe(
-                Effect.catchTag("OAuthError", (err) =>
-                  interaction.output.warning(
-                    `Cloudflare: could not revoke OAuth token: ${err.errorDescription}`,
+          const client = OAuthClient.clientFor(credentials);
+          return client !== undefined
+            ? client
+                .revoke(credentials)
+                .pipe(
+                  Effect.catchTag("OAuthNetworkError", (err) =>
+                    interaction.output.warning(
+                      `Cloudflare: could not revoke OAuth token: ${err.message}`,
+                    ),
                   ),
-                ),
-              )
+                )
             : Effect.void;
         }),
         Match.exhaustive,
@@ -590,14 +595,12 @@ export const CloudflareAuth = AuthProviderLayer<
                   };
                 });
 
-                const fallBackToBrowserLogin = Effect.gen(function* () {
-                  if (creds.type === "oauth") {
-                    yield* interaction.output.warning(
-                      "Cloudflare: removed OAuth credentials issued to the previous client.",
-                    );
-                  }
-                  return { type: "browser" as const };
-                });
+                // Grants from any other client (including the legacy one) are
+                // re-authorized against the current client with the same
+                // scopes rather than refreshed.
+                const migrateToCurrentClient = interaction.output
+                  .info("Cloudflare: re-authorizing OAuth credentials with the new client.")
+                  .pipe(Effect.as({ type: "browser" as const }));
 
                 // The silent refresh rotates a single-use refresh token, so
                 // its read-refresh-persist section runs under the profile
@@ -626,12 +629,18 @@ export const CloudflareAuth = AuthProviderLayer<
                           Effect.tap(() =>
                             interaction.output.success("Cloudflare: OAuth credentials refreshed."),
                           ),
-                          Effect.catchTag("OAuthError", () =>
-                            Effect.succeed({ type: "browser" as const }),
+                          Effect.catchTag(
+                            [
+                              "OAuthError",
+                              "OAuthNetworkError",
+                              "OAuthServerUnavailable",
+                              "OAuthInvalidResponse",
+                            ],
+                            () => Effect.succeed({ type: "browser" as const }),
                           ),
                         ),
                       )
-                    : yield* fallBackToBrowserLogin;
+                    : yield* migrateToCurrentClient;
                 if (outcome.type === "browser") {
                   return yield* fullLogin;
                 }
