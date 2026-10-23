@@ -68,6 +68,9 @@ jobs:
       - name: Run pkg tests
         run: pnpm -C packages/pkg test
 
+      - name: Run Domain oxlint plugin tests
+        run: pnpm -C packages/oxlint-plugin-domain test
+
       - name: Test CLI launcher
         run: timeout 240 pnpm test test/Cli/launcher.test.ts test/Cli/exitCodes.test.ts --retry 0 --concurrency 1
 
