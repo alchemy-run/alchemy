@@ -159,7 +159,7 @@ test.provider.skipIf(process.env.ALCHEMY_TEST_DEV === "1")(
 );
 
 test.provider(
-  "async handler defaults to the `handler` export",
+  "async handler invokes the default export",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
@@ -172,7 +172,7 @@ test.provider(
       );
 
       const { Configuration } = yield* Lambda.getFunction({ FunctionName: fn.functionName });
-      expect(Configuration?.Handler).toBe("index.handler");
+      expect(Configuration?.Handler).toBe("index.default");
 
       const response = yield* Lambda.invoke({ FunctionName: fn.functionName, Payload: "{}" });
       expect(response.FunctionError).toBeUndefined();
