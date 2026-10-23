@@ -117,7 +117,7 @@ test.provider(
   {
     tags: ["provider:turso", "provider:turso:organizationsettings", "live"],
     timeout: 90_000,
-    exclusive: "turso",
+    exclusive: true,
   },
 );
 
