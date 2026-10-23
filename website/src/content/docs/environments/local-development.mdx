@@ -184,32 +184,6 @@ own stage, named after its directory:
 Run `dev:destroy` before you delete the worktree, or its cloud
 resources outlive it.
 
-If your stack keeps its state on disk, the worktrees are already
-isolated. `Alchemy.localState()` writes state to `.alchemy/` inside
-each checkout, so every worktree tracks its own resources under the
-same `dev_$USER` stage:
-
-```typescript
-import * as Alchemy from "alchemy";
-import * as Cloudflare from "@alchemy.run/cloudflare";
-import * as Effect from "effect/Effect";
-
-export default Alchemy.Stack(
-  "MyApp",
-  { providers: Cloudflare.providers(), state: Alchemy.localState() },
-  Effect.gen(function* () {
-    const bucket = yield* Cloudflare.R2.Bucket("Bucket");
-    return { bucketName: bucket.bucketName };
-  }),
-);
-```
-
-Generated names include a random per-instance suffix, so the live
-resources of two worktrees don't collide. Resources you name
-yourself (a fixed bucket name, a custom domain) still do. Run
-`alchemy destroy --stage dev_$USER` before deleting the worktree:
-its state goes with the directory.
-
 You can also set `ALCHEMY_STAGE` in the worktree's `.env`. Every
 command reads it, `alchemy deploy` included, so dev and deploy then
 share one stage and switching between them replaces it
@@ -224,13 +198,27 @@ ALCHEMY_TEST_STAGE=test_$(basename $(git rev-parse --show-toplevel)) pnpm test
 
 ## Testing in dev mode
 
-The [test harness](/testing/test-harness) has the same switch:
-`Test.make({ dev: true })` (off by default, on both the Bun and
-Vitest adapters) runs a suite's `deploy(Stack)` against the local
-emulators — Cloudflare in workerd, AWS in Docker — instead of the
-real cloud, so integration tests run on your machine with no cloud
-calls and no separate `alchemy dev` terminal. See
-[Test harness → dev](/testing/test-harness#dev).
+The [test harness](/testing/test-harness) runs the same suite
+locally or live. Leave `dev` out of `Test.make` and the
+`ALCHEMY_DEV` env var picks the mode:
+
+```sh
+ALCHEMY_DEV=1 pnpm test   # local emulators, no cloud calls
+pnpm test                 # real cloud
+```
+
+Iterate with the local run, and run live when you need the real
+thing. A common split is local on pull requests and live on `main`:
+
+```yaml
+# .github/workflows/test.yml
+- run: pnpm test
+  env:
+    ALCHEMY_DEV: ${{ github.ref == 'refs/heads/main' && 'false' || 'true' }}
+```
+
+See [Test harness → dev](/testing/test-harness#dev) for the option
+itself.
 
 ## Where next
 
