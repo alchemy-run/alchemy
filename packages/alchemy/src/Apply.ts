@@ -1934,7 +1934,6 @@ const collectGarbage = Effect.fn(function* (plan: Plan, session: PlanStatusSessi
               adoptionBlocked:
                 value.adoptionBlocked ??
                 (isDeleteNode(node) ? node.state.adoptionBlocked : node.adoptionBlocked),
-              propsIncomplete: propsIncomplete(value),
               props: stripUnresolved(value.props),
               bindings: stripUnresolved(value.bindings),
               namespace,

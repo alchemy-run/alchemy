@@ -3647,6 +3647,84 @@ describe("read is never handed unresolved persisted props", { tags: ["unit", "lo
       expect(plan.resources.Half!.action).toBe("create");
     }),
   );
+
+  // `propsIncomplete`: Apply stripped unresolved props from this attr-less
+  // checkpoint, so the remaining props can identify a different resource.
+  const incomplete = (fqn: string, props: Record<string, unknown>): ResourceState => ({
+    ...creatingWithUnresolvedProps(fqn),
+    props,
+    propsIncomplete: true,
+  });
+
+  test(
+    "an incomplete creating row skips the read probe and defers admission to apply",
+    Effect.gen(function* () {
+      yield* seed({ Half: incomplete("Half", { string: "resolved" }) });
+      const { reads, layer } = trackReads();
+      const plan = yield* makePlan(
+        Effect.gen(function* () {
+          yield* TestResource("Half", { string: "resolved" });
+        }),
+      ).pipe(Effect.provide(layer));
+      expect(reads).toEqual([]);
+      expect(plan.resources.Half).toMatchObject({
+        action: "create",
+        props: { string: "resolved" },
+        deferredAdoption: { adopt: false },
+      });
+    }),
+  );
+
+  test(
+    "an incomplete creating row carries a scoped adopt(true) into deferred admission",
+    Effect.gen(function* () {
+      yield* seed({ Half: incomplete("Half", { string: "resolved" }) });
+      const { reads, layer } = trackReads();
+      const plan = yield* makePlan(
+        Effect.gen(function* () {
+          yield* TestResource("Half", { string: "resolved" }).pipe(adopt(true));
+        }),
+      ).pipe(Effect.provide(layer));
+      expect(reads).toEqual([]);
+      expect(plan.resources.Half).toMatchObject({
+        action: "create",
+        deferredAdoption: { adopt: true },
+      });
+    }),
+  );
+
+  test(
+    "an incomplete creating row still diffs: an immutable change plans a replacement",
+    Effect.gen(function* () {
+      yield* seed({ Half: incomplete("Half", { replaceString: "old" }) });
+      const { reads, layer } = trackReads();
+      const plan = yield* makePlan(
+        Effect.gen(function* () {
+          yield* TestResource("Half", { replaceString: "new" });
+        }),
+      ).pipe(Effect.provide(layer));
+      expect(reads).toEqual([]);
+      expect(plan.resources.Half).toMatchObject({
+        action: "replace",
+        props: { replaceString: "new" },
+        state: { status: "creating", propsIncomplete: true },
+      });
+    }),
+  );
+
+  test(
+    "destroy of an incomplete creating row hands apply the marker without probing",
+    Effect.gen(function* () {
+      yield* seed({ Zombie: incomplete("Zombie", { string: "resolved" }) });
+      const { reads, layer } = trackReads();
+      const plan = yield* makePlan(Effect.void).pipe(Effect.provide(layer));
+      expect(reads).toEqual([]);
+      expect(plan.deletions.Zombie).toMatchObject({
+        action: "delete",
+        state: { status: "creating", attr: undefined, propsIncomplete: true },
+      });
+    }),
+  );
 });
 
 describe("provider modes (local ⇄ live)", { tags: ["unit", "local"] }, () => {
