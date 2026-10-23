@@ -76,6 +76,12 @@ the first deploy. Because the state lives in your AWS account rather
 than on disk, the same configuration works locally and in CI with no
 extra setup.
 
+:::note[Other state stores]
+For purely local iteration you can use `Alchemy.localState()`
+instead, which writes state under `.alchemy/` next to your code — or
+[write your own](/state-store).
+:::
+
 ## Add a Resource
 
 Resources represent cloud infrastructure — buckets, tables, queues,

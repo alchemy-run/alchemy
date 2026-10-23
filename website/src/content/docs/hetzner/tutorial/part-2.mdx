@@ -51,7 +51,6 @@ Import the Server and yield it from the Stack:
 ```diff lang="typescript"
 // alchemy.run.ts
 import * as Alchemy from "alchemy";
-import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Hetzner from "@alchemy.run/hetzner";
 import * as Effect from "effect/Effect";
 +import { Box } from "./src/server.ts";
@@ -60,7 +59,7 @@ export default Alchemy.Stack(
   "MyApp",
   {
     providers: Hetzner.providers(),
-    state: Cloudflare.state(),
+    state: Alchemy.localState(),
   },
   Effect.gen(function* () {
 -    const key = yield* Hetzner.SshKey("laptop", {
@@ -196,7 +195,6 @@ Stack's Effect is what registers the resource and starts the deploy:
 ```diff lang="typescript"
 // alchemy.run.ts
 import * as Alchemy from "alchemy";
-import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Hetzner from "@alchemy.run/hetzner";
 import * as Effect from "effect/Effect";
 +import Api from "./src/api.ts";
@@ -206,7 +204,7 @@ export default Alchemy.Stack(
   "MyApp",
   {
     providers: Hetzner.providers(),
-    state: Cloudflare.state(),
+    state: Alchemy.localState(),
   },
   Effect.gen(function* () {
     const server = yield* Box;

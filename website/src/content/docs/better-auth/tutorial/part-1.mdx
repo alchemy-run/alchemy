@@ -119,7 +119,7 @@ import AuthApi from "./src/worker.ts";
 
 export default Alchemy.Stack(
   "BetterAuthTutorial",
-  { providers: Cloudflare.providers(), state: Cloudflare.state() },
+  { providers: Cloudflare.providers(), state: Alchemy.localState() },
   Effect.gen(function* () {
     const api = yield* AuthApi;
     return { url: api.url };

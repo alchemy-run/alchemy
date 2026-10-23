@@ -82,7 +82,7 @@ export default Alchemy.Stack(
   "CloudflareTursoDrizzleExample",
   {
 +    providers: Layer.mergeAll(Cloudflare.providers(), Turso.providers(), Drizzle.providers()),
-    state: Cloudflare.state(),
+    state: Alchemy.localState(),
   },
   Effect.gen(function* () {
 +    const template = yield* Template;

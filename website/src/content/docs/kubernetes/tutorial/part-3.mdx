@@ -74,7 +74,6 @@ Replace the inline declarations in `alchemy.run.ts`:
 
 ```diff lang="typescript"
 import * as Alchemy from "alchemy";
-import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Kubernetes from "@alchemy.run/kubernetes";
 import * as Effect from "effect/Effect";
 +import { Cluster, Web } from "./src/infra.ts";
@@ -83,7 +82,7 @@ export default Alchemy.Stack(
   "MyCluster",
   {
     providers: Kubernetes.providers(),
-    state: Cloudflare.state(),
+    state: Alchemy.localState(),
   },
   Effect.gen(function* () {
 -    const cluster = yield* Kubernetes.LocalCluster("Cluster", {

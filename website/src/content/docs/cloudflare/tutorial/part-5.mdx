@@ -40,6 +40,12 @@ export default Alchemy.Stack(
 );
 ```
 
+:::caution
+If you're using `State.localState()` instead, switch it to
+`Cloudflare.state()` (or another shared store) before continuing —
+GitHub Actions runners can't see your local filesystem.
+:::
+
 ## Set up an `admin` profile
 
 Your `alchemy.run.ts` only needs enough permission to deploy your

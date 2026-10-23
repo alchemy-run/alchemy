@@ -7,7 +7,7 @@ sidebar:
 
 import PackageManagers from "../../../../components/PackageManagers.astro";
 
-export const pkgs = `alchemy@latest @alchemy.run/prisma@latest @alchemy.run/cloudflare@latest effect @effect/platform-node`;
+export const pkgs = `alchemy@latest @alchemy.run/prisma@latest effect @effect/platform-node`;
 
 Build a full-stack application on Prisma in four parts: a Project, an
 Effect-native Compute API, a Postgres database, and a Vite frontend.
@@ -17,7 +17,6 @@ contains the final application and its deployment test.
 ## Prerequisites
 
 - [Bun](https://bun.sh) or Node.js 22+ installed locally.
-- A Cloudflare account to hold deploy state — see [Cloudflare setup](/cloudflare/setup).
 - A Prisma workspace with access to Compute and Postgres.
 - A workspace service token from the [Prisma Console](https://console.prisma.io).
 
@@ -55,7 +54,7 @@ Use matching Effect versions for Alchemy and the platform packages.
 Enter your service token when prompted. [Setup](/prisma/setup) explains
 profiles and the `PRISMA_SERVICE_TOKEN` environment variable used in CI.
 
-## Ignore generated files
+## Ignore local state
 
 Create `.gitignore`:
 
@@ -66,7 +65,8 @@ dist/
 .env
 ```
 
-`.alchemy/` holds build output and logs. Keep it out of source control.
+Alchemy's local state contains resource identifiers and potentially sensitive
+outputs. Keep it out of source control, but retain it between deployments.
 
 ## Create the Stack
 
@@ -74,21 +74,19 @@ Create `alchemy.run.ts`:
 
 ```typescript
 import * as Alchemy from "alchemy";
-import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Prisma from "@alchemy.run/prisma";
 import * as Effect from "effect/Effect";
 
 export default Alchemy.Stack(
   "PrismaTutorial",
-  { providers: Prisma.providers(), state: Cloudflare.state() },
+  { providers: Prisma.providers(), state: Alchemy.localState() },
   Effect.gen(function* () {}),
 );
 ```
 
-A Stack groups resources. The Prisma providers manage them, and
-`Cloudflare.state()` records what this Stack owns in your Cloudflare
-account, so every machine and CI run sees the same state. See
-[State Store](/state-store).
+A Stack groups resources. The Prisma providers manage them, and local state
+records what this Stack owns. For shared deployments, use a
+[shared state store](/state-store) instead.
 
 ## Define a Project
 

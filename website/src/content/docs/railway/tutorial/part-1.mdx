@@ -8,7 +8,7 @@ sidebar:
 import Terminal from "../../../../components/Terminal.astro";
 import PackageManagers from "../../../../components/PackageManagers.astro";
 
-export const pkgs = `alchemy@latest @alchemy.run/railway@latest @alchemy.run/cloudflare@latest effect @effect/platform-bun @effect/platform-node`;
+export const pkgs = `alchemy@latest @alchemy.run/railway@latest effect @effect/platform-bun @effect/platform-node`;
 
 Install Alchemy and Effect, create a Stack with a Railway Project, and
 deploy it. A Project is the parent for Services, Environments,
@@ -17,7 +17,6 @@ Variables, and disks.
 ## Prerequisites
 
 - [Bun](https://bun.sh) or Node.js 22+
-- A Cloudflare account to hold deploy state — see [Cloudflare setup](/cloudflare/setup)
 - A Railway workspace and an account API token — see
   [Setup](/railway/setup) if you haven't created those yet
 
@@ -35,7 +34,7 @@ Start with an empty directory and initialize a `package.json`:
 
 ## Install dependencies
 
-Install `alchemy@latest`, `@alchemy.run/railway`, `@alchemy.run/cloudflare`, and `effect`:
+Install `alchemy@latest`, `@alchemy.run/railway`, and `effect`:
 
 <PackageManagers add={pkgs} />
 
@@ -71,14 +70,13 @@ deploys and compute diffs against your infrastructure.
 
 ## Configure state
 
-Railway has no state backend of its own, so we'll keep state in your
-Cloudflare account with `Cloudflare.state()`. Every machine and CI run
-then sees the same state:
+Railway has no state backend of its own, so we'll keep state on disk
+with `Alchemy.localState()` — it writes to `.alchemy/` next to your
+code, no setup required:
 
 ```diff lang="typescript"
 // alchemy.run.ts
 import * as Alchemy from "alchemy";
-+import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 
@@ -86,7 +84,7 @@ export default Alchemy.Stack(
   "MyApp",
   {
     providers: Layer.empty,
-+    state: Cloudflare.state(),
++    state: Alchemy.localState(),
   },
   Effect.gen(function* () {
     // we'll add resources here next
@@ -94,9 +92,11 @@ export default Alchemy.Stack(
 );
 ```
 
-The first deploy prompts for permission and bootstraps a small
-state-store Worker into your Cloudflare account. It's a one-time step,
-reused by every stack and stage — see [State Store](/state-store).
+:::note[Other state stores]
+Local state is perfect for a solo project. When you need state your
+team and CI can share, swap in `Cloudflare.state()` or `AWS.state()`
+— see [State Store](/state-store).
+:::
 
 ## Add a Project
 
@@ -108,7 +108,6 @@ Let's declare a Railway Project and observe the type error:
 ```diff lang="typescript"
 // alchemy.run.ts
 import * as Alchemy from "alchemy";
-import * as Cloudflare from "@alchemy.run/cloudflare";
 +import * as Railway from "@alchemy.run/railway";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -119,7 +118,7 @@ export default Alchemy.Stack(
     providers: Layer.empty,
     // @error: ts(2322) Type 'Layer<never, never, never>' is not assignable to type 'Layer<NoInfer<Providers>, never, StackServices>'.
     // @error:   Type 'Providers' is not assignable to type 'never'.
-    state: Cloudflare.state(),
+    state: Alchemy.localState(),
   },
   Effect.gen(function* () {
 +    const site = yield* Railway.Project("Site");
@@ -143,7 +142,6 @@ error:
 ```diff lang="typescript"
 // alchemy.run.ts
 import * as Alchemy from "alchemy";
-import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Railway from "@alchemy.run/railway";
 import * as Effect from "effect/Effect";
 -import * as Layer from "effect/Layer";
@@ -152,7 +150,7 @@ export default Alchemy.Stack(
   "MyApp",
   {
 +    providers: Railway.providers(),
-    state: Cloudflare.state(),
+    state: Alchemy.localState(),
   },
   Effect.gen(function* () {
     const site = yield* Railway.Project("Site");
