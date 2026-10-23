@@ -1,6 +1,8 @@
 ---
 name: audit
 description: Audit one or more specific pull requests the user names — PR numbers, `#N`, or GitHub URLs (e.g. "/audit 2101", "/audit #2101 #2093", "/audit https://github.com/alchemy-run/alchemy/pull/2101"). Works through them one at a time: check out, merge main, resolve conflicts, audit tests and JSDoc, run the suites, rewrite the PR description as DX snippets, and stop with a merge-or-close recommendation. Use when the user hands you the PRs rather than a search criteria (for that, use pr-queue); also for "also audit #N", "skip #N" or "next" while an audit is running.
+metadata:
+  internal: true
 ---
 
 # Pull request audit

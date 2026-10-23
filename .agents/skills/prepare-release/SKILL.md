@@ -1,6 +1,8 @@
 ---
 name: prepare-release
 description: Prepare an alchemy release by converging the live test suite — nuke + clear:state the testing account, run every test through a tag-driven `--plan` (unit → per-provider live in parallel → local), triage failures as they stream in, fan out one fix agent per failing/leaking service, census leaks, and loop until two consecutive rounds are green and clean. Fixes land as one alchemy PR plus at most one distilled PR and one floci PR. Use for "prepare a release", "/prepare-release", "release hardening run", "run the full suite before release", optionally scoped ("/prepare-release aws cloudflare").
+metadata:
+  internal: true
 ---
 
 # Prepare a release
@@ -36,7 +38,7 @@ node -v                                      # alchemy CLI needs >= 24.11.1 and 
 set -a; source .env; set +a                  # Cloudflare creds (pnpm download:env if missing)
 aws sso login                                # AWS live + nuke ride the SSO session
 mkdir -p /tmp/release
-pnpm exec tsc -b                             # REQUIRED before live runs: emits distilled lib/
+pnpm exec tsrs -b                             # REQUIRED before live runs: emits distilled lib/
 ```
 
 Runtime bundles (Lambda, Fly, Hetzner, Neon Functions) resolve distilled
@@ -208,7 +210,7 @@ lifecycle op, mock a response, or skip a test without a typed reason.
 ## 7. Gate
 
 ```sh
-pnpm exec tsc -b                             # coordinator only, once per round
+pnpm exec tsrs -b                             # coordinator only, once per round
 pnpm docs:check-jsdoc                        # if any props/attrs changed
 ```
 

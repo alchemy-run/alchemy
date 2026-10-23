@@ -52,7 +52,7 @@ interface BaseResourceState {
   /** Desired state (input props) of this Resource */
   props?: Props;
   /** The output attributes of this Resource (if it has been created) */
-  attr?: Attr;
+  attr?: Attr | undefined;
   /** The removal policy of the resource */
   removalPolicy?: RemovalPolicy["Service"];
   /** Attr-less lookup could recover the predecessor migrated away from this FQN. */

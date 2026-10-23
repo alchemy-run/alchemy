@@ -312,15 +312,48 @@ const SECTIONS: Section[] = [
     intro:
       "Google Cloud as Stack resources — Cloud Run services and jobs, Firestore, Pub/Sub, BigQuery, Secret Manager, Memorystore. Bindings grant IAM onto a per-host service account.",
     pages: {
-      slugs: [
-        "gcp/index",
-        "gcp/setup",
-        "gcp/guides/cloud-run-api",
-        "gcp/guides/event-pipeline",
-        "gcp/guides/memorystore",
-        "gcp/guides/bindings",
-      ],
+      slugs: ["gcp/index", "gcp/setup"],
     },
+  },
+  {
+    heading: "GCP — Tutorial",
+    pages: { directory: "gcp/tutorial" },
+  },
+  {
+    heading: "GCP — Compute",
+    pages: { directory: "gcp/compute" },
+  },
+  {
+    heading: "GCP — Frontend",
+    pages: { directory: "gcp/frontend" },
+  },
+  {
+    heading: "GCP — APIs",
+    pages: { directory: "gcp/apis" },
+  },
+  {
+    heading: "GCP — Data",
+    pages: { directory: "gcp/data" },
+  },
+  {
+    heading: "GCP — AI",
+    pages: { directory: "gcp/ai" },
+  },
+  {
+    heading: "GCP — Messaging & events",
+    pages: { directory: "gcp/messaging" },
+  },
+  {
+    heading: "GCP — Security & secrets",
+    pages: { directory: "gcp/security" },
+  },
+  {
+    heading: "GCP — Observability",
+    pages: { directory: "gcp/observability" },
+  },
+  {
+    heading: "GCP — Networking",
+    pages: { directory: "gcp/networking" },
   },
   {
     heading: "Fly — start here",

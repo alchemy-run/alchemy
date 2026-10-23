@@ -93,7 +93,7 @@ The Action in step 5 bootstraps the database without an HTTP `/setup` route; it 
 
 ```typescript
 // src/backend/api.ts
-import * as AWS from "alchemy/AWS";
+import * as AWS from "@alchemy.run/aws";
 import { eq } from "drizzle-orm";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -184,7 +184,7 @@ export default class Backend extends AWS.Lambda.Function<Backend>()(
 ```typescript
 // alchemy.run.ts
 import * as Alchemy from "alchemy";
-import * as AWS from "alchemy/AWS";
+import * as AWS from "@alchemy.run/aws";
 import * as Effect from "effect/Effect";
 import Backend from "./src/backend/api.ts";
 import { BootstrapDatabase } from "./src/backend/bootstrap.ts";

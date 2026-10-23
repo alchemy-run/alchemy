@@ -1,6 +1,6 @@
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
-import * as ts from "typescript-api/unstable/ast";
+import * as ts from "tsrs/unstable/ast";
 import { createSyntaxProject } from "./typescript-source.ts";
 
 /** Insert only the missing type argument/import, preserving comments and formatting. */

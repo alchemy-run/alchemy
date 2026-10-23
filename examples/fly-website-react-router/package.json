@@ -15,6 +15,7 @@
     "test": "bun test"
   },
   "dependencies": {
+    "@alchemy.run/fly": "workspace:*",
     "@react-router/node": "catalog:",
     "alchemy": "workspace:*",
     "effect": "catalog:",

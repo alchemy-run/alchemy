@@ -66,11 +66,6 @@ jobs:
           node scripts/release/prepare.ts '${{ inputs.version }}' | tee -a "$GITHUB_OUTPUT"
 
       - name: Build release packages
-        # The cold tsgo build can starve the runner without Go heap limits on
-        # this 32 GB machine, and a lost runner mid-release is costly.
-        env:
-          GOMEMLIMIT: 6GiB
-          GOGC: "40"
         run: pnpm build:pkg
 
       - name: Pack release artifacts

@@ -17,7 +17,7 @@ A [`Zone`](/providers/hetzner/zone) is an apex domain you own —
 trailing dot):
 
 ```typescript
-import * as Hetzner from "alchemy/Hetzner";
+import * as Hetzner from "@alchemy.run/hetzner";
 
 export const Dns = Hetzner.Zone("dns", {
   name: "example.com",
@@ -68,7 +68,7 @@ directly, and calls never pass a zone id:
 
 ```typescript
 import * as Alchemy from "alchemy";
-import * as Hetzner from "alchemy/Hetzner";
+import * as Hetzner from "@alchemy.run/hetzner";
 import * as Effect from "effect/Effect";
 import { Dns } from "./dns.ts";
 

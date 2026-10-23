@@ -43,7 +43,7 @@ if (!traceDir) {
 
 const BUCKETS = [
   "(unknown)",
-  "packages/alchemy/src/AWS",
+  "packages/aws/src",
   "packages/alchemy/src/Cloudflare",
   "packages/alchemy/src (core)",
   "submodules/distilled/*/lib",
