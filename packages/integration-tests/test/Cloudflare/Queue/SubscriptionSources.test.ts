@@ -417,7 +417,7 @@ describe.sequential(
             "provider:cloudflare:worker",
           ],
           timeout: 120_000,
-          exclusive: true,
+          exclusive: "cloudflare:event-subscriptions",
         },
       );
     }
@@ -466,7 +466,7 @@ describe.sequential(
           "provider:cloudflare:worker",
         ],
         timeout: 120_000,
-        exclusive: true,
+        exclusive: "cloudflare:event-subscriptions",
       },
     );
 
@@ -541,7 +541,7 @@ describe.sequential(
           "provider:cloudflare:worker",
         ],
         timeout: 120_000,
-        exclusive: true,
+        exclusive: "cloudflare:event-subscriptions",
       },
     );
 
@@ -595,7 +595,7 @@ describe.sequential(
           Effect.ensuring(stack.destroy().pipe(Effect.andThen(host.destroy()), Effect.orDie)),
         );
       },
-      { timeout: 120_000, exclusive: true },
+      { timeout: 120_000, exclusive: "cloudflare:event-subscriptions" },
     );
   },
 );
@@ -1044,7 +1044,7 @@ for (const change of ["replacement", "update", "paused-update"] as const) {
         "live",
       ],
       timeout: 120_000,
-      exclusive: true,
+      exclusive: "cloudflare:event-subscriptions",
     },
   );
 }

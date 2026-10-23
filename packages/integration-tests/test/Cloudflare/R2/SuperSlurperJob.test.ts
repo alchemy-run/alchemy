@@ -158,7 +158,7 @@ test.provider(
   {
     tags: ["provider:cloudflare", "provider:cloudflare:r2", "live"],
     timeout: 120_000,
-    exclusive: true,
+    exclusive: "cloudflare:event-subscriptions",
   },
 );
 
@@ -305,7 +305,7 @@ test.provider(
       "live",
     ],
     timeout: 120_000,
-    exclusive: true,
+    exclusive: "cloudflare:event-subscriptions",
   },
 );
 
@@ -343,7 +343,7 @@ test.provider(
       "live",
     ],
     timeout: 120_000,
-    exclusive: true,
+    exclusive: "cloudflare:event-subscriptions",
   },
 );
 
@@ -451,7 +451,7 @@ test.provider(
       "live",
     ],
     timeout: 120_000,
-    exclusive: true,
+    exclusive: "cloudflare:event-subscriptions",
   },
 );
 
@@ -499,6 +499,6 @@ test.provider.skipIf(process.env.CLOUDFLARE_TEST_SUPER_SLURPER_COMPLETION !== "1
       "live",
     ],
     timeout: 120_000,
-    exclusive: true,
+    exclusive: "cloudflare:event-subscriptions",
   },
 );

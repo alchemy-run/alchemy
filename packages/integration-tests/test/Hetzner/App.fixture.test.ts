@@ -74,12 +74,12 @@ const Stack = Alchemy.Stack(
 );
 
 const stack = hasHetznerCreds
-  ? beforeAll(deploy(Stack), { timeout: 180_000, exclusive: true })
+  ? beforeAll(deploy(Stack), { timeout: 180_000, exclusive: "hetzner" })
   : null;
 
 afterAll.skipIf(!hasHetznerCreds || !!process.env.NO_DESTROY)(destroy(Stack), {
   timeout: 120_000,
-  exclusive: true,
+  exclusive: "hetzner",
 });
 
 test.skipIf(!hasHetznerCreds)(
@@ -179,6 +179,6 @@ test.skipIf(!hasHetznerCreds)(
       "live",
     ],
     timeout: 180_000,
-    exclusive: true,
+    exclusive: "hetzner",
   },
 );
