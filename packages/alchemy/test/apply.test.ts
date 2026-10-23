@@ -9700,115 +9700,167 @@ describe("resource selection apply barriers", { tags: ["unit", "local"] }, () =>
   }
 });
 
-describe("Worker identity proof compatibility", { tags: ["unit", "local"] }, () => {
-  interface CompatibilityWorker extends Resource<
-    "Cloudflare.Worker",
+describe("replacement ownership admission", { tags: ["unit", "local"] }, () => {
+  // A fake cloud keyed by physical name; each entry records which logical id owns it.
+  interface Named extends Resource<
+    "Test.Named",
+    { name: string; deleteFirst?: boolean },
     { name: string },
-    { workerName: string; workerId: string }
+    { self: string }
   > {}
-  interface CompatibilityOther extends Resource<
-    "Test.CompatibilityOther",
-    { name: string },
-    { workerName: string; workerId: string }
-  > {}
-  const CompatibilityWorker = Resource<CompatibilityWorker>("Cloudflare.Worker");
-  const CompatibilityOther = Resource<CompatibilityOther>("Test.CompatibilityOther");
-  class CompatibilityProbe extends Context.Service<
-    CompatibilityProbe,
-    { reads: string[]; deletes: string[] }
-  >()("WorkerIdentityCompatibility") {}
-  const lifecycle = {
-    read: Effect.fn(function* ({ olds }: { olds: { name: string } }) {
-      (yield* CompatibilityProbe).reads.push(olds.name);
-      return { workerName: olds.name, workerId: "physical" };
+  const Named = Resource<Named>("Test.Named");
+  class Cloud extends Context.Service<
+    Cloud,
+    { owners: Map<string, string>; events: string[]; outputs: Array<unknown> }
+  >()("ReplacementAdmissionCloud") {}
+  const providers = Provider.succeed(Named, {
+    diff: Effect.fn(function* ({ olds, news }) {
+      if (isResolved(news) && olds.name === news.name) return undefined;
+      return { action: "replace" as const, deleteFirst: news.deleteFirst === true };
     }),
-    reconcile: ({ news }: { news: { name: string } }) =>
-      Effect.succeed({ workerName: news.name, workerId: "physical" }),
-    delete: Effect.fn(function* ({ output }: { output: { workerName: string } }) {
-      (yield* CompatibilityProbe).deletes.push(output.workerName);
+    read: Effect.fn(function* ({ id, olds, output }) {
+      const cloud = yield* Cloud;
+      const name = output?.name ?? olds?.name;
+      const owner = name === undefined ? undefined : cloud.owners.get(name);
+      if (owner === undefined) return undefined;
+      cloud.events.push(`read ${name}`);
+      return owner === id ? { name: name! } : Unowned({ name: name! });
     }),
-  };
-  const providers = Layer.mergeAll(
-    Provider.succeed(CompatibilityWorker, lifecycle),
-    Provider.succeed(CompatibilityOther, lifecycle),
-  ).pipe(
+    precreate: Effect.fn(function* ({ id, news }) {
+      const cloud = yield* Cloud;
+      cloud.events.push(`precreate ${news.name}`);
+      cloud.owners.set(news.name as string, id);
+      return { name: news.name as string };
+    }),
+    reconcile: Effect.fn(function* ({ id, news, olds, output }) {
+      const cloud = yield* Cloud;
+      if (olds === undefined) cloud.outputs.push(output);
+      cloud.events.push(`reconcile ${news.name}`);
+      cloud.owners.set(news.name, id);
+      return { name: news.name };
+    }),
+    delete: Effect.fn(function* ({ output }) {
+      const cloud = yield* Cloud;
+      cloud.events.push(`delete ${output.name}`);
+      cloud.owners.delete(output.name);
+    }),
+  }).pipe(
     Layer.provideMerge(
       Layer.effect(
-        CompatibilityProbe,
-        Effect.sync(() => ({ reads: [], deletes: [] })),
+        Cloud,
+        Effect.sync(() => ({ owners: new Map(), events: [], outputs: [] })),
       ),
     ),
   );
-  const { test } = Test.make({ providers });
-  for (const marker of [undefined, false, true]) {
-    test.provider(`live Worker recovery uses explicit identity proof (${marker})`, (stack) =>
+  const { test } = Test.make({ providers: Layer.mergeAll(providers, TestLayers()) });
+
+  const named = (
+    props: { name: string | Output.Output<string>; deleteFirst?: boolean },
+    cycle = false,
+  ) =>
+    Effect.gen(function* () {
+      const resource = yield* Named("Subject", props);
+      if (cycle) yield* resource.bind("Self", { self: resource.name });
+      return resource;
+    });
+
+  /** Deploys `Subject` as "old", then plants a foreign "target" in the fake cloud. */
+  const setup = Effect.fn(function* (stack: Test.ScratchStack) {
+    const cloud = yield* Cloud;
+    yield* stack.destroy();
+    cloud.owners.clear();
+    yield* stack.deploy(named({ name: "old" }));
+    cloud.owners.set("target", "SomeoneElse");
+    cloud.events.length = 0;
+    cloud.outputs.length = 0;
+    return cloud;
+  });
+
+  for (const cycle of [false, true]) {
+    for (const deleteFirst of [false, true]) {
+      test.provider(
+        `refuses a foreign replacement before mutation (cycle=${cycle}, deleteFirst=${deleteFirst})`,
+        (stack) =>
+          Effect.gen(function* () {
+            const cloud = yield* setup(stack);
+            const error = yield* stack
+              .deploy(named({ name: "target", deleteFirst }, cycle))
+              .pipe(Effect.flip);
+            expect(error).toMatchObject({ _tag: "OwnedBySomeoneElse" });
+            // Only the probe ran: the previous generation survives and the
+            // foreign target is untouched.
+            expect(cloud.events).toEqual(["read target"]);
+            expect(cloud.owners.get("old")).toBe("Subject");
+            expect(cloud.owners.get("target")).toBe("SomeoneElse");
+            yield* stack.destroy();
+            expect(cloud.owners.has("old")).toBe(false);
+            expect(cloud.owners.get("target")).toBe("SomeoneElse");
+          }),
+      );
+    }
+  }
+
+  test.provider("refuses a delete-first replacement whose name resolves during apply", (stack) =>
+    Effect.gen(function* () {
+      const cloud = yield* setup(stack);
+      const error = yield* stack
+        .deploy(
+          Effect.gen(function* () {
+            const source = yield* TestResource("Name", { string: "target" });
+            return yield* named({ name: source.string, deleteFirst: true });
+          }),
+        )
+        .pipe(Effect.flip);
+      expect(error).toMatchObject({ _tag: "OwnedBySomeoneElse" });
+      expect(cloud.events).toEqual(["read target"]);
+      expect(cloud.owners.get("old")).toBe("Subject");
+      yield* stack.destroy();
+    }),
+  );
+
+  test.provider("adopt(false) on the resource overrides global adoption", (stack) =>
+    Effect.gen(function* () {
+      const cloud = yield* setup(stack);
+      const error = yield* stack
+        .deploy(named({ name: "target" }).pipe(adopt(false)))
+        .pipe(Effect.flip);
+      expect(error).toMatchObject({ _tag: "OwnedBySomeoneElse" });
+      expect(cloud.events).toEqual(["read target"]);
+      yield* stack.destroy();
+    }).pipe(Effect.provideService(AdoptPolicy, true)),
+  );
+
+  test.provider("adopt(true) takes over a foreign replacement target", (stack) =>
+    Effect.gen(function* () {
+      const cloud = yield* setup(stack);
+      yield* stack.deploy(named({ name: "target" }).pipe(adopt(true)));
+      expect(cloud.events).toEqual(["read target", "reconcile target", "delete old"]);
+      expect(cloud.outputs).toEqual([{ name: "target" }]);
+      expect(cloud.owners.get("target")).toBe("Subject");
+      yield* stack.destroy();
+    }),
+  );
+
+  test.provider("an absent replacement target is created normally", (stack) =>
+    Effect.gen(function* () {
+      const cloud = yield* setup(stack);
+      yield* stack.deploy(named({ name: "fresh" }));
+      expect(cloud.events).toEqual(["reconcile fresh", "delete old"]);
+      expect(cloud.outputs).toEqual([undefined]);
+      yield* stack.destroy();
+    }),
+  );
+
+  test.provider(
+    "delete-first admits the target, then deletes, then creates without stale output",
+    (stack) =>
       Effect.gen(function* () {
-        const probe = yield* CompatibilityProbe;
+        const cloud = yield* setup(stack);
+        cloud.owners.set("target", "Subject"); // e.g. left by an interrupted attempt
+        yield* stack.deploy(named({ name: "target", deleteFirst: true }));
+        expect(cloud.events).toEqual(["read target", "delete old", "reconcile target"]);
+        expect(cloud.outputs).toEqual([undefined]);
         yield* stack.destroy();
-        const state = yield* yield* State;
-        yield* state.set({
-          stack: stack.name,
-          stage: stack.stage,
-          fqn: "Checkpoint",
-          value: {
-            status: "creating",
-            fqn: "Checkpoint",
-            logicalId: "Checkpoint",
-            instanceId: "interrupted",
-            resourceType: CompatibilityWorker.Type,
-            namespace: undefined,
-            props: { name: "shared" },
-            attr: undefined,
-            bindings: [],
-            downstream: [],
-            providerVersion: 0,
-            providerMode: "live",
-            propsIncomplete: true,
-            workerIdentityResolved: marker,
-          } as ResourceState,
-        });
-        yield* stack.plan(CompatibilityWorker("Checkpoint", { name: "shared" }));
-        expect(probe.reads).toHaveLength(marker === true ? 1 : 0);
-        yield* stack.destroy();
-        expect(probe.reads).toHaveLength(marker === true ? 2 : 0);
-        expect(probe.deletes).toEqual(marker === true ? ["shared"] : []);
       }),
-    );
-  }
-  for (const local of [false, true]) {
-    test.provider(
-      `generic incompleteness remains conservative for ${local ? "local Worker" : "another resource"}`,
-      (stack) =>
-        Effect.gen(function* () {
-          const probe = yield* CompatibilityProbe;
-          yield* stack.destroy();
-          const state = yield* yield* State;
-          yield* state.set({
-            stack: stack.name,
-            stage: stack.stage,
-            fqn: "Checkpoint",
-            value: {
-              status: "creating",
-              fqn: "Checkpoint",
-              logicalId: "Checkpoint",
-              instanceId: "interrupted",
-              resourceType: local ? CompatibilityWorker.Type : CompatibilityOther.Type,
-              namespace: undefined,
-              props: { name: "shared" },
-              attr: undefined,
-              bindings: [],
-              downstream: [],
-              providerVersion: 0,
-              providerMode: local ? "local" : "live",
-              propsIncomplete: true,
-              workerIdentityResolved: true,
-            } as ResourceState,
-          });
-          if (!local) yield* stack.plan(CompatibilityOther("Checkpoint", { name: "shared" }));
-          yield* stack.destroy();
-          expect(probe.reads).toEqual([]);
-          expect(probe.deletes).toEqual([]);
-        }),
-    );
-  }
+  );
 });

@@ -191,6 +191,8 @@ export interface Replace<R extends ResourceLike = ResourceLike> extends ApplyNod
   props: any;
   deleteFirst: boolean;
   restart?: boolean;
+  /** Ownership probe of the replacement's physical identity, run before any mutation. */
+  deferredAdoption?: { adopt: boolean };
   state:
     | CreatingResourceState
     | CreatedResourceState
@@ -1486,11 +1488,14 @@ const makePlan = <A>(
           renamedFrom,
           adoptionBlocked: reusesMigratedFqn ? "migrated-fqn" : undefined,
           deferredAdoption:
-            node.action === "create" &&
             provider.read &&
             !reusesMigratedFqn &&
-            ((oldState === undefined && !isResolved(news)) ||
-              (oldState?.status === "creating" && oldState.attr === undefined))
+            // A replacement targets a new physical identity, which may belong
+            // to someone else — admit it like a fresh create.
+            (node.action === "replace" ||
+              (node.action === "create" &&
+                ((oldState === undefined && !isResolved(news)) ||
+                  (oldState?.status === "creating" && oldState.attr === undefined))))
               ? { adopt: adoptThis }
               : undefined,
         }) as any as T;

@@ -1189,14 +1189,61 @@ const executeNode = (
           }
         });
 
-      if (node.deleteFirst) {
+      const deleteFirst = Effect.fn(function* () {
         yield* scopedSession.note(
           "Deleting previous resource before creating its replacement (deleteFirst)...",
         );
         yield* deleteOldGenerations(replState.old);
-      }
+      });
 
       let attr: any = replState.attr;
+
+      // ── replacement admission ──
+      //
+      // The replacement may resolve to a physical identity that already
+      // exists and belongs to someone else (e.g. a renamed Worker pointing at
+      // a foreign script). Read it before anything is mutated — before
+      // precreate, reconcile, and delete-first cleanup of the previous
+      // generation — and refuse an unowned target unless adoption is allowed,
+      // exactly like a fresh create.
+      let admitted = attr !== undefined || node.deferredAdoption === undefined;
+      const admit = Effect.fn(function* (props: Record<string, any>) {
+        admitted = true;
+        const observed = yield* node.provider.read!({
+          id: logicalId,
+          fqn,
+          instanceId,
+          olds: props,
+          output: undefined,
+        }).pipe(instrumentLifecycle("read", fqn, node.resource.Type, logicalId, instanceId));
+        if (observed === undefined) return;
+        if (Unowned.is(observed) && !node.deferredAdoption?.adopt) {
+          return yield* new OwnedBySomeoneElse({
+            message:
+              `Cannot replace resource '${fqn}' (${node.resource.Type}): ` +
+              "its replacement exists in the cloud but is not owned by this " +
+              "stack/stage/logical-id. Re-run with `--adopt` (or " +
+              "wrap the effect in `adopt(true)`) to take it over.",
+            resourceType: node.resource.Type,
+            logicalId,
+          });
+        }
+        // A delete-first target may be the previous generation itself, which
+        // is about to be deleted — never hand its attributes to reconcile.
+        if (!node.deleteFirst) attr = stripUnowned(observed);
+      });
+
+      if (!admitted && isResolved(node.props)) {
+        yield* admit(node.props);
+      }
+
+      // A cycle must delete before precreate claims the identity, even when
+      // that identity can only be admitted once upstream outputs resolve.
+      let deletedFirst = false;
+      if (node.deleteFirst && (admitted || inCycle)) {
+        yield* deleteFirst();
+        deletedFirst = true;
+      }
 
       if (attr !== undefined) {
         // If precreate already ran, expose that intermediate output immediately so
@@ -1249,6 +1296,13 @@ const executeNode = (
       const news = (yield* Output.evaluate(node.props, outputs)) as Record<string, any>;
 
       const bindingOutputs = excludeDeletedBindings(yield* Output.evaluate(node.bindings, outputs));
+
+      if (!admitted && attr === undefined) {
+        yield* admit(news);
+      }
+      if (node.deleteFirst && !deletedFirst) {
+        yield* deleteFirst();
+      }
 
       attr = yield* node.provider
         .reconcile({
