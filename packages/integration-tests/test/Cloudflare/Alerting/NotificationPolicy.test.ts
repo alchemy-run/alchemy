@@ -101,6 +101,95 @@ test.provider(
   { tags: ["provider:cloudflare", "provider:cloudflare:alerting", "live"] },
 );
 
+test.provider(
+  "SQL custom alert (custom_analytics over the SQL API)",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+
+      yield* stack.destroy();
+
+      // Disabled so the alert never evaluates or sends mail.
+      const sqlAlert = (threshold: string) =>
+        Cloudflare.Alerting.NotificationPolicy("SqlAlert", {
+          alertType: "custom_analytics",
+          enabled: false,
+          mechanisms: { email: [{ id: EMAIL }] },
+          filters: {
+            source: ["sql_api"],
+            selectors: [
+              `SELECT count() AS value FROM logs.workersLogs WHERE accountTag = '${accountId}' AND level = 'error'`,
+            ],
+            executionInterval: ["5m"],
+            alertTriggerPreferences: ["threshold"],
+            alertTriggerPreferencesOperator: [">"],
+            alertTriggerPreferencesValue: [threshold],
+            alertTriggerPreferencesShortWindow: ["5m"],
+            alertTriggerPreferencesLongWindow: ["5m"],
+          },
+        });
+
+      const policy = yield* stack.deploy(sqlAlert("100"));
+      expect(policy.alertType).toEqual("custom_analytics");
+
+      const created = yield* alerting.getPolicy({ accountId, policyId: policy.policyId });
+      expect(created.filters?.source).toEqual(["sql_api"]);
+      expect(created.filters?.executionInterval).toEqual(["5m"]);
+      expect(created.filters?.alertTriggerPreferencesOperator).toEqual([">"]);
+      expect(created.filters?.alertTriggerPreferencesShortWindow).toEqual(["5m"]);
+      expect(created.filters?.alertTriggerPreferencesValue).toEqual(["100"]);
+
+      // The observed filters round-trip, so a redeploy does not PUT.
+      yield* stack.deploy(sqlAlert("100"));
+      const unchanged = yield* alerting.getPolicy({ accountId, policyId: policy.policyId });
+      expect(unchanged.modified).toEqual(created.modified);
+
+      // Changing the threshold updates in place.
+      const updated = yield* stack.deploy(sqlAlert("250"));
+      expect(updated.policyId).toEqual(policy.policyId);
+      const afterUpdate = yield* alerting.getPolicy({ accountId, policyId: policy.policyId });
+      expect(afterUpdate.filters?.alertTriggerPreferencesValue).toEqual(["250"]);
+
+      yield* stack.destroy();
+
+      yield* waitForPolicyDeleted(accountId, policy.policyId);
+    }).pipe(logLevel),
+  { tags: ["provider:cloudflare", "provider:cloudflare:alerting", "live"] },
+);
+
+test.provider(
+  "rejects a SQL custom alert whose query the SQL API refuses",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const error = yield* stack
+        .deploy(
+          Cloudflare.Alerting.NotificationPolicy("BadSqlAlert", {
+            alertType: "custom_analytics",
+            enabled: false,
+            mechanisms: { email: [{ id: EMAIL }] },
+            filters: {
+              source: ["sql_api"],
+              // No account scope: the SQL API rejects the query.
+              selectors: ["SELECT count() AS value FROM logs.workersLogs"],
+              executionInterval: ["5m"],
+              alertTriggerPreferences: ["threshold"],
+              alertTriggerPreferencesOperator: [">"],
+              alertTriggerPreferencesValue: ["100"],
+              alertTriggerPreferencesShortWindow: ["5m"],
+              alertTriggerPreferencesLongWindow: ["5m"],
+            },
+          }),
+        )
+        .pipe(Effect.flip);
+      expect(error._tag).toEqual("InvalidAlertQuery");
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { tags: ["provider:cloudflare", "provider:cloudflare:alerting", "live"] },
+);
+
 // Canonical `list()` test (account-scoped collection): deploy a real policy,
 // then assert it appears in the exhaustively-paginated account-wide result.
 test.provider(

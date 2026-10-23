@@ -157,13 +157,48 @@ export type NotificationPolicy = Resource<
  * });
  * ```
  *
- * ### SQL custom alerts, dashboards and Issues automations <!-- api-prose -->
- * A notification policy only fires on the alert types listed in `AlertType`.
- * Cloudflare's public API does not yet expose the SQL-based custom alerts,
- * custom dashboards or Issues automations from the October 2026
- * observability release, so no Alchemy resource can manage them yet.
- * Create them in the Cloudflare dashboard. They can still deliver to a
- * webhook destination you manage with `NotificationWebhook`.
+ * ### SQL custom alerts
+ * A `custom_analytics` policy with `source: ["sql_api"]` is a custom alert:
+ * Cloudflare runs the SQL API query in `selectors` every
+ * `executionInterval` and fires when the trigger condition holds. The
+ * trigger is `threshold` (with an operator and value), `slo`, or a z-score
+ * anomaly (`zscore_spike`, `zscore_drop`, `zscore_spike_and_drop`).
+ * Cloudflare validates the query when the policy is saved.
+ *
+ * **Example:** Alert when a Worker logs more than 100 errors in 5 minutes
+ * ```typescript
+ * yield* Cloudflare.Alerting.NotificationPolicy("ErrorSpike", {
+ *   alertType: "custom_analytics",
+ *   mechanisms: { email: [{ id: "ops@example.com" }] },
+ *   filters: {
+ *     source: ["sql_api"],
+ *     selectors: [
+ *       `SELECT count() AS value FROM logs.workersLogs
+ *        WHERE accountTag = '${accountId}' AND level = 'error'`,
+ *     ],
+ *     executionInterval: ["5m"],
+ *     alertTriggerPreferences: ["threshold"],
+ *     alertTriggerPreferencesOperator: [">"],
+ *     alertTriggerPreferencesValue: ["100"],
+ *     alertTriggerPreferencesShortWindow: ["5m"],
+ *     alertTriggerPreferencesLongWindow: ["5m"],
+ *   },
+ * });
+ * ```
+ *
+ * ### Workers Issues notifications
+ * **Example:** Notify on new Worker issues
+ * ```typescript
+ * const policy = yield* Cloudflare.Alerting.NotificationPolicy("IssuePolicy", {
+ *   alertType: "workers_observability_real_time_issue",
+ *   mechanisms: { email: [{ id: "ops@example.com" }] },
+ * });
+ *
+ * yield* Cloudflare.Workers.IssueAutomation("IssueAlerts", {
+ *   policyId: policy.policyId,
+ *   afterOccurrences: 5,
+ * });
+ * ```
  *
  * @see https://developers.cloudflare.com/notifications/
  *
