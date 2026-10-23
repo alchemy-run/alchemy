@@ -2316,7 +2316,7 @@ export const PERMISSION_GROUPS = [
     id: "d7ba8d4dce414197a3efab21b2f87eb8",
     name: "Workers Editor",
     description:
-      "Read, update, and deploy Workers. Includes script content,\nsettings, versions, deployments, and previews. Cannot create\nor delete Workers \u2014 use Workers Admin for that. Routes and\nobservability require separate per-feature token roles.\n",
+      "Read, update, and deploy Workers. Includes script content,\nsettings, versions, deployments, and previews. Cannot create\nor delete Workers — use Workers Admin for that. Routes and\nobservability require separate per-feature token roles.\n",
     scopes: ["com.cloudflare.api.account"],
   },
   {
@@ -2622,7 +2622,7 @@ export const PERMISSION_GROUPS = [
     scopes: ["com.cloudflare.api.account.zone"],
   },
   // No longer listed by Cloudflare's permission-groups API; kept so existing
-  // configs that reference it keep resolving.
+  // configs that reference them keep resolving.
   {
     id: "3a1e1ef09dd34271bb44fc4c6a419952",
     name: "Cloudflare DEX",
