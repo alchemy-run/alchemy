@@ -3,7 +3,7 @@ import { organization } from "@alchemy.run/turso/Credentials";
 import * as Hrana from "@alchemy.run/turso/Hrana";
 import * as turso from "@distilled.cloud/turso/turso";
 import * as Alchemy from "alchemy";
-import { expect } from "alchemy-test";
+import { expect } from "@alchemy.run/test";
 import * as Test from "alchemy/Test/Alchemy";
 import { defaultStage } from "alchemy/Test/Core";
 import * as Effect from "effect/Effect";

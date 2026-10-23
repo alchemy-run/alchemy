@@ -25,7 +25,7 @@
     "@effect/platform-node": "catalog:",
     "@tailwindcss/vite": "catalog:",
     "@types/node": "catalog:node24",
-    "alchemy-test": "workspace:*",
+    "@alchemy.run/test": "workspace:*",
     "nitropack": "catalog:",
     "nuxt": "catalog:",
     "tailwindcss": "catalog:",

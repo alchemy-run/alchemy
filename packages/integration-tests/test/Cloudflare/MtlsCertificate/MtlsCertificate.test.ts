@@ -3,7 +3,7 @@ import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnviron
 import type { InferEnv } from "@alchemy.run/cloudflare/Workers/InferEnv";
 import * as mtls from "@distilled.cloud/cloudflare/mtls-certificates";
 import * as workers from "@distilled.cloud/cloudflare/workers";
-import { describe, expect } from "alchemy-test";
+import { describe, expect } from "@alchemy.run/test";
 import * as Provider from "alchemy/Provider";
 import * as Test from "alchemy/Test/Alchemy";
 import { poll } from "alchemy/Util/poll";

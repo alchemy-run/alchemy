@@ -8,7 +8,7 @@ import * as S3 from "@distilled.cloud/aws/s3";
 import { Query } from "@distilled.cloud/core/query";
 import { GraphQLLive, Railway as RailwayApi } from "@distilled.cloud/railway";
 import * as Alchemy from "alchemy";
-import { describe, expect } from "alchemy-test";
+import { describe, expect } from "@alchemy.run/test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";

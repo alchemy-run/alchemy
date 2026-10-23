@@ -151,7 +151,7 @@
     "@types/react": "catalog:",
     "@types/ws": "catalog:",
     "@vitejs/plugin-rsc": "catalog:",
-    "alchemy-test": "workspace:*",
+    "@alchemy.run/test": "workspace:*",
     "astro": "catalog:",
     "drizzle-orm": "catalog:",
     "effect": "catalog:",

@@ -2,7 +2,7 @@ import * as AWS from "@alchemy.run/aws";
 import type { PolicyDocument } from "@alchemy.run/aws/IAM/Policy";
 import { EmailIdentity, EmailIdentityPolicy } from "@alchemy.run/aws/SES";
 import * as sesv2 from "@distilled.cloud/aws/sesv2";
-import { expect } from "alchemy-test";
+import { expect } from "@alchemy.run/test";
 import * as Output from "alchemy/Output";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Data from "effect/Data";

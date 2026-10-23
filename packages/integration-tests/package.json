@@ -92,7 +92,7 @@
     "@vitejs/plugin-rsc": "catalog:",
     "@vitejs/plugin-vue": "catalog:",
     "alchemy": "workspace:*",
-    "alchemy-test": "workspace:*",
+    "@alchemy.run/test": "workspace:*",
     "arktype": "catalog:",
     "astro": "catalog:",
     "aws4fetch": "catalog:",

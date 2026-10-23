@@ -5,7 +5,7 @@ import { normalizePolicyDocument } from "@alchemy.run/aws/IAM/Policy";
 import * as ecr from "@distilled.cloud/aws/ecr";
 import { Region } from "@distilled.cloud/aws/Region";
 import * as sts from "@distilled.cloud/aws/sts";
-import { expect } from "alchemy-test";
+import { expect } from "@alchemy.run/test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 

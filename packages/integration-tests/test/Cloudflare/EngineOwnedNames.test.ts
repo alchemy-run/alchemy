@@ -9,7 +9,7 @@ import { type Bucket, BucketProvider } from "@alchemy.run/cloudflare/R2/Bucket";
 import { type Index, IndexProvider } from "@alchemy.run/cloudflare/Vectorize/VectorizeIndex";
 import { apiTokenCredentials, Credentials } from "@distilled.cloud/cloudflare/Credentials";
 import { NodeServices } from "@effect/platform-node";
-import { describe, expect, it } from "alchemy-test";
+import { describe, expect, it } from "@alchemy.run/test";
 import { AlchemyContext } from "alchemy/AlchemyContext";
 import { ArtifactStore, createArtifactStore } from "alchemy/Artifacts";
 import { Provider } from "alchemy/Provider";

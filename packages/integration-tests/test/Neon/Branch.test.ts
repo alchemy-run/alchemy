@@ -14,7 +14,7 @@ import {
   updateProjectBranch,
   updateProjectEndpoint,
 } from "@distilled.cloud/neon";
-import { describe, expect } from "alchemy-test";
+import { describe, expect } from "@alchemy.run/test";
 import { adopt, OwnedBySomeoneElse, Unowned } from "alchemy/AdoptPolicy";
 import * as Provider from "alchemy/Provider";
 import { isResourceState, State, type ResourceState } from "alchemy/State";

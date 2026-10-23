@@ -1,6 +1,6 @@
 import { hashDockerBuildInputs, selectDockerBuildContext } from "@alchemy.run/docker/BuildHash";
 import { BunServices } from "@effect/platform-bun";
-import { expect, layer } from "alchemy-test";
+import { expect, layer } from "@alchemy.run/test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";

@@ -2,7 +2,7 @@ import * as AWS from "@alchemy.run/aws";
 import * as AppConfig from "@alchemy.run/aws/AppConfig";
 import { AWSEnvironment } from "@alchemy.run/aws/Environment";
 import * as appconfig from "@distilled.cloud/aws/appconfig";
-import { expect } from "alchemy-test";
+import { expect } from "@alchemy.run/test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";

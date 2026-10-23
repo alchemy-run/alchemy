@@ -15,7 +15,7 @@ import { makeStreamingSource } from "@alchemy.run/git/Store/StreamingSource";
  * and thin-pack bases from the store are exercised in-process.
  */
 import * as BunServices from "@effect/platform-bun/BunServices";
-import { describe, expect, test } from "alchemy-test";
+import { describe, expect, test } from "@alchemy.run/test";
 import { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";

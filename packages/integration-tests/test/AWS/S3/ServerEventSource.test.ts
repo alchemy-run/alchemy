@@ -3,7 +3,7 @@ import * as EC2 from "@distilled.cloud/aws/ec2";
 import * as ECS from "@distilled.cloud/aws/ecs";
 import * as S3 from "@distilled.cloud/aws/s3";
 import * as SQS from "@distilled.cloud/aws/sqs";
-import { describe, expect } from "alchemy-test";
+import { describe, expect } from "@alchemy.run/test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Core from "alchemy/Test/Core";
 import * as Data from "effect/Data";

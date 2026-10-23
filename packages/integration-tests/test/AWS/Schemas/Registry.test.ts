@@ -3,7 +3,7 @@ import { AWSEnvironment } from "@alchemy.run/aws/Environment";
 import { normalizePolicyDocument, type PolicyDocument } from "@alchemy.run/aws/IAM/Policy";
 import { Registry } from "@alchemy.run/aws/Schemas";
 import * as schemas from "@distilled.cloud/aws/schemas";
-import { describe, expect } from "alchemy-test";
+import { describe, expect } from "@alchemy.run/test";
 import * as Provider from "alchemy/Provider";
 import type { ScopedPlanStatusSession } from "alchemy/Report";
 import * as Test from "alchemy/Test/Alchemy";

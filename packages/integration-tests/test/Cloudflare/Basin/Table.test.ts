@@ -3,7 +3,7 @@ import * as Basin from "@alchemy.run/cloudflare/Basin";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
 import * as basin from "@distilled.cloud/cloudflare/basin_catalog";
 import * as Iceberg from "@distilled.cloud/iceberg";
-import { expect } from "alchemy-test";
+import { expect } from "@alchemy.run/test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";

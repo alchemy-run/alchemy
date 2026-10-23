@@ -7,7 +7,7 @@ import {
   toFlyServiceCheck,
 } from "@alchemy.run/fly/replicas";
 import type { FlyMachineConfig } from "@distilled.cloud/fly-io/machines";
-import { expect, it } from "alchemy-test";
+import { expect, it } from "@alchemy.run/test";
 import * as Effect from "effect/Effect";
 
 it.effect(

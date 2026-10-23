@@ -1,7 +1,7 @@
 import * as AWS from "@alchemy.run/aws";
 import { ConfigurationSet, Tenant, TenantResourceAssociation } from "@alchemy.run/aws/SES";
 import * as sesv2 from "@distilled.cloud/aws/sesv2";
-import { expect } from "alchemy-test";
+import { expect } from "@alchemy.run/test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";

@@ -2,7 +2,7 @@ import * as GCP from "@alchemy.run/gcp";
 import { GcpEnvironment } from "@alchemy.run/gcp/Environment";
 import * as crm from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import * as composer from "@distilled.cloud/gcp/composer_v1";
-import { describe, expect } from "alchemy-test";
+import { describe, expect } from "@alchemy.run/test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Core from "alchemy/Test/Core";
 import * as Effect from "effect/Effect";

@@ -96,7 +96,7 @@
     "@types/bun": "catalog:",
     "@types/node": "catalog:",
     "alchemy": "workspace:*",
-    "alchemy-test": "workspace:*",
+    "@alchemy.run/test": "workspace:*",
     "changelogithub": "catalog:",
     "effect": "catalog:",
     "husky": "catalog:",

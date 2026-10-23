@@ -1,7 +1,7 @@
 import * as AWS from "@alchemy.run/aws";
 import { Thing, ThingType, ThingTypeDeletionTimedOut } from "@alchemy.run/aws/IoT";
 import * as iot from "@distilled.cloud/aws/iot";
-import { assert, describe, expect } from "alchemy-test";
+import { assert, describe, expect } from "@alchemy.run/test";
 import { DestroyError } from "alchemy/Apply";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Cause from "effect/Cause";

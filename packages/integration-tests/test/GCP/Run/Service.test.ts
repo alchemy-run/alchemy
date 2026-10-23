@@ -7,7 +7,7 @@ import * as pubsub from "@distilled.cloud/gcp/pubsub_v1";
 import * as cloudrun from "@distilled.cloud/gcp/run_v2";
 import * as storage from "@distilled.cloud/gcp/storage_v1";
 import * as iam from "@distilled.cloud/gcp/unstable/iam_v1";
-import { expect } from "alchemy-test";
+import { expect } from "@alchemy.run/test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Core from "alchemy/Test/Core";
 import * as Data from "effect/Data";

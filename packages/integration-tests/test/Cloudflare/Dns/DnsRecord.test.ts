@@ -3,7 +3,7 @@ import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnviron
 import { findZoneByName } from "@alchemy.run/cloudflare/Zone/lookup";
 import * as dns from "@distilled.cloud/cloudflare/dns";
 import * as Retry from "@distilled.cloud/cloudflare/Retry";
-import { expect } from "alchemy-test";
+import { expect } from "@alchemy.run/test";
 import { adopt, OwnedBySomeoneElse } from "alchemy/AdoptPolicy";
 import * as Provider from "alchemy/Provider";
 import { noopSession } from "alchemy/Report";

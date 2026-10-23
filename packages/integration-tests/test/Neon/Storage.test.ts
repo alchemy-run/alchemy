@@ -5,7 +5,7 @@ import { providers } from "@alchemy.run/neon/Providers";
 import { storageLayer } from "@alchemy.run/neon/Storage";
 import * as S3 from "@distilled.cloud/aws/s3";
 import * as SDK from "@distilled.cloud/neon";
-import { expect } from "alchemy-test";
+import { expect } from "@alchemy.run/test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";

@@ -1,5 +1,5 @@
 import { RuntimeContext } from "alchemy";
-import { describe, expect, it } from "alchemy-test";
+import { describe, expect, it } from "@alchemy.run/test";
 import { APIError } from "better-auth/api";
 import { anonymous } from "better-auth/plugins/anonymous";
 import * as Effect from "effect/Effect";

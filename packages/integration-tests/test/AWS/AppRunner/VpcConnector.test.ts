@@ -2,7 +2,7 @@ import * as AWS from "@alchemy.run/aws";
 import { VpcConnector } from "@alchemy.run/aws/AppRunner";
 import { SecurityGroup, Subnet, Vpc } from "@alchemy.run/aws/EC2";
 import * as apprunner from "@distilled.cloud/aws/apprunner";
-import { expect } from "alchemy-test";
+import { expect } from "@alchemy.run/test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { assertSecurityGroupGone, assertSubnetGone, assertVpcGone } from "../EC2/Gone.ts";

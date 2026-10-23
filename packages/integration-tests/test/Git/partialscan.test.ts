@@ -19,7 +19,7 @@ import {
 } from "@alchemy.run/git/Protocol/PartialScan";
 import * as Zlib from "@alchemy.run/git/Protocol/Zlib";
 import * as BunServices from "@effect/platform-bun/BunServices";
-import { describe, expect, test } from "alchemy-test";
+import { describe, expect, test } from "@alchemy.run/test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";

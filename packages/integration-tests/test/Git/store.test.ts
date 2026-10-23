@@ -28,7 +28,7 @@ import {
   WINDOW_BYTES,
   WINDOW_CACHE_BYTES,
 } from "@alchemy.run/git/Store/ObjectStore";
-import { describe, expect, test } from "alchemy-test";
+import { describe, expect, test } from "@alchemy.run/test";
 import { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";

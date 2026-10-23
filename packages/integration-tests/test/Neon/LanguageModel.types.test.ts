@@ -3,7 +3,7 @@ import type { Branch } from "@alchemy.run/neon/Branch";
 import type { Credential } from "@alchemy.run/neon/Credential";
 import type { Project } from "@alchemy.run/neon/Project";
 import { QueryAIGateway } from "@alchemy.run/neon/QueryAIGateway";
-import { expect, test } from "alchemy-test";
+import { expect, test } from "@alchemy.run/test";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type { LanguageModel } from "effect/ai/LanguageModel";
 import * as Effect from "effect/Effect";

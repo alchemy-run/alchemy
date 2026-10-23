@@ -32,7 +32,7 @@
     "@types/node": "catalog:node24",
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
-    "alchemy-test": "workspace:*",
+    "@alchemy.run/test": "workspace:*",
     "tailwindcss": "catalog:",
     "typescript": "catalog:",
     "vite": "catalog:"

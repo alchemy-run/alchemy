@@ -6,7 +6,7 @@ import * as logs from "@distilled.cloud/aws/cloudwatch-logs";
 import * as mwaa from "@distilled.cloud/aws/mwaa-serverless";
 import * as s3 from "@distilled.cloud/aws/s3";
 import * as sts from "@distilled.cloud/aws/sts";
-import { expect } from "alchemy-test";
+import { expect } from "@alchemy.run/test";
 import * as Output from "alchemy/Output";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Data from "effect/Data";

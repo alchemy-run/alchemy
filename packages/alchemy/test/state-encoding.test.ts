@@ -1,4 +1,4 @@
-import { describe, expect, test } from "alchemy-test";
+import { describe, expect, test } from "@alchemy.run/test";
 import * as Duration from "effect/Duration";
 import { deepEqual } from "@/Diff";
 import {

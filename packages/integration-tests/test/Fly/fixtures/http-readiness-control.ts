@@ -3,7 +3,7 @@ import * as Fly from "@alchemy.run/fly";
 import { checksPassing, configuredCheckNames } from "@alchemy.run/fly/replicas";
 import * as machines from "@distilled.cloud/fly-io/machines";
 import * as Retry from "@distilled.cloud/fly-io/Retry";
-import { expect } from "alchemy-test";
+import { expect } from "@alchemy.run/test";
 import type { ScratchStack } from "alchemy/Test/Alchemy";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";

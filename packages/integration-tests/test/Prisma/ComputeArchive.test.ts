@@ -1,6 +1,6 @@
 import { gunzipSync } from "node:zlib";
 import { createComputeArchive, normalizeEntrypoint } from "@alchemy.run/prisma/ComputeArchive";
-import { describe, expect, it } from "alchemy-test";
+import { describe, expect, it } from "@alchemy.run/test";
 import { PlatformServices } from "alchemy/Util/PlatformServices";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";

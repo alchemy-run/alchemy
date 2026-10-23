@@ -10,7 +10,7 @@ import {
   TrafficPolicy,
 } from "@alchemy.run/aws/MailManager";
 import * as mm from "@distilled.cloud/aws/mailmanager";
-import { expect } from "alchemy-test";
+import { expect } from "@alchemy.run/test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";

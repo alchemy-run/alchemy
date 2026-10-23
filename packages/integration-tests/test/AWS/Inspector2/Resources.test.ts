@@ -1,7 +1,7 @@
 import * as AWS from "@alchemy.run/aws";
 import { Filter } from "@alchemy.run/aws/Inspector2/Filter";
 import * as inspector2 from "@distilled.cloud/aws/inspector2";
-import { expect } from "alchemy-test";
+import { expect } from "@alchemy.run/test";
 import * as Provider from "alchemy/Provider";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";

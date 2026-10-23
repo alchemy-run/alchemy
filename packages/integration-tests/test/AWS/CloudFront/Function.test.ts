@@ -1,7 +1,7 @@
 import * as AWS from "@alchemy.run/aws";
 import { Function } from "@alchemy.run/aws/CloudFront";
 import * as cloudfront from "@distilled.cloud/aws/cloudfront";
-import { expect } from "alchemy-test";
+import { expect } from "@alchemy.run/test";
 import * as Provider from "alchemy/Provider";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";

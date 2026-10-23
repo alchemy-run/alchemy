@@ -3,7 +3,7 @@ import { AnomalyMonitor } from "@alchemy.run/aws/CostExplorer/AnomalyMonitor";
 import { AnomalySubscription } from "@alchemy.run/aws/CostExplorer/AnomalySubscription";
 import * as ce from "@distilled.cloud/aws/cost-explorer";
 import { Region as AwsRegion } from "@distilled.cloud/aws/Region";
-import { expect } from "alchemy-test";
+import { expect } from "@alchemy.run/test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";

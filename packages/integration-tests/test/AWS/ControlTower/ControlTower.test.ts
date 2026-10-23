@@ -1,7 +1,7 @@
 import * as AWS from "@alchemy.run/aws";
 import { EnabledBaseline, EnabledControl } from "@alchemy.run/aws/ControlTower";
 import * as controltower from "@distilled.cloud/aws/controltower";
-import { describe, expect } from "alchemy-test";
+import { describe, expect } from "@alchemy.run/test";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";

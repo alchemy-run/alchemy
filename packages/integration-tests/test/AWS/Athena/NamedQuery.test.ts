@@ -1,7 +1,7 @@
 import * as AWS from "@alchemy.run/aws";
 import { NamedQuery } from "@alchemy.run/aws/Athena/NamedQuery";
 import * as athena from "@distilled.cloud/aws/athena";
-import { expect } from "alchemy-test";
+import { expect } from "@alchemy.run/test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 

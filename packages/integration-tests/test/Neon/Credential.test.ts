@@ -3,7 +3,7 @@ import { Credential, validateCredential, type CredentialScope } from "@alchemy.r
 import { Project } from "@alchemy.run/neon/Project";
 import { providers } from "@alchemy.run/neon/Providers";
 import * as SDK from "@distilled.cloud/neon";
-import { expect } from "alchemy-test";
+import { expect } from "@alchemy.run/test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";

@@ -3,7 +3,7 @@ import { AWSEnvironment } from "@alchemy.run/aws/Environment";
 import { normalizePolicyDocument, type PolicyStatement } from "@alchemy.run/aws/IAM/Policy";
 import { Queue } from "@alchemy.run/aws/SQS";
 import * as SQS from "@distilled.cloud/aws/sqs";
-import { describe, expect } from "alchemy-test";
+import { describe, expect } from "@alchemy.run/test";
 import { adopt } from "alchemy/AdoptPolicy";
 import * as Output from "alchemy/Output";
 import * as Provider from "alchemy/Provider";

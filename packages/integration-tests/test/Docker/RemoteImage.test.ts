@@ -1,5 +1,5 @@
 import * as Docker from "@alchemy.run/docker";
-import { describe, expect } from "alchemy-test";
+import { describe, expect } from "@alchemy.run/test";
 import * as Provider from "alchemy/Provider";
 import { inMemoryState } from "alchemy/State";
 import * as Test from "alchemy/Test/Alchemy";

@@ -5,7 +5,7 @@ import {
   type PrismaResolvedCredentials,
 } from "@alchemy.run/prisma/AuthProvider";
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { describe, expect, it } from "alchemy-test";
+import { describe, expect, it } from "@alchemy.run/test";
 import { AuthProviders, getAuthProvider } from "alchemy/Auth/AuthProvider";
 import { ProfileStore } from "alchemy/Auth/Profile";
 import * as Interaction from "alchemy/Interaction";

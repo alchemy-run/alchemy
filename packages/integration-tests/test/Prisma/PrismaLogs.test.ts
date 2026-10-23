@@ -1,6 +1,6 @@
 import { createServer, type Server, type Socket } from "node:net";
 import { parseDeploymentLogRecord, tailDeploymentLogs } from "@alchemy.run/prisma/PrismaLogs";
-import { describe, expect, it } from "alchemy-test";
+import { describe, expect, it } from "@alchemy.run/test";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";

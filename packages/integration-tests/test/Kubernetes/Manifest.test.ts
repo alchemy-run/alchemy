@@ -2,7 +2,7 @@ import * as AWS from "@alchemy.run/aws";
 import * as Kubernetes from "@alchemy.run/kubernetes";
 import type { Connection } from "@alchemy.run/kubernetes/Connection";
 import * as NodeSocketServer from "@effect/platform-node/NodeSocketServer";
-import { describe, expect } from "alchemy-test";
+import { describe, expect } from "@alchemy.run/test";
 import * as Drift from "alchemy/Drift";
 import * as Provider from "alchemy/Provider";
 import * as Test from "alchemy/Test/Alchemy";

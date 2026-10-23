@@ -5,7 +5,7 @@ import { generateWorkflowName } from "@alchemy.run/cloudflare/Workflows/Workflow
 import * as queues from "@distilled.cloud/cloudflare/queues";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import * as workflows from "@distilled.cloud/cloudflare/workflows";
-import { expect } from "alchemy-test";
+import { expect } from "@alchemy.run/test";
 import { adopt } from "alchemy/AdoptPolicy";
 import * as Output from "alchemy/Output";
 import * as Test from "alchemy/Test/Alchemy";

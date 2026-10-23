@@ -8,7 +8,7 @@ import * as KMS from "@distilled.cloud/aws/kms";
 import { Region } from "@distilled.cloud/aws/Region";
 import * as S3 from "@distilled.cloud/aws/s3";
 import { NodeServices } from "@effect/platform-node";
-import { describe, expect, it } from "alchemy-test";
+import { describe, expect, it } from "@alchemy.run/test";
 import { AlchemyContext } from "alchemy/AlchemyContext";
 import { ArtifactStore, createArtifactStore } from "alchemy/Artifacts";
 import * as Output from "alchemy/Output";
