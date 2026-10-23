@@ -2,6 +2,7 @@ import * as AWS from "@alchemy.run/aws";
 import { Function } from "@alchemy.run/aws/CloudFront";
 import * as cloudfront from "@distilled.cloud/aws/cloudfront";
 import { expect } from "alchemy-test";
+import * as Drift from "alchemy/Drift";
 import * as Provider from "alchemy/Provider";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
@@ -83,6 +84,76 @@ test.provider(
   {
     tags: ["provider:aws", "provider:aws:cloudfront", "live"],
     timeout: 300_000,
+  },
+);
+
+// Regression for #2349: a function's `Status` is rollout state. It reads
+// `UNASSOCIATED` until a distribution uses it, `IN_PROGRESS` right after a
+// publish, and `DEPLOYED` once CloudFront finishes the rollout. Drift must not
+// report a change when only that status moved.
+test.provider.skipIf(!!process.env.FAST)(
+  "drift reports no change once an associated function finishes rolling out",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const program = (body: string) =>
+        Effect.gen(function* () {
+          const fn = yield* AWS.CloudFront.Function("RolloutFn", {
+            comment: "rollout handler",
+            code: `async function handler(event) {
+  ${body}
+  return event.request;
+}`,
+          });
+          const distribution = yield* AWS.CloudFront.Distribution("RolloutDistribution", {
+            origins: [
+              {
+                id: "site",
+                domainName: "example.com",
+                customOriginConfig: { originProtocolPolicy: "https-only" },
+              },
+            ],
+            defaultCacheBehavior: {
+              targetOriginId: "site",
+              viewerProtocolPolicy: "redirect-to-https",
+              functionAssociations: [{ functionArn: fn.functionArn, eventType: "viewer-request" }],
+            },
+          });
+          return { fn, distribution };
+        });
+
+      const expectNoFunctionDrift = Effect.gen(function* () {
+        const live = yield* cloudfront
+          .describeFunction({ Name: deployed.fn.functionName, Stage: "LIVE" })
+          .pipe(
+            Effect.repeat({
+              schedule: Schedule.spaced("5 seconds"),
+              until: (fn) => fn.FunctionSummary?.Status === "DEPLOYED",
+              times: 60,
+            }),
+          );
+        expect(live.FunctionSummary?.Status).toBe("DEPLOYED");
+
+        const drift = yield* Drift.detect({ name: stack.name, stage: stack.stage }).pipe(
+          Effect.provide(stack.state),
+        );
+        expect(drift.resources.RolloutFn?.action).toBe("unchanged");
+      });
+
+      const deployed = yield* stack.deploy(program("// v1"));
+      yield* expectNoFunctionDrift;
+
+      // A code change re-publishes LIVE, which starts a new rollout.
+      yield* stack.deploy(program("// v2"));
+      yield* expectNoFunctionDrift;
+
+      yield* stack.destroy();
+      yield* assertFunctionDeleted(deployed.fn.functionName);
+    }),
+  {
+    tags: ["provider:aws", "provider:aws:cloudfront", "live"],
+    timeout: 900_000,
   },
 );
 
