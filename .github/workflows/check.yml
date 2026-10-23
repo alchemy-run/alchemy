@@ -68,6 +68,12 @@ jobs:
       - name: Run pkg tests
         run: pnpm -C packages/pkg test
 
+      # `tsrs -b` above emits distilled `lib/` after `typecheck`'s own
+      # `ensure:built`, so the bundles are stale here. Rebuild them outside
+      # the launcher test's timeout.
+      - name: Bundle distilled packages
+        run: pnpm ensure:built
+
       - name: Test CLI launcher
         run: timeout 240 pnpm test test/Cli/launcher.test.ts test/Cli/exitCodes.test.ts --retry 0 --concurrency 1
 
