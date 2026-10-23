@@ -106,6 +106,6 @@ test.provider(
   {
     tags: ["provider:gcp", "provider:gcp:networksecurity", "live"],
     timeout: 90_000,
-    exclusive: true,
+    exclusive: "gcp:dns-threat-detector",
   },
 );

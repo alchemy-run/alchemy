@@ -1158,7 +1158,7 @@ Output behavior (plain mode, the default):
 Runner semantics to know:
 
 - Everything runs in ONE bun process: files run concurrently (respecting `describe.sequential`), imports of all test files happen up-front (they must be lazy and pure — registration only, no top-level side effects beyond `Test.make`/`describe`/`test`).
-- Tests that mutate process-global state (e.g. `process.env.PATH`) must pass `{ exclusive: true }` in the test options to take the whole-process write lock.
+- Tests that mutate process-global state (e.g. `process.env.PATH`, `process.chdir`, `globalThis.__ALCHEMY_RUNTIME__`) must pass `{ exclusive: true }` in the test options to take the whole-process write lock. Tests that only contend for a shared cloud resource (an account singleton, a quota) pass a label instead — `{ exclusive: "aws:ses-account" }` serializes them with other holders of that label while the rest of the run continues. The same option works on `beforeAll`/`afterAll` hooks.
 - The harness (`alchemy-test` package) provides `describe`, `it`/`test` (incl. `it.effect`/`it.live`), hooks, `layer`, `expect`, and `assert` — the codemod `scripts/codemod-alchemy-test.ts` migrates vitest imports and is idempotent.
 - The runner runs in plain bun, so distilled resolves from `src/*.ts` via the `bun` export condition — a regenerated service is test-visible immediately, no `lib/` rebuild required.
 
