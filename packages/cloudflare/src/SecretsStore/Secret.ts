@@ -128,9 +128,9 @@ export const SecretProviderLive = () =>
       const accountId = news.store.accountId;
       const storeId = news.store.storeId;
 
-      // Observe — re-fetch the cached secret; fall back to a name
-      // scan over the store so we recover from out-of-band deletes
-      // or partial state-persistence failures.
+      // Observe — re-fetch the cached secret; fall back to a lookup
+      // by name so we recover from out-of-band deletes or partial
+      // state-persistence failures.
       let observed:
         | {
             id: string;
@@ -155,11 +155,8 @@ export const SecretProviderLive = () =>
           );
       }
       if (!observed) {
-        observed = yield* secretsStore.listStoreSecrets.items({ accountId, storeId }).pipe(
-          Stream.filter((s) => s.name === name),
-          Stream.runHead,
-          Effect.catchTag("StoreNotFound", () => Effect.succeedNone),
-          Effect.map(Option.getOrUndefined),
+        observed = yield* findSecretByName({ accountId, storeId, name }).pipe(
+          Effect.catchTag("StoreNotFound", () => Effect.succeed(undefined)),
         );
       }
 
@@ -204,11 +201,7 @@ export const SecretProviderLive = () =>
             comment: secret.comment ?? undefined,
           };
         }
-        const existing = yield* secretsStore.listStoreSecrets.items({ accountId, storeId }).pipe(
-          Stream.filter((s) => s.name === name),
-          Stream.runHead,
-          Effect.map(Option.getOrUndefined),
-        );
+        const existing = yield* findSecretByName({ accountId, storeId, name });
         if (!existing) {
           return yield* Effect.die(
             new Error(
@@ -289,17 +282,11 @@ export const SecretProviderLive = () =>
       // create path instead of handing `undefined` to the API (#995).
       if (!olds?.store?.storeId || !olds.store.accountId) return undefined;
       const name = resolveName(id, olds.name);
-      const match = yield* secretsStore.listStoreSecrets
-        .items({
-          accountId: olds.store.accountId,
-          storeId: olds.store.storeId,
-        })
-        .pipe(
-          Stream.filter((s) => s.name === name),
-          Stream.runHead,
-          Effect.catchTag("StoreNotFound", () => Effect.succeedNone),
-          Effect.map(Option.getOrUndefined),
-        );
+      const match = yield* findSecretByName({
+        accountId: olds.store.accountId,
+        storeId: olds.store.storeId,
+        name,
+      }).pipe(Effect.catchTag("StoreNotFound", () => Effect.succeed(undefined)));
       if (!match) return undefined;
       // Secrets carry no ownership signal (Cloudflare doesn't expose
       // tags on store secrets), so a name match is not proof we own
@@ -485,6 +472,22 @@ const waitForSecretActive = (
           StoreNotFound: () => Effect.succeed(initialStatus),
         }),
       );
+
+/**
+ * Find a store's secret by exact name. The store's default listing order
+ * is not stable across pages, so a scan of every page can skip a secret
+ * in a store with more than one page of them. The API's `search` filter
+ * (a match over name and comment) narrows the listing to a handful of
+ * candidates first; the exact-name filter then picks the one.
+ */
+const findSecretByName = (key: { accountId: string; storeId: string; name: string }) =>
+  secretsStore.listStoreSecrets
+    .items({ accountId: key.accountId, storeId: key.storeId, search: key.name })
+    .pipe(
+      Stream.filter((s) => s.name === key.name),
+      Stream.runHead,
+      Effect.map(Option.getOrUndefined),
+    );
 
 const resolveScopes = (scopes: string[] | undefined): string[] =>
   scopes && scopes.length > 0 ? scopes : ["workers"];
