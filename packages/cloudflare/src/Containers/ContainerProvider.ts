@@ -1589,6 +1589,16 @@ export const LiveContainerProvider = () =>
               };
             });
 
+          // A Durable Object-managed Container owns no application: the
+          // class's DurableObjectApplication does, and reads it. Its state is
+          // the placeholder `reconcileDurableObjectContainer` wrote
+          // (`applicationId: ""`), so there is nothing to look up here, and a
+          // lookup by the generated name always misses and reports the
+          // deployed Container as missing.
+          if (output?.applicationId === "" && output.schedulingPolicy === "durable_object") {
+            return output;
+          }
+
           let attrs: ContainerApplication["Attributes"] | undefined;
           // A `dev:` applicationId never exists on Cloudflare — look the
           // application up by its (deterministic) name instead of hitting the

@@ -2,6 +2,7 @@ import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Containers from "@distilled.cloud/cloudflare/containers";
 import * as Workers from "@distilled.cloud/cloudflare/workers";
 import { describe, expect } from "alchemy-test";
+import * as Drift from "alchemy/Drift";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
@@ -666,6 +667,24 @@ for (const dev of [true, false]) {
                       exitCode: 7,
                       release: "",
                       images: ASYNC_IMAGES,
+                    });
+
+                    // A Container's row is the placeholder reconcile wrote, so
+                    // drift reads it back as deployed rather than missing.
+                    const drift = yield* Drift.detect(stack);
+                    expect(
+                      Object.fromEntries(
+                        Object.values(drift.resources)
+                          .filter((row) => row.resourceType === "Cloudflare.Container")
+                          .map((row) => [row.logicalId, row.action]),
+                      ),
+                    ).toEqual({
+                      NativeShell: "unchanged",
+                      NativeTools: "unchanged",
+                      NativeLint: "unchanged",
+                      AsyncShell: "unchanged",
+                      AsyncTools: "unchanged",
+                      AsyncLint: "unchanged",
                     });
                   }
 
