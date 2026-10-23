@@ -492,7 +492,13 @@ export const SchemaProvider = () =>
             : undefined;
         }),
         read: Effect.fn(function* ({ olds, output }) {
-          if (!output) return undefined;
+          if (!output) {
+            // A create never reaches `diff`; plan only calls `read` to look
+            // for something to adopt. Ask any rename questions now so they
+            // are answered before apply starts changing other resources.
+            if (olds && isResolved(olds)) yield* detectDrift(olds);
+            return undefined;
+          }
           const out = resolveOut(olds ?? ({} as SchemaProps));
           const exists = yield* fs.exists(out);
           if (!exists) return undefined;
@@ -570,7 +576,9 @@ const applyRenames = (rows: ReadonlyArray<Located>, hints: ReadonlyArray<Hint>) 
         : current.map((row) => {
             const [from, to] = [hint.from, hint.to];
             if (hint.kind === "schema") {
-              return row.schema === from[0]
+              // Schema rows name themselves; everything else names its schema.
+              const own = row.entityType === "schemas" ? row.name : row.schema;
+              return own === from[0]
                 ? {
                     ...row,
                     schema: to[0]!,
