@@ -787,8 +787,8 @@ export function ExternalWait({
     else if (shortcut === "o" && onOpen !== undefined) {
       setBrowserFailed(false);
       void onOpen().catch(() => setBrowserFailed(true));
-    } else if (shortcut === "c" && (code ?? url) !== undefined) {
-      copyToClipboard(code ?? url!, stdout ?? process.stdout);
+    } else if (shortcut === "c" && url !== undefined) {
+      copyToClipboard(url, stdout ?? process.stdout);
       setCopied(true);
       clearTimeout(copiedTimer.current);
       copiedTimer.current = setTimeout(() => setCopied(false), 2000);
@@ -835,10 +835,7 @@ export function ExternalWait({
           ? []
           : ([
               ...(onOpen === undefined ? [] : ([["o", "open browser"]] as const)),
-              [
-                "c",
-                copied ? `${glyphs.success} copied` : code === undefined ? "copy URL" : "copy code",
-              ],
+              ["c", copied ? `${glyphs.success} copied` : "copy URL"],
             ] as const)),
         [keyGlyphs.escape, "cancel"],
       ]}
