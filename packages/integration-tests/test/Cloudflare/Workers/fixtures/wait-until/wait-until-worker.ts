@@ -1,7 +1,17 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Effect from "effect/Effect";
+import * as HttpApi from "effect/http-api/HttpApi";
+import * as HttpApiBuilder from "effect/http-api/HttpApiBuilder";
+import * as HttpApiEndpoint from "effect/http-api/HttpApiEndpoint";
+import * as HttpApiGroup from "effect/http-api/HttpApiGroup";
+import * as Etag from "effect/http/Etag";
+import * as HttpPlatform from "effect/http/HttpPlatform";
+import * as HttpRouter from "effect/http/HttpRouter";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as Layer from "effect/Layer";
+import * as Path from "effect/Path";
+import * as Schema from "effect/Schema";
 
 /**
  * Durable Object journal for `WaitUntil.test.ts`.
@@ -64,6 +74,22 @@ export class Journal extends Cloudflare.DurableObject<Journal>()(
   }),
 ) {}
 
+const BackgroundApi = HttpApi.make("BackgroundApi").add(
+  HttpApiGroup.make("Background").add(
+    HttpApiEndpoint.get("bg", "/api/bg", { success: Schema.String }),
+  ),
+);
+
+const HttpPlatformStub = Layer.succeed(HttpPlatform.HttpPlatform, {
+  platform: "web",
+  compression: {
+    algorithms: new Set<HttpPlatform.CompressionAlgorithm>(),
+    compressResponse: (response) => Effect.succeed(response),
+  },
+  fileResponse: () => Effect.die("HttpPlatform.fileResponse not supported"),
+  fileWebResponse: () => Effect.die("HttpPlatform.fileWebResponse not supported"),
+});
+
 /**
  * Fixture worker for `WaitUntil.test.ts`.
  *
@@ -95,11 +121,42 @@ export default class WaitUntilWorker extends Cloudflare.Worker<WaitUntilWorker>(
       }),
     );
 
+    // HttpApi routes built once, in init (#2173): `HttpApiBuilder.group`
+    // captures the init context (holding the deferred execution context) and
+    // re-provides it over each handler, so `waitUntil` must still reach the
+    // live per-event context.
+    const api = yield* HttpRouter.toHttpEffect(
+      HttpApiBuilder.layer(BackgroundApi).pipe(
+        Layer.provide(
+          HttpApiBuilder.group(BackgroundApi, "Background", (handlers) =>
+            handlers.handle("bg", () =>
+              Effect.gen(function* () {
+                const exec = yield* Cloudflare.WorkerExecutionContext;
+                yield* exec.waitUntil(
+                  Effect.sleep("100 millis").pipe(
+                    Effect.andThen(
+                      journals.getByName("default").record("from-http-api-wait-until"),
+                    ),
+                  ),
+                );
+                return "bg-api-scheduled";
+              }),
+            ),
+          ),
+        ),
+        Layer.provide([Etag.layer, HttpPlatformStub, Path.layer]),
+      ),
+    );
+
     return {
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;
         const url = new URL(request.url, "http://x");
         const journal = journals.getByName("default");
+
+        if (url.pathname.startsWith("/api/")) {
+          return yield* api;
+        }
 
         if (url.pathname === "/bg-many") {
           const journal = journals.getByName("parallel");

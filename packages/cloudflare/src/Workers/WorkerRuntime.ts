@@ -268,9 +268,24 @@ export const deferredExecutionContext: WorkerExecutionContext["Service"] = {
   },
 };
 
-const liveExecutionContext = WorkerExecutionContext.pipe(
+/**
+ * The real per-event {@link WorkerExecutionContext}, provided by the bridge
+ * alongside `WorkerExecutionContext` for every event. The deferred context
+ * reads this key rather than `WorkerExecutionContext`: a context captured at
+ * init (e.g. by `HttpApiBuilder.group`, which re-provides its build-time
+ * context over each handler) carries the deferred stand-in under
+ * `WorkerExecutionContext` and would shadow the per-event one, but init never
+ * provides this key, so a captured init context can't shadow it.
+ *
+ * @internal
+ */
+export const LiveExecutionContext = Context.Reference<
+  WorkerExecutionContext["Service"] | undefined
+>("Cloudflare.Workers.LiveExecutionContext", { defaultValue: () => undefined });
+
+const liveExecutionContext = LiveExecutionContext.pipe(
   Effect.flatMap((live) =>
-    live === deferredExecutionContext
+    live === undefined
       ? Effect.die(new Error("WorkerExecutionContext can only be used inside a request handler"))
       : Effect.succeed(live),
   ),

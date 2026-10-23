@@ -36,6 +36,7 @@ import {
   WorkerExecutionContext,
   deferredExecutionContext,
   fromExecutionContext,
+  LiveExecutionContext,
 } from "./WorkerRuntime.ts";
 import type { WorkerRuntimeContext } from "./WorkerRuntimeContext.ts";
 
@@ -72,6 +73,7 @@ export const makeWorkerBridge = (
     onExit: (exit: Exit.Exit<any, any>, scope: Scope.Closeable) => T | Promise<T>,
   ): Promise<T> => {
     const scope = Scope.makeUnsafe();
+    const executionContext = fromExecutionContext(ctx, env);
     return build((promise) => ctx.waitUntil(promise as Promise<any>))
       .then(
         (built) => {
@@ -86,7 +88,8 @@ export const makeWorkerBridge = (
             // `ctx.waitUntil` below).
             Effect.provide(
               Layer.mergeAll(
-                Layer.succeed(WorkerExecutionContext, fromExecutionContext(ctx, env)),
+                Layer.succeed(WorkerExecutionContext, executionContext),
+                Layer.succeed(LiveExecutionContext, executionContext),
                 Layer.succeed(Scope.Scope, scope),
                 Layer.succeed(RuntimeContext, built.runtimeContext),
                 // The configured telemetry exporters. Constructed as part
