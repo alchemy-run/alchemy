@@ -4,6 +4,7 @@ import * as Logs from "@distilled.cloud/aws/cloudwatch-logs";
 import * as iam from "@distilled.cloud/aws/iam";
 import * as Lambda from "@distilled.cloud/aws/lambda";
 import { expect } from "alchemy-test";
+import * as Drift from "alchemy/Drift";
 import * as Provider from "alchemy/Provider";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Duration from "effect/Duration";
@@ -562,6 +563,60 @@ test.provider(
   { tags: ["provider:aws", "provider:aws:lambda", "live"], timeout: 360_000 },
 );
 
+// #2435: `read` must observe the live configuration, or an out-of-band
+// memory/timeout change reads as `unchanged` and drift never repairs it.
+test.provider(
+  "drift detects and repairs out-of-band memory and timeout changes",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const fn = yield* stack.deploy(
+        AWS.Lambda.Function("DriftFn", {
+          main: timeoutHandlerPath,
+          handler: "handler",
+          isExternal: true,
+          functionUrl: false,
+          memorySize: 128,
+          timeout: Duration.seconds(3),
+        }),
+      );
+      expect(fn.memorySize).toBe(128);
+      expect(fn.timeoutSeconds).toBe(3);
+
+      const detectDrift = () => Drift.detect(stack).pipe(Effect.provide(stack.state));
+      expect((yield* detectDrift()).resources.DriftFn?.action).toBe("unchanged");
+
+      yield* Lambda.updateFunctionConfiguration({
+        FunctionName: fn.functionName,
+        MemorySize: 256,
+        Timeout: 10,
+      }).pipe(
+        Effect.retry({
+          while: (e) => e._tag === "ResourceConflictException",
+          schedule: Schedule.exponential(500),
+          times: 8,
+        }),
+      );
+      yield* waitForConfiguration(fn.functionName, { memorySize: 256, timeout: 10 });
+
+      const drifted = (yield* detectDrift()).resources.DriftFn;
+      expect(drifted?.action).toBe("drifted");
+      expect(drifted?.attr).toMatchObject({ memorySize: 256, timeoutSeconds: 10 });
+
+      const repaired = yield* Drift.repair({ name: stack.name, stage: stack.stage }).pipe(
+        Effect.provide(stack.state),
+      );
+      expect(repaired.resources.DriftFn?.action).toBe("repaired");
+      yield* waitForConfiguration(fn.functionName, { memorySize: 128, timeout: 3 });
+      expect((yield* detectDrift()).resources.DriftFn?.action).toBe("unchanged");
+
+      yield* stack.destroy();
+      yield* assertFunctionDeleted(fn.functionName);
+    }).pipe(Effect.onError(() => stack.destroy().pipe(Effect.ignore))),
+  { tags: ["provider:aws", "provider:aws:lambda", "live"], timeout: 240_000 },
+);
+
 // Canonical `list()` test (AWS account/region-scoped collection): deploy a
 // real function, resolve the provider from context via the typed
 // `Provider.findProvider`, call `list()`, and assert the deployed function
@@ -822,6 +877,24 @@ const waitForReservedConcurrency = Effect.fn(function* (
     Effect.filterOrFail(
       (actual) => actual === expected,
       () => new Error("Reserved concurrency update has not propagated yet"),
+    ),
+    Effect.retry({
+      schedule: Schedule.max([Schedule.exponential(500), Schedule.recurs(10)]),
+    }),
+  );
+});
+
+const waitForConfiguration = Effect.fn(function* (
+  functionName: string,
+  expected: { memorySize: number; timeout: number },
+) {
+  return yield* Lambda.getFunctionConfiguration({ FunctionName: functionName }).pipe(
+    Effect.filterOrFail(
+      (config) =>
+        config.MemorySize === expected.memorySize &&
+        config.Timeout === expected.timeout &&
+        config.LastUpdateStatus === "Successful",
+      () => new Error("Lambda configuration update has not propagated yet"),
     ),
     Effect.retry({
       schedule: Schedule.max([Schedule.exponential(500), Schedule.recurs(10)]),

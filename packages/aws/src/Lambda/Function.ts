@@ -198,6 +198,11 @@ export interface FunctionCommonProps extends PlatformProps {
    * Instruction set architecture for the Lambda function.
    */
   architecture?: FunctionArchitecture;
+  /**
+   * Memory allocated to the function, in MB.
+   *
+   * @default 128
+   */
   memorySize?: number;
   env?: Record<string, any>;
   /**
@@ -518,6 +523,16 @@ export interface Function extends Resource<
       image?: Omit<FunctionImageAttributes, "hash">;
     };
     reservedConcurrentExecutions?: number;
+    /**
+     * Memory allocated to the function, in MB, as observed on the deployed
+     * function. Lets `alchemy drift` detect out-of-band changes.
+     */
+    memorySize?: number;
+    /**
+     * Timeout of the function, in seconds, as observed on the deployed
+     * function. Lets `alchemy drift` detect out-of-band changes.
+     */
+    timeoutSeconds?: number;
   },
   {
     env?: Record<string, any>;
@@ -1472,7 +1487,7 @@ export const FunctionProvider = () =>
             (configuration.LastUpdateStatus === undefined ||
               configuration.LastUpdateStatus === "Successful")
           ) {
-            return;
+            return configuration;
           }
           return yield* new FunctionUpdatePending({
             functionName,
@@ -1753,7 +1768,10 @@ export const FunctionProvider = () =>
                 PackageType: "Zip" as const,
               }),
           Architectures: [news.architecture ?? "x86_64"],
-          MemorySize: news.memorySize,
+          // Defaults are explicit so removing the prop (or repairing drift on
+          // a function that never set it) converges back to AWS's default;
+          // `UpdateFunctionConfiguration` treats omitted fields as "leave as-is".
+          MemorySize: news.memorySize ?? 128,
           // Always explicit: `UpdateFunctionConfiguration` treats an omitted
           // `Layers` as "leave as-is", so removing the prop would strand the
           // previously-attached layers.
@@ -1768,7 +1786,7 @@ export const FunctionProvider = () =>
             },
           },
           Tags: tags,
-          Timeout: toTimeoutSeconds(news.timeout),
+          Timeout: toTimeoutSeconds(news.timeout) ?? 3,
           // Always explicit so removing the `tracing` prop converges back to
           // the AWS default on update.
           TracingConfig: { Mode: news.tracing ?? "PassThrough" },
@@ -2216,6 +2234,8 @@ export const FunctionProvider = () =>
               observed: result?.Code,
             }),
             reservedConcurrentExecutions,
+            memorySize: fn.MemorySize,
+            timeoutSeconds: fn.Timeout,
           } satisfies Function["Attributes"];
           return (yield* hasAlchemyTags(id, tagsResult)) ? attrs : Unowned(attrs);
         }),
@@ -2261,6 +2281,8 @@ export const FunctionProvider = () =>
                     ...(reservedConcurrentExecutions === undefined
                       ? {}
                       : { reservedConcurrentExecutions }),
+                    ...(fn.MemorySize === undefined ? {} : { memorySize: fn.MemorySize }),
+                    ...(fn.Timeout === undefined ? {} : { timeoutSeconds: fn.Timeout }),
                   } satisfies Function["Attributes"];
                 }),
               { concurrency: 10 },
@@ -2435,7 +2457,7 @@ export const FunctionProvider = () =>
             session,
           });
 
-          yield* createOrUpdateFunction({
+          const configuration = yield* createOrUpdateFunction({
             id,
             news,
             roleArn,
@@ -2522,6 +2544,8 @@ export const FunctionProvider = () =>
             roleArn,
             code: prepared.attributes,
             reservedConcurrentExecutions,
+            memorySize: configuration?.MemorySize,
+            timeoutSeconds: configuration?.Timeout,
           };
         }),
         delete: Effect.fn(function* ({ output }) {
