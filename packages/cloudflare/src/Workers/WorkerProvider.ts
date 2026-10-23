@@ -3,7 +3,7 @@ import * as durableObjectsApi from "@distilled.cloud/cloudflare/durable-objects"
 import * as rulesets from "@distilled.cloud/cloudflare/rulesets";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import * as wfp from "@distilled.cloud/cloudflare/workers-for-platforms";
-import { OwnedBySomeoneElse, Unowned } from "alchemy/AdoptPolicy";
+import { Unowned } from "alchemy/AdoptPolicy";
 import { dotAlchemyDirectory } from "alchemy/AlchemyContext";
 import * as Artifacts from "alchemy/Artifacts";
 import { havePropsChanged, isResolved, stripEffects } from "alchemy/Diff";
@@ -68,10 +68,6 @@ import {
   withoutDevOnlyBindings,
 } from "./WorkerBinding.ts";
 import { createWorkerName } from "./WorkerName.ts";
-export class WorkerIdentityUnresolved extends Data.TaggedError("WorkerIdentityUnresolved")<{
-  message: string;
-}> {}
-
 class MissingDurableObjects extends Data.TaggedError("MissingDurableObjects")<{
   scriptName: string;
   expected: string[];
@@ -4671,18 +4667,9 @@ export const LiveWorkerProvider = () =>
             }
           }
         }),
-        precreate: Effect.fn(function* ({ id, fqn, news, session, bindings, adopt }) {
+        precreate: Effect.fn(function* ({ id, news, session, bindings }) {
           const { accountId } = yield* yield* CloudflareEnvironment;
           yield* assertCloudflareTelemetryCompatibility(news as WorkerProps, bindings);
-          if (
-            news.version?.parent == null &&
-            news.preview?.of == null &&
-            (!isResolved(news.name) || !isResolved(news.namespace))
-          ) {
-            return yield* new WorkerIdentityUnresolved({
-              message: `Cannot pre-create Worker '${fqn}' before its name and dispatch namespace resolve.`,
-            });
-          }
           const name = yield* createWorkerName(id, news.name);
           // A version worker uploads to its parent's script during
           // reconcile; pre-creating a placeholder script under this
@@ -4713,43 +4700,41 @@ export const LiveWorkerProvider = () =>
               crons: [],
             } satisfies Worker["Attributes"];
           }
-          const assertOwnership = (tags: string[] | null | undefined) =>
-            hasAlchemyWorkerTags(id, tags ?? []) || adopt === true
-              ? Effect.void
-              : Effect.fail(
-                  new OwnedBySomeoneElse({
-                    message:
-                      `Cannot adopt Worker '${fqn}': '${name}' is not owned by this ` +
-                      "stack/stage/logical-id. Re-run with `--adopt` or `adopt(true)` to take it over.",
-                    resourceType: "Cloudflare.Worker",
-                    logicalId: id,
-                    physicalName: name,
-                  }),
-                );
-          // Dispatch workers need no upload stub, but their provisional output
-          // still bypasses deferred admission. Check ownership before publishing it.
+          // A Workers for Platforms user worker can't be pre-created: precreate
+          // runs on raw, *unresolved* props (so resources in a dependency cycle
+          // can signal early), meaning a `namespace` that references the
+          // namespace resource is still an unresolved Output here, and the
+          // namespace itself may not be deployed yet. There's also nothing to
+          // pre-create — a user worker is dispatched to by name, never bound to
+          // circularly. Return a stub; `reconcile` performs the real upload
+          // once props resolve and the namespace exists.
           if (news.namespace != null) {
-            const settings = yield* getScriptSettings(
-              accountId,
-              name,
-              resolveNamespaceName(news.namespace),
-            ).pipe(
-              Effect.catchTag(
-                ["DispatchNamespaceScriptNotFound", "DispatchNamespaceNotFound"],
-                () => Effect.succeed(undefined),
-              ),
-            );
-            if (settings) yield* assertOwnership(settings.tags);
             yield* Effect.logInfo(
               `Cloudflare Worker precreate: skipping stub for dispatch-namespace worker ${name}`,
             );
-            return {
+            // Reconcile uploads over whatever this stub stands for, so a
+            // resolvable namespace is checked for a foreign script now.
+            const existing = isResolved(news.namespace)
+              ? yield* getScriptSettings(
+                  accountId,
+                  name,
+                  resolveNamespaceName(news.namespace),
+                ).pipe(
+                  Effect.catchTags({
+                    WorkerNotFound: () => Effect.succeed(undefined),
+                    WorkerHasNoVersions: () => Effect.succeed(undefined),
+                    DispatchNamespaceScriptNotFound: () => Effect.succeed(undefined),
+                    DispatchNamespaceNotFound: () => Effect.succeed(undefined),
+                  }),
+                )
+              : undefined;
+            const stub = {
               // Provisional: reconcile records the real immutable ID from
               // the dispatch upload — nothing observes this stub row (user
               // workers are dispatched by name, never bound circularly).
               workerId: "",
               workerName: name,
-              namespace: resolveNamespaceName(news.namespace),
+              namespace: typeof news.namespace === "string" ? news.namespace : undefined,
               logpush: undefined,
               url: undefined,
               tags: undefined,
@@ -4760,6 +4745,9 @@ export const LiveWorkerProvider = () =>
               routes: [],
               crons: [],
             } satisfies Worker["Attributes"];
+            return existing && !hasAlchemyWorkerTags(id, existing.tags ?? [])
+              ? Unowned(stub)
+              : stub;
           }
           const dispatchNamespace = resolveNamespaceName(news.namespace);
           const exportMap = news.exports ?? {};
@@ -4812,10 +4800,15 @@ export const LiveWorkerProvider = () =>
             name,
             dispatchNamespace,
           ).pipe(
-            // A versionless script has unreadable ownership, not proven absence.
-            // Only explicit not-found errors permit a placeholder upload.
+            // A freshly pre-created stub can briefly report "has no
+            // versions" before its first version registers — treat it the
+            // same as a missing worker (nothing to adopt yet). For a user
+            // worker the dispatch-namespace endpoints report a missing
+            // script as `DispatchNamespaceScriptNotFound` (and a missing
+            // namespace as `DispatchNamespaceNotFound`).
             Effect.catchTags({
               WorkerNotFound: () => Effect.succeed(undefined),
+              WorkerHasNoVersions: () => Effect.succeed(undefined),
               DispatchNamespaceScriptNotFound: () => Effect.succeed(undefined),
               DispatchNamespaceNotFound: () => Effect.succeed(undefined),
             }),
@@ -4824,8 +4817,9 @@ export const LiveWorkerProvider = () =>
 
           let placeholder: { tag?: string | null } | undefined;
           if (existingSettings) {
-            // Cycles can reach precreate before the deferred ownership read.
-            yield* assertOwnership(existingSettings.tags);
+            // Precreate can run before the engine's ownership read (a cycle
+            // with unresolved props), so nothing is written here: a foreign
+            // script is returned as `Unowned` below and the engine decides.
             yield* Effect.logInfo(`Cloudflare Worker precreate: reusing existing ${name}`);
           } else {
             yield* session.note("Pre-creating worker...", { kind: "status" });
@@ -4925,7 +4919,7 @@ export const LiveWorkerProvider = () =>
             domain,
           });
 
-          return {
+          const attrs = {
             // The placeholder upload's tag (or, when adopting an existing
             // script, the listing lookup); reconcile re-records it after
             // the full deploy.
@@ -4942,6 +4936,9 @@ export const LiveWorkerProvider = () =>
             routes: [],
             crons: [],
           } satisfies Worker["Attributes"];
+          return existingSettings && !hasAlchemyWorkerTags(id, existingSettings.tags ?? [])
+            ? Unowned(attrs)
+            : attrs;
         }),
         read: Effect.fn(
           function* ({ id, output, olds }) {

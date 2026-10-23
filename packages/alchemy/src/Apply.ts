@@ -11,7 +11,7 @@ import * as Predicate from "effect/Predicate";
 import type { Simplify } from "effect/Types";
 import type { ActionLike } from "./Action.ts";
 import { makeResolveContext } from "./ActionRuntimeContext.ts";
-import { AdoptPolicy, OwnedBySomeoneElse, stripUnowned, Unowned } from "./AdoptPolicy.ts";
+import { OwnedBySomeoneElse, stripUnowned, Unowned } from "./AdoptPolicy.ts";
 import { AlchemyContext } from "./AlchemyContext.ts";
 import {
   Artifacts,
@@ -106,6 +106,33 @@ const track = (
   tracker[fqn] = entry;
   outputs[fqn] = entry.output;
 };
+
+/**
+ * Precreate may find that the resource already exists. Like `read`, it reports
+ * a foreign one as `Unowned(attrs)`: refuse it unless adoption is allowed,
+ * before its attributes are checkpointed or published to cycle peers.
+ */
+const admitPrecreated = (
+  attr: any,
+  node: { adopt?: boolean; resource: { Type: string } },
+  fqn: string,
+  logicalId: string,
+) =>
+  !Unowned.is(attr)
+    ? Effect.succeed(attr)
+    : node.adopt
+      ? Effect.succeed(stripUnowned(attr))
+      : Effect.fail(
+          new OwnedBySomeoneElse({
+            message:
+              `Cannot adopt resource '${fqn}' (${node.resource.Type}): ` +
+              "it exists in the cloud but is not owned by this " +
+              "stack/stage/logical-id. Re-run with `--adopt` (or " +
+              "wrap the effect in `adopt(true)`) to take it over.",
+            resourceType: node.resource.Type,
+            logicalId,
+          }),
+        );
 
 const provideLifecycleScope =
   (resource: ResourceContext["Service"]) =>
@@ -562,12 +589,6 @@ const executeNode = (
         value: {
           ...value,
           adoptionBlocked: value.adoptionBlocked ?? node.adoptionBlocked,
-          // Record incompleteness before stripping. Omitted identity fields must
-          // not become a different physical resource during recovery or destroy.
-          propsIncomplete:
-            value.attr === undefined && (value.propsIncomplete || !isResolved(value.props))
-              ? true
-              : undefined,
           props: stripUnresolved(value.props),
           bindings: stripUnresolved(value.bindings),
           namespace,
@@ -773,15 +794,6 @@ const executeNode = (
     });
     const instanceId = yield* resolveInstanceId;
 
-    const precreateAdoption = Effect.gen(function* () {
-      if (node.resource.Adopt !== undefined) return node.resource.Adopt;
-      if (node.action === "create" && node.deferredAdoption) return node.deferredAdoption.adopt;
-      const policy = yield* Effect.serviceOption(AdoptPolicy);
-      if (Option.isSome(policy)) return policy.value;
-      const context = yield* Effect.serviceOption(AlchemyContext);
-      return Option.isSome(context) ? context.value.adopt : false;
-    });
-
     // ── lifecycle ──
 
     // ── create ──
@@ -832,9 +844,11 @@ const executeNode = (
             session: scopedSession,
             instanceId,
             bindings: excludeDeletedBindings(node.bindings),
-            adopt: yield* precreateAdoption,
           })
-          .pipe(instrumentLifecycle("precreate", fqn, node.resource.Type, logicalId, instanceId));
+          .pipe(
+            instrumentLifecycle("precreate", fqn, node.resource.Type, logicalId, instanceId),
+            Effect.flatMap((attr) => admitPrecreated(attr, node, fqn, logicalId)),
+          );
         yield* commit<CreatingResourceState>({
           status: "creating",
           fqn,
@@ -1261,9 +1275,11 @@ const executeNode = (
             session: scopedSession,
             instanceId,
             bindings: excludeDeletedBindings(node.bindings),
-            adopt: yield* precreateAdoption,
           })
-          .pipe(instrumentLifecycle("precreate", fqn, node.resource.Type, logicalId, instanceId));
+          .pipe(
+            instrumentLifecycle("precreate", fqn, node.resource.Type, logicalId, instanceId),
+            Effect.flatMap((attr) => admitPrecreated(attr, node, fqn, logicalId)),
+          );
         yield* commit<ReplacingResourceState>({
           status: "replacing",
           fqn,
@@ -1968,17 +1984,6 @@ const collectGarbage = Effect.fn(function* (plan: Plan, session: PlanStatusSessi
         const adoptionBlocked = isDeleteNode(node)
           ? node.state.adoptionBlocked
           : generation.adoptionBlocked;
-        const propsIncomplete = isDeleteNode(node)
-          ? node.state.propsIncomplete
-          : generation.propsIncomplete;
-        const workerIdentityResolved = isDeleteNode(node)
-          ? node.state.workerIdentityResolved
-          : generation.workerIdentityResolved;
-        const hasWorkerIdentityProof =
-          // oxlint-disable-next-line alchemy/package-boundaries -- The engine must distinguish legacy Worker checkpoints before serialization, retry, and cleanup.
-          resourceType === "Cloudflare.Worker" &&
-          providerMode !== "local" &&
-          workerIdentityResolved === true;
         // Mutable: an attr-less row (interrupted create) may recover its
         // attributes from `provider.read` below, right before deletion.
         let attr = persistedAttr;
@@ -2132,11 +2137,6 @@ const collectGarbage = Effect.fn(function* (plan: Plan, session: PlanStatusSessi
                     "migrated predecessor. Any interrupted new physical " +
                     "resource must be identified and cleaned up manually.",
                 );
-              } else if (propsIncomplete && !hasWorkerIdentityProof) {
-                yield* scopedSession.note(
-                  "Skipping recovery because unresolved properties were omitted from state. " +
-                    "Any interrupted physical resource must be identified and cleaned up manually.",
-                );
               } else if (provider.read) {
                 const recovered = yield* provider
                   .read({ id: logicalId, fqn, instanceId, olds: props as never, output: undefined })
@@ -2198,8 +2198,6 @@ const collectGarbage = Effect.fn(function* (plan: Plan, session: PlanStatusSessi
                 removalPolicy: node.resource.RemovalPolicy,
                 providerMode,
                 adoptionBlocked,
-                propsIncomplete,
-                workerIdentityResolved,
               });
             }
 
@@ -2270,8 +2268,6 @@ const collectGarbage = Effect.fn(function* (plan: Plan, session: PlanStatusSessi
                   bindings: excludeDeletedBindings(node.bindings),
                   removalPolicy: node.removalPolicy,
                   providerMode: node.providerMode,
-                  propsIncomplete: node.propsIncomplete,
-                  workerIdentityResolved: node.workerIdentityResolved,
                 });
               }
               yield* scopedSession.note(

@@ -291,9 +291,12 @@ export interface ProviderService<
   }): Effect.Effect<Diff | void, any, DiffReq>;
   // dev?:() => Effect.Effect<void, any, DevReq>;
   /**
-   * Publishes provisional attributes for dependency cycles. Before reusing an
-   * existing resource, verify ownership or require the effective `adopt` policy.
-   * Planning may have deferred `read` because other properties remain unresolved.
+   * Publishes provisional attributes so resources in a dependency cycle can
+   * resolve against each other. It runs on raw, possibly unresolved props,
+   * before any ownership `read`. When it finds the resource already exists
+   * and is not owned by this stack/stage/logical-id, it must not write to it
+   * and must return `Unowned(attrs)`; the engine then refuses it unless
+   * adoption is allowed.
    */
   precreate?(input: {
     id: string;
@@ -306,8 +309,6 @@ export interface ProviderService<
     instanceId: string;
     session: ScopedPlanStatusSession;
     bindings: BindingData<Res>;
-    /** Effective resource-scoped adoption policy, including overrides of the CLI default. */
-    adopt?: boolean;
   }): Effect.Effect<Res["Attributes"], any, PrecreateReq>;
   /**
    * Reconciles the desired state of a Resource with the live cloud state.

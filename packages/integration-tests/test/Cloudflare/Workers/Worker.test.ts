@@ -974,7 +974,7 @@ describe.concurrent(
       { tags: ["live"] },
     );
 
-    // #1299: unresolved props bypass the plan probe, and the self-binding forces
+    // #2198: unresolved props bypass the plan probe, and the self-binding forces
     // precreate. A binding-only cycle with resolved props would not test this path.
     for (const scopedAdopt of [undefined, false]) {
       test.provider(
@@ -1028,10 +1028,9 @@ describe.concurrent(
                 fqn: "CyclicDifferent",
               });
             }).pipe(Effect.provide(stack.state));
+            // Refused before precreate's attributes were checkpointed.
             expect(checkpoint?.status).toBe("creating");
-            if (!isResourceState(checkpoint)) throw new Error("Expected a resource checkpoint");
-            expect(checkpoint?.attr).toBeUndefined();
-            expect(checkpoint?.propsIncomplete).toBe(true);
+            if (isResourceState(checkpoint)) expect(checkpoint.attr).toBeUndefined();
             // Verify both configuration and active code remain unchanged, not just tags.
             expect(yield* workers.getScriptScriptAndVersionSetting(request)).toEqual(settings);
             expect(yield* workers.listScriptDeployments(request)).toEqual(deployment);

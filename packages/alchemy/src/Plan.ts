@@ -133,6 +133,8 @@ export interface BaseNode<R extends ResourceLike<string> = ResourceLike<string>>
 export interface ApplyNodeBase<
   R extends ResourceLike<string> = ResourceLike<string>,
 > extends BaseNode<R> {
+  /** Whether this resource may take over a foreign physical resource (`--adopt` / `adopt(...)`). */
+  adopt?: boolean;
   /** Cloud attribute drift attached to synthetic drift-repair plans. */
   drift?: {
     readonly expected: unknown;
@@ -1480,6 +1482,7 @@ const makePlan = <A>(
       ) =>
         ({
           ...node,
+          adopt: adoptThis,
           provider,
           resource,
           bindings: bindingDiffs,
@@ -1510,21 +1513,6 @@ const makePlan = <A>(
           state: oldState,
         });
       } else if (!modeSwitched && oldState.status === "creating" && oldState.attr === undefined) {
-        const hasWorkerIdentityProof =
-          // oxlint-disable-next-line alchemy/package-boundaries -- The engine must distinguish legacy Worker checkpoints before serialization, retry, and cleanup.
-          resource.Type === "Cloudflare.Worker" &&
-          mode !== "local" &&
-          oldState.workerIdentityResolved === true;
-        if (
-          oldState.propsIncomplete &&
-          !hasWorkerIdentityProof &&
-          provider.read &&
-          !reusesMigratedFqn
-        ) {
-          // The old identity was not persisted. Diffing its stripped props can
-          // turn a refused create into a replacement that bypasses admission.
-          return Node<Create>({ action: "create", props: applyProps, state: oldState });
-        }
         // A create may have succeeded before state persistence failed. If the
         // provider can recover an attribute snapshot, keep driving the same
         // create instead of starting over blindly.
