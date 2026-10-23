@@ -569,7 +569,7 @@ export const CloudflareAuth = AuthProviderLayer<
                 // one unknown scope makes the whole authorize URL invalid — so
                 // sanitize before generating a URL, never after it fails.
                 const fullLogin = Effect.gen(function* () {
-                  const { valid, dropped } = partitionOAuthScopes(c.scopes);
+                  const { valid } = partitionOAuthScopes(c.scopes);
                   if (valid.length === 0) {
                     return yield* AuthError.make({
                       message:
@@ -577,14 +577,7 @@ export const CloudflareAuth = AuthProviderLayer<
                         `Scopes must be picked again. ${reconfigure}`,
                     });
                   }
-                  const refreshed = yield* (
-                    dropped.length === 0
-                      ? Effect.void
-                      : interaction.output.warning(
-                          `Cloudflare: dropping ${dropped.length} stored scope${dropped.length === 1 ? "" : "s"} no longer offered by the current OAuth client (${dropped.join(", ")}). ` +
-                            `Scopes must be picked again. ${reconfigure}`,
-                        )
-                  ).pipe(Effect.andThen(oauthLogin(profileName, valid)));
+                  const refreshed = yield* oauthLogin(profileName, valid);
                   return {
                     ...c,
                     scopes: valid,
