@@ -187,7 +187,7 @@ remove any a contributor committed.
   fixture reuses a cached image, dev mode skips the code path. Check the logs
   or timing to confirm the path actually ran. `packages/frontend-frameworks`
   is consumed from `dist/`, so rebuild with `npx tsdown` around this check.
-- Wrap every run: `timeout 240 pnpm test <file> --profile testing`. "0 files"
+- Run with `pnpm test <file> --profile testing`. "0 files"
   or "0 tests" is an invocation bug (bad path, zsh word-splitting — use
   arrays or `xargs`), never a pass.
 - Credentials: for Cloudflare live, `set -a; source .env; set +a`
