@@ -127,6 +127,6 @@ test.provider.skipIf(!user || !!process.env.FAST)(
   {
     tags: ["provider:gcp", "provider:gcp:oslogin", "live"],
     timeout: 90_000,
-    exclusive: true,
+    exclusive: "gcp:oslogin",
   },
 );

@@ -84,7 +84,7 @@ describe.sequential(
           );
           expect(afterDestroy).toEqual([]);
         }).pipe(logLevel),
-      { exclusive: true },
+      { exclusive: "cloudflare:mnm" },
     );
   },
 );

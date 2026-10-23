@@ -230,6 +230,6 @@ test.provider.skipIf(!enabled)(
   {
     tags: ["provider:neon", "provider:neon:project", "provider:neon:projectvpcendpoint", "live"],
     timeout: 120_000,
-    exclusive: true,
+    exclusive: "neon:governance",
   },
 );

@@ -130,7 +130,7 @@ test.provider.skipIf(!hasHetznerCreds)(
   {
     tags: ["provider:hetzner", "provider:hetzner:server", "provider:hetzner:service", "live"],
     timeout: 180_000,
-    exclusive: true,
+    exclusive: "hetzner",
   },
 );
 
@@ -183,7 +183,7 @@ test.provider.skipIf(!hasHetznerCreds)(
   {
     tags: ["provider:hetzner", "provider:hetzner:server", "provider:hetzner:service", "live"],
     timeout: 180_000,
-    exclusive: true,
+    exclusive: "hetzner",
   },
 );
 
@@ -221,7 +221,7 @@ test.provider.skipIf(!hasHetznerCreds)(
   {
     tags: ["provider:hetzner", "provider:hetzner:server", "provider:hetzner:service", "live"],
     timeout: 180_000,
-    exclusive: true,
+    exclusive: "hetzner",
   },
 );
 
@@ -286,6 +286,6 @@ test.provider.skipIf(!hasHetznerCreds)(
   {
     tags: ["provider:hetzner", "provider:hetzner:server", "provider:hetzner:service", "live"],
     timeout: 300_000,
-    exclusive: true,
+    exclusive: "hetzner",
   },
 );
