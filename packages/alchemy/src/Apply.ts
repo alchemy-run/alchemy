@@ -1253,8 +1253,10 @@ const executeNode = (
 
       // A cycle must delete before precreate claims the identity, even when
       // that identity can only be admitted once upstream outputs resolve.
+      // Otherwise the previous generation survives until reconcile is
+      // about to run, so a failed upstream never leaves the resource missing.
       let deletedFirst = false;
-      if (node.deleteFirst && (admitted || inCycle)) {
+      if (node.deleteFirst && inCycle) {
         yield* deleteFirst();
         deletedFirst = true;
       }

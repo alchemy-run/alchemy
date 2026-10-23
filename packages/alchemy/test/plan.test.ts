@@ -48,6 +48,7 @@ import {
   OverrideStablesResource,
   ProbeBinding,
   Queue,
+  StaticStablesResource,
   TestLayers,
   TestResource,
   TestResourceHooks,
@@ -3239,6 +3240,122 @@ describe("engine-level adoption", { tags: ["unit", "local"] }, () => {
       );
 
       expect(plan.resources.FreshBucket!.action).toBe("create");
+    }),
+  );
+
+  // A replacement targets a new physical identity. Plan never probes it (its
+  // props may still resolve during apply); it hands apply the effective
+  // adoption policy as `deferredAdoption` so the probe runs before mutation.
+  const replaceable = (fqn: string, overrides?: Partial<ResourceState>): ResourceState =>
+    ({
+      instanceId,
+      providerVersion: 0,
+      logicalId: fqn,
+      fqn,
+      namespace: undefined,
+      resourceType: "Test.TestResource",
+      status: "created",
+      props: { replaceString: "old" },
+      attr: { ...ownedAttrs, replaceString: "old" },
+      downstream: [],
+      bindings: [],
+      ...overrides,
+    }) as ResourceState;
+
+  const trackedReads = () => {
+    const reads: string[] = [];
+    const readHook = (id: string) =>
+      Effect.sync(() => {
+        reads.push(id);
+        return undefined;
+      });
+    return { reads, readHook };
+  };
+
+  const policies = [
+    { global: undefined, scoped: undefined, adopt: false },
+    { global: true, scoped: undefined, adopt: true },
+    { global: false, scoped: true, adopt: true },
+    { global: true, scoped: false, adopt: false },
+  ] as const;
+  for (const { global, scoped, adopt: expected } of policies) {
+    test(
+      `a replacement defers admission to apply (global=${global}, scoped=${scoped})`,
+      Effect.gen(function* () {
+        yield* seed({ R: replaceable("R") });
+        const { reads, readHook } = trackedReads();
+        const plan = yield* makeAdoptPlan(
+          Effect.gen(function* () {
+            const r = TestResource("R", { replaceString: "new" });
+            yield* scoped === undefined ? r : r.pipe(adopt(scoped));
+          }),
+          { adopt: global, readHook },
+        );
+        expect(reads).toEqual([]);
+        expect(plan.resources.R).toMatchObject({
+          action: "replace",
+          deferredAdoption: { adopt: expected },
+        });
+      }),
+    );
+  }
+
+  test(
+    "updates and noops never defer admission",
+    Effect.gen(function* () {
+      yield* seed({
+        Updated: replaceable("Updated", { props: { string: "a" } }),
+        Unchanged: replaceable("Unchanged", { props: { string: "a" } }),
+      });
+      const plan = yield* makeAdoptPlan(
+        Effect.gen(function* () {
+          yield* TestResource("Updated", { string: "b" });
+          yield* TestResource("Unchanged", { string: "a" });
+        }),
+        {},
+      );
+      expect(plan.resources.Updated!.action).toBe("update");
+      expect(plan.resources.Unchanged!.action).toBe("noop");
+      expect((plan.resources.Updated as any).deferredAdoption).toBeUndefined();
+      expect((plan.resources.Unchanged as any).deferredAdoption).toBeUndefined();
+    }),
+  );
+
+  test(
+    "a replacement of a provider without `read` has nothing to admit",
+    Effect.gen(function* () {
+      yield* seed({
+        R: replaceable("R", {
+          resourceType: "Test.StaticStablesResource",
+          attr: { string: "s", tags: {}, stableId: "id", stableArn: "arn", replaceString: "old" },
+        }),
+      });
+      const plan = yield* makeAdoptPlan(
+        Effect.gen(function* () {
+          yield* StaticStablesResource("R", { replaceString: "new" });
+        }),
+        {},
+      );
+      expect(plan.resources.R!.action).toBe("replace");
+      expect((plan.resources.R as any).deferredAdoption).toBeUndefined();
+    }),
+  );
+
+  test(
+    "a replacement of a reused FQN never probes its predecessor's identity",
+    Effect.gen(function* () {
+      yield* seed({ R: replaceable("R", { adoptionBlocked: "migrated-fqn" }) });
+      const plan = yield* makeAdoptPlan(
+        Effect.gen(function* () {
+          yield* TestResource("R", { replaceString: "new" });
+        }),
+        { adopt: true },
+      );
+      expect(plan.resources.R).toMatchObject({
+        action: "replace",
+        adoptionBlocked: "migrated-fqn",
+      });
+      expect((plan.resources.R as any).deferredAdoption).toBeUndefined();
     }),
   );
 });
