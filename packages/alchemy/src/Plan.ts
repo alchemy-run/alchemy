@@ -1504,21 +1504,6 @@ const makePlan = <A>(
           props: applyProps,
           state: oldState,
         });
-      } else if (
-        !modeSwitched &&
-        oldState.status === "creating" &&
-        oldState.attr === undefined &&
-        oldState.propsIncomplete
-      ) {
-        // The checkpoint lost unresolved props, so they cannot identify the
-        // interrupted attempt: a lookup could match a different resource, and
-        // a diff against them could plan a spurious replacement. Re-drive the
-        // create; it admits the resolved identity before writing.
-        return Node<Create>({
-          action: "create",
-          props: applyProps,
-          state: oldState,
-        });
       } else if (!modeSwitched && oldState.status === "creating" && oldState.attr === undefined) {
         // A create may have succeeded before state persistence failed. If the
         // provider can recover an attribute snapshot, keep driving the same
@@ -1531,7 +1516,16 @@ const makePlan = <A>(
         // `output` is undefined (as it is here), so handing them
         // unresolved exprs crashes. Skip the probe — same behavior as
         // a read that found nothing — and re-drive the create.
-        if (provider.read && !reusesMigratedFqn && isResolved(oldState.props)) {
+        //
+        // A checkpoint whose unresolved props were stripped (`propsIncomplete`)
+        // can't identify the attempt at all: a lookup could match a different
+        // resource. Skip it too and let the diff below decide.
+        if (
+          provider.read &&
+          !reusesMigratedFqn &&
+          !oldState.propsIncomplete &&
+          isResolved(oldState.props)
+        ) {
           const attr = yield* provider
             .read({
               id,
