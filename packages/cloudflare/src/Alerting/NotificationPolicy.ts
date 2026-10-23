@@ -157,6 +157,14 @@ export type NotificationPolicy = Resource<
  * });
  * ```
  *
+ * ### SQL custom alerts, dashboards and Issues automations <!-- api-prose -->
+ * A notification policy only fires on the alert types listed in `AlertType`.
+ * Cloudflare's public API does not yet expose the SQL-based custom alerts,
+ * custom dashboards or Issues automations from the October 2026
+ * observability release, so no Alchemy resource can manage them yet.
+ * Create them in the Cloudflare dashboard. They can still deliver to a
+ * webhook destination you manage with `NotificationWebhook`.
+ *
  * @see https://developers.cloudflare.com/notifications/
  *
  * @resource
