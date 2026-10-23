@@ -9577,7 +9577,7 @@ describe("incomplete interrupted-create checkpoints", { tags: ["unit", "local"] 
       const cloud = yield* Cloud;
       cloud.events.push("precreate");
       // The interrupted attempt: nothing reaches state after this point.
-      if (cloud.interrupt) return yield* new ResourceFailure({ message: "interrupted" });
+      if (cloud.interrupt) return yield* new ResourceFailure();
       return { key: "pending" };
     }),
     reconcile: Effect.fn(function* ({ id, news }) {
