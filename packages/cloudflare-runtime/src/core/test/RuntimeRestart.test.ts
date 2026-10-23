@@ -5,6 +5,7 @@ import * as Queue from "effect/Queue";
 import * as Schedule from "effect/Schedule";
 import * as Scope from "effect/Scope";
 import { afterEach, vi } from "vitest";
+import * as DurableObjectNamespace from "../bindings/DurableObjectNamespace.ts";
 import * as Service from "../bindings/Service.ts";
 import * as Runtime from "../Runtime.ts";
 import * as Workerd from "../workerd/Workerd.ts";
@@ -23,6 +24,43 @@ export default {
       for (;;) hog.push(new Array(1_000_000).fill(url.pathname));
     }
     return env.SERVICE ? env.SERVICE.fetch(request) : new Response("hello");
+  },
+};
+`;
+
+const CRASHING_DURABLE_OBJECT_SCRIPT = `
+import { DurableObject } from "cloudflare:workers";
+const hog = [];
+export class Pinger extends DurableObject {
+  fetch() {
+    return new Response("fetch ok");
+  }
+  ping() {
+    return "rpc ok";
+  }
+}
+export default {
+  fetch(request) {
+    if (new URL(request.url).pathname === "/crash") {
+      for (;;) hog.push(new Array(1_000_000).fill("crash"));
+    }
+    return new Response("hello");
+  },
+};
+`;
+
+const DURABLE_OBJECT_CONSUMER_SCRIPT = `
+export default {
+  async fetch(request, env) {
+    const stub = env.PINGER.get(env.PINGER.idFromName("singleton"));
+    try {
+      if (new URL(request.url).pathname === "/rpc") {
+        return new Response(await stub.ping());
+      }
+      return await stub.fetch(request);
+    } catch (error) {
+      return new Response(String(error));
+    }
   },
 };
 `;
@@ -173,6 +211,66 @@ layer(localRuntimeLayer, { excludeTestServices: true })("Runtime restart", (it) 
         providerScope = yield* Scope.fork(parent);
         yield* startProvider("three");
         yield* expectVersion("three");
+      }),
+    { timeout: 60_000 },
+  );
+
+  it.effect(
+    "reconnects a cross-script Durable Object to its owner's replacement process",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv(Workerd.V8_FLAGS_ENV, "--max-old-space-size=32");
+        const runtime = yield* Runtime.Runtime;
+        const restarts = yield* Queue.unbounded<Workerd.WorkerdExit>();
+        const owner = yield* runtime.start({
+          name: "restart-durable-object-owner",
+          compatibilityDate: "2026-03-10",
+          compatibilityFlags: [],
+          bindings: [],
+          modules: [{ name: "main.js", type: "ESModule", content: CRASHING_DURABLE_OBJECT_SCRIPT }],
+          durableObjectNamespaces: [
+            { className: "Pinger", sql: false, uniqueKey: "restart-durable-object" },
+          ],
+          onRestart: (exit) => {
+            Queue.offerUnsafe(restarts, exit);
+          },
+        });
+        const consumer = yield* runtime.start({
+          name: "restart-durable-object-consumer",
+          compatibilityDate: "2026-03-10",
+          compatibilityFlags: [],
+          bindings: [
+            DurableObjectNamespace.local({
+              binding: "PINGER",
+              className: "Pinger",
+              scriptName: "restart-durable-object-owner",
+              uniqueKey: "restart-durable-object",
+            }),
+          ],
+          modules: [{ name: "main.js", type: "ESModule", content: DURABLE_OBJECT_CONSUMER_SCRIPT }],
+        });
+        // Calls arrive well inside the proxy's idle eviction window, so a stale
+        // connection would fail every attempt.
+        const expectAnswer = (path: string, answer: string) =>
+          fetchText(new URL(path, consumer)).pipe(
+            Effect.filterOrFail(
+              (text) => text === answer,
+              (text) => new Error(text),
+            ),
+            Effect.retry({
+              schedule: Schedule.spaced("250 millis"),
+              times: 10,
+            }),
+            Effect.tap((text) => Effect.sync(() => expect(text).toBe(answer))),
+          );
+        yield* expectAnswer("/rpc", "rpc ok");
+        yield* expectAnswer("/fetch", "fetch ok");
+
+        // The replacement listens on the same debug port.
+        yield* fetchText(new URL("/crash", owner)).pipe(Effect.ignore);
+        yield* Queue.take(restarts).pipe(Effect.timeout(10_000));
+        yield* expectAnswer("/rpc", "rpc ok");
+        yield* expectAnswer("/fetch", "fetch ok");
       }),
     { timeout: 60_000 },
   );
