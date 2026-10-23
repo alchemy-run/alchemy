@@ -30,6 +30,7 @@ export {
   type ProviderRefreshCompleted,
   type ProviderRefreshStarted,
   type ResourceAnnotated,
+  type ResourceDiffFailed,
   type ResourceDiffStarted,
   type ResourcePlanned,
   type ResourceStatusChanged,
@@ -60,6 +61,16 @@ const spanEventOf = (
     case "plan.resource.completed":
     case "plan.action.completed":
       return undefined;
+    case "plan.resource.failed":
+      return {
+        name: "alchemy.plan.resource.failed",
+        attributes: {
+          "alchemy.resource.fqn": event.fqn,
+          "alchemy.resource.logical_id": event.logicalId,
+          "alchemy.resource.type": event.resourceType,
+          "alchemy.plan.message": event.message,
+        },
+      };
     case "apply.resource.status":
       return {
         name: "alchemy.apply.resource.status",

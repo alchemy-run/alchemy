@@ -1,12 +1,19 @@
 import * as Cause from "effect/Cause";
+import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import * as Fiber from "effect/Fiber";
 import * as Option from "effect/Option";
+import * as Schedule from "effect/Schedule";
 import * as Scope from "effect/Scope";
 import { Progress } from "../../Alchemist/Progress.ts";
 import type { Plan } from "../../Plan.ts";
 import * as Report from "../../Report.ts";
 import { CliKit } from "../CliKit/CliKit.ts";
+import { formatElapsed } from "../Format.ts";
+
+/** How often a non-interactive plan reports diffs that are still running. */
+const SLOW_DIFF_INTERVAL = "30 seconds";
 
 export const renderPlanning =
   (options: { operation: string; stage: string; computingLabel?: string; readyLabel?: string }) =>
@@ -26,18 +33,47 @@ export const renderPlanning =
         `${options.operation} · ${options.stage}`,
       );
       const interactive = (yield* CliKit).terminal.input;
-      const inFlight = new Set<string>();
+      // fqn -> when its diff started; insertion order keeps the oldest first.
+      const inFlight = new Map<string, number>();
+      const failures: Report.ResourceDiffFailed[] = [];
       let done = 0;
       let total = 0;
       const showCounter = (fallback: string) =>
         Effect.suspend(() => {
-          const current: string = inFlight.values().next().value ?? fallback;
+          const current: string = inFlight.keys().next().value ?? fallback;
           const rest = inFlight.size > 1 ? ` +${inFlight.size - 1}` : "";
           return planning.update(
             phaseLabel["computing-plan"],
             `${done}/${total} · ${current}${rest}`,
           );
         });
+      // A plain log has no spinner detail to show what is in flight, so a
+      // diff stuck retrying a cloud call would leave "Computing plan" silent
+      // until it gives up. Name the slow tail periodically instead (#2357).
+      const reportSlowDiffs = Effect.gen(function* () {
+        const oldest = inFlight.entries().next().value;
+        if (oldest === undefined) return;
+        const [fqn, startedAt] = oldest;
+        const now = yield* Clock.currentTimeMillis;
+        const rest = inFlight.size > 1 ? ` +${inFlight.size - 1} more` : "";
+        yield* planning.update(
+          `Still planning ${fqn}${rest} (${formatElapsed(now - startedAt)})`,
+          options.stage,
+        );
+      });
+      const heartbeat = interactive
+        ? undefined
+        : yield* reportSlowDiffs.pipe(
+            Effect.repeat(Schedule.spaced(SLOW_DIFF_INTERVAL)),
+            Effect.delay(SLOW_DIFF_INTERVAL),
+            Effect.forkDetach,
+          );
+      const failedLabel = () => {
+        if (failures.length === 0) return "Planning failed";
+        const [first] = failures;
+        const rest = failures.length > 1 ? ` (+${failures.length - 1} more failed)` : "";
+        return `Planning failed: ${first!.fqn} (${first!.resourceType}): ${first!.message}${rest}`;
+      };
       return yield* effect.pipe(
         Effect.provideService(Progress, (event) => {
           switch (event._tag) {
@@ -52,14 +88,21 @@ export const renderPlanning =
             case "state.bootstrap.completed":
               return planning.update(phaseLabel["loading-state"], options.stage);
             case "plan.resource.started":
-              if (!interactive) return Effect.void;
-              inFlight.add(event.fqn);
-              total = Math.max(total, event.total);
-              return showCounter(event.fqn);
+              return Clock.currentTimeMillis.pipe(
+                Effect.flatMap((now) => {
+                  inFlight.set(event.fqn, now);
+                  total = Math.max(total, event.total);
+                  return interactive ? showCounter(event.fqn) : Effect.void;
+                }),
+              );
+            case "plan.resource.failed":
+              inFlight.delete(event.fqn);
+              failures.push(event);
+              return Effect.void;
             case "plan.resource.completed":
             case "plan.action.completed":
-              if (!interactive) return Effect.void;
               inFlight.delete(event.fqn);
+              if (!interactive) return Effect.void;
               done = event.completed;
               total = event.total;
               return showCounter(event.fqn);
@@ -67,8 +110,15 @@ export const renderPlanning =
               return Effect.void;
           }
         }),
-        Effect.tapError(() => planning.fail("Planning failed")),
-        Effect.ensuring(planning.close),
+        Effect.tapCause((cause) =>
+          Cause.hasInterruptsOnly(cause) ? Effect.void : planning.fail(failedLabel()),
+        ),
+        Effect.ensuring(
+          Effect.andThen(
+            heartbeat === undefined ? Effect.void : Fiber.interrupt(heartbeat),
+            planning.close,
+          ),
+        ),
       );
     });
 

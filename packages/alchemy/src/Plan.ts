@@ -1278,6 +1278,11 @@ const makePlan = <A>(
       const { provider, mode } = yield* resolveProviderAndMode(resource);
       const id = resource.LogicalId;
       const fqn = resource.FQN;
+      yield* Effect.annotateCurrentSpan({
+        "alchemy.resource.fqn": fqn,
+        "alchemy.resource.logical_id": id,
+        "alchemy.resource.type": resource.Type,
+      });
       // Paired with the resource-planned completion below so renderers can
       // show what is actually in flight (diffs may read the cloud and run
       // concurrently — completions alone hide the slow tail).
@@ -1814,7 +1819,26 @@ const makePlan = <A>(
     // hiding the InvalidReferenceError or provider error that actually
     // broke the plan.
     const diffExits = yield* Effect.all(
-      resources.map((resource) => Effect.exit(Effect.tap(diffResource(resource), resourcePlanned))),
+      resources.map((resource) =>
+        diffResource(resource).pipe(
+          Effect.tap(resourcePlanned),
+          // The failure propagates with its typed error untouched; the event
+          // names the resource that broke the plan (#2357).
+          Effect.tapCause((cause) => {
+            const message = summarizeCause(cause);
+            return message === undefined
+              ? Effect.void
+              : reportPlanned({
+                  _tag: "plan.resource.failed",
+                  fqn: resource.FQN,
+                  logicalId: resource.LogicalId,
+                  resourceType: resource.Type,
+                  message,
+                });
+          }),
+          Effect.exit,
+        ),
+      ),
       { concurrency: "unbounded" },
     );
     const diffFailures = diffExits.filter(Exit.isFailure);
@@ -2330,6 +2354,41 @@ const providePlanScope =
         ),
       ),
     );
+
+/**
+ * One-line summary of a diff failure for progress renderers: the first
+ * non-interrupt reason's `_tag` and message, with markup stripped and
+ * whitespace collapsed (provider errors can carry a whole HTML error page).
+ * `undefined` for interrupt-only causes — those are not the failure.
+ */
+const summarizeCause = (cause: Cause.Cause<unknown>): string | undefined => {
+  const reason = cause.reasons.find((reason) => !Cause.isInterruptReason(reason));
+  if (reason === undefined) return undefined;
+  const error = Cause.isFailReason(reason)
+    ? reason.error
+    : Cause.isDieReason(reason)
+      ? reason.defect
+      : undefined;
+  const tag =
+    typeof error === "object" && error !== null && "_tag" in error && typeof error._tag === "string"
+      ? error._tag
+      : undefined;
+  const raw =
+    typeof error === "object" &&
+    error !== null &&
+    "message" in error &&
+    typeof error.message === "string"
+      ? error.message
+      : String(error);
+  const text = raw
+    .replace(/<(script|style)[^>]*>[\s\S]*?<\/\1>/gi, " ")
+    .replace(/<[^>]*>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  const message = text.length > 200 ? `${text.slice(0, 199)}…` : text;
+  if (tag === undefined) return message || "unknown error";
+  return message && message !== tag ? `${tag}: ${message}` : tag;
+};
 
 export class DeleteResourceHasDownstreamDependencies extends Data.TaggedError(
   "DeleteResourceHasDownstreamDependencies",
