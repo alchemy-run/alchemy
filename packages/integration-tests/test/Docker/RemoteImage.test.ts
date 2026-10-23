@@ -4,7 +4,7 @@ import { inMemoryState } from "alchemy/State";
 import * as Test from "alchemy/Test/Alchemy";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
-import { localRegistry } from "./RemoteImage.testUtils.ts";
+import { localRegistry } from "./Runtime.ts";
 
 const { test } = Test.make({ providers: Docker.providers(), state: inMemoryState() });
 
@@ -90,6 +90,8 @@ describe(
               context: contextName,
             }),
           )
+          // Push must find the named context via the CLI's own config dir
+          // (process.env), not alchemy's ConfigProvider.
           .pipe(Effect.provide(ConfigProvider.layer(ConfigProvider.fromEnv({ env: {} }))));
         const target = yield* docker.image.inspect(targetRef);
         const digest = yield* registry.manifestDigest("alchemy-local-reuse", targetTag);

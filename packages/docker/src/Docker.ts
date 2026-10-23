@@ -701,13 +701,17 @@ const makeDocker = (options: DockerOptions) =>
         // global docker config (buildx builders, `docker context`, etc. intact).
         const dir = yield* fs.makeTempDirectoryScoped({ prefix: "alchemy-docker-" });
         const ambient = yield* DockerEnvironment;
-        const environment = {
-          DOCKER_CONFIG: process.env.DOCKER_CONFIG ?? "",
-          HOME: process.env.HOME ?? "",
-          USERPROFILE: process.env.USERPROFILE ?? "",
-          ...ambient,
-        };
-        const isWindows = yield* Effect.sync(() => process.platform === "win32");
+        // The CLI child inherits process.env (layered under DockerEnvironment),
+        // so resolve its config dir from the same place.
+        const { environment, isWindows } = yield* Effect.sync(() => ({
+          environment: {
+            DOCKER_CONFIG: process.env.DOCKER_CONFIG ?? "",
+            HOME: process.env.HOME ?? "",
+            USERPROFILE: process.env.USERPROFILE ?? "",
+            ...ambient,
+          },
+          isWindows: process.platform === "win32",
+        }));
         const home = isWindows
           ? environment.USERPROFILE || environment.HOME
           : environment.HOME || environment.USERPROFILE;
