@@ -120,6 +120,13 @@ Read the full diff against `origin/main` and apply AGENTS.md. The standards:
 - Reconciler doctrine, Typed Error Doctrine (tagged errors, never
   `Effect.fail(new Error(...))` or catching catch-alls by status), no
   `Effect.orDie` in lifecycle ops, no raw Promise/`node:fs`.
+- **Environment through `effect/Config`.** Inside Effect code, read env vars
+  with `Config.String(...)` (`Config.withDefault`/`Config.option` when
+  optional), never `process.env` — wrapping `process.env` in `Effect.sync`
+  is not enough. `Effect.sync` is for facts `Config` can't express
+  (`process.platform`, `process.cwd()`). Module-scope test gates
+  (`skipIf(!!process.env.FAST)`) are exempt. Fix violations in the PR's
+  diff, including ones the contributor wrote.
 
 **Design review — answer these in the report before the user has to ask:**
 does a change replace a resource, and can that lose data (a database bound to

@@ -704,6 +704,7 @@ Do not use `Effect.orDie` in the lifecycle operations since this will crash the 
 | `await fetch(...)`                                   | `yield* HttpClient.HttpClient` + `HttpClientRequest`        |
 | `Effect.promise(() => listSqlFiles(dir))`            | Make `listSqlFiles` itself return `Effect` and `yield*` it |
 | `new Promise((res) => setTimeout(res, ms))`          | `yield* Effect.sleep(Duration.millis(ms))`                  |
+| `process.env.DOCKER_CONFIG`                          | `yield* Config.String("DOCKER_CONFIG")` (`Config.withDefault` / `Config.option` when optional) |
 
 Sync, CPU-only Node APIs (e.g. `crypto.createHash().update().digest()`, `process.cwd()`, `Buffer`, `TextEncoder`) must still be wrapped in `Effect.sync(() => ...)` (or `Effect.try` if they can throw) so the call participates in the Effect runtime — tracing, interruption, and error channels. Don't call them as bare expressions inside `Effect.gen`.
 
@@ -713,6 +714,8 @@ const hash = yield* Effect.sync(() =>
 );
 const cwd = yield* Effect.sync(() => process.cwd());
 ```
+
+Environment variables are configuration: read them through `effect/Config`, never `process.env`, so a provided `ConfigProvider` (`.env` files, profiles, tests) is honored. `Effect.sync` is only for process facts `Config` can't express, like `process.platform` or `process.cwd()`. Module-scope test gates (`test.skipIf(!!process.env.FAST)`) run outside Effect and are exempt.
 
 This applies to **lifecycle operations, helpers, AND tests**. Tests must use `FileSystem.FileSystem`/`Path.Path` for any file/path access (see [Database.test.ts](./packages/integration-tests/test/Cloudflare/D1/Database.test.ts) for the pattern).
 :::
