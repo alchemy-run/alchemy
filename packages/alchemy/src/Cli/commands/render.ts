@@ -71,7 +71,7 @@ export const renderPlanning =
         // A prompt dismissed mid-plan (e.g. a provider asking the user to
         // resolve an ambiguity) is a cancellation, not a planning failure.
         Effect.tapError((error) =>
-          isPromptCancellation(error) ? Effect.void : planning.fail("Planning failed"),
+          planning.fail(isPromptCancellation(error) ? "Planning was canceled" : "Planning failed"),
         ),
         Effect.ensuring(planning.close),
       );

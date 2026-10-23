@@ -7,31 +7,44 @@ import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import * as Match from "effect/Match";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
-import type { PlatformError } from "effect/PlatformError";
+import * as Record from "effect/Record";
+import * as S from "effect/Schema";
 import type { Providers } from "./Providers.ts";
 
 export type Dialect = "postgres" | "mysql" | "sqlite";
 
-type DdlEntry = {
-  readonly entityType: string;
-  readonly schema?: string;
-  readonly table?: string;
-  readonly name?: string;
-  readonly [field: string]: unknown;
-};
+// Unlisted fields are kept (the rest records), so a decoded snapshot can be
+// written back whole.
+const DdlEntry = S.StructWithRest(
+  S.Struct({
+    entityType: S.String,
+    schema: S.optional(S.String),
+    table: S.optional(S.String),
+    name: S.optional(S.String),
+  }),
+  [S.Record(S.String, S.Unknown)],
+);
+type DdlEntry = typeof DdlEntry.Type;
 
 // A `snapshot.json`. Postgres folders hold one `base` snapshot followed by
 // `diff` snapshots carrying `deltas`; mysql and sqlite snapshots are full.
-type Snapshot = {
-  readonly type?: "base" | "diff";
-  readonly version?: string;
-  readonly dialect?: string;
-  readonly id?: string;
-  readonly prevIds?: ReadonlyArray<string>;
-  readonly ddl?: ReadonlyArray<DdlEntry>;
-};
+const Snapshot = S.StructWithRest(
+  S.Struct({
+    type: S.optional(S.Literals(["base", "diff"])),
+    version: S.optional(S.String),
+    dialect: S.optional(S.String),
+    id: S.optional(S.String),
+    prevIds: S.optional(S.Array(S.String)),
+    ddl: S.optional(S.Array(DdlEntry)),
+  }),
+  [S.Record(S.String, S.Unknown)],
+);
+type Snapshot = typeof Snapshot.Type;
+
+const decodeSnapshot = S.decodeEffect(S.fromJsonString(Snapshot));
 
 // drizzle-kit's `MissingHint` / `Hint`, narrowed to what `generate` can ask:
 // rename-or-create. Its `confirm_data_loss` questions need a live database
@@ -66,17 +79,22 @@ type UpResult = { status: "ok"; upgraded: ReadonlyArray<string> };
 
 type CommandFailed = { status: "error"; error: unknown };
 
-// `drizzle-kit/cli`: the `drizzle-kit` commands as functions. They never
-// prompt and report results (including unanswered questions) as values.
+// The `drizzle-kit` commands Drizzle.Schema runs: `[options, result]`.
+type Commands = {
+  generate: [GenerateOptions, GenerateResult];
+  up: [UpOptions, UpResult];
+};
+
+// `drizzle-kit/cli`: the commands as functions. They never prompt and report
+// results (including unanswered questions) as values.
 type DrizzleKitCli = {
-  generate: (options: GenerateOptions) => Promise<GenerateResult | CommandFailed>;
-  up: (options: UpOptions) => Promise<UpResult | CommandFailed>;
+  [K in keyof Commands]: (options: Commands[K][0]) => Promise<Commands[K][1] | CommandFailed>;
 };
 
 // `drizzle-kit/payload/*`: snapshot builders. Only postgres has `reconstruct`.
 type DrizzleKitPayload = {
-  generateDrizzleJson: (imports: Record<string, unknown>) => Promise<Snapshot>;
-  reconstruct?: (files: Record<string, Snapshot>, id?: string) => Promise<Snapshot>;
+  generateDrizzleJson: (imports: Record.ReadonlyRecord<string, unknown>) => Promise<Snapshot>;
+  reconstruct?: (files: Record.ReadonlyRecord<string, Snapshot>, id?: string) => Promise<Snapshot>;
 };
 
 class DrizzleKitLoadFailed extends Data.TaggedError("DrizzleKitLoadFailed")<{
@@ -85,6 +103,15 @@ class DrizzleKitLoadFailed extends Data.TaggedError("DrizzleKitLoadFailed")<{
 }> {
   override get message() {
     return `Failed to load ${this.module} (is drizzle-kit installed?): ${this.cause}`;
+  }
+}
+
+class InvalidSnapshot extends Data.TaggedError("InvalidSnapshot")<{
+  readonly file: string;
+  readonly cause: S.SchemaError;
+}> {
+  override get message() {
+    return `Invalid drizzle snapshot at ${this.file}: ${this.cause.message}`;
   }
 }
 
@@ -222,38 +249,25 @@ const importModule = <A>(module: string) =>
     catch: (cause) => new DrizzleKitLoadFailed({ module, cause }),
   });
 
-const isCommandFailed = (result: { status: string }): result is CommandFailed =>
-  result.status === "error";
+// A `drizzle-kit/cli` command as an Effect, failing on a thrown or reported error.
+const command = <K extends keyof Commands>(name: K) =>
+  Effect.fn(`drizzleKit.${name}`)(function* (options: Commands[K][0]) {
+    const cli = yield* importModule<DrizzleKitCli>("drizzle-kit/cli");
+    const result = yield* Effect.tryPromise({
+      try: () => cli[name](options),
+      catch: (cause) => new DrizzleKitFailed({ command: name, cause }),
+    });
+    if (result.status === "error") {
+      return yield* new DrizzleKitFailed({ command: name, cause: result.error });
+    }
+    return result as Commands[K][1];
+  });
 
-// Run a `drizzle-kit/cli` command, failing on a thrown or reported error.
-const runCommand = <A extends { status: string }>(
-  command: keyof DrizzleKitCli,
-  run: (cli: DrizzleKitCli) => Promise<A | CommandFailed>,
-) =>
-  importModule<DrizzleKitCli>("drizzle-kit/cli").pipe(
-    Effect.flatMap((cli) =>
-      Effect.tryPromise({
-        try: () => run(cli),
-        catch: (cause) => new DrizzleKitFailed({ command, cause }),
-      }),
-    ),
-    Effect.flatMap((result) =>
-      isCommandFailed(result)
-        ? Effect.fail(new DrizzleKitFailed({ command, cause: result.error }))
-        : Effect.succeed(result),
-    ),
-  );
-
-/** The `drizzle-kit` commands Drizzle.Schema runs. */
 const drizzleKit = {
   /** `drizzle-kit generate`; with `explain` a dry run that writes nothing. */
-  generate: Effect.fn("drizzleKit.generate")(function* (options: GenerateOptions) {
-    return yield* runCommand("generate", (cli) => cli.generate(options));
-  }),
+  generate: command("generate"),
   /** `drizzle-kit up`: upgrade snapshots to the current format. */
-  up: Effect.fn("drizzleKit.up")(function* (options: UpOptions) {
-    return yield* runCommand("up", (cli) => cli.up(options));
-  }),
+  up: command("up"),
 };
 
 export const SchemaProvider = () =>
@@ -284,14 +298,18 @@ export const SchemaProvider = () =>
       });
 
       const readSnapshots = Effect.fn("Drizzle.readSnapshots")(function* (out: string) {
-        const snapshots: Record<string, { snapshot: Snapshot; text: string }> = {};
-        for (const dir of yield* listMigrationDirs(out)) {
-          const snapshotPath = path.join(out, dir, "snapshot.json");
-          if (!(yield* fs.exists(snapshotPath))) continue;
-          const text = yield* fs.readFileString(snapshotPath);
-          snapshots[dir] = { snapshot: JSON.parse(text) as Snapshot, text };
-        }
-        return snapshots;
+        const entries = yield* Effect.forEach(yield* listMigrationDirs(out), (dir) =>
+          Effect.gen(function* () {
+            const file = path.join(out, dir, "snapshot.json");
+            if (!(yield* fs.exists(file))) return [];
+            const text = yield* fs.readFileString(file);
+            const snapshot = yield* decodeSnapshot(text).pipe(
+              Effect.mapError((cause) => new InvalidSnapshot({ file, cause })),
+            );
+            return [[dir, { snapshot, text }] as const];
+          }),
+        );
+        return Record.fromEntries(entries.flat());
       });
 
       // The latest snapshot is the head of the `prevIds` chain — the one no
@@ -299,7 +317,7 @@ export const SchemaProvider = () =>
       // enough: two migrations generated within the same second share the
       // timestamp prefix, and the random name suffix then decides the sort.
       const readLatestSnapshot = Effect.fn("Drizzle.readLatestSnapshot")(function* (out: string) {
-        const entries = Object.values(yield* readSnapshots(out));
+        const entries = Record.values(yield* readSnapshots(out));
         if (entries.length === 0) return undefined;
         const referenced = new Set(entries.flatMap((entry) => entry.snapshot.prevIds ?? []));
         const head = entries.find(
@@ -309,20 +327,6 @@ export const SchemaProvider = () =>
         const latest = head ?? entries[entries.length - 1]!;
         return { snapshot: latest.snapshot, hash: sha(latest.text) };
       });
-
-      const copyDirectory: (from: string, to: string) => Effect.Effect<void, PlatformError> =
-        Effect.fn("Drizzle.copyDirectory")(function* (from: string, to: string) {
-          yield* fs.makeDirectory(to, { recursive: true });
-          for (const entry of yield* fs.readDirectory(from)) {
-            const source = path.join(from, entry);
-            const target = path.join(to, entry);
-            if ((yield* fs.stat(source)).type === "Directory") {
-              yield* copyDirectory(source, target);
-            } else {
-              yield* fs.writeFile(target, yield* fs.readFile(source));
-            }
-          }
-        });
 
       /**
        * Bring a migrations folder up to drizzle-kit's current snapshot format
@@ -338,7 +342,7 @@ export const SchemaProvider = () =>
       ) {
         if (!(yield* fs.exists(out))) return false;
         if (cliDialect(props) === "postgresql") {
-          for (const [dir, { snapshot }] of Object.entries(yield* readSnapshots(out))) {
+          for (const [dir, { snapshot }] of Record.toEntries(yield* readSnapshots(out))) {
             if (snapshot.type !== undefined || snapshot.version !== "9") continue;
             yield* fs.writeFileString(
               path.join(out, dir, "snapshot.json"),
@@ -348,6 +352,22 @@ export const SchemaProvider = () =>
         }
         const { upgraded } = yield* drizzleKit.up({ dialect: cliDialect(props), out });
         return upgraded.length > 0;
+      });
+
+      // The schema the migrations folder describes. Postgres folders are diff
+      // chains drizzle-kit rebuilds; other dialects store full snapshots.
+      const readPreviousSnapshot = Effect.fn("Drizzle.readPreviousSnapshot")(function* (
+        kit: DrizzleKitPayload,
+        out: string,
+      ) {
+        const reconstruct = kit.reconstruct;
+        if (reconstruct === undefined) return (yield* readLatestSnapshot(out))?.snapshot;
+        const snapshots = yield* readSnapshots(out);
+        if (Record.isEmptyRecord(snapshots)) return undefined;
+        return yield* Effect.tryPromise({
+          try: () => reconstruct(Record.map(snapshots, ({ snapshot }) => snapshot)),
+          catch: (cause) => new DrizzleKitFailed({ command: "reconstruct", cause }),
+        });
       });
 
       /**
@@ -362,30 +382,17 @@ export const SchemaProvider = () =>
         const kit = yield* importModule<DrizzleKitPayload>(`drizzle-kit/payload/${dialect}`);
         const schemaModule = yield* Effect.tryPromise({
           try: () =>
-            import(/* @vite-ignore */ resolveSchema(props)) as Promise<Record<string, unknown>>,
+            import(/* @vite-ignore */ resolveSchema(props)) as Promise<
+              Record.ReadonlyRecord<string, unknown>
+            >,
           catch: (cause) => new SchemaImportFailed({ schema: props.schema, cause }),
         });
         const cur = yield* Effect.tryPromise({
           try: () => kit.generateDrizzleJson(schemaModule),
           catch: (cause) => new DrizzleKitFailed({ command: "generateDrizzleJson", cause }),
         });
-        const snapshots = yield* readSnapshots(out);
-        const reconstruct = kit.reconstruct;
-        const prev =
-          reconstruct !== undefined
-            ? Object.keys(snapshots).length === 0
-              ? {}
-              : yield* Effect.tryPromise({
-                  try: () =>
-                    reconstruct(
-                      Object.fromEntries(
-                        Object.entries(snapshots).map(([dir, { snapshot }]) => [dir, snapshot]),
-                      ),
-                    ),
-                  catch: (cause) => new DrizzleKitFailed({ command: "reconstruct", cause }),
-                })
-            : ((yield* readLatestSnapshot(out))?.snapshot ?? {});
-        return { prev: prev.ddl ?? [], cur: cur.ddl ?? [] };
+        const prev = yield* readPreviousSnapshot(kit, out);
+        return { prev: prev?.ddl ?? [], cur: cur.ddl ?? [] };
       });
 
       /**
@@ -399,11 +406,12 @@ export const SchemaProvider = () =>
         out: string,
       ) {
         const hints: Array<Hint> = [];
-        let context: { prev: ReadonlyArray<DdlEntry>; cur: ReadonlyArray<DdlEntry> } | undefined;
-        while (true) {
-          // `explain` dry-runs generate: it reports the pending migration
-          // (`ok`), `no_changes`, or the questions it still needs answered
-          // (`missing_hints`) without writing anything.
+        const context = yield* Effect.cached(loadRenameContext(props, out));
+        // `explain` dry-runs generate: it reports the pending migration
+        // (`ok`), `no_changes`, or the questions it still needs answered
+        // (`missing_hints`) without writing anything. Answers can raise new
+        // questions (columns of a renamed table), so ask until none are left.
+        const result = yield* Effect.gen(function* () {
           const result = yield* drizzleKit.generate({
             dialect: cliDialect(props),
             schema: schemaGlob(props),
@@ -411,14 +419,15 @@ export const SchemaProvider = () =>
             explain: true,
             hints,
           });
-          if (result.status !== "missing_hints") {
-            return { hints, changed: result.status === "ok" };
+          if (result.status === "missing_hints") {
+            const { prev, cur } = yield* context;
+            for (const hint of result.unresolved) {
+              hints.push(yield* askHint(props, hint, prev, cur, hints));
+            }
           }
-          context ??= yield* loadRenameContext(props, out);
-          for (const hint of result.unresolved) {
-            hints.push(yield* askHint(props, hint, context.prev, context.cur, hints));
-          }
-        }
+          return result;
+        }).pipe(Effect.repeat({ until: (result) => result.status !== "missing_hints" }));
+        return { hints, changed: result.status === "ok" };
       });
 
       /**
@@ -432,7 +441,7 @@ export const SchemaProvider = () =>
           const out = resolveOut(props);
           const scratch = yield* fs.makeTempDirectoryScoped({ prefix: "alchemy-drizzle-" });
           const migrations = path.join(scratch, "migrations");
-          if (yield* fs.exists(out)) yield* copyDirectory(out, migrations);
+          if (yield* fs.exists(out)) yield* fs.copy(out, migrations);
           const upgraded = yield* upgradeFolder(props, migrations);
           const { hints, changed } = yield* resolveHints(props, migrations);
           return { out, upgraded, hints, changed };
@@ -539,7 +548,7 @@ export const SchemaProvider = () =>
   );
 
 // drizzle-kit hint kinds → snapshot `ddl` entity types.
-const ddlEntityTypes: Record<string, string> = {
+const ddlEntityTypes: Record.ReadonlyRecord<string, string> = {
   table: "tables",
   column: "columns",
   index: "indexes",
@@ -571,53 +580,69 @@ const locate = (row: DdlEntry): Located => ({
 });
 
 const idOf = (row: Located, arity: number) =>
-  arity === 1
-    ? [row.name]
-    : arity === 2
-      ? [row.schema, row.name]
-      : [row.schema, row.table, row.name];
+  Match.value(arity).pipe(
+    Match.when(1, () => [row.name]),
+    Match.when(2, () => [row.schema, row.name]),
+    Match.orElse(() => [row.schema, row.table, row.name]),
+  );
+
+type Rename = Extract<Hint, { type: "rename" }>;
+
+// Give `row` the id `to`, shaped like the `from` id it was matched by.
+const withId = (row: Located, to: ReadonlyArray<string>) =>
+  Match.value(to.length).pipe(
+    Match.when(1, () => ({ ...row, name: to[0]! })),
+    Match.when(2, () => ({ ...row, schema: to[0]!, name: to[1]! })),
+    Match.orElse(() => ({ ...row, schema: to[0]!, table: to[1]!, name: to[2]! })),
+  );
+
+const renameRow = (row: Located, rename: Rename): Located => {
+  const { from, to } = rename;
+  return Match.value(rename).pipe(
+    // Schema rows name themselves; everything else names its schema.
+    Match.when({ kind: "schema" }, () =>
+      Match.value(row).pipe(
+        Match.when({ entityType: "schemas", name: from[0] }, () => ({ ...row, name: to[0]! })),
+        Match.when({ entityType: (type) => type !== "schemas", schema: from[0] }, () => ({
+          ...row,
+          schema: to[0]!,
+        })),
+        Match.orElse(() => row),
+      ),
+    ),
+    // The table and everything inside it follow the rename (or move).
+    Match.when({ kind: "table" }, () =>
+      Match.value(row).pipe(
+        Match.when({ entityType: "tables", schema: from[0], name: from[1] }, () => withId(row, to)),
+        Match.when({ schema: from[0], table: from[1] }, () => ({
+          ...row,
+          schema: to[0]!,
+          table: to[1]!,
+        })),
+        Match.orElse(() => row),
+      ),
+    ),
+    Match.orElse(({ kind }) =>
+      row.entityType === ddlEntityTypes[kind] &&
+      JSON.stringify(idOf(row, from.length)) === JSON.stringify(from)
+        ? withId(row, to)
+        : row,
+    ),
+  );
+};
 
 /**
  * Carry previous entities through the renames answered so far, so a later
  * question about the renamed table (or a table moved to another schema)
  * matches the entities that moved with it.
  */
-const applyRenames = (rows: ReadonlyArray<Located>, hints: ReadonlyArray<Hint>) =>
-  hints.reduce(
-    (current, hint) =>
-      hint.type !== "rename"
-        ? current
-        : current.map((row) => {
-            const [from, to] = [hint.from, hint.to];
-            if (hint.kind === "schema") {
-              // Schema rows name themselves; everything else names its schema.
-              const own = row.entityType === "schemas" ? row.name : row.schema;
-              return own === from[0]
-                ? {
-                    ...row,
-                    schema: to[0]!,
-                    ...(row.entityType === "schemas" ? { name: to[0]! } : {}),
-                  }
-                : row;
-            }
-            if (hint.kind === "table" && row.schema === from[0]) {
-              if (row.entityType === "tables" && row.name === from[1]) {
-                return { ...row, schema: to[0]!, name: to[1]! };
-              }
-              if (row.table === from[1]) return { ...row, schema: to[0]!, table: to[1]! };
-              return row;
-            }
-            const id = JSON.stringify(idOf(row, from.length));
-            return row.entityType === ddlEntityTypes[hint.kind] && id === JSON.stringify(from)
-              ? from.length === 3
-                ? { ...row, schema: to[0]!, table: to[1]!, name: to[2]! }
-                : from.length === 2
-                  ? { ...row, schema: to[0]!, name: to[1]! }
-                  : { ...row, name: to[0]! }
-              : row;
-          }),
-    rows,
-  );
+const applyRenames = (rows: ReadonlyArray<Located>, hints: ReadonlyArray<Hint>) => {
+  let current = rows;
+  for (const hint of hints) {
+    if (hint.type === "rename") current = current.map((row) => renameRow(row, hint));
+  }
+  return current;
+};
 
 /**
  * Entities a rename-or-create question could have been renamed from: same
