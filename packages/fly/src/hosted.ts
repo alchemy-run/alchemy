@@ -30,6 +30,7 @@ import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import type * as rolldown from "rolldown";
+import { buildOnRemoteBuilder } from "./internal/RemoteBuilder.ts";
 import type { BoundTarget, DiskSpec, ServiceBinding } from "./MountVolume.ts";
 import { rpcMethodsOf, serveFlyRpc } from "./rpc.ts";
 
@@ -65,6 +66,11 @@ export const FLY_REGISTRY = "registry.fly.io";
 export const DEFAULT_BASE_IMAGE = "node:26-slim";
 export const DEFAULT_PORT = 3000;
 export const MACHINE_PLATFORM = "linux/amd64";
+/**
+ * Machine metadata naming the remote builder that just built the image, so
+ * Fly pulls it from that builder's registry mirror (as `fly deploy` does).
+ */
+export const FLY_BUILDER_ID_METADATA = "fly_builder_id";
 
 export interface FlyBuildOptions extends Bundle.BundleConfig {
   /**
@@ -79,6 +85,16 @@ export interface FlyBuildOptions extends Bundle.BundleConfig {
    * ```
    */
   readonly install?: PackageInstall;
+  /**
+   * Build the image on Fly's remote builders (Depot), as `fly deploy` does,
+   * instead of with the local Docker engine. Only the build context is
+   * uploaded; the builder pulls the base image and pushes the result to
+   * `registry.fly.io` next to it. Set `false` to build and push locally.
+   * Either way, the local `docker buildx` client drives the build.
+   *
+   * @default true
+   */
+  readonly remote?: boolean;
 }
 
 export type { ExtraFile };
@@ -485,10 +501,20 @@ export const createFlyHostedSupport = ({
     const imageRef = `${FLY_REGISTRY}/${input.appName}:${repo}-${codeHash}`;
 
     if (input.previousHash === codeHash) {
-      return { imageRef, codeHash };
+      return { imageRef, codeHash, builderId: undefined };
     }
 
-    if (!(yield* imageExists(imageRef))) {
+    const minted = yield* machines.createAppDeployToken({ app_name: input.appName });
+    const token =
+      minted.token === undefined || Redacted.isRedacted(minted.token)
+        ? minted.token
+        : Redacted.make(minted.token);
+    if (token === undefined || Redacted.value(token).length === 0) {
+      return yield* new DeployTokenMissing({ appName: input.appName });
+    }
+    const registry = { server: FLY_REGISTRY, username: "x", password: token };
+
+    const materialize = Effect.gen(function* () {
       const realMain = yield* resolveMainPath(input.props.main);
       const contextDir = yield* getStableContextDir(realMain, dotAlchemy, `${input.id}-image`);
       const fs = yield* FileSystem.FileSystem;
@@ -524,26 +550,37 @@ export const createFlyHostedSupport = ({
           yield* fs.copy(realMain, dest, { overwrite: true });
         }
       }
+      return contextDir;
+    });
+
+    if (input.props.build?.remote !== false) {
+      const contextDir = yield* materialize;
+      yield* note(`Building ${imageRef} on a Fly remote builder...`);
+      const { builderId } = yield* buildOnRemoteBuilder({
+        docker,
+        appName: input.appName,
+        contextDir,
+        imageRef,
+        platform: MACHINE_PLATFORM,
+        registry,
+      });
+      yield* note(`Pushed ${imageRef}`);
+      return { imageRef, codeHash, builderId };
+    }
+
+    if (!(yield* imageExists(imageRef))) {
+      const contextDir = yield* materialize;
       yield* note(`Building container image ${imageRef}...`);
       yield* docker.image.build({ context: contextDir, tag: imageRef, platform: MACHINE_PLATFORM });
       yield* note(`Built ${imageRef}`);
     }
 
-    const minted = yield* machines.createAppDeployToken({ app_name: input.appName });
-    const token =
-      minted.token === undefined || Redacted.isRedacted(minted.token)
-        ? minted.token
-        : Redacted.make(minted.token);
-    if (token === undefined || Redacted.value(token).length === 0) {
-      return yield* new DeployTokenMissing({ appName: input.appName });
-    }
-
     yield* note(`Pushing ${imageRef}...`);
     yield* docker.image
-      .push(imageRef, { server: FLY_REGISTRY, username: "x", password: token })
+      .push(imageRef, registry)
       .pipe(Effect.retry({ times: 3, schedule: pushBackoff }));
     yield* note(`Pushed ${imageRef}`);
-    return { imageRef, codeHash };
+    return { imageRef, codeHash, builderId: undefined };
   });
 
   const hash = Effect.fn(function* (props: HostedProgramProps) {

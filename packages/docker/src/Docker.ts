@@ -606,11 +606,19 @@ const makeDocker = (options: DockerOptions) =>
         }),
       );
 
+    // Merge `credentials` into the ambient auth config: a DOCKER_AUTH_CONFIG
+    // provided through DockerEnvironment wins over the process environment,
+    // matching how `run` layers DockerEnvironment over it.
     const registryEnvironment = Effect.fn("registryEnvironment")(
       (credentials: RegistryCredentials) =>
-        Config.Redacted("DOCKER_AUTH_CONFIG").pipe(
-          Config.withDefault(Redacted.make("{}")),
-          Effect.map((value) => Redacted.value(value) || "{}"),
+        Effect.gen(function* () {
+          const ambient = yield* DockerEnvironment;
+          if (ambient.DOCKER_AUTH_CONFIG !== undefined) return ambient.DOCKER_AUTH_CONFIG || "{}";
+          const value = yield* Config.Redacted("DOCKER_AUTH_CONFIG").pipe(
+            Config.withDefault(Redacted.make("{}")),
+          );
+          return Redacted.value(value) || "{}";
+        }).pipe(
           Effect.flatMap(decodeRegistryAuthConfig),
           // Schema diagnostics may include credential input. Do not retain them.
           Effect.mapError(() =>

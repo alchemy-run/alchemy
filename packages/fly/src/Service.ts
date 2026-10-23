@@ -40,6 +40,7 @@ import {
   createFlyHostRuntimeContext,
   defaultHttpServices,
   DEFAULT_PORT,
+  FLY_BUILDER_ID_METADATA,
   toEnvRecord,
   type FlyBuildOptions,
   type FlyHostRuntimeContext,
@@ -1197,7 +1198,9 @@ const metadataChanged = (
   observed: Record<string, string | undefined> | undefined,
   desired: Record<string, string>,
 ) => {
-  const { removed, added, updated } = diffMachineMetadata(compactRecord(observed), desired);
+  // Only set by deploys that just built the image; not desired state.
+  const { [FLY_BUILDER_ID_METADATA]: _builderId, ...rest } = compactRecord(observed);
+  const { removed, added, updated } = diffMachineMetadata(rest, desired);
   return removed.length > 0 || Object.keys(added).length > 0 || Object.keys(updated).length > 0;
 };
 
@@ -1801,7 +1804,7 @@ export const ServiceProvider = () =>
           if (published.added) env[BINDING_PORT_ENV] = String(bindingPort);
           const statics = toFlyStatics(props.statics);
 
-          const { imageRef, codeHash } = yield* hosted.resolveImage({
+          const { imageRef, codeHash, builderId } = yield* hosted.resolveImage({
             id,
             appName,
             props,
@@ -1838,7 +1841,18 @@ export const ServiceProvider = () =>
                 statics,
               }),
             buildConfig: ({ mounts, metadata }) =>
-              buildConfig({ image: imageRef, guest, env, services, mounts, metadata, statics }),
+              buildConfig({
+                image: imageRef,
+                guest,
+                env,
+                services,
+                mounts,
+                metadata:
+                  builderId === undefined
+                    ? metadata
+                    : { ...metadata, [FLY_BUILDER_ID_METADATA]: builderId },
+                statics,
+              }),
           }).pipe(
             Effect.catchTag("Fly.ReplicaNotCreated", (error) =>
               Effect.fail(new ServiceNotCreated({ name: error.name, appName: error.appName })),
