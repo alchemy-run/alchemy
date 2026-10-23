@@ -20,6 +20,12 @@ allowBuilds:
   vue-demi: false
   workerd: true
 
+# distilled's build scripts (submodules/distilled/scripts, run by
+# `pnpm ensure:built`) import rolldown; distilled's root package is not a
+# workspace member here, so rolldown is hoisted to the root node_modules.
+publicHoistPattern:
+  - rolldown
+
 # Recursive `pnpm -r run` task graph. Builds are never triggered by install.
 # Each package's `build` runs `build:package` (its own compile step) over
 # itself and its workspace dependencies, so `pnpm build` in any package
