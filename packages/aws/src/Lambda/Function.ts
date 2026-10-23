@@ -325,7 +325,9 @@ export interface FunctionZipProps extends FunctionCommonProps {
   bundle?: false;
   image?: never;
   /**
-   * Exported handler symbol inside the bundled module.
+   * Name of the export in `main` that Lambda invokes. Only applies to async
+   * handlers (`main` exports a plain Lambda handler); Effect Functions are
+   * wrapped in a generated entry and ignore it.
    * @default "handler"
    */
   handler?: string;
@@ -478,7 +480,7 @@ const handlerStringOf = (props: FunctionZipProps): string => {
           .slice(Math.max(props.main.lastIndexOf("/"), props.main.lastIndexOf("\\")) + 1)
           .replace(/\.[^.]+$/, "")
       : "index";
-  return `${base}.${externalMode ? (props.handler ?? "default") : "default"}`;
+  return `${base}.${externalMode ? (props.handler ?? "handler") : "default"}`;
 };
 
 /**
