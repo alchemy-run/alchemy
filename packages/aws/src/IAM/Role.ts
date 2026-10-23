@@ -14,7 +14,7 @@ import type { AccountID } from "../Environment.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import { parsePolicyDocument, stringifyPolicyDocument, toTagRecord } from "./common.ts";
-import type { PolicyDocument, PolicyStatement } from "./Policy.ts";
+import { normalizePolicyDocument, type PolicyDocument, type PolicyStatement } from "./Policy.ts";
 
 export type RoleName = string;
 export type RoleArn = `arn:aws:iam::${AccountID}:role/${RoleName}`;
@@ -320,7 +320,11 @@ export const RoleProvider = () =>
         news: Record<string, PolicyDocument>;
       }) {
         for (const [policyName, document] of Object.entries(news)) {
-          if (JSON.stringify(olds[policyName] ?? null) !== JSON.stringify(document)) {
+          const observed = olds[policyName];
+          if (
+            observed === undefined ||
+            normalizePolicyDocument(observed) !== normalizePolicyDocument(document)
+          ) {
             yield* iam.putRolePolicy({
               RoleName: roleName,
               PolicyName: policyName,
@@ -505,10 +509,13 @@ export const RoleProvider = () =>
             observedRole.Role?.PermissionsBoundary?.PermissionsBoundaryArn;
 
           // Sync assume-role policy — only call updateAssumeRolePolicy
-          // when the document actually differs.
+          // when the document actually differs. IAM returns the stored
+          // document in its own form (reordered keys, single-item lists as
+          // scalars), so compare normalized documents, not raw JSON text.
           if (
-            JSON.stringify(observedAssumePolicy ?? null) !==
-            JSON.stringify(assumeRolePolicyDocument)
+            observedAssumePolicy === undefined ||
+            normalizePolicyDocument(observedAssumePolicy) !==
+              normalizePolicyDocument(assumeRolePolicyDocument)
           ) {
             yield* iam
               .updateAssumeRolePolicy({

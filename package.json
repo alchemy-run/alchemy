@@ -57,6 +57,7 @@
     "ensure:built": "node scripts/ensure-built.ts",
     "test": "pnpm ensure:built && cd ./packages/alchemy && bun alchemy-test",
     "test:integration": "pnpm ensure:built && cd ./packages/integration-tests && bun alchemy-test",
+    "tsc": "tsrs",
     "typecheck": "pnpm ensure:built && tsrs -b && pnpm -C packages/frontend-frameworks exec tsrs --noEmit -p tsconfig.test.json",
     "test:aws:floci": "bun scripts/test-aws-floci.ts",
     "test:cloudflare-packages": "pnpm ensure:built && pnpm -r --filter @alchemy.run/cloudflare-runtime --filter @alchemy.run/frontend-frameworks --filter \"./packages/frontend-frameworks/fixtures/*\" run test",
