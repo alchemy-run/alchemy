@@ -3300,6 +3300,36 @@ describe("engine-level adoption", { tags: ["unit", "local"] }, () => {
     );
   }
 
+  // Every node carries its effective adoption policy, so apply can admit an
+  // `Unowned` precreate result without re-deriving it.
+  for (const { global, scoped, adopt: expected } of policies) {
+    test(
+      `every node records the effective adoption policy (global=${global}, scoped=${scoped})`,
+      Effect.gen(function* () {
+        yield* seed({
+          Updated: replaceable("Updated", { props: { string: "a" } }),
+          Unchanged: replaceable("Unchanged", { props: { string: "a" } }),
+          Replaced: replaceable("Replaced"),
+        });
+        const scope = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+          scoped === undefined ? effect : effect.pipe(adopt(scoped));
+        const plan = yield* makeAdoptPlan(
+          Effect.gen(function* () {
+            yield* scope(TestResource("Created", { string: "a" }));
+            yield* scope(TestResource("Updated", { string: "b" }));
+            yield* scope(TestResource("Unchanged", { string: "a" }));
+            yield* scope(TestResource("Replaced", { replaceString: "new" }));
+          }),
+          { adopt: global, readHook: () => Effect.succeed(undefined) },
+        );
+        expect(plan.resources.Created).toMatchObject({ action: "create", adopt: expected });
+        expect(plan.resources.Updated).toMatchObject({ action: "update", adopt: expected });
+        expect(plan.resources.Unchanged).toMatchObject({ action: "noop", adopt: expected });
+        expect(plan.resources.Replaced).toMatchObject({ action: "replace", adopt: expected });
+      }),
+    );
+  }
+
   test(
     "updates and noops never defer admission",
     Effect.gen(function* () {

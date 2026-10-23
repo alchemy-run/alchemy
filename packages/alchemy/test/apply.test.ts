@@ -5759,35 +5759,44 @@ describe("deferred adoption", { tags: ["unit", "local"] }, () => {
 
   // #2198: a cycle with unresolved props precreates before any ownership read.
   // A precreate that finds a foreign resource reports it as `Unowned`.
-  for (const scoped of [undefined, false, true]) {
-    test.provider(`admits an unowned precreate by policy (scoped adopt ${scoped})`, (stack) =>
-      Effect.gen(function* () {
-        const probe = yield* Probe;
-        probe.foreignPrecreate = true;
-        yield* stack.destroy();
-        const app = Effect.gen(function* () {
-          const parent = yield* Singleton("Parent", {});
-          const declaration = Stub("Stub", { parent: parent.identity });
-          const stub = yield* scoped === undefined ? declaration : declaration.pipe(adopt(scoped));
-          yield* stub.bind("Self", { env: { SELF: stub.identity } });
-          return stub;
-        });
-        const result = yield* stack.deploy(app).pipe(Effect.flip, Effect.option);
-        if (scoped === true) {
-          // Adopted: reconcile receives the precreated attrs, stripped of the marker.
-          expect(Option.isNone(result)).toBe(true);
-          expect(probe.reconciles[0]?.output).toEqual({ identity: "stub", value: "stub" });
-          expect(Unowned.is(probe.reconciles[0]?.output)).toBe(false);
-        } else {
-          expect(Option.getOrUndefined(result)).toMatchObject({ _tag: "OwnedBySomeoneElse" });
-          // Refused before the foreign attrs were checkpointed or reconciled.
-          expect(probe.reconciles).toEqual([]);
-          expect((yield* getState("Stub")).attr).toBeUndefined();
-        }
-        yield* stack.destroy();
-        if (scoped !== true) expect(probe.deletes).not.toContain("Stub");
-        // `adopt(false)` on the resource wins over a global `--adopt`.
-      }).pipe(Effect.provideService(AdoptPolicy, scoped === false)),
+  const precreatePolicies = [
+    { global: false, scoped: undefined, admits: false },
+    { global: true, scoped: undefined, admits: true },
+    { global: true, scoped: false, admits: false },
+    { global: false, scoped: true, admits: true },
+  ] as const;
+  for (const { global, scoped, admits } of precreatePolicies) {
+    test.provider(
+      `admits an unowned precreate by policy (global ${global}, scoped ${scoped})`,
+      (stack) =>
+        Effect.gen(function* () {
+          const probe = yield* Probe;
+          probe.foreignPrecreate = true;
+          yield* stack.destroy();
+          const app = Effect.gen(function* () {
+            const parent = yield* Singleton("Parent", {});
+            const declaration = Stub("Stub", { parent: parent.identity });
+            const stub = yield* scoped === undefined
+              ? declaration
+              : declaration.pipe(adopt(scoped));
+            yield* stub.bind("Self", { env: { SELF: stub.identity } });
+            return stub;
+          });
+          const result = yield* stack.deploy(app).pipe(Effect.flip, Effect.option);
+          if (admits) {
+            // Adopted: reconcile receives the precreated attrs, stripped of the marker.
+            expect(Option.isNone(result)).toBe(true);
+            expect(probe.reconciles[0]?.output).toEqual({ identity: "stub", value: "stub" });
+            expect(Unowned.is(probe.reconciles[0]?.output)).toBe(false);
+          } else {
+            expect(Option.getOrUndefined(result)).toMatchObject({ _tag: "OwnedBySomeoneElse" });
+            // Refused before the foreign attrs were checkpointed or reconciled.
+            expect(probe.reconciles).toEqual([]);
+            expect((yield* getState("Stub")).attr).toBeUndefined();
+          }
+          yield* stack.destroy();
+          if (!admits) expect(probe.deletes).not.toContain("Stub");
+        }).pipe(Effect.provideService(AdoptPolicy, global)),
     );
   }
 
@@ -9607,6 +9616,8 @@ describe("replacement ownership admission", { tags: ["unit", "local"] }, () => {
       deleteFirst: boolean;
       /** Names whose reconcile succeeds in the cloud, then dies before returning. */
       crash: Set<string>;
+      /** Precreate finds a foreign resource and reports it without writing. */
+      foreignPrecreate: boolean;
     }
   >()("ReplacementAdmissionCloud") {}
   const providers = Provider.succeed(Named, {
@@ -9624,6 +9635,10 @@ describe("replacement ownership admission", { tags: ["unit", "local"] }, () => {
     }),
     precreate: Effect.fn(function* ({ id, news }) {
       const cloud = yield* Cloud;
+      if (cloud.foreignPrecreate) {
+        cloud.events.push("precreate (foreign)");
+        return Unowned({ name: "foreign" });
+      }
       // An unresolved name has no identity to claim yet.
       if (typeof news.name !== "string") {
         cloud.events.push("precreate (unresolved)");
@@ -9656,6 +9671,7 @@ describe("replacement ownership admission", { tags: ["unit", "local"] }, () => {
           outputs: [],
           deleteFirst: false,
           crash: new Set<string>(),
+          foreignPrecreate: false,
         })),
       ),
     ),
@@ -9683,6 +9699,7 @@ describe("replacement ownership admission", { tags: ["unit", "local"] }, () => {
     cloud.owners.clear();
     cloud.crash.clear();
     cloud.deleteFirst = false;
+    cloud.foreignPrecreate = false;
     yield* stack.deploy(resolvesDuringApply("old"));
     cloud.owners.set("target", "SomeoneElse");
     cloud.events.length = 0;
@@ -9876,6 +9893,46 @@ describe("replacement ownership admission", { tags: ["unit", "local"] }, () => {
         }),
     );
   }
+
+  // #2198: with an unresolved name, a cyclic replacement precreates before any
+  // ownership read, so precreate itself reports a foreign resource.
+  test.provider("refuses an unowned precreate of a cyclic replacement", (stack) =>
+    Effect.gen(function* () {
+      const cloud = yield* setup(stack);
+      cloud.foreignPrecreate = true;
+      const error = yield* stack.deploy(resolvesDuringApply("fresh", true)).pipe(Effect.flip);
+      expect(error).toMatchObject({ _tag: "OwnedBySomeoneElse" });
+      expect(cloud.events).toEqual(["precreate (foreign)"]);
+      expect(cloud.outputs).toEqual([]);
+      // The foreign attrs were never checkpointed; the old generation survives.
+      const replacing = yield* getState("Subject");
+      expect(replacing).toMatchObject({ status: "replacing", attr: undefined });
+      expect(cloud.owners.get("old")).toBe("Subject");
+      cloud.foreignPrecreate = false;
+      yield* stack.destroy();
+    }),
+  );
+
+  test.provider("adopt(true) admits an unowned precreate of a cyclic replacement", (stack) =>
+    Effect.gen(function* () {
+      const cloud = yield* setup(stack);
+      cloud.foreignPrecreate = true;
+      yield* stack.deploy(
+        Effect.gen(function* () {
+          const source = yield* TestResource("Name", { string: "fresh" });
+          const subject = yield* Named("Subject", { name: source.string }).pipe(adopt(true));
+          yield* subject.bind("Self", { self: subject.name });
+          return subject;
+        }),
+      );
+      expect(cloud.events.slice(0, 2)).toEqual(["precreate (foreign)", "reconcile fresh"]);
+      // Reconcile gets the precreated attrs without the `Unowned` marker.
+      expect(cloud.outputs).toEqual([{ name: "foreign" }]);
+      expect(Unowned.is(cloud.outputs[0])).toBe(false);
+      cloud.foreignPrecreate = false;
+      yield* stack.destroy();
+    }),
+  );
 
   test.provider("a resumed replacement with a precreate stub is not probed again", (stack) =>
     Effect.gen(function* () {
