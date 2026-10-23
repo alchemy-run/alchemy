@@ -272,6 +272,8 @@ export const SchemaProvider = () =>
       const relativeOut = (abs: string) => path.relative(process.cwd(), abs);
 
       const resolveSchema = (p: SchemaProps) => path.resolve(process.cwd(), p.schema);
+      // drizzle-kit reads `schema` as a glob, where `\` is an escape.
+      const schemaGlob = (p: SchemaProps) => resolveSchema(p).replaceAll("\\", "/");
 
       // List `<ts>_*` migration directories under `out`, sorted by numeric
       // prefix. Returns an empty array if `out` doesn't exist.
@@ -404,7 +406,7 @@ export const SchemaProvider = () =>
           // (`missing_hints`) without writing anything.
           const result = yield* drizzleKit.generate({
             dialect: cliDialect(props),
-            schema: resolveSchema(props),
+            schema: schemaGlob(props),
             out,
             explain: true,
             hints,
@@ -457,7 +459,7 @@ export const SchemaProvider = () =>
           yield* fs.makeDirectory(out, { recursive: true });
           const result = yield* drizzleKit.generate({
             dialect: cliDialect(props),
-            schema: resolveSchema(props),
+            schema: schemaGlob(props),
             out,
             hints,
           });
