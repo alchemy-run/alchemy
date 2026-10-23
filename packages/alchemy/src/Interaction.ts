@@ -193,6 +193,8 @@ export const accessors = {
       Effect.flatMap(Interaction, (service) => service.prompt.select(options)),
     multiSelect: <Value>(options: MultiSelectOptions<Value>) =>
       Effect.flatMap(Interaction, (service) => service.prompt.multiSelect(options)),
+    awaitExternal: (options: AwaitExternalOptions) =>
+      Effect.flatMap(Interaction, (service) => service.prompt.awaitExternal(options)),
   },
 };
 

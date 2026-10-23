@@ -1,7 +1,7 @@
+import * as Stripe from "@alchemy.run/stripe";
 import { Account } from "@bank/domain/Account/Account.aggregate";
 import { AccountId } from "@bank/domain/Account/Account.id";
 import { RecordSettlement } from "@bank/domain/Account/RecordSettlement.command";
-import * as Stripe from "alchemy/Stripe";
 import * as Effect from "effect/Effect";
 
 /**

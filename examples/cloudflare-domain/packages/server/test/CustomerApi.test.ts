@@ -1,3 +1,4 @@
+import * as Domain from "@alchemy.run/domain";
 import { mainAccountId } from "@bank/domain/Account/Account.id";
 import { Bank, BankHandlers } from "@bank/domain/Bank.model";
 import { CustomerId } from "@bank/domain/Customer/Customer.id";
@@ -8,7 +9,6 @@ import { MemoryLedgerStore } from "@bank/domain/Ledger/LedgerStore";
 import { sessionClient } from "@bank/domain/Session.middleware";
 import { SupportApi } from "@bank/domain/SupportApi.api";
 import { expect, it } from "@effect/vitest";
-import * as Domain from "alchemy/Domain";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";

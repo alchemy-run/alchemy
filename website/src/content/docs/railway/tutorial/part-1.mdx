@@ -8,7 +8,7 @@ sidebar:
 import Terminal from "../../../../components/Terminal.astro";
 import PackageManagers from "../../../../components/PackageManagers.astro";
 
-export const pkgs = `alchemy@latest effect @effect/platform-bun @effect/platform-node`;
+export const pkgs = `alchemy@latest @alchemy.run/railway@latest effect @effect/platform-bun @effect/platform-node`;
 
 Install Alchemy and Effect, create a Stack with a Railway Project, and
 deploy it. A Project is the parent for Services, Environments,
@@ -34,7 +34,7 @@ Start with an empty directory and initialize a `package.json`:
 
 ## Install dependencies
 
-Install `alchemy@latest` and `effect`:
+Install `alchemy@latest`, `@alchemy.run/railway`, and `effect`:
 
 <PackageManagers add={pkgs} />
 
@@ -108,7 +108,7 @@ Let's declare a Railway Project and observe the type error:
 ```diff lang="typescript"
 // alchemy.run.ts
 import * as Alchemy from "alchemy";
-+import * as Railway from "alchemy/Railway";
++import * as Railway from "@alchemy.run/railway";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 
@@ -142,7 +142,7 @@ error:
 ```diff lang="typescript"
 // alchemy.run.ts
 import * as Alchemy from "alchemy";
-import * as Railway from "alchemy/Railway";
+import * as Railway from "@alchemy.run/railway";
 import * as Effect from "effect/Effect";
 -import * as Layer from "effect/Layer";
 

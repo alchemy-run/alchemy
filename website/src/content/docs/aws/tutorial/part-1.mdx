@@ -8,7 +8,7 @@ sidebar:
 import Terminal from "../../../../components/Terminal.astro";
 import PackageManagers from "../../../../components/PackageManagers.astro";
 
-export const pkgs = `alchemy@latest effect @effect/platform-bun @effect/platform-node`;
+export const pkgs = `alchemy@latest @alchemy.run/aws@latest effect @effect/platform-bun @effect/platform-node`;
 
 In this first part you'll install Alchemy and Effect, create a Stack
 with an AWS S3 Bucket, and deploy it — all in under five minutes.
@@ -27,7 +27,7 @@ Start with an empty directory and initialize a `package.json`:
 
 ## Install dependencies
 
-Install `alchemy@latest` and `effect`:
+Install `alchemy@latest`, `@alchemy.run/aws`, and `effect`:
 
 <PackageManagers add={pkgs} />
 
@@ -41,7 +41,7 @@ Create an `alchemy.run.ts` file:
 ```typescript
 // alchemy.run.ts
 import * as Alchemy from "alchemy";
-import * as AWS from "alchemy/AWS";
+import * as AWS from "@alchemy.run/aws";
 import * as Effect from "effect/Effect";
 
 export default Alchemy.Stack(
@@ -93,7 +93,7 @@ Add an S3 Bucket:
 ```diff lang="typescript"
 // alchemy.run.ts
 import * as Alchemy from "alchemy";
-import * as AWS from "alchemy/AWS";
+import * as AWS from "@alchemy.run/aws";
 import * as Effect from "effect/Effect";
 
 export default Alchemy.Stack(

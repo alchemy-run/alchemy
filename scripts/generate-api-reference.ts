@@ -1,7 +1,7 @@
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
-import * as ts from "typescript-api/unstable/ast";
-import type { Node, SourceFile } from "typescript-api/unstable/ast";
+import * as ts from "tsrs/unstable/ast";
+import type { Node, SourceFile } from "tsrs/unstable/ast";
 import {
   docCommentLines,
   jsdocCopyId,
@@ -48,6 +48,116 @@ const config = {
       srcRoot: path.join(import.meta.dir, "../packages/better-auth/src"),
       providerPrefix: "BetterAuth",
       sourceDisplayPrefix: "packages/better-auth/src",
+    },
+    {
+      srcRoot: path.join(import.meta.dir, "../packages/git/src"),
+      providerPrefix: "Git",
+      sourceDisplayPrefix: "packages/git/src",
+    },
+    {
+      srcRoot: path.join(import.meta.dir, "../packages/drizzle/src"),
+      providerPrefix: "Drizzle",
+      sourceDisplayPrefix: "packages/drizzle/src",
+    },
+    {
+      srcRoot: path.join(import.meta.dir, "../packages/acme/src"),
+      providerPrefix: "ACME",
+      sourceDisplayPrefix: "packages/acme/src",
+    },
+    {
+      srcRoot: path.join(import.meta.dir, "../packages/axiom/src"),
+      providerPrefix: "Axiom",
+      sourceDisplayPrefix: "packages/axiom/src",
+    },
+    {
+      srcRoot: path.join(import.meta.dir, "../packages/doppler/src"),
+      providerPrefix: "Doppler",
+      sourceDisplayPrefix: "packages/doppler/src",
+    },
+    {
+      srcRoot: path.join(import.meta.dir, "../packages/infisical/src"),
+      providerPrefix: "Infisical",
+      sourceDisplayPrefix: "packages/infisical/src",
+    },
+    {
+      srcRoot: path.join(import.meta.dir, "../packages/turso/src"),
+      providerPrefix: "Turso",
+      sourceDisplayPrefix: "packages/turso/src",
+    },
+    {
+      srcRoot: path.join(import.meta.dir, "../packages/planetscale/src"),
+      providerPrefix: "Planetscale",
+      sourceDisplayPrefix: "packages/planetscale/src",
+    },
+    {
+      srcRoot: path.join(import.meta.dir, "../packages/neon/src"),
+      providerPrefix: "Neon",
+      sourceDisplayPrefix: "packages/neon/src",
+    },
+    {
+      srcRoot: path.join(import.meta.dir, "../packages/prisma/src"),
+      providerPrefix: "Prisma",
+      sourceDisplayPrefix: "packages/prisma/src",
+    },
+    {
+      srcRoot: path.join(import.meta.dir, "../packages/hetzner/src"),
+      providerPrefix: "Hetzner",
+      sourceDisplayPrefix: "packages/hetzner/src",
+    },
+    {
+      srcRoot: path.join(import.meta.dir, "../packages/railway/src"),
+      providerPrefix: "Railway",
+      sourceDisplayPrefix: "packages/railway/src",
+    },
+    {
+      srcRoot: path.join(import.meta.dir, "../packages/fly/src"),
+      providerPrefix: "Fly",
+      sourceDisplayPrefix: "packages/fly/src",
+    },
+    {
+      srcRoot: path.join(import.meta.dir, "../packages/github/src"),
+      providerPrefix: "GitHub",
+      sourceDisplayPrefix: "packages/github/src",
+    },
+    {
+      srcRoot: path.join(import.meta.dir, "../packages/stripe/src"),
+      providerPrefix: "Stripe",
+      sourceDisplayPrefix: "packages/stripe/src",
+    },
+    {
+      srcRoot: path.join(import.meta.dir, "../packages/cloudflare/src"),
+      providerPrefix: "Cloudflare",
+      sourceDisplayPrefix: "packages/cloudflare/src",
+    },
+    {
+      srcRoot: path.join(import.meta.dir, "../packages/gcp/src"),
+      providerPrefix: "GCP",
+      sourceDisplayPrefix: "packages/gcp/src",
+    },
+    {
+      srcRoot: path.join(import.meta.dir, "../packages/aws/src"),
+      providerPrefix: "AWS",
+      sourceDisplayPrefix: "packages/aws/src",
+    },
+    {
+      srcRoot: path.join(import.meta.dir, "../packages/domain/src"),
+      providerPrefix: "Domain",
+      sourceDisplayPrefix: "packages/domain/src",
+    },
+    {
+      srcRoot: path.join(import.meta.dir, "../packages/kubernetes/src"),
+      providerPrefix: "Kubernetes",
+      sourceDisplayPrefix: "packages/kubernetes/src",
+    },
+    {
+      srcRoot: path.join(import.meta.dir, "../packages/docker/src"),
+      providerPrefix: "Docker",
+      sourceDisplayPrefix: "packages/docker/src",
+    },
+    {
+      srcRoot: path.join(import.meta.dir, "../packages/sql/src"),
+      providerPrefix: "SQL",
+      sourceDisplayPrefix: "packages/sql/src",
     },
   ] satisfies SourceRoot[],
 };
@@ -170,6 +280,8 @@ interface ParsedJSDoc {
   peers: string[];
   category: string;
   product: string;
+  /** `@title <Heading>` — overrides the section heading (the export name). */
+  title: string;
 }
 
 /** Where a declaration's JSDoc lives, for copy markers. */
@@ -212,6 +324,7 @@ function parseJSDoc(node: Node, markers?: MarkerContext): ParsedJSDoc {
       peers: [],
       category: "",
       product: "",
+      title: "",
     };
   }
 
@@ -227,6 +340,7 @@ function parseJSDoc(node: Node, markers?: MarkerContext): ParsedJSDoc {
   let hasPrimitiveTag = false;
   let category = "";
   let product = "";
+  let title = "";
   let sawTag = false;
   let currentSection: ExampleSection | undefined;
   let currentExample: ExampleBlock | undefined;
@@ -321,6 +435,9 @@ function parseJSDoc(node: Node, markers?: MarkerContext): ParsedJSDoc {
         case "label":
           if (value) product = value;
           break;
+        case "title":
+          if (value) title = value;
+          break;
         case "section":
           flushExample();
           flushSectionDesc();
@@ -363,6 +480,7 @@ function parseJSDoc(node: Node, markers?: MarkerContext): ParsedJSDoc {
     peers,
     category,
     product,
+    title,
   };
 }
 
@@ -489,17 +607,18 @@ export function findTaggedPrimary(
       continue;
     }
     // A primitive is its module's `make`; the page is named after the module.
-    const name = doc.hasPrimitiveTag
+    const exportName = doc.hasPrimitiveTag
       ? path.basename(sourceFile.fileName).replace(/\.tsx?$/, "")
       : declName(node);
-    if (!name) continue;
+    if (!exportName) continue;
+    const name = doc.title || exportName;
     const category = doc.category;
     const product = doc.product;
     if (hasContent(doc)) return { name, doc, category, product };
 
     // Tagged declaration has no prose — look for the related declaration that
     // carries the docs (same name, or re-exported under this name).
-    const localName = localNameForExport(sourceFile, name);
+    const localName = localNameForExport(sourceFile, exportName);
     const related: Node[] = [
       ...sourceFile.statements.filter(ts.isVariableStatement),
       ...sourceFile.statements.filter(ts.isClassDeclaration),
@@ -508,7 +627,7 @@ export function findTaggedPrimary(
     ].filter((d) => {
       if (d === node) return false;
       const dn = declName(d);
-      return dn === name || (localName !== undefined && dn === localName);
+      return dn === exportName || (localName !== undefined && dn === localName);
     });
 
     let best: ParsedJSDoc | undefined;
@@ -746,7 +865,8 @@ function renderResource(doc: PageDoc, resolve: LinkResolver): string {
 /** Change this grouping to experiment with larger or smaller reference pages. */
 function referenceLocation(outputRelative: string, product: string) {
   const parts = normalizeSlashes(outputRelative).replace(/\.md$/, "").split("/");
-  // Flat providers declare service-sized pages with @product instead of folders.
+  // Flat providers declare service-sized pages with @product instead of
+  // folders; a resource without one gets its own page.
   const group =
     parts.length > 2
       ? parts.slice(0, 2)
@@ -759,11 +879,12 @@ function referenceLocation(outputRelative: string, product: string) {
               .replace(/[^a-z0-9]+/g, "-")
               .replace(/^-|-$/g, ""),
           ]
-        : [parts[0], "reference"];
+        : parts;
   const title = parts.slice(parts.length > 2 ? 2 : 1).join("-");
   return {
     outputRelative: `${group.join("/")}.md`,
-    title: parts.length > 2 ? group.join(".") : product ? `${parts[0]}.${product}` : parts[0],
+    title:
+      parts.length > 2 ? group.join(".") : product ? `${parts[0]}.${product}` : parts.join("."),
     resourceTitle: title,
     link: `/providers/${group.join("/").toLowerCase()}#${title.toLowerCase()}`,
   };
@@ -830,7 +951,7 @@ function orderedKeys(keys: string[], order: string[]): string[] {
 /** The sidebar lists documents; resource anchors live in the page's TOC. */
 function buildServiceItems(pages: PageEntry[]): SidebarItem[] {
   return pages
-    .map((page) => ({ label: page.product || page.service || page.provider, link: page.link }))
+    .map((page) => ({ label: page.product || page.service || page.resource, link: page.link }))
     .sort(byLabel);
 }
 
@@ -1000,7 +1121,8 @@ async function main() {
         throw new Error(`Duplicate reference anchor: ${location.link}`);
       }
       anchors.add(location.link);
-      redirects[oldLink] = location.link;
+      // A resource whose page kept its old URL needs no redirect.
+      if (oldLink !== location.link.split("#")[0]) redirects[oldLink] = location.link;
       pageEntries.push({
         provider: segments[0] ?? "",
         service: segments.length > 2 ? segments[1] : "",

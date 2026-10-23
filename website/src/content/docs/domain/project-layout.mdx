@@ -1,6 +1,6 @@
 ---
 title: Project layout
-description: How to lay out an alchemy/Domain project. One file per building block, named after its noun and its kind; folders per subdomain; a pure domain package, a server package that hosts it, and a foldkit web package, wired in one stack.
+description: How to lay out an @alchemy.run/domain project. One file per building block, named after its noun and its kind; folders per subdomain; a pure domain package, a server package that hosts it, and a foldkit web package, wired in one stack.
 ---
 
 A domain grows into many small pieces: commands, events, rejections, views, policies. Lay them out so a file's name tells you what it holds before you open it, and so the model never depends on how it's hosted.
@@ -68,7 +68,7 @@ src/
 
 ## Keep the model in its own package
 
-The domain package imports only `alchemy/Domain` and `effect`. Its stories run the whole model in memory, so it never needs a cloud account to test:
+The domain package imports only `@alchemy.run/domain` and `effect`. Its stories run the whole model in memory, so it never needs a cloud account to test:
 
 ```text
 packages/

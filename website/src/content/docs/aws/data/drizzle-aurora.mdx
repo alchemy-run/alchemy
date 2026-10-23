@@ -76,7 +76,7 @@ env: { NODE_EXTRA_CA_CERTS: "/var/runtime/ca-cert.pem" }
 The RDS binding currently emits `sslmode=no-verify`. Override it to require certificate and hostname verification:
 
 ```typescript
-import * as Drizzle from "alchemy/Drizzle/Postgres";
+import * as Drizzle from "@alchemy.run/drizzle/Postgres";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 
@@ -96,7 +96,7 @@ The CA path is specific to [managed Lambda Node.js runtimes](https://docs.aws.am
 ## Package the driver
 
 ```sh
-pnpm add alchemy effect @effect/sql-pg \
+pnpm add alchemy @alchemy.run/aws @alchemy.run/drizzle effect @effect/sql-pg \
   drizzle-orm@1.0.0-rc.5-ab785fc pg
 pnpm add -D @types/pg
 ```

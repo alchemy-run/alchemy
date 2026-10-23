@@ -1,4 +1,4 @@
-import * as AWS from "alchemy/AWS";
+import * as AWS from "@alchemy.run/aws";
 import type { Output } from "alchemy/Output";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";

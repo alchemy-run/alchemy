@@ -9,6 +9,9 @@
       "path": "./submodules/distilled/packages/core/tsconfig.json"
     },
     {
+      "path": "./submodules/distilled/packages/aws4signer/tsconfig.json"
+    },
+    {
       "path": "./submodules/distilled/packages/aws/tsconfig.json"
     },
     {
@@ -58,16 +61,10 @@
       "path": "./packages/node-utils/tsconfig.json"
     },
     {
-      "path": "./packages/vite-plugin-copy-editor/tsconfig.json"
-    },
-    {
       "path": "./packages/cloudflare-runtime/tsconfig.json"
     },
     {
       "path": "./packages/frontend-frameworks/tsconfig.json"
-    },
-    {
-      "path": "./packages/floci/tsconfig.json"
     },
     {
       "path": "./packages/cloudflare-test-tools/tsconfig.json"
@@ -86,6 +83,78 @@
     },
     {
       "path": "./packages/better-auth/tsconfig.json"
+    },
+    {
+      "path": "./packages/git/tsconfig.json"
+    },
+    {
+      "path": "./packages/drizzle/tsconfig.json"
+    },
+    {
+      "path": "./packages/acme/tsconfig.json"
+    },
+    {
+      "path": "./packages/axiom/tsconfig.json"
+    },
+    {
+      "path": "./packages/doppler/tsconfig.json"
+    },
+    {
+      "path": "./packages/infisical/tsconfig.json"
+    },
+    {
+      "path": "./packages/turso/tsconfig.json"
+    },
+    {
+      "path": "./packages/planetscale/tsconfig.json"
+    },
+    {
+      "path": "./packages/neon/tsconfig.json"
+    },
+    {
+      "path": "./packages/prisma/tsconfig.json"
+    },
+    {
+      "path": "./packages/hetzner/tsconfig.json"
+    },
+    {
+      "path": "./packages/railway/tsconfig.json"
+    },
+    {
+      "path": "./packages/fly/tsconfig.json"
+    },
+    {
+      "path": "./packages/github/tsconfig.json"
+    },
+    {
+      "path": "./packages/stripe/tsconfig.json"
+    },
+    {
+      "path": "./packages/cloudflare/tsconfig.json"
+    },
+    {
+      "path": "./packages/gcp/tsconfig.json"
+    },
+    {
+      "path": "./packages/aws/tsconfig.json"
+    },
+    {
+      "path": "./packages/domain/tsconfig.json"
+    },
+    {
+      "path": "./packages/docker/tsconfig.json"
+    },
+    {
+      "path": "./packages/kubernetes/tsconfig.json"
+    },
+    {
+      "path": "./packages/redis/tsconfig.json"
+    },
+    {
+      "path": "./packages/sql/tsconfig.json"
+    },
+    {
+      "path": "./packages/integration-tests/tsconfig.json"
     },
     {
       "path": "./packages/pkg/tsconfig.json"
@@ -203,9 +272,6 @@
       "path": "./examples/aws-website-vite/tsconfig.json"
     },
     {
-      "path": "./examples/cloudflare-agent/tsconfig.json"
-    },
-    {
       "path": "./examples/cloudflare-preview-benchmark/tsconfig.json"
     },
     {
@@ -216,6 +282,18 @@
     },
     {
       "path": "./examples/cloudflare-static-site/tsconfig.json"
+    },
+    {
+      "path": "./examples/cloudflare-foldkit-spa/tsconfig.json"
+    },
+    {
+      "path": "./examples/cloudflare-foldkit-hybrid/tsconfig.json"
+    },
+    {
+      "path": "./examples/cloudflare-foldkit-ssg/tsconfig.json"
+    },
+    {
+      "path": "./examples/cloudflare-foldkit-ssr/tsconfig.json"
     },
     {
       "path": "./examples/cloudflare-website-tanstack-start/tsconfig.json"
@@ -258,6 +336,12 @@
     },
     {
       "path": "./examples/cloudflare-website-nextjs/tsconfig.json"
+    },
+    {
+      "path": "./examples/cloudflare-agents/tsconfig.json"
+    },
+    {
+      "path": "./examples/cloudflare-flue/tsconfig.json"
     },
     {
       "path": "./examples/cloudflare-website-vinext/tsconfig.json"

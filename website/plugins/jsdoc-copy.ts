@@ -3,15 +3,6 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
-  applyRuns,
-  CopyEditError,
-  markdownDialect,
-  markdownRuns,
-  type CopyEditHandler,
-  type MarkdownOptions,
-  type MarkdownStyle,
-} from "@alchemy.run/vite-plugin-copy-editor";
-import {
   docCommentLines,
   docTargets,
   JSDOC_LINE_PREFIX,
@@ -20,6 +11,15 @@ import {
   regionSource,
   replaceRegion,
 } from "../../scripts/jsdoc-blocks.ts";
+import {
+  applyRuns,
+  CopyEditError,
+  markdownDialect,
+  markdownRuns,
+  type CopyEditHandler,
+  type MarkdownOptions,
+  type MarkdownStyle,
+} from "../src/copy-editor/index.ts";
 
 const repoRoot = fileURLToPath(new URL("../../", import.meta.url));
 const generator = path.join(repoRoot, "scripts/generate-api-reference.ts");

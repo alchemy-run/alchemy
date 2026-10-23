@@ -1,9 +1,11 @@
 import * as path from "node:path";
-import * as ts from "typescript-api/unstable/ast";
-import { API, TypeFlags, type Type, type Project } from "typescript-api/unstable/async";
+import * as ts from "tsrs/unstable/ast";
+import { API, TypeFlags, type Type, type Project } from "tsrs/unstable/async";
 
 /**
- * Lints every `packages/alchemy/src/{Cloud}/Providers.ts` file and fails if any
+ * Lints every `Providers.ts` under a workspace package's `src` (alchemy's
+ * `src/{Cloud}/Providers.ts` and each provider package's `src/Providers.ts`)
+ * and fails if any
  * `providers()` factory ends up with `unknown` or `any` in its Layer requirements
  * (the 3rd `Layer<ROut, E, RIn>` type argument). An `unknown`/`any` RIn means some leaf
  * provider layer leaked an unsatisfied/undeclared requirement, which silently
@@ -13,8 +15,16 @@ import { API, TypeFlags, type Type, type Project } from "typescript-api/unstable
  * call(s) whose requirements include `unknown`.
  */
 
-const tsConfig = path.join(import.meta.dir, "../packages/alchemy/tsconfig.json");
-const srcRoot = path.join(import.meta.dir, "../packages/alchemy/src");
+const packagesRoot = path.join(import.meta.dir, "../packages");
+
+/** Workspace packages with a `Providers.ts` anywhere under `src`. */
+const providerPackages = async (): Promise<ReadonlyArray<string>> => {
+  const found = new Set<string>();
+  for await (const file of new Bun.Glob("*/src/**/Providers.ts").scan(packagesRoot)) {
+    found.add(path.join(packagesRoot, file.split("/")[0]!));
+  }
+  return [...found].sort((a, b) => a.localeCompare(b));
+};
 
 export async function lintProviders(
   project: Project,
@@ -128,10 +138,17 @@ export async function lintProviders(
 
 if (import.meta.main) {
   await using api = new API();
-  const snapshot = await api.updateSnapshot({ openProjects: [tsConfig] });
-  const project = snapshot.getProject(tsConfig);
-  if (!project) throw new Error(`Failed to open ${tsConfig}`);
-  if (!(await lintProviders(project, srcRoot))) {
+  const packages = await providerPackages();
+  const tsConfigs = packages.map((dir) => path.join(dir, "tsconfig.json"));
+  const snapshot = await api.createSnapshot({ openProjects: tsConfigs });
+  let ok = true;
+  for (const dir of packages) {
+    const tsConfig = path.join(dir, "tsconfig.json");
+    const project = snapshot.getConfiguredProject(tsConfig);
+    if (!project) throw new Error(`Failed to open ${tsConfig}`);
+    ok = (await lintProviders(project, path.join(dir, "src"))) && ok;
+  }
+  if (!ok) {
     console.error(
       "\nProvider lint failed: one or more `providers()` factories have `unknown`/`any` requirements.",
     );

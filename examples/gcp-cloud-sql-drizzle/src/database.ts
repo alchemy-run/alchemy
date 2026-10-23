@@ -1,6 +1,6 @@
+import * as Drizzle from "@alchemy.run/drizzle";
+import * as GCP from "@alchemy.run/gcp";
 import * as Alchemy from "alchemy";
-import * as Drizzle from "alchemy/Drizzle";
-import * as GCP from "alchemy/GCP";
 import * as Effect from "effect/Effect";
 
 export const database = Effect.gen(function* () {
