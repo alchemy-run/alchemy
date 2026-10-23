@@ -698,6 +698,30 @@ const makeDocker = (options: DockerOptions) =>
         // race. Only `push` reads this config; `build`/`pull`/`tag` keep using the
         // global docker config (buildx builders, `docker context`, etc. intact).
         const dir = yield* fs.makeTempDirectoryScoped({ prefix: "alchemy-docker-" });
+        // The isolated DOCKER_CONFIG holds none of the CLI's contexts. Ask the CLI
+        // (same environment as the push) which context it would use, and copy just
+        // that context's metadata and TLS material in.
+        const selected =
+          context ??
+          (yield* run(["context", "show"]).pipe(
+            Effect.map((result) => result.stdout),
+            Effect.orElseSucceed(() => "default"),
+          ));
+        if (selected && selected !== "default") {
+          const inspected = yield* runInspect<{
+            Storage: { MetadataPath: string; TLSPath: string };
+          }>(["context", "inspect", selected]);
+          for (const [kind, source] of [
+            ["meta", inspected.Storage.MetadataPath],
+            ["tls", inspected.Storage.TLSPath],
+          ] as const) {
+            if (!(yield* fs.exists(source))) continue;
+            const target = path.join(dir, "contexts", kind, path.basename(source));
+            yield* fs.makeDirectory(path.dirname(target), { recursive: true });
+            yield* fs.copy(source, target);
+          }
+        }
+        const pushContext = selected && selected !== "default" ? selected : context;
         const config = yield* Effect.sync(() => {
           const password = Redacted.isRedacted(credentials.password)
             ? Redacted.value(credentials.password)
@@ -711,12 +735,19 @@ const makeDocker = (options: DockerOptions) =>
         const result =
           platform === undefined
             ? yield* run(
-                [...formatArgs({ context }), "push", ...digestArgs, ref],
+                [...formatArgs({ context: pushContext }), "push", ...digestArgs, ref],
                 { DOCKER_CONFIG: dir },
                 outputTap(session),
               )
             : yield* run(
-                [...formatArgs({ context }), "push", "--platform", platform, ...digestArgs, ref],
+                [
+                  ...formatArgs({ context: pushContext }),
+                  "push",
+                  "--platform",
+                  platform,
+                  ...digestArgs,
+                  ref,
+                ],
                 { DOCKER_CONFIG: dir },
                 outputTap(session),
               ).pipe(
@@ -727,7 +758,7 @@ const makeDocker = (options: DockerOptions) =>
                   (error) => /--platform|unknown flag|containerd/i.test(String(error)),
                   () =>
                     run(
-                      [...formatArgs({ context }), "push", ...digestArgs, ref],
+                      [...formatArgs({ context: pushContext }), "push", ...digestArgs, ref],
                       { DOCKER_CONFIG: dir },
                       outputTap(session),
                     ),
