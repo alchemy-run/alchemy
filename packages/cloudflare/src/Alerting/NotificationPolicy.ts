@@ -1,13 +1,20 @@
 import * as alerting from "@distilled.cloud/cloudflare/alerting";
-import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
-import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
+import {
+  createPolicyName,
+  findPolicyByName,
+  narrowPolicy,
+  type ObservedPolicy,
+  observePolicy,
+  type PolicyBody,
+  policyEqualsObserved,
+} from "./internal.ts";
 
 const TypeId = "Cloudflare.Alerting.NotificationPolicy" as const;
 type TypeId = typeof TypeId;
@@ -157,34 +164,9 @@ export type NotificationPolicy = Resource<
  * });
  * ```
  *
- * ### SQL custom alerts
- * A `custom_analytics` policy with `source: ["sql_api"]` is a custom alert:
- * Cloudflare runs the SQL API query in `selectors` every
- * `executionInterval` and fires when the trigger condition holds. The
- * trigger is `threshold` (with an operator and value), `slo`, or a z-score
- * anomaly (`zscore_spike`, `zscore_drop`, `zscore_spike_and_drop`).
- * Cloudflare validates the query when the policy is saved.
- *
- * **Example:** Alert when a Worker logs more than 100 errors in 5 minutes
- * ```typescript
- * yield* Cloudflare.Alerting.NotificationPolicy("ErrorSpike", {
- *   alertType: "custom_analytics",
- *   mechanisms: { email: [{ id: "ops@example.com" }] },
- *   filters: {
- *     source: ["sql_api"],
- *     selectors: [
- *       `SELECT count() AS value FROM logs.workersLogs
- *        WHERE accountTag = '${accountId}' AND level = 'error'`,
- *     ],
- *     executionInterval: ["5m"],
- *     alertTriggerPreferences: ["threshold"],
- *     alertTriggerPreferencesOperator: [">"],
- *     alertTriggerPreferencesValue: ["100"],
- *     alertTriggerPreferencesShortWindow: ["5m"],
- *     alertTriggerPreferencesLongWindow: ["5m"],
- *   },
- * });
- * ```
+ * ### SQL custom alerts <!-- api-prose -->
+ * Alerts on a SQL query (Cloudflare's `custom_analytics` alert type) have
+ * their own resource with typed triggers: `Cloudflare.Alerting.CustomAlert`.
  *
  * ### Workers Issues notifications
  * **Example:** Notify on new Worker issues
@@ -326,62 +308,6 @@ export const NotificationPolicyProvider = () =>
     }),
   });
 
-interface ObservedPolicy {
-  readonly id: string;
-  readonly name?: string;
-  readonly alertType?: AlertType;
-  readonly enabled?: boolean;
-  readonly description?: string;
-  readonly alertInterval?: string;
-  readonly mechanisms?: unknown;
-  readonly filters?: unknown;
-  readonly created?: string;
-  readonly modified?: string;
-}
-
-const undef = <T>(v: T | null | undefined): T | undefined => (v == null ? undefined : v);
-
-const narrowPolicy = (raw: {
-  id?: string | null;
-  name?: string | null;
-  alertType?: string | null;
-  enabled?: boolean | null;
-  description?: string | null;
-  alertInterval?: string | null;
-  mechanisms?: unknown;
-  filters?: unknown;
-  created?: string | null;
-  modified?: string | null;
-}): ObservedPolicy | undefined =>
-  raw.id == null
-    ? undefined
-    : {
-        id: raw.id,
-        name: undef(raw.name),
-        alertType: undef(raw.alertType) as AlertType | undefined,
-        enabled: undef(raw.enabled),
-        description: undef(raw.description),
-        alertInterval: undef(raw.alertInterval),
-        mechanisms: raw.mechanisms ?? undefined,
-        filters: raw.filters ?? undefined,
-        created: undef(raw.created),
-        modified: undef(raw.modified),
-      };
-
-const observePolicy = (accountId: string, policyId: string) =>
-  alerting.getPolicy({ accountId, policyId }).pipe(
-    Effect.map((p) => narrowPolicy({ ...p, id: p.id ?? policyId })),
-    Effect.catchTag("PolicyNotFound", () => Effect.succeed(undefined)),
-  );
-
-const findPolicyByName = (accountId: string, name: string) =>
-  alerting.listPolicies.items({ accountId }).pipe(
-    Stream.filter((p) => p.name === name && p.id != null),
-    Stream.runHead,
-    Effect.map(Option.getOrUndefined),
-    Effect.map((p) => (p === undefined ? undefined : narrowPolicy(p))),
-  );
-
 const toPolicyAttributes = (
   observed: ObservedPolicy,
   accountId: string,
@@ -394,13 +320,6 @@ const toPolicyAttributes = (
   created: observed.created,
   modified: observed.modified,
 });
-
-const createPolicyName = (id: string, name: string | undefined) =>
-  Effect.gen(function* () {
-    return name ?? (yield* createPhysicalName({ id, lowercase: true }));
-  });
-
-type PolicyBody = Omit<alerting.CreatePolicyRequest, "accountId">;
 
 const buildPolicyBody = (name: string, news: NotificationPolicyProps): PolicyBody => ({
   name,
@@ -420,28 +339,3 @@ const buildPolicyBody = (name: string, news: NotificationPolicyProps): PolicyBod
  * dropped and object keys sorted, since Cloudflare echoes optional fields
  * as `null`.
  */
-const policyEqualsObserved = (desired: PolicyBody, observed: ObservedPolicy): boolean =>
-  desired.name === (observed.name ?? "") &&
-  desired.enabled === (observed.enabled ?? true) &&
-  (desired.description ?? "") === (observed.description ?? "") &&
-  (desired.alertInterval ?? undefined) === observed.alertInterval &&
-  normalizedEquals(desired.mechanisms, observed.mechanisms) &&
-  normalizedEquals(desired.filters, observed.filters);
-
-const normalizedEquals = (a: unknown, b: unknown): boolean =>
-  JSON.stringify(normalize(a)) === JSON.stringify(normalize(b));
-
-/** Drop null/undefined members and sort object keys for stable comparison. */
-const normalize = (value: unknown): unknown => {
-  if (value === null || value === undefined) return undefined;
-  if (Array.isArray(value)) return value.map(normalize);
-  if (typeof value === "object") {
-    const out: Record<string, unknown> = {};
-    for (const key of Object.keys(value as Record<string, unknown>).sort()) {
-      const v = normalize((value as Record<string, unknown>)[key]);
-      if (v !== undefined) out[key] = v;
-    }
-    return Object.keys(out).length === 0 ? undefined : out;
-  }
-  return value;
-};
