@@ -4,6 +4,7 @@ import {
   type RegistryCredentials,
 } from "@alchemy.run/docker/Docker";
 import * as builders from "@distilled.cloud/fly-io/builders";
+import * as Clock from "effect/Clock";
 import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -34,6 +35,9 @@ const FLY_REGISTRY_MIRROR = "_api.internal:5000";
 const HEALTH_INTERVAL = Duration.seconds(5);
 /** Builders usually go active within ~15s; give up well before the deploy would. */
 const MAX_PENDING_POLLS = 240;
+/** How often, and how long, to wait for the builder's push to reach `registry.fly.io`. */
+const UPSTREAM_POLL = Duration.seconds(2);
+const MAX_UPSTREAM_POLLS = 90;
 
 export class RemoteBuilderError extends Data.TaggedError("Fly.RemoteBuilderError")<{
   operation: string;
@@ -109,9 +113,7 @@ const acquireConnection = Effect.fn(function* (
 
 /**
  * Build `imageRef` from `contextDir` on a Fly remote builder and push it to
- * `registry` from there. Returns the builder's id: Machines created with it
- * as `fly_builder_id` metadata pull the image from the builder's registry
- * mirror before it finishes uploading to `registry.fly.io`.
+ * `registry` from there.
  */
 export const buildOnRemoteBuilder = Effect.fn(function* (input: {
   docker: Docker["Service"];
@@ -120,7 +122,9 @@ export const buildOnRemoteBuilder = Effect.fn(function* (input: {
   imageRef: string;
   platform: string;
   registry: RegistryCredentials;
+  note?: (message: string) => Effect.Effect<void>;
 }) {
+  const note = input.note ?? ((_message: string) => Effect.void);
   const { buildId, buildToken } = yield* builders.ensureDepotRemoteBuilder({
     input: { appName: input.appName, builderScope: "app" },
   });
@@ -168,7 +172,16 @@ export const buildOnRemoteBuilder = Effect.fn(function* (input: {
 
     yield* input.docker.image
       .build(
-        { context: input.contextDir, tag: input.imageRef, platform: input.platform },
+        {
+          context: input.contextDir,
+          tag: input.imageRef,
+          platform: input.platform,
+          // Buildx attaches provenance by default, which pushes an image index.
+          // The builder's registry mirror never forwards an index to
+          // registry.fly.io, so the image would only exist on the builder.
+          // flyctl's BuildKit client adds no attestations either.
+          args: ["--provenance=false", "--sbom=false"],
+        },
         undefined,
         input.registry,
       )
@@ -180,8 +193,28 @@ export const buildOnRemoteBuilder = Effect.fn(function* (input: {
           }),
         }),
       );
-    // The BuildKit worker's hostname, which is also its TLS server name.
-    return { builderId: connection.serverName };
+
+    // The builder pushes through its host's registry mirror, which forwards
+    // to registry.fly.io. Machines pull from there, so confirm the tag landed
+    // (usually within seconds) while the builder is still held.
+    const started = yield* Clock.currentTimeMillis;
+    yield* input.docker.run(["buildx", "imagetools", "inspect", "--raw", input.imageRef]).pipe(
+      Effect.provideService(DockerEnvironment, {
+        DOCKER_AUTH_CONFIG: JSON.stringify({
+          auths: { [input.registry.server]: { auth: basicAuth(input.registry) } },
+        }),
+      }),
+      Effect.retry({ schedule: Schedule.spaced(UPSTREAM_POLL), times: MAX_UPSTREAM_POLLS }),
+      Effect.mapError(
+        () =>
+          new RemoteBuilderError({
+            operation: "upload",
+            message: `${input.imageRef} did not reach ${input.registry.server}`,
+          }),
+      ),
+    );
+    const waited = (yield* Clock.currentTimeMillis) - started;
+    yield* note(`${input.imageRef} available on ${input.registry.server} after ${waited}ms`);
   }).pipe(
     Effect.scoped,
     Effect.tapError((error) => finish({ error: { error: String(error) } })),

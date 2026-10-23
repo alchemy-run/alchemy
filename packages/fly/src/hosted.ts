@@ -66,11 +66,6 @@ export const FLY_REGISTRY = "registry.fly.io";
 export const DEFAULT_BASE_IMAGE = "node:26-slim";
 export const DEFAULT_PORT = 3000;
 export const MACHINE_PLATFORM = "linux/amd64";
-/**
- * Machine metadata naming the remote builder that just built the image, so
- * Fly pulls it from that builder's registry mirror (as `fly deploy` does).
- */
-export const FLY_BUILDER_ID_METADATA = "fly_builder_id";
 
 export interface FlyBuildOptions extends Bundle.BundleConfig {
   /**
@@ -501,7 +496,7 @@ export const createFlyHostedSupport = ({
     const imageRef = `${FLY_REGISTRY}/${input.appName}:${repo}-${codeHash}`;
 
     if (input.previousHash === codeHash) {
-      return { imageRef, codeHash, builderId: undefined };
+      return { imageRef, codeHash };
     }
 
     const minted = yield* machines.createAppDeployToken({ app_name: input.appName });
@@ -556,16 +551,17 @@ export const createFlyHostedSupport = ({
     if (input.props.build?.remote !== false) {
       const contextDir = yield* materialize;
       yield* note(`Building ${imageRef} on a Fly remote builder...`);
-      const { builderId } = yield* buildOnRemoteBuilder({
+      yield* buildOnRemoteBuilder({
         docker,
         appName: input.appName,
         contextDir,
         imageRef,
         platform: MACHINE_PLATFORM,
         registry,
+        note,
       });
       yield* note(`Pushed ${imageRef}`);
-      return { imageRef, codeHash, builderId };
+      return { imageRef, codeHash };
     }
 
     if (!(yield* imageExists(imageRef))) {
@@ -580,7 +576,7 @@ export const createFlyHostedSupport = ({
       .push(imageRef, registry)
       .pipe(Effect.retry({ times: 3, schedule: pushBackoff }));
     yield* note(`Pushed ${imageRef}`);
-    return { imageRef, codeHash, builderId: undefined };
+    return { imageRef, codeHash };
   });
 
   const hash = Effect.fn(function* (props: HostedProgramProps) {
