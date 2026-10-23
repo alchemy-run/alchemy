@@ -684,9 +684,7 @@ const makeDocker = (options: DockerOptions) =>
     const push: Docker["Service"]["image"]["push"] = Effect.fn(
       function* (ref, credentials, platform, context, session) {
         // Write the registry credentials directly into an isolated docker config
-        // as a plaintext `auths` entry and skip `docker login` entirely. Preserve
-        // the selected Docker context because the CLI stores named context metadata
-        // under DOCKER_CONFIG and the active context in config.json.
+        // as a plaintext `auths` entry and skip `docker login` entirely.
         //
         // `docker login` is the wrong tool here: on macOS Docker Desktop it routes
         // through the shared `osxkeychain`/`desktop` credential helper *regardless*
@@ -700,65 +698,36 @@ const makeDocker = (options: DockerOptions) =>
         // race. Only `push` reads this config; `build`/`pull`/`tag` keep using the
         // global docker config (buildx builders, `docker context`, etc. intact).
         const dir = yield* fs.makeTempDirectoryScoped({ prefix: "alchemy-docker-" });
-        const ambient = yield* DockerEnvironment;
-        const optional = (name: string) => Config.String(name).pipe(Config.withDefault(""));
-        const configured = yield* Config.all({
-          DOCKER_CONFIG: optional("DOCKER_CONFIG"),
-          HOME: optional("HOME"),
-          USERPROFILE: optional("USERPROFILE"),
-        }).pipe(
-          Effect.mapError(() =>
-            systemError({
-              _tag: "InvalidData",
-              args: ["image", "push"],
-              description: "Unable to read the Docker client config directory from config.",
-            }),
-          ),
-        );
-        const environment = { ...configured, ...ambient };
-        const isWindows = yield* Effect.sync(() => process.platform === "win32");
-        const home = isWindows
-          ? environment.USERPROFILE || environment.HOME
-          : environment.HOME || environment.USERPROFILE;
-        if (!environment.DOCKER_CONFIG && !home) {
-          return yield* systemError({
-            _tag: "InvalidData",
-            args: ["image", "push"],
-            description: "Unable to resolve the Docker client config directory.",
-          });
+        // The isolated DOCKER_CONFIG holds none of the CLI's contexts. Ask the CLI
+        // (same environment as the push) which context it would use, and copy just
+        // that context's metadata and TLS material in.
+        const selected =
+          context ??
+          (yield* run(["context", "show"]).pipe(
+            Effect.map((result) => result.stdout),
+            Effect.orElseSucceed(() => "default"),
+          ));
+        if (selected && selected !== "default") {
+          const inspected = yield* runInspect<{
+            Storage: { MetadataPath: string; TLSPath: string };
+          }>(["context", "inspect", selected]);
+          for (const [kind, source] of [
+            ["meta", inspected.Storage.MetadataPath],
+            ["tls", inspected.Storage.TLSPath],
+          ] as const) {
+            if (!(yield* fs.exists(source))) continue;
+            const target = path.join(dir, "contexts", kind, path.basename(source));
+            yield* fs.makeDirectory(path.dirname(target), { recursive: true });
+            yield* fs.copy(source, target);
+          }
         }
-        const sourceConfigDir = environment.DOCKER_CONFIG || path.join(home, ".docker");
-        const sourceConfig = yield* fs
-          .readFileString(path.join(sourceConfigDir, "config.json"))
-          .pipe(
-            Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed("{}")),
-            Effect.flatMap((contents) =>
-              Effect.try({
-                try: () => JSON.parse(contents) as { currentContext?: unknown },
-                catch: () =>
-                  systemError({
-                    _tag: "InvalidData",
-                    args: ["image", "push"],
-                    description: "Invalid Docker client config JSON.",
-                  }),
-              }),
-            ),
-          );
-        const contextsDir = path.join(sourceConfigDir, "contexts");
-        if (yield* fs.exists(contextsDir)) {
-          yield* fs.copy(contextsDir, path.join(dir, "contexts"));
-        }
+        const pushContext = selected && selected !== "default" ? selected : context;
         const config = yield* Effect.sync(() => {
           const password = Redacted.isRedacted(credentials.password)
             ? Redacted.value(credentials.password)
             : credentials.password;
           const auth = Buffer.from(`${credentials.username}:${password}`).toString("base64");
-          return JSON.stringify({
-            ...(typeof sourceConfig?.currentContext === "string"
-              ? { currentContext: sourceConfig.currentContext }
-              : {}),
-            auths: { [credentials.server]: { auth } },
-          });
+          return JSON.stringify({ auths: { [credentials.server]: { auth } } });
         });
         yield* fs.writeFileString(path.join(dir, "config.json"), config);
         const digestFile = path.join(dir, "digest");
@@ -766,12 +735,19 @@ const makeDocker = (options: DockerOptions) =>
         const result =
           platform === undefined
             ? yield* run(
-                [...formatArgs({ context }), "push", ...digestArgs, ref],
+                [...formatArgs({ context: pushContext }), "push", ...digestArgs, ref],
                 { DOCKER_CONFIG: dir },
                 outputTap(session),
               )
             : yield* run(
-                [...formatArgs({ context }), "push", "--platform", platform, ...digestArgs, ref],
+                [
+                  ...formatArgs({ context: pushContext }),
+                  "push",
+                  "--platform",
+                  platform,
+                  ...digestArgs,
+                  ref,
+                ],
                 { DOCKER_CONFIG: dir },
                 outputTap(session),
               ).pipe(
@@ -782,7 +758,7 @@ const makeDocker = (options: DockerOptions) =>
                   (error) => /--platform|unknown flag|containerd/i.test(String(error)),
                   () =>
                     run(
-                      [...formatArgs({ context }), "push", ...digestArgs, ref],
+                      [...formatArgs({ context: pushContext }), "push", ...digestArgs, ref],
                       { DOCKER_CONFIG: dir },
                       outputTap(session),
                     ),
