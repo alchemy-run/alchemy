@@ -1,5 +1,5 @@
 import { storyCoverage } from "../src/rules/story-coverage.ts";
-import { bank, tester } from "./tester.ts";
+import { bank, kennel, tester } from "./tester.ts";
 
 const head = `import * as Domain from "@alchemy.run/domain";\n`;
 
@@ -42,6 +42,27 @@ export class CloseAccount extends Domain.Command("CloseAccount", { events: [Acco
       filename: bank("src/Account/OpenAccount.command.ts"),
       code: `${head}export class AlreadyOpen extends Domain.Rejection("AlreadyOpen") {}`,
       errors: [{ messageId: "rejection", data: { name: "AlreadyOpen" } }],
+    },
+  ],
+});
+
+tester.run("story-coverage (kebab, messages file)", storyCoverage, {
+  valid: [
+    {
+      filename: kennel("src/dog/dog.messages.ts"),
+      code: `${head}export class NotHungry extends Domain.Rejection("NotHungry") {}
+export class FeedDog extends Domain.Command("FeedDog", { events: [DogFed] }) {}`,
+    },
+  ],
+  invalid: [
+    {
+      filename: kennel("src/dog/dog.messages.ts"),
+      code: `${head}export class Asleep extends Domain.Rejection("Asleep") {}
+export class WalkDog extends Domain.Command("WalkDog", { events: [DogWalked] }) {}`,
+      errors: [
+        { messageId: "rejection", data: { name: "Asleep" } },
+        { messageId: "command", data: { name: "WalkDog" } },
+      ],
     },
   ],
 });

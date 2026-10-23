@@ -21,6 +21,9 @@ const matches = (source: string, allowed: string) =>
  * Enable it on the domain package's source (`overrides[].files`). Relative
  * imports must stay inside the package. Type-only imports of `alchemy` are
  * allowed (a port may require `RuntimeContext`); set `allowTypes` to change that.
+ * `allowPaths` lists directories (absolute, or relative to the lint's working
+ * directory) a relative import may leave the package for, such as a pure
+ * module shared with a package that has not moved yet.
  */
 export const domainImports: Rule = {
   meta: {
@@ -41,6 +44,7 @@ export const domainImports: Rule = {
         properties: {
           allow: { type: "array", items: { type: "string" } },
           allowTypes: { type: "array", items: { type: "string" } },
+          allowPaths: { type: "array", items: { type: "string" } },
         },
         additionalProperties: false,
       },
@@ -50,18 +54,23 @@ export const domainImports: Rule = {
     const options = (context.options[0] ?? {}) as {
       allow?: ReadonlyArray<string>;
       allowTypes?: ReadonlyArray<string>;
+      allowPaths?: ReadonlyArray<string>;
     };
     const allowed = [...ALLOWED, ...(options.allow ?? [])];
     const allowedTypes = [...allowed, ...(options.allowTypes ?? ALLOWED_TYPES)];
     const root = packageRoot(context.filename);
+    const allowedPaths = (options.allowPaths ?? []).map((dir) => path.resolve(context.cwd, dir));
+    const inside = (dir: string, target: string) => {
+      const relative = path.relative(dir, target);
+      return !relative.startsWith("..") && !path.isAbsolute(relative);
+    };
 
     const check = (node: Node, source: unknown, typeOnly = false) => {
       if (typeof source !== "string") return;
       if (isRelative(source)) {
         if (root === undefined) return;
         const target = path.resolve(path.dirname(context.filename), source);
-        const relative = path.relative(root, target);
-        if (relative.startsWith("..") || path.isAbsolute(relative)) {
+        if (!inside(root, target) && !allowedPaths.some((dir) => inside(dir, target))) {
           context.report({ node, messageId: "outside", data: { source } });
         }
         return;

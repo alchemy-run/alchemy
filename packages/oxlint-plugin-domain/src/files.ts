@@ -33,7 +33,19 @@ const isFile = (file: string): boolean => {
   }
 };
 
-export const exists = isFile;
+/**
+ * `file` exists under exactly this name. A case-insensitive file system
+ * (macOS, Windows) answers `stat("Account.id.ts")` for `account.id.ts`, so
+ * the name is compared with the directory listing.
+ */
+export const exists = (file: string): boolean => {
+  if (!isFile(file)) return false;
+  try {
+    return fs.readdirSync(path.dirname(file)).includes(path.basename(file));
+  } catch {
+    return false;
+  }
+};
 
 const readText = (file: string): string | undefined => {
   try {

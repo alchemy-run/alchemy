@@ -1,5 +1,5 @@
 import { blockFileName } from "../src/rules/block-file-name.ts";
-import { bank, tester } from "./tester.ts";
+import { bank, kennel, tester } from "./tester.ts";
 
 const head = `import * as Domain from "@alchemy.run/domain";\n`;
 
@@ -156,6 +156,134 @@ export class Session extends RpcMiddleware.Service<Session, { provides: CurrentA
             actual: "Session.middleware.ts",
             kind: "Middleware",
             callee: "RpcMiddleware.Service",
+          },
+        },
+      ],
+    },
+  ],
+});
+
+const kebab = { fileCase: "kebab" } as const;
+const grouped = { fileCase: "kebab", messagesFile: "messages" } as const;
+
+tester.run("block-file-name (fileCase, messagesFile)", blockFileName, {
+  valid: [
+    {
+      filename: kennel("src/dog/dog.aggregate.ts"),
+      code: `${head}export class Dog extends Domain.Aggregate("Dog", {}) {}`,
+      options: [kebab],
+    },
+    {
+      filename: kennel("src/dog/feed-dog.command.ts"),
+      code: `${head}export class DogFed extends Domain.Event("DogFed", {}) {}
+export class FeedDog extends Domain.Command("FeedDog", {}) {}`,
+      options: [kebab],
+    },
+    {
+      filename: kennel("src/dog/not-hungry.rejection.ts"),
+      code: `${head}export class NotHungry extends Domain.Rejection("NotHungry") {}`,
+      options: [kebab],
+    },
+    {
+      filename: kennel("src/gateway-job-queue.aggregate.ts"),
+      code: `${head}export class GatewayJobQueue extends Domain.Aggregate("GatewayJobQueue", {}) {}`,
+      options: [kebab],
+    },
+    {
+      filename: kennel("src/atm-card.aggregate.ts"),
+      code: `${head}export class ATMCard extends Domain.Aggregate("ATMCard", {}) {}`,
+      options: [kebab],
+    },
+    // A messages file holds the commands, events and rejections of one aggregate.
+    {
+      filename: kennel("src/dog/dog.messages.ts"),
+      code: `${head}export class NotHungry extends Domain.Rejection("NotHungry") {}
+export class DogFed extends Domain.Event("DogFed", {}) {}
+export class FeedDog extends Domain.Command("FeedDog", {}) {}
+export class WalkDog extends Domain.Command("WalkDog", {}) {}`,
+      options: [grouped],
+    },
+    {
+      filename: bank("src/Account/Account.messages.ts"),
+      code: `${head}export class OpenAccount extends Domain.Command("OpenAccount", {}) {}
+export class CloseAccount extends Domain.Command("CloseAccount", {}) {}`,
+      options: [{ messagesFile: "messages" }],
+    },
+  ],
+  invalid: [
+    {
+      filename: kennel("src/dog/Dog.aggregate.ts"),
+      code: `${head}export class Dog extends Domain.Aggregate("Dog", {}) {}`,
+      options: [kebab],
+      errors: [
+        {
+          messageId: "name",
+          data: {
+            kind: "Aggregate",
+            name: "Dog",
+            expected: "dog.aggregate.ts",
+            actual: "Dog.aggregate.ts",
+          },
+        },
+      ],
+    },
+    {
+      filename: kennel("src/dog/feed.command.ts"),
+      code: `${head}export class FeedDog extends Domain.Command("FeedDog", {}) {}`,
+      options: [kebab],
+      errors: [
+        {
+          messageId: "name",
+          data: {
+            kind: "Command",
+            name: "FeedDog",
+            expected: "feed-dog.command.ts",
+            actual: "feed.command.ts",
+          },
+        },
+      ],
+    },
+    // Without `messagesFile`, a grouped file is named for its first command.
+    {
+      filename: kennel("src/dog/dog.messages.ts"),
+      code: `${head}export class FeedDog extends Domain.Command("FeedDog", {}) {}`,
+      options: [kebab],
+      errors: [
+        {
+          messageId: "name",
+          data: {
+            kind: "Command",
+            name: "FeedDog",
+            expected: "feed-dog.command.ts",
+            actual: "dog.messages.ts",
+          },
+        },
+      ],
+    },
+    // A messages file holds no other block.
+    {
+      filename: kennel("src/dog/dog.messages.ts"),
+      code: `${head}export class FeedDog extends Domain.Command("FeedDog", {}) {}
+export class Dog extends Domain.Aggregate("Dog", {}) {}
+export class DogCard extends Domain.View("DogCard", {}) {}`,
+      options: [grouped],
+      errors: [
+        {
+          messageId: "messages",
+          data: {
+            kind: "Aggregate",
+            name: "Dog",
+            expected: "dog.aggregate.ts",
+            actual: "dog.messages.ts",
+          },
+        },
+        {
+          messageId: "messages",
+          data: {
+            kind: "View",
+            name: "DogCard",
+            expected: "dog-card.view.ts",
+            actual: "dog.messages.ts",
           },
         },
       ],
