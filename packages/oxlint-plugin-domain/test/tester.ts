@@ -12,3 +12,7 @@ export const tester = new RuleTester({
 /** An absolute path inside the fixture package `test/fixtures/bank`. */
 export const bank = (file: string): string =>
   path.join(import.meta.dirname, "fixtures", "bank", file);
+
+/** An absolute path inside the fixture package `test/fixtures/kennel` (kebab-case file names, grouped messages files). */
+export const kennel = (file: string): string =>
+  path.join(import.meta.dirname, "fixtures", "kennel", file);

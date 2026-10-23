@@ -1,5 +1,5 @@
 import { noCrossAggregateImport } from "../src/rules/no-cross-aggregate-import.ts";
-import { bank, tester } from "./tester.ts";
+import { bank, kennel, tester } from "./tester.ts";
 
 const filename = bank("src/Account/Account.aggregate.ts");
 const head = `import * as Domain from "@alchemy.run/domain";\n`;
@@ -40,6 +40,22 @@ export class Transfer extends Domain.Aggregate("Transfer", { decide: {} }) {}`,
       filename,
       code: `${head}import { Loan } from "@acme/lending/Loan/Loan.aggregate";${body}`,
       errors: [{ messageId: "cross" }],
+    },
+  ],
+});
+
+tester.run("no-cross-aggregate-import (kebab)", noCrossAggregateImport, {
+  valid: [
+    {
+      filename: kennel("src/dog/dog.aggregate.ts"),
+      code: `${head}import { FeedDog } from "./dog.messages";\nexport class Dog extends Domain.Aggregate("Dog", {}) {}`,
+    },
+  ],
+  invalid: [
+    {
+      filename: kennel("src/dog/dog.aggregate.ts"),
+      code: `${head}import { Cat } from "../cat/cat.aggregate";\nexport class Dog extends Domain.Aggregate("Dog", {}) {}`,
+      errors: [{ messageId: "cross", data: { aggregate: "Dog", other: "Cat" } }],
     },
   ],
 });
