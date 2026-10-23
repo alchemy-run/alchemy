@@ -62,11 +62,6 @@ import {
   type SelectionOutput,
 } from "./ResourceSelection.ts";
 import { capturedEnvKeys } from "./RuntimeContext.ts";
-import {
-  isProvisionalWorkerOutput,
-  recordedWorkerAccount,
-  sameWorkerIdentity,
-} from "./State/WorkerState.ts";
 import { cachedInScope } from "./Util/Memoize.ts";
 export { InvalidResourceSelection, UnsafeSelectionBoundary } from "./ResourceSelection.ts";
 import { type StackSpec } from "./Stack.ts";
@@ -193,8 +188,6 @@ export interface NoopUpdate<R extends ResourceLike = ResourceLike> extends Apply
 
 export interface Replace<R extends ResourceLike = ResourceLike> extends ApplyNodeBase<R> {
   action: "replace";
-  /** Whether replacement may take over a foreign physical identity. */
-  adopt?: boolean;
   props: any;
   deleteFirst: boolean;
   restart?: boolean;
@@ -1480,39 +1473,11 @@ const makePlan = <A>(
       }
 
       const adoptThis = resource.Adopt ?? (yield* shouldAdopt);
-      // oxlint-disable-next-line alchemy/package-boundaries -- The engine must distinguish legacy Worker checkpoints before serialization, retry, and cleanup.
-      const isLiveWorker = resource.Type === "Cloudflare.Worker" && mode !== "local";
-      if (
-        isLiveWorker &&
-        (oldState?.status === "creating" || oldState?.status === "deleting") &&
-        (isProvisionalWorkerOutput(oldState.attr) ||
-          (oldState.status === "creating" && oldState.workerWriteStarted === false))
-      ) {
-        oldState = {
-          ...oldState,
-          attr: undefined,
-          workerAccountId:
-            oldState.workerWriteStarted === false ? undefined : recordedWorkerAccount(oldState),
-        };
-      }
-      let workerAccountChanged = false;
-      if (
-        isLiveWorker &&
-        oldState !== undefined &&
-        (oldState.status === "creating" || oldState.status === "replacing") &&
-        oldState.workerWriteStarted !== false &&
-        recordedWorkerAccount(oldState) !== undefined
-      ) {
-        const account = yield* provider.workerIdentity?.account ?? Effect.succeed(undefined);
-        if (account !== undefined)
-          workerAccountChanged = account !== recordedWorkerAccount(oldState);
-      }
       const Node = <T extends Apply>(
         node: Omit<T, "provider" | "resource" | "bindings" | "downstream" | "mode">,
       ) =>
         ({
           ...node,
-          ...(isLiveWorker && node.action === "replace" ? { adopt: adoptThis } : {}),
           provider,
           resource,
           bindings: bindingDiffs,
@@ -1524,8 +1489,7 @@ const makePlan = <A>(
             node.action === "create" &&
             provider.read &&
             !reusesMigratedFqn &&
-            ((isLiveWorker && node.action === "create" && node.state?.attr === undefined) ||
-              (oldState === undefined && !isResolved(news)) ||
+            ((oldState === undefined && !isResolved(news)) ||
               (oldState?.status === "creating" && oldState.attr === undefined))
               ? { adopt: adoptThis }
               : undefined,
@@ -1542,32 +1506,20 @@ const makePlan = <A>(
         });
       } else if (
         !modeSwitched &&
-        isLiveWorker &&
-        !reusesMigratedFqn &&
-        (oldState.status === "creating" || oldState.status === "replacing") &&
-        (workerAccountChanged ||
-          oldState.workerIdentityResolved !== true ||
-          !sameWorkerIdentity(oldState.props, applyProps)) &&
-        oldState.workerWriteStarted !== false
+        oldState.status === "creating" &&
+        oldState.attr === undefined &&
+        oldState.propsIncomplete
       ) {
-        // Changed or unknown identities need separate generations. A new
-        // candidate must not turn missing identity fields into cleanup proof.
-        return Node<Replace>({
-          action: "replace",
+        // The checkpoint lost unresolved props, so they cannot identify the
+        // interrupted attempt: a lookup could match a different resource, and
+        // a diff against them could plan a spurious replacement. Re-drive the
+        // create; it admits the resolved identity before writing.
+        return Node<Create>({
+          action: "create",
           props: applyProps,
           state: oldState,
-          deleteFirst: false,
-          restart: oldState.status === "replacing" ? true : undefined,
         });
       } else if (!modeSwitched && oldState.status === "creating" && oldState.attr === undefined) {
-        if (
-          isLiveWorker &&
-          (oldState.workerIdentityResolved !== true || oldState.workerWriteStarted === false) &&
-          provider.read &&
-          !reusesMigratedFqn
-        ) {
-          return Node<Create>({ action: "create", props: applyProps, state: oldState });
-        }
         // A create may have succeeded before state persistence failed. If the
         // provider can recover an attribute snapshot, keep driving the same
         // create instead of starting over blindly.

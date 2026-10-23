@@ -13,7 +13,6 @@ import type { ScopedPlanStatusSession } from "alchemy/Report";
 import { type ResourceBinding } from "alchemy/Resource";
 import { isRedactedMarker } from "alchemy/RuntimeContext";
 import { Stack } from "alchemy/Stack";
-import { isProvisionalWorkerOutput } from "alchemy/State/WorkerState";
 import { cachedFunction } from "alchemy/Util/cached-function";
 import { initialCwd } from "alchemy/Util/Node";
 import { sha256Object } from "alchemy/Util/sha256";
@@ -4391,28 +4390,6 @@ export const LiveWorkerProvider = () =>
       });
 
       return Worker.Provider.of({
-        workerIdentity: {
-          account: Effect.gen(function* () {
-            const environment = yield* Effect.serviceOption(CloudflareEnvironment);
-            return Option.isSome(environment) ? (yield* environment.value).accountId : undefined;
-          }),
-          name: createWorkerName,
-          withAccount: (accountId, effect) =>
-            Effect.gen(function* () {
-              const service = yield* Effect.serviceOption(CloudflareEnvironment);
-              if (Option.isNone(service))
-                return yield* Effect.die(
-                  "Recorded Worker account requires Cloudflare credentials for cleanup",
-                );
-              const environment = yield* service.value;
-              return yield* effect.pipe(
-                Effect.provideService(
-                  CloudflareEnvironment,
-                  Effect.succeed({ ...environment, accountId }),
-                ),
-              );
-            }),
-        },
         stables: ["workerId", "workerName"],
         list: () =>
           Effect.gen(function* () {
@@ -5174,16 +5151,15 @@ export const LiveWorkerProvider = () =>
             // raises `OwnedBySomeoneElse`).
             return hasAlchemyWorkerTags(id, settings.tags ?? []) ? attrs : Unowned(attrs);
           },
-          (effect, { output }) =>
+          (effect) =>
             effect.pipe(
-              // Version propagation may lag a known upload. Without trusted
-              // output, unreadable version settings cannot prove absence.
+              // A worker that exists but hasn't registered a version yet reads
+              // as "not deployed" — fall through to (re)create like NotFound.
+              // The dispatch-namespace endpoints report the same conditions as
+              // `DispatchNamespaceScriptNotFound` / `DispatchNamespaceNotFound`.
               Effect.catchTags({
                 WorkerNotFound: () => Effect.succeed(undefined),
-                WorkerHasNoVersions: (error) =>
-                  output === undefined || isProvisionalWorkerOutput(output)
-                    ? Effect.fail(error)
-                    : Effect.succeed(undefined),
+                WorkerHasNoVersions: () => Effect.succeed(undefined),
                 DispatchNamespaceScriptNotFound: () => Effect.succeed(undefined),
                 DispatchNamespaceNotFound: () => Effect.succeed(undefined),
               }),
@@ -5265,13 +5241,7 @@ export const LiveWorkerProvider = () =>
 
           return yield* putWorker(id, fqn, news, bindings, olds, output, session, existingSettings);
         }),
-        delete: Effect.fn(function* ({ output, session, force }) {
-          if (!force && isProvisionalWorkerOutput(output)) {
-            yield* session.note(
-              "Skipping deletion of provisional Worker attributes. Any interrupted upload requires manual cleanup.",
-            );
-            return;
-          }
+        delete: Effect.fn(function* ({ output }) {
           // Version workers own a version, not the script — `workerName` is
           // the *parent's* script and must never be deleted here. Versions
           // can't be deleted through the API (they age out of Cloudflare's

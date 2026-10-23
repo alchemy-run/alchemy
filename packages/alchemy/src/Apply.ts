@@ -11,7 +11,7 @@ import * as Predicate from "effect/Predicate";
 import type { Simplify } from "effect/Types";
 import type { ActionLike } from "./Action.ts";
 import { makeResolveContext } from "./ActionRuntimeContext.ts";
-import { AdoptPolicy, OwnedBySomeoneElse, stripUnowned, Unowned } from "./AdoptPolicy.ts";
+import { OwnedBySomeoneElse, stripUnowned, Unowned } from "./AdoptPolicy.ts";
 import { AlchemyContext } from "./AlchemyContext.ts";
 import {
   Artifacts,
@@ -26,7 +26,7 @@ import {
   failCredentialsRequired,
   demandPlanCredentials,
 } from "./Auth/Demand.ts";
-import { havePropsChanged, stripUnresolved } from "./Diff.ts";
+import { havePropsChanged, isResolved, stripUnresolved } from "./Diff.ts";
 import type { Input } from "./Input.ts";
 import { generateInstanceId } from "./InstanceId.ts";
 import * as Output from "./Output.ts";
@@ -69,11 +69,6 @@ import {
   State,
   StateStoreError,
 } from "./State/index.ts";
-import {
-  isProvisionalWorkerOutput,
-  recordedWorkerAccount,
-  workerIdentitySurvivesPersistence,
-} from "./State/WorkerState.ts";
 import { type ResourceOp, recordResourceOp } from "./Telemetry/Metrics.ts";
 import { hashInput } from "./Util/sha256.ts";
 
@@ -111,6 +106,21 @@ const track = (
   tracker[fqn] = entry;
   outputs[fqn] = entry.output;
 };
+
+/**
+ * Whether an attr-less checkpoint lost props to `stripUnresolved`. Its stored
+ * props no longer identify the physical resource it was creating (e.g. a
+ * stripped namespace makes a name match a different resource), so recovery
+ * must not look the resource up from them.
+ */
+const propsIncomplete = (value: {
+  attr?: unknown;
+  props?: unknown;
+  propsIncomplete?: true;
+}): true | undefined =>
+  value.attr === undefined && (value.propsIncomplete || !isResolved(value.props))
+    ? true
+    : undefined;
 
 const provideLifecycleScope =
   (resource: ResourceContext["Service"]) =>
@@ -546,57 +556,8 @@ const executeNode = (
     const logicalId = node.resource.LogicalId;
     const namespace = node.resource.Namespace;
 
-    // oxlint-disable-next-line alchemy/package-boundaries -- The engine must distinguish legacy Worker checkpoints before serialization, retry, and cleanup.
-    const isLiveWorker = node.resource.Type === "Cloudflare.Worker" && node.mode !== "local";
-    const currentWorkerAccount = node.provider.workerIdentity?.account ?? Effect.succeed(undefined);
-    const workerName = (id: string, name: string | undefined) =>
-      node.provider.workerIdentity?.name(id, name) ??
-      Effect.die("Worker provider requires physical identity operations");
-    const resumingWorker =
-      isLiveWorker &&
-      (node.action === "create" ||
-        (node.action === "replace" && !node.restart && node.state.status === "replacing"));
-    let workerAccountId =
-      resumingWorker && node.state !== undefined ? recordedWorkerAccount(node.state) : undefined;
-    if (
-      resumingWorker &&
-      node.state?.workerWriteStarted !== false &&
-      workerAccountId !== undefined &&
-      (yield* currentWorkerAccount) !== workerAccountId
-    )
-      return yield* Effect.die(
-        "Worker account changed after planning; replan before resuming this physical attempt",
-      );
-    const startWorkerWrite = Effect.gen(function* () {
-      const account = yield* currentWorkerAccount;
-      if (workerAccountId !== undefined && account !== undefined && account !== workerAccountId)
-        return yield* Effect.die("Worker account changed during apply; replan before writing");
-      workerAccountId = account ?? workerAccountId;
-    });
-    const commit = <S extends ResourceState>(value: Omit<S, "namespace">) => {
-      const props = stripUnresolved(value.props);
-      const workerIdentityResolved = isLiveWorker
-        ? workerIdentitySurvivesPersistence(value.props, props)
-        : undefined;
-      // Record generated names while provider output is available. Quarantine
-      // must retain this identity without trusting historical cached output.
-      const storedProps =
-        workerIdentityResolved === true &&
-        (value.status === "creating" || value.status === "replacing") &&
-        value.props?.name == null &&
-        value.props?.version?.parent == null &&
-        value.props?.preview?.of == null &&
-        value.attr !== undefined &&
-        !isProvisionalWorkerOutput(value.attr) &&
-        value.attr.versionOf === undefined &&
-        value.attr.previewOf === undefined &&
-        typeof value.attr.workerId === "string" &&
-        value.attr.workerId.length > 0 &&
-        typeof value.attr.workerName === "string" &&
-        value.attr.workerName.length > 0
-          ? { ...props, name: value.attr.workerName }
-          : props;
-      return state.set({
+    const commit = <S extends ResourceState>(value: Omit<S, "namespace">) =>
+      state.set({
         stack: stackName,
         stage,
         fqn,
@@ -616,16 +577,12 @@ const executeNode = (
         value: {
           ...value,
           adoptionBlocked: value.adoptionBlocked ?? node.adoptionBlocked,
-          workerIdentityResolved,
-          workerAccountId: isLiveWorker
-            ? (value.workerAccountId ?? value.attr?.accountId ?? workerAccountId)
-            : undefined,
-          props: storedProps,
+          propsIncomplete: propsIncomplete(value),
+          props: stripUnresolved(value.props),
           bindings: stripUnresolved(value.bindings),
           namespace,
         } as S,
       });
-    };
 
     const scopedSession = {
       ...session,
@@ -789,11 +746,6 @@ const executeNode = (
           removalPolicy: node.resource.RemovalPolicy,
           providerMode: node.mode,
           adoptionBlocked: node.adoptionBlocked,
-          workerWriteStarted: isLiveWorker
-            ? node.state === undefined
-              ? false
-              : node.state.workerWriteStarted
-            : undefined,
         });
         return id;
       } else if (node.action === "replace") {
@@ -820,7 +772,6 @@ const executeNode = (
           deleteFirst: node.deleteFirst,
           removalPolicy: node.resource.RemovalPolicy,
           providerMode: node.mode,
-          workerWriteStarted: isLiveWorker ? false : undefined,
         });
         return id;
       } else if (node.state?.instanceId) {
@@ -830,50 +781,34 @@ const executeNode = (
         `Instance ID not found for resource '${logicalId}' and action is '${node.action}'`,
       );
     });
-    let instanceId = yield* resolveInstanceId;
-
-    const precreateAdoption = Effect.gen(function* () {
-      if (node.resource.Adopt !== undefined) return node.resource.Adopt;
-      if (node.action === "replace" && node.adopt !== undefined) return node.adopt;
-      if (node.action === "create" && node.deferredAdoption) return node.deferredAdoption.adopt;
-      const policy = yield* Effect.serviceOption(AdoptPolicy);
-      if (Option.isSome(policy)) return policy.value;
-      const context = yield* Effect.serviceOption(AlchemyContext);
-      return Option.isSome(context) ? context.value.adopt : false;
-    });
+    const instanceId = yield* resolveInstanceId;
 
     // ── lifecycle ──
 
     // ── create ──
     if (node.action === "create") {
-      let attr: any = node.state?.attr;
-      let workerWriteStarted = isLiveWorker
-        ? node.state === undefined
-          ? false
-          : node.state.workerWriteStarted
-        : undefined;
-      const checkpoint = (props: Record<string, any>, bindings: ResourceBinding[]) =>
-        commit<CreatingResourceState>({
+      if (!node.state) {
+        // First persistence point for a brand new logical resource. Once this is
+        // written, retries know they should resume creation instead of planning
+        // another fresh create from scratch.
+        yield* commit<CreatingResourceState>({
           status: "creating",
           fqn,
           logicalId,
           instanceId,
           resourceType: node.resource.Type,
-          props,
-          attr,
+          props: node.props,
+          attr: undefined,
           providerVersion: node.provider.version ?? 0,
-          bindings,
+          bindings: excludeDeletedBindings(node.bindings),
           downstream: node.downstream,
           removalPolicy: node.resource.RemovalPolicy,
           providerMode: node.mode,
           adoptionBlocked: node.adoptionBlocked,
-          workerWriteStarted,
-          workerAccountId,
         });
-      if (!node.state || (isLiveWorker && attr === undefined)) {
-        // Capture current identity without changing an earlier write attempt's provenance.
-        yield* checkpoint(node.props, excludeDeletedBindings(node.bindings));
       }
+
+      let attr: any = node.state?.attr;
 
       if (attr !== undefined) {
         // Precreate/read may already have produced a usable output snapshot. Publish
@@ -890,11 +825,6 @@ const executeNode = (
         // Some resources need a placeholder physical resource before their real
         // create can finish. Persist that stub so downstream evaluation can proceed.
         yield* report("pre-creating");
-        if (isLiveWorker) {
-          yield* startWorkerWrite;
-          workerWriteStarted = true;
-          yield* checkpoint(node.props, excludeDeletedBindings(node.bindings));
-        }
         attr = yield* node.provider
           .precreate({
             id: logicalId,
@@ -905,7 +835,21 @@ const executeNode = (
             bindings: excludeDeletedBindings(node.bindings),
           })
           .pipe(instrumentLifecycle("precreate", fqn, node.resource.Type, logicalId, instanceId));
-        yield* checkpoint(node.props, excludeDeletedBindings(node.bindings));
+        yield* commit<CreatingResourceState>({
+          status: "creating",
+          fqn,
+          logicalId,
+          instanceId,
+          resourceType: node.resource.Type,
+          props: node.props,
+          attr,
+          providerVersion: node.provider.version ?? 0,
+          bindings: excludeDeletedBindings(node.bindings),
+          downstream: node.downstream,
+          removalPolicy: node.resource.RemovalPolicy,
+          providerMode: node.mode,
+          adoptionBlocked: node.adoptionBlocked,
+        });
         yield* storeAndSignal({ output: attr, props: {}, bindings: [], instanceId });
       }
 
@@ -925,8 +869,24 @@ const executeNode = (
       const bindingOutputs = excludeDeletedBindings(yield* Output.evaluate(node.bindings, outputs));
 
       if (attr === undefined && node.deferredAdoption && node.provider.read) {
+        const checkpoint = () =>
+          commit<CreatingResourceState>({
+            status: "creating",
+            fqn,
+            logicalId,
+            instanceId,
+            resourceType: node.resource.Type,
+            props: news,
+            attr,
+            providerVersion: node.provider.version ?? 0,
+            bindings: bindingOutputs,
+            downstream: node.downstream,
+            removalPolicy: node.resource.RemovalPolicy,
+            providerMode: node.mode,
+            adoptionBlocked: node.adoptionBlocked,
+          });
         // Refusal or interruption must retain identity, never foreign attributes.
-        yield* checkpoint(news, bindingOutputs);
+        yield* checkpoint();
         const observed = yield* node.provider
           .read({ id: logicalId, fqn, instanceId, olds: news, output: undefined })
           .pipe(instrumentLifecycle("read", fqn, node.resource.Type, logicalId, instanceId));
@@ -944,15 +904,10 @@ const executeNode = (
           }
           attr = stripUnowned(observed);
           // A creating checkpoint retains olds: undefined on retry.
-          yield* checkpoint(news, bindingOutputs);
+          yield* checkpoint();
         }
       }
 
-      if (isLiveWorker) {
-        yield* startWorkerWrite;
-        workerWriteStarted = true;
-        yield* checkpoint(news, bindingOutputs);
-      }
       attr = yield* node.provider
         .reconcile({
           id: logicalId,
@@ -1181,203 +1136,11 @@ const executeNode = (
           downstream: node.downstream,
           removalPolicy: node.resource.RemovalPolicy,
           providerMode: node.mode,
-          workerWriteStarted: isLiveWorker ? false : undefined,
         });
       } else {
         // Resume the same replacement generation after an interrupted apply.
         replState = node.state;
       }
-
-      let oldGenerations: ReplacementOldResourceState | undefined = replState.old;
-      let admittedAccountId: string | undefined;
-      const preserveGeneratedIdentity = Effect.fn(function* (news: Record<string, any>) {
-        const previous = replState.old;
-        const namespaceName = (props: Record<string, any> | undefined) =>
-          typeof props?.namespace === "string" ? props.namespace : props?.namespace?.name;
-        if (
-          isLiveWorker &&
-          !node.deleteFirst &&
-          replState.workerWriteStarted === false &&
-          previous.workerIdentityResolved === true &&
-          stampedMode(previous) !== "local" &&
-          news.name == null &&
-          namespaceName(news) === namespaceName(previous.props) &&
-          news.version?.parent == null &&
-          news.preview?.of == null &&
-          previous.props?.version?.parent == null &&
-          previous.props?.preview?.of == null
-        ) {
-          if (recordedWorkerAccount(previous) !== undefined) {
-            const account = yield* currentWorkerAccount;
-            if (account !== recordedWorkerAccount(previous)) return;
-          }
-          instanceId = previous.instanceId;
-          replState = { ...replState, instanceId };
-          if (typeof previous.attr?.workerName === "string" && previous.attr.workerName.length > 0)
-            news.name = previous.attr.workerName;
-          else if (typeof previous.props?.name === "string" && previous.props.name.length > 0)
-            news.name = previous.props.name;
-        }
-      });
-      const coalesceWorkerGenerations = Effect.fn(function* (news: Record<string, any>) {
-        if (
-          !isLiveWorker ||
-          node.deleteFirst ||
-          news.version?.parent != null ||
-          news.preview?.of != null
-        )
-          return;
-        const targetName = yield* workerName(logicalId, news.name).pipe(
-          provideLifecycleScope({ logicalId, fqn, instanceId, type: node.resource.Type }),
-        );
-        let accountId = admittedAccountId;
-        const hasKnownAccount = (old: ReplacementOldResourceState): boolean =>
-          recordedWorkerAccount(old) !== undefined ||
-          ((old.status === "replacing" || old.status === "replaced") && hasKnownAccount(old.old));
-        if (
-          accountId === undefined &&
-          oldGenerations !== undefined &&
-          hasKnownAccount(oldGenerations)
-        ) {
-          accountId = yield* currentWorkerAccount;
-        }
-        const namespaceName = (props: Record<string, any> | undefined) =>
-          typeof props?.namespace === "string" ? props.namespace : props?.namespace?.name;
-        const visit = (
-          old: ReplacementOldResourceState,
-        ): Effect.Effect<ReplacementOldResourceState | undefined, any, any> =>
-          Effect.gen(function* () {
-            const nested =
-              old.status === "replacing" || old.status === "replaced"
-                ? yield* visit(old.old)
-                : undefined;
-            if (
-              // oxlint-disable-next-line alchemy/package-boundaries -- The engine must distinguish legacy Worker checkpoints before serialization, retry, and cleanup.
-              old.resourceType === "Cloudflare.Worker" &&
-              stampedMode(old) !== "local" &&
-              old.workerIdentityResolved === true &&
-              old.adoptionBlocked !== "migrated-fqn" &&
-              old.props?.version?.parent == null &&
-              old.props?.preview?.of == null &&
-              old.attr?.versionOf === undefined &&
-              old.attr?.previewOf === undefined
-            ) {
-              const oldName =
-                old.attr?.workerName ??
-                (yield* workerName(logicalId, old.props?.name).pipe(
-                  provideLifecycleScope({
-                    logicalId,
-                    fqn,
-                    instanceId: old.instanceId,
-                    type: old.resourceType,
-                  }),
-                ));
-              if (
-                oldName === targetName &&
-                (old.attr?.namespace ?? namespaceName(old.props)) === namespaceName(news)
-              ) {
-                if (recordedWorkerAccount(old) !== undefined && accountId === undefined)
-                  return yield* Effect.die(
-                    "Cannot coalesce Worker attempts without their account identity",
-                  );
-                if (
-                  recordedWorkerAccount(old) === undefined ||
-                  recordedWorkerAccount(old) === accountId
-                )
-                  return nested;
-              }
-            }
-            if (old.status !== "replacing" && old.status !== "replaced") return old;
-            if (nested !== undefined) return { ...old, old: nested };
-            const { old: _old, deleteFirst: _deleteFirst, ...value } = old;
-            return old.status === "replaced"
-              ? { ...value, status: "created", attr: old.attr }
-              : { ...value, status: "creating" };
-          });
-        if (oldGenerations !== undefined) oldGenerations = yield* visit(oldGenerations);
-      });
-
-      const checkpointReplacement = Effect.fn(function* (
-        props: Record<string, any>,
-        attr: any,
-        bindings: ResourceBinding[],
-        writeStarted: boolean | undefined,
-      ) {
-        if (isLiveWorker && writeStarted === true) yield* startWorkerWrite;
-        replState = {
-          ...replState,
-          props,
-          attr,
-          bindings,
-          workerWriteStarted: writeStarted,
-          workerAccountId,
-          downstream: node.downstream,
-          removalPolicy: node.resource.RemovalPolicy,
-          providerMode: node.mode,
-          providerVersion: node.provider.version ?? 0,
-          deleteFirst: node.deleteFirst,
-        };
-        if (oldGenerations !== undefined) {
-          yield* commit<ReplacingResourceState>({ ...replState, old: oldGenerations });
-        } else {
-          const { old: _old, deleteFirst: _deleteFirst, ...value } = replState;
-          yield* commit<CreatingResourceState>({ ...value, status: "creating" });
-        }
-      });
-
-      const containsUnprovenWrite = (generation: ReplacementOldResourceState): boolean =>
-        ((generation.attr === undefined || isProvisionalWorkerOutput(generation.attr)) &&
-          generation.workerIdentityResolved !== true &&
-          generation.workerWriteStarted !== false) ||
-        ((generation.status === "replacing" || generation.status === "replaced") &&
-          containsUnprovenWrite(generation.old));
-      const retryAdmission =
-        isLiveWorker && (!node.deleteFirst || containsUnprovenWrite(replState.old));
-      const admitRetry = Effect.fn(function* (news: Record<string, any>) {
-        if (news.version?.parent != null || news.preview?.of != null) return undefined;
-        if (!node.provider.read)
-          return yield* Effect.die("Worker retry requires an ownership reader");
-        const observed = yield* node.provider
-          .read({
-            id: logicalId,
-            fqn,
-            instanceId,
-            olds: news,
-            output: undefined,
-          })
-          .pipe(instrumentLifecycle("read", fqn, node.resource.Type, logicalId, instanceId));
-        if (observed !== undefined && Unowned.is(observed) && !(yield* precreateAdoption)) {
-          return yield* new OwnedBySomeoneElse({
-            message: `Cannot adopt retry '${fqn}': it is not owned by this stack/stage/logical-id.`,
-            resourceType: node.resource.Type,
-            logicalId,
-          });
-        }
-        const attributes =
-          observed === undefined ? undefined : stripUnowned(observed as Record<string, any>);
-        admittedAccountId = attributes?.accountId;
-        return attributes;
-      });
-      if (retryAdmission && inCycle) {
-        if (!workerIdentitySurvivesPersistence(node.props, stripUnresolved(node.props))) {
-          return yield* Effect.die(
-            "Cannot admit a cyclic Worker retry with an unresolved identity",
-          );
-        }
-        yield* preserveGeneratedIdentity(node.props);
-        yield* admitRetry(node.props);
-      }
-
-      const checkpointWrite =
-        (props: Record<string, any>, attr: any, bindings: ResourceBinding[]) =>
-        <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-          !isLiveWorker
-            ? effect
-            : Effect.gen(function* () {
-                yield* coalesceWorkerGenerations(props);
-                yield* checkpointReplacement(props, attr, bindings, true);
-                return yield* effect;
-              });
 
       // ── delete-first replacements ──
       //
@@ -1399,20 +1162,7 @@ const executeNode = (
       ): Effect.Effect<void, any, any> =>
         Effect.gen(function* () {
           const retain = node.resource.RemovalPolicy === "retain";
-          const skipWorkerOutput =
-            // oxlint-disable-next-line alchemy/package-boundaries -- The engine must distinguish legacy Worker checkpoints before serialization, retry, and cleanup.
-            old.resourceType === "Cloudflare.Worker" &&
-            stampedMode(old) !== "local" &&
-            (old.status === "creating" || old.status === "replacing") &&
-            (old.workerIdentityResolved !== true || old.workerWriteStarted === false);
-          if (skipWorkerOutput && old.attr !== undefined && !retain) {
-            yield* scopedSession.note(
-              old.workerWriteStarted === false
-                ? "Skipping Worker cleanup because no mutating lifecycle started."
-                : "Skipping an unproven Worker generation. Any interrupted upload requires manual cleanup.",
-            );
-          }
-          if (old.attr !== undefined && !retain && !skipWorkerOutput) {
+          if (old.attr !== undefined && !retain) {
             // Delete each old generation with the provider variant of the
             // mode that created it — after a local ⇄ live switch,
             // `node.provider` (the new mode) cannot tear down the other
@@ -1464,18 +1214,24 @@ const executeNode = (
             session: scopedSession,
             instanceId,
             bindings: excludeDeletedBindings(node.bindings),
-            adopt: yield* precreateAdoption,
           })
-          .pipe(
-            checkpointWrite(node.props, attr, excludeDeletedBindings(node.bindings)),
-            instrumentLifecycle("precreate", fqn, node.resource.Type, logicalId, instanceId),
-          );
-        yield* checkpointReplacement(
-          node.props,
+          .pipe(instrumentLifecycle("precreate", fqn, node.resource.Type, logicalId, instanceId));
+        yield* commit<ReplacingResourceState>({
+          status: "replacing",
+          fqn,
+          logicalId,
+          instanceId,
+          resourceType: node.resource.Type,
+          props: node.props,
           attr,
-          excludeDeletedBindings(node.bindings),
-          replState.workerWriteStarted,
-        );
+          providerVersion: node.provider.version ?? 0,
+          bindings: excludeDeletedBindings(node.bindings),
+          downstream: node.downstream,
+          old: replState.old,
+          deleteFirst: node.deleteFirst,
+          removalPolicy: node.resource.RemovalPolicy,
+          providerMode: node.mode,
+        });
         yield* storeAndSignal({ output: attr, props: {}, bindings: [], instanceId });
       }
 
@@ -1493,11 +1249,6 @@ const executeNode = (
 
       const bindingOutputs = excludeDeletedBindings(yield* Output.evaluate(node.bindings, outputs));
 
-      if (retryAdmission && !inCycle) {
-        yield* preserveGeneratedIdentity(news);
-        attr = yield* admitRetry(news);
-      }
-
       attr = yield* node.provider
         .reconcile({
           id: logicalId,
@@ -1509,12 +1260,9 @@ const executeNode = (
           olds: undefined,
           output: attr,
         })
-        .pipe(
-          checkpointWrite(news, attr, bindingOutputs),
-          instrumentLifecycle("create", fqn, node.resource.Type, logicalId, instanceId),
-        );
+        .pipe(instrumentLifecycle("create", fqn, node.resource.Type, logicalId, instanceId));
 
-      if (node.deleteFirst || oldGenerations === undefined) {
+      if (node.deleteFirst) {
         // The old generation(s) were already torn down above, so there is
         // nothing left for `collectGarbage` to drain — collapse straight to
         // the terminal `created` state.
@@ -1550,7 +1298,7 @@ const executeNode = (
           downstream: node.downstream,
           // Preserve the remaining backlog exactly as-is. GC is responsible for
           // popping one generation at a time until the chain is exhausted.
-          old: oldGenerations,
+          old: replState.old,
           deleteFirst: node.deleteFirst,
           removalPolicy: node.resource.RemovalPolicy,
           providerMode: node.mode,
@@ -2165,29 +1913,12 @@ const collectGarbage = Effect.fn(function* (plan: Plan, session: PlanStatusSessi
         const adoptionBlocked = isDeleteNode(node)
           ? node.state.adoptionBlocked
           : generation.adoptionBlocked;
-        const workerIdentityResolved = isDeleteNode(node)
-          ? node.state.workerIdentityResolved
-          : generation.workerIdentityResolved;
-        const workerWriteStarted = isDeleteNode(node)
-          ? node.state.workerWriteStarted
-          : generation.workerWriteStarted;
-        const workerAccountId =
-          // oxlint-disable-next-line alchemy/package-boundaries -- The engine must distinguish legacy Worker checkpoints before serialization, retry, and cleanup.
-          resourceType === "Cloudflare.Worker" && stampedMode(generation) !== "local"
-            ? recordedWorkerAccount(generation)
-            : undefined;
+        const incompleteProps = isDeleteNode(node)
+          ? node.state.propsIncomplete
+          : generation.propsIncomplete;
         // Mutable: an attr-less row (interrupted create) may recover its
         // attributes from `provider.read` below, right before deletion.
-        let attr =
-          // oxlint-disable-next-line alchemy/package-boundaries -- The engine must distinguish legacy Worker checkpoints before serialization, retry, and cleanup.
-          resourceType === "Cloudflare.Worker" &&
-          providerMode !== "local" &&
-          (isProvisionalWorkerOutput(persistedAttr) ||
-            (stampedMode(generation) !== "local" &&
-              (generation.status === "creating" || generation.status === "replacing") &&
-              (workerIdentityResolved !== true || workerWriteStarted === false)))
-            ? undefined
-            : persistedAttr;
+        let attr = persistedAttr;
 
         const nextAncestors = new Set(ancestors).add(fqn);
 
@@ -2203,6 +1934,7 @@ const collectGarbage = Effect.fn(function* (plan: Plan, session: PlanStatusSessi
               adoptionBlocked:
                 value.adoptionBlocked ??
                 (isDeleteNode(node) ? node.state.adoptionBlocked : node.adoptionBlocked),
+              propsIncomplete: propsIncomplete(value),
               props: stripUnresolved(value.props),
               bindings: stripUnresolved(value.bindings),
               namespace,
@@ -2338,64 +2070,38 @@ const collectGarbage = Effect.fn(function* (plan: Plan, session: PlanStatusSessi
                     "migrated predecessor. Any interrupted new physical " +
                     "resource must be identified and cleaned up manually.",
                 );
-              } else if (
-                // oxlint-disable-next-line alchemy/package-boundaries -- The engine must distinguish legacy Worker checkpoints before serialization, retry, and cleanup.
-                resourceType === "Cloudflare.Worker" &&
-                providerMode !== "local" &&
-                workerWriteStarted === false
-              ) {
+              } else if (incompleteProps) {
                 yield* scopedSession.note(
-                  "Removing Worker checkpoint without a cloud lookup because no mutating lifecycle started.",
-                );
-              } else if (
-                // oxlint-disable-next-line alchemy/package-boundaries -- The engine must distinguish legacy Worker checkpoints before serialization, retry, and cleanup.
-                resourceType === "Cloudflare.Worker" &&
-                providerMode !== "local" &&
-                workerIdentityResolved !== true
-              ) {
-                yield* scopedSession.note(
-                  "Skipping Worker recovery because its physical identity was not recorded completely. " +
-                    "Any interrupted upload must be identified and cleaned up manually.",
+                  "Skipping recovery: unresolved properties were omitted from " +
+                    "this interrupted create's state, so they cannot identify it. " +
+                    "Any interrupted physical resource must be identified and " +
+                    "cleaned up manually.",
                 );
               } else if (provider.read) {
-                let recoveryRead = provider.read({
-                  id: logicalId,
-                  fqn,
-                  instanceId,
-                  olds: props as never,
-                  output: undefined,
-                });
-                if (workerAccountId !== undefined) {
-                  if (provider.workerIdentity === undefined)
-                    return yield* Effect.die(
-                      "Recorded Worker account requires Cloudflare credentials for cleanup",
-                    );
-                  recoveryRead = provider.workerIdentity.withAccount(workerAccountId, recoveryRead);
-                }
-                const recovered = yield* recoveryRead.pipe(
-                  instrumentLifecycle("read", fqn, resourceType, logicalId, instanceId),
-                  // The persisted props of an interrupted create can carry
-                  // holes where unresolved Outputs were stripped at commit
-                  // time (see stripUnresolved) — e.g. a parent reference
-                  // persisted as `{}`. A provider that dereferences one
-                  // crashes deep inside its SDK client (a SchemaError
-                  // defect), which would make the stage impossible to
-                  // destroy. Recovery is best-effort: degrade the defect
-                  // to "nothing recovered", surface a note, and let the
-                  // row be dropped (#995).
-                  Effect.catchDefect((defect) =>
-                    workerAccountId !== undefined
-                      ? Effect.die(defect)
-                      : scopedSession
-                          .note(
-                            "Recovery read crashed while looking up this " +
-                              "resource's interrupted create " +
-                              `(${String(defect)}) — if a physical resource ` +
-                              "was created, it must be cleaned up manually.",
-                          )
-                          .pipe(Effect.as(undefined)),
-                  ),
-                );
+                const recovered = yield* provider
+                  .read({ id: logicalId, fqn, instanceId, olds: props as never, output: undefined })
+                  .pipe(
+                    instrumentLifecycle("read", fqn, resourceType, logicalId, instanceId),
+                    // The persisted props of an interrupted create can carry
+                    // holes where unresolved Outputs were stripped at commit
+                    // time (see stripUnresolved) — e.g. a parent reference
+                    // persisted as `{}`. A provider that dereferences one
+                    // crashes deep inside its SDK client (a SchemaError
+                    // defect), which would make the stage impossible to
+                    // destroy. Recovery is best-effort: degrade the defect
+                    // to "nothing recovered", surface a note, and let the
+                    // row be dropped (#995).
+                    Effect.catchDefect((defect) =>
+                      scopedSession
+                        .note(
+                          "Recovery read crashed while looking up this " +
+                            "resource's interrupted create " +
+                            `(${String(defect)}) — if a physical resource ` +
+                            "was created, it must be cleaned up manually.",
+                        )
+                        .pipe(Effect.as(undefined)),
+                    ),
+                  );
                 if (recovered !== undefined) {
                   if (Unowned.is(recovered)) {
                     yield* scopedSession.note(
@@ -2432,9 +2138,7 @@ const collectGarbage = Effect.fn(function* (plan: Plan, session: PlanStatusSessi
                 removalPolicy: node.resource.RemovalPolicy,
                 providerMode,
                 adoptionBlocked,
-                workerIdentityResolved,
-                workerWriteStarted,
-                workerAccountId,
+                propsIncomplete: incompleteProps,
               });
             }
 
@@ -2505,9 +2209,7 @@ const collectGarbage = Effect.fn(function* (plan: Plan, session: PlanStatusSessi
                   bindings: excludeDeletedBindings(node.bindings),
                   removalPolicy: node.removalPolicy,
                   providerMode: node.providerMode,
-                  workerIdentityResolved: node.workerIdentityResolved,
-                  workerWriteStarted: node.workerWriteStarted,
-                  workerAccountId: node.workerAccountId,
+                  propsIncomplete: node.propsIncomplete,
                 });
               }
               yield* scopedSession.note(
