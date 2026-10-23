@@ -57,6 +57,8 @@ interface BaseResourceState {
   removalPolicy?: RemovalPolicy["Service"];
   /** Attr-less lookup could recover the predecessor migrated away from this FQN. */
   adoptionBlocked?: "migrated-fqn";
+  /** Account containing this Worker's physical attempt, independent of cached ownership output. */
+  workerAccountId?: string;
   /**
    * The {@link ProviderMode} this resource was last reconciled with.
    *

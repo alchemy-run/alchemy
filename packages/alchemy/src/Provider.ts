@@ -18,6 +18,8 @@ import type {
   ResourceLike,
 } from "./Resource.ts";
 import type { ResourceContext } from "./ResourceContext.ts";
+import type { Stack } from "./Stack.ts";
+import type { Stage } from "./Stage.ts";
 import type { State } from "./State/State.ts";
 
 export interface Provider<R extends ResourceLike = ResourceLike> extends Effect.Effect<
@@ -107,6 +109,21 @@ export interface ProviderService<
    * @default 0
    */
   version?: number;
+  /** Provider-owned identity operations used to recover live Worker checkpoints. */
+  workerIdentity?: {
+    /** Resolve the current account lazily, preserving credential failures. */
+    account: Effect.Effect<string | undefined>;
+    /** Resolve the physical script name within the engine's lifecycle scope. */
+    name: (
+      id: string,
+      name: string | undefined,
+    ) => Effect.Effect<string, never, ResourceContext | Stack | Stage>;
+    /** Run recovery using the recorded account and the current credentials. */
+    withAccount: <A, E, R>(
+      accountId: string,
+      effect: Effect.Effect<A, E, R>,
+    ) => Effect.Effect<A, E, R>;
+  };
   /**
    * Legacy type names this provider also answers to. Copied from the
    * resource class's `aliases` option by {@link succeed}/{@link effect} so
