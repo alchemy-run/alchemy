@@ -1571,6 +1571,9 @@ const fillUndefined = <T>(desired: T, observed: T): T => {
  *
  * Exported for unit tests.
  */
+const originKind = (origin: cloudfront.Origin) =>
+  origin.VpcOriginConfig ? "vpc" : origin.S3OriginConfig ? "s3" : "custom";
+
 export const mergeWithObservedConfig = (
   desired: cloudfront.DistributionConfig,
   observed: cloudfront.DistributionConfig,
@@ -1580,9 +1583,21 @@ export const mergeWithObservedConfig = (
     const observedOrigins = observed.Origins.Items;
     merged.Origins = {
       ...merged.Origins,
-      Items: merged.Origins.Items.map((item) =>
-        fillUndefined(item, observedOrigins.find((origin) => origin.Id === item.Id) ?? item),
-      ),
+      Items: merged.Origins.Items.map((item) => {
+        const current = observedOrigins.find((origin) => origin.Id === item.Id) ?? item;
+        if (originKind(current) === originKind(item)) return fillUndefined(item, current);
+        // An origin that changes kind (custom <-> S3 <-> VPC) under the same
+        // id must not inherit the old kind's config or access control:
+        // CloudFront rejects an origin carrying both.
+        const {
+          S3OriginConfig: _s3,
+          CustomOriginConfig: _custom,
+          VpcOriginConfig: _vpc,
+          OriginAccessControlId: _oac,
+          ...shared
+        } = current;
+        return fillUndefined(item, shared as cloudfront.Origin);
+      }),
     };
   }
   if (merged.CacheBehaviors?.Items && observed.CacheBehaviors?.Items) {

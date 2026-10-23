@@ -25,6 +25,12 @@ import makeInferredClassStack from "./fixtures/inferred/stack.ts";
 import { DEMO_PLAIN, DEMO_SECRET } from "./fixtures/remote/object.ts";
 import makeRemoteStack from "./fixtures/remote/stack.ts";
 
+/** Narrows a Containers application to the scheduler-placed shape. */
+const scheduledApplication = (app: Containers.ContainerApplicationItem) => {
+  assert("version" in app, `${app.name} is a Durable Object application`);
+  return app;
+};
+
 describe.concurrent.each([
   {
     dev: true,
@@ -143,7 +149,8 @@ describe.concurrent.each([
     /**
      * External container (`context` / `dockerfile`): Alchemy builds the user's
      * Dockerfile against the context directory (nginx serving a static page on
-     * port 8080) and the DO proxies a request to it.
+     * port 8080) and the DO proxies a request to it. A second container builds
+     * the same server from inline `dockerfile.content`.
      */
     describe("external container (context/dockerfile)", () => {
       const { test, beforeAll, afterAll, deploy, destroy } = make();
@@ -157,6 +164,19 @@ describe.concurrent.each([
 
           const hello = yield* fetchReady(new URL("/hello", url), "external container");
           expect(hello).toContain("external container");
+        }).pipe(logLevel),
+        { tags: [...(dev ? ["local"] : ["live"])], timeout },
+      );
+
+      // Inline `dockerfile.content` has no user build context: the provider
+      // materializes one, which needs the Docker service in reconcile.
+      test(
+        "builds an inline Dockerfile and serves it over its TCP port",
+        Effect.gen(function* () {
+          const { url } = yield* stack;
+
+          const hello = yield* fetchReady(new URL("/inline", url), "inline dockerfile container");
+          expect(hello).toContain("inline dockerfile container");
         }).pipe(logLevel),
         { tags: [...(dev ? ["local"] : ["live"])], timeout },
       );
@@ -206,6 +226,48 @@ describe.concurrent.each([
           expect(echoed.env.DEMO_BUCKET).toBe(bucketName);
         }).pipe(logLevel),
         { tags: [...(dev ? ["local"] : ["live"])], timeout },
+      );
+
+      // Cloudflare reports a start it has no instance for by rejecting
+      // monitor(), not start(), so monitor() must classify it the way start()
+      // does. maxInstances is not enforced locally.
+      test.skipIf(dev)(
+        "a start past maxInstances fails monitor() with NoContainerInstanceError",
+        Effect.gen(function* () {
+          const { url } = yield* stack;
+          const startCapped = (name: string) =>
+            Effect.gen(function* () {
+              const client = yield* freshConn;
+              const response = yield* client.get(new URL(`/capped?name=${name}`, url));
+              const body = yield* response.text;
+              if (response.status !== 200) {
+                return yield* Effect.fail(
+                  new Error(`capped not ready: ${response.status} ${body}`),
+                );
+              }
+              return JSON.parse(body) as { phase: string; tag: string };
+            }).pipe(
+              Effect.timeout("60 seconds"),
+              Effect.retry({ schedule: readinessSchedule, times: 6 }),
+            );
+
+          // A fresh application also has no instance while it provisions, so
+          // retry until the first object holds the one instance.
+          const first = yield* startCapped("first").pipe(
+            Effect.repeat({
+              schedule: Schedule.spaced("5 seconds"),
+              until: (result) => result.tag === "running",
+              times: 18,
+            }),
+          );
+          expect(first).toEqual({ phase: "monitor", tag: "running" });
+          const second = yield* startCapped("second");
+          expect(second).toMatchObject({
+            phase: "monitor",
+            tag: "NoContainerInstanceError",
+          });
+        }).pipe(logLevel),
+        { tags: ["live"], timeout },
       );
 
       // The proxy pattern from #1334 (`yield* fetch(yield* HttpServerRequest)`):
@@ -431,6 +493,32 @@ describe.sequential(
     );
 
     test(
+      "keeps an attached application whose bindings were never recorded",
+      Effect.gen(function* () {
+        const first = yield* stack;
+        assert(first.app.durableObjects?.namespaceId);
+        const state = yield* yield* State;
+        const containerRow = yield* state.get(containerKey);
+        assert(containerRow?.status === "created" || containerRow?.status === "updated");
+        // What a deploy that adopted the application and then failed leaves
+        // behind: the observed application, attachment included, and no
+        // recorded bindings.
+        yield* state.set({ ...containerKey, value: { ...containerRow, bindings: [] } });
+        yield* Effect.gen(function* () {
+          const plan = yield* AttachmentStack.pipe(
+            Effect.flatMap((stack) => Plan.make(stack).pipe(Effect.provide(stack.services))),
+          );
+          expect(plan.resources.AttachmentContainer.action).not.toBe("replace");
+          const next = yield* deploy(AttachmentStack);
+          expect(next.app.applicationId).toBe(first.app.applicationId);
+        }).pipe(
+          Effect.ensuring(state.set({ ...containerKey, value: containerRow }).pipe(Effect.orDie)),
+        );
+      }).pipe(Effect.provide(services)),
+      { timeout: 120_000, retry: 0 },
+    );
+
+    test(
       "recovers an interrupted create with an unresolved Worker attachment",
       Effect.gen(function* () {
         const first = yield* stack;
@@ -651,11 +739,114 @@ describe.sequential(
       }).pipe(Effect.provide(services)),
       { timeout: 120_000, retry: 0 },
     );
+
+    // Runs last: detaching recreates the application under a new id.
+    test(
+      "detaches in place an attached application whose bindings were never recorded",
+      Effect.gen(function* () {
+        // The previous case destroys the stack but restores its state rows.
+        yield* destroyStack({ stack: AttachmentStack, stage, dev: false });
+        const first = yield* deploy(AttachmentStack);
+        assert(first.app.durableObjects?.namespaceId);
+        const state = yield* yield* State;
+        const containerRow = yield* state.get(containerKey);
+        assert(containerRow?.status === "created" || containerRow?.status === "updated");
+        yield* state.set({ ...containerKey, value: { ...containerRow, bindings: [] } });
+        yield* Effect.gen(function* () {
+          // The observed attachment must not turn a detach into a replace:
+          // the new generation would re-adopt a named application by name
+          // and the old generation's delete would then remove it.
+          const plan = yield* attachmentStack(false).pipe(
+            Effect.flatMap((stack) => Plan.make(stack).pipe(Effect.provide(stack.services))),
+          );
+          expect(plan.resources.AttachmentContainer.action).toBe("update");
+          const next = yield* deploy(attachmentStack(false));
+          expect(next.app.applicationName).toBe(first.app.applicationName);
+          expect(next.app.durableObjects).toBeUndefined();
+          const observed = yield* readAttachmentApplication(
+            next.app.accountId,
+            next.app.applicationId,
+          );
+          expect(observed.durableObjects).toBeUndefined();
+        }).pipe(
+          Effect.ensuring(
+            destroyStack({ stack: AttachmentStack, stage, dev: false }).pipe(Effect.orDie),
+          ),
+        );
+      }).pipe(Effect.provide(services)),
+      { timeout: 180_000, retry: 0 },
+    );
+  },
+);
+
+describe.sequential(
+  "named container attachment (live)",
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:container",
+      "provider:cloudflare:worker",
+      "live",
+    ],
+  },
+  () => {
+    const stage = process.env.ALCHEMY_TEST_STAGE ?? "test-live";
+    const name = `alchemy-named-attachment-${stage}`;
+    const NamedStack = attachmentStack(true, name);
+    const services = Layer.effectContext(
+      NamedStack.pipe(Effect.map((stack) => stack.services)),
+    ).pipe(Layer.provide(Layer.succeed(Stage, stage)));
+    const { test, deploy } = Test.make({
+      providers: Cloudflare.providers(),
+      state: Cloudflare.state(),
+      stage,
+      dev: false,
+    });
+
+    test(
+      "re-attaches a named application after detaching it",
+      Effect.gen(function* () {
+        yield* destroyStack({ stack: NamedStack, stage, dev: false });
+        yield* Effect.gen(function* () {
+          const first = yield* deploy(NamedStack);
+          expect(first.app.applicationName).toBe(name);
+          assert(first.app.durableObjects?.namespaceId);
+
+          const detached = yield* deploy(attachmentStack(false, name));
+          expect(detached.app.applicationName).toBe(name);
+          expect(detached.app.durableObjects).toBeUndefined();
+          const observedDetached = yield* readAttachmentApplication(
+            detached.app.accountId,
+            detached.app.applicationId,
+          );
+          expect(observedDetached.name).toBe(name);
+          expect(observedDetached.durableObjects).toBeUndefined();
+
+          const attached = yield* deploy(attachmentStack(true, name));
+          expect(attached.app.applicationName).toBe(name);
+          assert(attached.app.durableObjects?.namespaceId);
+          const observedAttached = yield* readAttachmentApplication(
+            attached.app.accountId,
+            attached.app.applicationId,
+          );
+          expect(observedAttached.name).toBe(name);
+          expect(observedAttached.durableObjects?.namespaceId).toBe(
+            attached.app.durableObjects.namespaceId,
+          );
+        }).pipe(
+          Effect.ensuring(
+            destroyStack({ stack: NamedStack, stage, dev: false }).pipe(Effect.orDie),
+          ),
+        );
+      }).pipe(Effect.provide(services)),
+      { timeout: 240_000, retry: 0 },
+    );
   },
 );
 
 const readAttachmentApplication = (accountId: string, applicationId: string) =>
   Containers.getContainerApplication({ accountId, applicationId }).pipe(
+    Effect.map(scheduledApplication),
     Effect.retry({
       while: (error) => error._tag === "ContainerApplicationNotFound",
       schedule: Schedule.spaced("1 second"),

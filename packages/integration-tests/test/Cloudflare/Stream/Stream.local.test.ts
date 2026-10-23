@@ -85,7 +85,7 @@ interface ErrorEnvelope {
  * Under `alchemy dev` the `stream` binding is emulated by cloudflare-runtime:
  * uploads land in a local video store (shared across the runtime's workers,
  * persisted with disk-backed storage) and each video's `preview` URL is
- * served unmodified at `/cdn-cgi/mf/stream/<id>/watch` — no Cloudflare
+ * served unmodified at `/__cf_local/stream/<id>/watch` — no Cloudflare
  * credentials or preview session are involved for the binding. Fidelity
  * limits (mirroring Miniflare): no transcoding/HLS ladder, no signed URLs,
  * no direct creator uploads.
@@ -121,9 +121,10 @@ test.provider(
       expect(video.size).toBe(TEST_VIDEO_BYTES.byteLength);
       expect(video.creator).toBe("alchemy");
       expect(video.meta).toEqual({ title: "alchemy-local-test" });
-      // The preview URL is the local watch route on the runtime entry.
-      expect(video.preview).toMatch(
-        new RegExp(`^http://127\\.0\\.0\\.1:\\d+/cdn-cgi/mf/stream/${video.id}/watch$`),
+      // The preview URL is the local watch route on the Worker's own URL, as
+      // Miniflare builds it from its public URL.
+      expect(video.preview).toBe(
+        `${String(deployed.url).replace(/\/$/, "")}/__cf_local/stream/${video.id}/watch`,
       );
 
       // Read it back through the binding.
@@ -134,7 +135,7 @@ test.provider(
 
       // The stored bytes are served at the watch route, both through the
       // dev URL (the stream router middleware in front of the user worker)…
-      const watchRes = yield* client.get(`${deployed.url}/cdn-cgi/mf/stream/${video.id}/watch`);
+      const watchRes = yield* client.get(`${deployed.url}/__cf_local/stream/${video.id}/watch`);
       expect(watchRes.status).toBe(200);
       const watchBytes = new Uint8Array(yield* watchRes.arrayBuffer);
       expect(Array.from(watchBytes)).toEqual(Array.from(TEST_VIDEO_BYTES));

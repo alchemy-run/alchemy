@@ -615,7 +615,7 @@ export const isProviderService = (value: unknown): value is ProviderService =>
  *   the (lazily built, memoized) variant for that mode.
  * - `mode` given but the provider is mode-agnostic → the service itself:
  *   a single implementation satisfies every mode (hybrid), which is what
- *   lets live-only resources (e.g. R2 buckets) participate in dev runs.
+ *   lets live-only resources (e.g. DNS records) participate in dev runs.
  */
 export const providerForMode = <R extends ResourceLike>(
   service: ProviderService<R>,

@@ -1181,23 +1181,32 @@ const makePlan = <A>(
     //
     // Actions don't have bindings, so for action upstreams we use only
     // prop edges (which collapse to `newUpstreamDependencies` lookups).
-    const computeDownstream = (upFqn: string): string[] => {
-      const downstream: string[] = [];
-      for (const [downFqn, upstreams] of Object.entries(rawUpstreamDependencies)) {
+    //
+    // The edges are inverted in one pass (in `rawUpstreamDependencies` order,
+    // so each downstream list keeps that order) — scanning every node's
+    // upstream list per node was quadratic in resource count (#2400).
+    const directDownstream = new Map<string, string[]>();
+    for (const [downFqn, upstreams] of Object.entries(rawUpstreamDependencies)) {
+      const propDeps = new Set(newUpstreamDependencies[downFqn]);
+      for (const upFqn of upstreams) {
         if (downFqn === upFqn) continue;
-        if (!upstreams.includes(upFqn)) continue;
-        const isPropEdge = (newUpstreamDependencies[downFqn] ?? []).includes(upFqn);
-        if (isPropEdge) {
-          downstream.push(downFqn);
-          continue;
-        }
         // Binding-only edge — exclude when both endpoints sit inside
         // the same SCC of the combined graph.
-        if (combinedCycleMembers.has(upFqn) && combinedCycleMembers.has(downFqn)) {
+        if (
+          !propDeps.has(upFqn) &&
+          combinedCycleMembers.has(upFqn) &&
+          combinedCycleMembers.has(downFqn)
+        ) {
           continue;
         }
+        let downstream = directDownstream.get(upFqn);
+        if (!downstream) directDownstream.set(upFqn, (downstream = []));
         downstream.push(downFqn);
       }
+    }
+
+    const computeDownstream = (upFqn: string): string[] => {
+      const downstream = [...(directDownstream.get(upFqn) ?? [])];
       if (selected) {
         for (const row of historicalRows(persistedRows.get(upFqn))) {
           for (const dep of row.downstream ?? []) {

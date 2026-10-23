@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { describe, expect } from "alchemy-test";
 import * as Test from "alchemy/Test/Alchemy";
@@ -5,6 +6,7 @@ import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import FuseStack from "./fixtures/fuse/stack.ts";
 import LocalRemoteStack, { state } from "./fixtures/remote/local-stack.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
@@ -70,6 +72,43 @@ describe(
           Effect.retry({ schedule: readinessSchedule, times: 30 }),
         );
         expect(body).toContain("method");
+      }).pipe(logLevel),
+      { tags: ["local"], timeout: TEST_TIMEOUT },
+    );
+  },
+);
+
+/**
+ * A container that mounts a FUSE filesystem (as `s3fs` or `tigrisfs` mount R2)
+ * under `alchemy dev`, as deployed Containers can. A Linux host without
+ * /dev/fuse has no device to give the container.
+ */
+describe.skipIf(process.platform === "linux" && !existsSync("/dev/fuse"))(
+  "local container FUSE mount",
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:container", "provider:cloudflare:worker"],
+  },
+  () => {
+    const stack = beforeAll(deploy(FuseStack), { timeout: HOOK_TIMEOUT });
+    afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(FuseStack), {
+      timeout: HOOK_TIMEOUT,
+    });
+
+    test(
+      "mounts a FUSE filesystem inside the container",
+      Effect.gen(function* () {
+        const { url } = yield* stack;
+        const client = yield* HttpClient.HttpClient;
+
+        const body = yield* client.get(new URL("/", url)).pipe(
+          Effect.flatMap((r) =>
+            r.status !== 200 ? Effect.fail(new Error(`not ready: ${r.status}`)) : r.text,
+          ),
+          Effect.timeout("30 seconds"),
+          Effect.retry({ schedule: readinessSchedule, times: 30 }),
+        );
+        // Without the privileges bindfs fails: "fuse: device not found".
+        expect(body.trim()).toBe("read through fuse");
       }).pipe(logLevel),
       { tags: ["local"], timeout: TEST_TIMEOUT },
     );

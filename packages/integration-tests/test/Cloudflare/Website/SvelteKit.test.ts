@@ -14,7 +14,7 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import * as pathe from "pathe";
 import { cloneFixture } from "../Utils/Fixture.ts";
-import { expectUrlContains, expectUrlRedirect } from "../Utils/Http.ts";
+import { expectClientChunkContains, expectUrlContains, expectUrlRedirect } from "../Utils/Http.ts";
 import { expectWorkerExists, waitForWorkerToBeDeleted } from "../Utils/Worker.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
@@ -71,7 +71,11 @@ describe.concurrent(
                 const siteKv = yield* Cloudflare.KV.Namespace("SiteKV");
                 const site = yield* Cloudflare.Website.SvelteKit("SvelteKitSite", {
                   ...svelteKitProps(rootDir),
-                  env: { TEST_BINDING: bindingMarker, SITE_KV: siteKv },
+                  env: {
+                    TEST_BINDING: bindingMarker,
+                    SITE_KV: siteKv,
+                    VITE_SITE_MARKER: "SVELTEKIT_PUBLIC_ENV_MARKER",
+                  },
                 });
                 return { site, siteKv };
               }),
@@ -89,6 +93,18 @@ describe.concurrent(
             label: "SSR home with platform.env binding",
           });
 
+          // A declared public env value is inlined into the deployed client
+          // bundle at build time.
+          yield* expectClientChunkContains(
+            site1.url!,
+            pathe.join(rootDir, ".svelte-kit", "cloudflare"),
+            "SVELTEKIT_PUBLIC_ENV_MARKER",
+            {
+              timeout: "60 seconds",
+              label: "sveltekit public env",
+            },
+          );
+
           // API endpoint: node:crypto under nodejs_compat + platform.env.
           const hello = yield* fetchJsonReady<{ uuid: string; binding: string }>(
             `${site1.url!}/api/hello`,
@@ -100,6 +116,11 @@ describe.concurrent(
           yield* expectUrlContains(`${site1.url!}/robots.txt`, "User-agent", {
             timeout: "60 seconds",
             label: "static asset",
+          });
+          // The same file read by a server route through the `ASSETS` binding.
+          yield* expectUrlContains(`${site1.url!}/api/asset`, "User-agent", {
+            timeout: "60 seconds",
+            label: "sveltekit ASSETS binding",
           });
 
           // Prerendered page served from assets.

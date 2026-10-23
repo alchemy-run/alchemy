@@ -252,6 +252,40 @@ describe.concurrent(
       { tags: ["live"], timeout: 120_000 },
     );
 
+    test.provider(
+      "a full deploy reads back its deployment and does not drift",
+      (stack) =>
+        Effect.gen(function* () {
+          const { accountId } = yield* yield* CloudflareEnvironment;
+
+          yield* stack.destroy();
+
+          const worker = yield* stack.deploy(
+            Cloudflare.Worker("DeploymentWorker", {
+              script: `export default { fetch() { return new Response("ok"); } };`,
+              workersDev: false,
+            }),
+          );
+          const { deployments } = yield* workers.listScriptDeployments({
+            accountId,
+            scriptName: worker.workerName,
+          });
+          expect(worker.deploymentId).toEqual(deployments[0]?.id);
+
+          // `read` must return the recorded deployment, or every deployed
+          // Worker compares unequal to state and reads as drifted.
+          const detected = yield* Drift.detect(stack).pipe(Effect.provide(stack.state));
+          expect(detected.resources.DeploymentWorker?.action).toBe("unchanged");
+          expect(detected.resources.DeploymentWorker?.attr.deploymentId).toEqual(
+            worker.deploymentId,
+          );
+
+          yield* stack.destroy();
+          yield* waitForWorkerToBeDeleted(worker.workerName, accountId);
+        }).pipe(logLevel),
+      { tags: ["live"], timeout: 120_000 },
+    );
+
     // #1827: drift repair rebuilds the bundle from the `main` stored in
     // state. Deploy from one checkout with an absolute `main`
     // (`import.meta.url`), delete that checkout, then repair drift from

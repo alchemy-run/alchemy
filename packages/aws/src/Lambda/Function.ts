@@ -17,7 +17,7 @@ import type { LogLine, LogsInput } from "alchemy/Provider";
 import * as Provider from "alchemy/Provider";
 import { Resource, type ResourceBinding } from "alchemy/Resource";
 import type { FunctionContext, FunctionListener } from "alchemy/Runtime/Function";
-import { packEnvValue, unpackEnvValue } from "alchemy/RuntimeContext";
+import { packEnvValue, RuntimeContext, unpackEnvValue } from "alchemy/RuntimeContext";
 import { Stack } from "alchemy/Stack";
 import { Stage } from "alchemy/Stage";
 import { createInternalTags, createTagsList, hasAlchemyTags, hasTags } from "alchemy/Tags";
@@ -198,6 +198,11 @@ export interface FunctionCommonProps extends PlatformProps {
    * Instruction set architecture for the Lambda function.
    */
   architecture?: FunctionArchitecture;
+  /**
+   * Memory allocated to the function, in MB.
+   *
+   * @default 128
+   */
   memorySize?: number;
   env?: Record<string, any>;
   /**
@@ -314,14 +319,16 @@ export interface FunctionZipProps extends FunctionCommonProps {
    * `.output/server`, OpenNext's server functions) where re-bundling can
    * break `require`s of packaged `node_modules`. Implies external mode:
    * `handler` names an export of `main`, and the Lambda handler string is
-   * derived from `main`'s basename (e.g. `index.mjs` → `index.handler`).
+   * derived from `main`'s basename (e.g. `index.mjs` → `index.default`).
    * @default true
    */
   bundle?: false;
   image?: never;
   /**
-   * Exported handler symbol inside the bundled module.
-   * @default "handler"
+   * Name of the export in `main` that Lambda invokes. Only applies to async
+   * handlers (`main` exports a plain Lambda handler); Effect Functions are
+   * wrapped in a generated entry and ignore it.
+   * @default "default"
    */
   handler?: string;
   // TODO(sam): use a Layer instead so we can manage Effect platform?
@@ -518,6 +525,16 @@ export interface Function extends Resource<
       image?: Omit<FunctionImageAttributes, "hash">;
     };
     reservedConcurrentExecutions?: number;
+    /**
+     * Memory allocated to the function, in MB, as observed on the deployed
+     * function. Lets `alchemy drift` detect out-of-band changes.
+     */
+    memorySize?: number;
+    /**
+     * Timeout of the function, in seconds, as observed on the deployed
+     * function. Lets `alchemy drift` detect out-of-band changes.
+     */
+    timeoutSeconds?: number;
   },
   {
     env?: Record<string, any>;
@@ -676,12 +693,21 @@ export const normalizeFunctionUrl = (
  * **Example:** Writing the async handler
  * ```typescript
  * // src/handler.ts
- * export const handler = async (event: any) => {
+ * export default async (event: any) => {
  *   return {
  *     statusCode: 200,
  *     body: JSON.stringify({ message: "Hello from Lambda!" }),
  *   };
  * };
+ * ```
+ *
+ * **Example:** Invoking a named export
+ * ```typescript
+ * // src/handler.ts exports `handler` instead of a default export
+ * const func = yield* AWS.Lambda.Function("ApiFunction", {
+ *   main: "./src/handler.ts",
+ *   handler: "handler",
+ * });
  * ```
  *
  * ### Container Image Functions
@@ -1087,6 +1113,10 @@ export const Function: Platform<
                     Layer.mergeAll(
                       Layer.succeed(HandlerContext, context),
                       Layer.succeed(Scope.Scope, scope),
+                      // Runtime readers (e.g. bindings that read their
+                      // values through `RuntimeContext.get`) run in the
+                      // handler, like on every other host bridge.
+                      Layer.succeed(RuntimeContext, ctx as FunctionContext),
                       // The configured telemetry exporters, attached to the
                       // invocation scope by `buildEventTelemetry` so
                       // buffered spans/logs/metrics flush when it settles
@@ -1468,7 +1498,7 @@ export const FunctionProvider = () =>
             (configuration.LastUpdateStatus === undefined ||
               configuration.LastUpdateStatus === "Successful")
           ) {
-            return;
+            return configuration;
           }
           return yield* new FunctionUpdatePending({
             functionName,
@@ -1749,7 +1779,10 @@ export const FunctionProvider = () =>
                 PackageType: "Zip" as const,
               }),
           Architectures: [news.architecture ?? "x86_64"],
-          MemorySize: news.memorySize,
+          // Defaults are explicit so removing the prop (or repairing drift on
+          // a function that never set it) converges back to AWS's default;
+          // `UpdateFunctionConfiguration` treats omitted fields as "leave as-is".
+          MemorySize: news.memorySize ?? 128,
           // Always explicit: `UpdateFunctionConfiguration` treats an omitted
           // `Layers` as "leave as-is", so removing the prop would strand the
           // previously-attached layers.
@@ -1764,7 +1797,7 @@ export const FunctionProvider = () =>
             },
           },
           Tags: tags,
-          Timeout: toTimeoutSeconds(news.timeout),
+          Timeout: toTimeoutSeconds(news.timeout) ?? 3,
           // Always explicit so removing the `tracing` prop converges back to
           // the AWS default on update.
           TracingConfig: { Mode: news.tracing ?? "PassThrough" },
@@ -2212,6 +2245,8 @@ export const FunctionProvider = () =>
               observed: result?.Code,
             }),
             reservedConcurrentExecutions,
+            memorySize: fn.MemorySize,
+            timeoutSeconds: fn.Timeout,
           } satisfies Function["Attributes"];
           return (yield* hasAlchemyTags(id, tagsResult)) ? attrs : Unowned(attrs);
         }),
@@ -2257,6 +2292,8 @@ export const FunctionProvider = () =>
                     ...(reservedConcurrentExecutions === undefined
                       ? {}
                       : { reservedConcurrentExecutions }),
+                    ...(fn.MemorySize === undefined ? {} : { memorySize: fn.MemorySize }),
+                    ...(fn.Timeout === undefined ? {} : { timeoutSeconds: fn.Timeout }),
                   } satisfies Function["Attributes"];
                 }),
               { concurrency: 10 },
@@ -2431,7 +2468,7 @@ export const FunctionProvider = () =>
             session,
           });
 
-          yield* createOrUpdateFunction({
+          const configuration = yield* createOrUpdateFunction({
             id,
             news,
             roleArn,
@@ -2518,6 +2555,8 @@ export const FunctionProvider = () =>
             roleArn,
             code: prepared.attributes,
             reservedConcurrentExecutions,
+            memorySize: configuration?.MemorySize,
+            timeoutSeconds: configuration?.Timeout,
           };
         }),
         delete: Effect.fn(function* ({ output }) {

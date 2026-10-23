@@ -233,7 +233,15 @@ describe(
           expect(yield* awaitResult(run.status)).toEqual({ _tag: "Interrupted" });
           expect(yield* stepsOf("Approve", run.executionId)).toEqual(["requested"]);
           // Woken through its callback and finished by itself, not stopped.
-          const [execution] = yield* executionsOf("Approve", run.executionId);
+          // The result is recorded before the durable execution settles, so
+          // poll until it leaves RUNNING.
+          const [execution] = yield* executionsOf("Approve", run.executionId).pipe(
+            Effect.repeat({
+              schedule: Schedule.spaced("2 seconds"),
+              until: ([first]) => first?.Status !== "RUNNING",
+              times: 20,
+            }),
+          );
           expect(execution!.Status).toBe("SUCCEEDED");
         }),
       { timeout: 180_000 },
