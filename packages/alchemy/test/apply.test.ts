@@ -9592,19 +9592,19 @@ describe("replacement ownership admission", { tags: ["unit", "local"] }, () => {
   // A fake cloud keyed by physical name; each entry records which logical id owns it.
   interface Named extends Resource<
     "Test.Named",
-    { name: string; deleteFirst?: boolean },
+    { name: string },
     { name: string },
     { self: string }
   > {}
   const Named = Resource<Named>("Test.Named");
   class Cloud extends Context.Service<
     Cloud,
-    { owners: Map<string, string>; events: string[]; outputs: Array<unknown> }
+    { owners: Map<string, string>; events: string[]; outputs: Array<unknown>; deleteFirst: boolean }
   >()("ReplacementAdmissionCloud") {}
   const providers = Provider.succeed(Named, {
     diff: Effect.fn(function* ({ olds, news }) {
       if (isResolved(news) && olds.name === news.name) return undefined;
-      return { action: "replace" as const, deleteFirst: news.deleteFirst === true };
+      return { action: "replace" as const, deleteFirst: (yield* Cloud).deleteFirst };
     }),
     read: Effect.fn(function* ({ id, olds, output }) {
       const cloud = yield* Cloud;
@@ -9636,16 +9636,13 @@ describe("replacement ownership admission", { tags: ["unit", "local"] }, () => {
     Layer.provideMerge(
       Layer.effect(
         Cloud,
-        Effect.sync(() => ({ owners: new Map(), events: [], outputs: [] })),
+        Effect.sync(() => ({ owners: new Map(), events: [], outputs: [], deleteFirst: false })),
       ),
     ),
   );
   const { test } = Test.make({ providers: Layer.mergeAll(providers, TestLayers()) });
 
-  const named = (
-    props: { name: string | Output.Output<string>; deleteFirst?: boolean },
-    cycle = false,
-  ) =>
+  const named = (props: { name: string | Output.Output<string> }, cycle = false) =>
     Effect.gen(function* () {
       const resource = yield* Named("Subject", props);
       if (cycle) yield* resource.bind("Self", { self: resource.name });
@@ -9657,6 +9654,7 @@ describe("replacement ownership admission", { tags: ["unit", "local"] }, () => {
     const cloud = yield* Cloud;
     yield* stack.destroy();
     cloud.owners.clear();
+    cloud.deleteFirst = false;
     yield* stack.deploy(named({ name: "old" }));
     cloud.owners.set("target", "SomeoneElse");
     cloud.events.length = 0;
@@ -9671,9 +9669,8 @@ describe("replacement ownership admission", { tags: ["unit", "local"] }, () => {
         (stack) =>
           Effect.gen(function* () {
             const cloud = yield* setup(stack);
-            const error = yield* stack
-              .deploy(named({ name: "target", deleteFirst }, cycle))
-              .pipe(Effect.flip);
+            cloud.deleteFirst = deleteFirst;
+            const error = yield* stack.deploy(named({ name: "target" }, cycle)).pipe(Effect.flip);
             expect(error).toMatchObject({ _tag: "OwnedBySomeoneElse" });
             // Only the probe ran: the previous generation survives and the
             // foreign target is untouched.
@@ -9691,11 +9688,12 @@ describe("replacement ownership admission", { tags: ["unit", "local"] }, () => {
   test.provider("refuses a delete-first replacement whose name resolves during apply", (stack) =>
     Effect.gen(function* () {
       const cloud = yield* setup(stack);
+      cloud.deleteFirst = true;
       const error = yield* stack
         .deploy(
           Effect.gen(function* () {
             const source = yield* TestResource("Name", { string: "target" });
-            return yield* named({ name: source.string, deleteFirst: true });
+            return yield* named({ name: source.string });
           }),
         )
         .pipe(Effect.flip);
@@ -9745,7 +9743,8 @@ describe("replacement ownership admission", { tags: ["unit", "local"] }, () => {
       Effect.gen(function* () {
         const cloud = yield* setup(stack);
         cloud.owners.set("target", "Subject"); // e.g. left by an interrupted attempt
-        yield* stack.deploy(named({ name: "target", deleteFirst: true }));
+        cloud.deleteFirst = true;
+        yield* stack.deploy(named({ name: "target" }));
         expect(cloud.events).toEqual(["read target", "delete old", "reconcile target"]);
         expect(cloud.outputs).toEqual([undefined]);
         yield* stack.destroy();
