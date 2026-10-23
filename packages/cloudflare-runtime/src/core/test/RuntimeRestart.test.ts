@@ -5,6 +5,7 @@ import * as Queue from "effect/Queue";
 import * as Schedule from "effect/Schedule";
 import * as Scope from "effect/Scope";
 import { afterEach, vi } from "vitest";
+import { WebSocket } from "ws";
 import * as DurableObjectNamespace from "../bindings/DurableObjectNamespace.ts";
 import * as Service from "../bindings/Service.ts";
 import * as Runtime from "../Runtime.ts";
@@ -32,7 +33,13 @@ const CRASHING_DURABLE_OBJECT_SCRIPT = `
 import { DurableObject } from "cloudflare:workers";
 const hog = [];
 export class Pinger extends DurableObject {
-  fetch() {
+  fetch(request) {
+    if (request.headers.get("Upgrade") === "websocket") {
+      const [client, server] = Object.values(new WebSocketPair());
+      server.accept();
+      server.addEventListener("message", (event) => server.send(event.data));
+      return new Response(null, { status: 101, webSocket: client });
+    }
     return new Response("fetch ok");
   }
   ping() {
@@ -70,6 +77,30 @@ const fetchText = (url: URL) =>
     const response = await fetch(url, { signal: AbortSignal.timeout(10_000) });
     return await response.text();
   });
+
+const openSocket = (url: URL) =>
+  Effect.acquireRelease(
+    Effect.callback<WebSocket, Error>((resume) => {
+      const socket = new WebSocket(new URL(url.pathname, url.href.replace(/^http/, "ws")));
+      socket.once("open", () => resume(Effect.succeed(socket)));
+      socket.once("error", (error) => resume(Effect.fail(error)));
+    }).pipe(Effect.timeout(10_000)),
+    (socket) => Effect.sync(() => socket.terminate()),
+  );
+
+const echo = (socket: WebSocket, message: string) =>
+  Effect.callback<string>((resume) => {
+    socket.once("message", (data) => resume(Effect.succeed(String(data))));
+    socket.send(message);
+  }).pipe(Effect.timeout(5_000));
+
+const closed = (socket: WebSocket) =>
+  Effect.callback<void>((resume) => {
+    if (socket.readyState === WebSocket.CLOSED) {
+      return resume(Effect.void);
+    }
+    socket.once("close", () => resume(Effect.void));
+  }).pipe(Effect.timeout(10_000));
 
 layer(localRuntimeLayer, { excludeTestServices: true })("Runtime restart", (it) => {
   afterEach(() => {
@@ -272,6 +303,64 @@ layer(localRuntimeLayer, { excludeTestServices: true })("Runtime restart", (it) 
         yield* expectAnswer("/rpc", "rpc ok");
         yield* expectAnswer("/fetch", "fetch ok");
       }),
+    { timeout: 60_000 },
+  );
+
+  it.effect(
+    "keeps a cross-script Durable Object WebSocket open across calls and reconnects after a restart",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv(Workerd.V8_FLAGS_ENV, "--max-old-space-size=32");
+        const runtime = yield* Runtime.Runtime;
+        const restarts = yield* Queue.unbounded<Workerd.WorkerdExit>();
+        const owner = yield* runtime.start({
+          name: "restart-websocket-owner",
+          compatibilityDate: "2026-03-10",
+          compatibilityFlags: [],
+          bindings: [],
+          modules: [{ name: "main.js", type: "ESModule", content: CRASHING_DURABLE_OBJECT_SCRIPT }],
+          durableObjectNamespaces: [
+            { className: "Pinger", sql: false, uniqueKey: "restart-websocket" },
+          ],
+          onRestart: (exit) => {
+            Queue.offerUnsafe(restarts, exit);
+          },
+        });
+        const consumer = yield* runtime.start({
+          name: "restart-websocket-consumer",
+          compatibilityDate: "2026-03-10",
+          compatibilityFlags: [],
+          bindings: [
+            DurableObjectNamespace.local({
+              binding: "PINGER",
+              className: "Pinger",
+              scriptName: "restart-websocket-owner",
+              uniqueKey: "restart-websocket",
+            }),
+          ],
+          modules: [{ name: "main.js", type: "ESModule", content: DURABLE_OBJECT_CONSUMER_SCRIPT }],
+        });
+
+        const socket = yield* openSocket(new URL("/ws", consumer)).pipe(
+          Effect.retry({ schedule: Schedule.spaced("250 millis"), times: 10 }),
+        );
+        expect(yield* echo(socket, "before")).toBe("before");
+        // Other calls through the proxy share the Durable Object without
+        // disturbing the open socket.
+        for (let i = 0; i < 20; i++) {
+          expect(yield* fetchText(new URL("/rpc", consumer))).toBe("rpc ok");
+        }
+        expect(yield* echo(socket, "between")).toBe("between");
+
+        // The owner's crash ends the socket; a new one reaches the replacement.
+        yield* fetchText(new URL("/crash", owner)).pipe(Effect.ignore);
+        yield* closed(socket);
+        yield* Queue.take(restarts).pipe(Effect.timeout(10_000));
+        const replacement = yield* openSocket(new URL("/ws", consumer)).pipe(
+          Effect.retry({ schedule: Schedule.spaced("250 millis"), times: 10 }),
+        );
+        expect(yield* echo(replacement, "after")).toBe("after");
+      }).pipe(Effect.scoped),
     { timeout: 60_000 },
   );
 
