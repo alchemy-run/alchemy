@@ -343,7 +343,7 @@ test.provider(
 
       expect(Result.isFailure(result)).toBe(true);
       if (Result.isFailure(result)) {
-        expect(String(result.failure)).toContain("drizzle-kit needs a decision");
+        expect(String(result.failure)).toContain("needs a decision");
       }
       // No migration was written for the undecided drift.
       expect(yield* readMigrationDirs(ws.out)).toEqual(initialDirs);

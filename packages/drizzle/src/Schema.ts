@@ -118,11 +118,9 @@ class UndecidedSchemaChange extends Data.TaggedError("UndecidedSchemaChange")<{
   override get message() {
     const { props, hint } = this;
     return [
-      `drizzle-kit needs a decision for ${props.schema} that cannot be made non-interactively:`,
-      `  ${hint.kind} ${formatEntity(hint.entity)}: created or renamed?`,
-      "",
-      "Re-run the deploy in an interactive terminal to answer it, or generate the migration yourself and commit it:",
-      `  npx drizzle-kit generate --dialect ${cliDialect(props)} --schema ${props.schema} --out ${props.out ?? "./migrations"}`,
+      `${props.schema} has an ambiguous change that needs a decision:`,
+      `  ${formatEntity(hint.entity)}: created or renamed?`,
+      "Re-run in an interactive terminal to answer it.",
     ].join("\n");
   }
 }
