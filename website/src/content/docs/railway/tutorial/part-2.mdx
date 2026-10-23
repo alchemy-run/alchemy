@@ -43,6 +43,7 @@ Import the Project and yield it from the Stack:
 ```diff lang="typescript"
 // alchemy.run.ts
 import * as Alchemy from "alchemy";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Railway from "@alchemy.run/railway";
 import * as Effect from "effect/Effect";
 +import { Site } from "./src/project.ts";
@@ -51,7 +52,7 @@ export default Alchemy.Stack(
   "MyApp",
   {
     providers: Railway.providers(),
-    state: Alchemy.localState(),
+    state: Cloudflare.state(),
   },
   Effect.gen(function* () {
 -    const site = yield* Railway.Project("Site");
@@ -195,6 +196,7 @@ Stack's Effect is what registers the resource and starts the deploy:
 ```diff lang="typescript"
 // alchemy.run.ts
 import * as Alchemy from "alchemy";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Railway from "@alchemy.run/railway";
 import * as Effect from "effect/Effect";
 +import Api from "./src/api.ts";
@@ -204,7 +206,7 @@ export default Alchemy.Stack(
   "MyApp",
   {
     providers: Railway.providers(),
-    state: Alchemy.localState(),
+    state: Cloudflare.state(),
   },
   Effect.gen(function* () {
     const site = yield* Site;

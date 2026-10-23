@@ -24,10 +24,10 @@ import BankWorker from "./src/BankWorker.ts";
 
 export default Alchemy.Stack(
   "Bank",
--  { providers: Cloudflare.providers(), state: Alchemy.localState() },
+-  { providers: Cloudflare.providers(), state: Cloudflare.state() },
 +  {
 +    providers: Layer.mergeAll(Cloudflare.providers(), Axiom.providers()),
-+    state: Alchemy.localState(),
++    state: Cloudflare.state(),
 +  },
 ```
 

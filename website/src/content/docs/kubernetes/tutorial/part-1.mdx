@@ -8,7 +8,7 @@ sidebar:
 import Terminal from "../../../../components/Terminal.astro";
 import PackageManagers from "../../../../components/PackageManagers.astro";
 
-export const pkgs = `alchemy@latest @alchemy.run/kubernetes@latest effect @effect/platform-bun @effect/platform-node`;
+export const pkgs = `alchemy@latest @alchemy.run/kubernetes@latest @alchemy.run/cloudflare@latest effect @effect/platform-bun @effect/platform-node`;
 
 In this first part you'll create a Stack, start a Kubernetes cluster
 on your machine, and deploy a replicated HTTP service. You won't
@@ -21,6 +21,7 @@ cloud account. Everything you build works on any Kubernetes cluster.
 ## Prerequisites
 
 - [Bun](https://bun.sh) or Node.js 22+
+- A Cloudflare account to hold deploy state — see [Cloudflare setup](/cloudflare/setup)
 - [Docker](https://docs.docker.com/get-started/get-docker/),
   [kind](https://kind.sigs.k8s.io/docs/user/quick-start/#installation),
   and [`kubectl`](https://kubernetes.io/docs/tasks/tools/)
@@ -36,7 +37,7 @@ Start with an empty directory and initialize a `package.json`:
 
 ## Install dependencies
 
-Install `alchemy@latest`, `@alchemy.run/kubernetes`, and `effect`:
+Install `alchemy@latest`, `@alchemy.run/kubernetes`, `@alchemy.run/cloudflare`, and `effect`:
 
 <PackageManagers add={pkgs} />
 
@@ -49,6 +50,7 @@ remembers what was deployed. Create `alchemy.run.ts`:
 ```typescript
 // alchemy.run.ts
 import * as Alchemy from "alchemy";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Kubernetes from "@alchemy.run/kubernetes";
 import * as Effect from "effect/Effect";
 
@@ -56,7 +58,7 @@ export default Alchemy.Stack(
   "MyCluster",
   {
     providers: Kubernetes.providers(),
-    state: Alchemy.localState(),
+    state: Cloudflare.state(),
   },
   Effect.gen(function* () {
     // resources go here
@@ -65,8 +67,8 @@ export default Alchemy.Stack(
 ```
 
 `Kubernetes.providers()` teaches Alchemy how to create, update, and
-delete Kubernetes resources. `Alchemy.localState()` keeps state in a
-`.alchemy/` directory next to your code.
+delete Kubernetes resources. `Cloudflare.state()` keeps state in your
+Cloudflare account, so every machine and CI run sees the same state.
 
 ## Start a local cluster
 

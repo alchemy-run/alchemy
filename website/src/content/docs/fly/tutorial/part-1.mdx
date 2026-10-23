@@ -8,7 +8,7 @@ sidebar:
 import Terminal from "../../../../components/Terminal.astro";
 import PackageManagers from "../../../../components/PackageManagers.astro";
 
-export const pkgs = `alchemy@latest @alchemy.run/fly@latest effect @effect/platform-bun @effect/platform-node`;
+export const pkgs = `alchemy@latest @alchemy.run/fly@latest @alchemy.run/cloudflare@latest effect @effect/platform-bun @effect/platform-node`;
 
 Install Alchemy and Effect, create a Stack, and deploy a
 `Fly.Service`: an Effect program running in a Fly Machine. The
@@ -20,6 +20,7 @@ image, and pushes it to `registry.fly.io`. No Dockerfile. No
 ## Prerequisites
 
 - [Bun](https://bun.sh) or Node.js 22+
+- A Cloudflare account to hold deploy state — see [Cloudflare setup](/cloudflare/setup)
 - A Fly organization and an API token — see [Setup](/fly/setup) if
   you haven't created those yet
 - Docker running locally. Alchemy builds `linux/amd64` images and
@@ -39,7 +40,7 @@ Start with an empty directory and initialize a `package.json`:
 
 ## Install dependencies
 
-Install `alchemy@latest`, `@alchemy.run/fly`, and `effect`:
+Install `alchemy@latest`, `@alchemy.run/fly`, `@alchemy.run/cloudflare`, and `effect`:
 
 <PackageManagers add={pkgs} />
 
@@ -75,13 +76,14 @@ deploys and compute diffs against your infrastructure.
 
 ## Configure state
 
-Fly has no state backend of its own, so we'll keep state on disk
-with `Alchemy.localState()` — it writes to `.alchemy/` next to your
-code, no setup required:
+Fly has no state backend of its own, so we'll keep state in your
+Cloudflare account with `Cloudflare.state()`. Every machine and CI run
+then sees the same state:
 
 ```diff lang="typescript"
 // alchemy.run.ts
 import * as Alchemy from "alchemy";
++import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 
@@ -89,7 +91,7 @@ export default Alchemy.Stack(
   "MyApp",
   {
     providers: Layer.empty,
-+    state: Alchemy.localState(),
++    state: Cloudflare.state(),
   },
   Effect.gen(function* () {
     // we'll add resources here next
@@ -97,11 +99,9 @@ export default Alchemy.Stack(
 );
 ```
 
-:::note[Other state stores]
-Local state is perfect for a solo project. When you need state your
-team and CI can share, swap in `Cloudflare.state()` or `AWS.state()`
-— see [State Store](/state-store).
-:::
+The first deploy prompts for permission and bootstraps a small
+state-store Worker into your Cloudflare account. It's a one-time step,
+reused by every stack and stage — see [State Store](/state-store).
 
 ## Create the Service file
 
@@ -173,6 +173,7 @@ the type error:
 ```diff lang="typescript"
 // alchemy.run.ts
 import * as Alchemy from "alchemy";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 +import Api from "./src/api.ts";
@@ -183,7 +184,7 @@ export default Alchemy.Stack(
     providers: Layer.empty,
     // @error: ts(2322) Type 'Layer<never, never, never>' is not assignable to type 'Layer<NoInfer<Providers>, never, StackServices>'.
     // @error:   Type 'Providers' is not assignable to type 'never'.
-    state: Alchemy.localState(),
+    state: Cloudflare.state(),
   },
   Effect.gen(function* () {
 -    // we'll add resources here next
@@ -203,6 +204,7 @@ error:
 ```diff lang="typescript"
 // alchemy.run.ts
 import * as Alchemy from "alchemy";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 +import * as Fly from "@alchemy.run/fly";
 import * as Effect from "effect/Effect";
 -import * as Layer from "effect/Layer";
@@ -212,7 +214,7 @@ export default Alchemy.Stack(
   "MyApp",
   {
 +    providers: Fly.providers(),
-    state: Alchemy.localState(),
+    state: Cloudflare.state(),
   },
   Effect.gen(function* () {
     const api = yield* Api;

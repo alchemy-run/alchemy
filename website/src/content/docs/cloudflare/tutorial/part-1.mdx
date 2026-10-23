@@ -102,12 +102,6 @@ encryption key are reused across every stack and stage on this
 Cloudflare account. See [State Store](/state-store) for
 the full picture.
 
-:::note[Other state stores]
-Don't want to deploy a Worker just for state? Swap `Cloudflare.state()`
-for `State.localState()` from `alchemy/State` to keep state on disk
-under `.alchemy/`, or [write your own](/state-store).
-:::
-
 ## Add a Resource
 
 Resources represent cloud infrastructure — buckets, queues, functions,
