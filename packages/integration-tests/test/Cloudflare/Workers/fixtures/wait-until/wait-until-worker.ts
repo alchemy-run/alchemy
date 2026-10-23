@@ -1,16 +1,14 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as Http from "alchemy/Http";
 import * as Effect from "effect/Effect";
 import * as HttpApi from "effect/http-api/HttpApi";
 import * as HttpApiBuilder from "effect/http-api/HttpApiBuilder";
 import * as HttpApiEndpoint from "effect/http-api/HttpApiEndpoint";
 import * as HttpApiGroup from "effect/http-api/HttpApiGroup";
-import * as Etag from "effect/http/Etag";
-import * as HttpPlatform from "effect/http/HttpPlatform";
 import * as HttpRouter from "effect/http/HttpRouter";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Layer from "effect/Layer";
-import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 
 /**
@@ -80,16 +78,6 @@ const BackgroundApi = HttpApi.make("BackgroundApi").add(
   ),
 );
 
-const HttpPlatformStub = Layer.succeed(HttpPlatform.HttpPlatform, {
-  platform: "web",
-  compression: {
-    algorithms: new Set<HttpPlatform.CompressionAlgorithm>(),
-    compressResponse: (response) => Effect.succeed(response),
-  },
-  fileResponse: () => Effect.die("HttpPlatform.fileResponse not supported"),
-  fileWebResponse: () => Effect.die("HttpPlatform.fileWebResponse not supported"),
-});
-
 /**
  * Fixture worker for `WaitUntil.test.ts`.
  *
@@ -144,7 +132,7 @@ export default class WaitUntilWorker extends Cloudflare.Worker<WaitUntilWorker>(
             ),
           ),
         ),
-        Layer.provide([Etag.layer, HttpPlatformStub, Path.layer]),
+        Layer.provide(Http.Platform),
       ),
     );
 
