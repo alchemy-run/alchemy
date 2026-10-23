@@ -319,14 +319,16 @@ export interface FunctionZipProps extends FunctionCommonProps {
    * `.output/server`, OpenNext's server functions) where re-bundling can
    * break `require`s of packaged `node_modules`. Implies external mode:
    * `handler` names an export of `main`, and the Lambda handler string is
-   * derived from `main`'s basename (e.g. `index.mjs` → `index.handler`).
+   * derived from `main`'s basename (e.g. `index.mjs` → `index.default`).
    * @default true
    */
   bundle?: false;
   image?: never;
   /**
-   * Exported handler symbol inside the bundled module.
-   * @default "handler"
+   * Name of the export in `main` that Lambda invokes. Only applies to async
+   * handlers (`main` exports a plain Lambda handler); Effect Functions are
+   * wrapped in a generated entry and ignore it.
+   * @default "default"
    */
   handler?: string;
   // TODO(sam): use a Layer instead so we can manage Effect platform?
@@ -691,12 +693,21 @@ export const normalizeFunctionUrl = (
  * **Example:** Writing the async handler
  * ```typescript
  * // src/handler.ts
- * export const handler = async (event: any) => {
+ * export default async (event: any) => {
  *   return {
  *     statusCode: 200,
  *     body: JSON.stringify({ message: "Hello from Lambda!" }),
  *   };
  * };
+ * ```
+ *
+ * **Example:** Invoking a named export
+ * ```typescript
+ * // src/handler.ts exports `handler` instead of a default export
+ * const func = yield* AWS.Lambda.Function("ApiFunction", {
+ *   main: "./src/handler.ts",
+ *   handler: "handler",
+ * });
  * ```
  *
  * ### Container Image Functions

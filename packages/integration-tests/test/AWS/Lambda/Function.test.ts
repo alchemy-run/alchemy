@@ -18,6 +18,8 @@ import * as Stream from "effect/Stream";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
 import { TestFunction, TestFunctionLive } from "./handler.ts";
 
+const asyncHandlerPath = fileURLToPath(new URL("./async-handler.ts", import.meta.url));
+const namedHandlerPath = fileURLToPath(new URL("./named-handler.ts", import.meta.url));
 const timeoutHandlerPath = fileURLToPath(new URL("./timeout-handler.ts", import.meta.url));
 const externalPackageHandlerPath = fileURLToPath(
   new URL("./external-package-handler.ts", import.meta.url),
@@ -150,6 +152,73 @@ test.provider.skipIf(process.env.ALCHEMY_TEST_DEV === "1")(
       yield* stack.destroy();
       yield* assertFunctionDeleted(created.functionName);
       yield* assertRoleDeleted(created.roleName);
+    }).pipe(Effect.onError(() => stack.destroy().pipe(Effect.ignore))),
+  {
+    tags: ["provider:aws", "provider:aws:iam", "provider:aws:lambda", "live"],
+    timeout: 120_000,
+  },
+);
+
+test.provider(
+  "async handler invokes the default export",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const fn = yield* stack.deploy(
+        AWS.Lambda.Function("AsyncHandlerFn", {
+          main: asyncHandlerPath,
+          functionUrl: false,
+        }),
+      );
+
+      const { Configuration } = yield* Lambda.getFunction({ FunctionName: fn.functionName });
+      expect(Configuration?.Handler).toBe("index.default");
+
+      const response = yield* Lambda.invoke({ FunctionName: fn.functionName, Payload: "{}" });
+      expect(response.FunctionError).toBeUndefined();
+      const payload = response.Payload
+        ? yield* response.Payload.pipe(Stream.decodeText(), Stream.mkString)
+        : "";
+      expect(JSON.parse(payload)).toEqual({ statusCode: 200, body: "ok" });
+
+      yield* stack.destroy();
+      yield* assertFunctionDeleted(fn.functionName);
+      yield* assertRoleDeleted(fn.roleName);
+    }).pipe(Effect.onError(() => stack.destroy().pipe(Effect.ignore))),
+  {
+    tags: ["provider:aws", "provider:aws:iam", "provider:aws:lambda", "live"],
+    timeout: 120_000,
+  },
+);
+
+test.provider(
+  "async handler invokes the export named by `handler`",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const fn = yield* stack.deploy(
+        AWS.Lambda.Function("NamedHandlerFn", {
+          main: namedHandlerPath,
+          handler: "handler",
+          functionUrl: false,
+        }),
+      );
+
+      const { Configuration } = yield* Lambda.getFunction({ FunctionName: fn.functionName });
+      expect(Configuration?.Handler).toBe("index.handler");
+
+      const response = yield* Lambda.invoke({ FunctionName: fn.functionName, Payload: "{}" });
+      expect(response.FunctionError).toBeUndefined();
+      const payload = response.Payload
+        ? yield* response.Payload.pipe(Stream.decodeText(), Stream.mkString)
+        : "";
+      expect(JSON.parse(payload)).toEqual({ statusCode: 200, body: "named" });
+
+      yield* stack.destroy();
+      yield* assertFunctionDeleted(fn.functionName);
+      yield* assertRoleDeleted(fn.roleName);
     }).pipe(Effect.onError(() => stack.destroy().pipe(Effect.ignore))),
   {
     tags: ["provider:aws", "provider:aws:iam", "provider:aws:lambda", "live"],
