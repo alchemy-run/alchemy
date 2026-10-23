@@ -11,7 +11,7 @@ import {
 import { stringWidth } from "@alchemy.run/sigil/ansi";
 import { useEffect, useLayoutEffect, useRef, useState } from "@alchemy.run/sigil/react";
 import type { JSX, ReactNode } from "react";
-import { copyToClipboard, truncate } from "../../../Util/Terminal.ts";
+import { copyToClipboard } from "../../../Util/Terminal.ts";
 import { theme } from "../../../Util/Theme.ts";
 import type { AwaitExternalOptions, Choice, CycleChoice } from "../types.ts";
 import { useCliEnvironment, useGlyphs, useKeyGlyphs } from "./Environment.tsx";
@@ -760,7 +760,6 @@ export function ExternalWait({
   const glyphs = useGlyphs();
   const keyGlyphs = useKeyGlyphs();
   const [manual, setManual] = useState(false);
-  const [showFull, setShowFull] = useState(false);
   const [copied, setCopied] = useState(false);
   const [browserFailed, setBrowserFailed] = useState(openFailed);
   const [error, setError] = useState<string>();
@@ -771,7 +770,6 @@ export function ExternalWait({
     },
     [],
   );
-  const { columns } = useTerminalSize();
   // Ctrl+C is handled centrally by the screen runner (SigilRuntime.run).
   useTerminalInput((input, key) => {
     if (manual) {
@@ -786,7 +784,6 @@ export function ExternalWait({
     else if (key.escape) onCancel();
     // Ctrl+C must fall through to the runner's cancel guard, not copy the URL.
     else if (key.ctrl || key.meta) return;
-    else if (shortcut === "u") setShowFull((current) => !current);
     else if (shortcut === "o" && onOpen !== undefined) {
       setBrowserFailed(false);
       void onOpen().catch(() => setBrowserFailed(true));
@@ -842,7 +839,6 @@ export function ExternalWait({
                 "c",
                 copied ? `${glyphs.success} copied` : code === undefined ? "copy URL" : "copy code",
               ],
-              ["u", showFull ? "collapse URL" : "full URL"],
             ] as const)),
         [keyGlyphs.escape, "cancel"],
       ]}
@@ -862,9 +858,7 @@ export function ExternalWait({
             {glyphs.warning} Could not open the browser. Copy and open the URL manually.
           </Text>
         ) : null}
-        {url === undefined ? null : (
-          <Link href={url}>{showFull ? url : truncate(url, Math.max(24, columns - 8))}</Link>
-        )}
+        {url === undefined ? null : <Link href={url}>{url}</Link>}
       </Box>
     </PromptFrame>
   );

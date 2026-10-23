@@ -1,7 +1,7 @@
 /**
  * Shared browser-OAuth ceremony for auth providers: open the authorization
  * URL, then race the provider's local callback listener against the branded
- * "waiting for browser" prompt (spinner + compact URL; Enter switches to
+ * "waiting for browser" prompt (spinner + URL; Enter switches to
  * manual code entry, `o` opens the browser again, and `c` copies the URL).
  *
  * {@link deviceOAuth} is the device-code (RFC 8628) counterpart.
