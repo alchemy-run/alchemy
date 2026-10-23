@@ -1,5 +1,5 @@
 import { aggregateIdFile } from "../src/rules/aggregate-id-file.ts";
-import { bank, tester } from "./tester.ts";
+import { bank, kennel, tester } from "./tester.ts";
 
 const head = `import * as Domain from "@alchemy.run/domain";\n`;
 
@@ -43,6 +43,32 @@ export class Account extends Domain.Aggregate("Account", { id: AccountId }) {}`,
           data: { name: "Account", expected: "Account.id.ts", actual: "this file" },
         },
       ],
+    },
+  ],
+});
+
+tester.run("aggregate-id-file (fileCase)", aggregateIdFile, {
+  valid: [
+    {
+      filename: kennel("src/dog/dog.aggregate.ts"),
+      code: `${head}import { DogId } from "./dog.id.ts";
+export class Dog extends Domain.Aggregate("Dog", { id: DogId }) {}`,
+      options: [{ fileCase: "kebab" }],
+    },
+  ],
+  invalid: [
+    {
+      filename: kennel("src/cat/cat.aggregate.ts"),
+      code: `${head}export class Cat extends Domain.Aggregate("Cat", { id: CatId }) {}`,
+      options: [{ fileCase: "kebab" }],
+      errors: [{ messageId: "missing", data: { name: "Cat", expected: "cat.id.ts" } }],
+    },
+    // The default case is pascal.
+    {
+      filename: kennel("src/dog/dog.aggregate.ts"),
+      code: `${head}import { DogId } from "./dog.id.ts";
+export class Dog extends Domain.Aggregate("Dog", { id: DogId }) {}`,
+      errors: [{ messageId: "missing", data: { name: "Dog", expected: "Dog.id.ts" } }],
     },
   ],
 });

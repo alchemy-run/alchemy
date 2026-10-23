@@ -44,3 +44,31 @@ tester.run("domain-imports", domainImports, {
     },
   ],
 });
+
+// `allowPaths`: directories a relative import may leave the package for (a shared pure module).
+const shared = bank("../shared");
+
+tester.run("domain-imports (allowPaths)", domainImports, {
+  valid: [
+    {
+      filename,
+      code: `import { decide } from "../../../shared/pure/decide";`,
+      options: [{ allowPaths: [shared] }],
+    },
+  ],
+  invalid: [
+    {
+      filename,
+      code: `import { BankWorker } from "../../../server/src/BankWorker.ts";`,
+      options: [{ allowPaths: [shared] }],
+      errors: [{ messageId: "outside" }],
+    },
+    // A sibling folder whose name starts with the allowed one is not inside it.
+    {
+      filename,
+      code: `import { x } from "../../../shared-io/x.ts";`,
+      options: [{ allowPaths: [shared] }],
+      errors: [{ messageId: "outside" }],
+    },
+  ],
+});

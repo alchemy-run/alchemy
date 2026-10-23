@@ -1,6 +1,7 @@
 import * as path from "node:path";
 import { PRIMARY_SUFFIX } from "../ast.ts";
 import { domainFile, kindOfPath } from "../file.ts";
+import { fileNoun, isMessageKind, naming, namingSchema } from "../naming.ts";
 import type { Rule } from "../types.ts";
 
 const TEST_FILE = /\.(?:test|spec)\.[cm]?tsx?$/;
@@ -25,6 +26,11 @@ const parse = (file: string) => {
  * Domain.Aggregate(...)` lives in `Account.aggregate.ts`. A file with only a
  * rejection is `<Rejection>.rejection.ts`. A kind-suffixed file declares a
  * block of its kind. Events and rejections may sit in their command's file.
+ *
+ * Options: `fileCase: "kebab"` names the file in kebab-case
+ * (`withdraw-money.command.ts`); `messagesFile: "messages"` lets
+ * `<noun>.messages.ts` hold the commands, events and rejections of one
+ * aggregate, and nothing else.
  */
 export const blockFileName: Rule = {
   meta: {
@@ -34,9 +40,13 @@ export const blockFileName: Rule = {
       name: "{{kind}} `{{name}}` belongs in `{{expected}}`, not `{{actual}}`.",
       empty:
         "`{{actual}}` is named for a {{kind}}, but declares no `{{callee}}`. Rename the file, or move the block here.",
+      messages:
+        "`{{actual}}` holds only commands, events and rejections. Move {{kind}} `{{name}}` to `{{expected}}`.",
     },
+    schema: namingSchema,
   },
   create(context) {
+    const { fileCase, messagesFile } = naming(context);
     return {
       Program(program) {
         if (TEST_FILE.test(context.filename)) return;
@@ -44,6 +54,25 @@ export const blockFileName: Rule = {
         const actual = path.basename(context.filename);
         const extension = /\.([cm]?tsx?)$/.exec(actual)?.[1] ?? "ts";
         const { noun, suffix } = parse(context.filename);
+        const fileOf = (name: string, kindSuffix: string) =>
+          `${fileNoun(name, fileCase)}.${kindSuffix}.${extension}`;
+
+        if (messagesFile !== undefined && suffix === messagesFile) {
+          for (const block of file.blocks) {
+            if (isMessageKind(block.kind)) continue;
+            context.report({
+              node: block.id,
+              messageId: "messages",
+              data: {
+                kind: block.kind,
+                name: block.name,
+                expected: fileOf(block.name, PRIMARY_SUFFIX[block.kind] ?? "ts"),
+                actual,
+              },
+            });
+          }
+          return;
+        }
 
         const primary = file.blocks.find((block) => PRIMARY_SUFFIX[block.kind] !== undefined);
         const named =
@@ -53,14 +82,14 @@ export const blockFileName: Rule = {
             : undefined);
         if (named !== undefined) {
           const expectedSuffix = PRIMARY_SUFFIX[named.kind] ?? "rejection";
-          if (noun !== named.name || suffix !== expectedSuffix) {
+          if (noun !== fileNoun(named.name, fileCase) || suffix !== expectedSuffix) {
             context.report({
               node: named.id,
               messageId: "name",
               data: {
                 kind: named.kind,
                 name: named.name,
-                expected: `${named.name}.${expectedSuffix}.${extension}`,
+                expected: fileOf(named.name, expectedSuffix),
                 actual,
               },
             });

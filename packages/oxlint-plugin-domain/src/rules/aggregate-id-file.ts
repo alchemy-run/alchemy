@@ -2,13 +2,15 @@ import * as path from "node:path";
 import { getProperty, unwrap } from "../ast.ts";
 import { domainFile } from "../file.ts";
 import { exists, resolveImport } from "../files.ts";
+import { fileNoun, naming, namingSchema } from "../naming.ts";
 import type { Rule } from "../types.ts";
 
 /**
  * SKILL.md: "An aggregate's id lives in `<Aggregate>.id.ts` next to it."
  *
  * `Account.aggregate.ts` has a sibling `Account.id.ts`, and the aggregate's
- * `id:` schema is imported from it.
+ * `id:` schema is imported from it. With `fileCase: "kebab"`,
+ * `gateway-job.aggregate.ts` has a sibling `gateway-job.id.ts`.
  */
 export const aggregateIdFile: Rule = {
   meta: {
@@ -20,14 +22,16 @@ export const aggregateIdFile: Rule = {
       elsewhere:
         "Aggregate `{{name}}` takes its `id` from `{{actual}}`. Import it from `./{{expected}}`, so every block that refers to the aggregate shares one id file.",
     },
+    schema: namingSchema,
   },
   create(context) {
+    const { fileCase } = naming(context);
     return {
       Program(program) {
         const file = domainFile(context, program);
         const aggregate = file.blocks.find((block) => block.kind === "Aggregate");
         if (aggregate === undefined) return;
-        const expected = `${aggregate.name}.id.ts`;
+        const expected = `${fileNoun(aggregate.name, fileCase)}.id.ts`;
         const expectedPath = path.join(path.dirname(context.filename), expected);
         if (!exists(expectedPath)) {
           context.report({

@@ -1,5 +1,5 @@
 import { oneBlockPerFile } from "../src/rules/one-block-per-file.ts";
-import { bank, tester } from "./tester.ts";
+import { bank, kennel, tester } from "./tester.ts";
 
 const head = `import * as Domain from "@alchemy.run/domain";\n`;
 
@@ -37,6 +37,7 @@ export class CloseAccount extends Domain.Command("CloseAccount", {}) {}`,
             first: "OpenAccount",
             firstKind: "Command",
             suffix: "command",
+            file: "CloseAccount.command.ts",
           },
         },
       ],
@@ -55,6 +56,7 @@ export class OpenAccount extends Domain.Command("OpenAccount", {}) {}`,
             first: "Account",
             firstKind: "Aggregate",
             suffix: "view",
+            file: "AccountSummary.view.ts",
           },
         },
         {
@@ -65,6 +67,7 @@ export class OpenAccount extends Domain.Command("OpenAccount", {}) {}`,
             first: "Account",
             firstKind: "Aggregate",
             suffix: "command",
+            file: "OpenAccount.command.ts",
           },
         },
       ],
@@ -82,6 +85,40 @@ export class Closed extends Domain.Rejection("Closed") {}`,
             first: "NotOpen",
             firstKind: "Rejection",
             suffix: "rejection",
+            file: "Closed.rejection.ts",
+          },
+        },
+      ],
+    },
+  ],
+});
+
+tester.run("one-block-per-file (fileCase, messagesFile)", oneBlockPerFile, {
+  valid: [
+    {
+      filename: kennel("src/dog/dog.messages.ts"),
+      code: `${head}export class NotHungry extends Domain.Rejection("NotHungry") {}
+export class Asleep extends Domain.Rejection("Asleep") {}
+export class FeedDog extends Domain.Command("FeedDog", {}) {}
+export class WalkDog extends Domain.Command("WalkDog", {}) {}`,
+      options: [{ fileCase: "kebab", messagesFile: "messages" }],
+    },
+  ],
+  invalid: [
+    {
+      filename: kennel("src/dog/dog.messages.ts"),
+      code: `${head}export class FeedDog extends Domain.Command("FeedDog", {}) {}
+export class WalkDog extends Domain.Command("WalkDog", {}) {}`,
+      options: [{ fileCase: "kebab" }],
+      errors: [
+        {
+          messageId: "extra",
+          data: {
+            kind: "Command",
+            name: "WalkDog",
+            first: "FeedDog",
+            firstKind: "Command",
+            file: "walk-dog.command.ts",
           },
         },
       ],

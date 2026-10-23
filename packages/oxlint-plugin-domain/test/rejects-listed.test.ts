@@ -1,5 +1,5 @@
 import { rejectsListed } from "../src/rules/rejects-listed.ts";
-import { bank, tester } from "./tester.ts";
+import { bank, kennel, tester } from "./tester.ts";
 
 const filename = bank("src/Account/Account.aggregate.ts");
 const header = `import * as Domain from "@alchemy.run/domain";
@@ -123,6 +123,27 @@ export class Summary extends Domain.View("Summary", {
       errors: [
         { messageId: "unlisted", data: { owner: "Summary", rejection: "NotOpen", via: "" } },
       ],
+    },
+  ],
+});
+
+const domain = `import * as Domain from "@alchemy.run/domain";\n`;
+
+// Kebab-case files and a grouped messages file: the command's `rejects` is read from it.
+tester.run("rejects-listed (kebab, messages file)", rejectsListed, {
+  valid: [
+    {
+      filename: kennel("src/dog/dog.aggregate.ts"),
+      code: `${domain}import { FeedDog, NotHungry } from "./dog.messages.ts";
+export class Dog extends Domain.Aggregate("Dog", { decide: { FeedDog: () => new NotHungry() } }) {}`,
+    },
+  ],
+  invalid: [
+    {
+      filename: kennel("src/dog/dog.aggregate.ts"),
+      code: `${domain}import { Asleep, FeedDog } from "./dog.messages";
+export class Dog extends Domain.Aggregate("Dog", { decide: { FeedDog: () => new Asleep() } }) {}`,
+      errors: [{ messageId: "unlisted", data: { owner: "FeedDog", rejection: "Asleep", via: "" } }],
     },
   ],
 });
