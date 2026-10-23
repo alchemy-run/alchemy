@@ -134,6 +134,8 @@ export const RegistryProxyLive = Layer.effect(
                   yield* registry.write({
                     scriptName: worker.name,
                     debugPortAddress: `127.0.0.1:${debugPort}`,
+                    // `start` runs again for a replacement process on the same ports.
+                    instanceId: crypto.randomUUID(),
                     services: [
                       {
                         kind: "worker",
