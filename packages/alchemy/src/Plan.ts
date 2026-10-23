@@ -188,11 +188,11 @@ export interface NoopUpdate<R extends ResourceLike = ResourceLike> extends Apply
 
 export interface Replace<R extends ResourceLike = ResourceLike> extends ApplyNodeBase<R> {
   action: "replace";
-  /** Whether replacement may take over a foreign physical identity. */
-  adopt?: boolean;
   props: any;
   deleteFirst: boolean;
   restart?: boolean;
+  /** Ownership probe of the replacement's physical identity, run before any mutation. */
+  deferredAdoption?: { adopt: boolean };
   state:
     | CreatingResourceState
     | CreatedResourceState
@@ -1475,14 +1475,11 @@ const makePlan = <A>(
       }
 
       const adoptThis = resource.Adopt ?? (yield* shouldAdopt);
-      // oxlint-disable-next-line alchemy/package-boundaries -- The engine must distinguish legacy Worker checkpoints before serialization, retry, and cleanup.
-      const isLiveWorker = resource.Type === "Cloudflare.Worker" && mode !== "local";
       const Node = <T extends Apply>(
         node: Omit<T, "provider" | "resource" | "bindings" | "downstream" | "mode">,
       ) =>
         ({
           ...node,
-          ...(isLiveWorker && node.action === "replace" ? { adopt: adoptThis } : {}),
           provider,
           resource,
           bindings: bindingDiffs,
@@ -1491,11 +1488,14 @@ const makePlan = <A>(
           renamedFrom,
           adoptionBlocked: reusesMigratedFqn ? "migrated-fqn" : undefined,
           deferredAdoption:
-            node.action === "create" &&
             provider.read &&
             !reusesMigratedFqn &&
-            ((oldState === undefined && !isResolved(news)) ||
-              (oldState?.status === "creating" && oldState.attr === undefined))
+            // A replacement targets a new physical identity, which may belong
+            // to someone else — admit it like a fresh create.
+            (node.action === "replace" ||
+              (node.action === "create" &&
+                ((oldState === undefined && !isResolved(news)) ||
+                  (oldState?.status === "creating" && oldState.attr === undefined))))
               ? { adopt: adoptThis }
               : undefined,
         }) as any as T;

@@ -9549,532 +9549,167 @@ describe("resource selection apply barriers", { tags: ["unit", "local"] }, () =>
   }
 });
 
-describe("Worker replacement ownership", { tags: ["unit", "local"] }, () => {
-  interface ReplacementWorker extends Resource<
-    "Cloudflare.Worker",
-    {
-      name: string;
-      namespace?: string;
-      version?: { traffic?: number; parent?: string };
-      preview?: { of: string };
-    },
-    { workerName: string; workerId: string; url?: string },
+describe("replacement ownership admission", { tags: ["unit", "local"] }, () => {
+  // A fake cloud keyed by physical name; each entry records which logical id owns it.
+  interface Named extends Resource<
+    "Test.Named",
+    { name: string; deleteFirst?: boolean },
+    { name: string },
     { self: string }
   > {}
-  const ReplacementWorker = Resource<ReplacementWorker>("Cloudflare.Worker");
-  class ReplacementReadFailure extends Data.TaggedError("ReplacementReadFailure")<{}> {}
-  class ReplacementProbe extends Context.Service<
-    ReplacementProbe,
-    {
-      observation: "owned" | "foreign" | "absent" | "failure";
-      deleteFirst: boolean;
-      unreadableAfterPrecreate: boolean;
-      events: string[];
-      deletes: string[];
-      reads: Array<{
-        olds: ReplacementWorker["Props"];
-        output: ReplacementWorker["Attributes"] | undefined;
-      }>;
-      creates: Array<ReplacementWorker["Attributes"] | undefined>;
-      checkpointAttrs: unknown[];
-    }
-  >()("ReplacementOwnershipProbe") {}
-  const providers = Provider.succeed(ReplacementWorker, {
-    workerIdentity: {
-      account: Effect.succeed(undefined),
-      name: (_id, name) =>
-        name
-          ? Effect.succeed(name)
-          : Effect.die("Replacement fixture requires an explicit Worker name"),
-      withAccount: () => Effect.die("Replacement fixture does not model account credentials"),
-    },
+  const Named = Resource<Named>("Test.Named");
+  class Cloud extends Context.Service<
+    Cloud,
+    { owners: Map<string, string>; events: string[]; outputs: Array<unknown> }
+  >()("ReplacementAdmissionCloud") {}
+  const providers = Provider.succeed(Named, {
     diff: Effect.fn(function* ({ olds, news }) {
-      if (isResolved(news) && olds?.name === news.name) return { action: "noop" as const };
-      return { action: "replace" as const, deleteFirst: (yield* ReplacementProbe).deleteFirst };
+      if (isResolved(news) && olds.name === news.name) return undefined;
+      return { action: "replace" as const, deleteFirst: news.deleteFirst === true };
     }),
-    read: Effect.fn(function* ({ olds, output }) {
-      const probe = yield* ReplacementProbe;
-      probe.reads.push({ olds, output });
-      if (output !== undefined) return output;
-      probe.events.push("read");
-      if (probe.observation === "failure") return yield* new ReplacementReadFailure();
-      if (probe.observation === "absent") return undefined;
-      const attr = { workerName: olds.name, workerId: "observed" };
-      return probe.observation === "foreign" ? Unowned(attr) : attr;
+    read: Effect.fn(function* ({ id, olds, output }) {
+      const cloud = yield* Cloud;
+      const name = output?.name ?? olds?.name;
+      const owner = name === undefined ? undefined : cloud.owners.get(name);
+      if (owner === undefined) return undefined;
+      cloud.events.push(`read ${name}`);
+      return owner === id ? { name: name! } : Unowned({ name: name! });
     }),
-    precreate: Effect.fn(function* ({ news }) {
-      const probe = yield* ReplacementProbe;
-      probe.events.push("precreate");
-      probe.checkpointAttrs.push((yield* getState("Replacement")).attr);
-      if (probe.unreadableAfterPrecreate) probe.observation = "failure";
-      return { workerName: news.name as string, workerId: "stub", url: "https://desired.example" };
+    precreate: Effect.fn(function* ({ id, news }) {
+      const cloud = yield* Cloud;
+      cloud.events.push(`precreate ${news.name}`);
+      cloud.owners.set(news.name as string, id);
+      return { name: news.name as string };
     }),
-    reconcile: Effect.fn(function* ({ news, olds, output }) {
-      const probe = yield* ReplacementProbe;
-      if (olds === undefined) {
-        probe.events.push("create");
-        probe.creates.push(output);
-        probe.checkpointAttrs.push((yield* getState("Replacement")).attr);
-      }
-      expect(Unowned.is(output)).toBe(false);
-      return { workerName: news.name, workerId: "created", url: "https://desired.example" };
+    reconcile: Effect.fn(function* ({ id, news, olds, output }) {
+      const cloud = yield* Cloud;
+      if (olds === undefined) cloud.outputs.push(output);
+      cloud.events.push(`reconcile ${news.name}`);
+      cloud.owners.set(news.name, id);
+      return { name: news.name };
     }),
     delete: Effect.fn(function* ({ output }) {
-      const probe = yield* ReplacementProbe;
-      probe.events.push("delete");
-      probe.deletes.push(output.workerName);
+      const cloud = yield* Cloud;
+      cloud.events.push(`delete ${output.name}`);
+      cloud.owners.delete(output.name);
     }),
   }).pipe(
     Layer.provideMerge(
       Layer.effect(
-        ReplacementProbe,
-        Effect.sync(() => ({
-          observation: "foreign" as const,
-          deleteFirst: false,
-          unreadableAfterPrecreate: false,
-          events: [],
-          deletes: [],
-          reads: [],
-          creates: [],
-          checkpointAttrs: [],
-        })),
+        Cloud,
+        Effect.sync(() => ({ owners: new Map(), events: [], outputs: [] })),
       ),
     ),
   );
   const { test } = Test.make({ providers: Layer.mergeAll(providers, TestLayers()) });
-  const seed = Effect.fn(function* (cached = false) {
-    const state = yield* yield* State;
-    const stack = yield* Stack;
-    const old = {
-      status: "created" as const,
-      fqn: "Replacement",
-      logicalId: "Replacement",
-      instanceId: "old-generation",
-      resourceType: ReplacementWorker.Type,
-      namespace: undefined,
-      props: { name: "old" },
-      attr: { workerName: "old", workerId: "old-id" },
-      providerVersion: 0,
-      bindings: [],
-      downstream: [],
-      providerMode: "live" as const,
-    };
-    yield* state.set({
-      stack: stack.name,
-      stage: stack.stage,
-      fqn: "Replacement",
-      value: cached
-        ? {
-            ...old,
-            status: "replacing",
-            instanceId: "replacement-generation",
-            props: { name: "target" },
-            attr: { workerName: "target", workerId: "cached" },
-            old,
-            deleteFirst: true,
-          }
-        : old,
-    });
-  });
-  const program = (
-    cycle: boolean,
-    override?: boolean,
-    version?: ReplacementWorker["Props"]["version"],
-    preview?: ReplacementWorker["Props"]["preview"],
-    name = "target",
+
+  const named = (
+    props: { name: string | Output.Output<string>; deleteFirst?: boolean },
+    cycle = false,
   ) =>
     Effect.gen(function* () {
-      const worker = yield* ReplacementWorker("Replacement", {
-        name,
-        version,
-        preview,
-      }).pipe(override === undefined ? (effect) => effect : adopt(override));
-      if (cycle) yield* worker.bind("Self", { self: worker.workerName });
-      return worker;
+      const resource = yield* Named("Subject", props);
+      if (cycle) yield* resource.bind("Self", { self: resource.name });
+      return resource;
     });
-  for (const cycle of [false, true]) {
-    for (const deleteFirst of [false, true]) {
-      for (const observation of ["foreign", "failure"] as const) {
-        test.provider(
-          `refuses ${observation} replacement before mutation (cycle=${cycle}, deleteFirst=${deleteFirst})`,
-          (stack) =>
-            Effect.gen(function* () {
-              const probe = yield* ReplacementProbe;
-              yield* stack.destroy();
-              probe.deleteFirst = deleteFirst;
-              probe.observation = observation;
-              yield* seed();
-              const result = yield* stack.deploy(program(cycle)).pipe(Effect.exit);
-              expect(Exit.isFailure(result)).toBe(true);
-              if (Exit.isFailure(result))
-                expect(result.cause.reasons.find(Cause.isFailReason)?.error).toMatchObject({
-                  _tag: observation === "foreign" ? "OwnedBySomeoneElse" : "ReplacementReadFailure",
-                });
-              expect(probe.events).toEqual(["read"]);
-              expect(probe.reads.every(({ output }) => output === undefined)).toBe(true);
-              const replacement = yield* getState("Replacement");
-              expect(replacement.status).toBe("replacing");
-              if (replacement.status === "replacing") {
-                expect(replacement.old.attr).toEqual({ workerName: "old", workerId: "old-id" });
-              }
-              probe.observation = "absent";
-              yield* stack.destroy();
-            }),
-        );
-      }
-    }
-    test.provider(
-      `resource refusal overrides global replacement adoption (cycle=${cycle})`,
-      (stack) =>
-        Effect.gen(function* () {
-          const probe = yield* ReplacementProbe;
-          yield* stack.destroy();
-          yield* seed();
-          const result = yield* stack.deploy(program(cycle, false)).pipe(Effect.exit);
-          expect(Exit.isFailure(result)).toBe(true);
-          expect(probe.events).toEqual(["read"]);
-          yield* stack.destroy();
-        }).pipe(Effect.provideService(AdoptPolicy, true)),
-    );
 
-    test.provider(
-      `delete-first retry clears invalidated attributes before publication (cycle=${cycle})`,
-      (stack) =>
-        Effect.gen(function* () {
-          const probe = yield* ReplacementProbe;
-          yield* stack.destroy();
-          probe.deleteFirst = true;
-          probe.observation = "absent";
-          yield* seed(true);
-          yield* stack.deploy(program(cycle));
-          expect(probe.events.indexOf("read")).toBeLessThan(probe.events.indexOf("delete"));
-          expect(probe.creates).toEqual([
-            cycle
-              ? { workerName: "target", workerId: "stub", url: "https://desired.example" }
-              : undefined,
-          ]);
-          expect(probe.checkpointAttrs[0]).toBeUndefined();
-          yield* stack.destroy();
-        }),
-    );
-  }
+  /** Deploys `Subject` as "old", then plants a foreign "target" in the fake cloud. */
+  const setup = Effect.fn(function* (stack: Test.ScratchStack) {
+    const cloud = yield* Cloud;
+    yield* stack.destroy();
+    cloud.owners.clear();
+    yield* stack.deploy(named({ name: "old" }));
+    cloud.owners.set("target", "SomeoneElse");
+    cloud.events.length = 0;
+    cloud.outputs.length = 0;
+    return cloud;
+  });
+
   for (const cycle of [false, true]) {
     for (const deleteFirst of [false, true]) {
-      for (const restart of [false, true]) {
-        test.provider(
-          `destroy preserves foreign cached replacement after refusal (cycle=${cycle}, deleteFirst=${deleteFirst}, restart=${restart})`,
-          (stack) =>
-            Effect.gen(function* () {
-              const probe = yield* ReplacementProbe;
-              yield* stack.destroy();
-              probe.deleteFirst = deleteFirst;
-              yield* seed(true);
-              const state = yield* yield* State;
-              const row = yield* getState("Replacement");
-              yield* state.set({
-                stack: stack.name,
-                stage: stack.stage,
-                fqn: "Replacement",
-                value: { ...row, deleteFirst },
-              });
-              const result = yield* stack
-                .deploy(
-                  program(
-                    cycle,
-                    undefined,
-                    undefined,
-                    undefined,
-                    restart ? "other-target" : "target",
-                  ),
-                )
-                .pipe(Effect.exit);
-              expect(Exit.isFailure(result)).toBe(true);
-              if (Exit.isFailure(result))
-                expect(result.cause.reasons.find(Cause.isFailReason)?.error).toMatchObject({
-                  _tag: "OwnedBySomeoneElse",
-                });
-              expect((yield* getState("Replacement")).attr).toBeUndefined();
-              yield* stack.destroy();
-              expect(probe.deletes).toEqual(["old"]);
-              expect(probe.events).not.toContain("precreate");
-              expect(probe.events).not.toContain("create");
-            }),
-        );
-      }
+      test.provider(
+        `refuses a foreign replacement before mutation (cycle=${cycle}, deleteFirst=${deleteFirst})`,
+        (stack) =>
+          Effect.gen(function* () {
+            const cloud = yield* setup(stack);
+            const error = yield* stack
+              .deploy(named({ name: "target", deleteFirst }, cycle))
+              .pipe(Effect.flip);
+            expect(error).toMatchObject({ _tag: "OwnedBySomeoneElse" });
+            // Only the probe ran: the previous generation survives and the
+            // foreign target is untouched.
+            expect(cloud.events).toEqual(["read target"]);
+            expect(cloud.owners.get("old")).toBe("Subject");
+            expect(cloud.owners.get("target")).toBe("SomeoneElse");
+            yield* stack.destroy();
+            expect(cloud.owners.has("old")).toBe(false);
+            expect(cloud.owners.get("target")).toBe("SomeoneElse");
+          }),
+      );
     }
   }
-  test.provider("destroy preserves foreign cached candidates already nested in a retry", (stack) =>
+
+  test.provider("refuses a delete-first replacement whose name resolves during apply", (stack) =>
     Effect.gen(function* () {
-      const probe = yield* ReplacementProbe;
+      const cloud = yield* setup(stack);
+      const error = yield* stack
+        .deploy(
+          Effect.gen(function* () {
+            const source = yield* TestResource("Name", { string: "target" });
+            return yield* named({ name: source.string, deleteFirst: true });
+          }),
+        )
+        .pipe(Effect.flip);
+      expect(error).toMatchObject({ _tag: "OwnedBySomeoneElse" });
+      expect(cloud.events).toEqual(["read target"]);
+      expect(cloud.owners.get("old")).toBe("Subject");
       yield* stack.destroy();
-      yield* seed(true);
-      const row = yield* getState("Replacement");
-      if (row.status !== "replacing") return yield* Effect.die("Expected replacing checkpoint");
-      const state = yield* yield* State;
-      yield* state.set({
-        stack: stack.name,
-        stage: stack.stage,
-        fqn: "Replacement",
-        value: {
-          ...row,
-          deleteFirst: false,
-          old: {
-            ...row,
-            instanceId: "abandoned-generation",
-            props: { name: "abandoned" },
-            attr: { workerName: "abandoned", workerId: "cached-abandoned" },
-          },
-        },
-      });
-      const result = yield* stack.deploy(program(false)).pipe(Effect.exit);
-      expect(Exit.isFailure(result)).toBe(true);
-      yield* stack.destroy();
-      expect(probe.deletes).toEqual(["old"]);
     }),
   );
-  for (const update of [false, true]) {
-    test.provider(
-      `terminal replacement quarantines nested foreign candidates before cleanup (update=${update})`,
-      (stack) =>
-        Effect.gen(function* () {
-          const probe = yield* ReplacementProbe;
-          yield* stack.destroy();
-          yield* seed(true);
-          const row = yield* getState("Replacement");
-          if (row.status !== "replacing") return yield* Effect.die("Expected replacing checkpoint");
-          const state = yield* yield* State;
-          yield* state.set({
-            stack: stack.name,
-            stage: stack.stage,
-            fqn: "Replacement",
-            value: {
-              ...row,
-              status: "replaced",
-              deleteFirst: false,
-              attr: { workerName: "target", workerId: "owned-id" },
-              old: {
-                ...row,
-                instanceId: "abandoned-generation",
-                props: { name: "abandoned" },
-                attr: { workerName: "abandoned", workerId: "cached-abandoned" },
-              },
-            },
-          });
-          const plan = yield* stack.plan(program(false));
-          expect(plan.resources.Replacement?.action).toBe("replace");
-          if (update) {
-            const node = plan.resources.Replacement;
-            if (node?.action !== "replace" || node.state.status !== "replaced")
-              return yield* Effect.die("Expected replaced cleanup plan");
-            plan.resources.Replacement = { ...node, action: "update", state: node.state };
-          }
-          yield* apply(plan);
-          expect(probe.deletes).toEqual(["old"]);
-          yield* stack.destroy();
-          expect(probe.deletes).toEqual(["old", "target"]);
-        }),
-    );
-  }
-  for (const matching of [true, false]) {
-    test.provider(
-      `cyclic retry reuses cached URL only after matching ownership (matching=${matching})`,
-      (stack) =>
-        Effect.gen(function* () {
-          const probe = yield* ReplacementProbe;
-          yield* stack.destroy();
-          probe.observation = "owned";
-          yield* seed(true);
-          const state = yield* yield* State;
-          const row = yield* getState("Replacement");
-          yield* state.set({
-            stack: stack.name,
-            stage: stack.stage,
-            fqn: "Replacement",
-            value: {
-              ...row,
-              deleteFirst: false,
-              attr: {
-                workerName: "target",
-                workerId: matching ? "observed" : "cached",
-                url: "https://desired.example",
-              },
-              workerIdentityResolved: true,
-              workerWriteStarted: true,
-            },
-          });
-          yield* stack.deploy(
-            Effect.gen(function* () {
-              const worker = yield* ReplacementWorker("Replacement", { name: "target" });
-              yield* worker.bind("Self", {
-                self: Output.map(worker.url, (url) => {
-                  expect(url).toBe("https://desired.example");
-                  return url!;
-                }),
-              });
-              return worker;
-            }),
-          );
-          expect(probe.events[0]).toBe("read");
-          expect(probe.events.includes("precreate")).toBe(!matching);
-          yield* stack.destroy();
-        }),
-    );
-  }
-  for (const observation of ["owned", "absent", "foreign"] as const) {
-    test.provider(`admits ${observation} replacement with the permitted output`, (stack) =>
-      Effect.gen(function* () {
-        const probe = yield* ReplacementProbe;
-        yield* stack.destroy();
-        probe.observation = observation;
-        yield* seed();
-        yield* stack.deploy(program(false, observation === "foreign"));
-        expect(probe.events).toEqual(["read", "create", "delete"]);
-        expect(probe.creates).toEqual([
-          observation === "absent" ? undefined : { workerName: "target", workerId: "observed" },
-        ]);
-        yield* stack.destroy();
-      }),
-    );
-  }
+
+  test.provider("adopt(false) on the resource overrides global adoption", (stack) =>
+    Effect.gen(function* () {
+      const cloud = yield* setup(stack);
+      const error = yield* stack
+        .deploy(named({ name: "target" }).pipe(adopt(false)))
+        .pipe(Effect.flip);
+      expect(error).toMatchObject({ _tag: "OwnedBySomeoneElse" });
+      expect(cloud.events).toEqual(["read target"]);
+      yield* stack.destroy();
+    }).pipe(Effect.provideService(AdoptPolicy, true)),
+  );
+
+  test.provider("adopt(true) takes over a foreign replacement target", (stack) =>
+    Effect.gen(function* () {
+      const cloud = yield* setup(stack);
+      yield* stack.deploy(named({ name: "target" }).pipe(adopt(true)));
+      expect(cloud.events).toEqual(["read target", "reconcile target", "delete old"]);
+      expect(cloud.outputs).toEqual([{ name: "target" }]);
+      expect(cloud.owners.get("target")).toBe("Subject");
+      yield* stack.destroy();
+    }),
+  );
+
+  test.provider("an absent replacement target is created normally", (stack) =>
+    Effect.gen(function* () {
+      const cloud = yield* setup(stack);
+      yield* stack.deploy(named({ name: "fresh" }));
+      expect(cloud.events).toEqual(["reconcile fresh", "delete old"]);
+      expect(cloud.outputs).toEqual([undefined]);
+      yield* stack.destroy();
+    }),
+  );
+
   test.provider(
-    "acyclic delete-first retry invalidates output before waiting for dependencies",
+    "delete-first admits the target, then deletes, then creates without stale output",
     (stack) =>
       Effect.gen(function* () {
-        const probe = yield* ReplacementProbe;
-        yield* stack.destroy();
-        probe.deleteFirst = true;
-        probe.observation = "absent";
-        yield* seed(true);
-        const state = yield* yield* State;
-        const pendingAttrs: unknown[] = [];
-        const plan = yield* stack.plan(program(false));
-        yield* apply(plan, {
-          session: {
-            done: () => Effect.void,
-            emit: (event) =>
-              event._tag === "apply.resource.status" &&
-              event.id === "Replacement" &&
-              event.status === "pending"
-                ? state.get({ stack: stack.name, stage: stack.stage, fqn: "Replacement" }).pipe(
-                    Effect.orDie,
-                    Effect.map((row) => {
-                      pendingAttrs.push(row && "attr" in row ? row.attr : undefined);
-                    }),
-                  )
-                : Effect.void,
-          },
-        });
-        expect(pendingAttrs).toEqual([undefined]);
+        const cloud = yield* setup(stack);
+        cloud.owners.set("target", "Subject"); // e.g. left by an interrupted attempt
+        yield* stack.deploy(named({ name: "target", deleteFirst: true }));
+        expect(cloud.events).toEqual(["read target", "delete old", "reconcile target"]);
+        expect(cloud.outputs).toEqual([undefined]);
         yield* stack.destroy();
       }),
   );
-  test.provider("cyclic admission preserves the desired stable URL from precreate", (stack) =>
-    Effect.gen(function* () {
-      const probe = yield* ReplacementProbe;
-      yield* stack.destroy();
-      probe.observation = "owned";
-      yield* seed();
-      yield* stack.deploy(
-        Effect.gen(function* () {
-          const worker = yield* ReplacementWorker("Replacement", { name: "target" });
-          yield* worker.bind("Self", {
-            self: Output.map(worker.url, (url) => {
-              expect(url).toBe("https://desired.example");
-              return url!;
-            }),
-          });
-          return worker;
-        }),
-      );
-      expect(probe.events).toContain("precreate");
-      yield* stack.destroy();
-    }),
-  );
-  test.provider("cyclic identity admission defers unresolved rollout traffic", (stack) =>
-    Effect.gen(function* () {
-      const probe = yield* ReplacementProbe;
-      yield* stack.destroy();
-      probe.observation = "absent";
-      yield* seed();
-      yield* stack.deploy(
-        Effect.gen(function* () {
-          const source = yield* TestResource("Rollout", { string: "10" });
-          const worker = yield* ReplacementWorker("Replacement", {
-            name: "target",
-            version: {
-              traffic: Output.map(source.string, Number),
-            },
-          });
-          yield* worker.bind("Self", { self: worker.workerName });
-          return worker;
-        }),
-      );
-      expect(probe.events).toContain("precreate");
-      yield* stack.destroy();
-    }),
-  );
-  test.provider(
-    "cyclic replacement does not re-read unreadable settings after its own placeholder",
-    (stack) =>
-      Effect.gen(function* () {
-        const probe = yield* ReplacementProbe;
-        yield* stack.destroy();
-        probe.observation = "absent";
-        probe.unreadableAfterPrecreate = true;
-        yield* seed();
-        yield* stack.deploy(program(true));
-        expect(probe.reads).toHaveLength(1);
-        expect(probe.events).toEqual(["read", "precreate", "create", "delete"]);
-        yield* stack.destroy();
-      }),
-  );
-  test.provider("version traffic options still require script ownership", (stack) =>
-    Effect.gen(function* () {
-      const probe = yield* ReplacementProbe;
-      yield* stack.destroy();
-      yield* seed();
-      const result = yield* stack.deploy(program(false, false, { traffic: 10 })).pipe(Effect.exit);
-      expect(Exit.isFailure(result)).toBe(true);
-      expect(probe.events).toEqual(["read"]);
-      yield* stack.destroy();
-    }),
-  );
-  test.provider("unresolved cyclic identity cannot delete or precreate a replacement", (stack) =>
-    Effect.gen(function* () {
-      const probe = yield* ReplacementProbe;
-      yield* stack.destroy();
-      probe.deleteFirst = true;
-      probe.observation = "owned";
-      yield* seed();
-      const desired = Effect.gen(function* () {
-        const source = yield* TestResource("Name", { string: "target" });
-        const worker = yield* ReplacementWorker("Replacement", { name: source.string });
-        yield* worker.bind("Self", { self: worker.workerName });
-        return worker;
-      });
-      const result = yield* stack.deploy(desired).pipe(Effect.exit);
-      expect(Exit.isFailure(result)).toBe(true);
-      expect(probe.events).toEqual([]);
-      yield* stack.destroy();
-    }),
-  );
-  for (const kind of ["version", "preview"] as const) {
-    test.provider(`a virtual ${kind} replacement does not admit its parent script`, (stack) =>
-      Effect.gen(function* () {
-        const probe = yield* ReplacementProbe;
-        yield* stack.destroy();
-        yield* seed();
-        yield* stack.deploy(
-          program(
-            false,
-            false,
-            kind === "version" ? { parent: "parent" } : undefined,
-            kind === "preview" ? { of: "parent" } : undefined,
-          ),
-        );
-        expect(probe.events).toEqual(["create", "delete"]);
-        yield* stack.destroy();
-      }),
-    );
-  }
 });

@@ -69,7 +69,6 @@ import {
   State,
   StateStoreError,
 } from "./State/index.ts";
-import { recordedWorkerAccount } from "./State/WorkerState.ts";
 import { type ResourceOp, recordResourceOp } from "./Telemetry/Metrics.ts";
 import { hashInput } from "./Util/sha256.ts";
 
@@ -106,27 +105,6 @@ const track = (
 ) => {
   tracker[fqn] = entry;
   outputs[fqn] = entry.output;
-};
-
-const quarantineReplacingWorkerOutputs = (
-  generation: ReplacementOldResourceState,
-): ReplacementOldResourceState => {
-  if (generation.status !== "replacing" && generation.status !== "replaced") return generation;
-  const old = quarantineReplacingWorkerOutputs(generation.old);
-  if (generation.status === "replaced") {
-    return old === generation.old ? generation : { ...generation, old };
-  }
-  const attr =
-    // oxlint-disable-next-line alchemy/package-boundaries -- The engine must distinguish legacy Worker checkpoints before serialization, retry, and cleanup.
-    generation.resourceType === "Cloudflare.Worker" &&
-    stampedMode(generation) !== "local" &&
-    generation.attr?.versionOf === undefined &&
-    generation.attr?.previewOf === undefined
-      ? undefined
-      : generation.attr;
-  return attr === generation.attr && old === generation.old
-    ? generation
-    : { ...generation, attr, old, workerAccountId: recordedWorkerAccount(generation) };
 };
 
 const provideLifecycleScope =
@@ -590,13 +568,6 @@ const executeNode = (
         } as S,
       });
 
-    if (node.state?.status === "replacing" || node.state?.status === "replaced") {
-      const old = quarantineReplacingWorkerOutputs(node.state.old);
-      if (old !== node.state.old) {
-        yield* state.set({ stack: stackName, stage, fqn, value: { ...node.state, old } });
-      }
-    }
-
     const scopedSession = {
       ...session,
       note: (note, options?) =>
@@ -781,7 +752,7 @@ const executeNode = (
           providerVersion: node.provider.version ?? 0,
           resourceType: node.resource.Type,
           bindings: excludeDeletedBindings(node.bindings),
-          old: quarantineReplacingWorkerOutputs(node.state),
+          old: node.state,
           deleteFirst: node.deleteFirst,
           removalPolicy: node.resource.RemovalPolicy,
           providerMode: node.mode,
@@ -1007,7 +978,6 @@ const executeNode = (
             // Keep the replacement wrapper intact while changing the live
             // replacement props; GC still has older generations to delete.
             ...node.state,
-            old: quarantineReplacingWorkerOutputs(node.state.old),
             attr: node.state.attr,
             props: news,
             providerMode: node.mode,
@@ -1063,7 +1033,6 @@ const executeNode = (
           // The live replacement changed, but cleanup of older generations still
           // has to continue afterwards.
           ...node.state,
-          old: quarantineReplacingWorkerOutputs(node.state.old),
           attr,
           props: news,
           // Resolved payload, not raw `node.bindings` — see create commit.
@@ -1117,8 +1086,6 @@ const executeNode = (
 
     // ── replace ──
     if (node.action === "replace") {
-      // oxlint-disable-next-line alchemy/package-boundaries -- The engine must distinguish legacy Worker checkpoints before serialization, retry, and cleanup.
-      const isLiveWorker = node.resource.Type === "Cloudflare.Worker" && node.mode !== "local";
       if (node.state.status === "replaced" && !node.restart) {
         // The replacement already exists; this pass only needs GC to clean up
         // older generations, so expose the current replacement and stop here.
@@ -1149,7 +1116,7 @@ const executeNode = (
           attr: undefined,
           providerVersion: node.provider.version ?? 0,
           deleteFirst: node.deleteFirst,
-          old: quarantineReplacingWorkerOutputs(node.state),
+          old: node.state,
           downstream: node.downstream,
           removalPolicy: node.resource.RemovalPolicy,
           providerMode: node.mode,
@@ -1174,50 +1141,6 @@ const executeNode = (
       // `created` state (rather than `replaced`) so Phase 2 has no old chain
       // left to drain. `delete` is required to be idempotent, so a re-run
       // after an interrupted apply simply re-converges.
-      let attr: any = replState.attr;
-      const cachedAttr = attr;
-      const hasCachedScript =
-        isLiveWorker &&
-        cachedAttr !== undefined &&
-        cachedAttr?.versionOf === undefined &&
-        cachedAttr?.previewOf === undefined;
-      const old = quarantineReplacingWorkerOutputs(replState.old);
-      if (hasCachedScript || old !== replState.old) {
-        // Legacy replacement caches do not prove ownership of the current target.
-        replState = yield* commit<ReplacingResourceState>({
-          ...replState,
-          props: node.props,
-          old,
-          attr: hasCachedScript ? undefined : attr,
-        });
-        attr = replState.attr;
-      }
-      const isScriptWorker = (props: Record<string, any>) =>
-        props.version?.parent == null && props.preview?.of == null;
-      const readReplacement = Effect.fn(function* (news: Record<string, any>) {
-        if (!node.provider.read) {
-          return yield* Effect.die("Worker replacement requires an ownership reader");
-        }
-        const observed = yield* node.provider
-          .read({ id: logicalId, fqn, instanceId, olds: news, output: undefined })
-          .pipe(instrumentLifecycle("read", fqn, node.resource.Type, logicalId, instanceId));
-        if (observed !== undefined && Unowned.is(observed) && !node.adopt) {
-          return yield* new OwnedBySomeoneElse({
-            message: `Cannot adopt replacement '${fqn}': it is not owned by this stack/stage/logical-id.`,
-            resourceType: node.resource.Type,
-            logicalId,
-          });
-        }
-        return observed === undefined ? undefined : stripUnowned(observed as Record<string, any>);
-      });
-      const clearReplacementOutput = Effect.fn(function* (props: Record<string, any>) {
-        attr = undefined;
-        replState = yield* commit<ReplacingResourceState>({
-          ...replState,
-          props,
-          attr: undefined,
-        });
-      });
       const deleteOldGenerations = (
         old: ReplacementOldResourceState,
       ): Effect.Effect<void, any, any> =>
@@ -1250,56 +1173,60 @@ const executeNode = (
           }
         });
 
-      if (isLiveWorker && node.deleteFirst && !inCycle) {
-        yield* clearReplacementOutput(node.props);
-      }
-      if (isLiveWorker && inCycle) {
-        // Cycles need a placeholder before upstream outputs can resolve.
-        // Admit only the known identity; other props may still be unresolved.
-        const identity = {
-          name: node.props.name,
-          namespace:
-            node.props.namespace == null || typeof node.props.namespace === "string"
-              ? node.props.namespace
-              : { name: node.props.namespace.name },
-          version: { parent: node.props.version?.parent },
-          preview: { of: node.props.preview?.of },
-        };
-        if (
-          Effect.isEffect(node.props.namespace) ||
-          Effect.isEffect(node.props.version) ||
-          Effect.isEffect(node.props.preview) ||
-          !isResolved(identity)
-        ) {
-          return yield* Effect.die(
-            "Cannot admit a cyclic Worker replacement with an unresolved identity",
-          );
-        }
-        // Admission must preserve precreate's desired stable outputs for peers.
-        if (isScriptWorker(identity)) {
-          const observed = yield* readReplacement(identity);
-          if (
-            hasCachedScript &&
-            !node.deleteFirst &&
-            typeof cachedAttr.workerId === "string" &&
-            cachedAttr.workerId !== "" &&
-            observed !== undefined &&
-            cachedAttr.workerId === observed.workerId &&
-            cachedAttr.workerName === observed.workerName &&
-            cachedAttr.namespace === observed.namespace &&
-            cachedAttr.accountId === observed.accountId
-          ) {
-            attr = cachedAttr;
-            replState = yield* commit<ReplacingResourceState>({ ...replState, attr });
-          }
-        }
-      }
-      if (node.deleteFirst && (!isLiveWorker || inCycle)) {
-        if (isLiveWorker) yield* clearReplacementOutput(node.props);
+      const deleteFirst = Effect.fn(function* () {
         yield* scopedSession.note(
           "Deleting previous resource before creating its replacement (deleteFirst)...",
         );
         yield* deleteOldGenerations(replState.old);
+      });
+
+      let attr: any = replState.attr;
+
+      // ── replacement admission ──
+      //
+      // The replacement may resolve to a physical identity that already
+      // exists and belongs to someone else (e.g. a renamed Worker pointing at
+      // a foreign script). Read it before anything is mutated — before
+      // precreate, reconcile, and delete-first cleanup of the previous
+      // generation — and refuse an unowned target unless adoption is allowed,
+      // exactly like a fresh create.
+      let admitted = attr !== undefined || node.deferredAdoption === undefined;
+      const admit = Effect.fn(function* (props: Record<string, any>) {
+        admitted = true;
+        const observed = yield* node.provider.read!({
+          id: logicalId,
+          fqn,
+          instanceId,
+          olds: props,
+          output: undefined,
+        }).pipe(instrumentLifecycle("read", fqn, node.resource.Type, logicalId, instanceId));
+        if (observed === undefined) return;
+        if (Unowned.is(observed) && !node.deferredAdoption?.adopt) {
+          return yield* new OwnedBySomeoneElse({
+            message:
+              `Cannot replace resource '${fqn}' (${node.resource.Type}): ` +
+              "its replacement exists in the cloud but is not owned by this " +
+              "stack/stage/logical-id. Re-run with `--adopt` (or " +
+              "wrap the effect in `adopt(true)`) to take it over.",
+            resourceType: node.resource.Type,
+            logicalId,
+          });
+        }
+        // A delete-first target may be the previous generation itself, which
+        // is about to be deleted — never hand its attributes to reconcile.
+        if (!node.deleteFirst) attr = stripUnowned(observed);
+      });
+
+      if (!admitted && isResolved(node.props)) {
+        yield* admit(node.props);
+      }
+
+      // A cycle must delete before precreate claims the identity, even when
+      // that identity can only be admitted once upstream outputs resolve.
+      let deletedFirst = false;
+      if (node.deleteFirst && (admitted || inCycle)) {
+        yield* deleteFirst();
+        deletedFirst = true;
       }
 
       if (attr !== undefined) {
@@ -1353,12 +1280,11 @@ const executeNode = (
 
       const bindingOutputs = excludeDeletedBindings(yield* Output.evaluate(node.bindings, outputs));
 
-      if (isLiveWorker && !inCycle && isScriptWorker(news)) {
-        attr = yield* readReplacement(news);
+      if (!admitted && attr === undefined) {
+        yield* admit(news);
       }
-      if (isLiveWorker && node.deleteFirst && !inCycle) {
-        yield* clearReplacementOutput(news);
-        yield* deleteOldGenerations(replState.old);
+      if (node.deleteFirst && !deletedFirst) {
+        yield* deleteFirst();
       }
 
       attr = yield* node.provider
@@ -2025,11 +1951,6 @@ const collectGarbage = Effect.fn(function* (plan: Plan, session: PlanStatusSessi
         const adoptionBlocked = isDeleteNode(node)
           ? node.state.adoptionBlocked
           : generation.adoptionBlocked;
-        const workerAccountId =
-          // oxlint-disable-next-line alchemy/package-boundaries -- The engine must distinguish legacy Worker checkpoints before serialization, retry, and cleanup.
-          resourceType === "Cloudflare.Worker" && stampedMode(generation) !== "local"
-            ? recordedWorkerAccount(generation)
-            : undefined;
         // Mutable: an attr-less row (interrupted create) may recover its
         // attributes from `provider.read` below, right before deletion.
         let attr = persistedAttr;
@@ -2184,44 +2105,30 @@ const collectGarbage = Effect.fn(function* (plan: Plan, session: PlanStatusSessi
                     "resource must be identified and cleaned up manually.",
                 );
               } else if (provider.read) {
-                let recoveryRead = provider.read({
-                  id: logicalId,
-                  fqn,
-                  instanceId,
-                  olds: props as never,
-                  output: undefined,
-                });
-                if (workerAccountId !== undefined) {
-                  if (provider.workerIdentity === undefined)
-                    return yield* Effect.die(
-                      "Recorded Worker account requires Cloudflare credentials for cleanup",
-                    );
-                  recoveryRead = provider.workerIdentity.withAccount(workerAccountId, recoveryRead);
-                }
-                const recovered = yield* recoveryRead.pipe(
-                  instrumentLifecycle("read", fqn, resourceType, logicalId, instanceId),
-                  // The persisted props of an interrupted create can carry
-                  // holes where unresolved Outputs were stripped at commit
-                  // time (see stripUnresolved) — e.g. a parent reference
-                  // persisted as `{}`. A provider that dereferences one
-                  // crashes deep inside its SDK client (a SchemaError
-                  // defect), which would make the stage impossible to
-                  // destroy. Recovery is best-effort: degrade the defect
-                  // to "nothing recovered", surface a note, and let the
-                  // row be dropped (#995).
-                  Effect.catchDefect((defect) =>
-                    workerAccountId !== undefined
-                      ? Effect.die(defect)
-                      : scopedSession
-                          .note(
-                            "Recovery read crashed while looking up this " +
-                              "resource's interrupted create " +
-                              `(${String(defect)}) — if a physical resource ` +
-                              "was created, it must be cleaned up manually.",
-                          )
-                          .pipe(Effect.as(undefined)),
-                  ),
-                );
+                const recovered = yield* provider
+                  .read({ id: logicalId, fqn, instanceId, olds: props as never, output: undefined })
+                  .pipe(
+                    instrumentLifecycle("read", fqn, resourceType, logicalId, instanceId),
+                    // The persisted props of an interrupted create can carry
+                    // holes where unresolved Outputs were stripped at commit
+                    // time (see stripUnresolved) — e.g. a parent reference
+                    // persisted as `{}`. A provider that dereferences one
+                    // crashes deep inside its SDK client (a SchemaError
+                    // defect), which would make the stage impossible to
+                    // destroy. Recovery is best-effort: degrade the defect
+                    // to "nothing recovered", surface a note, and let the
+                    // row be dropped (#995).
+                    Effect.catchDefect((defect) =>
+                      scopedSession
+                        .note(
+                          "Recovery read crashed while looking up this " +
+                            "resource's interrupted create " +
+                            `(${String(defect)}) — if a physical resource ` +
+                            "was created, it must be cleaned up manually.",
+                        )
+                        .pipe(Effect.as(undefined)),
+                    ),
+                  );
                 if (recovered !== undefined) {
                   if (Unowned.is(recovered)) {
                     yield* scopedSession.note(
@@ -2258,7 +2165,6 @@ const collectGarbage = Effect.fn(function* (plan: Plan, session: PlanStatusSessi
                 removalPolicy: node.resource.RemovalPolicy,
                 providerMode,
                 adoptionBlocked,
-                workerAccountId,
               });
             }
 
@@ -2329,7 +2235,6 @@ const collectGarbage = Effect.fn(function* (plan: Plan, session: PlanStatusSessi
                   bindings: excludeDeletedBindings(node.bindings),
                   removalPolicy: node.removalPolicy,
                   providerMode: node.providerMode,
-                  workerAccountId: node.workerAccountId,
                 });
               }
               yield* scopedSession.note(

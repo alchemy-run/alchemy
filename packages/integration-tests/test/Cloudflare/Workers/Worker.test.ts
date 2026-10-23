@@ -747,14 +747,6 @@ describe.concurrent(
             ),
           );
           const before = yield* snapshot;
-          const originalState = yield* Effect.gen(function* () {
-            const state = yield* yield* State;
-            return yield* state.get({
-              stack: stack.name,
-              stage: stack.stage,
-              fqn: "ReplacementTarget",
-            });
-          }).pipe(Effect.provide(stack.state));
           const refused = yield* stack
             .deploy(
               Effect.gen(function* () {
@@ -770,16 +762,8 @@ describe.concurrent(
           expect(refused._tag).toEqual("OwnedBySomeoneElse");
           const after = yield* snapshot;
           expect(after).toEqual(before);
-          if (originalState)
-            yield* Effect.gen(function* () {
-              const state = yield* yield* State;
-              yield* state.set({
-                stack: stack.name,
-                stage: stack.stage,
-                fqn: "ReplacementTarget",
-                value: originalState,
-              });
-            }).pipe(Effect.provide(stack.state));
+          // Destroy deletes ReplacementTarget's original generation and never
+          // touches ReplacementOwner's script through the refused replacement.
           yield* stack.destroy();
           yield* Effect.all(
             [initial.owner, initial.replacement].map((worker) =>
