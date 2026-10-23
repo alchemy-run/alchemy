@@ -45,7 +45,7 @@ import type { WorkerBuildOptions } from "./Sources/Rolldown.ts";
 import type { WorkerAccessConfig, WorkerAccessIdentity } from "./WorkerAccess.ts";
 import { bindWorkerAsyncBindings } from "./WorkerAsyncBindings.ts";
 import type { WorkerBinding, WorkerBindingResource, WorkerBindings } from "./WorkerBinding.ts";
-import { WorkerEnvironment, WorkerExecutionContext, WorkerTypeId } from "./WorkerRuntime.ts";
+import { WorkerEnvironment, WorkerTypeId } from "./WorkerRuntime.ts";
 import {
   makeWorkerRuntimeContext,
   type WorkerExport,
@@ -106,7 +106,6 @@ export type WorkerServices =
   | Worker
   | WebhookHost
   | Request
-  | WorkerExecutionContext
   | WorkerEnvironment
   | CloudflareEnvironment
   | Container.Application<any>
