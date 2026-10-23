@@ -103,6 +103,7 @@
     "oxfmt": "catalog:",
     "oxlint": "catalog:",
     "oxlint-tsgolint": "catalog:",
+    "rolldown": "catalog:",
     "tsrs": "catalog:",
     "typescript": "catalog:"
   },
