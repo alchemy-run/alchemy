@@ -69,7 +69,7 @@ export const makeHelpers = (env: Record<string, any>, bucket: Bucket) => {
     raw,
     use,
     tryPromise,
-    ...makeR2ObjectWrappers(tryPromise),
+    ...makeR2ObjectWrappers(tryPromise, true),
   };
 };
 
@@ -77,10 +77,12 @@ export const makeHelpers = (env: Record<string, any>, bucket: Bucket) => {
  * The `R2Object`/`R2ObjectBody` → Effect-client wrappers, shared by the
  * Worker-binding helpers above and the local platform-proxy helpers
  * (`LocalR2Gateway.ts`), which differ only in how `raw`/`use` obtain the
- * native bucket.
+ * native bucket. Only the Worker binding marks its body stream as native:
+ * the local platform proxy has different stream ownership/length semantics.
  */
 export const makeR2ObjectWrappers = (
   tryPromise: <T>(fn: () => Promise<T>) => Effect.Effect<T, R2Error>,
+  nativeStreams = false,
 ) => {
   const wrapR2Object = (object: runtime.R2Object): R2Object => ({
     ...object,
@@ -88,14 +90,19 @@ export const makeR2ObjectWrappers = (
   });
   const wrapR2ObjectBody = (object: runtime.R2ObjectBody): ObjectBody => ({
     ...wrapR2Object(object),
-    body: Stream.fromReadableStream({
-      evaluate: () => object.body as any as ReadableStream<Uint8Array<ArrayBufferLike>>,
-      onError: (error: any) =>
-        new R2Error({
-          message: error.message ?? "Unknown error",
-          cause: error,
-        }),
-    }),
+    // Preserve the native stream only on this untouched wrapper. Stream
+    // transforms return a new Stream without `raw`, so put cannot bypass them.
+    body: Object.assign(
+      Stream.fromReadableStream({
+        evaluate: () => object.body as any as ReadableStream<Uint8Array<ArrayBufferLike>>,
+        onError: (error: any) =>
+          new R2Error({
+            message: error.message ?? "Unknown error",
+            cause: error,
+          }),
+      }),
+      nativeStreams ? { raw: object.body } : {},
+    ),
     readable: object.body as any as ReadableStream<Uint8Array>,
     bodyUsed: object.bodyUsed,
     arrayBuffer: () => tryPromise(() => object.arrayBuffer()),

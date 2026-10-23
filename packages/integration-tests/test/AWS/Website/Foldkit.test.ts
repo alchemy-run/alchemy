@@ -5,6 +5,12 @@ import * as Effect from "effect/Effect";
 import * as pathe from "pathe";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
 import { expectUrlContains } from "../../Cloudflare/Utils/Http.ts";
+import {
+  foldkitFixture,
+  foldkitMemo,
+  verifyFoldkitBrowser,
+  verifyFoldkitRendering,
+} from "../../Website/Foldkit.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -92,6 +98,51 @@ describe.skipIf(!runLive || runEmulated)(
           yield* stack.destroy();
         }),
       { timeout: 2_400_000 },
+    );
+
+    // One distribution walked through every rendering mode. Prerendered
+    // pages are S3 objects; other routes, and every non-GET/HEAD request
+    // (a POST to a prerendered page included), reach the Web Function.
+    // `output: "static"` then drops the server and serves only the pages.
+    test.provider(
+      "renders SSR, SSG and hybrid output through the Web Function, then static output without one",
+      (stack) =>
+        Effect.gen(function* () {
+          yield* stack.destroy();
+
+          for (const mode of ["hybrid", "ssr", "ssg"] as const) {
+            const rootDir = yield* foldkitFixture(mode);
+            const site = yield* stack.deploy(
+              AWS.Website.Foldkit("FoldkitSite", {
+                rootDir,
+                output: "server",
+                memo: foldkitMemo,
+                forceDestroy: true,
+                invalidation: { paths: "all", wait: true },
+              }),
+            );
+            expect(site.server).toBeDefined();
+            yield* verifyFoldkitRendering(site.url! as string, mode);
+            yield* verifyFoldkitBrowser(site.url! as string, mode);
+          }
+
+          const rootDir = yield* foldkitFixture("static");
+          const site = yield* stack.deploy(
+            AWS.Website.Foldkit("FoldkitSite", {
+              rootDir,
+              output: "static",
+              errorPage: "404.html",
+              memo: foldkitMemo,
+              forceDestroy: true,
+              invalidation: { paths: "all", wait: true },
+            }),
+          );
+          expect(site.server).toBeUndefined();
+          yield* verifyFoldkitRendering(site.url! as string, "static");
+
+          yield* stack.destroy();
+        }),
+      { timeout: 3_600_000 },
     );
   },
 );

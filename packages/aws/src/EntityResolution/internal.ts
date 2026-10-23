@@ -2,7 +2,6 @@ import * as entityresolution from "@distilled.cloud/aws/entityresolution";
 import { diffTags } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
-import * as Schema from "effect/Schema";
 
 /**
  * Coerce an Entity Resolution wire tag map (values decode as
@@ -69,7 +68,7 @@ export const retryRolePropagation = <A, E, R>(
 ): Effect.Effect<A, E, R> =>
   Effect.retry(self, {
     while: (e) =>
-      Schema.is(entityresolution.AccessDeniedException)(e) &&
+      entityresolution.AccessDeniedException.is(e) &&
       typeof e.message === "string" &&
       (e.message.includes("assuming the passed role") ||
         e.message.includes("does not have access")),

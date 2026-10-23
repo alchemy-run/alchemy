@@ -37,7 +37,7 @@ import * as Path from "effect/Path";
 import type { PlatformError } from "effect/PlatformError";
 import * as Redacted from "effect/Redacted";
 import type * as Scope from "effect/Scope";
-import { runBuildChild } from "../core/BuildChild.ts";
+import { resolveBuildEnv, runBuildChild } from "../core/BuildChild.ts";
 import * as FrameworkCore from "../core/index.ts";
 import * as Astro from "./Astro.ts";
 import cloudflareTarget from "./cloudflare.ts";
@@ -109,6 +109,15 @@ export interface DevContext extends SourceContext {
     readonly hyperdrives: PluginWorker["hyperdrives"];
     readonly queueConsumers: Effect.Effect<Exclude<PluginWorker["queueConsumers"], undefined>>;
     readonly assets: PluginWorker["assets"] | undefined;
+    /**
+     * The Worker's other runtime settings (crons, Workflows, tail consumers,
+     * Cache API, `request.cf`, zone, Access), spread whole into the runtime
+     * Worker.
+     */
+    readonly options: Pick<
+      PluginWorker,
+      "workflows" | "crons" | "tails" | "streamingTails" | "cache" | "cf" | "zone" | "access"
+    >;
   };
   readonly runtimeContext: CloudflareVitePluginOptions["context"];
 }
@@ -139,6 +148,7 @@ type SourceServices = FileSystem.FileSystem | Path.Path;
 /** Mirror of alchemy's `SourceProvider` (with this module's closed error/requirement channels). */
 export interface SourceProvider {
   readonly ownsAssets: boolean;
+  readonly devAssetsBinding?: boolean;
   readonly build: (
     ctx: SourceContext,
   ) => Effect.Effect<SourceBuildOutput, SourceError, SourceServices>;
@@ -751,25 +761,6 @@ const assetConfigFromProps = (
 };
 
 /**
- * Resolve the Worker env into the plain strings the build child applies to
- * its `process.env` — same filter as {@link applyWorkerEnvToProcess}, but
- * producing JSON-safe data that can cross the process boundary.
- */
-const resolveBuildEnv = (env: Record<string, unknown> | undefined): Record<string, string> => {
-  const out: Record<string, string> = {};
-  for (const [key, value] of Object.entries(env ?? {})) {
-    if (typeof value === "string") {
-      out[key] = value;
-    } else if (Redacted.isRedacted(value) && typeof Redacted.value(value) === "string") {
-      out[key] = Redacted.value(value) as string;
-    } else if (typeof value === "number" || typeof value === "boolean") {
-      out[key] = String(value);
-    }
-  }
-  return out;
-};
-
-/**
  * The production build runs in a disposable child process with
  * `cwd = project root` (see `core/BuildChild.ts`): the natively-loaded
  * `astro.config.*` executes user plugins/integrations that may read the
@@ -851,6 +842,8 @@ const makeAstroSourceProvider = (options: AstroSourceOptions): SourceProvider =>
 
   return {
     ownsAssets: true,
+    // Dev runs the Worker in workerd with the Vite plugin's assets service.
+    devAssetsBinding: true,
 
     build: (ctx) =>
       Effect.gen(function* () {
@@ -936,6 +929,7 @@ const makeAstroSourceProvider = (options: AstroSourceOptions): SourceProvider =>
           compatibilityDate: ctx.compatibility.date,
           compatibilityFlags: ctx.compatibility.flags,
           worker: {
+            ...ctx.worker.options,
             name: ctx.workerName,
             bindings: ctx.worker.bindings,
             durableObjectNamespaces: ctx.worker.durableObjectNamespaces,

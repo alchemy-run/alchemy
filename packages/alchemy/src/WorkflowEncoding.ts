@@ -26,23 +26,64 @@ export const encodeExit = (exit: Exit.Exit<unknown, unknown>) =>
 export const decodeExit = (text: string) =>
   Schema.decodeEffect(ExitJson)(JSON.parse(text)).pipe(Effect.orDie);
 
-export const payloadCodec = (workflow: Workflow.AnyWithProps) =>
+/**
+ * The schemas a workflow's payload and result are stored through. Concrete
+ * `Workflow`s don't assign to Effect's own `Workflow.AnyWithProps` (its
+ * `execute` options), so accept just what encoding reads.
+ */
+export type WorkflowSchemas = Pick<
+  Workflow.AnyWithProps,
+  "payloadSchema" | "successSchema" | "errorSchema"
+>;
+
+export const payloadCodec = (workflow: WorkflowSchemas) =>
   Schema.toCodecJson(workflow.payloadSchema) as unknown as Schema.Codec<unknown, unknown>;
 
-const resultCodec = (workflow: Workflow.AnyWithProps) =>
-  Schema.toCodecJson(
-    Schema.Exit(workflow.successSchema, workflow.errorSchema, Schema.Defect()),
-  ) as unknown as Schema.Codec<Exit.Exit<unknown, unknown>, unknown>;
+interface ResultCodec {
+  readonly encode: (
+    exit: Exit.Exit<unknown, unknown>,
+  ) => Effect.Effect<unknown, Schema.SchemaError>;
+  readonly decode: (
+    value: unknown,
+  ) => Effect.Effect<Exit.Exit<unknown, unknown>, Schema.SchemaError>;
+}
+
+// Schemas are immutable values. Key by both current schema objects instead of
+// the workflow name or definition, so replaced schemas never reuse a stale codec.
+const resultCodecs = new WeakMap<Schema.Top, WeakMap<Schema.Top, ResultCodec>>();
+
+const resultCodec = (workflow: WorkflowSchemas): ResultCodec => {
+  const { successSchema, errorSchema } = workflow;
+  let errors = resultCodecs.get(successSchema);
+  if (errors === undefined) {
+    errors = new WeakMap();
+    resultCodecs.set(successSchema, errors);
+  }
+  let cached = errors.get(errorSchema);
+  if (cached === undefined) {
+    const codec = Schema.toCodecJson(
+      Schema.Exit(successSchema, errorSchema, Schema.Defect()),
+    ) as unknown as Schema.Codec<Exit.Exit<unknown, unknown>, unknown>;
+    cached = {
+      encode: Schema.encodeEffect(codec),
+      decode: Schema.decodeEffect(codec),
+    };
+    errors.set(errorSchema, cached);
+  }
+  return cached;
+};
 
 /** A workflow's own result is stored through its success and error schemas. */
-export const encodeResult = (workflow: Workflow.AnyWithProps, exit: Exit.Exit<unknown, unknown>) =>
-  Schema.encodeEffect(resultCodec(workflow))(exit).pipe(Effect.map(JSON.stringify), Effect.orDie);
+export const encodeResult = (workflow: WorkflowSchemas, exit: Exit.Exit<unknown, unknown>) =>
+  resultCodec(workflow).encode(exit).pipe(Effect.map(JSON.stringify), Effect.orDie);
 
-export const decodeResult = (workflow: Workflow.AnyWithProps, text: string) =>
-  Schema.decodeEffect(resultCodec(workflow))(JSON.parse(text)).pipe(
-    Effect.map((exit) => new Workflow.Complete({ exit })),
-    Effect.orDie,
-  );
+export const decodeResult = (workflow: WorkflowSchemas, text: string) =>
+  resultCodec(workflow)
+    .decode(JSON.parse(text))
+    .pipe(
+      Effect.map((exit) => new Workflow.Complete({ exit })),
+      Effect.orDie,
+    );
 
 /**
  * The step a workflow engine is running: provided around each `Activity` so

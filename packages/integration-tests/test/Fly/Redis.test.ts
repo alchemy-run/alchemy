@@ -232,12 +232,18 @@ test.provider(
           }),
         );
 
+      // A just-created Redis can refuse connections for a few seconds.
       const ping = yield* untilOk(
         HttpClient.get(`${deployed.api.url}/`).pipe(
           Effect.flatMap((res) =>
             res.status === 200 ? res.json : Effect.fail(new Error(`api returned ${res.status}`)),
           ),
-          Effect.map((value) => value as { pong: boolean; hasOutputUrl: boolean }),
+          Effect.map((value) => value as { pong: boolean; hasOutputUrl: boolean; error?: string }),
+          Effect.flatMap((value) =>
+            value.pong
+              ? Effect.succeed(value)
+              : Effect.fail(new Error(`ping failed: ${value.error}`)),
+          ),
         ),
       );
       expect(ping.pong).toEqual(true);

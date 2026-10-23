@@ -79,7 +79,11 @@ export const serveProbes = (routes: Record<string, Probe>) =>
 
 class ProbeNotReady extends Data.TaggedError("ProbeNotReady")<{
   readonly reason: string;
-}> {}
+}> {
+  override get message() {
+    return this.reason;
+  }
+}
 
 /**
  * Call a probe route on the deployed fixture. Retries (bounded, ~7 min) while

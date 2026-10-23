@@ -8,6 +8,7 @@ import {
 import * as IAM from "@alchemy.run/aws/IAM";
 import * as S3 from "@alchemy.run/aws/S3";
 import * as datazone from "@distilled.cloud/aws/datazone";
+import * as lf from "@distilled.cloud/aws/lakeformation";
 import { expect } from "alchemy-test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
@@ -53,14 +54,16 @@ const baseInfra = Effect.gen(function* () {
   const domain = yield* Domain("EnvTestDomain", {
     description: "alchemy datazone environment test",
   });
+  // DataZone itself assumes the provisioning role to run the environment's
+  // CloudFormation deployment.
   const provisioningRole = yield* IAM.Role("EnvProvisioningRole", {
     assumeRolePolicyDocument: {
       Version: "2012-10-17",
       Statement: [
         {
           Effect: "Allow",
-          Principal: { Service: "cloudformation.amazonaws.com" },
-          Action: ["sts:AssumeRole"],
+          Principal: { Service: "datazone.amazonaws.com" },
+          Action: ["sts:AssumeRole", "sts:TagSession"],
         },
       ],
     },
@@ -99,8 +102,16 @@ const baseInfra = Effect.gen(function* () {
     domainId: domain.domainId,
     description: "environment test project",
   });
-  return { domain, config, project };
+  return { domain, config, project, provisioningRole, manageAccessRole };
 });
+
+const lakeFormationAdmins = lf
+  .getDataLakeSettings({})
+  .pipe(
+    Effect.map((r) =>
+      (r.DataLakeSettings?.DataLakeAdmins ?? []).map((p) => p.DataLakePrincipalIdentifier),
+    ),
+  );
 
 test.provider.skipIf(!RUN_SLOW)(
   "create environment from the DefaultDataLake blueprint, delete",
@@ -111,11 +122,13 @@ test.provider.skipIf(!RUN_SLOW)(
       // 1. Deploy the domain, project, roles, bucket, and blueprint config.
       const base = yield* stack.deploy(
         Effect.gen(function* () {
-          const { domain, config, project } = yield* baseInfra;
+          const { domain, config, project, provisioningRole, manageAccessRole } = yield* baseInfra;
           return {
             domainId: domain.domainId,
             projectId: project.projectId,
             environmentBlueprintId: config.environmentBlueprintId,
+            provisioningRoleArn: provisioningRole.roleArn,
+            manageAccessRoleArn: manageAccessRole.roleArn,
           };
         }),
       );
@@ -170,6 +183,9 @@ test.provider.skipIf(!RUN_SLOW)(
       });
       expect(created.status).toBe("ACTIVE");
       expect(created.projectId).toBe(base.projectId);
+      // DataZone made the blueprint's manage-access role a Lake Formation
+      // administrator when it deployed the environment.
+      expect(yield* lakeFormationAdmins).toContain(base.manageAccessRoleArn);
 
       // 3. Destroy — environment, project, blueprint config, and domain.
       yield* stack.destroy();
@@ -186,6 +202,11 @@ test.provider.skipIf(!RUN_SLOW)(
           Effect.catchTag("AccessDeniedException", () => Effect.succeed(true)),
         );
       expect(gone).toBe(true);
+      // ...and the blueprint configuration's delete removed both roles'
+      // entries again, so none dangles once the roles are deleted.
+      const adminsAfterDestroy = yield* lakeFormationAdmins;
+      expect(adminsAfterDestroy).not.toContain(base.manageAccessRoleArn);
+      expect(adminsAfterDestroy).not.toContain(base.provisioningRoleArn);
     }),
   {
     tags: ["provider:aws", "provider:aws:datazone", "provider:aws:iam", "provider:aws:s3", "live"],

@@ -253,17 +253,34 @@ export const ProviderLive = () =>
     }),
     diff: Effect.fn(function* ({ id, olds, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      if (!isResolved(news)) return undefined;
       if ((output?.accountId ?? accountId) !== accountId) {
         return { action: "replace" } as const;
       }
-      const oldName = output?.name ?? (yield* createConfigName(id, olds.name));
-      // Auto-generated names are engine-owned: the deployed name stays
-      // authoritative even if the generator would name this id differently
-      // today. Only an explicit user-provided name can force a replace.
-      const name = news.name ?? oldName;
-      if (oldName !== name) {
-        return { action: "replace" } as const;
+      // Each replace-forcing field is checked on its own: an unresolved
+      // origin (e.g. another resource's output) must not hide a rename.
+      const newName = "name" in news ? news.name : undefined;
+      if (isResolved(newName)) {
+        const oldName = output?.name ?? (yield* createConfigName(id, olds.name));
+        // Auto-generated names are engine-owned: the deployed name stays
+        // authoritative even if the generator would name this id differently
+        // today. Only an explicit user-provided name can force a replace.
+        const name = newName ?? oldName;
+        if (oldName !== name) {
+          return { action: "replace" } as const;
+        }
+      }
+      // `updateConfig` preserves omitted mTLS settings and accepts no null
+      // certificate id, so a pinned certificate can only be dropped by
+      // creating a fresh config. An explicit name is unique per account, so
+      // the old config must go first.
+      const oldMtls = output?.mtls ?? olds?.mtls;
+      const mtls = "mtls" in news ? news.mtls : undefined;
+      if (isResolved(mtls)) {
+        const dropped = (key: "caCertificateId" | "mtlsCertificateId") =>
+          oldMtls?.[key] !== undefined && mtls?.[key] === undefined;
+        if (dropped("caCertificateId") || dropped("mtlsCertificateId")) {
+          return { action: "replace", deleteFirst: newName !== undefined } as const;
+        }
       }
     }),
     read: Effect.fn(function* ({ id, output, olds }) {
@@ -334,7 +351,7 @@ export const ProviderLive = () =>
           ? hyperdrive.updateConfig({
               accountId: output.accountId,
               hyperdriveId: output.hyperdriveId,
-              name: output.name,
+              name: news.name ?? output.name,
               ...requestBody,
             })
           : hyperdrive.createConfig({ accountId, name, ...requestBody }).pipe(

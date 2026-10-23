@@ -237,6 +237,7 @@ export const providers = () =>
       Email.AllowPolicy,
       Email.BlockSender,
       Email.CatchAll,
+      Email.DmarcReports,
       Email.Domain,
       Email.ImpersonationRegistryEntry,
       Email.Routing,
@@ -497,6 +498,7 @@ export const providers = () =>
           Email.AllowPolicyProvider(),
           Email.BlockSenderProvider(),
           Email.CatchAllProvider(),
+          Email.DmarcReportsProvider(),
           Email.DomainProvider(),
           Email.ImpersonationRegistryEntryProvider(),
           Email.RoutingProvider(),
@@ -668,7 +670,7 @@ export const providers = () =>
     ),
     // Plan-executable data-source capabilities (`Binding.Service.execute`).
     Layer.provideMerge(GetIdentityProviderHttp),
-    Layer.provide(DockerLive),
+    Layer.provideMerge(DockerLive),
     // Note: `localRuntimeServices()` is no longer provided globally — each
     // local provider composes it into its `ProviderLayer.dual` local thunk,
     // so workerd machinery only builds when a local variant is actually

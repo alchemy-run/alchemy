@@ -455,7 +455,17 @@ export const PlanetscaleAuth = AuthProviderLayer<
                   interaction.output.success("Planetscale: OAuth credentials refreshed."),
                 ),
               ),
-            ).pipe(Effect.catchTag("OAuthError", () => configureOAuth(profileName)));
+            ).pipe(
+              Effect.catchTag(
+                [
+                  "OAuthError",
+                  "OAuthNetworkError",
+                  "OAuthServerUnavailable",
+                  "OAuthInvalidResponse",
+                ],
+                () => configureOAuth(profileName),
+              ),
+            );
             return refreshed;
           }),
         ),

@@ -598,6 +598,7 @@ const toBinding = (
       className: binding.className ?? binding.name,
       scriptName: binding.scriptName,
       transferredFrom: normalizeTransferredFrom(binding.transferredFrom),
+      storage: binding.storage,
     };
   } else if (isWorkflowLike(binding)) {
     return {

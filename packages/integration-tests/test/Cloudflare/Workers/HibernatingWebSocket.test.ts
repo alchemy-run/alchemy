@@ -244,6 +244,26 @@ describe.concurrent.each([
     );
 
     test(
+      "upgrade tags sockets for getWebSockets(tag) and getTags",
+      Effect.gen(function* () {
+        const { url } = yield* stack;
+        // A fresh object per attempt so sockets from a retried attempt are not counted.
+        const name = `tags-${crypto.randomUUID()}`;
+        const a = yield* connect(`${url}/socket/${name}?tags=user:a,room:all`);
+        const b = yield* connect(`${url}/socket/${name}?tags=user:b,room:all`);
+        const untagged = yield* connect(`${url}/socket/${name}`);
+        const members = { "user:a": 1, "user:b": 1, "room:all": 2 };
+        yield* a.send("tags");
+        expect(yield* a.receive).toEqual({ tags: ["user:a", "room:all"], members, all: 3 });
+        yield* b.send("tags");
+        expect(yield* b.receive).toEqual({ tags: ["user:b", "room:all"], members, all: 3 });
+        yield* untagged.send("tags");
+        expect(yield* untagged.receive).toEqual({ tags: [], members, all: 3 });
+      }).pipe(Effect.scoped),
+      { tags: [...(dev ? ["local"] : ["live"])] },
+    );
+
+    test(
       "real hibernation restores typed attachments and closes an obsolete schema by application policy",
       Effect.gen(function* () {
         const { url } = yield* stack;
