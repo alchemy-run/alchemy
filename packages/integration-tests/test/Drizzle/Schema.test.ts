@@ -8,7 +8,7 @@ import {
 } from "alchemy/Interaction";
 import * as Provider from "alchemy/Provider";
 import * as Stack from "alchemy/Stack";
-import { State } from "alchemy/State";
+import { isResourceState, State } from "alchemy/State";
 import * as Test from "alchemy/Test/Alchemy";
 import { generate } from "drizzle-kit/cli";
 import * as PostgresKit from "drizzle-kit/payload/postgres";
@@ -571,6 +571,36 @@ test.provider(
 
       expect(plan.resources["app-schema"]?.action).toBe("create");
       expect(asked[0]).toEqual("Is table people created or renamed from another table?");
+    }),
+  { tags: ["unit", "local"] },
+);
+
+test.provider(
+  "an interrupted create is re-driven with the new props",
+  (stack) =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const ws = yield* stageWorkspace(SCHEMA_SOURCE);
+      yield* stack.deploy(Drizzle.Schema("app-schema", { schema: ws.schemaPath, out: ws.out }));
+
+      // The shape an interrupted first deploy leaves behind.
+      const state = yield* yield* State;
+      const key = { stack: stack.name, stage: stack.stage, fqn: "app-schema" };
+      const row = yield* state.get(key);
+      if (!isResourceState(row)) return yield* Effect.die(new Error("no app-schema state row"));
+      yield* state.set({
+        ...key,
+        value: { ...row, props: row.props!, status: "creating", attr: undefined },
+      });
+
+      const otherOut = path.join(ws.root, "other-migrations");
+      const result = yield* stack.deploy(
+        Drizzle.Schema("app-schema", { schema: ws.schemaPath, out: otherOut }),
+      );
+
+      expect(path.resolve(result.out)).toEqual(otherOut);
+      expect(yield* fs.exists(otherOut)).toBe(true);
     }),
   { tags: ["unit", "local"] },
 );

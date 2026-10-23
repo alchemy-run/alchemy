@@ -435,8 +435,15 @@ export const SchemaProvider = () =>
           const { hints, changed } = yield* resolveHints(props, migrations);
           return { out, upgraded, hints, changed };
         },
-        Effect.scoped,
-        Artifacts.cached("detectDrift"),
+        // Keyed by props: an interrupted create's recovery `read` sees the
+        // persisted props, which may differ from the ones being deployed.
+        (effect, props) =>
+          effect.pipe(
+            Effect.scoped,
+            Artifacts.cached(
+              `detectDrift:${cliDialect(props)}:${resolveSchema(props)}:${resolveOut(props)}`,
+            ),
+          ),
       );
 
       /**
@@ -474,7 +481,12 @@ export const SchemaProvider = () =>
         list: () => Effect.succeed([]),
         diff: Effect.fn(function* ({ news, output }) {
           if (!isResolved(news)) return undefined;
-          if (!output) return undefined;
+          if (!output) {
+            // Re-driving an interrupted create: answer questions now, not
+            // during apply.
+            yield* detectDrift(news);
+            return undefined;
+          }
           // Only flag an update when drizzle-kit would emit new SQL (or the
           // folder needs upgrading) — otherwise downstream resources (e.g.
           // Neon.Branch) would see `schema.out` as an unresolved Output during
