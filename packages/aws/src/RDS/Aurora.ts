@@ -202,7 +202,7 @@ export interface AuroraProps {
    * its own call: put each statement in its own file or separate statements
    * with `--> statement-breakpoint` (drizzle-kit's default).
    */
-  migrations?: MigrationsInput;
+  migrations?: Input<MigrationsInput>;
   /**
    * How `migrations` reach the cluster: `"data-api"`, `"direct"` (a
    * connection from the deploying machine), or an `AWS.RDS.MigrationRunner`
@@ -229,7 +229,7 @@ export interface AuroraProps {
   /**
    * KMS key for storage encryption. Forwarded to the cluster.
    */
-  kmsKeyId?: string;
+  kmsKeyId?: Input<string>;
   /**
    * Enable IAM database authentication. Forwarded to the cluster.
    */

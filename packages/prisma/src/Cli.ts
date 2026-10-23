@@ -25,7 +25,14 @@ const generateCommand = Command.make(
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const loaded = yield* loadGeneratorConfig(config);
-    const bin = yield* path.fromFileUrl(new URL("../../bin/cli.js", import.meta.url));
+    // alchemy's own CLI, found through module resolution so it works from the
+    // workspace and from an installed project alike.
+    const manifest = yield* Effect.sync(() => import.meta.resolve("alchemy/package.json"));
+    const bin = path.join(
+      path.dirname(yield* path.fromFileUrl(new URL(manifest))),
+      "bin",
+      "cli.js",
+    );
     const run = Effect.gen(function* () {
       const result = yield* exec(
         ChildProcess.make(process.execPath, [

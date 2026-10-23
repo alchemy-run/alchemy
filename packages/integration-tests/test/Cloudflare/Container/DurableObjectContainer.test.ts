@@ -1,5 +1,4 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
-import { DockerLive } from "@alchemy.run/docker/Docker";
 import * as Containers from "@distilled.cloud/cloudflare/containers";
 import * as Workers from "@distilled.cloud/cloudflare/workers";
 import { describe, expect } from "alchemy-test";
@@ -8,7 +7,6 @@ import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as HttpClient from "effect/http/HttpClient";
-import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
 import { GuardWorker } from "./fixtures/native/guard-worker.ts";
 import { policyStack, settingsStack, TEST_SSH_PUBLIC_KEY } from "./fixtures/native/settings.ts";
@@ -167,7 +165,7 @@ for (const dev of [true, false]) {
     },
     () => {
       const { test } = Test.make({
-        providers: Layer.mergeAll(Cloudflare.providers(), DockerLive),
+        providers: Cloudflare.providers(),
         dev,
         stage: `${Test.defaultStage()}-native-${dev ? "local" : "live"}`,
       });
@@ -416,12 +414,12 @@ for (const dev of [true, false]) {
                 expect(withSettings.id).toBe(
                   declared.worker.durableObjectNamespaces.NativeAsyncObject,
                 );
-                expect(withSettings.configuration.wranglerSsh).toMatchObject({
+                expect(withSettings.configuration?.wranglerSsh).toMatchObject({
                   enabled: true,
                   port: 22,
                 });
                 expect(
-                  withSettings.configuration.authorizedKeys?.map((key) => key.publicKey),
+                  withSettings.configuration?.authorizedKeys?.map((key) => key.publicKey),
                 ).toEqual([TEST_SSH_PUBLIC_KEY]);
                 expect(withSettings.observability?.logs?.enabled).toBe(true);
 
@@ -429,8 +427,8 @@ for (const dev of [true, false]) {
                 const removed = yield* stack.deploy(settingsStack());
                 expect(removed.application.applicationId).toBe(application.applicationId);
                 const cleared = yield* observe(application);
-                expect(cleared.configuration.wranglerSsh?.enabled ?? false).toBe(false);
-                expect(cleared.configuration.authorizedKeys ?? []).toEqual([]);
+                expect(cleared.configuration?.wranglerSsh?.enabled ?? false).toBe(false);
+                expect(cleared.configuration?.authorizedKeys ?? []).toEqual([]);
                 expect(cleared.observability?.logs?.enabled ?? false).toBe(false);
 
                 // Settings this stack never declared are left alone.
@@ -440,7 +438,9 @@ for (const dev of [true, false]) {
                   configuration: { wranglerSsh: { enabled: true, port: 22 } },
                 });
                 yield* stack.deploy(settingsStack());
-                expect((yield* observe(application)).configuration.wranglerSsh?.enabled).toBe(true);
+                expect((yield* observe(application)).configuration?.wranglerSsh?.enabled).toBe(
+                  true,
+                );
               }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.orDie)));
             }),
           { timeout: 180_000, retry: 0 },
@@ -642,8 +642,15 @@ for (const dev of [true, false]) {
                       expect(observed.id).toBe(worker.durableObjectNamespaces[className]);
                       expect(observed.id).toBe(observed.durableObjects?.namespaceId);
                       expect(observed.name).toBe(application.applicationName);
-                      expect(observed.configuration.image).toBeUndefined();
-                      expect(observed.maxInstances ?? undefined).toBeUndefined();
+                      const { configuration } = observed;
+                      expect(
+                        configuration && "image" in configuration ? configuration.image : undefined,
+                      ).toBeUndefined();
+                      expect(
+                        "maxInstances" in observed
+                          ? (observed.maxInstances ?? undefined)
+                          : undefined,
+                      ).toBeUndefined();
                       // The uploaded Worker merges the class's Containers into
                       // its one entry, keyed by Container id.
                       expect(

@@ -1,13 +1,22 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
+import { CloudflareApiLive } from "@alchemy.run/cloudflare/Providers";
+import * as workers from "@distilled.cloud/cloudflare/workers";
 import * as Alchemy from "alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import * as Schedule from "effect/Schedule";
 import { requestWorker, waitUntilStable } from "../Utils/WorkerRequest.ts";
-import type { HistoryRow } from "./fixtures/sql-migrations/object.ts";
+import type {
+  CursorErrors,
+  CursorMethods,
+  CursorStreams,
+  HistoryRow,
+} from "./fixtures/sql-migrations/object.ts";
 import SqlMigrationsWorker from "./fixtures/sql-migrations/worker.ts";
 
 type MigratedState = {
@@ -75,7 +84,11 @@ for (const dev of [true, false]) {
         { providers: Cloudflare.providers(), state },
         Effect.gen(function* () {
           const worker = yield* SqlMigrationsWorker;
-          return { url: worker.url.as<string>() };
+          return {
+            url: worker.url.as<string>(),
+            workerName: worker.workerName,
+            accountId: worker.accountId,
+          };
         }),
       );
       cleanup.beforeAll(cleanup.destroy(Stack), { timeout: 120_000 });
@@ -121,11 +134,53 @@ for (const dev of [true, false]) {
             ),
             { timeout: "60 seconds" },
           );
+          // New actor names can still hit namespace propagation independently.
+          // Warm the cursor actors with reads; never retry cursor operations.
+          yield* Effect.forEach(
+            ["cursor-methods", "cursor-streams", "cursor-errors"],
+            (name) =>
+              waitUntilStable(
+                `SQL cursor object ${name}`,
+                requestWorker(HttpClientRequest.get(`${deployed.url}/state?name=${name}`)).pipe(
+                  Effect.map((response) => response.status === 200),
+                  Effect.catchTag("WorkerNotPropagated", () => Effect.succeed(false)),
+                ),
+                { timeout: "30 seconds" },
+              ),
+            { concurrency: 3 },
+          );
           return deployed;
         }),
         { timeout: 120_000 },
       );
-      afterAll(destroy(Stack), { timeout: 120_000 });
+      afterAll(
+        Effect.gen(function* () {
+          const deployed = yield* Effect.exit(stack);
+          yield* destroy(Stack);
+          if (dev || Exit.isFailure(deployed)) return;
+          const deleted = yield* workers
+            .getScript({
+              accountId: deployed.value.accountId,
+              scriptName: deployed.value.workerName,
+            })
+            .pipe(
+              Effect.as(false),
+              Effect.catchTag(["WorkerNotFound", "WorkerHasNoVersions"], () =>
+                Effect.succeed(true),
+              ),
+              Effect.repeat({
+                while: (deleted) => !deleted,
+                schedule: Schedule.spaced("1 second"),
+                times: 8,
+              }),
+              Effect.timeout("15 seconds"),
+              Effect.provide(CloudflareApiLive()),
+              Effect.scoped,
+            );
+          expect(deleted).toBe(true);
+        }),
+        { timeout: 120_000 },
+      );
 
       const json = <A>(method: "GET" | "POST", path: string) =>
         Effect.gen(function* () {
@@ -145,6 +200,66 @@ for (const dev of [true, false]) {
           return (yield* response.json) as A;
         });
       const read = (name: string) => json<MigratedState>("GET", `/state?name=${name}`);
+
+      test(
+        "SQL cursor methods remain bound and report live SQLite metadata",
+        Effect.gen(function* () {
+          const result = yield* json<CursorMethods>("POST", "/cursor/methods?name=cursor-methods");
+          expect(result.beforeInsert).toBe(0);
+          expect(result.afterInsert).toBe(3);
+          expect(result.stableMembers).toBe(true);
+          expect(result.columns).toEqual(["value"]);
+          expect(result.sameColumnsAfterConsumption).toBe(true);
+          expect(result.first).toEqual({ done: false, value: { value: 1 } });
+          expect(result.second).toEqual({ done: false, value: { value: 2 } });
+          expect(result.last).toEqual({ value: 3 });
+          expect(result.exhausted.done).toBe(true);
+          expect(result.remaining).toEqual([]);
+          expect(result.rawRemaining).toEqual([]);
+          // SQLite may prefetch a row, but re-running the same statistic Effect
+          // must observe the later reads rather than its first result.
+          expect(result.reads[1]).toBeGreaterThanOrEqual(result.reads[0]!);
+          expect(result.reads[2]).toBeGreaterThan(result.reads[0]!);
+          expect(result.reads[2]).toBeGreaterThanOrEqual(3);
+          expect(result.writes).toBe(0);
+        }),
+        { tags: [...(dev ? ["local"] : ["live"])], timeout: 90_000 },
+      );
+
+      test(
+        "SQL cursor Stream, Channel, and raw views lazily consume the same SQLite cursor",
+        Effect.gen(function* () {
+          const result = yield* json<CursorStreams>("GET", "/cursor/streams?name=cursor-streams");
+          expect(result.first).toEqual({ done: false, value: { value: 0 } });
+          expect(result.values).toEqual([1000, 2000, 3000, 4000]);
+          expect(result.repeated).toEqual([]);
+          expect(result.sameChannel).toBe(true);
+          expect(result.channelFirst).toEqual({ done: false, value: { value: 1 } });
+          expect(result.channelValues).toEqual([{ value: 2 }, { value: 3 }]);
+          expect(result.channelRepeated).toEqual([]);
+          expect(result.rawFirst).toBe(1);
+          expect(result.rawValues).toEqual([[2, null, [0, 1, 2, 255]]]);
+          expect(result.rawRemaining).toEqual([]);
+        }),
+        { tags: [...(dev ? ["local"] : ["live"])], timeout: 90_000 },
+      );
+
+      test(
+        "SQL cursor one and exec preserve native SQLite defects",
+        Effect.gen(function* () {
+          const result = yield* json<CursorErrors>("GET", "/cursor/errors?name=cursor-errors");
+          expect(result.failures).toHaveLength(3);
+          for (const failure of result.failures) {
+            expect(failure.wrapped).toEqual(failure.native);
+            expect(failure.wrapped).toHaveLength(1);
+            expect(failure.wrapped[0]!.tag).toBe("Die");
+            expect(failure.wrapped[0]!.name).toBe("Error");
+            expect(failure.wrapped[0]!.message).toBeTruthy();
+          }
+          expect(result.recovered).toEqual({ value: 7 });
+        }),
+        { tags: [...(dev ? ["local"] : ["live"])], timeout: 90_000 },
+      );
 
       test(
         "activation applies modern migrations, relations, and a snapshot larger than 5 KB",

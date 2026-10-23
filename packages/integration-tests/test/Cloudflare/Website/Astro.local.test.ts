@@ -151,6 +151,13 @@ describe.concurrent(
             label: "astro dev static asset",
           });
 
+          // The same `public/` file read by a server route through the
+          // Worker's `ASSETS` binding.
+          yield* expectUrlContains(`${site.url!}/api/asset`, "astro-static-asset", {
+            timeout: "60 seconds",
+            label: "astro dev ASSETS binding",
+          });
+
           // ── sessions round-trip against the LOCAL simulator ────────────────
           const first = yield* fetchSession(`${site.url!}/session`).pipe(
             Effect.filterOrFail(

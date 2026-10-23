@@ -276,6 +276,9 @@ test.provider(
             cpu: 256,
             memory: 512,
             requiresCompatibilities: ["EC2"],
+            // awsvpc (the default) needs a network configuration on RunTask,
+            // which the emulator enforces like ECS does; bridge needs none.
+            networkMode: "bridge",
             runtimePlatform: hostRuntimePlatform,
           });
           // A multi-resource binding spanning a `flociDual` (Cluster) and a

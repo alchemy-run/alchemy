@@ -5,11 +5,11 @@ description: SQL.Postgres turns a connection string into an @effect/sql-pg clien
 
 import PackageManagers from "../../../../components/PackageManagers.astro";
 
-export const deps = `@effect/sql-pg pg`;
+export const deps = `@alchemy.run/sql @effect/sql-pg pg`;
 
 `SQL.Postgres` provides tagged-template queries over a Postgres connection. Queries are Effects with typed `SqlError` failures, interruption, and tracing.
 
-Install the optional Postgres driver:
+Install `@alchemy.run/sql` and the optional Postgres driver:
 
 <PackageManagers add={deps} />
 

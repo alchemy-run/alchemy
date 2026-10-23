@@ -234,15 +234,24 @@ export interface Worker_DurableObjectNamespace_ContainerOptions {
    */
   imageName?: string;
   images?: Array<{ name: string; image: string }>;
-  privileges?: {
-    capabilities?: Array<string>;
-    devices?: Array<{
-      pathOnHost: string;
-      pathInContainer: string;
-      cgroupPermissions: string;
-    }>;
-    securityOpt?: Array<string>;
-  };
+  privileges?: Worker_DurableObjectNamespace_ContainerOptions_ContainerPrivileges;
+}
+
+/**
+ * Extra Docker `HostConfig` privileges workerd applies when it creates the
+ * container. workerd passes them to Docker as-is, without validation.
+ */
+export interface Worker_DurableObjectNamespace_ContainerOptions_ContainerPrivileges {
+  /** Docker `HostConfig.CapAdd` values. */
+  capabilities?: Array<string>;
+  /** Docker `HostConfig.Devices` values. */
+  devices?: Array<{
+    pathOnHost: string;
+    pathInContainer: string;
+    cgroupPermissions: string;
+  }>;
+  /** Docker `HostConfig.SecurityOpt` values. */
+  securityOpt?: Array<string>;
 }
 
 export type Worker_DurableObjectNamespace = {

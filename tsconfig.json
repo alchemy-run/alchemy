@@ -9,6 +9,9 @@
       "path": "./submodules/distilled/packages/core/tsconfig.json"
     },
     {
+      "path": "./submodules/distilled/packages/aws4signer/tsconfig.json"
+    },
+    {
       "path": "./submodules/distilled/packages/aws/tsconfig.json"
     },
     {
@@ -56,9 +59,6 @@
     // Consolidated Cloudflare runtime, framework, and test-tool projects.
     {
       "path": "./packages/node-utils/tsconfig.json"
-    },
-    {
-      "path": "./packages/vite-plugin-copy-editor/tsconfig.json"
     },
     {
       "path": "./packages/cloudflare-runtime/tsconfig.json"
@@ -284,6 +284,18 @@
       "path": "./examples/cloudflare-static-site/tsconfig.json"
     },
     {
+      "path": "./examples/cloudflare-foldkit-spa/tsconfig.json"
+    },
+    {
+      "path": "./examples/cloudflare-foldkit-hybrid/tsconfig.json"
+    },
+    {
+      "path": "./examples/cloudflare-foldkit-ssg/tsconfig.json"
+    },
+    {
+      "path": "./examples/cloudflare-foldkit-ssr/tsconfig.json"
+    },
+    {
       "path": "./examples/cloudflare-website-tanstack-start/tsconfig.json"
     },
     {
@@ -324,6 +336,12 @@
     },
     {
       "path": "./examples/cloudflare-website-nextjs/tsconfig.json"
+    },
+    {
+      "path": "./examples/cloudflare-agents/tsconfig.json"
+    },
+    {
+      "path": "./examples/cloudflare-flue/tsconfig.json"
     },
     {
       "path": "./examples/cloudflare-website-vinext/tsconfig.json"
