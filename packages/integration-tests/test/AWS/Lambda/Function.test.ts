@@ -16,6 +16,7 @@ import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
+import { aliasFunction, AliasFunction } from "./fixtures/alias-handler.ts";
 import { TestFunction, TestFunctionLive } from "./handler.ts";
 
 const asyncHandlerPath = fileURLToPath(new URL("./async-handler.ts", import.meta.url));
@@ -800,6 +801,118 @@ test.provider(
     ),
   { tags: ["provider:aws", "provider:aws:lambda", "live"], timeout: 360_000 },
 );
+
+// `alias` publishes a version per deploy and routes every consumer through
+// the alias: the function URL and the event-source mapping target `:live`,
+// so moving the alias back to an earlier version rolls back without a
+// redeploy. Removing `alias` moves them back to the unqualified function.
+test.provider(
+  "alias routes the function URL and event sources through the alias",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const deploy = (alias: string | undefined, marker: string) =>
+        stack.deploy(
+          Effect.gen(function* () {
+            const fn = yield* AliasFunction;
+            yield* fn.bind`ReleaseMarker`({ env: { RELEASE_MARKER: marker } });
+            return fn;
+          }).pipe(Effect.provide(aliasFunction(alias))),
+        );
+
+      const v1 = yield* deploy("live", "v1");
+      const aliasArn = `${v1.functionArn}:live`;
+      expect(v1.aliasName).toBe("live");
+      expect(v1.qualifiedArn).toBe(aliasArn);
+      expect(v1.version).toMatch(/^[1-9]\d*$/);
+      yield* assertAlias(v1.functionName, "live", v1.version!);
+      yield* assertUrlQualifier(v1.functionName, v1.functionUrl!, "live");
+      expect(yield* eventSourceMappingTargets(v1.functionName)).toEqual([aliasArn]);
+      expect(yield* invokeHttpFunction(`${v1.functionName}:live`)).toBe("v1");
+
+      // A new release advances the alias; consumers keep the same target.
+      const v2 = yield* deploy("live", "v2");
+      expect(v2.qualifiedArn).toBe(aliasArn);
+      expect(v2.functionUrl).toBe(v1.functionUrl);
+      expect(Number(v2.version)).toBeGreaterThan(Number(v1.version));
+      yield* assertAlias(v2.functionName, "live", v2.version!);
+      expect(yield* eventSourceMappingTargets(v2.functionName)).toEqual([aliasArn]);
+      expect(yield* invokeHttpFunction(`${v2.functionName}:live`)).toBe("v2");
+
+      // Rollback is one UpdateAlias call: everything wired to the alias
+      // serves v1 again.
+      yield* Lambda.updateAlias({
+        FunctionName: v2.functionName,
+        Name: "live",
+        FunctionVersion: v1.version!,
+      });
+      expect(yield* invokeHttpFunction(`${v2.functionName}:live`)).toBe("v1");
+
+      // Removing the alias moves the URL and mapping back to the function.
+      const unaliased = yield* deploy(undefined, "v2");
+      expect(unaliased.aliasName).toBeUndefined();
+      expect(unaliased.qualifiedArn).toBe(unaliased.functionArn);
+      yield* Lambda.getAlias({ FunctionName: unaliased.functionName, Name: "live" }).pipe(
+        Effect.flatMap(() => Effect.fail(new Error("alias live still exists"))),
+        Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+      );
+      yield* assertUrlQualifier(unaliased.functionName, unaliased.functionUrl!, undefined);
+      expect(yield* eventSourceMappingTargets(unaliased.functionName)).toEqual([
+        unaliased.functionArn,
+      ]);
+      expect(yield* invokeHttpFunction(unaliased.functionName)).toBe("v2");
+
+      yield* stack.destroy();
+      yield* assertFunctionDeleted(unaliased.functionName);
+    }).pipe(
+      Effect.tap(() => stack.destroy()),
+      Effect.onError(() => stack.destroy().pipe(Effect.ignore)),
+    ),
+  {
+    tags: ["provider:aws", "provider:aws:lambda", "provider:aws:sqs", "live"],
+    timeout: 360_000,
+  },
+);
+
+const assertAlias = Effect.fn(function* (functionName: string, alias: string, version: string) {
+  const observed = yield* Lambda.getAlias({ FunctionName: functionName, Name: alias });
+  expect(observed.FunctionVersion).toBe(version);
+});
+
+// The function URL lives on exactly one qualifier: the alias, or the
+// unqualified function when there is none.
+const assertUrlQualifier = Effect.fn(function* (
+  functionName: string,
+  functionUrl: string,
+  qualifier: string | undefined,
+) {
+  const config = yield* Lambda.getFunctionUrlConfig({
+    FunctionName: functionName,
+    Qualifier: qualifier,
+  });
+  expect(config.FunctionUrl).toBe(functionUrl);
+  expect(config.FunctionArn).toMatch(qualifier ? new RegExp(`:${qualifier}$`) : /:function:[^:]+$/);
+  if (qualifier !== undefined) {
+    const unqualified = yield* Lambda.getFunctionUrlConfig({ FunctionName: functionName }).pipe(
+      Effect.map(() => "present" as const),
+      Effect.catchTag("ResourceNotFoundException", () => Effect.succeed("absent" as const)),
+    );
+    expect(unqualified).toBe("absent");
+  }
+});
+
+// Function ARNs every event-source mapping on the function (any qualifier)
+// invokes.
+const eventSourceMappingTargets = Effect.fn(function* (functionName: string) {
+  const mappings = yield* Lambda.listEventSourceMappings.items({}).pipe(
+    Stream.filter((mapping) =>
+      (mapping.FunctionArn ?? "").split(":").slice(6, 7).includes(functionName),
+    ),
+    Stream.runCollect,
+  );
+  return Array.from(mappings).map((mapping) => mapping.FunctionArn);
+});
 
 const assertFunctionReady = Effect.fn(function* (functionName: string, marker: string) {
   // Deploy must finish configuration propagation; these checks never retry.
