@@ -9,14 +9,6 @@ import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
 import * as NukeRoute from "@/Alchemist/routes/nuke.ts";
-import {
-  NonInteractiveTerminal,
-  Application,
-  Screen,
-  TerminalCancelled,
-  CliKit,
-  layer as cliKitLayer,
-} from "@/Cli/CliKit/index.ts";
 import { renderApply } from "@/Cli/commands/render.ts";
 import {
   AnsweredPrompt,
@@ -42,6 +34,7 @@ import {
 import { Menu } from "@/Cli/components/ui/Interactive.tsx";
 import { tabsWindow } from "@/Cli/components/ui/Layout.tsx";
 import { ApprovePlan } from "@/Cli/components/view/ApprovePlan.tsx";
+import { formatView } from "@/Cli/components/view/Format.tsx";
 import {
   NukeProgress,
   NukeProgressStore,
@@ -61,6 +54,7 @@ import {
   DashStore,
   runProfileDashboardSession,
 } from "@/Cli/components/view/ProfileDashboard.tsx";
+import { browserLoginScreen, cycleSelectScreen } from "@/Cli/components/view/Prompts.tsx";
 import { makeRuntime } from "@/Cli/components/view/Runtime.tsx";
 import { sigilCli } from "@/Cli/components/view/SigilCli.tsx";
 import { stackOutputsView } from "@/Cli/components/view/StackOutputs.tsx";
@@ -71,6 +65,15 @@ import {
   type StateExplorerSource,
 } from "@/Cli/components/view/StateExplorer.tsx";
 import { isInProgress } from "@/Cli/components/view/statusStyle.ts";
+import {
+  Interaction,
+  NonInteractiveTerminal,
+  Screen,
+  TerminalCancelled,
+  layer as interactionLayer,
+  makeNonInteractive,
+  type View,
+} from "@/Interaction.ts";
 import type { ProviderService } from "@/Provider.ts";
 import { Cli, Progress } from "@/Report.ts";
 import { makeResourceLogger, makeResourceOutput } from "@/Util/ResourceOutput.ts";
@@ -143,42 +146,37 @@ class InputStream extends PassThrough {
   }
 }
 
-const makeStatic = () => {
-  const stdout = new CaptureStream();
-  const runtime = makeRuntime(
-    {
-      input: false,
-      // SAFETY: CaptureStream implements the writable stream surface consumed by Sigil.
-      stdout: stdout as unknown as NodeJS.WriteStream,
-      captureConsole: false,
-    },
-    {
-      input: false,
-      columns: stdout.columns,
-      rows: stdout.rows,
-      colors: false,
-      unicode: true,
-      alternateScreen: false,
-    },
-  );
-  return { ...runtime, stdout };
+const staticCapabilities = {
+  input: false,
+  columns: 80,
+  rows: 24,
+  colors: false,
+  unicode: true,
+  alternateScreen: false,
 };
 
-it.effect(
-  "reports terminal-native progress on TTY output",
-  () =>
-    Effect.gen(function* () {
-      const { service, stdout } = yield* makeLive();
-      yield* service.nativeProgress.set("indeterminate");
-      yield* service.nativeProgress.set("normal", 50);
-      yield* service.nativeProgress.set("inactive");
+/** Render a view without a renderer, like help screens do. */
+const formatStatic = (
+  view: View,
+  options?: { columns?: number; colors?: boolean; unicode?: boolean },
+) => formatView(view, { ...staticCapabilities, unicode: options?.unicode ?? true }, options);
 
-      expect(stdout.output).toContain("\u001B]9;4;3\u001B\\");
-      expect(stdout.output).toContain("\u001B]9;4;1;50\u001B\\");
-      expect(stdout.output).toContain("\u001B]9;4;0\u001B\\");
-    }),
-  { tags: ["unit", "local"] },
-);
+const renderStatic = (
+  view: View,
+  options?: { columns?: number; colors?: boolean; unicode?: boolean },
+) => Effect.sync(() => formatStatic(view, options));
+
+/** The plain renderer over a captured stdout. */
+const makeStatic = () => {
+  const stdout = new CaptureStream();
+  const service = makeNonInteractive({
+    // SAFETY: CaptureStream implements the writable stream surface consumed here.
+    stdout: stdout as unknown as NodeJS.WriteStream,
+    colors: false,
+    unicode: true,
+  });
+  return { service, stdout };
+};
 
 const makeExplorerSource = () => {
   const calls = { stacks: 0, stages: 0, resources: 0, files: 0 };
@@ -304,7 +302,7 @@ it(
     const apiUrl =
       "https://cloudflareworkerexample-api-clxp5k3fbtqacxdev7mx7uuxmw.testing-2b2.workers.dev";
     // Narrow width: `wrap="none"` output lines must overflow, not break.
-    const output = service.output.format(
+    const output = formatStatic(
       stackOutputsView({ apiUrl, metadata: { region: "us-east-1", replicas: 2 } }),
       { columns: 40 },
     );
@@ -324,7 +322,7 @@ it(
       planWith([updateNode({ config: { retries: 2 } }, { config: { retries: 3 } })]),
       { detailed: true, viewport: "full" },
     );
-    const output = service.output.format(<Plan tree={tree} />, { columns: 80 });
+    const output = formatStatic(<Plan tree={tree} />, { columns: 80 });
 
     expect(output).toContain("properties:");
     expect(output).toContain("config:");
@@ -344,9 +342,9 @@ it(
       defaultMode: "local" as const,
     };
     const reviewTree = new PlanTree(plan, { viewport: "full" });
-    const reviewOutput = service.output.format(<Plan tree={reviewTree} />, { columns: 80 });
+    const reviewOutput = formatStatic(<Plan tree={reviewTree} />, { columns: 80 });
     const tree = new PlanTree(plan, { mode: "apply", label: "Starting dev stack", busy: true });
-    const output = service.output.format(<Plan tree={tree} collapsible />, { columns: 160 });
+    const output = formatStatic(<Plan tree={tree} collapsible />, { columns: 160 });
 
     expect(reviewOutput).toContain("1 to update");
     expect(reviewOutput).toContain("1 no change");
@@ -373,7 +371,7 @@ it(
     });
     tree.setBusy(false);
     tree.setViewport("full");
-    const updatingOutput = service.output.format(<Plan tree={tree} />, { columns: 80 });
+    const updatingOutput = formatStatic(<Plan tree={tree} />, { columns: 80 });
     expect(updatingOutput).toContain("1 updating");
     expect(updatingOutput).not.toContain("1 pending");
     expect(updatingOutput).toContain("1 no change");
@@ -392,7 +390,7 @@ it(
     const { service } = makeStatic();
     const deletions = Array.from({ length: 40 }, (_, index) => deleteNode({}, `Resource${index}`));
     const plan = { ...planWith([], deletions), destroy: true };
-    const output = service.output.format(
+    const output = formatStatic(
       <ApprovePlan plan={plan} controller={{ submit: () => undefined, cancel: () => undefined }} />,
       { columns: 80 },
     );
@@ -426,7 +424,7 @@ it(
       status: "deleted",
     });
 
-    const output = service.output.format(<Plan tree={tree} />, { columns: 120 });
+    const output = formatStatic(<Plan tree={tree} />, { columns: 120 });
     const lines = output.split("\n");
     const summaryLine = lines.find((line) => line.includes("Plan ·"));
     const progressLine = lines.find((line) => line.includes("Destroying stack"));
@@ -458,7 +456,7 @@ it(
       label: "Deploying stack",
       busy: true,
     });
-    const render = () => service.output.format(<Plan tree={tree} />, { columns: 80 });
+    const render = () => formatStatic(<Plan tree={tree} />, { columns: 80 });
 
     // Three bindings never inflate the total: only the host is work.
     expect(tree.progress()).toEqual({ completed: 0, failures: 0, total: 1 });
@@ -517,7 +515,7 @@ it(
       message: "worker failed",
     });
 
-    const output = service.output.format(<Plan tree={tree} />, { columns: 80 });
+    const output = formatStatic(<Plan tree={tree} />, { columns: 80 });
     expect(tree.progress()).toEqual({ completed: 1, failures: 1, total: 1 });
     expect(output).toContain("1 fail");
     expect(output).toContain("Deploying stack (1/1)");
@@ -544,7 +542,7 @@ it.effect(
         type: "Test.Resource",
         status: "updated",
       });
-      const live = yield* service.live.open(<Plan tree={tree} />);
+      const live = yield* service.live(<Plan tree={tree} />);
       yield* Effect.promise(flushEffects);
       expect(stdout.output).toContain("\u001B]9;4;1;100\u001B\\");
 
@@ -567,7 +565,7 @@ it.effect(
         defaultMode: "local" as const,
       };
       const tree = new PlanTree(plan, { mode: "apply", label: "Starting dev stack" });
-      const live = yield* service.live.open(<Plan tree={tree} collapsible />);
+      const live = yield* service.live(<Plan tree={tree} collapsible />);
 
       yield* Effect.promise(() => stdout.waitFor("p hide widget"));
       yield* Effect.sync(() => {
@@ -584,7 +582,7 @@ it.effect(
       yield* Effect.promise(() => stdout.waitFor("p show plan/output"));
 
       const { service: staticService } = makeStatic();
-      const hiddenOutput = staticService.output.format(<Plan tree={tree} collapsible />, {
+      const hiddenOutput = formatStatic(<Plan tree={tree} collapsible />, {
         columns: 80,
       });
       expect(hiddenOutput).not.toContain("Plan ·");
@@ -610,7 +608,7 @@ it.effect(
         ...planWith([updateNode({ version: 1 }, { version: 2 })]),
         defaultMode: "local" as const,
       };
-      const cli = sigilCli().pipe(Layer.provide(Layer.succeed(CliKit, service)));
+      const cli = sigilCli().pipe(Layer.provide(Layer.succeed(Interaction, service)));
       let settledAt = 0;
       yield* Effect.scoped(
         Effect.gen(function* () {
@@ -641,7 +639,7 @@ it.effect(
         ...planWith([updateNode({ version: 1 }, { version: 2 })]),
         defaultMode: "local" as const,
       };
-      const cli = sigilCli().pipe(Layer.provide(Layer.succeed(CliKit, service)));
+      const cli = sigilCli().pipe(Layer.provide(Layer.succeed(Interaction, service)));
       yield* Effect.gen(function* () {
         const { startApplySession } = yield* Cli;
         const first = yield* startApplySession(plan, { dev: true });
@@ -678,7 +676,7 @@ it(
     );
     tree.setView("output");
 
-    const output = service.output.format(<Plan tree={tree} collapsible />, { columns: 80 });
+    const output = formatStatic(<Plan tree={tree} collapsible />, { columns: 80 });
     expect(output).toContain("Output");
     expect(output).toContain("earlier lines");
     expect(output).not.toContain("Worker");
@@ -696,7 +694,7 @@ it(
     const node = updateNode({ value: "declared" }, { value: "declared" });
     node.drift = { expected: { value: "declared" }, actual: { value: "changed-out-of-band" } };
     const tree = new PlanTree(planWith([node]), { viewport: "full" });
-    const output = service.output.format(<Plan tree={tree} />, { columns: 80 });
+    const output = formatStatic(<Plan tree={tree} />, { columns: 80 });
 
     expect(output).not.toContain("drift:");
     expect(output).toContain("│ - value: declared");
@@ -709,7 +707,7 @@ it(
   "replaces provider details with refresh progress in place",
   () => {
     const { service } = makeStatic();
-    const output = service.output.format(
+    const output = formatStatic(
       <ProfileDetailsBody
         providers={[
           {
@@ -787,10 +785,9 @@ it(
   "sizes provider blocks by providerBlockHeight",
   () => {
     const { service } = makeStatic();
-    const output = service.output.format(
-      <ProfileDetailsBody providers={dashboardProviders} focusColumn />,
-      { columns: 80 },
-    );
+    const output = formatStatic(<ProfileDetailsBody providers={dashboardProviders} focusColumn />, {
+      columns: 80,
+    });
     const expected = dashboardProviders.reduce(
       (rows, provider, index) => rows + providerBlockHeight(provider, index === 0),
       0,
@@ -806,7 +803,7 @@ it(
   "marks the focused provider with the pointer and no rails",
   () => {
     const { service } = makeStatic();
-    const output = service.output.format(
+    const output = formatStatic(
       <ProfileDetailsBody
         providers={dashboardProviders}
         focusColumn
@@ -836,7 +833,7 @@ it(
     const { service, stdout } = makeStatic();
     const store = new DashStore(dashboardEntries);
     store.setDetails("default", { state: "ready", providers: dashboardProviders, available: [] });
-    const output = service.output.format(<Dashboard store={store} initialSelected={0} />, {
+    const output = formatStatic(<Dashboard store={store} initialSelected={0} />, {
       columns: 80,
     });
 
@@ -867,7 +864,7 @@ it.live(
         execute: () => Effect.succeed({ ok: true, message: "", entries: dashboardEntries }),
         runFlow: () => Effect.succeed({ ok: true, message: "" }),
         reloadEntries: Effect.succeed(dashboardEntries),
-      }).pipe(Effect.provideService(CliKit, service), Effect.forkChild);
+      }).pipe(Effect.provideService(Interaction, service), Effect.forkChild);
 
       // "focus provider" joins the key bar once the providers have resolved;
       // arrow keys are ignored while the pane still shows the loading spinner.
@@ -891,7 +888,7 @@ it(
   "renders input frames inline by default and keeps a stacked variant",
   () => {
     const { service } = makeStatic();
-    const inline = service.output.format(
+    const inline = formatStatic(
       <PromptFrame
         message="Profile name"
         description="Used to select stored credentials."
@@ -900,7 +897,7 @@ it(
         <Text>production</Text>
       </PromptFrame>,
     );
-    const stacked = service.output.format(
+    const stacked = formatStatic(
       <PromptFrame message="Profile name" layout="stacked">
         <Text>production</Text>
       </PromptFrame>,
@@ -918,7 +915,7 @@ it(
   "renders compact informational toasts as a bare status line",
   () => {
     const { service } = makeStatic();
-    const output = service.output.format(<Toast variant="info">Credentials refreshed.</Toast>);
+    const output = formatStatic(<Toast variant="info">Credentials refreshed.</Toast>);
 
     expect(output).toBe("• Credentials refreshed.");
   },
@@ -929,7 +926,7 @@ it(
   "renders prompt frames with an indented body and no rail",
   () => {
     const { service } = makeStatic();
-    const output = service.output.format(
+    const output = formatStatic(
       <PromptFrame message="Cloudflare authentication method">
         <Menu
           cursor={0}
@@ -970,6 +967,17 @@ const makeLive = (
   } = {},
 ) => {
   const input = overrides.input ?? true;
+  if (!input) {
+    const stdout = new CaptureStream();
+    const stderr = new CaptureStream();
+    const service = makeNonInteractive({
+      // SAFETY: CaptureStream implements the writable stream surface consumed here.
+      stdout: stdout as unknown as NodeJS.WriteStream,
+      colors: overrides.colors ?? false,
+      unicode: overrides.unicode ?? true,
+    });
+    return Effect.succeed({ service, stdout, stderr, dispose: async () => {} });
+  }
   return Effect.acquireRelease(
     Effect.sync(() => {
       const stdout = new CaptureStream(input);
@@ -1010,10 +1018,10 @@ it(
   () => {
     const { service } = makeStatic();
     const view = <Text color="green">ready</Text>;
-    const styled = service.output.format(view, { colors: true });
+    const styled = formatStatic(view, { colors: true });
     expect(styled).toContain("\u001B[");
     expect(stripVTControlCharacters(styled)).toBe("ready");
-    expect(service.output.format(view, { colors: false })).toBe("ready");
+    expect(formatStatic(view, { colors: false })).toBe("ready");
   },
   { tags: ["unit", "local"] },
 );
@@ -1024,7 +1032,7 @@ it.effect(
     Effect.gen(function* () {
       const { service } = yield* makeLive({ colors: true });
       const url = "https://example.com/deploy";
-      const output = service.output.format(stackOutputsView({ url }), { colors: true });
+      const output = formatStatic(stackOutputsView({ url }), { colors: true });
       expect(stripVTControlCharacters(output)).toContain(url);
     }),
   { tags: ["unit", "local"] },
@@ -1037,8 +1045,7 @@ it.effect(
       const stdin = new InputStream();
       const { service, stdout } = yield* makeLive({ stdin });
       const fiber = yield* service
-        .application(service.prompt.custom(stateExplorerScreen(explorerSource)))
-        .pipe(Application.alternate)
+        .session(service.prompt.screen(stateExplorerScreen(explorerSource)), { alternate: true })
         .pipe(Effect.forkChild);
       yield* Effect.promise(() => stdin.ready);
       yield* Effect.promise(() => stdout.waitFor("Loading"));
@@ -1062,7 +1069,7 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const { service, stdout } = makeStatic();
-      const rendered = yield* service.output.render(
+      const rendered = yield* renderStatic(
         <>
           <SectionHeading annotation="active">Profile</SectionHeading>
           <DescriptionList
@@ -1089,7 +1096,7 @@ it.effect(
       const { service } = makeStatic();
 
       expect(
-        (yield* service.output.render(
+        (yield* renderStatic(
           <ChoiceGroup
             value
             choices={[
@@ -1100,7 +1107,7 @@ it.effect(
         )).trim(),
       ).toBe("Yes   No");
       expect(
-        (yield* service.output.render(
+        (yield* renderStatic(
           <ChoiceGroup
             value={false}
             choices={[
@@ -1111,7 +1118,7 @@ it.effect(
         )).trim(),
       ).toBe("Yes   No");
       expect(
-        (yield* service.output.render(
+        (yield* renderStatic(
           <ChoiceGroup
             value
             choices={[
@@ -1122,7 +1129,7 @@ it.effect(
         )).trim(),
       ).toBe("Destroy   Cancel");
       expect(
-        (yield* service.output.render(
+        (yield* renderStatic(
           <ChoiceGroup
             orientation="vertical"
             value="repair"
@@ -1142,7 +1149,7 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const { service } = makeStatic();
-      const rendered = yield* service.output.render(["count: ", 0, false, null]);
+      const rendered = yield* renderStatic(["count: ", 0, false, null]);
 
       expect(rendered).toBe("count: 0");
     }),
@@ -1198,18 +1205,11 @@ it.effect(
       }
 
       const cycleFailure = yield* service.prompt
-        .cycle({ message: "Change", options: [] })
-        .pipe(Effect.flip);
-      const externalFailure = yield* service.prompt
-        .awaitExternal({ message: "Authorize", waitingLabel: "Waiting", inputLabel: "Enter code" })
+        .screen(cycleSelectScreen({ message: "Change", options: [] }))
         .pipe(Effect.flip);
       expect(cycleFailure).toBeInstanceOf(NonInteractiveTerminal);
       if (cycleFailure instanceof NonInteractiveTerminal) {
         expect(cycleFailure.operation).toBe("cycle selection");
-      }
-      expect(externalFailure).toBeInstanceOf(NonInteractiveTerminal);
-      if (externalFailure instanceof NonInteractiveTerminal) {
-        expect(externalFailure.operation).toBe("external authorization");
       }
     }),
   { tags: ["unit", "local"] },
@@ -1220,7 +1220,7 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const { service, stdout } = makeStatic();
-      const progress = yield* service.live.progress({ label: "Deploying" });
+      const progress = yield* service.progress({ label: "Deploying" });
       yield* progress.update({ label: "Uploading", detail: "2/3" });
       yield* progress.succeed("Deployed");
       yield* progress.fail("must not print");
@@ -1244,7 +1244,7 @@ it.effect(
       const { service, stdout } = yield* makeLive();
 
       const store = new LiveStore("Scanning");
-      const live = yield* service.live.open(<LiveLabel store={store} />);
+      const live = yield* service.live(<LiveLabel store={store} />);
       yield* Effect.sync(() => store.set("Deleting"));
       yield* live.close;
       yield* live.close;
@@ -1260,10 +1260,10 @@ it.effect(
     Effect.gen(function* () {
       const { service, stdout } = yield* makeLive();
 
-      const first = yield* service.live.open(<Text>first</Text>);
+      const first = yield* service.live(<Text>first</Text>);
       const closing = yield* first.close.pipe(Effect.forkChild);
       const store = new LiveStore("second");
-      const second = yield* service.live.open(<LiveLabel store={store} />, {
+      const second = yield* service.live(<LiveLabel store={store} />, {
         persistOnClose: true,
       });
       yield* Fiber.join(closing);
@@ -1278,7 +1278,7 @@ it.effect(
 interface OrderingCase {
   readonly name: string;
   readonly captureConsole: boolean;
-  readonly emit: (service: CliKit["Service"]) => Effect.Effect<void>;
+  readonly emit: (service: Interaction["Service"]) => Effect.Effect<void>;
   readonly verify: (output: string) => void;
 }
 
@@ -1320,7 +1320,7 @@ it.effect.each(orderingCases)(
       const { service, stdout } = yield* makeLive({ captureConsole, colors: captureConsole });
 
       const store = new LiveStore("Deploying");
-      const live = yield* service.live.open(<LiveLabel store={store} />, { persistOnClose: true });
+      const live = yield* service.live(<LiveLabel store={store} />, { persistOnClose: true });
       yield* emit(service);
       yield* Effect.sync(() => store.set("Deployed"));
       yield* live.close;
@@ -1336,7 +1336,7 @@ it.effect(
     Effect.gen(function* () {
       const { service, stdout, stderr } = yield* makeLive({ captureConsole: true });
       const store = new LiveStore("Resolving credentials");
-      const live = yield* service.live.open(<LiveLabel store={store} />, { persistOnClose: true });
+      const live = yield* service.live(<LiveLabel store={store} />, { persistOnClose: true });
 
       yield* Effect.sync(() => {
         stdout.write("floci stdout\n");
@@ -1362,7 +1362,7 @@ it.effect(
     Effect.gen(function* () {
       const { service, stdout, stderr } = yield* makeLive({ captureConsole: true });
       const store = new LiveStore("Deploying");
-      const live = yield* service.live.open(<LiveLabel store={store} />);
+      const live = yield* service.live(<LiveLabel store={store} />);
       // A writer whose final chunk has no trailing newline (e.g. an error
       // block written raw to stderr): its tail must render within the
       // partial-flush deadline — before this, it sat buffered until the
@@ -1384,9 +1384,9 @@ it.effect(
       const { service, stdout } = makeStatic();
       yield* Effect.scoped(
         Effect.gen(function* () {
-          const first = yield* service.live.progress({ label: "Resolve credentials" });
+          const first = yield* service.progress({ label: "Resolve credentials" });
           yield* first.succeed();
-          const second = yield* service.live.progress({ label: "Apply resource" });
+          const second = yield* service.progress({ label: "Apply resource" });
           yield* second.fail();
         }),
       );
@@ -1420,7 +1420,7 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const { service } = makeStatic();
-      const rendered = yield* service.output.render(
+      const rendered = yield* renderStatic(
         <Status variant="warning" detail="retrying">
           API unavailable
         </Status>,
@@ -1435,12 +1435,12 @@ it.effect(
   "uses ASCII fallbacks when Unicode is unavailable",
   () =>
     Effect.gen(function* () {
-      const { service } = yield* makeLive({ input: false, unicode: false });
-      const rendered = yield* service.output.render(
+      const rendered = yield* renderStatic(
         <>
           <Heading>Deploy</Heading>
           <Status variant="success">Complete</Status>
         </>,
+        { unicode: false },
       );
       expect(rendered).toContain("@ Deploy");
       expect(rendered).toContain("+ Complete");
@@ -1497,7 +1497,7 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const { service, stdout } = yield* makeLive({ captureConsole: true });
-      const live = yield* service.live.open(<Text>Building</Text>);
+      const live = yield* service.live(<Text>Building</Text>);
 
       const output = makeResourceOutput("www", globalThis.console);
       output.stderr.push("[FILE_NAME_CONFLICT] warning\n");
@@ -1517,7 +1517,7 @@ it.effect(
     Effect.gen(function* () {
       const { service, stdout } = yield* makeLive();
 
-      const result = yield* service.prompt.custom(
+      const result = yield* service.prompt.screen(
         Screen.make("test screen", ({ submit }) => {
           queueMicrotask(() => submit("completed", <Status>Done</Status>));
           return <Status>Working</Status>;
@@ -1535,16 +1535,15 @@ it.effect(
     Effect.gen(function* () {
       const { service, stdout } = yield* makeLive();
 
-      yield* service
-        .application(
-          service.prompt.custom(
-            Screen.make("full screen", ({ submit }) => {
-              queueMicrotask(() => submit(undefined));
-              return <Status>Browsing</Status>;
-            }),
-          ),
-        )
-        .pipe(Application.alternate);
+      yield* service.session(
+        service.prompt.screen(
+          Screen.make("full screen", ({ submit }) => {
+            queueMicrotask(() => submit(undefined));
+            return <Status>Browsing</Status>;
+          }),
+        ),
+        { alternate: true },
+      );
 
       expect(stdout.output).toContain("\u001B[?1049h");
       expect(stdout.output).toContain("\u001B[?1049l");
@@ -1563,7 +1562,7 @@ it.effect(
       const { service } = yield* makeLive({ stdin });
 
       const fiber = yield* service.prompt
-        .custom(
+        .screen(
           Screen.make("backspace", ({ submit }) => (
             <TextField initialValue="abc" onChange={submit} onSubmit={submit} />
           )),
@@ -1589,7 +1588,7 @@ it.effect(
       const { service } = yield* makeLive({ stdin });
 
       const fiber = yield* service.prompt
-        .custom(Screen.make("paste", ({ submit }) => <TextField onSubmit={submit} />))
+        .screen(Screen.make("paste", ({ submit }) => <TextField onSubmit={submit} />))
         .pipe(Effect.forkChild);
       yield* Effect.promise(() => stdin.ready);
       // A paste arrives as one chunk; embedded newlines/tabs must not survive.
@@ -1682,7 +1681,7 @@ it.effect(
       const { service } = yield* makeLive({ stdin });
 
       const fiber = yield* service.prompt
-        .custom(
+        .screen(
           Screen.make("grapheme", ({ submit }) => (
             <TextField initialValue="a👍" onChange={submit} onSubmit={submit} />
           )),
@@ -1765,19 +1764,21 @@ it.effect(
       const { service } = yield* makeLive({ stdin });
 
       const fiber = yield* service.prompt
-        .cycle({
-          message: "Manage accounts",
-          requireChange: true,
-          options: [
-            {
-              label: "Cloudflare",
-              states: [
-                { value: "keep", label: "keep" },
-                { value: "remove", label: "remove" },
-              ],
-            },
-          ],
-        })
+        .screen(
+          cycleSelectScreen({
+            message: "Manage accounts",
+            requireChange: true,
+            options: [
+              {
+                label: "Cloudflare",
+                states: [
+                  { value: "keep", label: "keep" },
+                  { value: "remove", label: "remove" },
+                ],
+              },
+            ],
+          }),
+        )
         .pipe(Effect.forkChild);
       yield* Effect.promise(() => stdin.ready);
       yield* Effect.sync(() => stdin.write("\r"));
@@ -1802,15 +1803,18 @@ it.effect(
       let opened = 0;
 
       const fiber = yield* service.prompt
-        .awaitExternal({
-          message: "Authorize",
-          waitingLabel: "Waiting",
-          url: "https://example.com/authorize",
-          inputLabel: "Enter code",
-          onOpen: async () => {
-            opened += 1;
-          },
-        })
+        .screen(
+          browserLoginScreen({
+            message: "Authorize",
+            waitingLabel: "Waiting",
+            url: "https://example.com/authorize",
+            allowManualInput: true,
+            inputLabel: "Enter code",
+            onOpen: async () => {
+              opened += 1;
+            },
+          }),
+        )
         .pipe(Effect.forkChild);
       yield* Effect.promise(() => stdin.ready);
       yield* Effect.sync(() => stdin.write("o"));
@@ -1836,12 +1840,14 @@ it.effect(
       const { service, stdout } = yield* makeLive({ stdin });
 
       const fiber = yield* service.prompt
-        .awaitExternal({
-          message: "AWS authorization",
-          waitingLabel: "Waiting",
-          url: "https://example.com/authorize",
-          allowManualInput: false,
-        })
+        .screen(
+          browserLoginScreen({
+            message: "AWS authorization",
+            waitingLabel: "Waiting",
+            url: "https://example.com/authorize",
+            allowManualInput: false,
+          }),
+        )
         .pipe(Effect.flip, Effect.forkChild);
       yield* Effect.promise(() => stdin.ready);
       yield* Effect.promise(() => stdout.waitFor("AWS authorization"));
@@ -1867,13 +1873,15 @@ it.effect(
       const { service, stdout } = yield* makeLive({ stdin });
 
       const fiber = yield* service.prompt
-        .awaitExternal({
-          message: "AWS authorization",
-          waitingLabel: "Waiting for device authorization…",
-          url: "https://device.sso.example.com/",
-          code: "ABCD-EFGH",
-          allowManualInput: false,
-        })
+        .screen(
+          browserLoginScreen({
+            message: "AWS authorization",
+            waitingLabel: "Waiting for device authorization…",
+            url: "https://device.sso.example.com/",
+            code: "ABCD-EFGH",
+            allowManualInput: false,
+          }),
+        )
         .pipe(Effect.flip, Effect.forkChild);
       yield* Effect.promise(() => stdin.ready);
       yield* Effect.promise(() => stdout.waitFor("ABCD-EFGH"));
@@ -1918,36 +1926,13 @@ it.effect(
 );
 
 it.effect(
-  "returns an explicit undefined menu back target on Escape",
-  () =>
-    Effect.gen(function* () {
-      const stdin = new InputStream();
-      const { service } = yield* makeLive({ stdin });
-
-      const fiber = yield* service.prompt
-        .menu<string | undefined>({
-          message: "pick",
-          back: undefined,
-          options: [{ value: "alpha", label: "alpha" }],
-        })
-        .pipe(Effect.forkChild);
-      yield* Effect.promise(() => stdin.ready);
-      yield* Effect.sync(() => stdin.write("\x1b"));
-      const result = yield* Fiber.join(fiber);
-
-      expect(result).toBe(undefined);
-    }),
-  { tags: ["unit", "local"] },
-);
-
-it.effect(
   "cleans up a cancelled standalone prompt",
   () =>
     Effect.gen(function* () {
       const { service, stdout } = yield* makeLive();
 
       const failure = yield* service.prompt
-        .custom(
+        .screen(
           Screen.make("cancel test", ({ cancel }) => {
             queueMicrotask(cancel);
             return <Status>Waiting</Status>;
@@ -1969,14 +1954,14 @@ it.effect(
       const { service } = yield* makeLive({ stdin });
 
       const fiber = yield* service.prompt
-        .custom(Screen.make("interrupted", () => <Status>Waiting</Status>))
+        .screen(Screen.make("interrupted", () => <Status>Waiting</Status>))
         .pipe(Effect.forkChild);
       yield* Effect.promise(() => stdin.ready);
       yield* Fiber.interrupt(fiber);
 
       // The interrupted prompt must have released the renderer and the prompt
       // gate for the next interaction.
-      const result = yield* service.prompt.custom(
+      const result = yield* service.prompt.screen(
         Screen.make("after interruption", ({ submit }) => {
           queueMicrotask(() => submit("ok"));
           return <Status>After</Status>;
@@ -1995,7 +1980,7 @@ it.effect(
 
       yield* Effect.scoped(
         Effect.gen(function* () {
-          yield* service.live.open(<Text>Leaky</Text>);
+          yield* service.live(<Text>Leaky</Text>);
           // Deliberately no close — the enclosing scope must release the row
           // and unmount the renderer.
         }),
@@ -2018,7 +2003,7 @@ it.effect(
       // Without exit observation this would hang forever: the screen's
       // submit/cancel can never run once the renderer has crashed.
       const exit = yield* service.prompt
-        .custom(Screen.make("broken screen", () => <Broken />))
+        .screen(Screen.make("broken screen", () => <Broken />))
         .pipe(Effect.exit);
 
       expect(Exit.isFailure(exit)).toBe(true);
@@ -2036,7 +2021,7 @@ it.effect(
       // The screen never touches the controller — the centralized handler in
       // the runtime must still turn Ctrl+C into a cancellation.
       const fiber = yield* service.prompt
-        .custom(Screen.make("no cancel wiring", () => <Status>Waiting</Status>))
+        .screen(Screen.make("no cancel wiring", () => <Status>Waiting</Status>))
         .pipe(Effect.flip, Effect.forkChild);
       yield* Effect.promise(() => stdin.ready);
       yield* Effect.sync(() => stdin.write("\x03"));
@@ -2054,23 +2039,23 @@ it.effect(
     Effect.gen(function* () {
       const { service, stdout } = yield* makeLive();
 
-      const result = yield* service.application(
+      const result = yield* service.session(
         Effect.gen(function* () {
-          const action = yield* service.prompt.custom(
+          const action = yield* service.prompt.screen(
             Screen.make("main menu", ({ submit }) => {
               queueMicrotask(() => submit("add"));
               return <Status>Main menu</Status>;
             }),
           );
-          const name = yield* service.wizard(
-            service.prompt.custom(
+          const name = yield* service.session(
+            service.prompt.screen(
               Screen.make("auth flow", ({ submit }) => {
                 queueMicrotask(() => submit("cloudflare", <Status>Profile name</Status>));
                 return <Status>Cloudflare auth</Status>;
               }),
             ),
           );
-          const done = yield* service.prompt.custom(
+          const done = yield* service.prompt.screen(
             Screen.make("returned menu", ({ submit }) => {
               queueMicrotask(() => submit(true));
               return <Status>Returned menu</Status>;
@@ -2090,12 +2075,12 @@ it.effect(
 );
 
 it.effect(
-  "provides CliKit once as a scoped injectable service",
+  "selects the plain renderer without terminal input",
   () => {
     const stdout = new CaptureStream();
     return Effect.gen(function* () {
-      const capabilities = yield* CliKit.useSync((cli) => cli.terminal);
-      const cli = yield* CliKit;
+      const capabilities = yield* Interaction.useSync((cli) => cli.terminal);
+      const cli = yield* Interaction;
       yield* cli.output.print("Injected");
 
       expect(capabilities.input).toBe(false);
@@ -2103,7 +2088,7 @@ it.effect(
       expect(stdout.output).toContain("Injected");
     }).pipe(
       Effect.provide(
-        cliKitLayer({
+        interactionLayer({
           input: false,
           stdout: stdout as unknown as NodeJS.WriteStream,
           captureConsole: false,
@@ -2119,8 +2104,8 @@ it.effect(
   () => {
     const stdout = new CaptureStream(true);
     return Effect.gen(function* () {
-      const cli = yield* CliKit;
-      const progress = yield* cli.live.progress({ label: "Deploying" });
+      const cli = yield* Interaction;
+      const progress = yield* cli.progress({ label: "Deploying" });
       yield* progress.update({ label: "Uploading" });
       yield* progress.succeed("Deployed");
 
@@ -2130,7 +2115,7 @@ it.effect(
       expect(stdout.output).not.toContain("\u001B[");
     }).pipe(
       Effect.provide(
-        cliKitLayer({
+        interactionLayer({
           input: false,
           stdout: stdout as unknown as NodeJS.WriteStream,
           captureConsole: false,
@@ -2175,7 +2160,7 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const { service } = makeStatic();
-      const rendered = yield* service.output.render(
+      const rendered = yield* renderStatic(
         <>
           <Tabs
             tabs={[
@@ -2205,7 +2190,7 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const { service } = makeStatic();
-      const rendered = yield* service.output.render(
+      const rendered = yield* renderStatic(
         <KeyBar
           inline
           marginTop={0}
@@ -2229,7 +2214,7 @@ it(
   "wraps individual key hints in narrow terminals",
   () => {
     const { service } = makeStatic();
-    const rendered = service.output.format(
+    const rendered = formatStatic(
       <KeyBar
         inline
         marginTop={0}
@@ -2261,7 +2246,7 @@ it.effect(
       });
 
       // Active tab in the middle: window centers on it, arrows on both sides.
-      const middle = yield* service.output.render(<Tabs tabs={tabs} active="profile-10" />);
+      const middle = yield* renderStatic(<Tabs tabs={tabs} active="profile-10" />);
       expect(middle).toContain("profile-10");
       expect(middle).toContain("‹");
       expect(middle).toContain("›");
@@ -2271,21 +2256,19 @@ it.effect(
       expect(middle.trimEnd()).not.toContain("\n");
 
       // Active tab at the start: no left arrow, right arrow only.
-      const first = yield* service.output.render(<Tabs tabs={tabs} active="profile-01" />);
+      const first = yield* renderStatic(<Tabs tabs={tabs} active="profile-01" />);
       expect(first).toContain("profile-01");
       expect(first).not.toContain("‹");
       expect(first).toContain("›");
 
       // Active tab at the end: left arrow only.
-      const last = yield* service.output.render(<Tabs tabs={tabs} active="profile-20" />);
+      const last = yield* renderStatic(<Tabs tabs={tabs} active="profile-20" />);
       expect(last).toContain("profile-20");
       expect(last).toContain("‹");
       expect(last).not.toContain("›");
 
       // Everything fits: no arrows at all.
-      const fitting = yield* service.output.render(
-        <Tabs tabs={tabs.slice(0, 3)} active="profile-02" />,
-      );
+      const fitting = yield* renderStatic(<Tabs tabs={tabs.slice(0, 3)} active="profile-02" />);
       expect(fitting).toContain("profile-01");
       expect(fitting).toContain("profile-03");
       expect(fitting).not.toContain("‹");
@@ -2340,8 +2323,7 @@ it.live(
       const stdin = new InputStream();
       const { service, stdout } = yield* makeLive({ stdin });
       const fiber = yield* service
-        .application(service.prompt.custom(stateExplorerScreen(mutable)))
-        .pipe(Application.alternate)
+        .session(service.prompt.screen(stateExplorerScreen(mutable)), { alternate: true })
         .pipe(Effect.forkChild);
       yield* Effect.promise(() => stdin.ready);
       const press = (key: string) =>
@@ -2411,7 +2393,7 @@ it.effect(
       store.emit({ _tag: "nuke.scan.provider.started", provider: "Test.Fast" });
       store.emit({ _tag: "nuke.scan.provider.started", provider: "Test.Slow" });
       store.emit({ _tag: "nuke.scan.provider.completed", provider: "Test.Fast", resources: 3 });
-      const output = yield* service.output.render(<NukeProgress store={store} />);
+      const output = yield* renderStatic(<NukeProgress store={store} />);
       expect(output).toContain("1/2");
       expect(output).toContain("3 resources found");
       expect(output).toContain("Scanning Test.Slow");
@@ -2467,7 +2449,7 @@ it.effect(
       expect(tree.snapshot().tasks.get("nuke/2")?.status).toBe("deleted");
       expect(tree.snapshot().tasks.get("nuke/1")?.status).toBe("fail");
       expect(tree.progress()).toEqual({ completed: 2, total: 3, failures: 1 });
-      const output = yield* service.output.render(<Plan tree={tree} />);
+      const output = yield* renderStatic(<Plan tree={tree} />);
       expect(output).toContain("pass 2");
       expect(output).toContain("blocked");
       expect(output.match(/same-name/g)).toHaveLength(3);
@@ -2506,7 +2488,7 @@ it.effect(
         scan: { resources, mode: "live", context: Context.empty(), failures: [] },
         resources,
         strategy: { _tag: "coordinated" },
-      }).pipe(renderNukeDelete(resources, "live"), Effect.provideService(CliKit, service));
+      }).pipe(renderNukeDelete(resources, "live"), Effect.provideService(Interaction, service));
       expect(result.deleted).toHaveLength(1);
       expect(result.failed).toHaveLength(1);
       expect(result.held).toHaveLength(1);
@@ -2528,7 +2510,7 @@ it.effect(
         const report = yield* Progress;
         yield* report({ _tag: "nuke.scan.started", total: 2 });
         yield* Effect.fail("scan failed");
-      }).pipe(renderNukeScan(), Effect.provideService(CliKit, service), Effect.result);
+      }).pipe(renderNukeScan(), Effect.provideService(Interaction, service), Effect.result);
       expect(stdout.output).toContain("\u001B[?25h");
       yield* service.output.info("After nuke");
       expect(stdout.output).toContain("After nuke");
@@ -2551,12 +2533,12 @@ it.effect(
         [1, "[⣿⣿]"],
         [2, "[⣿⣿]"],
       ] as const) {
-        const output = yield* service.output.render(
+        const output = yield* renderStatic(
           <ProgressBar value={value} width={2} showPercent={false} />,
         );
         expect(output.trim()).toBe(expected);
       }
-      const labeled = yield* service.output.render(
+      const labeled = yield* renderStatic(
         <ProgressBar value={0.5} width={2} label="Uploading" detail="2 of 4 files" />,
       );
       expect(labeled).toContain("[⣿ ]");
@@ -2571,9 +2553,9 @@ it.effect(
   "falls back to ASCII for progress bars without Unicode",
   () =>
     Effect.gen(function* () {
-      const { service } = yield* makeLive({ input: false, unicode: false });
-      const output = yield* service.output.render(
+      const output = yield* renderStatic(
         <ProgressBar value={0.5} width={4} showPercent={false} />,
+        { unicode: false },
       );
       expect(output.trim()).toBe("[##..]");
     }),
@@ -2600,13 +2582,13 @@ it.effect(
         "Cloudflare.R2.Bucket",
       ]);
       expect(tree.rows.every((row) => row.type === "resource" && row.depth === 0)).toBe(true);
-      const output = yield* service.output.render(<Plan tree={tree} />);
+      const output = yield* renderStatic(<Plan tree={tree} />);
       expect(output).toContain("3 to delete");
       expect(output.match(/Cloudflare.R2.Bucket/g)).toHaveLength(2);
       expect(output).not.toContain("(Cloudflare.R2.Bucket)");
       expect(output.match(/same\/name/g)).toHaveLength(2);
 
-      const compact = yield* service.output.render(
+      const compact = yield* renderStatic(
         <Plan tree={new PlanTree(nukePlan(targets, { mode: "live" }), { viewport: "full" })} />,
       );
       expect(compact).toContain("3 to delete");
@@ -2629,7 +2611,7 @@ it.effect(
         const result = yield* reviewNuke([{ providerId: "AWS.S3.Bucket", displayName: "bucket" }], {
           ...options,
           mode: "local",
-        }).pipe(Effect.provideService(CliKit, service));
+        }).pipe(Effect.provideService(Interaction, service));
         expect(result).toBe(true);
         expect(stdout.output).toContain("1 to delete");
         expect(stdout.output).toContain("AWS.S3.Bucket");
@@ -2649,7 +2631,7 @@ it.live(
         mode: "local",
         yes: false,
         dryRun: false,
-      }).pipe(Effect.provideService(CliKit, service), Effect.forkChild);
+      }).pipe(Effect.provideService(Interaction, service), Effect.forkChild);
       yield* Effect.promise(flushEffects);
       yield* Effect.raceFirst(
         Effect.promise(() => stdout.waitFor("Cancel")),
@@ -2680,9 +2662,7 @@ it.effect(
       ];
       const plan = nukePlan(targets, { mode: "live" });
       expect(plan.rows).toHaveLength(6);
-      const output = yield* service.output.render(
-        <Plan tree={new PlanTree(plan, { viewport: "full" })} />,
-      );
+      const output = yield* renderStatic(<Plan tree={new PlanTree(plan, { viewport: "full" })} />);
       expect(output).toContain("6 to delete");
       expect(output.match(/api-123/g)).toHaveLength(2);
       expect(output.match(/Test.Unknown/g)).toHaveLength(2);
@@ -2739,7 +2719,7 @@ it.effect(
           });
         }).pipe(
           renderNukeScan(),
-          Effect.provideService(CliKit, service),
+          Effect.provideService(Interaction, service),
           Effect.provide(Logger.layer([logger])),
         );
         expect(entries).toHaveLength(input ? 2 : 4);

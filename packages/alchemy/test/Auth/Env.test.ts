@@ -10,7 +10,7 @@ import {
   getEnvRequired,
   mapPromptCancellation,
 } from "@/Auth/Env.ts";
-import { TerminalCancelled } from "@/Cli/CliKit/index.ts";
+import { TerminalCancelled } from "@/Interaction.ts";
 
 const provideConfig = (values: Record<string, unknown>) =>
   Effect.provideService(ConfigProvider.ConfigProvider, ConfigProvider.fromUnknown(values));

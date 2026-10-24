@@ -15,7 +15,6 @@ import type { ArtifactStore } from "./Artifacts.ts";
 import type { AuthProviders } from "./Auth/AuthProvider.ts";
 import type { CredentialsStore } from "./Auth/Credentials.ts";
 import type { ProfileStore } from "./Auth/Profile.ts";
-import type { CliKit } from "./Cli/CliKit/CliKit.ts";
 import type { Interaction } from "./Interaction.ts";
 import type { State } from "./State/State.ts";
 import { UserFacingError } from "./UserFacingError.ts";
@@ -87,8 +86,8 @@ export type HostServices =
 /** What auth layers and state stores run under: the host's services and the auth registry. */
 export type ContributionServices = HostServices | AuthProviders;
 
-/** What a CLI command runs under: the host's services and the terminal. */
-export type CliServices = HostServices | CliKit;
+/** What a CLI command runs under: the host's services, `Interaction` included. */
+export type CliServices = HostServices;
 
 /** A provider's own failure: any tagged error with a message for the user. */
 export type ContributionFailure = { readonly _tag: string; readonly message: string };

@@ -16,8 +16,8 @@ import {
   routeCacheLayer,
   StackModuleLoader,
 } from "@/Alchemist/Session.ts";
-import * as CliKit from "@/Cli/CliKit/index.ts";
 import { Secrets, Stack, inMemoryState } from "@/index.ts";
+import * as Interaction from "@/Interaction.ts";
 import { evalStack } from "../../src/EvalStack";
 import * as TestCore from "../../src/Test/Core";
 import { TestLayers } from "../test.resources";
@@ -148,7 +148,7 @@ describe("importStack", { tags: ["unit", "local"] }, () => {
       Effect.all([
         open({ entrypoint: fixtureAbsolutePath, stage: "test" }),
         open({ entrypoint: fixtureAbsolutePath, stage: "test" }),
-      ]).pipe(Effect.provide(routeCacheLayer), Effect.provide(CliKit.layer({ input: false }))),
+      ]).pipe(Effect.provide(routeCacheLayer), Effect.provide(Interaction.layerNonInteractive())),
       { providers: TestLayers() },
     );
 
@@ -164,7 +164,7 @@ describe("importStack", { tags: ["unit", "local"] }, () => {
     const [first, second] = await TestCore.run(
       Effect.all([collectAuthProviders(options), collectAuthProviders(options)]).pipe(
         Effect.provide(routeCacheLayer),
-        Effect.provide(CliKit.layer({ input: false })),
+        Effect.provide(Interaction.layerNonInteractive()),
       ),
       { providers: TestLayers() },
     );

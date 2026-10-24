@@ -120,7 +120,6 @@ const listVisibleAccounts: Effect.Effect<
 
 const selectAccount = (accessToken: string) =>
   Effect.gen(function* () {
-    const interaction = Interaction.accessors;
     const accounts = yield* listVisibleAccounts;
     if (accounts.length === 0) {
       return yield* AuthError.make({
@@ -131,16 +130,14 @@ const selectAccount = (accessToken: string) =>
     }
     const [account] = accounts;
     if (accounts.length === 1 && account !== undefined) {
-      yield* interaction.output.info(`Using Cloudflare account ${account.name}.`);
+      yield* Interaction.info(`Using Cloudflare account ${account.name}.`);
       return account.id;
     }
-    return yield* interaction.prompt
-      .select({
-        message: "Select a Cloudflare account",
-        searchable: true,
-        options: accounts.map((a) => ({ value: a.id, label: a.name, description: a.id })),
-      })
-      .pipe(mapPromptCancellation);
+    return yield* Interaction.select({
+      message: "Select a Cloudflare account",
+      searchable: true,
+      options: accounts.map((a) => ({ value: a.id, label: a.name, description: a.id })),
+    }).pipe(mapPromptCancellation);
   }).pipe((e) => withOAuthCredentials(accessToken, e));
 
 const promptAccountId = () =>
@@ -241,7 +238,6 @@ export const CloudflareAuth = AuthProviderLayer<
 >()(
   CLOUDFLARE_AUTH_PROVIDER_NAME,
   Effect.gen(function* () {
-    const interaction = Interaction.accessors;
     const store = yield* CredentialsStore;
 
     const oauthLogin = (_profileName: string, scopes: string[]) =>
@@ -253,33 +249,29 @@ export const CloudflareAuth = AuthProviderLayer<
           authorization,
           token: OAuthClient.deviceToken(authorization),
         });
-        yield* interaction.output.success("Connected to Cloudflare with OAuth.");
+        yield* Interaction.success("Connected to Cloudflare with OAuth.");
         return credentials;
       });
 
     const loginStored = Effect.fn(function* () {
-      const credentialType = yield* interaction.prompt
-        .select({
-          message: "Cloudflare credential type",
-          options: [
-            { value: "apiToken" as const, label: "API Token", description: "recommended" },
-            { value: "apiKey" as const, label: "API Key + Email" },
-          ],
-        })
-        .pipe(mapPromptCancellation);
+      const credentialType = yield* Interaction.select({
+        message: "Cloudflare credential type",
+        options: [
+          { value: "apiToken" as const, label: "API Token", description: "recommended" },
+          { value: "apiKey" as const, label: "API Key + Email" },
+        ],
+      }).pipe(mapPromptCancellation);
 
       return yield* Match.value(credentialType).pipe(
         Match.when("apiToken", () =>
           Effect.gen(function* () {
-            const apiToken = yield* interaction.prompt
-              .password({
-                message: "Cloudflare API Token",
-                validate: (v) => (v.length === 0 ? "Required" : undefined),
-              })
-              .pipe(mapPromptCancellation, Effect.map(Redacted.make));
+            const apiToken = yield* Interaction.password({
+              message: "Cloudflare API Token",
+              validate: (v) => (v.length === 0 ? "Required" : undefined),
+            }).pipe(mapPromptCancellation, Effect.map(Redacted.make));
             const accountId = yield* promptAccountId();
 
-            yield* interaction.output.success("Cloudflare: credentials saved.");
+            yield* Interaction.success("Cloudflare: credentials saved.");
             return {
               method: "stored" as const,
               credentialType: "apiToken" as const,
@@ -290,22 +282,18 @@ export const CloudflareAuth = AuthProviderLayer<
         ),
         Match.when("apiKey", () =>
           Effect.gen(function* () {
-            const apiKey = yield* interaction.prompt
-              .password({
-                message: "Cloudflare API Key",
-                validate: (v) => (v.length === 0 ? "Required" : undefined),
-              })
-              .pipe(mapPromptCancellation, Effect.map(Redacted.make));
+            const apiKey = yield* Interaction.password({
+              message: "Cloudflare API Key",
+              validate: (v) => (v.length === 0 ? "Required" : undefined),
+            }).pipe(mapPromptCancellation, Effect.map(Redacted.make));
 
-            const email = yield* interaction.prompt
-              .text({
-                message: "Cloudflare Email",
-                validate: (v) => (v.length === 0 ? "Required" : undefined),
-              })
-              .pipe(mapPromptCancellation, Effect.map(Redacted.make));
+            const email = yield* Interaction.text({
+              message: "Cloudflare Email",
+              validate: (v) => (v.length === 0 ? "Required" : undefined),
+            }).pipe(mapPromptCancellation, Effect.map(Redacted.make));
             const accountId = yield* promptAccountId();
 
-            yield* interaction.output.success("Cloudflare: credentials saved.");
+            yield* Interaction.success("Cloudflare: credentials saved.");
             return {
               method: "stored" as const,
               credentialType: "apiKey" as const,
@@ -351,7 +339,7 @@ export const CloudflareAuth = AuthProviderLayer<
     });
 
     const configureInteractive = (profileName: string, currentConfig?: CloudflareAuthConfig) =>
-      interaction.prompt.select({ message: "Cloudflare authentication method", options }).pipe(
+      Interaction.select({ message: "Cloudflare authentication method", options }).pipe(
         Effect.flatMap((method) =>
           Match.value(method).pipe(
             Match.when("oauth", () => configureOAuth(profileName, currentConfig)),
@@ -531,9 +519,7 @@ export const CloudflareAuth = AuthProviderLayer<
                 .revoke(credentials)
                 .pipe(
                   Effect.catchTag("OAuthNetworkError", (err) =>
-                    interaction.output.warning(
-                      `Cloudflare: could not revoke OAuth token: ${err.message}`,
-                    ),
+                    Interaction.warning(`Cloudflare: could not revoke OAuth token: ${err.message}`),
                   ),
                 )
             : Effect.void;
@@ -591,9 +577,9 @@ export const CloudflareAuth = AuthProviderLayer<
                 // Grants from any other client (including the legacy one) are
                 // re-authorized against the current client with the same
                 // scopes rather than refreshed.
-                const migrateToCurrentClient = interaction.output
-                  .info("Cloudflare: re-authorizing OAuth credentials with the new client.")
-                  .pipe(Effect.as({ type: "browser" as const }));
+                const migrateToCurrentClient = Interaction.info(
+                  "Cloudflare: re-authorizing OAuth credentials with the new client.",
+                ).pipe(Effect.as({ type: "browser" as const }));
 
                 // The silent refresh rotates a single-use refresh token, so
                 // its read-refresh-persist section runs under the profile
@@ -604,7 +590,7 @@ export const CloudflareAuth = AuthProviderLayer<
                   creds.type === "oauth" && OAuthClient.usesCurrentClient(creds)
                     ? yield* withProfileCredentialsLock(
                         profileName,
-                        interaction.output.info("Cloudflare: refreshing OAuth credentials...").pipe(
+                        Interaction.info("Cloudflare: refreshing OAuth credentials...").pipe(
                           Effect.andThen(OAuthClient.refresh(creds)),
                           Effect.flatMap((credentials) => {
                             const config = {
@@ -620,7 +606,7 @@ export const CloudflareAuth = AuthProviderLayer<
                             );
                           }),
                           Effect.tap(() =>
-                            interaction.output.success("Cloudflare: OAuth credentials refreshed."),
+                            Interaction.success("Cloudflare: OAuth credentials refreshed."),
                           ),
                           Effect.catchTag(
                             [

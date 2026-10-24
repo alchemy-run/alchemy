@@ -158,7 +158,7 @@ export const state = (options: CloudflareStateOptions = {}) =>
           // silently read/write state in the wrong account, so discard it
           // and fall through to re-derivation from the current account.
           if (isStateStoreCredentialsStale(credentials, accountId)) {
-            yield* Interaction.accessors.output.info(
+            yield* Interaction.info(
               `Cloudflare State Store credentials were minted for a different ` +
                 `Cloudflare account; re-deriving for the current account.`,
             );
@@ -250,7 +250,7 @@ export const bootstrap = (options: BootstrapOptions = {}) =>
       if (yield* isStateStoreServing(accountId, scriptName)) {
         // this is a regular update, let's check if it needs an update and refresh credentials
         if (!force) {
-          yield* Interaction.accessors.output.info(
+          yield* Interaction.info(
             `Worker '${scriptName}' already exists; adopting and refreshing credentials. ` +
               `Use --force to redeploy.`,
           );
@@ -346,7 +346,7 @@ export const teardownStateStore = (options: TeardownOptions = {}) =>
     });
 
     // 1. Delete the state-store Worker.
-    yield* Interaction.accessors.output.info(`Deleting state store worker '${scriptName}'...`);
+    yield* Interaction.info(`Deleting state store worker '${scriptName}'...`);
     yield* workers.deleteScript({ accountId, scriptName, force: true }).pipe(
       Effect.asVoid,
       Effect.catchTag("WorkerNotFound", () =>
@@ -374,7 +374,7 @@ export const teardownStateStore = (options: TeardownOptions = {}) =>
         );
       const ours = secrets.filter((s) => ourSecretNames.has(s.name));
       for (const secret of ours) {
-        yield* Interaction.accessors.output.info(`Deleting secret '${secret.name}'...`);
+        yield* Interaction.info(`Deleting secret '${secret.name}'...`);
         yield* SecretsStore.deleteStoreSecret({
           accountId,
           storeId: store.id,
@@ -389,7 +389,7 @@ export const teardownStateStore = (options: TeardownOptions = {}) =>
       }
       const remaining = secrets.length - ours.length;
       if (deleteEmptyStore && remaining === 0) {
-        yield* Interaction.accessors.output.info(`Deleting empty secrets store '${store.id}'...`);
+        yield* Interaction.info(`Deleting empty secrets store '${store.id}'...`);
         yield* SecretsStore.deleteStore({
           accountId,
           storeId: store.id,
@@ -399,7 +399,7 @@ export const teardownStateStore = (options: TeardownOptions = {}) =>
           Effect.catchTag(["StoreNotFound", "NotFound", "InvalidAccountId"], () => Effect.void),
         );
       } else if (remaining > 0) {
-        yield* Interaction.accessors.output.info(
+        yield* Interaction.info(
           `Secrets store '${store.id}' still has ${remaining} other ` +
             `secret(s); leaving it in place.`,
         );
@@ -410,9 +410,7 @@ export const teardownStateStore = (options: TeardownOptions = {}) =>
     const credStore = yield* CredentialsStore;
     yield* deleteStoreCredentials(credStore, profileName, scriptName).pipe(Effect.ignore);
 
-    yield* Interaction.accessors.output.success(
-      `Cloudflare State Store '${scriptName}' torn down.`,
-    );
+    yield* Interaction.success(`Cloudflare State Store '${scriptName}' torn down.`);
   }).pipe(
     Effect.withSpan("state_store.teardown", {
       attributes: {

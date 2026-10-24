@@ -67,7 +67,6 @@ const withOAuthCredentials = <A, E, R>(
  */
 const selectOrganization = (accessToken: string) =>
   Effect.gen(function* () {
-    const interaction = Interaction.accessors;
     const list = yield* listOrganizations;
     const response = yield* list({});
     const orgs = response.data;
@@ -83,19 +82,17 @@ const selectOrganization = (accessToken: string) =>
           message: "Planetscale: organization response was unexpectedly empty.",
         });
       }
-      yield* interaction.output.info(`Planetscale: using organization: ${org.name} (${org.id})`);
+      yield* Interaction.info(`Planetscale: using organization: ${org.name} (${org.id})`);
       return org.name;
     }
-    return yield* interaction.prompt
-      .select({
-        message: "Select a Planetscale organization",
-        options: orgs.map((o) => ({
-          value: o.name,
-          label: o.name,
-          description: o.id,
-        })),
-      })
-      .pipe(mapPromptCancellation);
+    return yield* Interaction.select({
+      message: "Select a Planetscale organization",
+      options: orgs.map((o) => ({
+        value: o.name,
+        label: o.name,
+        description: o.id,
+      })),
+    }).pipe(mapPromptCancellation);
   }).pipe((e) => withOAuthCredentials(accessToken, e));
 
 const options: Array<{
@@ -182,7 +179,6 @@ export const PlanetscaleAuth = AuthProviderLayer<
 >()(
   PLANETSCALE_AUTH_PROVIDER_NAME,
   Effect.gen(function* () {
-    const interaction = Interaction.accessors;
     const oauthLogin = (_profileName: string) =>
       Effect.gen(function* () {
         const authorization = yield* OAuthClient.authorize();
@@ -193,7 +189,7 @@ export const PlanetscaleAuth = AuthProviderLayer<
           callback: OAuthClient.callback(authorization),
           exchange: (input) => OAuthClient.exchangeCallbackInput(input, authorization),
         });
-        yield* interaction.output.success("Planetscale: OAuth credentials saved.");
+        yield* Interaction.success("Planetscale: OAuth credentials saved.");
         return credentials;
       });
 
@@ -210,15 +206,13 @@ export const PlanetscaleAuth = AuthProviderLayer<
         selectOrganization,
         Effect.catch((e) =>
           Effect.gen(function* () {
-            yield* interaction.output.warning(
+            yield* Interaction.warning(
               `Planetscale: could not auto-list organizations (${String(e)}). Falling back to manual entry.`,
             );
-            return yield* interaction.prompt
-              .text({
-                message: "Planetscale Organization (URL slug)",
-                validate: (v) => (v.length === 0 ? "Required" : undefined),
-              })
-              .pipe(mapPromptCancellation);
+            return yield* Interaction.text({
+              message: "Planetscale Organization (URL slug)",
+              validate: (v) => (v.length === 0 ? "Required" : undefined),
+            }).pipe(mapPromptCancellation);
           }),
         ),
       );
@@ -235,46 +229,38 @@ export const PlanetscaleAuth = AuthProviderLayer<
     });
 
     const loginStored = Effect.fn(function* (_profileName: string) {
-      const tokenId = yield* interaction.prompt
-        .text({
-          message: "Planetscale Service Token ID",
-          validate: (v) => (v.length === 0 ? "Required" : undefined),
-        })
-        .pipe(mapPromptCancellation);
+      const tokenId = yield* Interaction.text({
+        message: "Planetscale Service Token ID",
+        validate: (v) => (v.length === 0 ? "Required" : undefined),
+      }).pipe(mapPromptCancellation);
 
-      const token = yield* interaction.prompt
-        .password({
-          message: "Planetscale Service Token",
-          validate: (v) => (v.length === 0 ? "Required" : undefined),
-        })
-        .pipe(mapPromptCancellation);
+      const token = yield* Interaction.password({
+        message: "Planetscale Service Token",
+        validate: (v) => (v.length === 0 ? "Required" : undefined),
+      }).pipe(mapPromptCancellation);
 
-      const organization = yield* interaction.prompt
-        .text({
-          message: "Planetscale Organization (URL slug)",
-          validate: (v) => (v.length === 0 ? "Required" : undefined),
-        })
-        .pipe(mapPromptCancellation);
+      const organization = yield* Interaction.text({
+        message: "Planetscale Organization (URL slug)",
+        validate: (v) => (v.length === 0 ? "Required" : undefined),
+      }).pipe(mapPromptCancellation);
 
-      yield* interaction.output.success("Planetscale: credentials saved.");
+      yield* Interaction.success("Planetscale: credentials saved.");
       return { method: "stored" as const, tokenId, token, organization };
     });
 
     const configureInteractive = (profileName: string) =>
-      interaction.prompt
-        .select({
-          message: "Planetscale authentication method",
-          options,
-        })
-        .pipe(
-          Effect.flatMap((method) =>
-            Match.value(method).pipe(
-              Match.when("oauth", () => configureOAuth(profileName)),
-              Match.when("stored", () => loginStored(profileName)),
-              Match.exhaustive,
-            ),
+      Interaction.select({
+        message: "Planetscale authentication method",
+        options,
+      }).pipe(
+        Effect.flatMap((method) =>
+          Match.value(method).pipe(
+            Match.when("oauth", () => configureOAuth(profileName)),
+            Match.when("stored", () => loginStored(profileName)),
+            Match.exhaustive,
           ),
-        );
+        ),
+      );
 
     const configureCredentials = (profileName: string) =>
       configureInteractive(profileName).pipe(
@@ -321,7 +307,7 @@ export const PlanetscaleAuth = AuthProviderLayer<
               token: Redacted.value(storedSecret(values.token) ?? Redacted.make("")),
               organization: storedValueText(values.organization) ?? "",
             })),
-            Effect.tap(() => interaction.output.success("Planetscale: credentials saved.")),
+            Effect.tap(() => Interaction.success("Planetscale: credentials saved.")),
           )
         : Effect.fail(
             AuthError.make({
@@ -438,7 +424,7 @@ export const PlanetscaleAuth = AuthProviderLayer<
             }
             const refreshed = yield* withProfileCredentialsLock(
               profileName,
-              interaction.output.info("Planetscale: refreshing OAuth credentials...").pipe(
+              Interaction.info("Planetscale: refreshing OAuth credentials...").pipe(
                 Effect.andThen(OAuthClient.refresh(credentials)),
                 Effect.flatMap((credentials) => {
                   const config = {
@@ -451,9 +437,7 @@ export const PlanetscaleAuth = AuthProviderLayer<
                   };
                   return (updateConfig?.(config) ?? Effect.void).pipe(Effect.as(config));
                 }),
-                Effect.tap(() =>
-                  interaction.output.success("Planetscale: OAuth credentials refreshed."),
-                ),
+                Effect.tap(() => Interaction.success("Planetscale: OAuth credentials refreshed.")),
               ),
             ).pipe(
               Effect.catchTag(
