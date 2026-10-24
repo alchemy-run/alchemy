@@ -829,7 +829,7 @@ test.provider(
       yield* assertAlias(v1.functionName, "live", v1.version!);
       yield* assertUrlQualifier(v1.functionName, v1.functionUrl!, "live");
       expect(yield* eventSourceMappingTargets(v1.functionName)).toEqual([aliasArn]);
-      expect(yield* invokeHttpFunction(`${v1.functionName}:live`)).toBe("v1");
+      yield* expectServes(`${v1.functionName}:live`, "v1");
 
       // A new release advances the alias; consumers keep the same target.
       const v2 = yield* deploy("live", "v2");
@@ -838,7 +838,7 @@ test.provider(
       expect(Number(v2.version)).toBeGreaterThan(Number(v1.version));
       yield* assertAlias(v2.functionName, "live", v2.version!);
       expect(yield* eventSourceMappingTargets(v2.functionName)).toEqual([aliasArn]);
-      expect(yield* invokeHttpFunction(`${v2.functionName}:live`)).toBe("v2");
+      yield* expectServes(`${v2.functionName}:live`, "v2");
 
       // Rollback is one UpdateAlias call: everything wired to the alias
       // serves v1 again.
@@ -847,7 +847,7 @@ test.provider(
         Name: "live",
         FunctionVersion: v1.version!,
       });
-      expect(yield* invokeHttpFunction(`${v2.functionName}:live`)).toBe("v1");
+      yield* expectServes(`${v2.functionName}:live`, "v1");
 
       // Removing the alias moves the URL and mapping back to the function.
       const unaliased = yield* deploy(undefined, "v2");
@@ -861,7 +861,7 @@ test.provider(
       expect(yield* eventSourceMappingTargets(unaliased.functionName)).toEqual([
         unaliased.functionArn,
       ]);
-      expect(yield* invokeHttpFunction(unaliased.functionName)).toBe("v2");
+      yield* expectServes(unaliased.functionName, "v2");
 
       yield* stack.destroy();
       yield* assertFunctionDeleted(unaliased.functionName);
@@ -874,6 +874,19 @@ test.provider(
     timeout: 360_000,
   },
 );
+
+// Alias moves are eventually consistent: poll until the qualifier serves the
+// expected release.
+const expectServes = Effect.fn(function* (functionName: string, marker: string) {
+  const body = yield* invokeHttpFunction(functionName).pipe(
+    Effect.repeat({
+      schedule: Schedule.spaced("1 second"),
+      until: (body) => body === marker,
+      times: 20,
+    }),
+  );
+  expect(body).toBe(marker);
+});
 
 const assertAlias = Effect.fn(function* (functionName: string, alias: string, version: string) {
   const observed = yield* Lambda.getAlias({ FunctionName: functionName, Name: alias });
