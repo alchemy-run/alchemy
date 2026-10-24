@@ -884,6 +884,60 @@ test.provider(
 );
 
 test.provider(
+  "re-imports SQL that D1 already holds after a seed rollback",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const dir = yield* fs.makeTempDirectory({ prefix: "alchemy-d1-reimport-" });
+      const seedPath = path.join(dir, "seed.sql");
+      const seed = (mode: string) =>
+        fs.writeFileString(
+          seedPath,
+          [
+            "CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);",
+            `INSERT OR REPLACE INTO settings (key, value) VALUES ('mode', '${mode}');`,
+          ].join("\n"),
+        );
+      const deploy = stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.D1.Database("ReimportDatabase", { importFiles: [seedPath] });
+        }),
+      );
+      const mode = (databaseId: string) =>
+        queryAll<{ value: string }>(
+          accountId,
+          databaseId,
+          "SELECT value FROM settings WHERE key = 'mode';",
+        );
+
+      yield* stack.destroy();
+
+      yield* seed("v1");
+      const v1 = yield* deploy;
+      expect(yield* mode(v1.databaseId)).toEqual([{ value: "v1" }]);
+
+      yield* seed("v2");
+      const v2 = yield* deploy;
+      expect(v2.databaseId).toEqual(v1.databaseId);
+      expect(yield* mode(v2.databaseId)).toEqual([{ value: "v2" }]);
+
+      // Rolling back re-imports SQL whose etag D1 already holds: `init`
+      // returns no upload URL and the import has already completed.
+      yield* seed("v1");
+      const rolledBack = yield* deploy;
+      expect(rolledBack.databaseId).toEqual(v1.databaseId);
+      expect(rolledBack.importHashes[seedPath]).toEqual(v1.importHashes[seedPath]);
+      expect(yield* mode(rolledBack.databaseId)).toEqual([{ value: "v1" }]);
+
+      yield* stack.destroy();
+      yield* waitForDatabaseToBeDeleted(v1.databaseId, accountId);
+    }).pipe(logLevel),
+  { tags: ["provider:cloudflare", "provider:cloudflare:d1", "live"] },
+);
+
+test.provider(
   "clones a database by databaseId",
   (stack) =>
     Effect.gen(function* () {

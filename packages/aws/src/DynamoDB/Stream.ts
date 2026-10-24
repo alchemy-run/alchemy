@@ -1,13 +1,36 @@
 import type * as DynamoDB from "@distilled.cloud/aws/dynamodb";
 import * as Binding from "alchemy/Binding";
+import type * as lambda from "aws-lambda";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
-import * as Stream from "effect/Stream";
 import type { Table, TableEvent, TableRecord } from "./Table.ts";
 
 export type StreamRecord<Data> = TableRecord<Data>;
 
 export type StreamEvent<Data> = TableEvent<Data>;
+
+/**
+ * Lambda's partial-batch response for DynamoDB Streams. Report the
+ * `SequenceNumber` of the first record that failed as `itemIdentifier`;
+ * Lambda checkpoints before it and retries from there.
+ */
+export type DynamoDBBatchResponse = import("aws-lambda").DynamoDBBatchResponse;
+
+/**
+ * Handler for one delivered batch of table changes: receives the
+ * {@link StreamEvent} and returns Lambda's {@link DynamoDBBatchResponse} (or
+ * `void` when every record succeeded). A failure or defect retries the whole
+ * batch.
+ *
+ * Row images default to raw attribute values; annotate the parameter
+ * (`event: DynamoDB.StreamEvent<Order>`) to type them. The method form keeps
+ * the parameter bivariant so an annotated handler is accepted.
+ */
+export type TableChangesHandler<E = never, Req = never> = {
+  handle(
+    event: StreamEvent<Record<string, lambda.AttributeValue>>,
+  ): Effect.Effect<DynamoDBBatchResponse | void, E, Req>;
+}["handle"];
 
 /**
  * Event source binding that subscribes a Lambda function to a DynamoDB
@@ -27,12 +50,10 @@ export interface TableEventSource extends Binding.Service<
 > {}
 export const TableEventSource = Binding.Service<TableEventSource>("AWS.DynamoDB.TableEventSource");
 
-export type TableEventSourceService = <Data = unknown, StreamReq = never, Req = never>(
+export type TableEventSourceService = <E = never, Req = never>(
   table: Table,
   props: StreamsProps,
-  process: (
-    stream: Stream.Stream<StreamRecord<Data>, never, StreamReq>,
-  ) => Effect.Effect<void, never, Req>,
+  process: TableChangesHandler<E, Req>,
 ) => Effect.Effect<void, never, never>;
 
 export interface TableEventSourceProps {
@@ -97,8 +118,15 @@ export interface StreamsProps extends TableEventSourceProps {
 /**
  * Consume change data capture events from a DynamoDB table via a Lambda
  * event source mapping. The stream is enabled automatically through the
- * binding contract. The handler receives each delivered batch as an Effect
- * `Stream` of change records.
+ * binding contract.
+ *
+ * The handler receives each delivered {@link StreamEvent} (only the records
+ * from `table`) and returns Lambda's {@link DynamoDBBatchResponse}: name the
+ * first failed record's `SequenceNumber` to checkpoint before it, or return
+ * `void` when every record succeeded. If the handler fails, the whole batch is
+ * retried.
+ *
+ * Each batch runs inside a `process <table>` span (`SpanKind.CONSUMER`).
  *
  * Provide `Lambda.TableEventSource` on the Function to satisfy the binding.
  *
@@ -107,41 +135,61 @@ export interface StreamsProps extends TableEventSourceProps {
  * yield* DynamoDB.consumeTableChanges(
  *   table,
  *   { streamViewType: "NEW_AND_OLD_IMAGES", startingPosition: "TRIM_HORIZON" },
- *   (stream) =>
- *     stream.pipe(
- *       Stream.runForEach((record) =>
- *         Effect.log(`${record.eventName}: ${JSON.stringify(record.dynamodb.Keys)}`),
- *       ),
- *     ),
+ *   Effect.fn(function* (event) {
+ *     for (const record of event.Records) {
+ *       yield* Effect.log(`${record.eventName}: ${JSON.stringify(record.dynamodb.Keys)}`);
+ *     }
+ *   }),
  * );
  * ```
  *
- * @example Forward changes to an SQS queue via QueueSink
+ * @example Type the row images
  * ```typescript
- * const sink = yield* AWS.SQS.QueueSink(queue);
+ * interface Order {
+ *   id: { S: string };
+ *   status: { S: string };
+ * }
+ *
+ * yield* DynamoDB.consumeTableChanges(
+ *   table,
+ *   { streamViewType: "NEW_IMAGE" },
+ *   Effect.fn(function* (event: DynamoDB.StreamEvent<Order>) {
+ *     for (const record of event.Records) {
+ *       yield* Effect.log(record.dynamodb.NewImage?.status.S);
+ *     }
+ *   }),
+ * );
+ * ```
+ *
+ * @example Checkpoint at the first failed record
+ * ```typescript
+ * const sendMessage = yield* AWS.SQS.SendMessage(queue);
  *
  * yield* DynamoDB.consumeTableChanges(
  *   table,
  *   { streamViewType: "NEW_AND_OLD_IMAGES", batchSize: 10 },
- *   (stream) =>
- *     stream.pipe(
- *       Stream.map((record) => ({
+ *   Effect.fn(function* (event) {
+ *     for (const record of event.Records) {
+ *       const ok = yield* sendMessage({
  *         MessageBody: JSON.stringify({
  *           eventName: record.eventName,
  *           keys: record.dynamodb.Keys,
  *           newImage: record.dynamodb.NewImage,
  *         }),
- *       })),
- *       Stream.run(sink),
- *       Effect.orDie,
- *     ),
+ *       }).pipe(
+ *         Effect.as(true),
+ *         Effect.catchCause(() => Effect.succeed(false)),
+ *       );
+ *       if (!ok) {
+ *         return { batchItemFailures: [{ itemIdentifier: record.dynamodb.SequenceNumber! }] };
+ *       }
+ *     }
+ *   }),
  * );
  * ```
  */
-export const consumeTableChanges = <Data = unknown, Req = never, StreamReq = never>(
+export const consumeTableChanges = <E = never, Req = never>(
   table: Table,
   props: StreamsProps = {},
-  handler: (
-    stream: Stream.Stream<StreamRecord<Data>, never, StreamReq>,
-  ) => Effect.Effect<void, never, Req>,
+  handler: TableChangesHandler<E, Req>,
 ) => TableEventSource.use((source) => source(table, props, handler));

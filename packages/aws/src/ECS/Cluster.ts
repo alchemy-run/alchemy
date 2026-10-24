@@ -105,6 +105,22 @@ export const ClusterProvider = () =>
           value,
         }));
 
+      // The one projection of a described cluster onto Attributes, shared by
+      // read, list and reconcile so drift compares like with like.
+      const toAttrs = (cluster: ecs.Cluster, tags: Record<string, string>) => ({
+        clusterArn: cluster.clusterArn as ClusterArn,
+        clusterName: cluster.clusterName!,
+        status: cluster.status ?? "ACTIVE",
+        settings: cluster.settings ?? [],
+        configuration: cluster.configuration,
+        capacityProviders: cluster.capacityProviders ?? [],
+        defaultCapacityProviderStrategy: cluster.defaultCapacityProviderStrategy ?? [],
+        serviceConnectDefaults: cluster.serviceConnectDefaults?.namespace
+          ? { namespace: cluster.serviceConnectDefaults.namespace }
+          : undefined,
+        tags,
+      });
+
       const toClusterName = (id: string, props: { clusterName?: string } = {}) =>
         props.clusterName
           ? Effect.succeed(props.clusterName)
@@ -164,19 +180,7 @@ export const ClusterProvider = () =>
           if (!cluster?.clusterArn || cluster.status === "INACTIVE") {
             return undefined;
           }
-          return {
-            clusterArn: cluster.clusterArn as ClusterArn,
-            clusterName: cluster.clusterName!,
-            status: cluster.status ?? "ACTIVE",
-            settings: cluster.settings ?? [],
-            configuration: cluster.configuration,
-            capacityProviders: cluster.capacityProviders ?? [],
-            defaultCapacityProviderStrategy: cluster.defaultCapacityProviderStrategy ?? [],
-            serviceConnectDefaults: cluster.serviceConnectDefaults?.namespace
-              ? { namespace: cluster.serviceConnectDefaults.namespace }
-              : undefined,
-            tags: output?.tags ?? {},
-          };
+          return toAttrs(cluster, output?.tags ?? {});
         }),
         list: () =>
           Effect.gen(function* () {
@@ -220,21 +224,7 @@ export const ClusterProvider = () =>
                   )
                   .map((t) => [t.key, t.value]),
               );
-              return [
-                {
-                  clusterArn: cluster.clusterArn as ClusterArn,
-                  clusterName: cluster.clusterName!,
-                  status: cluster.status ?? "ACTIVE",
-                  settings: cluster.settings ?? [],
-                  configuration: cluster.configuration,
-                  capacityProviders: cluster.capacityProviders ?? [],
-                  defaultCapacityProviderStrategy: cluster.defaultCapacityProviderStrategy ?? [],
-                  serviceConnectDefaults: cluster.serviceConnectDefaults?.namespace
-                    ? { namespace: cluster.serviceConnectDefaults.namespace }
-                    : undefined,
-                  tags,
-                },
-              ];
+              return [toAttrs(cluster, tags)];
             });
           }),
         reconcile: Effect.fn(function* ({ id, news: rawNews, session }) {
@@ -341,17 +331,14 @@ export const ClusterProvider = () =>
           }
 
           yield* session.note(clusterArn);
-          return {
-            clusterArn,
-            clusterName,
-            status: cluster?.status ?? "ACTIVE",
-            settings: news.settings ?? [],
-            configuration: news.configuration,
-            capacityProviders: news.capacityProviders ?? [],
-            defaultCapacityProviderStrategy: news.defaultCapacityProviderStrategy ?? [],
-            serviceConnectDefaults: news.serviceConnectDefaults,
-            tags: desiredTags,
-          };
+          // Return what ECS reports, not the props: it fills in account
+          // defaults (e.g. `containerInsights`) that `read` observes, so
+          // echoing the props would report drift on an untouched cluster.
+          const final = (yield* ecs.describeClusters({
+            clusters: [clusterArn],
+            include: ["SETTINGS", "TAGS", "CONFIGURATIONS"],
+          })).clusters?.find((candidate) => candidate.clusterArn === clusterArn);
+          return toAttrs(final ?? cluster, desiredTags);
         }),
         delete: Effect.fn(function* ({ output }) {
           const cluster = output.clusterArn;

@@ -2,9 +2,11 @@ import { fileURLToPath } from "node:url";
 import * as AWS from "@alchemy.run/aws";
 import { describe, expect } from "@alchemy.run/test";
 import * as cloudfront from "@distilled.cloud/aws/cloudfront";
+import * as Output from "alchemy/Output";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import { expectUrlContains } from "../../Cloudflare/Utils/Http.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -34,6 +36,14 @@ describe.skipIf(!runLive)(
             Effect.gen(function* () {
               const router = yield* AWS.Website.Router("Router", {
                 invalidation: { paths: "all", wait: true },
+                routes: {
+                  // An Output url, like `api.functionUrl` — resolved at
+                  // deploy time rather than parsed up front.
+                  "/api/*": {
+                    url: Output.literal("https://example.com/"),
+                    rewrite: { regex: "^/api/.*$", to: "/" },
+                  },
+                },
               });
 
               const site = yield* AWS.Website.StaticSite("DocsSite", {
@@ -65,6 +75,13 @@ describe.skipIf(!runLive)(
           expect(
             config.DistributionConfig?.DefaultCacheBehavior?.FunctionAssociations?.Quantity,
           ).toBeGreaterThanOrEqual(1);
+
+          // The url route wins over the site at `/` and reaches its origin
+          // instead of falling through to the placeholder (#1645).
+          yield* expectUrlContains(`${deployed.router.url}/api/anything`, "Example Domain", {
+            timeout: "120 seconds",
+            label: "url route",
+          });
 
           yield* stack.destroy();
           yield* assertDistributionDeleted(deployed.router.distribution.distributionId);

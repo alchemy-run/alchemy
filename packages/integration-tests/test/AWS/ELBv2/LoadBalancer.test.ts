@@ -145,8 +145,8 @@ test.provider(
 
       const target = { name: stack.name, stage: stack.stage };
       const clean = yield* Drift.detect(target).pipe(Effect.provide(stack.state));
-      // The load balancer's own action also flips on subnet order (#1968), so
-      // its attribute checks compare the observed attributes directly.
+      // #1968: ELB returns subnets in its own order; that is not drift.
+      expect(clean.resources.DriftLb?.action).toBe("unchanged");
       expect(clean.resources.DriftLb?.attr.attributes).toEqual(lbAttributes);
       expect(clean.resources.DriftLbListener?.action).toBe("unchanged");
 
@@ -160,8 +160,9 @@ test.provider(
       });
 
       const drifted = yield* Drift.detect(target).pipe(Effect.provide(stack.state));
-      expect(drifted.resources.DriftLb?.attr.attributes).toEqual({
-        "idle_timeout.timeout_seconds": "60",
+      expect(drifted.resources.DriftLb).toMatchObject({
+        action: "drifted",
+        attr: { attributes: { "idle_timeout.timeout_seconds": "60" } },
       });
       expect(drifted.resources.DriftLbListener).toMatchObject({
         action: "drifted",
@@ -186,7 +187,7 @@ test.provider(
       ).toMatchObject(listenerAttributes);
 
       const settled = yield* Drift.detect(target).pipe(Effect.provide(stack.state));
-      expect(settled.resources.DriftLb?.attr.attributes).toEqual(lbAttributes);
+      expect(settled.resources.DriftLb?.action).toBe("unchanged");
       expect(settled.resources.DriftLbListener?.action).toBe("unchanged");
 
       yield* stack.destroy();
