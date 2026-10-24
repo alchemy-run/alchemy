@@ -135,11 +135,9 @@ export interface EntitySpec<P extends object, A extends object, K extends Entity
 
 /** Whether any field of the desired key differs from the recorded one. */
 const keysDiffer = (desired: EntityKey, recorded: EntityKey) => {
-  const left = desired as unknown as Record<string, unknown>;
-  const right = recorded as unknown as Record<string, unknown>;
-  return Object.keys(left).some((field) => {
-    const l = left[field];
-    const r = right[field];
+  const recordedFields = new Map<string, unknown>(Object.entries(recorded));
+  return Object.entries(desired).some(([field, l]: [string, unknown]) => {
+    const r = recordedFields.get(field);
     return typeof l === "string" && typeof r === "string" ? !sameName(l, r) : l !== r;
   });
 };

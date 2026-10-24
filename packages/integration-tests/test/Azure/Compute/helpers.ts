@@ -42,14 +42,14 @@ export const PUBLIC_KEY_2 =
  * capacity-restricted (`SkuNotAvailable`) in eastus/westus2 on the trial
  * subscription; the 1-vCPU F-series v7 sizes are unrestricted.
  */
-export const VM_LOCATION = process.env.AZURE_TEST_VM_LOCATION ?? "eastus";
-export const VM_SIZE = process.env.AZURE_TEST_VM_SIZE ?? "Standard_F1als_v7";
+export const VM_LOCATION = "eastus";
+export const VM_SIZE = "Standard_F1als_v7";
 /**
  * SCSI-controller size for restore point tests: restore points of VMs on
  * NVMe-only sizes (the v7 families) end in `Failed`.
  */
-export const SCSI_VM_SIZE = process.env.AZURE_TEST_SCSI_VM_SIZE ?? "Standard_D2as_v4";
-export const VM_SIZE_ALT = process.env.AZURE_TEST_VM_SIZE_ALT ?? "Standard_F1as_v7";
+export const SCSI_VM_SIZE = "Standard_D2as_v4";
+export const VM_SIZE_ALT = "Standard_F1as_v7";
 
 /**
  * Network for a VM: resource group, VNet, subnet, and a NIC without a
@@ -75,3 +75,22 @@ export const vmNetwork = (location = VM_LOCATION) =>
     });
     return { group, vnet, subnet, nic };
   });
+
+/**
+ * A one-instance `Uniform` scale set (1 vCPU) for instance-level tests. Its
+ * only instance has ID `"0"` (no overprovisioning).
+ */
+export const uniformScaleSet = Effect.gen(function* () {
+  const { group, subnet } = yield* vmNetwork();
+  const scaleSet = yield* Azure.Compute.VirtualMachineScaleSet("Vmss", {
+    resourceGroup: group.resourceGroupName,
+    location: VM_LOCATION,
+    orchestrationMode: "Uniform",
+    vmSize: VM_SIZE,
+    capacity: 1,
+    subnetId: subnet.subnetId,
+    adminUsername: "azureuser",
+    sshPublicKeys: [PUBLIC_KEY_1],
+  });
+  return { group, scaleSet };
+});

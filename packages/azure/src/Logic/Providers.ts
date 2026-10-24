@@ -25,6 +25,10 @@ import {
   IntegrationAccountSchema,
   IntegrationAccountSchemaProvider,
 } from "./IntegrationAccountSchema.ts";
+import {
+  IntegrationAccountSession,
+  IntegrationAccountSessionProvider,
+} from "./IntegrationAccountSession.ts";
 import { Workflow, WorkflowProvider } from "./Workflow.ts";
 
 export const resources = [
@@ -36,6 +40,7 @@ export const resources = [
   IntegrationAccountMap,
   IntegrationAccountPartner,
   IntegrationAccountSchema,
+  IntegrationAccountSession,
   Workflow,
 ];
 export const layers = () =>
@@ -48,5 +53,6 @@ export const layers = () =>
     IntegrationAccountMapProvider(),
     IntegrationAccountPartnerProvider(),
     IntegrationAccountSchemaProvider(),
+    IntegrationAccountSessionProvider(),
     WorkflowProvider(),
   );

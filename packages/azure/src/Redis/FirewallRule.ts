@@ -50,8 +50,8 @@ export interface FirewallRule extends Resource<
 
 /**
  * An IP range allowed to reach an `Azure.Redis.Cache` over its public
- * endpoint. Once a cache has any firewall rule, only addresses inside a
- * rule may connect.
+ * endpoint. Once a cache has at least one firewall rule, only addresses
+ * inside a rule may connect.
  *
  * Rules have no tags; they belong to the stage that owns their cache.
  *

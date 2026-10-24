@@ -46,8 +46,10 @@ test.provider(
         program({ announcement: "Welcome", tags: { env: "test" } }),
       );
       expect(lab.labName.length).toBeGreaterThan(0);
-      expect(lab.vaultName).toBeDefined();
-      expect(lab.defaultStorageAccount).toBeDefined();
+      expect(lab.vaultName).toMatch(/\/providers\/Microsoft\.KeyVault\/vaults\/[^/]+$/i);
+      expect(lab.defaultStorageAccount).toMatch(
+        /\/providers\/Microsoft\.Storage\/storageAccounts\/[^/]+$/i,
+      );
       const observed = yield* getLab(group.resourceGroupName, lab.labName);
       expect(observed.properties.labStorageType).toEqual("Standard");
       expect(observed.properties.announcement?.title).toEqual("Welcome");

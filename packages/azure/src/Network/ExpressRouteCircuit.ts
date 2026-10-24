@@ -4,7 +4,7 @@ import type { Resource } from "alchemy/Resource";
 import { orUndefinedIfNotFound, userTags } from "../Arm.ts";
 import type { Providers } from "../Providers.ts";
 import { GroupedResource } from "../StackResourceGroup.ts";
-import { lower } from "./common.ts";
+import { circuitPeeringInput, lower } from "./common.ts";
 import { idsOf, networkProvider } from "./generic.ts";
 
 export interface ExpressRouteCircuitProps {
@@ -188,8 +188,7 @@ export const ExpressRouteCircuitProvider = () =>
               (p): network.ExpressRouteCircuitPeeringInput => ({
                 id: p.id,
                 name: p.name,
-                properties:
-                  p.properties as unknown as network.ExpressRouteCircuitPeeringPropertiesFormatInput,
+                properties: p.properties && circuitPeeringInput(p.properties),
               }),
             ),
           },

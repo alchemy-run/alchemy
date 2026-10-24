@@ -53,7 +53,7 @@ test.provider(
       const cust = customer.customerResourceName;
       expect(node.tags).toEqual({ env: "test" });
       expect(node.location.toLowerCase()).toEqual("westus");
-      expect(node.cacheNodeId).toBeDefined();
+      expect(node.cacheNodeId).toMatch(/^[0-9a-f-]{36}$/);
       expect(node.isProvisioned).toEqual(false);
       const observed = yield* untilSucceeded(getCacheNode(rg, cust, node.cacheNodeResourceName));
       expect(observed.properties?.cacheNode?.isEnabled).toEqual(false);
@@ -97,18 +97,17 @@ test.provider(
       );
       expect(replaced.node.cacheNodeResourceName).toEqual("alchemy-test-mcc-node-renamed");
       expect(replaced.node.proxyUrl).toBeUndefined();
-      expect(
-        (yield* getCacheNode(rg, cust, "alchemy-test-mcc-node-renamed")).properties?.cacheNode
-          ?.isEnabled,
-      ).toEqual(true);
-      expect(yield* untilGone(getCacheNode(rg, cust, node.cacheNodeResourceName))).toEqual("gone");
+      const renamed = yield* getCacheNode(rg, cust, "alchemy-test-mcc-node-renamed");
+      expect(renamed.properties?.cacheNode?.isEnabled).toEqual(true);
+      const oldGone = yield* untilGone(getCacheNode(rg, cust, node.cacheNodeResourceName));
+      expect(oldGone).toEqual("gone");
 
       // Delete.
       yield* stack.destroy();
-      expect(yield* untilGone(getCacheNode(rg, cust, "alchemy-test-mcc-node-renamed"))).toEqual(
-        "gone",
-      );
-      expect(yield* untilGone(getCustomer(rg, cust))).toEqual("gone");
+      const renamedGone = yield* untilGone(getCacheNode(rg, cust, "alchemy-test-mcc-node-renamed"));
+      expect(renamedGone).toEqual("gone");
+      const customerGone = yield* untilGone(getCustomer(rg, cust));
+      expect(customerGone).toEqual("gone");
     }).pipe(logLevel),
   { tags, timeout: 900_000 },
 );

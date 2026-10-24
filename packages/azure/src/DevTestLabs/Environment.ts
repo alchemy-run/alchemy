@@ -82,6 +82,10 @@ export interface Environment extends Resource<
  * deployed into its own resource group on behalf of a lab user. Deleting
  * the environment deletes that resource group.
  *
+ * The lab needs a `LabVirtualNetwork` with a subnet that allows VM
+ * creation, even when the template creates no VMs; otherwise the
+ * environment ends in `Failed` (`NoMatchingSubnetFoundAllowingVmCreation`).
+ *
  * @see https://learn.microsoft.com/azure/devtest-labs/devtest-lab-create-environment-from-arm
  *
  * ### Deploying a Template

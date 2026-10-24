@@ -38,7 +38,8 @@ export interface ServiceFabricScheduleProps extends ScheduleRecurrenceProps {
   /** Name of the lab Service Fabric registration. Changing it replaces the schedule. */
   serviceFabric: string;
   /**
-   * Task to run for the cluster.
+   * Task to run for the cluster. Startup schedules (`LabVmsStartupTask`)
+   * require `weeklyRecurrence`. Changing it replaces the schedule.
    * @default "LabVmsShutdownTask"
    */
   taskType?: ServiceFabricScheduleTaskType;

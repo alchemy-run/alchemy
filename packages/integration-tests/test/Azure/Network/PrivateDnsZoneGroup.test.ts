@@ -113,7 +113,6 @@ test.provider(
 
       // Step 2: the zone group registers the endpoint's A record.
       const { account, endpoint, zoneGroup } = yield* stack.deploy(program({ zoneId }));
-      expect(zoneGroup).toBeDefined();
       expect(zoneGroup!.privateDnsZoneIds.map((z) => z.toLowerCase())).toEqual([
         zoneId.toLowerCase(),
       ]);

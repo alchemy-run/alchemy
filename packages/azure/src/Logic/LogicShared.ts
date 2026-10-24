@@ -11,10 +11,11 @@ import { isOwned } from "../Arm.ts";
 
 /**
  * Generated name for workflows, integration accounts, and integration
- * account artifacts: 1-80 letters, digits, `-`, `_`, `.`, `(`, `)`.
+ * account artifacts: letters, digits, `-`, `_`, `.`, `(`, `)`, at most
+ * `maxLength` (80; batch configurations allow 20).
  */
-export const createLogicName = Effect.fn(function* (id: string) {
-  const name = yield* createPhysicalName({ id, maxLength: 80 });
+export const createLogicName = Effect.fn(function* (id: string, maxLength = 80) {
+  const name = yield* createPhysicalName({ id, maxLength });
   return name.replace(/[^A-Za-z0-9\-_.()]/g, "-");
 });
 

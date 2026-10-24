@@ -65,7 +65,7 @@ test.provider(
       expect(observed.properties.category).toEqual("CustomKeys");
       expect(observed.properties.target).toEqual("https://example.com");
       const firstHash = observed.properties.metadata?.["alchemy::credentials"];
-      expect(firstHash).toBeDefined();
+      expect(firstHash).toMatch(/^[0-9a-f]{32}$/);
 
       // In place: target and credentials.
       yield* stack.deploy(

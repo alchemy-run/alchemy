@@ -163,7 +163,8 @@ test.provider.skipIf(!runExpensive)(
         target.vaultId.toLowerCase(),
       );
       expect(observed.properties?.requestMessage).toEqual("first");
-      expect(link.status).toBeDefined();
+      expect(link.status).toEqual(observed.properties?.status);
+      expect(typeof link.status).toEqual("string");
 
       // Replacement: a new primary link (new target) yields a new copy.
       // The new primary link to vault B must be approved before its copy

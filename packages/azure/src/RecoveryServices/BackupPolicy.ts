@@ -262,30 +262,24 @@ const getPolicy = (
     }),
   );
 
-/** The policy body Alchemy sends (only fields the user set). */
-const desiredProperties = (news: BackupPolicyProps): backup.ProtectionPolicy => {
-  const body: Record<string, unknown> = {
-    backupManagementType: news.backupManagementType,
-    timeZone: news.timeZone ?? "UTC",
-  };
-  const optional = {
-    workLoadType: news.workLoadType,
-    policyType: news.policyType,
-    schedulePolicy: news.schedulePolicy,
-    retentionPolicy: news.retentionPolicy,
-    vaultRetentionPolicy: news.vaultRetentionPolicy,
-    instantRpRetentionRangeInDays: news.instantRpRetentionRangeInDays,
-    tieringPolicy: news.tieringPolicy,
-    settings: news.settings,
-    subProtectionPolicy: news.subProtectionPolicy,
-  };
-  for (const [key, value] of Object.entries(optional)) {
-    if (value !== undefined) body[key] = value;
-  }
+/**
+ * The policy body Alchemy sends. Unset fields stay `undefined`: they are
+ * left out of the request and ignored by `matchesDesired`.
+ */
+const desiredProperties = (news: BackupPolicyProps): backup.ProtectionPolicy => ({
+  backupManagementType: news.backupManagementType,
   // AzureWorkload policies carry the time zone inside `settings`.
-  if (news.backupManagementType === "AzureWorkload") delete body.timeZone;
-  return body as unknown as backup.ProtectionPolicy;
-};
+  timeZone: news.backupManagementType === "AzureWorkload" ? undefined : (news.timeZone ?? "UTC"),
+  workLoadType: news.workLoadType,
+  policyType: news.policyType,
+  schedulePolicy: news.schedulePolicy,
+  retentionPolicy: news.retentionPolicy,
+  vaultRetentionPolicy: news.vaultRetentionPolicy,
+  instantRpRetentionRangeInDays: news.instantRpRetentionRangeInDays,
+  tieringPolicy: news.tieringPolicy,
+  settings: news.settings,
+  subProtectionPolicy: news.subProtectionPolicy,
+});
 
 const toAttrs = (
   resourceGroup: string,

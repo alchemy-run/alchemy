@@ -57,8 +57,9 @@ test.provider(
           }),
         );
         const rg = group.resourceGroupName;
-        expect(context.uniqueIdentifier).toBeDefined();
         const observed = yield* getContext(rg, context.contextName);
+        expect(context.uniqueIdentifier).toEqual(observed.properties?.uniqueIdentifier);
+        expect(context.uniqueIdentifier?.length ?? 0).toBeGreaterThan(0);
         expect(observed.properties?.capabilities.map((c) => c.name)).toEqual(["soap"]);
         expect(observed.tags?.["alchemy::id"]).toEqual("Context");
 

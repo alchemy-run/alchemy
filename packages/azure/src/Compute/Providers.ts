@@ -40,6 +40,18 @@ import {
   VirtualMachineScaleSetExtension,
   VirtualMachineScaleSetExtensionProvider,
 } from "./VirtualMachineScaleSetExtension.ts";
+import {
+  VirtualMachineScaleSetVMDiagnosticRunCommand,
+  VirtualMachineScaleSetVMDiagnosticRunCommandProvider,
+} from "./VirtualMachineScaleSetVMDiagnosticRunCommand.ts";
+import {
+  VirtualMachineScaleSetVMExtension,
+  VirtualMachineScaleSetVMExtensionProvider,
+} from "./VirtualMachineScaleSetVMExtension.ts";
+import {
+  VirtualMachineScaleSetVMRunCommand,
+  VirtualMachineScaleSetVMRunCommandProvider,
+} from "./VirtualMachineScaleSetVMRunCommand.ts";
 
 export const resources = [
   AvailabilitySet,
@@ -59,6 +71,9 @@ export const resources = [
   VirtualMachineRunCommand,
   VirtualMachineScaleSet,
   VirtualMachineScaleSetExtension,
+  VirtualMachineScaleSetVMDiagnosticRunCommand,
+  VirtualMachineScaleSetVMExtension,
+  VirtualMachineScaleSetVMRunCommand,
 ];
 export const layers = () =>
   Layer.mergeAll(
@@ -79,4 +94,7 @@ export const layers = () =>
     VirtualMachineRunCommandProvider(),
     VirtualMachineScaleSetProvider(),
     VirtualMachineScaleSetExtensionProvider(),
+    VirtualMachineScaleSetVMDiagnosticRunCommandProvider(),
+    VirtualMachineScaleSetVMExtensionProvider(),
+    VirtualMachineScaleSetVMRunCommandProvider(),
   );

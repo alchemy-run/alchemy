@@ -14,6 +14,7 @@ import {
   ApplicationSecurityGroupAddressPrefixSet,
   ApplicationSecurityGroupAddressPrefixSetProvider,
 } from "./ApplicationSecurityGroupAddressPrefixSet.ts";
+import { AuthenticationPolicy, AuthenticationPolicyProvider } from "./AuthenticationPolicy.ts";
 import { AzureFirewall, AzureFirewallProvider } from "./AzureFirewall.ts";
 import { BastionHost, BastionHostProvider } from "./BastionHost.ts";
 import { ConnectionAnalyzer, ConnectionAnalyzerProvider } from "./ConnectionAnalyzer.ts";
@@ -23,6 +24,7 @@ import {
   ConnectivityConfigurationProvider,
 } from "./ConnectivityConfiguration.ts";
 import { CustomIpPrefix, CustomIpPrefixProvider } from "./CustomIpPrefix.ts";
+import { DdosCustomPolicy, DdosCustomPolicyProvider } from "./DdosCustomPolicy.ts";
 import { DdosProtectionPlan, DdosProtectionPlanProvider } from "./DdosProtectionPlan.ts";
 import { DscpConfiguration, DscpConfigurationProvider } from "./DscpConfiguration.ts";
 import { ExpressRouteCircuit, ExpressRouteCircuitProvider } from "./ExpressRouteCircuit.ts";
@@ -34,6 +36,15 @@ import {
   ExpressRouteCircuitConnection,
   ExpressRouteCircuitConnectionProvider,
 } from "./ExpressRouteCircuitConnection.ts";
+import {
+  ExpressRouteCircuitPeering,
+  ExpressRouteCircuitPeeringProvider,
+} from "./ExpressRouteCircuitPeering.ts";
+import {
+  ExpressRouteConnection,
+  ExpressRouteConnectionProvider,
+} from "./ExpressRouteConnection.ts";
+import { ExpressRouteGateway, ExpressRouteGatewayProvider } from "./ExpressRouteGateway.ts";
 import { ExpressRouteLag, ExpressRouteLagProvider } from "./ExpressRouteLag.ts";
 import { ExpressRoutePort, ExpressRoutePortProvider } from "./ExpressRoutePort.ts";
 import {
@@ -61,6 +72,7 @@ import {
 } from "./HubVirtualNetworkConnection.ts";
 import { InboundNatRule, InboundNatRuleProvider } from "./InboundNatRule.ts";
 import { InterconnectGroup, InterconnectGroupProvider } from "./InterconnectGroup.ts";
+import { IpAllocation, IpAllocationProvider } from "./IpAllocation.ts";
 import { IpamPool, IpamPoolProvider } from "./IpamPool.ts";
 import { IpamPoolStaticCidr, IpamPoolStaticCidrProvider } from "./IpamPoolStaticCidr.ts";
 import { IpGroup, IpGroupProvider } from "./IpGroup.ts";
@@ -86,6 +98,7 @@ import {
   NetworkManagerConnection,
   NetworkManagerConnectionProvider,
 } from "./NetworkManagerConnection.ts";
+import { NetworkProfile, NetworkProfileProvider } from "./NetworkProfile.ts";
 import { NetworkSecurityGroup, NetworkSecurityGroupProvider } from "./NetworkSecurityGroup.ts";
 import {
   NetworkSecurityPerimeter,
@@ -174,6 +187,7 @@ import {
 import { ServiceGateway, ServiceGatewayProvider } from "./ServiceGateway.ts";
 import { Subnet, SubnetProvider } from "./Subnet.ts";
 import { VerifierWorkspace, VerifierWorkspaceProvider } from "./VerifierWorkspace.ts";
+import { VirtualApplianceSite, VirtualApplianceSiteProvider } from "./VirtualApplianceSite.ts";
 import { VirtualHub, VirtualHubProvider } from "./VirtualHub.ts";
 import {
   VirtualHubBgpConnection,
@@ -192,8 +206,19 @@ import {
   VirtualNetworkAppliance,
   VirtualNetworkApplianceProvider,
 } from "./VirtualNetworkAppliance.ts";
+import { VirtualNetworkGateway, VirtualNetworkGatewayProvider } from "./VirtualNetworkGateway.ts";
+import {
+  VirtualNetworkGatewayConnection,
+  VirtualNetworkGatewayConnectionProvider,
+} from "./VirtualNetworkGatewayConnection.ts";
+import {
+  VirtualNetworkGatewayNatRule,
+  VirtualNetworkGatewayNatRuleProvider,
+} from "./VirtualNetworkGatewayNatRule.ts";
 import { VirtualNetworkPeering, VirtualNetworkPeeringProvider } from "./VirtualNetworkPeering.ts";
 import { VirtualNetworkTap, VirtualNetworkTapProvider } from "./VirtualNetworkTap.ts";
+import { VirtualRouter, VirtualRouterProvider } from "./VirtualRouter.ts";
+import { VirtualRouterPeering, VirtualRouterPeeringProvider } from "./VirtualRouterPeering.ts";
 import { VirtualWan, VirtualWanProvider } from "./VirtualWan.ts";
 import { VpnConnection, VpnConnectionProvider } from "./VpnConnection.ts";
 import { VpnGateway, VpnGatewayProvider } from "./VpnGateway.ts";
@@ -311,6 +336,19 @@ export const resources = [
   NetworkVirtualApplianceConnection,
   NetworkVirtualApplianceInboundSecurityRule,
   ExpressRouteCircuitConnection,
+  AuthenticationPolicy,
+  VirtualNetworkGateway,
+  VirtualNetworkGatewayNatRule,
+  VirtualNetworkGatewayConnection,
+  VirtualRouter,
+  VirtualRouterPeering,
+  ExpressRouteGateway,
+  ExpressRouteConnection,
+  DdosCustomPolicy,
+  IpAllocation,
+  NetworkProfile,
+  ExpressRouteCircuitPeering,
+  VirtualApplianceSite,
 ];
 
 export const layers = () =>
@@ -419,5 +457,18 @@ export const layers = () =>
       NetworkVirtualApplianceConnectionProvider(),
       NetworkVirtualApplianceInboundSecurityRuleProvider(),
       ExpressRouteCircuitConnectionProvider(),
+      AuthenticationPolicyProvider(),
+      VirtualNetworkGatewayProvider(),
+      VirtualNetworkGatewayNatRuleProvider(),
+      VirtualNetworkGatewayConnectionProvider(),
+      VirtualRouterProvider(),
+      VirtualRouterPeeringProvider(),
+      ExpressRouteGatewayProvider(),
+      ExpressRouteConnectionProvider(),
+      DdosCustomPolicyProvider(),
+      IpAllocationProvider(),
+      NetworkProfileProvider(),
+      ExpressRouteCircuitPeeringProvider(),
+      VirtualApplianceSiteProvider(),
     ),
   );

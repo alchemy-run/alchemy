@@ -1,5 +1,6 @@
 export type { EventGridIdentity, EventGridIdentityType, EventGridInboundIpRule } from "./common.ts";
 export * from "./CaCertificate.ts";
+export * from "./Channel.ts";
 export * from "./Client.ts";
 export * from "./ClientGroup.ts";
 export * from "./Domain.ts";
@@ -11,6 +12,10 @@ export * from "./Namespace.ts";
 export * from "./NamespaceTopic.ts";
 export * from "./NamespaceTopicEventSubscription.ts";
 export * from "./PartnerConfiguration.ts";
+export * from "./PartnerNamespace.ts";
+export * from "./PartnerRegistration.ts";
+export * from "./PartnerTopic.ts";
+export * from "./PartnerTopicEventSubscription.ts";
 export * from "./PermissionBinding.ts";
 export * from "./SystemTopic.ts";
 export * from "./SystemTopicEventSubscription.ts";

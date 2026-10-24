@@ -2,7 +2,7 @@ import * as Azure from "@alchemy.run/azure";
 import { expect } from "alchemy-test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
-import { getCustomer, logLevel, tags, untilGone, untilSucceeded } from "./util.ts";
+import { getCustomer, logLevel, tags, untilGone, untilObserved, untilSucceeded } from "./util.ts";
 
 const { test } = Test.make({ providers: Azure.providers() });
 
@@ -47,7 +47,10 @@ test.provider(
         program({ contactName: "Alchemy Ops", tags: { env: "prod" } }),
       );
       expect(updated.customer.customerResourceName).toEqual(customer.customerResourceName);
-      const afterUpdate = yield* getCustomer(rg, customer.customerResourceName);
+      const afterUpdate = yield* untilObserved(
+        getCustomer(rg, customer.customerResourceName),
+        (c) => c.properties?.customer?.contactName === "Alchemy Ops",
+      );
       expect(afterUpdate.tags?.env).toEqual("prod");
       expect(afterUpdate.properties?.customer?.contactName).toEqual("Alchemy Ops");
 
@@ -60,12 +63,15 @@ test.provider(
         }),
       );
       expect(replaced.customer.customerResourceName).toEqual("alchemy-test-mcc-renamed");
-      expect((yield* getCustomer(rg, "alchemy-test-mcc-renamed")).tags?.env).toEqual("prod");
-      expect(yield* untilGone(getCustomer(rg, customer.customerResourceName))).toEqual("gone");
+      const renamed = yield* getCustomer(rg, "alchemy-test-mcc-renamed");
+      expect(renamed.tags?.env).toEqual("prod");
+      const oldGone = yield* untilGone(getCustomer(rg, customer.customerResourceName));
+      expect(oldGone).toEqual("gone");
 
       // Delete.
       yield* stack.destroy();
-      expect(yield* untilGone(getCustomer(rg, "alchemy-test-mcc-renamed"))).toEqual("gone");
+      const renamedGone = yield* untilGone(getCustomer(rg, "alchemy-test-mcc-renamed"));
+      expect(renamedGone).toEqual("gone");
     }).pipe(logLevel),
   { tags, timeout: 900_000 },
 );

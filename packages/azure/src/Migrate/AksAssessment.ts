@@ -71,8 +71,11 @@ export interface AksAssessment extends Resource<
  * Azure Kubernetes Service clusters and cost needed to containerize
  * discovered web applications.
  *
- * Assessments cannot be tagged; Alchemy treats an assessment as owned when
- * its assessment project carries this stack's and stage's ownership tags.
+ * The project must hold web apps an appliance discovered; in a project
+ * without them Azure rejects the assessment with an HTTP 400 ("Bug
+ * Encountered in code."). Assessments cannot be tagged; Alchemy treats an
+ * assessment as owned when its assessment project carries this stack's and
+ * stage's ownership tags.
  *
  * @see https://learn.microsoft.com/azure/migrate/concepts-azure-kubernetes-service-assessment-calculation
  *

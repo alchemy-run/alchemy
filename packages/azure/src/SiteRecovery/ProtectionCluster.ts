@@ -96,7 +96,8 @@ export interface ProtectionCluster extends Resource<
  * when its vault is tagged for the current stack and stage. There is no
  * update API, so every change replaces the cluster, and delete is the
  * purge operation. Requires two or more VMs sharing a Premium SSD shared
- * disk, each already a {@link ProtectedItem}.
+ * disk, each already a {@link ProtectedItem}; without nodes the create
+ * fails with `SiteRecoveryOperationNotStarted`.
  *
  * @see https://learn.microsoft.com/rest/api/site-recovery/replication-protection-clusters/create
  *

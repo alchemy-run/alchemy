@@ -68,9 +68,8 @@ test.provider.skipIf(!runPaidOnly || !externalPfx)(
       const updated = yield* stack.deploy(program({ secret: "A", pinVersion: true }));
       expect(updated.certificate.certificateId).toEqual(certificate.certificateId);
       const reobserved = yield* get(certificate.certificateName);
-      expect(reobserved.properties.keyVaultSecretVersion).toBeDefined();
-      expect(updated.secret.secretUriWithVersion).toContain(
-        reobserved.properties.keyVaultSecretVersion!,
+      expect(reobserved.properties.keyVaultSecretVersion).toEqual(
+        updated.secret.secretUriWithVersion.split("/").pop(),
       );
 
       // Replacement: the secret name is immutable.

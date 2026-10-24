@@ -34,7 +34,17 @@ const environmentGone = (resourceGroupName: string, name: string) =>
     }),
   );
 
-const program = (props: { tags: Record<string, string> }) =>
+const getNetworking = (resourceGroupName: string, name: string) =>
+  Effect.gen(function* () {
+    const { subscriptionId } = yield* Azure.AzureEnvironment.current;
+    return yield* web.GetAppServiceEnvironmentAseV3NetworkingConfiguration({
+      subscriptionId,
+      resourceGroupName,
+      name,
+    });
+  });
+
+const program = (props: { tags: Record<string, string>; ftpEnabled: boolean }) =>
   Effect.gen(function* () {
     const group = yield* Azure.Resources.ResourceGroup("Group", {
       location: "eastus",
@@ -54,6 +64,7 @@ const program = (props: { tags: Record<string, string> }) =>
       resourceGroup: group.resourceGroupName,
       location: "eastus",
       subnetId: subnet.subnetId,
+      networking: { ftpEnabled: props.ftpEnabled, remoteDebugEnabled: false },
       tags: props.tags,
     });
     return { group, ase };
@@ -69,7 +80,9 @@ test.provider.skipIf(!(runExpensive && runPaidOnly))(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const { group, ase } = yield* stack.deploy(program({ tags: { env: "test" } }));
+      const { group, ase } = yield* stack.deploy(
+        program({ tags: { env: "test" }, ftpEnabled: false }),
+      );
       const observed = yield* getEnvironment(
         group.resourceGroupName,
         ase.appServiceEnvironmentName,
@@ -77,15 +90,25 @@ test.provider.skipIf(!(runExpensive && runPaidOnly))(
       expect(observed.properties?.provisioningState).toEqual("Succeeded");
       expect(observed.tags?.env).toEqual("test");
       expect(observed.tags?.["alchemy::id"]).toEqual("Ase");
+      const networking = yield* getNetworking(
+        group.resourceGroupName,
+        ase.appServiceEnvironmentName,
+      );
+      expect(networking.properties?.ftpEnabled).toEqual(false);
 
-      // In-place update: tags.
-      const updated = yield* stack.deploy(program({ tags: { env: "prod" } }));
+      // In-place update: tags and the networking configuration.
+      const updated = yield* stack.deploy(program({ tags: { env: "prod" }, ftpEnabled: true }));
       expect(updated.ase.appServiceEnvironmentId).toEqual(ase.appServiceEnvironmentId);
       const retagged = yield* getEnvironment(
         group.resourceGroupName,
         ase.appServiceEnvironmentName,
       );
       expect(retagged.tags?.env).toEqual("prod");
+      const renetworked = yield* getNetworking(
+        group.resourceGroupName,
+        ase.appServiceEnvironmentName,
+      );
+      expect(renetworked.properties?.ftpEnabled).toEqual(true);
 
       yield* stack.destroy();
       expect(

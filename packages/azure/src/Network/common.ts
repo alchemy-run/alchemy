@@ -232,3 +232,23 @@ export const peeringInput = (
     },
   };
 };
+
+/**
+ * Re-encode an observed ExpressRoute circuit peering as PUT input: the
+ * circuit PUT replaces its peerings, so the circuit re-sends them.
+ */
+export const circuitPeeringInput = (
+  p: network.ExpressRouteCircuitPeeringPropertiesFormat,
+): network.ExpressRouteCircuitPeeringPropertiesFormatInput => ({
+  peeringType: p.peeringType,
+  state: p.state,
+  peerASN: p.peerASN,
+  primaryPeerAddressPrefix: p.primaryPeerAddressPrefix,
+  secondaryPeerAddressPrefix: p.secondaryPeerAddressPrefix,
+  sharedKey: p.sharedKey,
+  vlanId: p.vlanId,
+  microsoftPeeringConfig: p.microsoftPeeringConfig,
+  routeFilter: ref(p.routeFilter?.id),
+  ipv6PeeringConfig: p.ipv6PeeringConfig,
+  connections: p.connections?.map((c) => ({ id: c.id, name: c.name, properties: c.properties })),
+});

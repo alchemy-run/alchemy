@@ -62,7 +62,7 @@ export interface CacheRedisConfiguration {
   notifyKeyspaceEvents?: string;
   /**
    * Enable Microsoft Entra authentication, required for
-   * `Azure.Redis.AccessPolicyAssignment`-style data access with tokens.
+   * `Azure.Redis.CacheAccessPolicyAssignment` data access with tokens.
    */
   aadEnabled?: boolean;
   /** Enable RDB snapshots to a storage account (Premium only). */

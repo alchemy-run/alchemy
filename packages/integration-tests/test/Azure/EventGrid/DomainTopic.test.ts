@@ -66,7 +66,7 @@ test.provider(
       yield* stack.destroy();
 
       const { group, domain, first, second } = yield* stack.deploy(program({ withFirst: true }));
-      expect(first).toBeDefined();
+      expect(first?.domainTopicName).toMatch(/^[A-Za-z0-9-]{3,50}$/);
       const firstName = first!.domainTopicName;
       expect(second.domainTopicId).toContain(
         `/domains/${domain.domainName}/topics/${second.domainTopicName}`,

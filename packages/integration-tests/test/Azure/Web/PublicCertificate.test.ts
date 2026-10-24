@@ -165,3 +165,91 @@ test.provider(
     timeout: 1_800_000,
   },
 );
+
+const slotProgram = (installed: boolean) =>
+  Effect.gen(function* () {
+    const group = yield* Azure.Resources.ResourceGroup("Group", {
+      location: "eastus",
+    });
+    // Slots need a Standard (S1) Windows plan; westus2 accepts S1 plans.
+    const plan = yield* Azure.Web.AppServicePlan("Plan", {
+      resourceGroup: group.resourceGroupName,
+      location: "westus2",
+      sku: "S1",
+      os: "windows",
+    });
+    const app = yield* Azure.Web.WebApp("Site", {
+      resourceGroup: group.resourceGroupName,
+      serverFarmId: plan.appServicePlanId,
+      os: "windows",
+      siteConfig: { alwaysOn: false },
+    });
+    const slot = yield* Azure.Web.WebAppSlot("Slot", {
+      resourceGroup: group.resourceGroupName,
+      siteName: app.siteName,
+      name: "staging",
+      siteConfig: { alwaysOn: false },
+    });
+    const publicCert = installed
+      ? yield* Azure.Web.PublicCertificate("Ca", {
+          resourceGroup: group.resourceGroupName,
+          siteName: app.siteName,
+          slot: slot.slotName,
+          name: "alchemy-slot-ca",
+          blob: CER_BASE64,
+        })
+      : undefined;
+    return { group, app, publicCert };
+  });
+
+const getSlotCertificate = (resourceGroupName: string, name: string) =>
+  Effect.gen(function* () {
+    const { subscriptionId } = yield* Azure.AzureEnvironment.current;
+    return yield* web.GetWebAppPublicCertificateSlot({
+      subscriptionId,
+      resourceGroupName,
+      name,
+      slot: "staging",
+      publicCertificateName: "alchemy-slot-ca",
+    });
+  });
+
+// S1 Windows plan: ~$0.10/h, about $0.02 per run. Provisioning: ~3 minutes.
+test.provider(
+  "upload and delete a public certificate on a deployment slot",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const { group, app, publicCert } = yield* stack.deploy(slotProgram(true));
+      expect(publicCert?.slot).toEqual("staging");
+      expect(publicCert?.thumbprint?.toUpperCase()).toEqual(PFX_THUMBPRINT);
+      const observed = yield* getSlotCertificate(group.resourceGroupName, app.siteName);
+      expect(observed.properties?.thumbprint?.toUpperCase()).toEqual(PFX_THUMBPRINT);
+      // The production slot does not get the certificate.
+      expect(
+        yield* certificateGone(group.resourceGroupName, app.siteName, "alchemy-slot-ca"),
+      ).toEqual("gone");
+
+      // Delete only the certificate.
+      yield* stack.deploy(slotProgram(false));
+      const after = yield* getSlotCertificate(group.resourceGroupName, app.siteName).pipe(
+        Effect.as("found" as const),
+        Effect.catchTag(["ResourceNotFound", "ResourceGroupNotFound", "NotFound"], () =>
+          Effect.succeed("gone" as const),
+        ),
+        Effect.repeat({
+          schedule: Schedule.spaced("3 seconds"),
+          until: (status) => status === "gone",
+          times: 10,
+        }),
+      );
+      expect(after).toEqual("gone");
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  {
+    tags: ["provider:azure", "provider:azure:web", "live"],
+    timeout: 900_000,
+  },
+);

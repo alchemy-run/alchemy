@@ -70,7 +70,9 @@ test.provider(
       expect(domain.validationToken?.length ?? 0).toBeGreaterThan(0);
       const observed = yield* getDomain(group.resourceGroupName, site.staticSiteName, FIRST);
       expect(observed.properties?.validationToken).toEqual(domain.validationToken);
-      expect(["Validating", "Ready"]).toContain(observed.properties?.status);
+      // Nobody publishes the TXT record for example.com, so the domain stays
+      // pending validation.
+      expect(observed.properties?.status).toEqual("Validating");
 
       // A redeploy without changes leaves the domain in place.
       const same = yield* stack.deploy(program(FIRST));

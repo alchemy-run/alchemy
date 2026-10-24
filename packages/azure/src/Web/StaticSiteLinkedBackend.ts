@@ -25,6 +25,12 @@ export interface StaticSiteLinkedBackendProps {
   /** Name of the static site. Changing it replaces the link. */
   staticSiteName: string;
   /**
+   * Environment (build) the link applies to, e.g. a pull request preview
+   * environment. Changing it replaces the link.
+   * @default the production environment
+   */
+  environmentName?: string;
+  /**
    * Name of the link. If omitted, a unique name is generated from the app,
    * stage, and logical ID. Changing it replaces the link.
    */
@@ -54,6 +60,8 @@ export interface StaticSiteLinkedBackend extends Resource<
     linkedBackendName: string;
     /** Name of the static site. */
     staticSiteName: string;
+    /** Environment (build), if environment-scoped. */
+    environmentName: string | undefined;
     /** Resource group of the static site. */
     resourceGroup: string;
     /** ARM resource ID of the link. */
@@ -74,7 +82,9 @@ export interface StaticSiteLinkedBackend extends Resource<
 /**
  * Links an Azure Static Web App to a backend API (function app, container
  * app, API Management, or web app) so requests to `/api/*` are proxied to
- * it. Requires the `Standard` plan; a site has at most one linked backend.
+ * it (`Microsoft.Web/staticSites/linkedBackends`, or
+ * `staticSites/builds/linkedBackends` with `environmentName`). Requires the
+ * `Standard` plan; a site has at most one linked backend.
  *
  * @see https://learn.microsoft.com/azure/static-web-apps/apis-overview
  *
@@ -105,21 +115,22 @@ const getLink = (
   subscriptionId: string,
   resourceGroupName: string,
   name: string,
+  environmentName: string | undefined,
   linkedBackendName: string,
-) =>
-  orUndefinedIfNotFound(
-    web.GetStaticSiteLinkedBackend({
-      subscriptionId,
-      resourceGroupName,
-      name,
-      linkedBackendName,
-    }),
+) => {
+  const where = { subscriptionId, resourceGroupName, name, linkedBackendName };
+  return orUndefinedIfNotFound(
+    environmentName === undefined
+      ? web.GetStaticSiteLinkedBackend(where)
+      : web.GetStaticSiteLinkedBackendForBuild({ ...where, environmentName }),
   );
+};
 
 const toAttrs = (
   props: {
     resourceGroup: string;
     staticSiteName: string;
+    environmentName: string | undefined;
     linkedBackendName: string;
     cleanAuthConfigOnUnlink: boolean;
   },
@@ -127,6 +138,7 @@ const toAttrs = (
 ): StaticSiteLinkedBackend["Attributes"] => ({
   linkedBackendName: props.linkedBackendName,
   staticSiteName: props.staticSiteName,
+  environmentName: props.environmentName,
   resourceGroup: props.resourceGroup,
   linkedBackendId: link.id ?? "",
   backendResourceId: link.properties?.backendResourceId ?? "",
@@ -140,6 +152,7 @@ export const StaticSiteLinkedBackendProvider = () =>
     stables: [
       "linkedBackendName",
       "staticSiteName",
+      "environmentName",
       "resourceGroup",
       "linkedBackendId",
       "backendResourceId",
@@ -156,6 +169,7 @@ export const StaticSiteLinkedBackendProvider = () =>
       if (
         lower(news.resourceGroup) !== lower(output.resourceGroup) ||
         lower(news.staticSiteName) !== lower(output.staticSiteName) ||
+        news.environmentName !== output.environmentName ||
         (news.name !== undefined && lower(news.name) !== lower(output.linkedBackendName)) ||
         lower(news.backendResourceId) !== lower(output.backendResourceId) ||
         !sameLocation(news.region, output.region)
@@ -172,12 +186,14 @@ export const StaticSiteLinkedBackendProvider = () =>
       if (resourceGroup === undefined || staticSiteName === undefined) {
         return undefined;
       }
+      const environmentName = output?.environmentName ?? olds?.environmentName;
       const linkedBackendName =
         output?.linkedBackendName ?? olds?.name ?? (yield* createLinkName(id));
       const observed = yield* getLink(
         subscriptionId,
         resourceGroup,
         staticSiteName,
+        environmentName,
         linkedBackendName,
       );
       if (observed === undefined) return undefined;
@@ -185,6 +201,7 @@ export const StaticSiteLinkedBackendProvider = () =>
         {
           resourceGroup,
           staticSiteName,
+          environmentName,
           linkedBackendName,
           cleanAuthConfigOnUnlink:
             output?.cleanAuthConfigOnUnlink ?? olds?.cleanAuthConfigOnUnlink ?? true,
@@ -202,6 +219,7 @@ export const StaticSiteLinkedBackendProvider = () =>
       const props = {
         resourceGroup: news.resourceGroup,
         staticSiteName: news.staticSiteName,
+        environmentName: news.environmentName,
         linkedBackendName: news.name ?? output?.linkedBackendName ?? (yield* createLinkName(id)),
         cleanAuthConfigOnUnlink: news.cleanAuthConfigOnUnlink ?? true,
       };
@@ -209,6 +227,7 @@ export const StaticSiteLinkedBackendProvider = () =>
         subscriptionId,
         props.resourceGroup,
         props.staticSiteName,
+        props.environmentName,
         props.linkedBackendName,
       );
 
@@ -217,7 +236,7 @@ export const StaticSiteLinkedBackendProvider = () =>
 
       // Ensure. A link has no mutable properties; a failed link is re-sent.
       if (observed === undefined || observed.properties?.provisioningState === "Failed") {
-        yield* web.StaticSitesLinkBackend({
+        const request = {
           subscriptionId,
           resourceGroupName: props.resourceGroup,
           name: props.staticSiteName,
@@ -226,7 +245,13 @@ export const StaticSiteLinkedBackendProvider = () =>
             backendResourceId: news.backendResourceId,
             region: news.region,
           },
-        });
+        };
+        yield* props.environmentName === undefined
+          ? web.StaticSitesLinkBackend(request)
+          : web.StaticSitesLinkBackendToBuild({
+              ...request,
+              environmentName: props.environmentName,
+            });
       }
       const ready = yield* waitForProvisioned(
         `linked backend ${props.linkedBackendName}`,
@@ -239,14 +264,20 @@ export const StaticSiteLinkedBackendProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       const { subscriptionId } = yield* AzureEnvironment.current;
+      const where = {
+        subscriptionId,
+        resourceGroupName: output.resourceGroup,
+        name: output.staticSiteName,
+        linkedBackendName: output.linkedBackendName,
+        isCleaningAuthConfig: output.cleanAuthConfigOnUnlink,
+      };
       yield* ignoreNotFound(
-        web.UnlinkStaticSiteBackend({
-          subscriptionId,
-          resourceGroupName: output.resourceGroup,
-          name: output.staticSiteName,
-          linkedBackendName: output.linkedBackendName,
-          isCleaningAuthConfig: output.cleanAuthConfigOnUnlink,
-        }),
+        output.environmentName === undefined
+          ? web.UnlinkStaticSiteBackend(where)
+          : web.UnlinkStaticSiteBackendFromBuild({
+              ...where,
+              environmentName: output.environmentName,
+            }),
       );
       yield* waitUntilGone(
         `linked backend ${output.linkedBackendName}`,
@@ -254,6 +285,7 @@ export const StaticSiteLinkedBackendProvider = () =>
           subscriptionId,
           output.resourceGroup,
           output.staticSiteName,
+          output.environmentName,
           output.linkedBackendName,
         ),
         { interval: "5 seconds", times: 60 },

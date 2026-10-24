@@ -66,7 +66,6 @@ test.provider(
       expect(token.scopeMapId.toLowerCase()).toEqual(pull.scopeMapId.toLowerCase());
       expect(token.passwords.map((p) => p.name)).toEqual(["password1"]);
       const password1 = token.passwords[0]!.value;
-      expect(password1).toBeDefined();
       expect(Redacted.value(password1!).length).toBeGreaterThan(10);
       const observed = yield* get(token.tokenName);
       expect(observed.properties?.status).toEqual("enabled");
@@ -94,7 +93,9 @@ test.provider(
       );
       expect(updated.token.tokenId).toEqual(token.tokenId);
       expect(updated.token.passwords.map((p) => p.name)).toEqual(["password2"]);
-      expect(updated.token.passwords[0]!.value).toBeDefined();
+      const password2 = Redacted.value(updated.token.passwords[0]!.value!);
+      expect(password2.length).toBeGreaterThan(10);
+      expect(password2).not.toEqual(Redacted.value(password1!));
       const reobserved = yield* get(token.tokenName);
       expect(reobserved.properties?.status).toEqual("disabled");
       expect(reobserved.properties?.scopeMapId?.toLowerCase()).toEqual(

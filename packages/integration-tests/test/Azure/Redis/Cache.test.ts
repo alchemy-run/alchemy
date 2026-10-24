@@ -48,7 +48,15 @@ test.provider.skipIf(!runExpensive)(
       expect(cache.hostName).toEqual(`${cache.cacheName}.redis.cache.windows.net`);
       expect(cache.sslPort).toEqual(6380);
       expect(cache.sku).toEqual("Basic");
-      expect(cache.primaryKey).toBeDefined();
+      const keys = yield* redis.ListRedisKeys({
+        subscriptionId: yield* subscription,
+        resourceGroupName: group.resourceGroupName,
+        name: cache.cacheName,
+      });
+      expect(keys.primaryKey?.length).toBeGreaterThan(0);
+      expect(cache.primaryKey ? Redacted.value(cache.primaryKey) : undefined).toEqual(
+        keys.primaryKey,
+      );
       expect(Redacted.value(cache.primaryConnectionString!)).toContain(
         `${cache.hostName}:6380,password=`,
       );

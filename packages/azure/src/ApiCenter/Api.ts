@@ -71,8 +71,6 @@ export interface ApiProps {
   description?: string;
   /** Short summary of the API. */
   summary?: string;
-  /** Development lifecycle stage of the API. */
-  lifecycleStage?: ApiCenterLifecycleStage;
   /** URL of the API's terms of service. */
   termsOfServiceUrl?: string;
   /** External documentation links. */
@@ -104,7 +102,10 @@ export interface Api extends Resource<
     title: string;
     /** Kind of API. */
     kind: string;
-    /** Lifecycle stage reported by API Center. */
+    /**
+     * Lifecycle stage reported by API Center. It is read-only on the API;
+     * each {@link ApiVersion} sets its own `lifecycleStage`.
+     */
     lifecycleStage: string | undefined;
   },
   never,
@@ -134,7 +135,6 @@ export interface Api extends Resource<
  *   serviceName: center.serviceName,
  *   title: "Orders API",
  *   kind: "rest",
- *   lifecycleStage: "production",
  *   contacts: [{ name: "Platform", email: "platform@example.com" }],
  *   customProperties: { [schema.metadataSchemaName]: "payments" },
  * });
@@ -155,7 +155,6 @@ const desiredProperties = (props: ApiProps, name: string): apicenter.ApiProperti
   kind: props.kind,
   description: props.description,
   summary: props.summary,
-  lifecycleStage: props.lifecycleStage,
   termsOfService:
     props.termsOfServiceUrl === undefined ? undefined : { url: props.termsOfServiceUrl },
   externalDocumentation: props.externalDocumentation,

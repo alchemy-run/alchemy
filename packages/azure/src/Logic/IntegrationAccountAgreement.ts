@@ -95,6 +95,11 @@ export interface IntegrationAccountAgreement extends Resource<
  * integration account. It carries the AS2, X12, or EDIFACT settings the
  * B2B encode/decode actions apply to messages exchanged by the partners.
  *
+ * :::caution
+ * Changing `name`, `agreementType`, `integrationAccount`, or
+ * `resourceGroup` replaces the agreement.
+ * :::
+ *
  * @see https://learn.microsoft.com/azure/logic-apps/logic-apps-enterprise-integration-agreements
  *
  * ### Creating an Agreement

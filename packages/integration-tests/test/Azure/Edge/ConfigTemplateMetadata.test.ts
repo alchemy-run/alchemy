@@ -70,7 +70,7 @@ const program = (props: { linked: boolean; name?: string }) =>
           ]
         : [],
     });
-    return { group, site, template, metadata };
+    return { group, context, site, template, metadata };
   });
 
 // Free control-plane resources; provision in seconds.
@@ -104,7 +104,10 @@ test.provider(
         // Replacement: a new name.
         const replaced = yield* stack.deploy(program({ linked: true, name: "alchemy-links" }));
         expect(replaced.metadata.configTemplateMetadataName).toEqual("alchemy-links");
-        expect((yield* get("alchemy-links")).properties?.contextId).toBeDefined();
+        const renamed = yield* get("alchemy-links");
+        expect(renamed.properties?.contextId?.toLowerCase()).toEqual(
+          replaced.context.contextId.toLowerCase(),
+        );
         expect(yield* waitGone(get("default"))).toEqual("gone");
 
         yield* stack.destroy();

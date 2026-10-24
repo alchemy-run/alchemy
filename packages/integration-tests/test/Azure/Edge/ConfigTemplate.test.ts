@@ -39,8 +39,9 @@ test.provider(
         program({ description: "first", tags: { env: "test" } }),
       );
       const rg = group.resourceGroupName;
-      expect(template.uniqueIdentifier).toBeDefined();
       const observed = yield* getTemplate(rg, template.configTemplateName);
+      expect(template.uniqueIdentifier).toEqual(observed.properties?.uniqueIdentifier);
+      expect(template.uniqueIdentifier?.length ?? 0).toBeGreaterThan(0);
       expect(observed.properties?.description).toEqual("first");
       expect(observed.tags?.["alchemy::id"]).toEqual("Template");
 

@@ -39,8 +39,12 @@ export interface VmwareCollectorProps {
    * Changing it replaces the collector.
    */
   discoverySiteId?: string;
-  /** Microsoft Entra application the appliance agent authenticates with. */
-  servicePrincipal?: CollectorServicePrincipal;
+  /**
+   * Microsoft Entra application the appliance agent authenticates with.
+   * Azure fixes the agent properties once the collector exists, so changing
+   * it replaces the collector.
+   */
+  servicePrincipal: CollectorServicePrincipal;
 }
 
 export interface VmwareCollector extends Resource<
@@ -59,6 +63,8 @@ export interface VmwareCollector extends Resource<
     agentId: string;
     /** ARM ID of the discovery site the collector reads, if any. */
     discoverySiteId: string | undefined;
+    /** Microsoft Entra application the appliance agent authenticates with. */
+    servicePrincipal: CollectorServicePrincipal | undefined;
     /** Last heartbeat of the appliance agent (ISO-8601), if it has reported. */
     lastHeartbeatUtc: string | undefined;
   },
@@ -75,6 +81,14 @@ export interface VmwareCollector extends Resource<
  * appliance whose agent it names starts sending heartbeats. Collectors
  * cannot be tagged; Alchemy treats a collector as owned when its
  * assessment project carries this stack's and stage's ownership tags.
+ *
+ * :::caution
+ * Azure fixes a collector's agent properties when it is created. Changing
+ * `agentId`, `discoverySiteId`, `servicePrincipal`, `name`,
+ * `assessmentProject`, or `resourceGroup` replaces the collector. An agent
+ * backs only one collector, so a replacement that keeps `agentId` deletes
+ * the old collector before it creates the new one.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/migrate/migrate-appliance-architecture
  *
@@ -129,6 +143,7 @@ const toAttrs = (
   collectorId: collector.id ?? "",
   agentId: collector.properties?.agentProperties?.id ?? "",
   discoverySiteId: collector.properties?.discoverySiteId ?? undefined,
+  servicePrincipal: collector.properties?.agentProperties?.spnDetails ?? undefined,
   lastHeartbeatUtc: collector.properties?.agentProperties?.lastHeartbeatUtc ?? undefined,
 });
 
@@ -149,9 +164,15 @@ export const VmwareCollectorProvider = () =>
         (news.name !== undefined &&
           news.name.toLowerCase() !== output.collectorName.toLowerCase()) ||
         news.agentId !== output.agentId ||
-        (news.discoverySiteId ?? "").toLowerCase() !== (output.discoverySiteId ?? "").toLowerCase()
+        (news.discoverySiteId ?? "").toLowerCase() !==
+          (output.discoverySiteId ?? "").toLowerCase() ||
+        // Azure rejects a PUT that changes the agent properties ("do not
+        // match the properties already present for this collector").
+        settingsDiffer(news.servicePrincipal, output.servicePrincipal)
       ) {
-        return { action: "replace" } as const;
+        // An agent backs only one collector ("already registered"), so a
+        // replacement that keeps the agent deletes the old collector first.
+        return { action: "replace", deleteFirst: news.agentId === output.agentId } as const;
       }
       return undefined;
     }),
@@ -188,8 +209,8 @@ export const VmwareCollectorProvider = () =>
       // Observe.
       const observed = yield* get;
 
-      // Ensure + sync: the PUT is a create-or-update of the whole collector,
-      // so it also applies service-principal changes.
+      // Ensure. Every property is immutable (diff replaces), so the PUT only
+      // runs for a missing collector or one changed out of band.
       if (observed === undefined || settingsDiffer(properties, observed.properties)) {
         yield* migrate.CreateVmwareCollectorsOperation({
           subscriptionId,

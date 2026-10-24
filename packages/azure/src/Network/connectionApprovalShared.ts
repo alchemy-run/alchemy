@@ -190,26 +190,27 @@ export const connectionApprovalProvider = <
     reconcile: Effect.fn(function* ({ news }: { news: Res["Props"] }) {
       const { subscriptionId } = yield* AzureEnvironment.current;
       yield* ensureRegistered(subscriptionId, "Microsoft.Network");
-      const n = news as unknown as ConnectionApprovalProps & Record<string, string>;
+      const n = news as Record<string, string | undefined>;
       const parent = n[spec.parent]!;
+      const resourceGroup = n.resourceGroup!;
       const status = n.status ?? "Approved";
       const description = n.description ?? `${status} by Alchemy`;
 
       // Observe: the connection appears once the private endpoint exists.
       const observed = yield* findConnection(
         subscriptionId,
-        n.resourceGroup,
+        resourceGroup,
         parent,
-        n.privateEndpointId,
+        n.privateEndpointId!,
       );
       const name = observed.name!;
-      const get = spec.get(subscriptionId, n.resourceGroup, parent, name);
+      const get = spec.get(subscriptionId, resourceGroup, parent, name);
       const state = observed.properties?.privateLinkServiceConnectionState;
 
       // Sync the approval state.
       if (state?.status !== status || state?.description !== description) {
         yield* spec
-          .update(subscriptionId, n.resourceGroup, parent, name, {
+          .update(subscriptionId, resourceGroup, parent, name, {
             status,
             description,
             actionsRequired: "None",
@@ -220,7 +221,7 @@ export const connectionApprovalProvider = <
         `${spec.label} connection ${parent}/${name}`,
         get,
       );
-      return toAttrs(n.resourceGroup, parent, final);
+      return toAttrs(resourceGroup, parent, final);
     }),
 
     delete: Effect.fn(function* ({ output }: { output: Res["Attributes"] }) {

@@ -7,3 +7,4 @@ export * from "./BackupResourceGuardProxy.ts";
 export * from "./BackupStorageConfig.ts";
 export * from "./BackupVaultConfig.ts";
 export * from "./Vault.ts";
+export * from "./VaultExtendedInfo.ts";

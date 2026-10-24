@@ -41,7 +41,7 @@ test.provider(
       expect(observed.properties?.provisioningState).toEqual("Succeeded");
       expect(observed.tags?.env).toEqual("a");
       expect(observed.tags?.["alchemy::id"]).toEqual("Namespace");
-      expect(namespace.uuid).toBeDefined();
+      expect(namespace.uuid).toMatch(/^[0-9a-f-]{36}$/i);
 
       // In place: tags.
       const updated = yield* stack.deploy(program({ tags: { env: "b" } }));

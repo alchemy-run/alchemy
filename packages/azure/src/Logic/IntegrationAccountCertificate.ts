@@ -82,6 +82,11 @@ export interface IntegrationAccountCertificate extends Resource<
  * encrypt, and verify AS2 messages. A public certificate needs only the
  * base64 `.cer`; a private certificate references a key in Key Vault.
  *
+ * :::caution
+ * Changing `name`, `integrationAccount`, or `resourceGroup` replaces the
+ * certificate.
+ * :::
+ *
  * @see https://learn.microsoft.com/azure/logic-apps/logic-apps-enterprise-integration-certificates
  *
  * ### Adding Certificates

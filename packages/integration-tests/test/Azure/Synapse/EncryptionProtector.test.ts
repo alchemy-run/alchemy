@@ -172,7 +172,8 @@ test.provider.skipIf(!process.env.AZURE_TEST_SYNAPSE_ENCRYPTION_PROTECTOR)(
       expect(protector.serverKeyType).toEqual("AzureKeyVault");
       const observed = yield* getProtector(group.resourceGroupName, workspace.workspaceName);
       expect(observed.properties?.serverKeyType).toEqual("AzureKeyVault");
-      expect(observed.properties?.serverKeyName).toBeDefined();
+      // Azure names the server key `{vault}_{key}_{version}`.
+      expect(observed.properties?.serverKeyName).toMatch(/_synapse-cmk_[0-9a-f]{32}$/);
 
       // Re-deploying is a no-op that keeps the same protector.
       const again = yield* stack.deploy(program);

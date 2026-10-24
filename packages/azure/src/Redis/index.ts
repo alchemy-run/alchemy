@@ -1,6 +1,7 @@
 export * from "./AccessPolicy.ts";
 export * from "./AccessPolicyAssignment.ts";
 export * from "./Cache.ts";
+export * from "./CacheAccessPolicyAssignment.ts";
 export * from "./FirewallRule.ts";
 export * from "./LinkedServer.ts";
 export * from "./ManagedRedis.ts";

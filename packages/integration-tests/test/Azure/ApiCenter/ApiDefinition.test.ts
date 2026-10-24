@@ -57,7 +57,7 @@ test.provider(
         "/workspaces/default/apis/orders/versions/v1/definitions/openapi",
       );
       expect(definition.specificationName).toEqual("openapi");
-      expect(definition.specificationHash).toBeDefined();
+      expect(definition.specificationHash).toMatch(/^[0-9a-f]{8}$/);
       const get = (name: string) =>
         Effect.gen(function* () {
           return yield* apicenter.GetApiDefinition({

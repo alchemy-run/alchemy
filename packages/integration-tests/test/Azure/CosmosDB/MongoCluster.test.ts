@@ -30,9 +30,12 @@ test.provider.skipIf(!runExpensive)(
       expect(cluster.computeTier).toEqual("Free");
       expect(cluster.tags).toEqual({ env: "test" });
       expect(cluster.administratorUserName).toEqual("alchemyadmin");
-      expect(cluster.administratorPassword).toBeDefined();
+      // No password was given, so the provider generated one.
+      const generated = Redacted.value(cluster.administratorPassword!);
+      expect(generated).toMatch(/^Aa1-[A-Za-z0-9_-]{32}$/);
       const connection = Redacted.value(cluster.connectionString!);
       expect(connection).toMatch(/^mongodb\+srv:\/\/alchemyadmin:/);
+      expect(connection).toContain(`:${generated}@`);
       expect(connection).not.toContain("<password>");
       const observed = yield* getCluster(group.resourceGroupName, cluster.mongoClusterName);
       expect(observed.id).toEqual(cluster.mongoClusterId);

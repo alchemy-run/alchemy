@@ -71,7 +71,7 @@ test.provider(
       expect(observed.properties?.state).toEqual("active");
       expect(observed.properties?.scope.toLowerCase()).toMatch(/\/products\/alchemy-starter$/);
       const secrets = yield* getSecrets(rg, svc, "alchemy-client");
-      expect(secrets.primaryKey).toBeDefined();
+      expect(secrets.primaryKey ?? "").not.toEqual("");
       expect(
         first.subscription?.primaryKey && Redacted.value(first.subscription.primaryKey),
       ).toEqual(secrets.primaryKey);

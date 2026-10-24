@@ -3,6 +3,7 @@ import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import {
   ensureRegistered,
   ignoreNotFound,
@@ -58,13 +59,14 @@ export interface DynamicConfiguration extends Resource<
 /**
  * A dynamic configuration under an Azure Arc workload orchestration
  * configuration. It tracks which version of a solution or config
- * template's values is current; the values live in immutable
+ * template's values is current; the values live in
  * `Azure.Edge.DynamicConfigurationVersion` children. Its name must be the
  * unique identifier of the template it configures, and the service only
  * resolves that template once it is linked (`Azure.Edge.ConfigTemplateMetadata`)
  * to a site or target whose `Azure.Edge.ConfigurationReference` points at
- * the parent configuration; otherwise creation fails with "No solution
- * template or config template found".
+ * the parent configuration; otherwise creation fails with
+ * `EdgeTemplateNotResolved` ("No solution template or config template
+ * found") after about a minute of retries.
  *
  * Dynamic configurations carry no tags or free-form fields, so Alchemy
  * cannot mark them; one found under the expected name is treated as this
@@ -187,13 +189,23 @@ export const DynamicConfigurationProvider = () =>
 
       // Ensure, then sync the current version against observed state.
       if (observed === undefined) {
-        yield* edge.DynamicConfigurationsCreateOrUpdate({
-          subscriptionId,
-          resourceGroupName: resourceGroup,
-          configurationName: configuration,
-          dynamicConfigurationName: name,
-          properties: { currentVersion: news.currentVersion },
-        });
+        yield* edge
+          .DynamicConfigurationsCreateOrUpdate({
+            subscriptionId,
+            resourceGroupName: resourceGroup,
+            configurationName: configuration,
+            dynamicConfigurationName: name,
+            properties: { currentVersion: news.currentVersion },
+          })
+          .pipe(
+            // The service resolves a just-written template, template
+            // version, or hierarchy link with a short lag.
+            Effect.retry({
+              while: (e) => e._tag === "EdgeTemplateNotResolved",
+              schedule: Schedule.spaced("5 seconds"),
+              times: 12,
+            }),
+          );
       } else if (observed.properties?.currentVersion !== news.currentVersion) {
         yield* edge.UpdateDynamicConfiguration({
           subscriptionId,

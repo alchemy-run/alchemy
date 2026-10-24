@@ -24,6 +24,11 @@ export interface FunctionKeyProps {
   /** Name of the function app. Changing it replaces the key. */
   functionAppName: string;
   /**
+   * Deployment slot of the function app. Changing it replaces the key.
+   * @default the production slot
+   */
+  slot?: string;
+  /**
    * Name of the function the key authorizes (it must be deployed).
    * Changing it replaces the key.
    */
@@ -50,6 +55,8 @@ export interface FunctionKey extends Resource<
     functionName: string;
     /** Name of the function app. */
     functionAppName: string;
+    /** Deployment slot, if slot-scoped. */
+    slot: string | undefined;
     /** Resource group of the function app. */
     resourceGroup: string;
     /** The key value; send it as `x-functions-key` or `?code=`. */
@@ -60,7 +67,8 @@ export interface FunctionKey extends Resource<
 > {}
 
 /**
- * A function key (`sites/functions/keys/{keyName}`) that authorizes calls
+ * A function key (`sites/functions/keys/{keyName}`, or
+ * `sites/slots/functions/keys/{keyName}` with `slot`) that authorizes calls
  * to a single HTTP-triggered function of a function app. Use
  * `Azure.Web.FunctionAppHostKey` for a key valid for every function.
  *
@@ -97,19 +105,21 @@ const readKey = (
   subscriptionId: string,
   resourceGroup: string,
   functionAppName: string,
+  slot: string | undefined,
   functionName: string,
   keyName: string,
-) =>
-  orUndefinedIfNotFound(
-    web.ListWebAppFunctionKeys({
-      ...siteWhere(subscriptionId, resourceGroup, functionAppName),
-      functionName,
-    }),
+) => {
+  const where = { ...siteWhere(subscriptionId, resourceGroup, functionAppName), functionName };
+  return orUndefinedIfNotFound(
+    slot === undefined
+      ? web.ListWebAppFunctionKeys(where)
+      : web.ListWebAppFunctionKeysSlot({ ...where, slot }),
   ).pipe(Effect.map((keys) => keys?.properties?.[keyName]));
+};
 
 export const FunctionKeyProvider = () =>
   Provider.succeed(FunctionKey, {
-    stables: ["keyName", "functionName", "functionAppName", "resourceGroup"],
+    stables: ["keyName", "functionName", "functionAppName", "slot", "resourceGroup"],
 
     // Function keys are removed with their function app.
     list: Effect.fn(function* () {
@@ -121,6 +131,7 @@ export const FunctionKeyProvider = () =>
       if (
         lower(news.resourceGroup) !== lower(output.resourceGroup) ||
         lower(news.functionAppName) !== lower(output.functionAppName) ||
+        lower(news.slot) !== lower(output.slot) ||
         lower(news.functionName) !== lower(output.functionName) ||
         (news.name !== undefined && news.name !== output.keyName)
       ) {
@@ -141,11 +152,13 @@ export const FunctionKeyProvider = () =>
       ) {
         return undefined;
       }
+      const slot = output?.slot ?? olds?.slot;
       const keyName = output?.keyName ?? olds?.name ?? (yield* createKeyName(id));
       const value = yield* readKey(
         subscriptionId,
         resourceGroup,
         functionAppName,
+        slot,
         functionName,
         keyName,
       );
@@ -154,6 +167,7 @@ export const FunctionKeyProvider = () =>
         keyName,
         functionName,
         functionAppName,
+        slot,
         resourceGroup,
         value: Redacted.make(value),
       };
@@ -164,10 +178,17 @@ export const FunctionKeyProvider = () =>
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const { subscriptionId } = yield* AzureEnvironment.current;
       yield* ensureRegistered(subscriptionId, "Microsoft.Web");
-      const { resourceGroup, functionAppName, functionName } = news;
+      const { resourceGroup, functionAppName, functionName, slot } = news;
       const keyName = news.name ?? output?.keyName ?? (yield* createKeyName(id));
       const desired = reveal(news.value);
-      const read = readKey(subscriptionId, resourceGroup, functionAppName, functionName, keyName);
+      const read = readKey(
+        subscriptionId,
+        resourceGroup,
+        functionAppName,
+        slot,
+        functionName,
+        keyName,
+      );
 
       // Observe.
       const observed = yield* read;
@@ -175,12 +196,15 @@ export const FunctionKeyProvider = () =>
       // Ensure + sync the value. Without an explicit value the generated
       // one is kept.
       if (observed === undefined || (desired !== undefined && observed !== desired)) {
-        yield* web.WebAppsCreateOrUpdateFunctionSecret({
+        const request = {
           ...siteWhere(subscriptionId, resourceGroup, functionAppName),
           functionName,
           keyName,
           properties: { name: keyName, value: desired },
-        });
+        };
+        yield* slot === undefined
+          ? web.WebAppsCreateOrUpdateFunctionSecret(request)
+          : web.WebAppsCreateOrUpdateFunctionSecretSlot({ ...request, slot });
       }
 
       // The runtime persists keys asynchronously; wait until it serves it.
@@ -194,6 +218,7 @@ export const FunctionKeyProvider = () =>
         keyName,
         functionName,
         functionAppName,
+        slot,
         resourceGroup,
         value: Redacted.make(value),
       };
@@ -201,12 +226,15 @@ export const FunctionKeyProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       const { subscriptionId } = yield* AzureEnvironment.current;
+      const where = {
+        ...siteWhere(subscriptionId, output.resourceGroup, output.functionAppName),
+        functionName: output.functionName,
+        keyName: output.keyName,
+      };
       yield* ignoreNotFound(
-        web.DeleteWebAppFunctionSecret({
-          ...siteWhere(subscriptionId, output.resourceGroup, output.functionAppName),
-          functionName: output.functionName,
-          keyName: output.keyName,
-        }),
+        output.slot === undefined
+          ? web.DeleteWebAppFunctionSecret(where)
+          : web.DeleteWebAppFunctionSecretSlot({ ...where, slot: output.slot }),
       );
       yield* waitUntilGone(
         `function key ${output.keyName}`,
@@ -214,6 +242,7 @@ export const FunctionKeyProvider = () =>
           subscriptionId,
           output.resourceGroup,
           output.functionAppName,
+          output.slot,
           output.functionName,
           output.keyName,
         ),
@@ -221,6 +250,6 @@ export const FunctionKeyProvider = () =>
     }),
 
     nuke: {
-      dependsOn: ["Azure.Resources.ResourceGroup", "Azure.Web.FunctionApp"],
+      dependsOn: ["Azure.Resources.ResourceGroup", "Azure.Web.FunctionApp", "Azure.Web.WebAppSlot"],
     },
   });

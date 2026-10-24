@@ -17,9 +17,17 @@ import {
   DatabaseSecurityAlertPolicyProvider,
 } from "./DatabaseSecurityAlertPolicy.ts";
 import {
+  DatabaseSqlVulnerabilityAssessmentRuleBaseline,
+  DatabaseSqlVulnerabilityAssessmentRuleBaselineProvider,
+} from "./DatabaseSqlVulnerabilityAssessmentRuleBaseline.ts";
+import {
   DatabaseVulnerabilityAssessment,
   DatabaseVulnerabilityAssessmentProvider,
 } from "./DatabaseVulnerabilityAssessment.ts";
+import {
+  DatabaseVulnerabilityAssessmentRuleBaseline,
+  DatabaseVulnerabilityAssessmentRuleBaselineProvider,
+} from "./DatabaseVulnerabilityAssessmentRuleBaseline.ts";
 import { DataMaskingPolicy, DataMaskingPolicyProvider } from "./DataMaskingPolicy.ts";
 import { DataMaskingRule, DataMaskingRuleProvider } from "./DataMaskingRule.ts";
 import { ElasticPool, ElasticPoolProvider } from "./ElasticPool.ts";
@@ -67,6 +75,10 @@ import {
   ManagedDatabaseVulnerabilityAssessment,
   ManagedDatabaseVulnerabilityAssessmentProvider,
 } from "./ManagedDatabaseVulnerabilityAssessment.ts";
+import {
+  ManagedDatabaseVulnerabilityAssessmentRuleBaseline,
+  ManagedDatabaseVulnerabilityAssessmentRuleBaselineProvider,
+} from "./ManagedDatabaseVulnerabilityAssessmentRuleBaseline.ts";
 import { ManagedInstance, ManagedInstanceProvider } from "./ManagedInstance.ts";
 import {
   ManagedInstanceAdministrator,
@@ -151,12 +163,20 @@ import {
   ServerSecurityAlertPolicy,
   ServerSecurityAlertPolicyProvider,
 } from "./ServerSecurityAlertPolicy.ts";
+import {
+  ServerTrustCertificate,
+  ServerTrustCertificateProvider,
+} from "./ServerTrustCertificate.ts";
 import { ServerTrustGroup, ServerTrustGroupProvider } from "./ServerTrustGroup.ts";
 import {
   ServerVulnerabilityAssessment,
   ServerVulnerabilityAssessmentProvider,
 } from "./ServerVulnerabilityAssessment.ts";
 import { SqlAgentConfiguration, SqlAgentConfigurationProvider } from "./SqlAgentConfiguration.ts";
+import {
+  SqlVulnerabilityAssessmentRuleBaseline,
+  SqlVulnerabilityAssessmentRuleBaselineProvider,
+} from "./SqlVulnerabilityAssessmentRuleBaseline.ts";
 import {
   SqlVulnerabilityAssessmentSettings,
   SqlVulnerabilityAssessmentSettingsProvider,
@@ -179,7 +199,9 @@ export const resources = [
   DatabaseAdvancedThreatProtectionSettings,
   DatabaseBlobAuditingPolicy,
   DatabaseSecurityAlertPolicy,
+  DatabaseSqlVulnerabilityAssessmentRuleBaseline,
   DatabaseVulnerabilityAssessment,
+  DatabaseVulnerabilityAssessmentRuleBaseline,
   DataMaskingPolicy,
   DataMaskingRule,
   ElasticPool,
@@ -206,6 +228,7 @@ export const resources = [
   ManagedDatabaseAdvancedThreatProtectionSettings,
   ManagedDatabaseSecurityAlertPolicy,
   ManagedDatabaseVulnerabilityAssessment,
+  ManagedDatabaseVulnerabilityAssessmentRuleBaseline,
   ManagedInstance,
   ManagedInstanceAdministrator,
   ManagedInstanceAdvancedThreatProtectionSettings,
@@ -233,9 +256,11 @@ export const resources = [
   ServerDnsAlias,
   ServerKey,
   ServerSecurityAlertPolicy,
+  ServerTrustCertificate,
   ServerTrustGroup,
   ServerVulnerabilityAssessment,
   SqlAgentConfiguration,
+  SqlVulnerabilityAssessmentRuleBaseline,
   SqlVulnerabilityAssessmentSettings,
   StartStopManagedInstanceSchedule,
   TransparentDataEncryption,
@@ -252,7 +277,9 @@ export const layers = () =>
       DatabaseAdvancedThreatProtectionSettingsProvider(),
       DatabaseBlobAuditingPolicyProvider(),
       DatabaseSecurityAlertPolicyProvider(),
+      DatabaseSqlVulnerabilityAssessmentRuleBaselineProvider(),
       DatabaseVulnerabilityAssessmentProvider(),
+      DatabaseVulnerabilityAssessmentRuleBaselineProvider(),
       DataMaskingPolicyProvider(),
       DataMaskingRuleProvider(),
       ElasticPoolProvider(),
@@ -279,6 +306,7 @@ export const layers = () =>
       ManagedDatabaseAdvancedThreatProtectionSettingsProvider(),
       ManagedDatabaseSecurityAlertPolicyProvider(),
       ManagedDatabaseVulnerabilityAssessmentProvider(),
+      ManagedDatabaseVulnerabilityAssessmentRuleBaselineProvider(),
       ManagedInstanceProvider(),
       ManagedInstanceAdministratorProvider(),
       ManagedInstanceAdvancedThreatProtectionSettingsProvider(),
@@ -308,9 +336,11 @@ export const layers = () =>
       ServerDnsAliasProvider(),
       ServerKeyProvider(),
       ServerSecurityAlertPolicyProvider(),
+      ServerTrustCertificateProvider(),
       ServerTrustGroupProvider(),
       ServerVulnerabilityAssessmentProvider(),
       SqlAgentConfigurationProvider(),
+      SqlVulnerabilityAssessmentRuleBaselineProvider(),
       SqlVulnerabilityAssessmentSettingsProvider(),
       StartStopManagedInstanceScheduleProvider(),
       TransparentDataEncryptionProvider(),

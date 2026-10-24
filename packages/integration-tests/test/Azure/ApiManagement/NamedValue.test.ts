@@ -83,7 +83,7 @@ test.provider(
       );
       const plainUpdated = yield* getNamedValue(rg, svc, "region");
       expect(plainUpdated.properties?.value).toEqual("us-east");
-      expect([...(plainUpdated.properties?.tags ?? [])].sort()).toEqual(["config", "geo"]);
+      expect(plainUpdated.properties?.tags?.toSorted()).toEqual(["config", "geo"]);
       expect((yield* getValue(rg, svc, "backend-key")).value).toEqual("s3cret-two");
 
       // Replacement: a new identifier creates a new named value.

@@ -58,6 +58,10 @@ export interface WorkspaceAadAdmin extends Resource<
  * A workspace has at most one Entra administrator. Azure makes the
  * identity that created the workspace its initial administrator; this
  * resource replaces it. Destroying the resource removes the administrator.
+ * Azure keeps one administrator behind both
+ * `Microsoft.Synapse/workspaces/administrators` and
+ * `Microsoft.Synapse/workspaces/sqlAdministrators`, so this resource covers
+ * both types.
  *
  * @see https://learn.microsoft.com/azure/synapse-analytics/sql/active-directory-authentication
  *

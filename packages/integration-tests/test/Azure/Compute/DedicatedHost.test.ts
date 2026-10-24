@@ -88,7 +88,7 @@ test.provider.skipIf(!runPaidOnly)(
         program({ autoReplaceOnFailure: true, tags: { env: "test" } }),
       );
       expect(host.sku).toEqual("DSv3-Type4");
-      expect(host.hostId).toBeDefined();
+      expect(host.hostId).toMatch(/^[0-9a-f-]{36}$/i);
       const observed = yield* getHost(
         group.resourceGroupName,
         hostGroup.hostGroupName,

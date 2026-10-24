@@ -190,6 +190,12 @@ export interface VirtualMachineScaleSet extends Resource<
     vmSize: string | undefined;
     /** Number of instances. */
     capacity: number | undefined;
+    /**
+     * Instance IDs of a `Uniform` scale set's VMs (e.g. `["0", "1"]`),
+     * sorted. Empty for `Flexible` scale sets, whose instances are regular
+     * VMs.
+     */
+    instanceIds: string[];
     /** Principal ID of the system-assigned identity, if enabled. */
     principalId: string | undefined;
     /** Creation time (ISO 8601). */
@@ -251,6 +257,7 @@ export interface VirtualMachineScaleSet extends Resource<
  *   adminUsername: "azureuser",
  *   sshPublicKeys: [publicKey],
  * });
+ * // batch.instanceIds, e.g. ["0", "1", "2", "3"]
  * ```
  *
  * @resource
@@ -277,10 +284,27 @@ const getScaleSet = (subscriptionId: string, resourceGroupName: string, vmScaleS
     }),
   );
 
+/** Sorted instance IDs of a Uniform scale set; `[]` for Flexible ones. */
+const listInstanceIds = (subscriptionId: string, resourceGroupName: string, set: Observed) =>
+  Effect.gen(function* () {
+    if (set.properties?.orchestrationMode !== "Uniform" || set.name === undefined) return [];
+    const page = yield* compute
+      .ListVirtualMachineScaleSetVMs({
+        subscriptionId,
+        resourceGroupName,
+        virtualMachineScaleSetName: set.name,
+      })
+      .pipe(Effect.flatMap((page) => requireSinglePage("ListVirtualMachineScaleSetVMs", page)));
+    return page.value
+      .flatMap((vm) => (vm.instanceId === undefined ? [] : [vm.instanceId]))
+      .sort((a, b) => Number(a) - Number(b));
+  });
+
 const toAttrs = (
   resourceGroup: string,
   name: string,
   set: Observed,
+  instanceIds: string[],
 ): VirtualMachineScaleSet["Attributes"] => ({
   virtualMachineScaleSetName: name,
   virtualMachineScaleSetId: set.id ?? "",
@@ -291,6 +315,7 @@ const toAttrs = (
   orchestrationMode: set.properties?.orchestrationMode,
   vmSize: set.sku?.name,
   capacity: set.sku?.capacity,
+  instanceIds,
   principalId: set.identity?.principalId,
   timeCreated: set.properties?.timeCreated,
   tags: userTags(set.tags),
@@ -372,7 +397,7 @@ export const VirtualMachineScaleSetProvider = () =>
       return page.value.flatMap((set) => {
         const resourceGroup = resourceGroupOf(set.id);
         return hasAnyAlchemyTag(set.tags) && resourceGroup !== undefined && set.name !== undefined
-          ? [toAttrs(resourceGroup, set.name, set)]
+          ? [toAttrs(resourceGroup, set.name, set, [])]
           : [];
       });
     }),
@@ -400,7 +425,8 @@ export const VirtualMachineScaleSetProvider = () =>
         output?.virtualMachineScaleSetName ?? olds?.name ?? (yield* createComputeName(id, 64));
       const observed = yield* getScaleSet(subscriptionId, resourceGroup, name);
       if (observed === undefined) return undefined;
-      const attrs = toAttrs(resourceGroup, name, observed);
+      const instanceIds = yield* listInstanceIds(subscriptionId, resourceGroup, observed);
+      const attrs = toAttrs(resourceGroup, name, observed, instanceIds);
       return (yield* isOwned(id, observed.tags)) ? attrs : Unowned(attrs);
     }),
 
@@ -553,7 +579,8 @@ export const VirtualMachineScaleSetProvider = () =>
         observed = yield* wait;
       }
 
-      return toAttrs(resourceGroup, name, observed);
+      const instanceIds = yield* listInstanceIds(subscriptionId, resourceGroup, observed);
+      return toAttrs(resourceGroup, name, observed, instanceIds);
     }),
 
     delete: Effect.fn(function* ({ output }) {

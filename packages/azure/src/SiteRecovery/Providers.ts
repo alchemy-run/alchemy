@@ -15,6 +15,7 @@ import {
   StorageClassificationMapping,
   StorageClassificationMappingProvider,
 } from "./StorageClassificationMapping.ts";
+import { VaultSetting, VaultSettingProvider } from "./VaultSetting.ts";
 
 export const resources = [
   AlertSetting,
@@ -27,6 +28,7 @@ export const resources = [
   RecoveryPlan,
   ReplicationPolicy,
   StorageClassificationMapping,
+  VaultSetting,
 ];
 export const layers = () =>
   Layer.mergeAll(
@@ -40,4 +42,5 @@ export const layers = () =>
     RecoveryPlanProvider(),
     ReplicationPolicyProvider(),
     StorageClassificationMappingProvider(),
+    VaultSettingProvider(),
   );

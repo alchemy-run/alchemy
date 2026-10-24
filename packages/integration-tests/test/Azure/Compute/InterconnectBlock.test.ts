@@ -18,7 +18,7 @@ const getBlock = (resourceGroupName: string, interconnectBlockName: string) =>
   );
 
 /** GPU size and interconnect group of an allow-listed subscription. */
-const SKU = process.env.AZURE_TEST_INTERCONNECT_SKU ?? "Standard_ND96isr_H100_v5";
+const SKU = "Standard_ND96isr_H100_v5";
 const INTERCONNECT_GROUP_ID = process.env.AZURE_TEST_INTERCONNECT_GROUP_ID ?? "";
 
 test.provider(

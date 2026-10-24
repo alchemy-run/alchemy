@@ -67,8 +67,9 @@ test.provider.skipIf(!runExpensive)(
       const observed = yield* get();
       expect(observed.properties?.size).toEqual(LAB_VM_SIZE);
       expect(observed.properties?.provisioningState).toEqual("Succeeded");
-      expect(vm.computeId).toBeDefined();
-      expect(vm.privateIpAddress).toBeDefined();
+      expect(vm.computeId).toMatch(/\/providers\/Microsoft\.Compute\/virtualMachines\/[^/]+$/i);
+      // The VM sits in the lab subnet (10.30.1.0/24).
+      expect(vm.privateIpAddress).toMatch(/^10\.30\.1\.\d{1,3}$/);
 
       // In-place: resize + retag.
       const updated = yield* stack.deploy(

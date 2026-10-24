@@ -3,6 +3,7 @@ import * as network from "@distilled.cloud/azure/network";
 import { expect } from "alchemy-test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
 import { runExpensive } from "../gates.ts";
 import { logLevel, subscriptionId, tags, untilGone } from "./helpers.ts";
 
@@ -51,7 +52,9 @@ test.provider.skipIf(!runExpensive)(
       const { group, port, authorization } = yield* stack.deploy(
         program({ authorizationName: "tenant-a" }),
       );
-      expect(authorization.authorizationKey).toBeDefined();
+      expect(Redacted.value(authorization.authorizationKey!)).toMatch(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+      );
       const observed = yield* getAuthorization(
         group.resourceGroupName,
         port.expressRoutePortName,

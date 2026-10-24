@@ -70,7 +70,8 @@ test.provider(
       expect(script.tags).toEqual({ a: "1" });
       const observed = yield* getScript(group.resourceGroupName, script.deploymentScriptName);
       expect(observed?.tags?.["alchemy::id"]).toEqual("Script");
-      expect(observed?.properties?.retentionInterval).toBeDefined();
+      // The provider's default retention interval.
+      expect(observed?.properties?.retentionInterval).toEqual("PT1H");
 
       // A tag change is a PATCH: the script does not re-run.
       const retagged = yield* stack.deploy(

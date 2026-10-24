@@ -27,6 +27,11 @@ export interface FunctionAppHostKeyProps {
   /** Name of the function app. Changing it replaces the key. */
   functionAppName: string;
   /**
+   * Deployment slot of the function app. Changing it replaces the key.
+   * @default the production slot
+   */
+  slot?: string;
+  /**
    * `functionKeys` (host keys accepted by every HTTP function) or
    * `systemKeys` (keys for extensions such as Event Grid webhooks).
    * Changing it replaces the key.
@@ -55,6 +60,8 @@ export interface FunctionAppHostKey extends Resource<
     keyType: FunctionAppHostKeyType;
     /** Name of the function app. */
     functionAppName: string;
+    /** Deployment slot, if slot-scoped. */
+    slot: string | undefined;
     /** Resource group of the function app. */
     resourceGroup: string;
     /** The key value; send it as `x-functions-key` or `?code=`. */
@@ -65,8 +72,9 @@ export interface FunctionAppHostKey extends Resource<
 > {}
 
 /**
- * A Functions host key (`sites/host/default/{keyType}/{keyName}`) that
- * authorizes calls to every HTTP-triggered function of a function app.
+ * A Functions host key (`sites/host/default/{keyType}/{keyName}`, or
+ * `sites/slots/host/default/...` with `slot`) that authorizes calls to every
+ * HTTP-triggered function of a function app.
  *
  * The function app's host must be running (its `AzureWebJobsStorage`
  * setting configured) for keys to be managed.
@@ -102,16 +110,21 @@ const readKey = (
   subscriptionId: string,
   resourceGroupName: string,
   name: string,
+  slot: string | undefined,
   keyType: FunctionAppHostKeyType,
   keyName: string,
-) =>
-  orUndefinedIfNotFound(web.ListWebAppHostKeys({ subscriptionId, resourceGroupName, name })).pipe(
-    Effect.map((keys) => keys?.[keyType]?.[keyName]),
-  );
+) => {
+  const where = { subscriptionId, resourceGroupName, name };
+  return orUndefinedIfNotFound(
+    slot === undefined
+      ? web.ListWebAppHostKeys(where)
+      : web.ListWebAppHostKeysSlot({ ...where, slot }),
+  ).pipe(Effect.map((keys) => keys?.[keyType]?.[keyName]));
+};
 
 export const FunctionAppHostKeyProvider = () =>
   Provider.succeed(FunctionAppHostKey, {
-    stables: ["keyName", "keyType", "functionAppName", "resourceGroup"],
+    stables: ["keyName", "keyType", "functionAppName", "slot", "resourceGroup"],
 
     // Host keys are removed with their function app.
     list: Effect.fn(function* () {
@@ -123,6 +136,7 @@ export const FunctionAppHostKeyProvider = () =>
       if (
         lower(news.resourceGroup) !== lower(output.resourceGroup) ||
         lower(news.functionAppName) !== lower(output.functionAppName) ||
+        lower(news.slot) !== lower(output.slot) ||
         (news.keyType ?? "functionKeys") !== output.keyType ||
         (news.name !== undefined && news.name !== output.keyName)
       ) {
@@ -138,12 +152,14 @@ export const FunctionAppHostKeyProvider = () =>
       if (resourceGroup === undefined || functionAppName === undefined) {
         return undefined;
       }
+      const slot = output?.slot ?? olds?.slot;
       const keyType = output?.keyType ?? olds?.keyType ?? "functionKeys";
       const keyName = output?.keyName ?? olds?.name ?? (yield* createKeyName(id));
       const value = yield* readKey(
         subscriptionId,
         resourceGroup,
         functionAppName,
+        slot,
         keyType,
         keyName,
       );
@@ -152,6 +168,7 @@ export const FunctionAppHostKeyProvider = () =>
         keyName,
         keyType,
         functionAppName,
+        slot,
         resourceGroup,
         value: Redacted.make(value),
       };
@@ -163,7 +180,7 @@ export const FunctionAppHostKeyProvider = () =>
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const { subscriptionId } = yield* AzureEnvironment.current;
       yield* ensureRegistered(subscriptionId, "Microsoft.Web");
-      const { resourceGroup, functionAppName } = news;
+      const { resourceGroup, functionAppName, slot } = news;
       const keyType = news.keyType ?? "functionKeys";
       const keyName = news.name ?? output?.keyName ?? (yield* createKeyName(id));
       const desired = reveal(news.value);
@@ -172,7 +189,7 @@ export const FunctionAppHostKeyProvider = () =>
         resourceGroupName: resourceGroup,
         name: functionAppName,
       };
-      const read = readKey(subscriptionId, resourceGroup, functionAppName, keyType, keyName);
+      const read = readKey(subscriptionId, resourceGroup, functionAppName, slot, keyType, keyName);
 
       // Observe.
       const observed = yield* read;
@@ -180,12 +197,15 @@ export const FunctionAppHostKeyProvider = () =>
       // Ensure + sync the value. Without an explicit value the generated
       // one is kept.
       if (observed === undefined || (desired !== undefined && observed !== desired)) {
-        yield* web.WebAppsCreateOrUpdateHostSecret({
+        const request = {
           ...where,
           keyType,
           keyName,
           properties: { name: keyName, value: desired },
-        });
+        };
+        yield* slot === undefined
+          ? web.WebAppsCreateOrUpdateHostSecret(request)
+          : web.WebAppsCreateOrUpdateHostSecretSlot({ ...request, slot });
       }
 
       // The runtime persists keys asynchronously; wait until it serves it.
@@ -199,6 +219,7 @@ export const FunctionAppHostKeyProvider = () =>
         keyName,
         keyType,
         functionAppName,
+        slot,
         resourceGroup,
         value: Redacted.make(value),
       };
@@ -206,14 +227,17 @@ export const FunctionAppHostKeyProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       const { subscriptionId } = yield* AzureEnvironment.current;
+      const where = {
+        subscriptionId,
+        resourceGroupName: output.resourceGroup,
+        name: output.functionAppName,
+        keyType: output.keyType,
+        keyName: output.keyName,
+      };
       yield* ignoreNotFound(
-        web.DeleteWebAppHostSecret({
-          subscriptionId,
-          resourceGroupName: output.resourceGroup,
-          name: output.functionAppName,
-          keyType: output.keyType,
-          keyName: output.keyName,
-        }),
+        output.slot === undefined
+          ? web.DeleteWebAppHostSecret(where)
+          : web.DeleteWebAppHostSecretSlot({ ...where, slot: output.slot }),
       );
       yield* waitUntilGone(
         `host key ${output.keyName}`,
@@ -221,6 +245,7 @@ export const FunctionAppHostKeyProvider = () =>
           subscriptionId,
           output.resourceGroup,
           output.functionAppName,
+          output.slot,
           output.keyType,
           output.keyName,
         ),
@@ -228,6 +253,6 @@ export const FunctionAppHostKeyProvider = () =>
     }),
 
     nuke: {
-      dependsOn: ["Azure.Resources.ResourceGroup", "Azure.Web.FunctionApp"],
+      dependsOn: ["Azure.Resources.ResourceGroup", "Azure.Web.FunctionApp", "Azure.Web.WebAppSlot"],
     },
   });

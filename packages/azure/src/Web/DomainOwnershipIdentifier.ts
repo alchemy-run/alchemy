@@ -17,6 +17,11 @@ export interface DomainOwnershipIdentifierProps {
   /** Name of the web app or function app. Changing it replaces it. */
   siteName: string;
   /**
+   * Deployment slot of the app. Changing it replaces the identifier.
+   * @default the production slot
+   */
+  slot?: string;
+  /**
    * Name of the identifier. If omitted, a unique name is generated from the
    * app, stage, and logical ID. Changing it replaces the identifier.
    */
@@ -38,6 +43,8 @@ export interface DomainOwnershipIdentifier extends Resource<
     identifierId: string;
     /** Name of the app. */
     siteName: string;
+    /** Deployment slot, if slot-scoped. */
+    slot: string | undefined;
     /** Resource group of the app. */
     resourceGroup: string;
     /** Value of the identifier. */
@@ -49,7 +56,8 @@ export interface DomainOwnershipIdentifier extends Resource<
 
 /**
  * A domain ownership identifier of an App Service app
- * (`Microsoft.Web/sites/domainOwnershipIdentifiers`): a named value that
+ * (`Microsoft.Web/sites/domainOwnershipIdentifiers`, or
+ * `sites/slots/domainOwnershipIdentifiers` with `slot`): a named value that
  * App Service accepts as proof of ownership when another app binds a custom
  * domain already verified for this one.
  *
@@ -84,31 +92,38 @@ const getIdentifier = (
   subscriptionId: string,
   resourceGroup: string,
   siteName: string,
+  slot: string | undefined,
   identifierName: string,
-) =>
-  orUndefinedIfNotFound(
-    web.GetWebAppDomainOwnershipIdentifier({
-      ...siteWhere(subscriptionId, resourceGroup, siteName),
-      domainOwnershipIdentifierName: identifierName,
-    }),
+) => {
+  const where = {
+    ...siteWhere(subscriptionId, resourceGroup, siteName),
+    domainOwnershipIdentifierName: identifierName,
+  };
+  return orUndefinedIfNotFound(
+    slot === undefined
+      ? web.GetWebAppDomainOwnershipIdentifier(where)
+      : web.GetWebAppDomainOwnershipIdentifierSlot({ ...where, slot }),
   );
+};
 
 const toAttrs = (
   resourceGroup: string,
   siteName: string,
+  slot: string | undefined,
   identifierName: string,
   observed: ObservedIdentifier,
 ): DomainOwnershipIdentifier["Attributes"] => ({
   identifierName,
   identifierId: observed.id ?? "",
   siteName,
+  slot,
   resourceGroup,
   value: observed.properties?.value,
 });
 
 export const DomainOwnershipIdentifierProvider = () =>
   Provider.succeed(DomainOwnershipIdentifier, {
-    stables: ["identifierName", "identifierId", "siteName", "resourceGroup"],
+    stables: ["identifierName", "identifierId", "siteName", "slot", "resourceGroup"],
 
     // Identifiers are removed with their app.
     list: Effect.fn(function* () {
@@ -120,6 +135,7 @@ export const DomainOwnershipIdentifierProvider = () =>
       if (
         lower(news.resourceGroup) !== lower(output.resourceGroup) ||
         lower(news.siteName) !== lower(output.siteName) ||
+        lower(news.slot) !== lower(output.slot) ||
         (news.name !== undefined && lower(news.name) !== lower(output.identifierName))
       ) {
         return { action: "replace" } as const;
@@ -134,16 +150,18 @@ export const DomainOwnershipIdentifierProvider = () =>
       if (resourceGroup === undefined || siteName === undefined) {
         return undefined;
       }
+      const slot = output?.slot ?? olds?.slot;
       const identifierName =
         output?.identifierName ?? olds?.name ?? (yield* createIdentifierName(id));
       const observed = yield* getIdentifier(
         subscriptionId,
         resourceGroup,
         siteName,
+        slot,
         identifierName,
       );
       if (observed === undefined) return undefined;
-      const attrs = toAttrs(resourceGroup, siteName, identifierName, observed);
+      const attrs = toAttrs(resourceGroup, siteName, slot, identifierName, observed);
       // Identifiers carry no tags; only one this stack recorded is ours.
       return output !== undefined ? attrs : Unowned(attrs);
     }),
@@ -151,7 +169,7 @@ export const DomainOwnershipIdentifierProvider = () =>
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const { subscriptionId } = yield* AzureEnvironment.current;
       yield* ensureRegistered(subscriptionId, "Microsoft.Web");
-      const { resourceGroup, siteName } = news;
+      const { resourceGroup, siteName, slot } = news;
       const identifierName =
         news.name ?? output?.identifierName ?? (yield* createIdentifierName(id));
       const request = {
@@ -165,34 +183,53 @@ export const DomainOwnershipIdentifierProvider = () =>
         subscriptionId,
         resourceGroup,
         siteName,
+        slot,
         identifierName,
       );
 
       // Ensure + sync the value (a synchronous PUT/PATCH).
       const result =
         observed === undefined
-          ? yield* web.WebAppsCreateOrUpdateDomainOwnershipIdentifier(request)
+          ? slot === undefined
+            ? yield* web.WebAppsCreateOrUpdateDomainOwnershipIdentifier(request)
+            : yield* web.WebAppsCreateOrUpdateDomainOwnershipIdentifierSlot({ ...request, slot })
           : observed.properties?.value !== news.value
-            ? yield* web.UpdateWebAppDomainOwnershipIdentifier(request)
+            ? slot === undefined
+              ? yield* web.UpdateWebAppDomainOwnershipIdentifier(request)
+              : yield* web.UpdateWebAppDomainOwnershipIdentifierSlot({ ...request, slot })
             : observed;
-      return toAttrs(resourceGroup, siteName, identifierName, result);
+      return toAttrs(resourceGroup, siteName, slot, identifierName, result);
     }),
 
     delete: Effect.fn(function* ({ output }) {
       const { subscriptionId } = yield* AzureEnvironment.current;
+      const where = {
+        ...siteWhere(subscriptionId, output.resourceGroup, output.siteName),
+        domainOwnershipIdentifierName: output.identifierName,
+      };
       yield* ignoreNotFound(
-        web.DeleteWebAppDomainOwnershipIdentifier({
-          ...siteWhere(subscriptionId, output.resourceGroup, output.siteName),
-          domainOwnershipIdentifierName: output.identifierName,
-        }),
+        output.slot === undefined
+          ? web.DeleteWebAppDomainOwnershipIdentifier(where)
+          : web.DeleteWebAppDomainOwnershipIdentifierSlot({ ...where, slot: output.slot }),
       );
       yield* waitUntilGone(
         `domain ownership identifier ${output.identifierName}`,
-        getIdentifier(subscriptionId, output.resourceGroup, output.siteName, output.identifierName),
+        getIdentifier(
+          subscriptionId,
+          output.resourceGroup,
+          output.siteName,
+          output.slot,
+          output.identifierName,
+        ),
       );
     }),
 
     nuke: {
-      dependsOn: ["Azure.Resources.ResourceGroup", "Azure.Web.WebApp", "Azure.Web.FunctionApp"],
+      dependsOn: [
+        "Azure.Resources.ResourceGroup",
+        "Azure.Web.WebApp",
+        "Azure.Web.FunctionApp",
+        "Azure.Web.WebAppSlot",
+      ],
     },
   });

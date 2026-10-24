@@ -1,5 +1,6 @@
 import * as Layer from "effect/Layer";
 import { CaCertificate, CaCertificateProvider } from "./CaCertificate.ts";
+import { Channel, ChannelProvider } from "./Channel.ts";
 import { Client, ClientProvider } from "./Client.ts";
 import { ClientGroup, ClientGroupProvider } from "./ClientGroup.ts";
 import { Domain, DomainProvider } from "./Domain.ts";
@@ -20,6 +21,13 @@ import {
   NamespaceTopicEventSubscriptionProvider,
 } from "./NamespaceTopicEventSubscription.ts";
 import { PartnerConfiguration, PartnerConfigurationProvider } from "./PartnerConfiguration.ts";
+import { PartnerNamespace, PartnerNamespaceProvider } from "./PartnerNamespace.ts";
+import { PartnerRegistration, PartnerRegistrationProvider } from "./PartnerRegistration.ts";
+import { PartnerTopic, PartnerTopicProvider } from "./PartnerTopic.ts";
+import {
+  PartnerTopicEventSubscription,
+  PartnerTopicEventSubscriptionProvider,
+} from "./PartnerTopicEventSubscription.ts";
 import { PermissionBinding, PermissionBindingProvider } from "./PermissionBinding.ts";
 import { SystemTopic, SystemTopicProvider } from "./SystemTopic.ts";
 import {
@@ -35,6 +43,7 @@ import { TopicSpace, TopicSpaceProvider } from "./TopicSpace.ts";
 
 export const resources = [
   CaCertificate,
+  Channel,
   Client,
   ClientGroup,
   Domain,
@@ -46,6 +55,10 @@ export const resources = [
   NamespaceTopic,
   NamespaceTopicEventSubscription,
   PartnerConfiguration,
+  PartnerNamespace,
+  PartnerRegistration,
+  PartnerTopic,
+  PartnerTopicEventSubscription,
   PermissionBinding,
   SystemTopic,
   SystemTopicEventSubscription,
@@ -56,6 +69,7 @@ export const resources = [
 export const layers = () =>
   Layer.mergeAll(
     CaCertificateProvider(),
+    ChannelProvider(),
     ClientProvider(),
     ClientGroupProvider(),
     DomainProvider(),
@@ -67,6 +81,10 @@ export const layers = () =>
     NamespaceTopicProvider(),
     NamespaceTopicEventSubscriptionProvider(),
     PartnerConfigurationProvider(),
+    PartnerNamespaceProvider(),
+    PartnerRegistrationProvider(),
+    PartnerTopicProvider(),
+    PartnerTopicEventSubscriptionProvider(),
     PermissionBindingProvider(),
     SystemTopicProvider(),
     SystemTopicEventSubscriptionProvider(),

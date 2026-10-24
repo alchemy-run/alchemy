@@ -122,10 +122,8 @@ test.provider.skipIf(!runExpensive)(
         group.resourceGroupName,
         replaced.trust.serverTrustGroupName,
       );
-      expect([...(reobserved.properties?.trustScopes ?? [])].sort()).toEqual([
-        "GlobalTransactions",
-        "ServiceBroker",
-      ]);
+      const trustScopes = [...(reobserved.properties?.trustScopes ?? [])].sort();
+      expect(trustScopes).toEqual(["GlobalTransactions", "ServiceBroker"]);
 
       yield* stack.destroy();
       expect(

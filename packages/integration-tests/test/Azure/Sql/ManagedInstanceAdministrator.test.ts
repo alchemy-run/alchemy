@@ -51,24 +51,24 @@ const grantDirectoryReaders = (principalId: string) =>
       ),
     );
     expect(existing.status).toEqual(200);
-    if (((existing.body as { value?: unknown[] }).value ?? []).length > 0) {
-      return;
+    const assigned = ((existing.body as { value?: unknown[] }).value ?? []).length > 0;
+    if (!assigned) {
+      const created = yield* graphRequest(
+        HttpClientRequest.post(
+          "https://graph.microsoft.com/v1.0/roleManagement/directory/roleAssignments",
+        ).pipe(
+          HttpClientRequest.bodyJsonUnsafe({
+            principalId,
+            roleDefinitionId: DIRECTORY_READERS,
+            directoryScopeId: "/",
+          }),
+        ),
+      );
+      expect(created.status).toEqual(201);
+      yield* Effect.logInfo(
+        `granted Directory Readers to ${principalId}: ${JSON.stringify(created.body)}`,
+      );
     }
-    const created = yield* graphRequest(
-      HttpClientRequest.post(
-        "https://graph.microsoft.com/v1.0/roleManagement/directory/roleAssignments",
-      ).pipe(
-        HttpClientRequest.bodyJsonUnsafe({
-          principalId,
-          roleDefinitionId: DIRECTORY_READERS,
-          directoryScopeId: "/",
-        }),
-      ),
-    );
-    expect(created.status).toEqual(201);
-    yield* Effect.logInfo(
-      `granted Directory Readers to ${principalId}: ${JSON.stringify(created.body)}`,
-    );
   });
 
 const getSetting = (resourceGroupName: string, managedInstanceName: string) =>
@@ -126,8 +126,9 @@ test.provider.skipIf(!runExpensive)(
 
       // The instance first, so its identity can be granted Directory Readers.
       const base = yield* stack.deploy(program(password, undefined));
-      expect(base.instance.principalId).toBeDefined();
-      yield* grantDirectoryReaders(base.instance.principalId!);
+      const principalId = base.instance.principalId ?? "";
+      expect(principalId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
+      yield* grantDirectoryReaders(principalId);
 
       // The role grant takes a while to reach the instance's lookups.
       const first = yield* stack.deploy(program(password, "First")).pipe(

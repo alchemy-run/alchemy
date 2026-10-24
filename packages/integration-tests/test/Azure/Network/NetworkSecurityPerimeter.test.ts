@@ -36,7 +36,9 @@ test.provider(
       yield* stack.destroy();
 
       const { group, perimeter } = yield* stack.deploy(program("test"));
-      expect(perimeter.perimeterGuid).toBeDefined();
+      expect(perimeter.perimeterGuid).toMatch(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+      );
       expect(
         (yield* getPerimeter(group.resourceGroupName, perimeter.networkSecurityPerimeterName)).tags
           ?.env,

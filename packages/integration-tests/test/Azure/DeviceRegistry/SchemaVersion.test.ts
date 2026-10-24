@@ -56,7 +56,8 @@ test.provider(
       const observed = yield* get;
       expect(observed.properties?.schemaContent).toEqual(content("temperature"));
       expect(observed.properties?.description).toEqual("first");
-      expect(version.hash).toBeDefined();
+      expect(version.hash).toEqual(observed.properties?.hash);
+      expect(version.hash?.length ?? 0).toBeGreaterThan(0);
 
       // Replacement: versions are immutable, so new content deletes and
       // recreates version "1".

@@ -75,7 +75,9 @@ export interface RecoveryPlanProps {
   failoverDeploymentModel?: "NotApplicable" | "Classic" | "ResourceManager";
   /**
    * Ordered failover groups. A plan has the `Shutdown` and `Failover`
-   * groups plus at least one `Boot` group. Updated in place.
+   * groups plus at least one `Boot` group, and the boot groups must hold at
+   * least one protected item: ASR's create job fails for an empty plan and
+   * the plan never appears. Updated in place.
    */
   groups: RecoveryPlanGroup[];
   /**
@@ -105,8 +107,8 @@ export interface RecoveryPlan extends Resource<
     failoverDeploymentModel: string | undefined;
     /** Replication providers of the items in the plan. */
     replicationProviders: string[];
-    /** Groups as observed in Azure. */
-    groups: RecoveryPlanGroup[];
+    /** Groups as observed in Azure, including the implicit `Shutdown` and `Failover` groups. */
+    groups: asr.RecoveryPlanGroup[];
   },
   never,
   Providers
@@ -182,8 +184,9 @@ const withImplicitGroups = (groups: readonly RecoveryPlanGroup[]) => {
   ];
 };
 
-const observedGroups = (observed: Observed) =>
-  (observed.properties?.groups ?? []) as unknown as RecoveryPlanGroup[];
+const observedGroups = (observed: Observed): asr.RecoveryPlanGroup[] => [
+  ...(observed.properties?.groups ?? []),
+];
 
 const toAttrs = (where: Where, observed: Observed): RecoveryPlan["Attributes"] => ({
   recoveryPlanName: where.recoveryPlanName,

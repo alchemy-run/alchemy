@@ -34,7 +34,10 @@ export interface AgentConnectorProps {
   name?: string;
   /** Data connector type, e.g. `Kusto` or `AppInsights`. */
   dataConnectorType: string;
-  /** Data source connection string or endpoint. */
+  /**
+   * Data source connection string or endpoint. A Kusto data source is the
+   * cluster URL plus the database, e.g. `https://c.kusto.windows.net/db`.
+   */
   dataSource?: string;
   /** Endpoint of the connector. */
   endpoint?: string;
@@ -77,7 +80,7 @@ export interface AgentConnector extends Resource<
  * yield* Azure.ContainerApps.AgentConnector("kusto", {
  *   agent: agent.agentName,
  *   dataConnectorType: "Kusto",
- *   dataSource: "https://mycluster.westus2.kusto.windows.net",
+ *   dataSource: "https://mycluster.westus2.kusto.windows.net/mydatabase",
  *   identity: "system",
  * });
  * ```
@@ -188,10 +191,12 @@ export const AgentConnectorProvider = () =>
       // Observe.
       let observed = yield* get;
 
-      // Ensure + sync: one full PUT, skipped when nothing changed.
+      // Ensure + sync: one full PUT, skipped when nothing changed. Azure
+      // returns `dataSource` as null, so a changed data source is detected
+      // against the previous props.
       if (
         observed === undefined ||
-        !matchesDesired(properties, observed.properties) ||
+        !matchesDesired({ ...properties, dataSource: undefined }, observed.properties) ||
         (olds !== undefined && fingerprint(properties) !== fingerprint(toProperties(olds)))
       ) {
         yield* app.AgentsConnectorsCreateOrUpdate({

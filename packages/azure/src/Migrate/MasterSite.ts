@@ -39,7 +39,9 @@ export interface MasterSiteProps {
    */
   location?: string;
   /**
-   * Whether the master site may group more than one fabric site.
+   * Whether the master site may group more than one fabric site. Azure
+   * fixes it when the site is created (updates ignore it), so changing it
+   * replaces the site.
    * @default false
    */
   allowMultipleSites?: boolean;
@@ -71,6 +73,8 @@ export interface MasterSite extends Resource<
     siteId: string;
     /** Location of the site. */
     location: string;
+    /** Whether the master site may group more than one fabric site. */
+    allowMultipleSites: boolean;
     /** ARM IDs of the fabric sites the master site groups. */
     sites: string[];
     /** ARM IDs of the SQL and web-app sites nested under the master site. */
@@ -86,6 +90,11 @@ export interface MasterSite extends Resource<
  * An Azure Migrate master site (`Microsoft.OffAzure/masterSites`) — groups
  * an appliance's fabric sites (VMware, Hyper-V, physical servers) together
  * with the SQL and web-app inventory sites the appliance creates under it.
+ *
+ * :::caution
+ * Azure honors `allowMultipleSites` only when the site is created. Changing
+ * it, `name`, `location`, or `resourceGroup` replaces the site.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/migrate/migrate-appliance-architecture
  *
@@ -138,6 +147,7 @@ const toAttrs = (
   resourceGroup,
   siteId: site.id ?? "",
   location: site.location,
+  allowMultipleSites: site.properties?.allowMultipleSites ?? false,
   sites: [...(site.properties?.sites ?? [])],
   nestedSites: [...(site.properties?.nestedSites ?? [])],
   tags: userTags(site.tags),
@@ -177,7 +187,9 @@ export const MasterSiteProvider = () =>
         news.resourceGroup.toLowerCase() !== output.resourceGroup.toLowerCase() ||
         (news.name !== undefined && news.name.toLowerCase() !== output.siteName.toLowerCase()) ||
         (news.location !== undefined &&
-          news.location.toLowerCase() !== output.location.toLowerCase())
+          news.location.toLowerCase() !== output.location.toLowerCase()) ||
+        // Azure honors `allowMultipleSites` only on create.
+        (news.allowMultipleSites ?? false) !== output.allowMultipleSites
       ) {
         return { action: "replace" } as const;
       }

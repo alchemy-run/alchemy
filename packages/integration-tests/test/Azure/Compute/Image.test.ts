@@ -77,7 +77,7 @@ test.provider(
       yield* generalize(group.resourceGroupName, vm.virtualMachineName);
 
       const { image } = yield* stack.deploy(program({ withImage: true, tags: { env: "test" } }));
-      expect(image).toBeDefined();
+      expect(image?.imageName).toMatch(/^[\w.-]+$/);
       expect(image!.osType).toEqual("Linux");
       expect(image!.hyperVGeneration).toEqual("V2");
       expect(image!.sourceVirtualMachineId?.toLowerCase()).toEqual(

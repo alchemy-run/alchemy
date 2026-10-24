@@ -88,7 +88,8 @@ test.provider(
         (o) => o.properties?.auditActionsAndGroups?.length === 2,
         12,
       );
-      expect([...(observed2.properties?.auditActionsAndGroups ?? [])].sort()).toEqual([
+      const audited = [...(observed2.properties?.auditActionsAndGroups ?? [])].sort();
+      expect(audited).toEqual([
         "FAILED_DATABASE_AUTHENTICATION_GROUP",
         "SUCCESSFUL_DATABASE_AUTHENTICATION_GROUP",
       ]);

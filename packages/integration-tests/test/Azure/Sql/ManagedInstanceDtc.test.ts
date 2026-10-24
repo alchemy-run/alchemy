@@ -79,7 +79,7 @@ test.provider.skipIf(!runExpensive)(
         .slice(1)
         .join(".")
         .toLowerCase();
-      expect(ownDomain).toBeDefined();
+      expect((ownDomain ?? "").length).toBeGreaterThan(0);
       expect(
         (observed2.properties?.externalDnsSuffixSearchList ?? []).filter(
           (suffix) => suffix.toLowerCase() !== ownDomain,

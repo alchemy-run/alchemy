@@ -46,7 +46,7 @@ export interface IntegrationAccountBatchConfigurationProps {
   /** Name of the integration account. Changing it replaces the batch configuration. */
   integrationAccount: string;
   /**
-   * Batch configuration name: 1-80 letters, digits, `-`, `_`, `.`, `(`, `)`. If
+   * Batch configuration name: 1-20 letters or digits. If
    * omitted, a unique name is generated from the app, stage, and logical
    * ID. Changing it replaces the batch configuration.
    */
@@ -89,6 +89,11 @@ export interface IntegrationAccountBatchConfiguration extends Resource<
  * A batch configuration in a Logic Apps integration account: a named
  * batch group and the criteria (message count, size, or schedule) that
  * release batched messages to batch-receiver workflows.
+ *
+ * :::caution
+ * Changing `name`, `integrationAccount`, or `resourceGroup` replaces the
+ * batch configuration. Names are 1-20 letters or digits.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/logic-apps/logic-apps-batch-process-send-receive-messages
  *
@@ -151,6 +156,15 @@ const toAttrs = (
   metadata: userMetadata(observed.properties.metadata),
 });
 
+/** Batch configuration names: 1-20 letters or digits. */
+const isValidName = (name: string) => /^[A-Za-z0-9]{1,20}$/.test(name);
+
+/** Generated name: letters and digits only, at most 20 characters. */
+const createBatchName = Effect.fn(function* (id: string) {
+  const name = yield* createLogicName(id, 20);
+  return name.replace(/[^A-Za-z0-9]/g, "");
+});
+
 export const IntegrationAccountBatchConfigurationProvider = () =>
   Provider.succeed(IntegrationAccountBatchConfiguration, {
     stables: [
@@ -185,7 +199,9 @@ export const IntegrationAccountBatchConfigurationProvider = () =>
       if (resourceGroup === undefined || integrationAccount === undefined) {
         return undefined;
       }
-      const name = output?.batchConfigurationName ?? olds?.name ?? (yield* createLogicName(id));
+      const name = output?.batchConfigurationName ?? olds?.name ?? (yield* createBatchName(id));
+      // Azure rejects an invalid name (BadRequest), so none can exist.
+      if (!isValidName(name)) return undefined;
       const observed = yield* getBatchConfiguration(
         subscriptionId,
         resourceGroup,
@@ -201,7 +217,7 @@ export const IntegrationAccountBatchConfigurationProvider = () =>
       const { subscriptionId } = yield* AzureEnvironment.current;
       yield* ensureRegistered(subscriptionId, "Microsoft.Logic");
       const { resourceGroup, integrationAccount } = news;
-      const name = news.name ?? output?.batchConfigurationName ?? (yield* createLogicName(id));
+      const name = news.name ?? output?.batchConfigurationName ?? (yield* createBatchName(id));
       const properties = {
         batchGroupName: news.batchGroupName,
         releaseCriteria: news.releaseCriteria,

@@ -33,7 +33,8 @@ test.provider.skipIf(!runExpensive)(
       );
       expect(monitor.provisioningState).toEqual("Succeeded");
       expect(monitor.routingPreference).toEqual("Default");
-      expect(monitor.managedResourceGroupName).toBeDefined();
+      // The provider names the managed resource group `mrg-<monitor>`.
+      expect(monitor.managedResourceGroupName).toEqual(`mrg-${monitor.monitorName}`.slice(0, 90));
       const observed = yield* getMonitor(group.resourceGroupName, monitor.monitorName);
       expect(observed.properties?.monitorSubnet?.toLowerCase()).toEqual(
         subnet.subnetId.toLowerCase(),

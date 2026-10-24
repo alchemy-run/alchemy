@@ -119,7 +119,9 @@ test.provider.skipIf(!runExpensive)(
       expect(firewall!.firewallPolicyId?.toLowerCase()).toEqual(policyId.toLowerCase());
       const observed = yield* getFirewall(group.resourceGroupName, firewall!.azureFirewallName);
       expect(observed.properties?.provisioningState).toEqual("Succeeded");
-      expect(observed.properties?.managementIpConfiguration).toBeDefined();
+      expect(
+        observed.properties?.managementIpConfiguration?.properties?.publicIPAddress?.id?.toLowerCase(),
+      ).toContain("/providers/microsoft.network/publicipaddresses/");
       expect(observed.tags?.env).toEqual("test");
 
       // In-place update: swap the policy + tags. (DNS proxy and threat

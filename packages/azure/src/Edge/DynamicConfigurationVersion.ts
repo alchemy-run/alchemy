@@ -23,14 +23,17 @@ export interface DynamicConfigurationVersionProps {
   /** Name of the parent dynamic configuration. Changing it replaces the version. */
   dynamicConfiguration: string;
   /**
-   * Semantic version, e.g. `1.0.0`. Versions are immutable; changing it
-   * creates a new version and deletes the old one.
+   * Semantic version, e.g. `1.0.0`. It must name an existing version of
+   * the config template (or solution template) the dynamic configuration
+   * belongs to; otherwise Azure fails with `System generated Schema not
+   * found`.
+   *
+   * :::caution
+   * Changing the version creates a new version and deletes the old one.
+   * :::
    */
   version: string;
-  /**
-   * Configuration values as YAML (`Key: value` lines). Versions are
-   * immutable; changing the values replaces the version.
-   */
+  /** Configuration values as YAML (`Key: value` lines). Updated in place. */
   values: string;
 }
 
@@ -56,9 +59,10 @@ export interface DynamicConfigurationVersion extends Resource<
 > {}
 
 /**
- * An immutable version of an Azure Arc workload orchestration dynamic
- * configuration: the YAML configuration values a hierarchy entity sets
- * for one solution or config template.
+ * A version of an Azure Arc workload orchestration dynamic configuration
+ * (`Microsoft.Edge/configurations/dynamicConfigurations/versions`): the
+ * YAML configuration values a hierarchy entity sets for one version of a
+ * solution or config template.
  *
  * Versions carry no tags or free-form fields, so Alchemy cannot mark them;
  * a version found under the expected name is treated as this resource.
@@ -137,10 +141,7 @@ export const DynamicConfigurationVersionProvider = () =>
         news.configuration.toLowerCase() !== output.configuration.toLowerCase() ||
         news.dynamicConfiguration.toLowerCase() !== output.dynamicConfiguration.toLowerCase() ||
         news.version !== output.version;
-      if (moved || news.values !== output.values) {
-        // Same name, new payload: the old version must go first.
-        return { action: "replace", deleteFirst: !moved } as const;
-      }
+      if (moved) return { action: "replace" } as const;
       return undefined;
     }),
 
@@ -173,7 +174,8 @@ export const DynamicConfigurationVersionProvider = () =>
       // Observe.
       const observed = yield* get;
 
-      // Ensure. The payload is the version's only aspect.
+      // Ensure and sync: the PUT is an upsert and the values are the
+      // version's only mutable aspect.
       if (observed === undefined || observed.properties?.values !== news.values) {
         yield* edge.DynamicConfigurationVersionsCreateOrUpdate({
           ...request(subscriptionId, news),

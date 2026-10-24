@@ -40,6 +40,32 @@ export interface ApplicationGatewayFrontendIpConfiguration {
   subnetId?: string;
   /** Static private IP in the gateway subnet (private frontend). */
   privateIpAddress?: string;
+  /**
+   * Name of the private link configuration (from
+   * `privateLinkConfigurations`) that exposes this frontend to private
+   * endpoints.
+   */
+  privateLinkConfiguration?: string;
+}
+
+export interface ApplicationGatewayPrivateLinkConfiguration {
+  /** Name of the configuration, referenced by a frontend's `privateLinkConfiguration`. */
+  name: string;
+  /** NAT IP configurations of the private link (in a subnet other than the gateway's). */
+  ipConfigurations: {
+    /** Name of the IP configuration. */
+    name: string;
+    /**
+     * ARM ID of the subnet, with `privateLinkServiceNetworkPolicies`
+     * disabled.
+     */
+    subnetId: string;
+    /**
+     * Whether this is the primary IP configuration.
+     * @default false
+     */
+    primary?: boolean;
+  }[];
 }
 
 export interface ApplicationGatewayFrontendPort {
@@ -197,6 +223,12 @@ export interface ApplicationGatewayProps {
   httpListeners: ApplicationGatewayHttpListener[];
   /** Basic request routing rules (listener -> pool + settings). */
   requestRoutingRules: ApplicationGatewayRequestRoutingRule[];
+  /**
+   * Private link configurations, so consumers reach a frontend through
+   * private endpoints (approve them with
+   * {@link ApplicationGatewayConnectionApproval}). v2 SKUs only.
+   */
+  privateLinkConfigurations?: ApplicationGatewayPrivateLinkConfiguration[];
   /** ARM ID of a WAF policy (`WAF_v2` only). */
   firewallPolicyId?: string;
   /**
@@ -376,6 +408,23 @@ const desiredProperties = (news: ApplicationGatewayProps, gatewayId: string) => 
         subnet: f.subnetId === undefined ? undefined : { id: f.subnetId },
         privateIPAddress: f.privateIpAddress,
         privateIPAllocationMethod: f.privateIpAddress === undefined ? undefined : "Static",
+        privateLinkConfiguration:
+          f.privateLinkConfiguration === undefined
+            ? undefined
+            : sub("privateLinkConfigurations", f.privateLinkConfiguration),
+      },
+    })),
+    privateLinkConfigurations: (news.privateLinkConfigurations ?? []).map((c) => ({
+      name: c.name,
+      properties: {
+        ipConfigurations: c.ipConfigurations.map((ip) => ({
+          name: ip.name,
+          properties: {
+            subnet: { id: ip.subnetId },
+            primary: ip.primary ?? false,
+            privateIPAllocationMethod: "Dynamic",
+          },
+        })),
       },
     })),
     frontendPorts: news.frontendPorts.map((p) => ({
@@ -463,6 +512,16 @@ const project = (p: {
       readonly publicIPAddress?: Ref;
       readonly subnet?: Ref;
       readonly privateIPAddress?: string;
+      readonly privateLinkConfiguration?: Ref;
+    };
+  }>;
+  readonly privateLinkConfigurations?: ReadonlyArray<{
+    readonly name?: string;
+    readonly properties?: {
+      readonly ipConfigurations?: ReadonlyArray<{
+        readonly name?: string;
+        readonly properties?: { readonly subnet?: Ref; readonly primary?: boolean };
+      }>;
     };
   }>;
   readonly frontendPorts?: ReadonlyArray<{
@@ -537,6 +596,15 @@ const project = (p: {
       publicIp: lower(f.properties?.publicIPAddress?.id),
       subnet: f.properties?.privateIPAddress ? lower(f.properties.subnet?.id) : undefined,
       privateIp: f.properties?.privateIPAddress,
+      privateLink: nameOf(f.properties?.privateLinkConfiguration?.id),
+    })),
+    privateLinks: byName(p.privateLinkConfigurations).map((c) => ({
+      name: c.name,
+      ipConfigurations: byName(c.properties?.ipConfigurations).map((ip) => ({
+        name: ip.name,
+        subnet: lower(ip.properties?.subnet?.id),
+        primary: ip.properties?.primary ?? false,
+      })),
     })),
     ports: byName(p.frontendPorts).map((port) => ({
       name: port.name,

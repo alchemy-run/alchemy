@@ -58,8 +58,16 @@ test.provider(
       expect(database.databaseName).toEqual("default");
       expect(database.hostName).toEqual(redis.hostName);
       expect(database.port).toEqual(10000);
-      expect(database.primaryKey).toBeDefined();
-      expect(Redacted.value(database.primaryKey!).length).toBeGreaterThan(0);
+      const keys = yield* redisenterprise.ListDatabaseKeys({
+        subscriptionId: yield* subscription,
+        resourceGroupName: group.resourceGroupName,
+        clusterName: redis.clusterName,
+        databaseName: "default",
+      });
+      expect(keys.primaryKey?.length).toBeGreaterThan(0);
+      expect(database.primaryKey ? Redacted.value(database.primaryKey) : undefined).toEqual(
+        keys.primaryKey,
+      );
       const observed = yield* get();
       expect(observed.properties?.evictionPolicy).toEqual("NoEviction");
       expect(observed.properties?.accessKeysAuthentication).toEqual("Enabled");

@@ -157,6 +157,7 @@ export const chain = (options: ChainOptions) =>
       sourceShareLocation: account.location,
     });
     let mapping: Azure.DataShare.DataSetMapping | undefined;
+    let targetContainerName: string | undefined;
     if (options.mapping) {
       yield* Azure.Authorization.RoleAssignment("ConsumerWritesTarget", {
         scope: storage.storageAccountId,
@@ -178,6 +179,7 @@ export const chain = (options: ChainOptions) =>
             : undefined,
       };
       const target = targets[(options.targetContainer ?? "Target") as "Target"]!;
+      targetContainerName = target.containerName;
       mapping = yield* Azure.DataShare.DataSetMapping("Mapping", {
         resourceGroup: group.resourceGroupName,
         account: consumer.accountName,
@@ -214,6 +216,7 @@ export const chain = (options: ChainOptions) =>
       consumer,
       subscription,
       mapping,
+      targetContainerName,
       trigger,
     };
   });

@@ -87,6 +87,12 @@ export interface IntegrationAccountAssembly extends Resource<
  * of the desired configuration in the assembly's metadata to detect
  * changes.
  *
+ * :::caution
+ * Changing `name`, `integrationAccount`, or `resourceGroup` replaces the
+ * assembly. An account holds one artifact per .NET assembly name, so a
+ * rename that keeps `assemblyName` deletes the old artifact first.
+ * :::
+ *
  * @see https://learn.microsoft.com/azure/logic-apps/logic-apps-enterprise-integration-maps#add-referenced-assemblies
  *
  * ### Uploading an Assembly
@@ -150,14 +156,21 @@ export const IntegrationAccountAssemblyProvider = () =>
 
     diff: Effect.fn(function* ({ news, output }) {
       if (!isResolved(news) || output === undefined) return undefined;
-      if (
-        news.resourceGroup.toLowerCase() !== output.resourceGroup.toLowerCase() ||
-        news.integrationAccount.toLowerCase() !== output.integrationAccount.toLowerCase() ||
-        (news.name !== undefined &&
-          news.name.toLowerCase() !== output.assemblyArtifactName.toLowerCase())
-      ) {
-        return { action: "replace" } as const;
+      const sameAccount =
+        news.resourceGroup.toLowerCase() === output.resourceGroup.toLowerCase() &&
+        news.integrationAccount.toLowerCase() === output.integrationAccount.toLowerCase();
+      if (sameAccount && news.name !== undefined) {
+        if (news.name.toLowerCase() === output.assemblyArtifactName.toLowerCase()) {
+          return undefined;
+        }
+        // An account rejects a second artifact with the same .NET assembly
+        // name (`Conflict`), so a rename that keeps it deletes first.
+        return {
+          action: "replace",
+          deleteFirst: news.assemblyName.toLowerCase() === output.assemblyName.toLowerCase(),
+        } as const;
       }
+      if (!sameAccount) return { action: "replace" } as const;
       return undefined;
     }),
 
@@ -196,7 +209,8 @@ export const IntegrationAccountAssemblyProvider = () =>
       let observed = yield* getAssembly(subscriptionId, resourceGroup, integrationAccount, name);
 
       // Ensure + sync: the PUT is a synchronous full replacement; changes
-      // to fields Azure does not echo surface through the metadata hash.
+      // to fields Azure does not echo (content, culture, public key
+      // token) surface through the metadata hash.
       if (
         observed === undefined ||
         artifactDiffers(
@@ -205,8 +219,6 @@ export const IntegrationAccountAssemblyProvider = () =>
           definedOnly({
             assemblyName: news.assemblyName,
             assemblyVersion: news.assemblyVersion,
-            assemblyCulture: news.assemblyCulture,
-            assemblyPublicKeyToken: news.assemblyPublicKeyToken,
           }),
         )
       ) {

@@ -8,6 +8,8 @@ import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { flexConnectionString, flexStorage } from "./fixtures/flex-app.ts";
+import { windowsFunctionApp } from "./fixtures/windows-function-app.ts";
 
 const { test } = Test.make({ providers: Azure.providers() });
 
@@ -172,5 +174,69 @@ test.provider(
   {
     tags: ["provider:azure", "provider:azure:web", "live"],
     timeout: 600_000,
+  },
+);
+
+const slotHostKeys = (resourceGroupName: string, name: string) =>
+  Effect.gen(function* () {
+    const { subscriptionId } = yield* Azure.AzureEnvironment.current;
+    return yield* web.ListWebAppHostKeysSlot({
+      subscriptionId,
+      resourceGroupName,
+      name,
+      slot: "staging",
+    });
+  });
+
+const slotHostKeyValue = "alchemyTestSlotHostKeyValue0123456789abcd";
+
+const slotProgram = (connection: string, withKey: boolean) =>
+  Effect.gen(function* () {
+    const { group, app, slot } = yield* windowsFunctionApp(connection);
+    const key = withKey
+      ? yield* Azure.Web.FunctionAppHostKey("SlotHostKey", {
+          resourceGroup: group.resourceGroupName,
+          functionAppName: app.siteName,
+          slot: slot.slotName,
+          value: Redacted.make(slotHostKeyValue),
+        })
+      : undefined;
+    return { group, app, key };
+  });
+
+// S1 Windows plan: ~$0.10/h, about $0.03 per run (Standard_LRS storage).
+// Provisioning: ~5-7 minutes (slot host start).
+test.provider(
+  "create and delete a host key in a deployment slot",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const { group, account } = yield* stack.deploy(flexStorage);
+      const connection = yield* flexConnectionString(
+        group.resourceGroupName,
+        account.storageAccountName,
+      );
+      const { app, key } = yield* stack.deploy(slotProgram(connection, true));
+      expect(key?.slot).toEqual("staging");
+      const observed = yield* slotHostKeys(group.resourceGroupName, app.siteName);
+      expect(observed.functionKeys?.[key?.keyName ?? ""]).toEqual(slotHostKeyValue);
+
+      // Delete only the key.
+      yield* stack.deploy(slotProgram(connection, false));
+      const remaining = yield* slotHostKeys(group.resourceGroupName, app.siteName).pipe(
+        Effect.repeat({
+          schedule: Schedule.spaced("3 seconds"),
+          until: (keys) => keys.functionKeys?.[key?.keyName ?? ""] === undefined,
+          times: 10,
+        }),
+      );
+      expect(remaining.functionKeys?.[key?.keyName ?? ""]).toEqual(undefined);
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  {
+    tags: ["provider:azure", "provider:azure:web", "live"],
+    timeout: 900_000,
   },
 );

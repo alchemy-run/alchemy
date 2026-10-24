@@ -20,6 +20,11 @@ export interface PublicCertificateProps {
   /** Name of the Windows web app or function app. Changing it replaces it. */
   siteName: string;
   /**
+   * Deployment slot of the app. Changing it replaces the certificate.
+   * @default the production slot
+   */
+  slot?: string;
+  /**
    * Name of the certificate. If omitted, a unique name is generated from the
    * app, stage, and logical ID. Changing it replaces the certificate.
    */
@@ -48,6 +53,8 @@ export interface PublicCertificate extends Resource<
     publicCertificateId: string;
     /** Name of the app. */
     siteName: string;
+    /** Deployment slot, if slot-scoped. */
+    slot: string | undefined;
     /** Resource group of the app. */
     resourceGroup: string;
     /** SHA-1 thumbprint of the certificate. */
@@ -61,7 +68,8 @@ export interface PublicCertificate extends Resource<
 
 /**
  * A public (`.cer`) certificate loaded into the certificate store of a
- * Windows App Service app (`Microsoft.Web/sites/publicCertificates`), e.g. a
+ * Windows App Service app (`Microsoft.Web/sites/publicCertificates`, or
+ * `sites/slots/publicCertificates` with `slot`), e.g. a
  * private CA the app's outbound calls must trust. Requires a Basic or higher
  * plan; load it into the app with the `WEBSITE_LOAD_CERTIFICATES` setting.
  *
@@ -90,24 +98,43 @@ const getCertificate = (
   subscriptionId: string,
   resourceGroup: string,
   siteName: string,
+  slot: string | undefined,
   publicCertificateName: string,
-) =>
-  orUndefinedIfNotFound(
-    web.GetWebAppPublicCertificate({
-      ...siteWhere(subscriptionId, resourceGroup, siteName),
-      publicCertificateName,
-    }),
+) => {
+  const where = { ...siteWhere(subscriptionId, resourceGroup, siteName), publicCertificateName };
+  return orUndefinedIfNotFound(
+    slot === undefined
+      ? web.GetWebAppPublicCertificate(where)
+      : web.GetWebAppPublicCertificateSlot({ ...where, slot }),
   );
+};
+
+const deleteCertificate = (
+  subscriptionId: string,
+  resourceGroup: string,
+  siteName: string,
+  slot: string | undefined,
+  publicCertificateName: string,
+) => {
+  const where = { ...siteWhere(subscriptionId, resourceGroup, siteName), publicCertificateName };
+  return ignoreNotFound(
+    slot === undefined
+      ? web.DeleteWebAppPublicCertificate(where)
+      : web.DeleteWebAppPublicCertificateSlot({ ...where, slot }),
+  );
+};
 
 const toAttrs = (
   resourceGroup: string,
   siteName: string,
+  slot: string | undefined,
   publicCertificateName: string,
   observed: ObservedCertificate,
 ): PublicCertificate["Attributes"] => ({
   publicCertificateName,
   publicCertificateId: observed.id ?? "",
   siteName,
+  slot,
   resourceGroup,
   thumbprint: observed.properties?.thumbprint,
   publicCertificateLocation: observed.properties?.publicCertificateLocation,
@@ -115,7 +142,7 @@ const toAttrs = (
 
 export const PublicCertificateProvider = () =>
   Provider.succeed(PublicCertificate, {
-    stables: ["publicCertificateName", "publicCertificateId", "siteName", "resourceGroup"],
+    stables: ["publicCertificateName", "publicCertificateId", "siteName", "slot", "resourceGroup"],
 
     // Certificates are removed with their app.
     list: Effect.fn(function* () {
@@ -126,7 +153,8 @@ export const PublicCertificateProvider = () =>
       if (!isResolved(news) || output === undefined) return undefined;
       const sameSite =
         lower(news.resourceGroup) === lower(output.resourceGroup) &&
-        lower(news.siteName) === lower(output.siteName);
+        lower(news.siteName) === lower(output.siteName) &&
+        lower(news.slot) === lower(output.slot);
       const sameBlob = olds === undefined || news.blob === olds.blob;
       if (
         !sameSite ||
@@ -150,11 +178,12 @@ export const PublicCertificateProvider = () =>
       if (resourceGroup === undefined || siteName === undefined) {
         return undefined;
       }
+      const slot = output?.slot ?? olds?.slot;
       const name =
         output?.publicCertificateName ?? olds?.name ?? (yield* createCertificateName(id));
-      const observed = yield* getCertificate(subscriptionId, resourceGroup, siteName, name);
+      const observed = yield* getCertificate(subscriptionId, resourceGroup, siteName, slot, name);
       if (observed === undefined) return undefined;
-      const attrs = toAttrs(resourceGroup, siteName, name, observed);
+      const attrs = toAttrs(resourceGroup, siteName, slot, name, observed);
       // Site certificates carry no tags; only one this stack recorded is ours.
       return output !== undefined ? attrs : Unowned(attrs);
     }),
@@ -162,55 +191,57 @@ export const PublicCertificateProvider = () =>
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const { subscriptionId } = yield* AzureEnvironment.current;
       yield* ensureRegistered(subscriptionId, "Microsoft.Web");
-      const { resourceGroup, siteName } = news;
+      const { resourceGroup, siteName, slot } = news;
       const name = news.name ?? output?.publicCertificateName ?? (yield* createCertificateName(id));
       const location = news.publicCertificateLocation ?? "CurrentUserMy";
 
       // Observe.
-      const observed = yield* getCertificate(subscriptionId, resourceGroup, siteName, name);
+      const observed = yield* getCertificate(subscriptionId, resourceGroup, siteName, slot, name);
 
       const inStore = (cert: ObservedCertificate | undefined) =>
         cert !== undefined && lower(cert.properties?.publicCertificateLocation) === lower(location);
-      const put = web.WebAppsCreateOrUpdatePublicCertificate({
+      const request = {
         ...siteWhere(subscriptionId, resourceGroup, siteName),
         publicCertificateName: name,
         properties: {
           blob: news.blob,
           publicCertificateLocation: location,
         },
-      });
+      };
+      const put =
+        slot === undefined
+          ? web.WebAppsCreateOrUpdatePublicCertificate(request)
+          : web.WebAppsCreateOrUpdatePublicCertificateSlot({ ...request, slot });
 
       // Ensure (a synchronous PUT; the blob is immutable).
       if (observed === undefined) {
-        return toAttrs(resourceGroup, siteName, name, yield* put);
+        const created = yield* put;
+        return toAttrs(resourceGroup, siteName, slot, name, created);
       }
       if (inStore(observed)) {
-        return toAttrs(resourceGroup, siteName, name, observed);
+        return toAttrs(resourceGroup, siteName, slot, name, observed);
       }
 
       // Sync the store. Microsoft.Web accepts a PUT on an existing
       // certificate but keeps its original store, so a store change
       // re-installs the certificate under the same name.
-      yield* ignoreNotFound(
-        web.DeleteWebAppPublicCertificate({
-          ...siteWhere(subscriptionId, resourceGroup, siteName),
-          publicCertificateName: name,
-        }),
-      );
+      yield* deleteCertificate(subscriptionId, resourceGroup, siteName, slot, name);
       yield* waitUntilGone(
         `public certificate ${name}`,
-        getCertificate(subscriptionId, resourceGroup, siteName, name),
+        getCertificate(subscriptionId, resourceGroup, siteName, slot, name),
       );
-      return toAttrs(resourceGroup, siteName, name, yield* put);
+      const reinstalled = yield* put;
+      return toAttrs(resourceGroup, siteName, slot, name, reinstalled);
     }),
 
     delete: Effect.fn(function* ({ output }) {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      yield* ignoreNotFound(
-        web.DeleteWebAppPublicCertificate({
-          ...siteWhere(subscriptionId, output.resourceGroup, output.siteName),
-          publicCertificateName: output.publicCertificateName,
-        }),
+      yield* deleteCertificate(
+        subscriptionId,
+        output.resourceGroup,
+        output.siteName,
+        output.slot,
+        output.publicCertificateName,
       );
       yield* waitUntilGone(
         `public certificate ${output.publicCertificateName}`,
@@ -218,12 +249,18 @@ export const PublicCertificateProvider = () =>
           subscriptionId,
           output.resourceGroup,
           output.siteName,
+          output.slot,
           output.publicCertificateName,
         ),
       );
     }),
 
     nuke: {
-      dependsOn: ["Azure.Resources.ResourceGroup", "Azure.Web.WebApp", "Azure.Web.FunctionApp"],
+      dependsOn: [
+        "Azure.Resources.ResourceGroup",
+        "Azure.Web.WebApp",
+        "Azure.Web.FunctionApp",
+        "Azure.Web.WebAppSlot",
+      ],
     },
   });

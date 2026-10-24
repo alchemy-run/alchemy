@@ -36,8 +36,11 @@ const createGuard = (resourceGroupName: string, name: string) =>
       location,
       properties: {},
     });
-    expect(guard.id).toBeDefined();
-    return guard.id!;
+    const id = guard.id ?? "";
+    expect(id.toLowerCase()).toContain(
+      `/providers/microsoft.dataprotection/resourceguards/${name}`,
+    );
+    return id;
   });
 
 const deleteGuard = (resourceGroupName: string, name: string) =>

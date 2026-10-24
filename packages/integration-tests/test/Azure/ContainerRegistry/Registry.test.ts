@@ -63,7 +63,10 @@ test.provider(
         }),
       );
       expect(updated.registry.registryId).toEqual(registry.registryId);
-      expect(updated.registry.adminUsername).toBeDefined();
+      // ACR names the admin user after the registry.
+      expect(updated.registry.adminUsername?.toLowerCase()).toEqual(
+        registry.registryName.toLowerCase(),
+      );
       expect(Redacted.value(updated.registry.adminPassword!).length).toBeGreaterThan(0);
       const reobserved = yield* getRegistry(group.resourceGroupName, registry.registryName);
       expect(reobserved.sku.name).toEqual("Standard");

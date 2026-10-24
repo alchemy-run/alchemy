@@ -89,6 +89,16 @@ export const vmLocation = (subscriptionId: string, resourceGroupName: string, vm
     compute.GetVirtualMachine({ subscriptionId, resourceGroupName, vmName }),
   ).pipe(Effect.map((vm) => vm?.location));
 
+/** Location of a scale set, or `undefined` if it does not exist. */
+export const scaleSetLocation = (
+  subscriptionId: string,
+  resourceGroupName: string,
+  vmScaleSetName: string,
+) =>
+  orUndefinedIfNotFound(
+    compute.GetVirtualMachineScaleSet({ subscriptionId, resourceGroupName, vmScaleSetName }),
+  ).pipe(Effect.map((set) => set?.location));
+
 /** Canonical form of protected settings (redacted or not). */
 export const protectedKey = (value: unknown) =>
   value === undefined
@@ -193,6 +203,36 @@ export const runCommandDrifted = (
     protectedKey(olds?.runAsPassword) !== protectedKey(news.runAsPassword)
   );
 };
+
+const PENDING_EXECUTION = new Set(["Unknown", "Pending", "Running"]);
+
+/**
+ * Wait for a run command to finish provisioning and, unless it runs
+ * asynchronously, executing. Right after a re-run PUT, scale set VM run
+ * commands still report `provisioningState: "Succeeded"` with a reset
+ * instance view.
+ */
+export const waitRunCommandFinished = <
+  A extends { readonly properties?: compute.VirtualMachineRunCommandProperties },
+  E,
+  R,
+>(
+  label: string,
+  get: Effect.Effect<A | undefined, E, R>,
+  asyncExecution: boolean | undefined,
+) =>
+  waitForProvisioned(
+    label,
+    get,
+    (value) => {
+      const execution = value.properties?.instanceView?.executionState;
+      return asyncExecution !== true &&
+        (execution === undefined || PENDING_EXECUTION.has(execution))
+        ? "Running"
+        : value.properties?.provisioningState;
+    },
+    { interval: "5 seconds", times: 120 },
+  );
 
 /** Execution result attributes of a run command. */
 export const runCommandResult = (

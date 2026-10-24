@@ -21,6 +21,8 @@ import { AuthorizationServer, AuthorizationServerProvider } from "./Authorizatio
 import { Backend, BackendProvider } from "./Backend.ts";
 import { Cache, CacheProvider } from "./Cache.ts";
 import { Certificate, CertificateProvider } from "./Certificate.ts";
+import { ContentItem, ContentItemProvider } from "./ContentItem.ts";
+import { ContentType, ContentTypeProvider } from "./ContentType.ts";
 import { Diagnostic, DiagnosticProvider } from "./Diagnostic.ts";
 import { Documentation, DocumentationProvider } from "./Documentation.ts";
 import { EmailTemplate, EmailTemplateProvider } from "./EmailTemplate.ts";
@@ -57,6 +59,7 @@ import {
 import { OpenIdConnectProvider, OpenIdConnectProviderProvider } from "./OpenIdConnectProvider.ts";
 import { PolicyFragment, PolicyFragmentProvider } from "./PolicyFragment.ts";
 import { PolicyRestriction, PolicyRestrictionProvider } from "./PolicyRestriction.ts";
+import { PortalConfig, PortalConfigProvider } from "./PortalConfig.ts";
 import { Product, ProductProvider } from "./Product.ts";
 import { ProductApi, ProductApiProvider } from "./ProductApi.ts";
 import { ProductApiLink, ProductApiLinkProvider } from "./ProductApiLink.ts";
@@ -72,6 +75,7 @@ import { Tag, TagProvider } from "./Tag.ts";
 import { TagApiLink, TagApiLinkProvider } from "./TagApiLink.ts";
 import { TagOperationLink, TagOperationLinkProvider } from "./TagOperationLink.ts";
 import { TagProductLink, TagProductLinkProvider } from "./TagProductLink.ts";
+import { TenantAccess, TenantAccessProvider } from "./TenantAccess.ts";
 import { User, UserProvider } from "./User.ts";
 import { Workspace, WorkspaceProvider } from "./Workspace.ts";
 import { WorkspaceApi, WorkspaceApiProvider } from "./WorkspaceApi.ts";
@@ -163,6 +167,8 @@ export const resources = [
   Backend,
   Cache,
   Certificate,
+  ContentItem,
+  ContentType,
   Diagnostic,
   Documentation,
   EmailTemplate,
@@ -184,6 +190,7 @@ export const resources = [
   OpenIdConnectProvider,
   PolicyFragment,
   PolicyRestriction,
+  PortalConfig,
   Product,
   ProductApi,
   ProductApiLink,
@@ -199,6 +206,7 @@ export const resources = [
   TagApiLink,
   TagOperationLink,
   TagProductLink,
+  TenantAccess,
   User,
   Workspace,
   WorkspaceApi,
@@ -256,6 +264,8 @@ export const layers = () =>
       BackendProvider(),
       CacheProvider(),
       CertificateProvider(),
+      ContentItemProvider(),
+      ContentTypeProvider(),
       DiagnosticProvider(),
       DocumentationProvider(),
       EmailTemplateProvider(),
@@ -277,6 +287,7 @@ export const layers = () =>
       OpenIdConnectProviderProvider(),
       PolicyFragmentProvider(),
       PolicyRestrictionProvider(),
+      PortalConfigProvider(),
     ),
     Layer.mergeAll(
       ProductProvider(),
@@ -294,6 +305,7 @@ export const layers = () =>
       TagApiLinkProvider(),
       TagOperationLinkProvider(),
       TagProductLinkProvider(),
+      TenantAccessProvider(),
       UserProvider(),
       WorkspaceProvider(),
       WorkspaceApiProvider(),

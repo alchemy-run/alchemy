@@ -78,6 +78,15 @@ export interface ContainerAppProps {
    */
   environmentId: string;
   /**
+   * ARM ID of the Azure Arc custom location, when `environmentId` is a
+   * `ConnectedEnvironment`. Changing it replaces the app.
+   *
+   * :::caution
+   * Changing `customLocationId` deletes the app and creates a new one.
+   * :::
+   */
+  customLocationId?: string;
+  /**
    * Workload profile of the environment to run on.
    * @default the environment's Consumption profile
    */
@@ -435,6 +444,7 @@ export const ContainerAppProvider = () =>
       if (
         lower(news.resourceGroup) !== lower(output.resourceGroup) ||
         (olds !== undefined && lower(news.kind) !== lower(olds.kind)) ||
+        (olds !== undefined && lower(news.customLocationId) !== lower(olds.customLocationId)) ||
         (news.name !== undefined && news.name !== output.containerAppName) ||
         (news.location !== undefined && !sameLocation(news.location, output.location)) ||
         lower(news.environmentId) !== lower(output.environmentId)
@@ -479,6 +489,10 @@ export const ContainerAppProvider = () =>
         tags,
         identity: toIdentity(identity),
         kind: news.kind,
+        extendedLocation:
+          news.customLocationId === undefined
+            ? undefined
+            : { name: news.customLocationId, type: "CustomLocation" },
         properties,
       });
       const ready = waitForProvisioned(`container app ${name}`, get, appState, {

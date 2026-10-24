@@ -99,7 +99,8 @@ test.provider(
       const observed = yield* getStack(group.resourceGroupName, created.deploymentStackName);
       expect(observed?.tags?.["alchemy::id"]).toEqual("Stack");
       expect(observed?.properties?.description).toEqual("first");
-      expect(yield* getIdentity(group.resourceGroupName)).toBeDefined();
+      const identity = yield* getIdentity(group.resourceGroupName);
+      expect(identity?.name).toEqual(IDENTITY);
 
       // Unchanged inputs do not redeploy.
       const again = yield* stack.deploy(
@@ -114,16 +115,16 @@ test.provider(
       expect(updated.stack.deploymentStackName).toEqual(created.deploymentStackName);
       expect(updated.stack.outputs).toEqual({ label: "two" });
       expect(updated.stack.managedResources).toEqual([]);
-      expect(
-        (yield* getStack(group.resourceGroupName, created.deploymentStackName))?.properties
-          ?.description,
-      ).toEqual("second");
-      expect(yield* untilGone(getIdentity(group.resourceGroupName))).toBeUndefined();
+      const reobserved = yield* getStack(group.resourceGroupName, created.deploymentStackName);
+      expect(reobserved?.properties?.description).toEqual("second");
+      const unmanaged = yield* untilGone(getIdentity(group.resourceGroupName));
+      expect(unmanaged).toBeUndefined();
 
       yield* stack.destroy();
-      expect(
-        yield* untilGone(getStack(group.resourceGroupName, created.deploymentStackName)),
-      ).toBeUndefined();
+      const destroyed = yield* untilGone(
+        getStack(group.resourceGroupName, created.deploymentStackName),
+      );
+      expect(destroyed).toBeUndefined();
     }).pipe(logLevel),
   {
     tags: ["provider:azure", "provider:azure:resources", "live"],

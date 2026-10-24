@@ -83,6 +83,11 @@ export interface IntegrationAccountMap extends Resource<
  * Azure stores the content but never returns it, so Alchemy keeps a hash
  * of the desired configuration in the map's metadata to detect changes.
  *
+ * :::caution
+ * Changing `name`, `mapType`, `integrationAccount`, or `resourceGroup`
+ * replaces the map.
+ * :::
+ *
  * @see https://learn.microsoft.com/azure/logic-apps/logic-apps-enterprise-integration-maps
  *
  * ### Adding a Map

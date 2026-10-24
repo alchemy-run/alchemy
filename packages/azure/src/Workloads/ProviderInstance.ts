@@ -250,14 +250,25 @@ type ObservedInstance = workloads.GetProviderInstanceResponse;
 
 const SECRET_FIELDS = ["dbPassword", "sapPassword"] as const;
 
+/** The secrets of the settings, unwrapped. */
+const secretsOf = (settings: ProviderInstanceSettings) => ({
+  dbPassword:
+    "dbPassword" in settings && settings.dbPassword !== undefined
+      ? Redacted.value(settings.dbPassword)
+      : undefined,
+  sapPassword:
+    "sapPassword" in settings && settings.sapPassword !== undefined
+      ? Redacted.value(settings.sapPassword)
+      : undefined,
+});
+
 /** Wire form of the settings (secrets unwrapped). */
 const toWire = (settings: ProviderInstanceSettings): workloads.ProviderSpecificProperties => {
-  const wire: Record<string, unknown> = { ...settings };
-  for (const field of SECRET_FIELDS) {
-    const value = wire[field];
-    if (Redacted.isRedacted(value)) wire[field] = Redacted.value(value);
-  }
-  return wire as unknown as workloads.ProviderSpecificProperties;
+  const { dbPassword, sapPassword } = secretsOf(settings);
+  const wire: workloads.ProviderSpecificProperties = { ...settings, dbPassword, sapPassword };
+  if (dbPassword === undefined) delete wire.dbPassword;
+  if (sapPassword === undefined) delete wire.sapPassword;
+  return wire;
 };
 
 /**
@@ -292,13 +303,10 @@ const settingsDrift = (observed: object | undefined, desired: ProviderInstanceSe
 };
 
 /** Fingerprint of the secrets, so a password change also re-creates. */
-const secretFingerprint = (settings: ProviderInstanceSettings) =>
-  JSON.stringify(
-    SECRET_FIELDS.map((field) => {
-      const value = (settings as unknown as Record<string, unknown>)[field];
-      return Redacted.isRedacted(value) ? Redacted.value(value) : value;
-    }),
-  );
+const secretFingerprint = (settings: ProviderInstanceSettings) => {
+  const secrets = secretsOf(settings);
+  return JSON.stringify(SECRET_FIELDS.map((field) => secrets[field]));
+};
 
 // Provider instance names are 2-20 characters long.
 const createInstanceName = (id: string) => createPhysicalName({ id, maxLength: 20 });

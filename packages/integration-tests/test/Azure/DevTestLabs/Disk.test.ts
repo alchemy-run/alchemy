@@ -91,7 +91,7 @@ test.provider.skipIf(!runExpensive)(
       expect(observed.properties?.leasedByLabVmId?.toLowerCase()).toEqual(
         vm.virtualMachineId.toLowerCase(),
       );
-      expect(disk.managedDiskId).toBeDefined();
+      expect(disk.managedDiskId).toMatch(/\/providers\/Microsoft\.Compute\/disks\/[^/]+$/i);
 
       // In-place: tags.
       const updated = yield* stack.deploy(program({ sizeGiB: 4, tags: { env: "prod" } }));

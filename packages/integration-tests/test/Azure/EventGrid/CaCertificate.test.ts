@@ -80,8 +80,9 @@ test.provider(
       yield* stack.destroy();
 
       const { group, namespace, ca } = yield* stack.deploy(program({ certificate: CA_A }));
-      expect(ca.expiryTimeInUtc).toBeDefined();
-      expect(Date.parse(ca.expiryTimeInUtc!)).toBeGreaterThan(Date.parse("2036-01-01T00:00:00Z"));
+      expect(Date.parse(ca.expiryTimeInUtc ?? "")).toBeGreaterThan(
+        Date.parse("2036-01-01T00:00:00Z"),
+      );
       const observed = yield* getCertificate(
         group.resourceGroupName,
         namespace.namespaceName,

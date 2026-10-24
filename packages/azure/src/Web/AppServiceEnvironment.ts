@@ -27,6 +27,43 @@ import { changedKeys, lower, sameLocation } from "./common.ts";
 /** Which endpoints of the environment sit behind an internal load balancer. */
 export type AppServiceEnvironmentLoadBalancing = "None" | "Web" | "Publishing" | "Web, Publishing";
 
+/** Networking settings of an App Service Environment v3. */
+export interface AppServiceEnvironmentNetworking {
+  /**
+   * Allow new private endpoint connections to apps in the environment.
+   * @default false
+   */
+  allowNewPrivateEndpointConnections?: boolean;
+  /**
+   * Allow FTP deployments to apps in the environment.
+   * @default false
+   */
+  ftpEnabled?: boolean;
+  /**
+   * Allow remote debugging of apps in the environment.
+   * @default false
+   */
+  remoteDebugEnabled?: boolean;
+  /**
+   * Inbound IP address of a custom public IP for an external environment.
+   * @default the environment's own inbound address
+   */
+  inboundIpAddressOverride?: string;
+}
+
+/** Custom DNS suffix of an internal App Service Environment v3. */
+export interface AppServiceEnvironmentCustomDnsSuffix {
+  /** DNS suffix of the apps, e.g. `internal.contoso.com`. */
+  dnsSuffix: string;
+  /** Key Vault secret URL of the wildcard certificate for the suffix. */
+  certificateUrl: string;
+  /**
+   * User-assigned identity (ARM ID) that reads the certificate.
+   * @default the environment's system-assigned identity
+   */
+  keyVaultReferenceIdentity?: string;
+}
+
 export interface AppServiceEnvironmentProps {
   /** Resource group the environment is created in. Changing it replaces it. */
   resourceGroup: string;
@@ -77,6 +114,18 @@ export interface AppServiceEnvironmentProps {
    */
   upgradePreference?: "None" | "Early" | "Late" | "Manual";
   /**
+   * Networking settings (`hostingEnvironments/configurations/networking`).
+   * @default Azure's defaults
+   */
+  networking?: AppServiceEnvironmentNetworking;
+  /**
+   * Custom DNS suffix for an internal environment
+   * (`hostingEnvironments/configurations/customdnssuffix`). Removing it
+   * deletes the custom suffix.
+   * @default the `{name}.appserviceenvironment.net` suffix only
+   */
+  customDnsSuffix?: AppServiceEnvironmentCustomDnsSuffix;
+  /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
    */
@@ -103,6 +152,8 @@ export interface AppServiceEnvironment extends Resource<
     status: string | undefined;
     /** Internal load balancing mode. */
     internalLoadBalancingMode: string | undefined;
+    /** Custom DNS suffix, if configured. */
+    customDnsSuffix: string | undefined;
     /** User tags (Alchemy ownership tags stripped). */
     tags: Record<string, string>;
   },
@@ -133,6 +184,19 @@ export interface AppServiceEnvironment extends Resource<
  * });
  * ```
  *
+ * **Example:** Internal environment with a custom DNS suffix
+ * ```typescript
+ * const ase = yield* Azure.Web.AppServiceEnvironment("ase", {
+ *   subnetId: subnet.subnetId,
+ *   internalLoadBalancingMode: "Web, Publishing",
+ *   customDnsSuffix: {
+ *     dnsSuffix: "internal.contoso.com",
+ *     certificateUrl: wildcardCertificateSecretUrl,
+ *   },
+ *   networking: { ftpEnabled: false, remoteDebugEnabled: false },
+ * });
+ * ```
+ *
  * **Example:** Internal environment
  * ```typescript
  * const ase = yield* Azure.Web.AppServiceEnvironment("ase", {
@@ -155,7 +219,21 @@ type ObservedEnvironment = web.GetAppServiceEnvironmentResponse;
 const getEnvironment = (subscriptionId: string, resourceGroupName: string, name: string) =>
   orUndefinedIfNotFound(web.GetAppServiceEnvironment({ subscriptionId, resourceGroupName, name }));
 
-const toAttrs = (resourceGroup: string, name: string, observed: ObservedEnvironment) => ({
+const getDnsSuffix = (subscriptionId: string, resourceGroupName: string, name: string) =>
+  orUndefinedIfNotFound(
+    web.GetAppServiceEnvironmentAseCustomDnsSuffixConfiguration({
+      subscriptionId,
+      resourceGroupName,
+      name,
+    }),
+  ).pipe(Effect.map((config) => config?.properties?.dnsSuffix || undefined));
+
+const toAttrs = (
+  resourceGroup: string,
+  name: string,
+  observed: ObservedEnvironment,
+  customDnsSuffix: string | undefined,
+) => ({
   appServiceEnvironmentName: name,
   appServiceEnvironmentId: observed.id ?? "",
   resourceGroup,
@@ -164,6 +242,7 @@ const toAttrs = (resourceGroup: string, name: string, observed: ObservedEnvironm
   dnsSuffix: observed.properties?.dnsSuffix,
   status: observed.properties?.status,
   internalLoadBalancingMode: observed.properties?.internalLoadBalancingMode,
+  customDnsSuffix,
   tags: userTags(observed.tags),
 });
 
@@ -192,7 +271,7 @@ export const AppServiceEnvironmentProvider = () =>
       return (page.value ?? []).flatMap((ase) => {
         const group = resourceGroupOf(ase.id);
         return hasAnyAlchemyTag(ase.tags) && group !== undefined && ase.name !== undefined
-          ? [toAttrs(group, ase.name, ase)]
+          ? [toAttrs(group, ase.name, ase, undefined)]
           : [];
       });
     }),
@@ -222,7 +301,8 @@ export const AppServiceEnvironmentProvider = () =>
         output?.appServiceEnvironmentName ?? olds?.name ?? (yield* createEnvironmentName(id));
       const observed = yield* getEnvironment(subscriptionId, resourceGroup, name);
       if (observed === undefined) return undefined;
-      const attrs = toAttrs(resourceGroup, name, observed);
+      const dnsSuffix = yield* getDnsSuffix(subscriptionId, resourceGroup, name);
+      const attrs = toAttrs(resourceGroup, name, observed, dnsSuffix);
       return (yield* isOwned(id, observed.tags)) ? attrs : Unowned(attrs);
     }),
 
@@ -288,7 +368,46 @@ export const AppServiceEnvironmentProvider = () =>
         observed = yield* waitReady;
       }
 
-      return toAttrs(resourceGroup, name, observed);
+      // Sync the networking configuration against observed state.
+      if (news.networking !== undefined) {
+        const networking = yield* web.GetAppServiceEnvironmentAseV3NetworkingConfiguration(where);
+        const delta = changedKeys(news.networking, networking.properties);
+        if (Object.keys(delta).length > 0) {
+          yield* web.UpdateAppServiceEnvironmentAseNetworkingConfiguration({
+            ...where,
+            properties: { ...news.networking },
+          });
+          observed = yield* waitReady;
+        }
+      }
+
+      // Sync the custom DNS suffix against observed state.
+      const observedSuffix = yield* orUndefinedIfNotFound(
+        web.GetAppServiceEnvironmentAseCustomDnsSuffixConfiguration(where),
+      );
+      const desiredSuffix = news.customDnsSuffix;
+      if (desiredSuffix !== undefined) {
+        const current = observedSuffix?.properties;
+        if (
+          lower(current?.dnsSuffix) !== lower(desiredSuffix.dnsSuffix) ||
+          current?.certificateUrl !== desiredSuffix.certificateUrl ||
+          lower(current?.keyVaultReferenceIdentity) !==
+            lower(desiredSuffix.keyVaultReferenceIdentity)
+        ) {
+          yield* web.UpdateAppServiceEnvironmentAseCustomDnsSuffixConfiguration({
+            ...where,
+            properties: { ...desiredSuffix },
+          });
+          observed = yield* waitReady;
+        }
+      } else if (observedSuffix?.properties?.dnsSuffix) {
+        yield* ignoreNotFound(
+          web.DeleteAppServiceEnvironmentAseCustomDnsSuffixConfiguration(where),
+        );
+        observed = yield* waitReady;
+      }
+
+      return toAttrs(resourceGroup, name, observed, desiredSuffix?.dnsSuffix);
     }),
 
     delete: Effect.fn(function* ({ output }) {

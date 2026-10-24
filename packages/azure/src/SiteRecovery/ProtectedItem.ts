@@ -148,7 +148,7 @@ export interface ProtectedItem extends Resource<
  *   policyId: policy.policyId,
  *   providerSpecificDetails: {
  *     instanceType: "A2A",
- *     fabricObjectId: vm.vmId,
+ *     fabricObjectId: vm.virtualMachineId,
  *     recoveryContainerId: recoveryContainer.protectionContainerId,
  *     recoveryResourceGroupId: recoveryGroup.resourceGroupId,
  *     vmManagedDisks: [

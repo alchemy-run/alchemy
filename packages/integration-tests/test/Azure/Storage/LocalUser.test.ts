@@ -87,7 +87,8 @@ test.provider(
       const username = created.local!.localUserName;
       expect(username).toMatch(/^[a-z0-9]{3,64}$/);
       expect(created.local!.hasSshKey).toEqual(true);
-      expect(created.local!.sid).toBeDefined();
+      // Azure assigns local users a security identifier `S-1-2-0-<n>-...`.
+      expect(created.local!.sid).toMatch(/^S-1-2-0(-\d+)+$/);
       const observed = yield* getUser(rg, acct, username);
       expect(observed.properties?.homeDirectory).toEqual("uploads");
       expect(observed.properties?.hasSshKey).toEqual(true);

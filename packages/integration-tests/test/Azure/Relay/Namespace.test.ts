@@ -45,7 +45,7 @@ test.provider(
       expect(ns.sku).toEqual("Standard");
       expect(ns.hostName).toEqual(`${ns.namespaceName}.servicebus.windows.net`);
       expect(ns.tags).toEqual({ env: "test" });
-      expect(ns.primaryConnectionString).toBeDefined();
+      expect(Redacted.isRedacted(ns.primaryConnectionString)).toEqual(true);
       expect(Redacted.value(ns.primaryConnectionString!)).toContain(
         `Endpoint=sb://${ns.namespaceName}.servicebus.windows.net/`,
       );

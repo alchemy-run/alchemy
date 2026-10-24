@@ -78,6 +78,32 @@ export const nexusCluster = {
 export const azureGroupId =
   process.env.AZURE_NEXUS_AZURE_GROUP_ID ?? "00000000-0000-0000-0000-000000000000";
 
+/** Whether the Nexus fixtures for workload networks are configured. */
+export const hasWorkloadNetworks = !!customLocationId && !!nexus.l3IsolationDomainId;
+
+/**
+ * Cloud services network plus L3 network for the Kubernetes and virtual
+ * machine lifecycles, in `resourceGroup` on the cluster's custom location.
+ */
+export const workloadNetworks = (resourceGroup: string, vlan: number) =>
+  Effect.gen(function* () {
+    const csn = yield* Azure.NetworkCloud.CloudServicesNetwork("Services", {
+      resourceGroup,
+      location: "eastus",
+      customLocationId,
+    });
+    const l3 = yield* Azure.NetworkCloud.L3Network("Cni", {
+      resourceGroup,
+      location: "eastus",
+      customLocationId,
+      l3IsolationDomainId: nexus.l3IsolationDomainId,
+      vlan,
+      ipAllocationType: "IPV4",
+      ipv4ConnectedPrefix: `10.${vlan % 250}.0.0/24`,
+    });
+    return { csn, l3 };
+  });
+
 /** A syntactically valid SSH public key for fixtures. */
 export const sshKey = {
   keyData:

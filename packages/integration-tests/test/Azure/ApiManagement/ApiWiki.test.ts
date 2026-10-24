@@ -3,7 +3,7 @@ import * as apim from "@distilled.cloud/azure/apimanagement";
 import { expect } from "alchemy-test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
-import { runExpensive } from "../gates.ts";
+import { runExpensive, runPaidOnly } from "../gates.ts";
 import { basicV2Api, logLevel, subscriptionId, tags, untilGone } from "./fixture.ts";
 
 const { test } = Test.make({ providers: Azure.providers() });
@@ -50,8 +50,8 @@ const program = (pages?: ("one" | "two")[]) =>
 // documentations and wikis routes (empty 404 / "did not have proper uri
 // path format") on Developer, BasicV2 or Premium services at any
 // api-version, pinned by the probe below. Runs only with
-// AZURE_TEST_APIM_WIKIS=1 once the routes ship.
-test.provider.skipIf(!runExpensive || !process.env.AZURE_TEST_APIM_WIKIS)(
+// AZURE_TEST_PAID=1 (unreleased routes) once they ship.
+test.provider.skipIf(!runPaidOnly)(
   "create, update, and delete an API wiki",
   (stack) =>
     Effect.gen(function* () {

@@ -39,20 +39,32 @@ export interface ApiCenterServiceIdentity {
 }
 
 export interface ServiceProps {
-  /** Resource group that holds the service. Changing it replaces the service. */
+  /**
+   * Resource group that holds the service.
+   *
+   * :::caution
+   * Changing it replaces the service.
+   * :::
+   */
   resourceGroup: string;
   /**
    * Service name: 3-50 letters, digits, and single hyphens. It forms the data API
-   * hostname `{name}.data.{location}.azure-apicenter.ms`. If omitted, a
-   * unique name is generated from the app, stage, and logical ID. Changing
-   * it replaces the service.
+   * hostname `{name}.data.{location}.azure-apicenter.ms`.
+   *
+   * :::caution
+   * Changing it replaces the service.
+   * :::
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
    * Azure region. API Center is only available in some regions (e.g.
    * `eastus`, `westeurope`, `uksouth`, `swedencentral`, `australiaeast`,
    * `centralindia`, `francecentral`, `canadacentral`, `japaneast`).
+   *
+   * :::caution
    * Changing it replaces the service.
+   * :::
    * @default the stack's Azure location
    */
   location?: string;
@@ -92,22 +104,23 @@ export interface Service extends Resource<
 > {}
 
 /**
- * An Azure API Center service: an inventory of the organization's APIs,
- * their versions, definitions, environments, and deployments.
+ * An Azure API Center service (`Microsoft.ApiCenter/services`): an
+ * inventory of the organization's APIs, their versions, definitions,
+ * environments, and deployments.
  *
  * Services are created on the Free plan. Catalog entities ({@link Api},
  * {@link Environment}, {@link MetadataSchema}, ...) live in the service's
- * `default` workspace and are deleted with it.
+ * `default` workspace and are deleted with it. Azure creates that
+ * workspace with the service and allows no second one.
  *
  * @see https://learn.microsoft.com/azure/api-center/overview
  *
  * ### Creating a Service
  * **Example:** API Center in East US
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("apis", {
+ * const center = yield* Azure.ApiCenter.Service("catalog", {
  *   location: "eastus",
  * });
- * const center = yield* Azure.ApiCenter.Service("catalog");
  * ```
  *
  * **Example:** Service with a system-assigned identity

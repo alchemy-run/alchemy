@@ -54,7 +54,7 @@ test.provider(
       expect(key.publicKey?.split(" ")[1]).toEqual(PUBLIC_KEY_1.split(" ")[1]);
       expect(key.privateKey).toBeUndefined();
       expect(generated.publicKey).toMatch(/^ssh-rsa /);
-      expect(generated.privateKey).toBeDefined();
+      expect(Redacted.isRedacted(generated.privateKey)).toEqual(true);
       expect(Redacted.value(generated.privateKey!)).toContain("PRIVATE KEY");
       const observed = yield* getKey(group.resourceGroupName, key.sshPublicKeyName);
       expect(observed.tags?.env).toEqual("test");
@@ -70,7 +70,9 @@ test.provider(
       expect(reobserved.properties?.publicKey?.split(" ")[1]).toEqual(PUBLIC_KEY_2.split(" ")[1]);
       expect(reobserved.tags?.env).toEqual("prod");
       expect(updated.generated.publicKey).toEqual(generated.publicKey);
-      expect(updated.generated.privateKey).toBeDefined();
+      expect(Redacted.value(updated.generated.privateKey!)).toEqual(
+        Redacted.value(generated.privateKey!),
+      );
 
       yield* stack.destroy();
       expect(yield* untilGone(getKey(group.resourceGroupName, key.sshPublicKeyName))).toEqual(

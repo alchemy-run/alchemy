@@ -44,7 +44,10 @@ export interface SharedPrivateLinkResourceProps {
   groupId: string;
   /** ARM resource ID of the target resource. Changing it replaces the link. */
   privateLinkResourceId: string;
-  /** Message shown to the target's owner when approving the connection. */
+  /**
+   * Message shown to the target's owner when approving the connection.
+   * Azure keeps it fixed after creation, so changing it replaces the link.
+   */
   requestMessage?: string;
 }
 
@@ -193,7 +196,9 @@ export const SharedPrivateLinkResourceProvider = () =>
         lower(news.webPubSub) !== lower(output.webPubSub) ||
         (news.name !== undefined &&
           lower(news.name) !== lower(output.sharedPrivateLinkResourceName)) ||
-        sharedPrivateLinkTargetChanged(news, output)
+        sharedPrivateLinkTargetChanged(news, output) ||
+        // Azure accepts a PUT with a new message but keeps the old one.
+        (news.requestMessage ?? "") !== (output.requestMessage ?? "")
       ) {
         return { action: "replace" } as const;
       }

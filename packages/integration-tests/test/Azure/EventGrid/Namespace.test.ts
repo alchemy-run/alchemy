@@ -3,6 +3,7 @@ import * as eventgrid from "@distilled.cloud/azure/eventgrid";
 import { expect } from "alchemy-test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 
@@ -66,7 +67,9 @@ test.provider(
       expect(namespace.capacity).toEqual(1);
       expect(namespace.topicSpacesEnabled).toEqual(false);
       expect(namespace.topicsHostname).toContain(".eventgrid.azure.net");
-      expect(namespace.primaryKey).toBeDefined();
+      expect(
+        namespace.primaryKey ? Redacted.value(namespace.primaryKey).length : 0,
+      ).toBeGreaterThan(40);
       const observed = yield* getNamespace(group.resourceGroupName, namespace.namespaceName);
       expect(observed.properties?.provisioningState).toEqual("Succeeded");
       expect(observed.sku?.capacity).toEqual(1);
@@ -78,7 +81,7 @@ test.provider(
       );
       expect(updated.namespace.namespaceName).toEqual(namespace.namespaceName);
       expect(updated.namespace.topicSpacesEnabled).toEqual(true);
-      expect(updated.namespace.topicSpacesHostname).toBeDefined();
+      expect(updated.namespace.topicSpacesHostname).toContain(".eventgrid.azure.net");
       const reobserved = yield* getNamespace(group.resourceGroupName, namespace.namespaceName);
       expect(reobserved.sku?.capacity).toEqual(2);
       expect(reobserved.properties?.topicSpacesConfiguration?.state).toEqual("Enabled");

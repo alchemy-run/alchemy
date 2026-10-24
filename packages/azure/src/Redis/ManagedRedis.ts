@@ -419,11 +419,14 @@ export const ManagedRedisProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       const { subscriptionId } = yield* AzureEnvironment.current;
       yield* ignoreNotFound(
-        redisenterprise.DeleteRedisEnterprise({
-          subscriptionId,
-          resourceGroupName: output.resourceGroup,
-          clusterName: output.clusterName,
-        }),
+        redisenterprise
+          .DeleteRedisEnterprise({
+            subscriptionId,
+            resourceGroupName: output.resourceGroup,
+            clusterName: output.clusterName,
+          })
+          // A retried or repeated delete races the first one; wait for it below.
+          .pipe(Effect.catchTag("RedisEnterpriseDeleteInProgress", () => Effect.void)),
       );
       yield* waitUntilGone(
         `managed redis ${output.clusterName}`,

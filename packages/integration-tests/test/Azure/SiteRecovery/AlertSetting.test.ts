@@ -67,10 +67,8 @@ test.provider(
       expect(updated.alerts.alertSettingId).toEqual(created.alerts.alertSettingId);
       const reobserved = yield* getAlerts(rg, vault);
       expect(reobserved.properties?.sendToOwners).toEqual("DoNotSend");
-      expect([...(reobserved.properties?.customEmailAddresses ?? [])].sort()).toEqual([
-        "a@example.com",
-        "b@example.com",
-      ]);
+      const emails = [...(reobserved.properties?.customEmailAddresses ?? [])].sort();
+      expect(emails).toEqual(["a@example.com", "b@example.com"]);
       expect(reobserved.properties?.locale).toEqual("fr-FR");
 
       // Delete: no delete API, the setting is reset to the vault default.

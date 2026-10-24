@@ -5,6 +5,10 @@ import {
   AccessPolicyAssignmentProvider,
 } from "./AccessPolicyAssignment.ts";
 import { Cache, CacheProvider } from "./Cache.ts";
+import {
+  CacheAccessPolicyAssignment,
+  CacheAccessPolicyAssignmentProvider,
+} from "./CacheAccessPolicyAssignment.ts";
 import { FirewallRule, FirewallRuleProvider } from "./FirewallRule.ts";
 import { LinkedServer, LinkedServerProvider } from "./LinkedServer.ts";
 import { ManagedRedis, ManagedRedisProvider } from "./ManagedRedis.ts";
@@ -15,6 +19,7 @@ export const resources = [
   AccessPolicy,
   AccessPolicyAssignment,
   Cache,
+  CacheAccessPolicyAssignment,
   FirewallRule,
   LinkedServer,
   ManagedRedis,
@@ -26,6 +31,7 @@ export const layers = () =>
     AccessPolicyProvider(),
     AccessPolicyAssignmentProvider(),
     CacheProvider(),
+    CacheAccessPolicyAssignmentProvider(),
     FirewallRuleProvider(),
     LinkedServerProvider(),
     ManagedRedisProvider(),

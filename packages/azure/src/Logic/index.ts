@@ -6,4 +6,5 @@ export * from "./IntegrationAccountCertificate.ts";
 export * from "./IntegrationAccountMap.ts";
 export * from "./IntegrationAccountPartner.ts";
 export * from "./IntegrationAccountSchema.ts";
+export * from "./IntegrationAccountSession.ts";
 export * from "./Workflow.ts";

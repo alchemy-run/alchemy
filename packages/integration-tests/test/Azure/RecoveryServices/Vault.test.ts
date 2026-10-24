@@ -82,7 +82,9 @@ test.provider(
         }),
       );
       expect(updated.vault.vaultName).toEqual(vault.vaultName);
-      expect(updated.vault.principalId).toBeDefined();
+      expect(updated.vault.principalId).toMatch(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+      );
       expect(updated.vault.identityType).toEqual("SystemAssigned");
       const reobserved = yield* getVault(group.resourceGroupName, vault.vaultName);
       expect(reobserved.properties?.publicNetworkAccess).toEqual("Disabled");

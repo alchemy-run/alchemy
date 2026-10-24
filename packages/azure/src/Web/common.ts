@@ -1,4 +1,8 @@
+import * as web from "@distilled.cloud/azure/web";
+import { tagRecord } from "alchemy/Tags";
+import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
+import { orUndefinedIfNotFound, stackAndStage } from "../Arm.ts";
 
 /** Lowercase an optional string, for case-insensitive ARM comparisons. */
 export const lower = (value: string | undefined) => value?.toLowerCase();
@@ -19,6 +23,27 @@ export const siteWhere = (subscriptionId: string, resourceGroup: string, siteNam
   subscriptionId,
   resourceGroupName: resourceGroup,
   name: siteName,
+});
+
+/**
+ * Whether the app (or slot) carries this stack/stage's ownership tags.
+ * Untagged per-app singletons (policies that always exist) take their
+ * ownership from the app they configure.
+ */
+export const isSiteOwnedByStack = Effect.fn(function* (
+  subscriptionId: string,
+  resourceGroup: string,
+  siteName: string,
+  slot: string | undefined,
+) {
+  const where = siteWhere(subscriptionId, resourceGroup, siteName);
+  const site = yield* orUndefinedIfNotFound(
+    slot === undefined ? web.GetWebApp(where) : web.GetWebAppSlot({ ...where, slot }),
+  );
+  if (site === undefined) return false;
+  const { stack, stage } = yield* stackAndStage;
+  const tags = tagRecord(site.tags);
+  return tags["alchemy::stack"] === stack && tags["alchemy::stage"] === stage;
 });
 
 /** Unwrap a secret prop that may be given as plain text or `Redacted`. */
@@ -50,6 +75,16 @@ export const matchesDesired = (desired: unknown, observed: unknown): boolean => 
     return desired.toLowerCase() === observed.toLowerCase();
   }
   return desired === observed;
+};
+
+/** Whether an observed settings map equals the desired one exactly. */
+export const settingsMatch = (
+  desired: Record<string, string>,
+  observed: Record<string, string | undefined> | undefined,
+) => {
+  const have = observed ?? {};
+  const keys = new Set([...Object.keys(desired), ...Object.keys(have)]);
+  return [...keys].every((key) => desired[key] === have[key]);
 };
 
 /** The desired keys whose value the observed object does not satisfy. */

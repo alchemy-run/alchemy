@@ -32,6 +32,8 @@ import {
 } from "./SolutionTemplateVersion.ts";
 import { SubscriptionSite, SubscriptionSiteProvider } from "./SubscriptionSite.ts";
 import { Target, TargetProvider } from "./Target.ts";
+import { Workflow, WorkflowProvider } from "./Workflow.ts";
+import { WorkflowVersion, WorkflowVersionProvider } from "./WorkflowVersion.ts";
 
 export const resources = [
   ConfigTemplate,
@@ -55,6 +57,8 @@ export const resources = [
   SolutionTemplateVersion,
   SubscriptionSite,
   Target,
+  Workflow,
+  WorkflowVersion,
 ];
 export const layers = () =>
   Layer.mergeAll(
@@ -79,4 +83,6 @@ export const layers = () =>
     SolutionTemplateVersionProvider(),
     SubscriptionSiteProvider(),
     TargetProvider(),
+    WorkflowProvider(),
+    WorkflowVersionProvider(),
   );

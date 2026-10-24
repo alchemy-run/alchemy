@@ -18,6 +18,16 @@ const getService = (resourceGroupName: string, sqlMigrationServiceName: string) 
     });
   });
 
+const listKeys = (resourceGroupName: string, sqlMigrationServiceName: string) =>
+  Effect.gen(function* () {
+    const { subscriptionId } = yield* Azure.AzureEnvironment.current;
+    return yield* datamigration.ListSqlMigrationServiceAuthKeys({
+      subscriptionId,
+      resourceGroupName,
+      sqlMigrationServiceName,
+    });
+  });
+
 const serviceGone = (resourceGroupName: string, name: string) =>
   getService(resourceGroupName, name).pipe(
     Effect.as("found" as const),
@@ -56,8 +66,10 @@ test.provider(
       expect(service.provisioningState).toEqual("Succeeded");
       expect(service.sqlMigrationServiceId).toContain("/sqlMigrationServices/");
       expect(service.tags).toEqual({ env: "dev" });
-      expect(service.authKey1).toBeDefined();
-      expect(Redacted.value(service.authKey1!).length).toBeGreaterThan(0);
+      const keys = yield* listKeys(rg, service.sqlMigrationServiceName);
+      const authKey1 = service.authKey1 === undefined ? "" : Redacted.value(service.authKey1);
+      expect(authKey1.length).toBeGreaterThan(0);
+      expect(authKey1).toEqual(keys.authKey1);
       const observed = yield* getService(rg, service.sqlMigrationServiceName);
       expect(observed.tags?.env).toEqual("dev");
       expect(observed.properties?.integrationRuntimeState).toEqual("NeedRegistration");

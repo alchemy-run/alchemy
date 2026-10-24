@@ -3,12 +3,17 @@ import {
   AdvancedPlatformMetrics,
   AdvancedPlatformMetricsProvider,
 } from "./AdvancedPlatformMetrics.ts";
+import {
+  BlobAccessPointConfiguration,
+  BlobAccessPointConfigurationProvider,
+} from "./BlobAccessPointConfiguration.ts";
 import { BlobContainer, BlobContainerProvider } from "./BlobContainer.ts";
 import { BlobInventoryPolicy, BlobInventoryPolicyProvider } from "./BlobInventoryPolicy.ts";
 import { BlobServiceProperties, BlobServicePropertiesProvider } from "./BlobServiceProperties.ts";
 import { Connector, ConnectorProvider } from "./Connector.ts";
 import { ContextCache, ContextCacheProvider } from "./ContextCache.ts";
 import { ContextCacheContainer, ContextCacheContainerProvider } from "./ContextCacheContainer.ts";
+import { DataShare, DataShareProvider } from "./DataShare.ts";
 import { EncryptionScope, EncryptionScopeProvider } from "./EncryptionScope.ts";
 import { FileServiceProperties, FileServicePropertiesProvider } from "./FileServiceProperties.ts";
 import { FileShare, FileShareProvider } from "./FileShare.ts";
@@ -38,12 +43,14 @@ import {
 
 export const resources = [
   AdvancedPlatformMetrics,
+  BlobAccessPointConfiguration,
   BlobContainer,
   BlobInventoryPolicy,
   BlobServiceProperties,
   Connector,
   ContextCache,
   ContextCacheContainer,
+  DataShare,
   EncryptionScope,
   FileServiceProperties,
   FileShare,
@@ -62,12 +69,14 @@ export const resources = [
 export const layers = () =>
   Layer.mergeAll(
     AdvancedPlatformMetricsProvider(),
+    BlobAccessPointConfigurationProvider(),
     BlobContainerProvider(),
     BlobInventoryPolicyProvider(),
     BlobServicePropertiesProvider(),
     ConnectorProvider(),
     ContextCacheProvider(),
     ContextCacheContainerProvider(),
+    DataShareProvider(),
     EncryptionScopeProvider(),
     FileServicePropertiesProvider(),
     FileShareProvider(),

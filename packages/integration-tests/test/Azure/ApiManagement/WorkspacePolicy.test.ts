@@ -57,7 +57,7 @@ test.provider.skipIf(!runExpensive)(
       const first = yield* stack.deploy(program("one"));
       const rg = first.group.resourceGroupName;
       const svc = first.service.serviceName;
-      expect(first.created).toBeDefined();
+      expect(first.created?.workspaceName).toEqual("alchemy-ws");
       const one = yield* get(rg, svc, "one");
       expect(one.properties?.value).toContain("one");
 

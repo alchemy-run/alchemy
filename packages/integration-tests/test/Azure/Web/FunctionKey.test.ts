@@ -13,6 +13,11 @@ import * as Schedule from "effect/Schedule";
 import { runPaidOnly } from "../gates.ts";
 import { flexConnectionString, flexPlanRejection, flexStorage } from "./fixtures/flex-app.ts";
 import { FUNCTION_NAME, FUNCTION_ZIP_BASE64 } from "./fixtures/powershell-function.ts";
+import {
+  SLOT_FUNCTION_NAME,
+  slotFunction,
+  windowsFunctionApp,
+} from "./fixtures/windows-function-app.ts";
 
 const { test } = Test.make({ providers: Azure.providers() });
 
@@ -222,5 +227,78 @@ test.provider.skipIf(runPaidOnly)(
   {
     tags: ["provider:azure", "provider:azure:web", "live"],
     timeout: 300_000,
+  },
+);
+
+const slotKeys = (resourceGroupName: string, name: string) =>
+  Effect.gen(function* () {
+    const { subscriptionId } = yield* Azure.AzureEnvironment.current;
+    return yield* web.ListWebAppFunctionKeysSlot({
+      subscriptionId,
+      resourceGroupName,
+      name,
+      slot: "staging",
+      functionName: SLOT_FUNCTION_NAME,
+    });
+  });
+
+const slotProgram = (connection: string, withKey: boolean) =>
+  Effect.gen(function* () {
+    const { group, app, slot } = yield* windowsFunctionApp(connection);
+    const fn = yield* slotFunction({
+      resourceGroup: group.resourceGroupName,
+      functionAppName: app.siteName,
+      slot: slot.slotName,
+    });
+    const key = withKey
+      ? yield* Azure.Web.FunctionKey("SlotKey", {
+          resourceGroup: group.resourceGroupName,
+          functionAppName: app.siteName,
+          slot: slot.slotName,
+          functionName: fn.functionName,
+          value: Redacted.make(explicitValue),
+        })
+      : undefined;
+    return { group, app, key };
+  });
+
+// S1 Windows plan: ~$0.10/h, about $0.03 per run (Standard_LRS storage).
+// Provisioning: ~5-7 minutes (slot host start).
+// Skipped: the slot's function (Azure.Web.SiteFunction) cannot be deleted at
+// teardown: DeleteWebAppFunction answers HTTP 404 `NotFound` "Error deleting
+// function." while GetWebAppFunction still returns it (see SiteFunction.test.ts).
+test.provider.skip(
+  "create and delete a function key in a deployment slot",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const { group, account } = yield* stack.deploy(flexStorage);
+      const connection = yield* flexConnectionString(
+        group.resourceGroupName,
+        account.storageAccountName,
+      );
+      const { app, key } = yield* stack.deploy(slotProgram(connection, true));
+      expect(key?.slot).toEqual("staging");
+      expect(Redacted.value(key?.value ?? Redacted.make(""))).toEqual(explicitValue);
+      const observed = yield* slotKeys(group.resourceGroupName, app.siteName);
+      expect(observed.properties?.[key?.keyName ?? ""]).toEqual(explicitValue);
+
+      // Delete only the key.
+      yield* stack.deploy(slotProgram(connection, false));
+      const remaining = yield* slotKeys(group.resourceGroupName, app.siteName).pipe(
+        Effect.repeat({
+          schedule: Schedule.spaced("3 seconds"),
+          until: (keys) => keys.properties?.[key?.keyName ?? ""] === undefined,
+          times: 10,
+        }),
+      );
+      expect(remaining.properties?.[key?.keyName ?? ""]).toEqual(undefined);
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  {
+    tags: ["provider:azure", "provider:azure:web", "live"],
+    timeout: 900_000,
   },
 );

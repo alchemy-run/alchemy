@@ -51,7 +51,10 @@ export interface AgentProps {
   agentSpaceId?: string;
   /** Knowledge graph (managed resources the agent can reason about). */
   knowledgeGraphConfiguration?: app.KnowledgeGraphConfiguration;
-  /** What the agent may do (access level and mode). */
+  /**
+   * What the agent may do (access level and mode `Review` or `Autonomous`).
+   * `identity` must name a user-assigned identity attached to the agent.
+   */
   actionConfiguration?: app.ActionConfiguration;
   /** Application Insights destination for agent logs. */
   logConfiguration?: app.LogConfiguration;

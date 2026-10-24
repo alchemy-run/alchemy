@@ -27,7 +27,11 @@ import { sameName } from "./common.ts";
 export interface AuthorizedPartner {
   /** Immutable ID of the partner's registration (a GUID the partner publishes). */
   partnerRegistrationImmutableId: string;
-  /** Display name of the partner. */
+  /**
+   * Display name of the partner. Only a Microsoft-verified partner may be
+   * named; omit it for your own unverified `Azure.EventGrid.PartnerRegistration`
+   * (Event Grid rejects the request otherwise).
+   */
   partnerName?: string;
   /**
    * When the authorization expires (ISO 8601). Must fall within

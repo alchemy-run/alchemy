@@ -10,6 +10,7 @@ import * as AdvisorProviders from "./Advisor/Providers.ts";
 import * as AnalysisServicesProviders from "./AnalysisServices/Providers.ts";
 import * as ApiCenterProviders from "./ApiCenter/Providers.ts";
 import * as ApiManagementProviders from "./ApiManagement/Providers.ts";
+import * as AppComplianceAutomationProviders from "./AppComplianceAutomation/Providers.ts";
 import * as AppConfigurationProviders from "./AppConfiguration/Providers.ts";
 import * as ApplicationInsightsProviders from "./ApplicationInsights/Providers.ts";
 import * as ArcDataProviders from "./ArcData/Providers.ts";
@@ -20,12 +21,14 @@ import * as AutomanageProviders from "./Automanage/Providers.ts";
 import * as AutomationProviders from "./Automation/Providers.ts";
 import * as AzureActiveDirectoryProviders from "./AzureActiveDirectory/Providers.ts";
 import * as AzureFleetProviders from "./AzureFleet/Providers.ts";
+import * as AzureSphereProviders from "./AzureSphere/Providers.ts";
 import * as AzureStackHCIProviders from "./AzureStackHCI/Providers.ts";
 import * as BatchProviders from "./Batch/Providers.ts";
 import * as BotServiceProviders from "./BotService/Providers.ts";
 import * as CdnProviders from "./Cdn/Providers.ts";
 import * as CertificateRegistrationProviders from "./CertificateRegistration/Providers.ts";
 import * as ChaosProviders from "./Chaos/Providers.ts";
+import * as CloudHealthProviders from "./CloudHealth/Providers.ts";
 import * as CodeSigningProviders from "./CodeSigning/Providers.ts";
 import * as CognitiveServicesProviders from "./CognitiveServices/Providers.ts";
 import * as CommunicationProviders from "./Communication/Providers.ts";
@@ -175,6 +178,7 @@ const services: ReadonlyArray<ServiceProviders> = [
   AnalysisServicesProviders,
   ApiCenterProviders,
   ApiManagementProviders,
+  AppComplianceAutomationProviders,
   AppConfigurationProviders,
   ApplicationInsightsProviders,
   ArcDataProviders,
@@ -184,12 +188,14 @@ const services: ReadonlyArray<ServiceProviders> = [
   AutomationProviders,
   AzureActiveDirectoryProviders,
   AzureFleetProviders,
+  AzureSphereProviders,
   AzureStackHCIProviders,
   BatchProviders,
   BotServiceProviders,
   CdnProviders,
   CertificateRegistrationProviders,
   ChaosProviders,
+  CloudHealthProviders,
   CodeSigningProviders,
   CognitiveServicesProviders,
   CommunicationProviders,

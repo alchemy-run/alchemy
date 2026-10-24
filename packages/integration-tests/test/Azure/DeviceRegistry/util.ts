@@ -14,6 +14,12 @@ export const tags = ["provider:azure", "provider:azure:deviceregistry", "live"];
 /** Device Registry regions; eastus is supported for every type. */
 export const location = "eastus";
 
+/**
+ * Region for registry devices and certificate authorities, which ARM
+ * serves only in australiaeast, uksouth, centralus, and japaneast.
+ */
+export const registryLocation = "centralus";
+
 export const subscription = Effect.map(Azure.AzureEnvironment.current, (env) => env.subscriptionId);
 
 /** Poll an out-of-band GET until it reports a typed not-found. */

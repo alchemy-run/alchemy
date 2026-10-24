@@ -107,7 +107,7 @@ test.provider.skipIf(!runExpensive)(
       const execution = yield* where(group.resourceGroupName, job.jobName).pipe(
         Effect.flatMap(app.StartJob),
       );
-      expect(execution.name).toBeDefined();
+      expect(execution.name).toMatch(new RegExp(`^${job.jobName}-[a-z0-9]+$`));
       const finished = yield* where(group.resourceGroupName, job.jobName).pipe(
         Effect.flatMap(app.ListJobsExecutions),
         Effect.map((page) => page.value.find((e) => e.name === execution.name)),

@@ -57,7 +57,7 @@ test.provider(
       expect(collection.sourceVirtualMachineId?.toLowerCase()).toEqual(
         vm.virtualMachineId.toLowerCase(),
       );
-      expect(collection.restorePointCollectionId).toBeDefined();
+      expect(collection.restorePointCollectionId).toMatch(/^[0-9a-f-]{36}$/i);
       const observed = yield* getCollection(
         group.resourceGroupName,
         collection.restorePointCollectionName,

@@ -31,9 +31,8 @@ export interface CustomImageProps {
    */
   name?: string;
   /**
-   * Capture the image from a lab VM. Exactly one of `vm`, `vhd`,
-   * `managedImageId`, or `managedSnapshotId` is required. Changing the
-   * source replaces the image.
+   * Capture the image from a lab VM. Exactly one of `vm` or `vhd` is
+   * required. Changing the source replaces the image.
    */
   vm?: {
     /** ARM ID of the source lab VM. */
@@ -43,21 +42,18 @@ export interface CustomImageProps {
     /** Sysprep state of a Windows source. */
     windowsOsState?: "NonSysprepped" | "SysprepRequested" | "SysprepApplied";
   };
-  /** Create the image from a VHD uploaded to the lab's storage account. */
+  /**
+   * Create the image from a VHD uploaded to the lab's storage account.
+   * Changing it replaces the image.
+   */
   vhd?: {
-    /** Blob name of the VHD. */
+    /** HTTPS URI of the VHD blob in the lab's storage account. */
     imageName: string;
     /** OS type of the VHD. */
     osType: "Windows" | "Linux" | "None";
     /** Whether the Windows VHD is sysprepped. */
     sysPrep?: boolean;
   };
-  /** ARM ID of a managed image to create the image from. */
-  managedImageId?: string;
-  /** ARM ID of a managed snapshot to create the image from. */
-  managedSnapshotId?: string;
-  /** OS type when the source is a managed image or snapshot. */
-  osType?: "Windows" | "Linux";
   /** Storage type per data disk LUN. Changing it replaces the image. */
   dataDiskStorageInfo?: { lun: string; storageType: "Standard" | "Premium" | "StandardSSD" }[];
   /** Description of the image. */
@@ -97,8 +93,10 @@ export interface CustomImage extends Resource<
 > {}
 
 /**
- * A DevTest Labs custom image — a VM image (captured from a lab VM, a VHD,
- * a managed image, or a snapshot) that lab users can create VMs from.
+ * A DevTest Labs custom image (`Microsoft.DevTestLab/labs/customimages`) —
+ * a VM image captured from a lab VM or imported from a VHD that lab users
+ * can create VMs from. The lab RP does not import managed images or
+ * snapshots on their own: a source needs `vm` or `vhd`.
  *
  * @see https://learn.microsoft.com/azure/devtest-labs/devtest-lab-create-custom-image-from-vm-using-portal
  *
@@ -115,13 +113,15 @@ export interface CustomImage extends Resource<
  * });
  * ```
  *
- * ### From a Managed Image
- * **Example:** Import an existing managed image
+ * ### Importing a VHD
+ * **Example:** Image from an uploaded Linux VHD
  * ```typescript
- * const image = yield* Azure.DevTestLabs.CustomImage("golden", {
+ * const image = yield* Azure.DevTestLabs.CustomImage("imported", {
  *   lab: lab.labName,
- *   managedImageId: managedImage.imageId,
- *   osType: "Linux",
+ *   vhd: {
+ *     imageName: "https://mylabstorage.blob.core.windows.net/uploads/os.vhd",
+ *     osType: "Linux",
+ *   },
  * });
  * ```
  *
@@ -161,12 +161,6 @@ const toAttrs = (
 });
 
 const sourceInput = (news: CustomImageProps): devtestlabs.CustomImagePropertiesInput => {
-  const managedOs =
-    news.osType === "Windows"
-      ? { windowsOsInfo: { windowsOsState: "NonSysprepped" } }
-      : news.osType === "Linux"
-        ? { linuxOsInfo: { linuxOsState: "NonDeprovisioned" } }
-        : {};
   return {
     vm:
       news.vm !== undefined
@@ -181,12 +175,8 @@ const sourceInput = (news: CustomImageProps): devtestlabs.CustomImagePropertiesI
                 ? undefined
                 : { windowsOsState: news.vm.windowsOsState },
           }
-        : news.managedImageId !== undefined || news.managedSnapshotId !== undefined
-          ? managedOs
-          : undefined,
+        : undefined,
     vhd: news.vhd,
-    managedImageId: news.managedImageId,
-    managedSnapshotId: news.managedSnapshotId,
     dataDiskStorageInfo: news.dataDiskStorageInfo,
   };
 };

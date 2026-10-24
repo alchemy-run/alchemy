@@ -265,7 +265,8 @@ export const networkProvider =
     ) {
       if (spec.tracked) return yield* isOwned(id, observed.tags);
       if (spec.ownerTags === undefined) return false;
-      return yield* parentOwned(yield* spec.ownerTags(subscriptionId, path));
+      const ownerTags = yield* spec.ownerTags(subscriptionId, path);
+      return yield* parentOwned(ownerTags);
     });
 
     return {

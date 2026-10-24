@@ -76,7 +76,9 @@ test.provider(
         }),
       );
       expect(updated.systemTopic.systemTopicName).toEqual(systemTopic.systemTopicName);
-      expect(updated.systemTopic.principalId).toBeDefined();
+      expect(updated.systemTopic.principalId).toMatch(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
+      );
       const reobserved = yield* getSystemTopic(
         group.resourceGroupName,
         systemTopic.systemTopicName,

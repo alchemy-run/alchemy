@@ -84,7 +84,7 @@ test.provider.skipIf(!runExpensive)(
 
       const { group, env, routes } = yield* stack.deploy(program({ prefix: "/web" }));
       if (routes === undefined) return yield* Effect.die("no route config");
-      expect(routes.fqdn).toBeDefined();
+      expect(routes.fqdn).toMatch(/\.azurecontainerapps\.io$/);
       expect(routes.url).toEqual(`https://${routes.fqdn}`);
       const get = getRoute(group.resourceGroupName, env.environmentName, routes.routeName);
       expect((yield* get).properties?.rules?.[0]?.routes?.[0]?.match?.prefix).toEqual("/web");

@@ -81,6 +81,24 @@ export const retryWhileVaultRegistering = <A, E extends { _tag: string }, R>(
   );
 
 /**
+ * Retry an ASR write rejected with `SiteRecoveryOperationNotStarted`
+ * ("Failed to start operation"), which ASR returns while another job on
+ * the same vault is starting (e.g. two fabrics created at once) and also
+ * for rejected input, so the retry is short: up to 3 minutes, the length
+ * of a fabric job. Use it only for writes whose input cannot be invalid.
+ */
+export const retryWhileVaultBusy = <A, E extends { _tag: string }, R>(
+  effect: Effect.Effect<A, E, R>,
+) =>
+  effect.pipe(
+    Effect.retry({
+      while: (e) => e._tag === "SiteRecoveryOperationNotStarted",
+      schedule: Schedule.spaced("15 seconds"),
+      times: 12,
+    }),
+  );
+
+/**
  * Retry a vault-level ASR write until a fabric created in the same deploy
  * has registered (`SiteRecoveryNoRegisteredServers`, up to ~5 minutes).
  */

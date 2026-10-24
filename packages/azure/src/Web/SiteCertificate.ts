@@ -28,6 +28,11 @@ export interface SiteCertificateProps {
   /** Name of the web app or function app. Changing it replaces it. */
   siteName: string;
   /**
+   * Deployment slot of the app. Changing it replaces the certificate.
+   * @default the production slot
+   */
+  slot?: string;
+  /**
    * Name of the certificate. If omitted, a unique name is generated from the
    * app, stage, and logical ID. Changing it replaces the certificate.
    */
@@ -79,6 +84,8 @@ export interface SiteCertificate extends Resource<
     certificateId: string;
     /** Name of the app. */
     siteName: string;
+    /** Deployment slot, if slot-scoped. */
+    slot: string | undefined;
     /** Resource group of the app. */
     resourceGroup: string;
     /** Location of the certificate. */
@@ -100,9 +107,14 @@ export interface SiteCertificate extends Resource<
 
 /**
  * A TLS certificate scoped to a single App Service app
- * (`Microsoft.Web/sites/certificates`) instead of the whole resource group:
+ * (`Microsoft.Web/sites/certificates`, or `sites/slots/certificates` with
+ * `slot`) instead of the whole resource group:
  * an uploaded PFX, a Key Vault reference, or a managed certificate. Only
  * the owning app can bind it. Requires a Basic or higher plan.
+ *
+ * Microsoft.Web currently answers the create with `WebMethodNotImplemented`
+ * ("The requested method is not implemented."); upload certificates with
+ * `Azure.Web.Certificate` (resource-group scoped) instead.
  *
  * @see https://learn.microsoft.com/azure/app-service/configure-ssl-certificate
  *
@@ -131,24 +143,32 @@ const getCertificate = (
   subscriptionId: string,
   resourceGroup: string,
   siteName: string,
+  slot: string | undefined,
   certificateName: string,
-) =>
-  orUndefinedIfNotFound(
-    web.GetSiteCertificate({
-      ...siteWhere(subscriptionId, resourceGroup, siteName),
-      certificateName,
-    }),
+) => {
+  const where = { ...siteWhere(subscriptionId, resourceGroup, siteName), certificateName };
+  return orUndefinedIfNotFound(
+    slot === undefined
+      ? web.GetSiteCertificate(where)
+      : web.GetSiteCertificateSlot({ ...where, slot }),
+  ).pipe(
+    // Where Microsoft.Web does not implement app-scoped certificates, none
+    // can exist.
+    Effect.catchTag("WebMethodNotImplemented", () => Effect.succeed(undefined)),
   );
+};
 
 const toAttrs = (
   resourceGroup: string,
   siteName: string,
+  slot: string | undefined,
   certificateName: string,
   cert: ObservedCertificate,
 ): SiteCertificate["Attributes"] => ({
   certificateName,
   certificateId: cert.id ?? "",
   siteName,
+  slot,
   resourceGroup,
   location: cert.location,
   thumbprint: cert.properties?.thumbprint ?? "",
@@ -160,7 +180,7 @@ const toAttrs = (
 
 export const SiteCertificateProvider = () =>
   Provider.succeed(SiteCertificate, {
-    stables: ["certificateName", "certificateId", "siteName", "resourceGroup", "location"],
+    stables: ["certificateName", "certificateId", "siteName", "slot", "resourceGroup", "location"],
 
     // Site certificates are removed with their app.
     list: Effect.fn(function* () {
@@ -172,6 +192,7 @@ export const SiteCertificateProvider = () =>
       if (
         lower(news.resourceGroup) !== lower(output.resourceGroup) ||
         lower(news.siteName) !== lower(output.siteName) ||
+        lower(news.slot) !== lower(output.slot) ||
         (news.name !== undefined && lower(news.name) !== lower(output.certificateName)) ||
         (news.location !== undefined && !sameLocation(news.location, output.location)) ||
         reveal(news.pfxBlob) !== reveal(olds?.pfxBlob) ||
@@ -192,10 +213,11 @@ export const SiteCertificateProvider = () =>
       if (resourceGroup === undefined || siteName === undefined) {
         return undefined;
       }
+      const slot = output?.slot ?? olds?.slot;
       const name = output?.certificateName ?? olds?.name ?? (yield* createCertificateName(id));
-      const observed = yield* getCertificate(subscriptionId, resourceGroup, siteName, name);
+      const observed = yield* getCertificate(subscriptionId, resourceGroup, siteName, slot, name);
       if (observed === undefined) return undefined;
-      const attrs = toAttrs(resourceGroup, siteName, name, observed);
+      const attrs = toAttrs(resourceGroup, siteName, slot, name, observed);
       return (yield* isOwned(id, observed.tags)) ? attrs : Unowned(attrs);
     }),
 
@@ -203,7 +225,7 @@ export const SiteCertificateProvider = () =>
       const env = yield* AzureEnvironment.current;
       const { subscriptionId } = env;
       yield* ensureRegistered(subscriptionId, "Microsoft.Web");
-      const { resourceGroup, siteName } = news;
+      const { resourceGroup, siteName, slot } = news;
       const name = news.name ?? output?.certificateName ?? (yield* createCertificateName(id));
       const location = news.location ?? output?.location ?? env.location;
       const tags = yield* desiredTags(id, news.tags);
@@ -211,7 +233,7 @@ export const SiteCertificateProvider = () =>
         ...siteWhere(subscriptionId, resourceGroup, siteName),
         certificateName: name,
       };
-      const get = getCertificate(subscriptionId, resourceGroup, siteName, name);
+      const get = getCertificate(subscriptionId, resourceGroup, siteName, slot, name);
 
       // Observe.
       let observed = yield* get;
@@ -220,7 +242,7 @@ export const SiteCertificateProvider = () =>
       // PUT re-runs only when it is missing or its tags drift (the PATCH
       // body cannot carry tags).
       if (observed === undefined || tagsDiffer(observed.tags, tags)) {
-        yield* web.SiteCertificatesCreateOrUpdate({
+        const request = {
           ...where,
           location,
           tags,
@@ -232,7 +254,10 @@ export const SiteCertificateProvider = () =>
             canonicalName: news.canonicalName,
             serverFarmId: news.serverFarmId,
           },
-        });
+        };
+        yield* slot === undefined
+          ? web.SiteCertificatesCreateOrUpdate(request)
+          : web.SiteCertificatesCreateOrUpdateSlot({ ...request, slot });
       }
       // Managed certificates are issued asynchronously; they are usable
       // once they carry a thumbprint.
@@ -248,23 +273,29 @@ export const SiteCertificateProvider = () =>
         news.serverFarmId !== undefined &&
         lower(observed.properties?.serverFarmId) !== lower(news.serverFarmId)
       ) {
-        yield* web.UpdateSiteCertificate({
-          ...where,
-          properties: { serverFarmId: news.serverFarmId },
-        });
+        const patch = { ...where, properties: { serverFarmId: news.serverFarmId } };
+        yield* slot === undefined
+          ? web.UpdateSiteCertificate(patch)
+          : web.UpdateSiteCertificateSlot({ ...patch, slot });
         observed = (yield* get) ?? observed;
       }
 
-      return toAttrs(resourceGroup, siteName, name, observed);
+      return toAttrs(resourceGroup, siteName, slot, name, observed);
     }),
 
     delete: Effect.fn(function* ({ output }) {
       const { subscriptionId } = yield* AzureEnvironment.current;
+      const where = {
+        ...siteWhere(subscriptionId, output.resourceGroup, output.siteName),
+        certificateName: output.certificateName,
+      };
       yield* ignoreNotFound(
-        web.DeleteSiteCertificate({
-          ...siteWhere(subscriptionId, output.resourceGroup, output.siteName),
-          certificateName: output.certificateName,
-        }),
+        output.slot === undefined
+          ? web.DeleteSiteCertificate(where)
+          : web.DeleteSiteCertificateSlot({ ...where, slot: output.slot }),
+      ).pipe(
+        // Not implemented means it was never created; the wait below checks.
+        Effect.catchTag("WebMethodNotImplemented", () => Effect.void),
       );
       yield* waitUntilGone(
         `site certificate ${output.certificateName}`,
@@ -272,12 +303,18 @@ export const SiteCertificateProvider = () =>
           subscriptionId,
           output.resourceGroup,
           output.siteName,
+          output.slot,
           output.certificateName,
         ),
       );
     }),
 
     nuke: {
-      dependsOn: ["Azure.Resources.ResourceGroup", "Azure.Web.WebApp", "Azure.Web.FunctionApp"],
+      dependsOn: [
+        "Azure.Resources.ResourceGroup",
+        "Azure.Web.WebApp",
+        "Azure.Web.FunctionApp",
+        "Azure.Web.WebAppSlot",
+      ],
     },
   });

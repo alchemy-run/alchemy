@@ -91,7 +91,7 @@ test.provider(
       expect(api.containerAppName).toMatch(/^[a-z][a-z0-9-]{1,31}$/);
       expect(api.fqdn).toContain("azurecontainerapps.io");
       expect(api.url).toEqual(`https://${api.fqdn}`);
-      expect(api.latestRevisionName).toBeDefined();
+      expect(api.latestRevisionName).toMatch(new RegExp(`^${api.containerAppName}--[a-z0-9]+$`));
 
       const observed = yield* getApp(group.resourceGroupName, api.containerAppName);
       expect(observed.properties?.provisioningState).toEqual("Succeeded");

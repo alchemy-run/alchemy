@@ -57,8 +57,9 @@ test.provider(
           projectName,
         });
       expect(project.location).toEqual(account.location);
-      expect(project.principalId).toBeDefined();
       const observed = yield* get(project.projectName);
+      expect(project.principalId).toMatch(/^[0-9a-f-]{36}$/);
+      expect(project.principalId).toEqual(observed.identity?.principalId);
       expect(observed.properties?.displayName).toEqual("Alchemy A");
       expect(observed.properties?.description).toEqual("first");
       expect(observed.tags?.env).toEqual("test");

@@ -8,3 +8,4 @@ export * from "./ProtectionContainerMapping.ts";
 export * from "./RecoveryPlan.ts";
 export * from "./ReplicationPolicy.ts";
 export * from "./StorageClassificationMapping.ts";
+export * from "./VaultSetting.ts";

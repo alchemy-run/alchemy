@@ -87,9 +87,8 @@ test.provider(
       const observed = yield* getPolicy(group.resourceGroupName, server.serverName);
       expect(observed.properties?.state).toEqual("Enabled");
       expect(observed.properties?.isAzureMonitorTargetEnabled).toEqual(true);
-      expect([...(observed.properties?.auditActionsAndGroups ?? [])].sort()).toEqual(
-        [...AUTH_GROUPS].sort(),
-      );
+      const audited = [...(observed.properties?.auditActionsAndGroups ?? [])].sort();
+      expect(audited).toEqual([...AUTH_GROUPS].sort());
 
       // In place: audit only failed logins.
       yield* stack.deploy(program({ password, groups: ["FAILED_DATABASE_AUTHENTICATION_GROUP"] }));

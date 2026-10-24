@@ -99,10 +99,32 @@ export interface StorageAccountProps {
    */
   publicNetworkAccess?: "Enabled" | "Disabled";
   /**
+   * Native data-sharing features allowed on the account. Each flag must be
+   * `true` before the matching child can be created:
+   * `allowBlobAccessPoints` for `Azure.Storage.BlobAccessPointConfiguration`,
+   * `allowStorageDataShares` for `Azure.Storage.DataShare`, and
+   * `allowStorageConnectors` for `Azure.Storage.Connector`. Unset flags keep
+   * the account's current value.
+   * @default Azure's default (all disabled)
+   */
+  dataCollaborationPolicy?: StorageDataCollaborationPolicy;
+  /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
    */
   tags?: Record<string, string>;
+}
+
+/** Native data-sharing features allowed on a storage account. */
+export interface StorageDataCollaborationPolicy {
+  /** Allow storage connectors on the account. */
+  allowStorageConnectors?: boolean;
+  /** Allow Blob Access Point configurations on the account. */
+  allowBlobAccessPoints?: boolean;
+  /** Allow storage data shares on the account. */
+  allowStorageDataShares?: boolean;
+  /** Allow data sharing across Entra tenants. */
+  allowCrossTenantDataSharing?: boolean;
 }
 
 export interface StorageAccountEndpoints {
@@ -140,6 +162,8 @@ export interface StorageAccount extends Resource<
     isHnsEnabled: boolean;
     /** Primary service endpoints. */
     primaryEndpoints: StorageAccountEndpoints;
+    /** Native data-sharing features allowed on the account. */
+    dataCollaborationPolicy: StorageDataCollaborationPolicy;
     /** User tags (Alchemy ownership tags stripped). */
     tags: Record<string, string>;
   },
@@ -173,6 +197,17 @@ export interface StorageAccount extends Resource<
  * ```typescript
  * const lake = yield* Azure.Storage.StorageAccount("lake", {
  *   isHnsEnabled: true,
+ * });
+ * ```
+ *
+ * ### Native Data Sharing
+ * **Example:** Account that allows Blob Access Points and data shares
+ * ```typescript
+ * const account = yield* Azure.Storage.StorageAccount("shared", {
+ *   dataCollaborationPolicy: {
+ *     allowBlobAccessPoints: true,
+ *     allowStorageDataShares: true,
+ *   },
  * });
  * ```
  *
@@ -223,6 +258,7 @@ const toAttrs = (
       dfs: endpoints?.dfs,
       web: endpoints?.web,
     },
+    dataCollaborationPolicy: { ...account.properties?.dataCollaborationPolicyProperties },
     tags: userTags(account.tags),
   };
 };
@@ -330,7 +366,11 @@ export const StorageAccountProvider = () =>
           sku: { name: sku },
           kind: news.kind ?? "StorageV2",
           tags,
-          properties: { ...desired, isHnsEnabled: news.isHnsEnabled },
+          properties: {
+            ...desired,
+            isHnsEnabled: news.isHnsEnabled,
+            dataCollaborationPolicyProperties: news.dataCollaborationPolicy,
+          },
         });
       }
       observed = yield* waitForProvisioned(
@@ -348,6 +388,17 @@ export const StorageAccountProvider = () =>
         if (value !== undefined && props[key] !== value) {
           Object.assign(changed, { [key]: value });
         }
+      }
+      const observedPolicy = props.dataCollaborationPolicyProperties ?? {};
+      const policy = Object.fromEntries(
+        Object.entries(news.dataCollaborationPolicy ?? {}).filter(([, v]) => v !== undefined),
+      ) as StorageDataCollaborationPolicy;
+      if (
+        (Object.keys(policy) as (keyof StorageDataCollaborationPolicy)[]).some(
+          (key) => (observedPolicy[key] ?? false) !== policy[key],
+        )
+      ) {
+        changed.dataCollaborationPolicyProperties = { ...observedPolicy, ...policy };
       }
       const skuChanged = observed.sku?.name !== sku;
       const tagsChanged = tagsDiffer(observed.tags, tags);

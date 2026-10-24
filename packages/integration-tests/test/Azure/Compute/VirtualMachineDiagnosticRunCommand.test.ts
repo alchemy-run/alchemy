@@ -65,7 +65,9 @@ test.provider(
         program({ timeoutInSeconds: 600, tags: { env: "test" } }),
       );
       expect(command.provisioningState).toEqual("Succeeded");
-      expect(command.executionState).toBeDefined();
+      // No Fleet Diagnostics agent on a stock image: the command exits 127.
+      expect(command.executionState).toEqual("Failed");
+      expect(command.exitCode).toEqual(127);
       const observed = yield* getRunCommand(
         group.resourceGroupName,
         vm.virtualMachineName,
@@ -80,7 +82,7 @@ test.provider(
         program({ timeoutInSeconds: 900, tags: { env: "prod" } }),
       );
       expect(updated.command.runCommandId).toEqual(command.runCommandId);
-      expect(updated.command.executionState).toBeDefined();
+      expect(updated.command.executionState).toEqual("Failed");
       const reobserved = yield* getRunCommand(
         group.resourceGroupName,
         vm.virtualMachineName,

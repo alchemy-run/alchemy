@@ -95,11 +95,8 @@ test.provider(
       const updated = yield* stack.deploy(program(["Manage"]));
       expect(updated.rule.authorizationRuleName).toEqual(rule.authorizationRuleName);
       const reobserved = yield* getRule(rg, ns, events.topicName, rule.authorizationRuleName);
-      expect([...(reobserved.properties?.rights ?? [])].sort()).toEqual([
-        "Listen",
-        "Manage",
-        "Send",
-      ]);
+      const reobservedRights = [...(reobserved.properties?.rights ?? [])].sort();
+      expect(reobservedRights).toEqual(["Listen", "Manage", "Send"]);
 
       // Removing only the rule deletes it while the topic stays.
       yield* stack.deploy(base);

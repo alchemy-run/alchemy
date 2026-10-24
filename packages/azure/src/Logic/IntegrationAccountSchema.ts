@@ -89,6 +89,11 @@ export interface IntegrationAccountSchema extends Resource<
  * Azure stores the content but never returns it, so Alchemy keeps a hash
  * of the desired configuration in the schema's metadata to detect changes.
  *
+ * :::caution
+ * Changing `name`, `integrationAccount`, or `resourceGroup` replaces the
+ * schema.
+ * :::
+ *
  * @see https://learn.microsoft.com/azure/logic-apps/logic-apps-enterprise-integration-schemas
  *
  * ### Adding a Schema

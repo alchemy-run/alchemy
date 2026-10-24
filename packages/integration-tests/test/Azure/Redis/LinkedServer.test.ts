@@ -68,11 +68,14 @@ test.provider.skipIf(!runPaidOnly)(
       );
       expect(link.linkedServerName).toEqual(secondary.cacheName);
       expect(link.serverRole).toEqual("Secondary");
-      expect(link.geoReplicatedPrimaryHostName).toBeDefined();
       const observed = yield* getLink(
         group.resourceGroupName,
         primary.cacheName,
         link.linkedServerName,
+      );
+      expect(link.geoReplicatedPrimaryHostName).toMatch(/\.redis\.cache\.windows\.net$/);
+      expect(link.geoReplicatedPrimaryHostName).toEqual(
+        observed.properties?.geoReplicatedPrimaryHostName,
       );
       expect(observed.properties?.linkedRedisCacheId?.toLowerCase()).toEqual(
         secondary.cacheId.toLowerCase(),

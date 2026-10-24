@@ -51,7 +51,9 @@ test.provider(
           tags: { env: "test" },
         }),
       );
-      expect(circuit.serviceKey).toBeDefined();
+      expect(circuit.serviceKey).toMatch(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+      );
       expect(circuit.serviceProviderProvisioningState).toEqual("NotProvisioned");
       const observed = yield* getCircuit(group.resourceGroupName, circuit.circuitName);
       expect(observed.properties?.provisioningState).toEqual("Succeeded");

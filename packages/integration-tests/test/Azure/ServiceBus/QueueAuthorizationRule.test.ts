@@ -95,7 +95,8 @@ test.provider(
       const updated = yield* stack.deploy(program(["Send", "Listen"]));
       expect(updated.rule.authorizationRuleName).toEqual(rule.authorizationRuleName);
       const reobserved = yield* getRule(rg, ns, orders.queueName, rule.authorizationRuleName);
-      expect([...(reobserved.properties?.rights ?? [])].sort()).toEqual(["Listen", "Send"]);
+      const reobservedRights = [...(reobserved.properties?.rights ?? [])].sort();
+      expect(reobservedRights).toEqual(["Listen", "Send"]);
 
       // Removing only the rule deletes it while the queue stays.
       yield* stack.deploy(base);

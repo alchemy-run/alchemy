@@ -67,7 +67,7 @@ test.provider(
       expect(observed.properties.category).toEqual("ApiKey");
       expect(observed.properties.metadata?.["alchemy::id"]).toEqual("Connection");
       const firstHash = observed.properties.metadata?.["alchemy::credentials"];
-      expect(firstHash).toBeDefined();
+      expect(firstHash).toMatch(/^[0-9a-f]{32}$/);
 
       // In place: target, credentials, and metadata.
       yield* stack.deploy(

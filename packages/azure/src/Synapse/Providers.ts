@@ -46,6 +46,10 @@ import {
   SqlPoolSecurityAlertPolicyProvider,
 } from "./SqlPoolSecurityAlertPolicy.ts";
 import {
+  SqlPoolSensitivityLabel,
+  SqlPoolSensitivityLabelProvider,
+} from "./SqlPoolSensitivityLabel.ts";
+import {
   SqlPoolTransparentDataEncryption,
   SqlPoolTransparentDataEncryptionProvider,
 } from "./SqlPoolTransparentDataEncryption.ts";
@@ -53,6 +57,10 @@ import {
   SqlPoolVulnerabilityAssessment,
   SqlPoolVulnerabilityAssessmentProvider,
 } from "./SqlPoolVulnerabilityAssessment.ts";
+import {
+  SqlPoolVulnerabilityAssessmentRuleBaseline,
+  SqlPoolVulnerabilityAssessmentRuleBaselineProvider,
+} from "./SqlPoolVulnerabilityAssessmentRuleBaseline.ts";
 import { WorkloadClassifier, WorkloadClassifierProvider } from "./WorkloadClassifier.ts";
 import { WorkloadGroup, WorkloadGroupProvider } from "./WorkloadGroup.ts";
 import { Workspace, WorkspaceProvider } from "./Workspace.ts";
@@ -92,8 +100,10 @@ export const resources = [
   SqlPoolGeoBackupPolicy,
   SqlPoolMaintenanceWindow,
   SqlPoolSecurityAlertPolicy,
+  SqlPoolSensitivityLabel,
   SqlPoolTransparentDataEncryption,
   SqlPoolVulnerabilityAssessment,
+  SqlPoolVulnerabilityAssessmentRuleBaseline,
   WorkloadClassifier,
   WorkloadGroup,
   Workspace,
@@ -122,8 +132,10 @@ export const layers = () =>
     SqlPoolGeoBackupPolicyProvider(),
     SqlPoolMaintenanceWindowProvider(),
     SqlPoolSecurityAlertPolicyProvider(),
+    SqlPoolSensitivityLabelProvider(),
     SqlPoolTransparentDataEncryptionProvider(),
     SqlPoolVulnerabilityAssessmentProvider(),
+    SqlPoolVulnerabilityAssessmentRuleBaselineProvider(),
     WorkloadClassifierProvider(),
     WorkloadGroupProvider(),
     WorkspaceProvider(),

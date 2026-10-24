@@ -36,9 +36,9 @@ export interface ProtectionContainerProps {
   /** Name of the fabric that holds the container. Changing it replaces the container. */
   fabric: string;
   /**
-   * Container name, unique within the fabric. If omitted, a unique name is
-   * generated from the app, stage, and logical ID. Changing it replaces the
-   * container.
+   * Container name, unique within the fabric. If omitted, a unique
+   * lowercase name of up to 32 characters is generated from the app, stage,
+   * and logical ID. Changing it replaces the container.
    */
   name?: string;
   /**
@@ -101,6 +101,14 @@ export const ProtectionContainer = GroupedResource<ProtectionContainer>(
 );
 
 type Observed = asr.GetReplicationProtectionContainerResponse;
+
+/**
+ * Generated container names are lowercase and at most 32 characters (the
+ * length of the portal's `asr-a2a-default-<region>-container`): ASR rejects
+ * the 60-character names other ASR objects accept.
+ */
+const createContainerName = (id: string) =>
+  Effect.map(createSiteRecoveryName(id, 32), (name) => name.toLowerCase());
 
 const getContainer = (
   subscriptionId: string,
@@ -174,7 +182,7 @@ export const ProtectionContainerProvider = () =>
       const fabric = output?.fabric ?? olds?.fabric;
       if (!resourceGroup || !vault || !fabric) return undefined;
       const name =
-        output?.protectionContainerName ?? olds?.name ?? (yield* createSiteRecoveryName(id));
+        output?.protectionContainerName ?? olds?.name ?? (yield* createContainerName(id));
       const observed = yield* getContainer(subscriptionId, resourceGroup, vault, fabric, name);
       if (observed === undefined) return undefined;
       return yield* ownedOrUnowned(
@@ -191,7 +199,7 @@ export const ProtectionContainerProvider = () =>
       yield* ensureRegistered(subscriptionId, SITE_RECOVERY_NAMESPACE);
       const { resourceGroup, vault, fabric } = news;
       const name =
-        news.name ?? output?.protectionContainerName ?? (yield* createSiteRecoveryName(id));
+        news.name ?? output?.protectionContainerName ?? (yield* createContainerName(id));
       const get = getContainer(subscriptionId, resourceGroup, vault, fabric, name);
 
       // Observe; ensure (nothing is mutable after creation).

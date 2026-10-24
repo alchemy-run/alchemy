@@ -3,6 +3,7 @@ import * as eventgrid from "@distilled.cloud/azure/eventgrid";
 import { expect } from "alchemy-test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 
@@ -60,7 +61,7 @@ test.provider(
 
       const { group, namespace, topic } = yield* stack.deploy(program({ retention: 1 }));
       expect(topic.eventRetentionInDays).toEqual(1);
-      expect(topic.primaryKey).toBeDefined();
+      expect(topic.primaryKey ? Redacted.value(topic.primaryKey).length : 0).toBeGreaterThan(40);
       const observed = yield* getTopic(
         group.resourceGroupName,
         namespace.namespaceName,

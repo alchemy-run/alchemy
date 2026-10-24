@@ -22,6 +22,12 @@ export interface StaticSiteUserProvidedFunctionAppProps {
   /** Name of the static site. Changing it replaces the link. */
   staticSiteName: string;
   /**
+   * Environment (build) the link applies to, e.g. a pull request preview
+   * environment. Changing it replaces the link.
+   * @default the production environment
+   */
+  environmentName?: string;
+  /**
    * ARM ID of the function app that serves the site's `/api` routes.
    * Changing it replaces the link.
    */
@@ -46,6 +52,8 @@ export interface StaticSiteUserProvidedFunctionApp extends Resource<
     userProvidedFunctionAppId: string;
     /** Name of the static site. */
     staticSiteName: string;
+    /** Environment (build), if environment-scoped. */
+    environmentName: string | undefined;
     /** Resource group of the static site. */
     resourceGroup: string;
     /** ARM ID of the function app. */
@@ -61,7 +69,8 @@ export interface StaticSiteUserProvidedFunctionApp extends Resource<
 
 /**
  * A "bring your own functions" function app registered with an Azure
- * Static Web App (`Microsoft.Web/staticSites/userProvidedFunctionApps`) so
+ * Static Web App (`Microsoft.Web/staticSites/userProvidedFunctionApps`, or
+ * `staticSites/builds/userProvidedFunctionApps` with `environmentName`) so
  * requests to `/api/*` are routed to it. Requires the `Standard` plan; a
  * site has at most one. New sites should prefer
  * `Azure.Web.StaticSiteLinkedBackend`, which also supports container apps and
@@ -91,26 +100,28 @@ const getFunctionApp = (
   subscriptionId: string,
   resourceGroupName: string,
   name: string,
+  environmentName: string | undefined,
   functionAppName: string,
-) =>
-  orUndefinedIfNotFound(
-    web.GetStaticSiteUserProvidedFunctionAppForStaticSite({
-      subscriptionId,
-      resourceGroupName,
-      name,
-      functionAppName,
-    }),
+) => {
+  const where = { subscriptionId, resourceGroupName, name, functionAppName };
+  return orUndefinedIfNotFound(
+    environmentName === undefined
+      ? web.GetStaticSiteUserProvidedFunctionAppForStaticSite(where)
+      : web.GetStaticSiteUserProvidedFunctionAppForStaticSiteBuild({ ...where, environmentName }),
   );
+};
 
 const toAttrs = (
   resourceGroup: string,
   staticSiteName: string,
+  environmentName: string | undefined,
   functionAppName: string,
   observed: ObservedFunctionApp,
 ): StaticSiteUserProvidedFunctionApp["Attributes"] => ({
   functionAppName,
   userProvidedFunctionAppId: observed.id ?? "",
   staticSiteName,
+  environmentName,
   resourceGroup,
   functionAppResourceId: observed.properties?.functionAppResourceId ?? "",
   functionAppRegion: observed.properties?.functionAppRegion ?? "",
@@ -123,6 +134,7 @@ export const StaticSiteUserProvidedFunctionAppProvider = () =>
       "functionAppName",
       "userProvidedFunctionAppId",
       "staticSiteName",
+      "environmentName",
       "resourceGroup",
       "functionAppResourceId",
       "functionAppRegion",
@@ -138,6 +150,7 @@ export const StaticSiteUserProvidedFunctionAppProvider = () =>
       if (
         lower(news.resourceGroup) !== lower(output.resourceGroup) ||
         lower(news.staticSiteName) !== lower(output.staticSiteName) ||
+        news.environmentName !== output.environmentName ||
         lower(news.functionAppResourceId) !== lower(output.functionAppResourceId) ||
         !sameLocation(news.functionAppRegion, output.functionAppRegion)
       ) {
@@ -158,14 +171,22 @@ export const StaticSiteUserProvidedFunctionAppProvider = () =>
       ) {
         return undefined;
       }
+      const environmentName = output?.environmentName ?? olds?.environmentName;
       const observed = yield* getFunctionApp(
         subscriptionId,
         resourceGroup,
         staticSiteName,
+        environmentName,
         functionAppName,
       );
       if (observed === undefined) return undefined;
-      const attrs = toAttrs(resourceGroup, staticSiteName, functionAppName, observed);
+      const attrs = toAttrs(
+        resourceGroup,
+        staticSiteName,
+        environmentName,
+        functionAppName,
+        observed,
+      );
       // Registrations carry no tags; only one this stack recorded is ours.
       return output !== undefined ? attrs : Unowned(attrs);
     }),
@@ -173,16 +194,22 @@ export const StaticSiteUserProvidedFunctionAppProvider = () =>
     reconcile: Effect.fn(function* ({ news }) {
       const { subscriptionId } = yield* AzureEnvironment.current;
       yield* ensureRegistered(subscriptionId, "Microsoft.Web");
-      const { resourceGroup, staticSiteName } = news;
+      const { resourceGroup, staticSiteName, environmentName } = news;
       const functionAppName = nameOf(news.functionAppResourceId) ?? "";
-      const get = getFunctionApp(subscriptionId, resourceGroup, staticSiteName, functionAppName);
+      const get = getFunctionApp(
+        subscriptionId,
+        resourceGroup,
+        staticSiteName,
+        environmentName,
+        functionAppName,
+      );
 
       // Observe.
       const observed = yield* get;
 
       // Ensure. A registration has nothing mutable (changes replace it).
       if (observed === undefined) {
-        yield* web.RegisterStaticSiteUserProvidedFunctionAppWithStaticSite({
+        const request = {
           subscriptionId,
           resourceGroupName: resourceGroup,
           name: staticSiteName,
@@ -192,7 +219,13 @@ export const StaticSiteUserProvidedFunctionAppProvider = () =>
             functionAppResourceId: news.functionAppResourceId,
             functionAppRegion: news.functionAppRegion,
           },
-        });
+        };
+        yield* environmentName === undefined
+          ? web.RegisterStaticSiteUserProvidedFunctionAppWithStaticSite(request)
+          : web.RegisterStaticSiteUserProvidedFunctionAppWithStaticSiteBuild({
+              ...request,
+              environmentName,
+            });
       }
       // The registration is long-running; it is usable once readable.
       const ready = yield* waitForProvisioned(
@@ -201,18 +234,24 @@ export const StaticSiteUserProvidedFunctionAppProvider = () =>
         () => undefined,
         { interval: "5 seconds", times: 60 },
       );
-      return toAttrs(resourceGroup, staticSiteName, functionAppName, ready);
+      return toAttrs(resourceGroup, staticSiteName, environmentName, functionAppName, ready);
     }),
 
     delete: Effect.fn(function* ({ output }) {
       const { subscriptionId } = yield* AzureEnvironment.current;
+      const where = {
+        subscriptionId,
+        resourceGroupName: output.resourceGroup,
+        name: output.staticSiteName,
+        functionAppName: output.functionAppName,
+      };
       yield* ignoreNotFound(
-        web.DetachStaticSiteUserProvidedFunctionAppFromStaticSite({
-          subscriptionId,
-          resourceGroupName: output.resourceGroup,
-          name: output.staticSiteName,
-          functionAppName: output.functionAppName,
-        }),
+        output.environmentName === undefined
+          ? web.DetachStaticSiteUserProvidedFunctionAppFromStaticSite(where)
+          : web.DetachStaticSiteUserProvidedFunctionAppFromStaticSiteBuild({
+              ...where,
+              environmentName: output.environmentName,
+            }),
       );
       yield* waitUntilGone(
         `user-provided function app ${output.functionAppName}`,
@@ -220,6 +259,7 @@ export const StaticSiteUserProvidedFunctionAppProvider = () =>
           subscriptionId,
           output.resourceGroup,
           output.staticSiteName,
+          output.environmentName,
           output.functionAppName,
         ),
         { interval: "5 seconds", times: 36 },

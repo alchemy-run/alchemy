@@ -22,6 +22,11 @@ export interface SiteExtensionProps {
   /** Name of the Windows web app or function app. Changing it replaces it. */
   siteName: string;
   /**
+   * Deployment slot of the app. Changing it replaces the extension.
+   * @default the production slot
+   */
+  slot?: string;
+  /**
    * ID of the extension in the site extension gallery
    * (https://www.siteextensions.net), e.g. `Microsoft.AspNetCore.AzureAppServices.SiteExtension`.
    * Changing it replaces the extension.
@@ -39,6 +44,8 @@ export interface SiteExtension extends Resource<
     siteExtensionId: string;
     /** Name of the app. */
     siteName: string;
+    /** Deployment slot, if slot-scoped. */
+    slot: string | undefined;
     /** Resource group of the app. */
     resourceGroup: string;
     /** Installed version. */
@@ -54,7 +61,8 @@ export interface SiteExtension extends Resource<
 
 /**
  * A site extension installed into a Windows App Service app
- * (`Microsoft.Web/sites/siteextensions`) from the site extension gallery,
+ * (`Microsoft.Web/sites/siteextensions`, or `sites/slots/siteextensions` with
+ * `slot`) from the site extension gallery,
  * e.g. the ASP.NET Core logging extension. Installing it restarts the app.
  *
  * @see https://learn.microsoft.com/rest/api/appservice/web-apps/install-site-extension
@@ -78,24 +86,28 @@ const getExtension = (
   subscriptionId: string,
   resourceGroup: string,
   siteName: string,
+  slot: string | undefined,
   siteExtensionId: string,
-) =>
-  orUndefinedIfNotFound(
-    web.GetWebAppSiteExtension({
-      ...siteWhere(subscriptionId, resourceGroup, siteName),
-      siteExtensionId,
-    }),
+) => {
+  const where = { ...siteWhere(subscriptionId, resourceGroup, siteName), siteExtensionId };
+  return orUndefinedIfNotFound(
+    slot === undefined
+      ? web.GetWebAppSiteExtension(where)
+      : web.GetWebAppSiteExtensionSlot({ ...where, slot }),
   );
+};
 
 const toAttrs = (
   resourceGroup: string,
   siteName: string,
+  slot: string | undefined,
   extensionId: string,
   observed: ObservedExtension,
 ): SiteExtension["Attributes"] => ({
   extensionId,
   siteExtensionId: observed.id ?? "",
   siteName,
+  slot,
   resourceGroup,
   version: observed.properties?.version,
   title: observed.properties?.title,
@@ -104,7 +116,7 @@ const toAttrs = (
 
 export const SiteExtensionProvider = () =>
   Provider.succeed(SiteExtension, {
-    stables: ["extensionId", "siteExtensionId", "siteName", "resourceGroup"],
+    stables: ["extensionId", "siteExtensionId", "siteName", "slot", "resourceGroup"],
 
     // Extensions are removed with their app.
     list: Effect.fn(function* () {
@@ -116,6 +128,7 @@ export const SiteExtensionProvider = () =>
       if (
         lower(news.resourceGroup) !== lower(output.resourceGroup) ||
         lower(news.siteName) !== lower(output.siteName) ||
+        lower(news.slot) !== lower(output.slot) ||
         lower(news.extensionId) !== lower(output.extensionId)
       ) {
         return { action: "replace" } as const;
@@ -131,9 +144,16 @@ export const SiteExtensionProvider = () =>
       if (resourceGroup === undefined || siteName === undefined || extensionId === undefined) {
         return undefined;
       }
-      const observed = yield* getExtension(subscriptionId, resourceGroup, siteName, extensionId);
+      const slot = output?.slot ?? olds?.slot;
+      const observed = yield* getExtension(
+        subscriptionId,
+        resourceGroup,
+        siteName,
+        slot,
+        extensionId,
+      );
       if (observed === undefined) return undefined;
-      const attrs = toAttrs(resourceGroup, siteName, extensionId, observed);
+      const attrs = toAttrs(resourceGroup, siteName, slot, extensionId, observed);
       // Extensions carry no tags; only one this stack recorded is ours.
       return output !== undefined ? attrs : Unowned(attrs);
     }),
@@ -141,18 +161,21 @@ export const SiteExtensionProvider = () =>
     reconcile: Effect.fn(function* ({ news }) {
       const { subscriptionId } = yield* AzureEnvironment.current;
       yield* ensureRegistered(subscriptionId, "Microsoft.Web");
-      const { resourceGroup, siteName, extensionId } = news;
-      const get = getExtension(subscriptionId, resourceGroup, siteName, extensionId);
+      const { resourceGroup, siteName, slot, extensionId } = news;
+      const get = getExtension(subscriptionId, resourceGroup, siteName, slot, extensionId);
 
       // Observe.
       const observed = yield* get;
 
       // Ensure. An extension has nothing mutable; a failed install is retried.
       if (observed === undefined || observed.properties?.provisioningState === "Failed") {
-        yield* web.InstallWebAppSiteExtension({
+        const where = {
           ...siteWhere(subscriptionId, resourceGroup, siteName),
           siteExtensionId: extensionId,
-        });
+        };
+        yield* slot === undefined
+          ? web.InstallWebAppSiteExtension(where)
+          : web.InstallWebAppSiteExtensionSlot({ ...where, slot });
       }
       const installed = yield* waitForProvisioned(
         `site extension ${extensionId}`,
@@ -160,25 +183,39 @@ export const SiteExtensionProvider = () =>
         (extension) => extension.properties?.provisioningState,
         { interval: "5 seconds", times: 60 },
       );
-      return toAttrs(resourceGroup, siteName, extensionId, installed);
+      return toAttrs(resourceGroup, siteName, slot, extensionId, installed);
     }),
 
     delete: Effect.fn(function* ({ output }) {
       const { subscriptionId } = yield* AzureEnvironment.current;
+      const where = {
+        ...siteWhere(subscriptionId, output.resourceGroup, output.siteName),
+        siteExtensionId: output.extensionId,
+      };
       yield* ignoreNotFound(
-        web.DeleteWebAppSiteExtension({
-          ...siteWhere(subscriptionId, output.resourceGroup, output.siteName),
-          siteExtensionId: output.extensionId,
-        }),
+        output.slot === undefined
+          ? web.DeleteWebAppSiteExtension(where)
+          : web.DeleteWebAppSiteExtensionSlot({ ...where, slot: output.slot }),
       );
       yield* waitUntilGone(
         `site extension ${output.extensionId}`,
-        getExtension(subscriptionId, output.resourceGroup, output.siteName, output.extensionId),
+        getExtension(
+          subscriptionId,
+          output.resourceGroup,
+          output.siteName,
+          output.slot,
+          output.extensionId,
+        ),
         { interval: "5 seconds", times: 24 },
       );
     }),
 
     nuke: {
-      dependsOn: ["Azure.Resources.ResourceGroup", "Azure.Web.WebApp", "Azure.Web.FunctionApp"],
+      dependsOn: [
+        "Azure.Resources.ResourceGroup",
+        "Azure.Web.WebApp",
+        "Azure.Web.FunctionApp",
+        "Azure.Web.WebAppSlot",
+      ],
     },
   });

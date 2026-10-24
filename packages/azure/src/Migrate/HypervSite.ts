@@ -39,7 +39,11 @@ export interface HypervSiteProps {
    * @default the `Azure.Location` layer, else the profile location
    */
   location?: string;
-  /** Name of the Azure Migrate appliance that reports to this site. */
+  /**
+   * Name of the Azure Migrate appliance that reports to this site. Azure
+   * fixes it once the site exists, so setting or changing it replaces the
+   * site; leaving it out keeps whatever the appliance registered.
+   */
   applianceName?: string;
   /** ARM ID of the `Migrate.Solution` (discovery tool) that tracks this site. */
   discoverySolutionId?: string;
@@ -85,6 +89,12 @@ export interface HypervSite extends Resource<
 /**
  * An Azure Migrate Hyper-V discovery site (`Microsoft.OffAzure/hypervSites`) — the discovery container an
  * on-premises Azure Migrate appliance reports Hyper-V inventory to.
+ *
+ * :::caution
+ * Azure fixes the appliance name once the site exists. Setting or changing
+ * `applianceName`, or changing `name`, `location`, or `resourceGroup`,
+ * replaces the site.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/migrate/how-to-set-up-appliance-hyper-v
  *
@@ -188,7 +198,10 @@ export const HypervSiteProvider = () =>
         news.resourceGroup.toLowerCase() !== output.resourceGroup.toLowerCase() ||
         (news.name !== undefined && news.name.toLowerCase() !== output.siteName.toLowerCase()) ||
         (news.location !== undefined &&
-          news.location.toLowerCase() !== output.location.toLowerCase())
+          news.location.toLowerCase() !== output.location.toLowerCase()) ||
+        // Azure rejects a PUT that changes the appliance name ("is different
+        // from already present").
+        (news.applianceName !== undefined && news.applianceName !== output.applianceName)
       ) {
         return { action: "replace" } as const;
       }

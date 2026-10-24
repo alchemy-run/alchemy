@@ -15,3 +15,6 @@ export * from "./VirtualMachineExtension.ts";
 export * from "./VirtualMachineRunCommand.ts";
 export * from "./VirtualMachineScaleSet.ts";
 export * from "./VirtualMachineScaleSetExtension.ts";
+export * from "./VirtualMachineScaleSetVMDiagnosticRunCommand.ts";
+export * from "./VirtualMachineScaleSetVMExtension.ts";
+export * from "./VirtualMachineScaleSetVMRunCommand.ts";

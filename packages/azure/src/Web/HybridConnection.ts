@@ -17,6 +17,11 @@ export interface HybridConnectionProps {
   /** Name of the web app or function app. Changing it replaces it. */
   siteName: string;
   /**
+   * Deployment slot of the app. Changing it replaces the connection.
+   * @default the production slot
+   */
+  slot?: string;
+  /**
    * Name of the Azure Relay namespace. Changing it replaces the connection.
    */
   namespaceName: string;
@@ -53,6 +58,8 @@ export interface HybridConnection extends Resource<
     hybridConnectionId: string;
     /** Name of the app. */
     siteName: string;
+    /** Deployment slot, if slot-scoped. */
+    slot: string | undefined;
     /** Resource group of the app. */
     resourceGroup: string;
     /** Name of the Relay namespace. */
@@ -74,7 +81,8 @@ export interface HybridConnection extends Resource<
 
 /**
  * An App Service Hybrid Connection
- * (`Microsoft.Web/sites/hybridConnectionNamespaces/relays`) that lets an app
+ * (`Microsoft.Web/sites/hybridConnectionNamespaces/relays`, or
+ * `sites/slots/hybridConnectionNamespaces/relays` with `slot`) that lets an app
  * reach an on-premises `host:port` through an Azure Relay hybrid connection
  * and the Hybrid Connection Manager agent. Requires a Basic or higher plan.
  *
@@ -105,26 +113,29 @@ const getConnection = (
   subscriptionId: string,
   resourceGroup: string,
   siteName: string,
+  slot: string | undefined,
   namespaceName: string,
   relayName: string,
-) =>
-  orUndefinedIfNotFound(
-    web.GetWebAppHybridConnection({
-      ...siteWhere(subscriptionId, resourceGroup, siteName),
-      namespaceName,
-      relayName,
-    }),
+) => {
+  const where = { ...siteWhere(subscriptionId, resourceGroup, siteName), namespaceName, relayName };
+  return orUndefinedIfNotFound(
+    slot === undefined
+      ? web.GetWebAppHybridConnection(where)
+      : web.GetWebAppHybridConnectionSlot({ ...where, slot }),
   );
+};
 
 const toAttrs = (
   resourceGroup: string,
   siteName: string,
+  slot: string | undefined,
   namespaceName: string,
   relayName: string,
   observed: ObservedConnection,
 ): HybridConnection["Attributes"] => ({
   hybridConnectionId: observed.id ?? "",
   siteName,
+  slot,
   resourceGroup,
   namespaceName,
   relayName,
@@ -136,7 +147,14 @@ const toAttrs = (
 
 export const HybridConnectionProvider = () =>
   Provider.succeed(HybridConnection, {
-    stables: ["hybridConnectionId", "siteName", "resourceGroup", "namespaceName", "relayName"],
+    stables: [
+      "hybridConnectionId",
+      "siteName",
+      "slot",
+      "resourceGroup",
+      "namespaceName",
+      "relayName",
+    ],
 
     // Hybrid connections are removed with their app.
     list: Effect.fn(function* () {
@@ -148,6 +166,7 @@ export const HybridConnectionProvider = () =>
       if (
         lower(news.resourceGroup) !== lower(output.resourceGroup) ||
         lower(news.siteName) !== lower(output.siteName) ||
+        lower(news.slot) !== lower(output.slot) ||
         lower(news.namespaceName) !== lower(output.namespaceName) ||
         lower(news.relayName) !== lower(output.relayName)
       ) {
@@ -170,15 +189,17 @@ export const HybridConnectionProvider = () =>
       ) {
         return undefined;
       }
+      const slot = output?.slot ?? olds?.slot;
       const observed = yield* getConnection(
         subscriptionId,
         resourceGroup,
         siteName,
+        slot,
         namespaceName,
         relayName,
       );
       if (observed === undefined) return undefined;
-      const attrs = toAttrs(resourceGroup, siteName, namespaceName, relayName, observed);
+      const attrs = toAttrs(resourceGroup, siteName, slot, namespaceName, relayName, observed);
       // Hybrid connections carry no tags; only one this stack recorded is ours.
       return output !== undefined ? attrs : Unowned(attrs);
     }),
@@ -186,7 +207,7 @@ export const HybridConnectionProvider = () =>
     reconcile: Effect.fn(function* ({ news, olds }) {
       const { subscriptionId } = yield* AzureEnvironment.current;
       yield* ensureRegistered(subscriptionId, "Microsoft.Web");
-      const { resourceGroup, siteName, namespaceName, relayName } = news;
+      const { resourceGroup, siteName, slot, namespaceName, relayName } = news;
       const sendKeyValue = reveal(news.sendKeyValue);
       const desired = {
         serviceBusNamespace: namespaceName,
@@ -204,6 +225,7 @@ export const HybridConnectionProvider = () =>
         subscriptionId,
         resourceGroup,
         siteName,
+        slot,
         namespaceName,
         relayName,
       );
@@ -217,25 +239,31 @@ export const HybridConnectionProvider = () =>
         observed.properties?.port !== desired.port ||
         observed.properties?.sendKeyName !== desired.sendKeyName ||
         sendKeyValue !== reveal(olds?.sendKeyValue);
-      const result = drifted
-        ? yield* web.WebAppsCreateOrUpdateHybridConnection({
-            ...siteWhere(subscriptionId, resourceGroup, siteName),
-            namespaceName,
-            relayName,
-            properties: desired,
-          })
-        : observed;
-      return toAttrs(resourceGroup, siteName, namespaceName, relayName, result);
+      const request = {
+        ...siteWhere(subscriptionId, resourceGroup, siteName),
+        namespaceName,
+        relayName,
+        properties: desired,
+      };
+      const result = !drifted
+        ? observed
+        : slot === undefined
+          ? yield* web.WebAppsCreateOrUpdateHybridConnection(request)
+          : yield* web.WebAppsCreateOrUpdateHybridConnectionSlot({ ...request, slot });
+      return toAttrs(resourceGroup, siteName, slot, namespaceName, relayName, result);
     }),
 
     delete: Effect.fn(function* ({ output }) {
       const { subscriptionId } = yield* AzureEnvironment.current;
+      const where = {
+        ...siteWhere(subscriptionId, output.resourceGroup, output.siteName),
+        namespaceName: output.namespaceName,
+        relayName: output.relayName,
+      };
       yield* ignoreNotFound(
-        web.DeleteWebAppHybridConnection({
-          ...siteWhere(subscriptionId, output.resourceGroup, output.siteName),
-          namespaceName: output.namespaceName,
-          relayName: output.relayName,
-        }),
+        output.slot === undefined
+          ? web.DeleteWebAppHybridConnection(where)
+          : web.DeleteWebAppHybridConnectionSlot({ ...where, slot: output.slot }),
       );
       yield* waitUntilGone(
         `hybrid connection ${output.relayName}`,
@@ -243,6 +271,7 @@ export const HybridConnectionProvider = () =>
           subscriptionId,
           output.resourceGroup,
           output.siteName,
+          output.slot,
           output.namespaceName,
           output.relayName,
         ),
@@ -250,6 +279,11 @@ export const HybridConnectionProvider = () =>
     }),
 
     nuke: {
-      dependsOn: ["Azure.Resources.ResourceGroup", "Azure.Web.WebApp", "Azure.Web.FunctionApp"],
+      dependsOn: [
+        "Azure.Resources.ResourceGroup",
+        "Azure.Web.WebApp",
+        "Azure.Web.FunctionApp",
+        "Azure.Web.WebAppSlot",
+      ],
     },
   });

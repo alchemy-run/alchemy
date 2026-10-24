@@ -26,10 +26,13 @@ test.provider(
       expect(workspace.connectivityEndpoints.sql).toContain(
         `${workspace.workspaceName}.sql.azuresynapse.net`,
       );
-      expect(workspace.principalId).toBeDefined();
+      expect(workspace.principalId).toMatch(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+      );
       expect(workspace.tags).toEqual({ env: "test" });
 
       const observed = yield* getWorkspace(group.resourceGroupName, workspace.workspaceName);
+      expect(observed.identity?.principalId).toEqual(workspace.principalId);
       expect(observed.properties?.provisioningState).toEqual("Succeeded");
       expect(observed.properties?.sqlAdministratorLogin).toEqual("sqladminuser");
       expect(observed.tags?.env).toEqual("test");
@@ -43,10 +46,13 @@ test.provider(
       expect(updated.workspace.workspaceId).toEqual(workspace.workspaceId);
       const reobserved = yield* getWorkspace(group.resourceGroupName, workspace.workspaceName);
       expect(reobserved.tags?.env).toEqual("prod");
-      expect(updated.workspace.passwordFingerprint).toBeDefined();
-      expect(Redacted.value(updated.workspace.passwordFingerprint!)).not.toEqual(
-        Redacted.value(workspace.passwordFingerprint!),
-      );
+      const fingerprint = (value: Redacted.Redacted<string> | undefined) =>
+        value === undefined ? "" : Redacted.value(value);
+      const before = fingerprint(workspace.passwordFingerprint);
+      const after = fingerprint(updated.workspace.passwordFingerprint);
+      expect(before).toMatch(/^[0-9a-f]{64}$/);
+      expect(after).toMatch(/^[0-9a-f]{64}$/);
+      expect(after).not.toEqual(before);
 
       yield* stack.destroy();
       expect(

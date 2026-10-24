@@ -31,8 +31,10 @@ export interface HypervClusterProps {
   fqdn: string;
   /**
    * ARM ID of the run-as account (credentials) the site's appliance uses to
-   * connect. Run-as accounts are registered by the appliance; the service
-   * rejects unknown IDs with `MigrateRunAsAccountInvalid`.
+   * connect. Run-as accounts are registered by the appliance; on a site
+   * without a live appliance Azure rejects the entry with an HTTP 400
+   * ("Object reference not set to an instance of an object.") and leaves it
+   * in a non-terminal state until the site is deleted.
    */
   runAsAccountId: string;
   /** FQDNs of the cluster's member hosts. */

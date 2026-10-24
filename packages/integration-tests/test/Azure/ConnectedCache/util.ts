@@ -55,6 +55,29 @@ export const getCacheNode = (
     }),
   );
 
+export const getIspCustomer = (resourceGroupName: string, customerResourceName: string) =>
+  Effect.flatMap(subscription, (subscriptionId) =>
+    connectedcache.GetIspCustomer({
+      subscriptionId,
+      resourceGroupName,
+      customerResourceName,
+    }),
+  );
+
+export const getIspCacheNode = (
+  resourceGroupName: string,
+  customerResourceName: string,
+  cacheNodeResourceName: string,
+) =>
+  Effect.flatMap(subscription, (subscriptionId) =>
+    connectedcache.GetIspCacheNodesOperation({
+      subscriptionId,
+      resourceGroupName,
+      customerResourceName,
+      cacheNodeResourceName,
+    }),
+  );
+
 /**
  * Poll a typed GET until `provisioningState` reports `Succeeded` (the RP's
  * replicas can briefly serve `Accepted` after a write).
@@ -66,6 +89,19 @@ export const untilSucceeded = <A extends { properties?: { provisioningState?: st
     Effect.repeat({
       schedule: Schedule.spaced("5 seconds"),
       until: (value) => value.properties?.provisioningState === "Succeeded",
+      times: 24,
+    }),
+  );
+
+/**
+ * Poll a typed GET until `until` holds. The Connected Cache RP's replicas
+ * serve the pre-write body for a while after an update.
+ */
+export const untilObserved = <A, E, R>(get: Effect.Effect<A, E, R>, until: (value: A) => boolean) =>
+  get.pipe(
+    Effect.repeat({
+      schedule: Schedule.spaced("5 seconds"),
+      until,
       times: 24,
     }),
   );

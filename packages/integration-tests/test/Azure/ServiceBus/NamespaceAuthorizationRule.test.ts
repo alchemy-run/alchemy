@@ -66,24 +66,22 @@ test.provider(
       const { group, bus, rule } = yield* stack.deploy(program(["Send", "Listen"]));
       const rg = group.resourceGroupName;
       expect(rule.rights).toEqual(["Listen", "Send"]);
-      expect(rule.primaryConnectionString).toBeDefined();
+      expect(Redacted.isRedacted(rule.primaryConnectionString)).toEqual(true);
       expect(Redacted.value(rule.primaryConnectionString!)).toContain(
         `SharedAccessKeyName=${rule.authorizationRuleName}`,
       );
       expect(Redacted.value(rule.primaryKey!).length).toBeGreaterThan(20);
       const observed = yield* getRule(rg, bus.namespaceName, rule.authorizationRuleName);
-      expect([...(observed.properties?.rights ?? [])].sort()).toEqual(["Listen", "Send"]);
+      const observedRights = [...(observed.properties?.rights ?? [])].sort();
+      expect(observedRights).toEqual(["Listen", "Send"]);
 
       // In place: add Manage (implies Listen + Send).
       const updated = yield* stack.deploy(program(["Manage"]));
       expect(updated.rule.authorizationRuleName).toEqual(rule.authorizationRuleName);
       expect(updated.rule.rights).toEqual(["Listen", "Manage", "Send"]);
       const reobserved = yield* getRule(rg, bus.namespaceName, rule.authorizationRuleName);
-      expect([...(reobserved.properties?.rights ?? [])].sort()).toEqual([
-        "Listen",
-        "Manage",
-        "Send",
-      ]);
+      const reobservedRights = [...(reobserved.properties?.rights ?? [])].sort();
+      expect(reobservedRights).toEqual(["Listen", "Manage", "Send"]);
 
       // Removing only the rule deletes it while the namespace stays.
       yield* stack.deploy(

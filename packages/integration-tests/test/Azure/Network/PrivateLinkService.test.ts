@@ -89,7 +89,12 @@ test.provider(
       const { group, service, approval } = yield* stack.deploy(
         program({ proxyProtocol: false, description: "ok", env: "test" }),
       );
-      expect(service.alias).toBeDefined();
+      expect(service.alias).toMatch(
+        new RegExp(
+          `^${service.privateLinkServiceName}\\.[0-9a-f-]{36}\\.[a-z0-9]+\\.azure\\.privatelinkservice$`,
+          "i",
+        ),
+      );
       expect(approval.status).toEqual("Approved");
       const observed = yield* getConnection(
         group.resourceGroupName,

@@ -3,6 +3,7 @@ import * as eventgrid from "@distilled.cloud/azure/eventgrid";
 import { expect } from "alchemy-test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 
@@ -59,7 +60,7 @@ test.provider(
       );
       expect(domain.domainName).toMatch(/^[A-Za-z0-9-]{3,50}$/);
       expect(domain.endpoint).toContain(".eventgrid.azure.net");
-      expect(domain.primaryKey).toBeDefined();
+      expect(domain.primaryKey ? Redacted.value(domain.primaryKey).length : 0).toBeGreaterThan(40);
       const observed = yield* getDomain(group.resourceGroupName, domain.domainName);
       expect(observed.properties?.provisioningState).toEqual("Succeeded");
       expect(observed.properties?.autoCreateTopicWithFirstSubscription).toEqual(true);

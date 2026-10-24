@@ -49,7 +49,8 @@ test.provider(
       );
       expect(observed.kind).toEqual("Container");
       const firstContainer = containerOf(observed);
-      expect(firstContainer).toBeDefined();
+      expect(first.targetContainerName).toEqual(expect.any(String));
+      expect(firstContainer).toEqual(first.targetContainerName);
 
       // Replacement: map into another container.
       const second = yield* stack.deploy(
@@ -63,7 +64,8 @@ test.provider(
         sub.shareSubscriptionName,
         mapping2.dataSetMappingName,
       );
-      expect(containerOf(reobserved)).not.toEqual(firstContainer);
+      expect(second.targetContainerName).not.toEqual(first.targetContainerName);
+      expect(containerOf(reobserved)).toEqual(second.targetContainerName);
 
       yield* stack.destroy();
       expect(

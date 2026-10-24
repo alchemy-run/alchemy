@@ -19,3 +19,5 @@ export * from "./SolutionTemplate.ts";
 export * from "./SolutionTemplateVersion.ts";
 export * from "./SubscriptionSite.ts";
 export * from "./Target.ts";
+export * from "./Workflow.ts";
+export * from "./WorkflowVersion.ts";

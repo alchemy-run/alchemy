@@ -69,7 +69,8 @@ test.provider(
       expect(group?.tags?.["alchemy::id"]).toEqual(Azure.DEFAULT_RESOURCE_GROUP_ID);
       expect(group?.tags?.["alchemy::stack"]).toEqual(stack.name);
       expect(group?.tags?.["alchemy::stage"]).toEqual(stack.stage);
-      expect(yield* getIdentity(expected, identity.identityName)).toBeDefined();
+      const observedIdentity = yield* getIdentity(expected, identity.identityName);
+      expect(observedIdentity?.name).toEqual(identity.identityName);
 
       // An identity Alchemy did not create keeps destroy from deleting the group.
       const { subscriptionId, location } = yield* Azure.AzureEnvironment.current;
@@ -88,8 +89,10 @@ test.provider(
       );
       const cause = Option.getOrUndefined(Cause.findErrorOption(failure!.cause));
       expect(cause).toBeInstanceOf(Azure.Resources.ResourceGroupNotEmpty);
-      expect(yield* getIdentity(expected, identity.identityName)).toBeUndefined();
-      expect(yield* getGroup(expected)).toBeDefined();
+      const deletedIdentity = yield* getIdentity(expected, identity.identityName);
+      expect(deletedIdentity).toBeUndefined();
+      const keptGroup = yield* getGroup(expected);
+      expect(keptGroup?.name).toEqual(expected);
 
       // Once the foreign identity is gone, destroy deletes the empty group.
       yield* msi.DeleteUserAssignedIdentity({
@@ -98,7 +101,8 @@ test.provider(
         resourceName: foreign,
       });
       yield* stack.destroy();
-      expect(yield* waitUntilGone(expected)).toBeUndefined();
+      const goneGroup = yield* waitUntilGone(expected);
+      expect(goneGroup).toBeUndefined();
     }).pipe(logLevel),
   { tags, timeout: 600_000 },
 );
@@ -122,14 +126,16 @@ test.provider(
         ),
       );
       expect(identity.resourceGroup).toEqual(existing);
-      expect(yield* getIdentity(existing, identity.identityName)).toBeDefined();
-      expect(
-        yield* getGroup(Azure.defaultResourceGroupName(stack.name, stack.stage)),
-      ).toBeUndefined();
+      const observedIdentity = yield* getIdentity(existing, identity.identityName);
+      expect(observedIdentity?.name).toEqual(identity.identityName);
+      const defaultGroup = yield* getGroup(Azure.defaultResourceGroupName(stack.name, stack.stage));
+      expect(defaultGroup).toBeUndefined();
 
       yield* stack.destroy();
-      expect(yield* getIdentity(existing, identity.identityName)).toBeUndefined();
-      expect(yield* getGroup(existing)).toBeDefined();
+      const deletedIdentity = yield* getIdentity(existing, identity.identityName);
+      expect(deletedIdentity).toBeUndefined();
+      const keptGroup = yield* getGroup(existing);
+      expect(keptGroup?.name).toEqual(existing);
 
       yield* deleteGroup(existing);
     }).pipe(logLevel),
@@ -154,13 +160,14 @@ test.provider(
         }),
       );
       expect(identity.resourceGroup).toEqual(group.resourceGroupName);
-      expect(yield* getIdentity(group.resourceGroupName, identity.identityName)).toBeDefined();
-      expect(
-        yield* getGroup(Azure.defaultResourceGroupName(stack.name, stack.stage)),
-      ).toBeUndefined();
+      const observedIdentity = yield* getIdentity(group.resourceGroupName, identity.identityName);
+      expect(observedIdentity?.name).toEqual(identity.identityName);
+      const defaultGroup = yield* getGroup(Azure.defaultResourceGroupName(stack.name, stack.stage));
+      expect(defaultGroup).toBeUndefined();
 
       yield* stack.destroy();
-      expect(yield* waitUntilGone(group.resourceGroupName)).toBeUndefined();
+      const goneGroup = yield* waitUntilGone(group.resourceGroupName);
+      expect(goneGroup).toBeUndefined();
     }).pipe(logLevel),
   { tags, timeout: 600_000 },
 );

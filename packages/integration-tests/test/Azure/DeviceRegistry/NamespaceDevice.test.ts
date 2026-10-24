@@ -70,7 +70,7 @@ test.provider(
       expect(observed.tags?.env).toEqual("a");
       expect(observed.tags?.["alchemy::id"]).toEqual("Device");
       expect(device.location).toEqual(location);
-      expect(device.uuid).toBeDefined();
+      expect(device.uuid).toMatch(/^[0-9a-f-]{36}$/i);
 
       // In place: enabled, OS version, tags.
       const updated = yield* stack.deploy(

@@ -16,6 +16,7 @@ import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createSiteRecoveryName,
   ownedOrUnowned,
+  retryWhileVaultBusy,
   sameName,
   SITE_RECOVERY_NAMESPACE,
 } from "./Shared.ts";
@@ -189,13 +190,15 @@ export const FabricProvider = () =>
       // Ensure: nothing on a fabric is mutable, so the PUT only runs when
       // it is missing. The create job takes ~3 minutes before GET sees it.
       if (observed === undefined) {
-        yield* asr.CreateReplicationFabric({
-          subscriptionId,
-          resourceGroupName: resourceGroup,
-          resourceName: vault,
-          fabricName: name,
-          properties: { customDetails: { instanceType: "Azure", location } },
-        });
+        yield* retryWhileVaultBusy(
+          asr.CreateReplicationFabric({
+            subscriptionId,
+            resourceGroupName: resourceGroup,
+            resourceName: vault,
+            fabricName: name,
+            properties: { customDetails: { instanceType: "Azure", location } },
+          }),
+        );
       }
       const fresh = yield* waitForProvisioned(
         `site recovery fabric ${name}`,

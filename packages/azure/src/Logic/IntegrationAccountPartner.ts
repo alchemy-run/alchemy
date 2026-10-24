@@ -80,6 +80,11 @@ export interface IntegrationAccountPartner extends Resource<
  * by one or more business identities. Agreements are made between two
  * partners.
  *
+ * :::caution
+ * Changing `name`, `integrationAccount`, or `resourceGroup` replaces the
+ * partner.
+ * :::
+ *
  * @see https://learn.microsoft.com/azure/logic-apps/logic-apps-enterprise-integration-partners
  *
  * ### Adding Partners

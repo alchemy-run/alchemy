@@ -20,6 +20,7 @@ import {
 import { BackupStorageConfig, BackupStorageConfigProvider } from "./BackupStorageConfig.ts";
 import { BackupVaultConfig, BackupVaultConfigProvider } from "./BackupVaultConfig.ts";
 import { Vault, VaultProvider } from "./Vault.ts";
+import { VaultExtendedInfo, VaultExtendedInfoProvider } from "./VaultExtendedInfo.ts";
 
 export const resources = [
   BackupEncryptionConfig,
@@ -31,6 +32,7 @@ export const resources = [
   BackupStorageConfig,
   BackupVaultConfig,
   Vault,
+  VaultExtendedInfo,
 ];
 export const layers = () =>
   Layer.mergeAll(
@@ -43,4 +45,5 @@ export const layers = () =>
     BackupStorageConfigProvider(),
     BackupVaultConfigProvider(),
     VaultProvider(),
+    VaultExtendedInfoProvider(),
   );

@@ -3,7 +3,7 @@ import * as apim from "@distilled.cloud/azure/apimanagement";
 import { expect } from "alchemy-test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
-import { runExpensive } from "../gates.ts";
+import { runPaidOnly } from "../gates.ts";
 import {
   basicV2Service,
   consumptionService,
@@ -47,8 +47,8 @@ const program = (doc?: { name: string; content: string }) =>
 // return an empty 404 on Developer, BasicV2 and Premium services at every
 // api-version from 2022-08-01 to 2024-06-01-preview, which the probe below
 // pins on a free Consumption service. Runs only with
-// AZURE_TEST_APIM_WIKIS=1 once the routes ship.
-test.provider.skipIf(!runExpensive || !process.env.AZURE_TEST_APIM_WIKIS)(
+// AZURE_TEST_PAID=1 (unreleased routes) once they ship.
+test.provider.skipIf(!runPaidOnly)(
   "create, update, replace, and delete a documentation page",
   (stack) =>
     Effect.gen(function* () {

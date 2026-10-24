@@ -54,8 +54,9 @@ test.provider(
       );
       const get = (name: string) =>
         getCredentialSet(group.resourceGroupName, registry.registryName, name);
-      expect(credentials.principalId).toBeDefined();
       const observed = yield* get(credentials.credentialSetName);
+      expect(credentials.principalId).toEqual(observed.identity?.principalId);
+      expect(credentials.principalId?.length).toBeGreaterThan(0);
       expect(observed.properties?.loginServer).toEqual("docker.io");
       expect(observed.identity?.type?.toLowerCase()).toEqual("systemassigned");
       const credential = observed.properties?.authCredentials?.[0];
