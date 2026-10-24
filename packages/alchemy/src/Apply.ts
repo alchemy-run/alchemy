@@ -11,7 +11,12 @@ import * as Predicate from "effect/Predicate";
 import type { Simplify } from "effect/Types";
 import type { ActionLike } from "./Action.ts";
 import { makeResolveContext } from "./ActionRuntimeContext.ts";
-import { OwnedBySomeoneElse, stripUnowned, Unowned } from "./AdoptPolicy.ts";
+import {
+  OwnedBySomeoneElse,
+  stripUnowned,
+  Unowned,
+  UnverifiableReplacement,
+} from "./AdoptPolicy.ts";
 import { AlchemyContext } from "./AlchemyContext.ts";
 import {
   Artifacts,
@@ -1251,12 +1256,26 @@ const executeNode = (
         yield* admit(node.props);
       }
 
-      // A cycle must delete before precreate claims the identity, even when
-      // that identity can only be admitted once upstream outputs resolve.
-      // Otherwise the previous generation survives until reconcile is
-      // about to run, so a failed upstream never leaves the resource missing.
+      // A cycle must delete before precreate claims the identity. Otherwise
+      // the previous generation survives until reconcile is about to run, so
+      // a failed upstream never leaves the resource missing.
       let deletedFirst = false;
       if (node.deleteFirst && inCycle) {
+        // Precreate runs on unresolved props, so an identity that resolves
+        // later cannot be admitted before the previous generation must go.
+        // Refuse rather than delete it and refuse afterwards.
+        if (!admitted && !node.deferredAdoption?.adopt) {
+          return yield* new UnverifiableReplacement({
+            message:
+              `Cannot replace resource '${fqn}' (${node.resource.Type}): ` +
+              "it must be deleted before its replacement is pre-created, but " +
+              "the replacement's identity depends on outputs that are not " +
+              "resolved yet, so its ownership cannot be checked first. Re-run " +
+              "with `--adopt` (or wrap the effect in `adopt(true)`) to replace it anyway.",
+            resourceType: node.resource.Type,
+            logicalId,
+          });
+        }
         yield* deleteFirst();
         deletedFirst = true;
       }
