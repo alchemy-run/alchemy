@@ -189,5 +189,48 @@ describe.sequential(
         }).pipe(logLevel),
       { timeout: 300_000 },
     );
+
+    // Regression for #1982: Cloudflare stops accepting/returning
+    // `foundation_dns` on 2026-11-23. Default nameservers (including
+    // Advanced Nameservers, `cloudflare.advanced`) are set through
+    // `zoneDefaults.nameservers.type`; the resource never sends or snapshots
+    // the removed boolean. Every non-default nameserver type is
+    // entitlement-gated on the testing account (`DnsSettingNotAvailable`),
+    // so the type is pinned to its observed value next to a field that
+    // forces a real PATCH.
+    test.provider(
+      "manages zoneDefaults.nameservers.type without foundationDns (#1982)",
+      (stack) =>
+        Effect.gen(function* () {
+          const { accountId } = yield* yield* CloudflareEnvironment;
+
+          yield* stack.destroy();
+          yield* normalizeBaseline(accountId);
+          const baseline = (yield* getSettings(accountId)).zoneDefaults.nameservers.type;
+
+          const settings = yield* stack.deploy(
+            Cloudflare.DNS.AccountDnsSettings("AccountDns", {
+              zoneDefaults: { nameservers: { type: baseline }, multiProvider: true },
+            }),
+          );
+          expect(settings.zoneDefaults.nameservers.type).toEqual(baseline);
+          expect(settings.zoneDefaults.multiProvider).toEqual(true);
+          expect(settings.managedKeys).toContain("zoneDefaults.nameservers");
+          expect(settings.managedKeys).not.toContain("zoneDefaults.foundationDns");
+          expect("foundationDns" in settings.zoneDefaults).toBe(false);
+          expect("foundationDns" in settings.initialSettings.zoneDefaults).toBe(false);
+
+          const live = yield* getSettings(accountId);
+          expect(live.zoneDefaults.nameservers.type).toEqual(baseline);
+          expect(live.zoneDefaults.multiProvider).toEqual(true);
+
+          yield* stack.destroy();
+
+          const restored = yield* getSettings(accountId);
+          expect(restored.zoneDefaults.nameservers.type).toEqual(baseline);
+          expect(restored.zoneDefaults.multiProvider).toEqual(BASELINE_MULTI_PROVIDER);
+        }).pipe(logLevel),
+      { timeout: 300_000 },
+    );
   },
 );

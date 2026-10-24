@@ -131,6 +131,68 @@ test.provider(
   },
 );
 
+// #1807: every `updateConfig` opens a new origin pool, so a redeploy that
+// plans an update without changing the config must not call it.
+test.provider(
+  "an update with an unchanged config leaves the live config untouched",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+
+      yield* stack.destroy();
+
+      // Updating the project leaves its `origin` unresolved at plan time,
+      // so Hyperdrive is planned as an update without any change of its own.
+      const program = (historyRetentionSeconds: number, originConnectionLimit: number) =>
+        Effect.gen(function* () {
+          const project = yield* Neon.Project("NoopProject", { historyRetentionSeconds });
+          return yield* Cloudflare.Hyperdrive.Connection("NoopHyperdrive", {
+            origin: project.origin,
+            originConnectionLimit,
+          });
+        });
+
+      const hd = yield* stack.deploy(program(21600, 5));
+      const before = yield* hyperdrive.getConfig({ accountId, hyperdriveId: hd.hyperdriveId });
+
+      const plan = yield* stack.plan(program(3600, 5));
+      expect(plan.resources.NoopHyperdrive!.action).toEqual("update");
+      yield* stack.deploy(program(3600, 5));
+
+      const unchanged = yield* hyperdrive.getConfig({ accountId, hyperdriveId: hd.hyperdriveId });
+      expect(unchanged.modifiedOn).toEqual(before.modifiedOn);
+
+      // Drift on a readable field is still corrected.
+      yield* hyperdrive.patchConfig({
+        accountId,
+        hyperdriveId: hd.hyperdriveId,
+        originConnectionLimit: 7,
+      });
+      yield* stack.deploy(program(21600, 5));
+      const corrected = yield* hyperdrive.getConfig({ accountId, hyperdriveId: hd.hyperdriveId });
+      expect(corrected.originConnectionLimit).toEqual(5);
+
+      // A real change is applied.
+      yield* stack.deploy(program(21600, 6));
+      const changed = yield* hyperdrive.getConfig({ accountId, hyperdriveId: hd.hyperdriveId });
+      expect(changed.originConnectionLimit).toEqual(6);
+
+      yield* stack.destroy();
+
+      yield* waitForConfigToBeDeleted(hd.hyperdriveId, accountId);
+    }).pipe(logLevel),
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:hyperdrive",
+      "provider:neon",
+      "provider:neon:project",
+      "live",
+    ],
+    timeout: 240_000,
+  },
+);
+
 test.provider(
   "renaming replaces the config while the origin is unresolved",
   (stack) =>

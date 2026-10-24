@@ -76,11 +76,17 @@ describe("Lambda Bindings", { tags: ["provider:aws", "provider:aws:lambda", "liv
   );
 
   test.provider(
-    "InvokeFunction invokes the target function",
+    "InvokeFunction invokes the target function through its alias",
     () =>
       Effect.gen(function* () {
-        const result = (yield* getJson("/invoke", 30)) as { statusCode: number };
+        const result = (yield* getJson("/invoke", 30)) as {
+          statusCode: number;
+          executedVersion: string;
+        };
         expect(result.statusCode).toBe(200);
+        // The target sets `alias: "live"`, so the binding runs the version
+        // the alias serves, never `$LATEST`.
+        expect(result.executedVersion).toMatch(/^[1-9]\d*$/);
       }),
     { timeout: 120_000 },
   );

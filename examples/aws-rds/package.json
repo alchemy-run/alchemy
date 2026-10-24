@@ -16,11 +16,11 @@
   },
   "dependencies": {
     "@alchemy.run/aws": "workspace:*",
+    "@alchemy.run/sql": "workspace:*",
     "@distilled.cloud/aws": "workspace:*",
     "@effect/platform-node": "catalog:",
-    "@types/pg": "catalog:",
+    "@effect/sql-pg": "catalog:",
     "alchemy": "workspace:*",
-    "effect": "catalog:",
-    "pg": "catalog:"
+    "effect": "catalog:"
   }
 }
