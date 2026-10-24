@@ -15,11 +15,12 @@ type TypeId = typeof TypeId;
 export interface AccountDnsNameservers {
   /**
    * Nameserver kind: Cloudflare's standard pair, a random standard
-   * assignment, or custom nameservers defined at the account or tenant
-   * level.
+   * assignment, Foundation DNS Advanced Nameservers (paid add-on), or
+   * custom nameservers defined at the account or tenant level.
    */
   type:
     | "cloudflare.standard"
+    | "cloudflare.advanced"
     | "cloudflare.standard.random"
     | "custom.account"
     | "custom.tenant"
@@ -57,12 +58,6 @@ export interface AccountDnsZoneDefaults {
    * @default false
    */
   flattenAllCnames?: boolean;
-  /**
-   * Enable Foundation DNS Advanced Nameservers by default (paid
-   * add-on).
-   * @default false
-   */
-  foundationDns?: boolean;
   /**
    * Default settings for internal zones (Enterprise Internal DNS only).
    */
@@ -132,8 +127,6 @@ export interface AccountDnsSettingsSnapshot {
   zoneDefaults: {
     /** Whether all CNAMEs are flattened by default. */
     flattenAllCnames: boolean;
-    /** Whether Foundation DNS is enabled by default. */
-    foundationDns: boolean;
     /** Default internal DNS reference zone, if configured. */
     internalDns: { referenceZoneId: string | undefined };
     /** Whether multi-provider DNS is enabled by default. */
@@ -199,8 +192,10 @@ export type AccountDnsSettings = Resource<
  *
  * Some fields are plan-gated: `zoneDefaults.nsTtl` and custom SOA
  * values require the custom nameserver TTL / custom SOA entitlements,
- * `foundationDns` is a paid add-on, and `internalDns` is Enterprise
+ * `nameservers.type: "cloudflare.advanced"` (Foundation DNS Advanced
+ * Nameservers) is a paid add-on, and `internalDns` is Enterprise
  * Internal DNS only.
+ *
  * ### Account-wide overrides
  * **Example:** Force every proxied record to DNS-only
  * ```typescript
@@ -350,7 +345,6 @@ const toSnapshot = (r: SettingsResponse): AccountDnsSettingsSnapshot => ({
   enforceDnsOnly: undef(r.enforceDnsOnly) ?? false,
   zoneDefaults: {
     flattenAllCnames: r.zoneDefaults.flattenAllCnames,
-    foundationDns: r.zoneDefaults.foundationDns,
     internalDns: {
       referenceZoneId: undef(r.zoneDefaults.internalDns.referenceZoneId),
     },
@@ -373,7 +367,6 @@ const toSnapshot = (r: SettingsResponse): AccountDnsSettingsSnapshot => ({
 
 const ZONE_DEFAULT_KEYS = [
   "flattenAllCnames",
-  "foundationDns",
   "internalDns",
   "multiProvider",
   "nameservers",
@@ -444,10 +437,6 @@ const computeDelta = (
       zdBody.flattenAllCnames = zd.flattenAllCnames;
       zdDirty = true;
     }
-    if (zd.foundationDns !== undefined && zd.foundationDns !== ozd.foundationDns) {
-      zdBody.foundationDns = zd.foundationDns;
-      zdDirty = true;
-    }
     if (
       zd.internalDns?.referenceZoneId !== undefined &&
       zd.internalDns.referenceZoneId !== ozd.internalDns.referenceZoneId
@@ -513,12 +502,6 @@ const computeRestore = (
       case "zoneDefaults.flattenAllCnames":
         if (izd.flattenAllCnames !== ozd.flattenAllCnames) {
           zdBody.flattenAllCnames = izd.flattenAllCnames;
-          zdDirty = true;
-        }
-        break;
-      case "zoneDefaults.foundationDns":
-        if (izd.foundationDns !== ozd.foundationDns) {
-          zdBody.foundationDns = izd.foundationDns;
           zdDirty = true;
         }
         break;

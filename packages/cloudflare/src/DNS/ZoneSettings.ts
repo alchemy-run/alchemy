@@ -11,15 +11,23 @@ const TypeId = "Cloudflare.DNS.ZoneSettings" as const;
 type TypeId = typeof TypeId;
 
 /**
- * Nameserver assignment for the zone. `custom.*` types require
- * Business/Enterprise account-level custom nameservers (ACNS).
+ * Nameserver assignment for the zone. `cloudflare.advanced` selects
+ * Foundation DNS Advanced Nameservers (paid add-on); `custom.*` types
+ * require Business/Enterprise account-level custom nameservers (ACNS).
  */
 export interface ZoneDnsNameservers {
   /**
-   * Nameserver kind: Cloudflare's standard pair, or custom nameservers
-   * defined at the account, tenant, or zone level.
+   * Nameserver kind: Cloudflare's standard pair, Foundation DNS
+   * Advanced Nameservers, or custom nameservers defined at the account,
+   * tenant, or zone level.
    */
-  type: "cloudflare.standard" | "custom.account" | "custom.tenant" | "custom.zone" | (string & {});
+  type:
+    | "cloudflare.standard"
+    | "cloudflare.advanced"
+    | "custom.account"
+    | "custom.tenant"
+    | "custom.zone"
+    | (string & {});
   /**
    * Which configured nameserver set to use (for `custom.account` /
    * `custom.tenant`).
@@ -65,15 +73,6 @@ export interface ZoneDnsSettingsProps {
    * @default false
    */
   flattenAllCnames?: boolean;
-  /**
-   * Enable Foundation DNS Advanced Nameservers (paid add-on — patching
-   * `true` fails without the entitlement).
-   *
-   * Mutable — patched in place.
-   *
-   * @default false
-   */
-  foundationDns?: boolean;
   /**
    * Settings for internal zones (Enterprise Internal DNS only).
    *
@@ -142,8 +141,6 @@ export interface ZoneDnsSettingsProps {
 export interface ZoneDnsSettingsSnapshot {
   /** Whether all CNAMEs are flattened. */
   flattenAllCnames: boolean;
-  /** Whether Foundation DNS is enabled. */
-  foundationDns: boolean;
   /** Internal DNS reference zone, if configured. */
   internalDns: { referenceZoneId: string | undefined };
   /** Whether multi-provider DNS is enabled. */
@@ -205,9 +202,11 @@ export type ZoneDnsSettings = Resource<
  * managed fields to the values they had before Alchemy first touched
  * the zone (captured as `initialSettings`).
  *
- * Some fields are plan-gated: `foundationDns` is a paid add-on,
+ * Some fields are plan-gated: `nameservers.type: "cloudflare.advanced"`
+ * (Foundation DNS Advanced Nameservers) is a paid add-on,
  * `nameservers.type: "custom.*"` requires account custom nameservers,
  * `internalDns` and `secondaryOverrides` are Enterprise features.
+ *
  * ### Basic settings
  * **Example:** Lower the NS record TTL
  * ```typescript
@@ -388,7 +387,6 @@ const undef = <T>(v: T | null | undefined): T | undefined => (v == null ? undefi
 
 const toSnapshot = (r: SettingsResponse): ZoneDnsSettingsSnapshot => ({
   flattenAllCnames: r.flattenAllCnames,
-  foundationDns: r.foundationDns,
   internalDns: { referenceZoneId: undef(r.internalDns.referenceZoneId) },
   multiProvider: r.multiProvider,
   nameservers: {
@@ -414,7 +412,6 @@ const declaredKeys = (news: ZoneDnsSettingsProps): string[] =>
   (
     [
       "flattenAllCnames",
-      "foundationDns",
       "internalDns",
       "multiProvider",
       "nameservers",
@@ -473,10 +470,6 @@ const computeDelta = (
     body.flattenAllCnames = news.flattenAllCnames;
     dirty = true;
   }
-  if (news.foundationDns !== undefined && news.foundationDns !== observed.foundationDns) {
-    body.foundationDns = news.foundationDns;
-    dirty = true;
-  }
   if (
     news.internalDns?.referenceZoneId !== undefined &&
     news.internalDns.referenceZoneId !== observed.internalDns.referenceZoneId
@@ -533,12 +526,6 @@ const computeRestore = (
       case "flattenAllCnames":
         if (initial.flattenAllCnames !== observed.flattenAllCnames) {
           body.flattenAllCnames = initial.flattenAllCnames;
-          dirty = true;
-        }
-        break;
-      case "foundationDns":
-        if (initial.foundationDns !== observed.foundationDns) {
-          body.foundationDns = initial.foundationDns;
           dirty = true;
         }
         break;
