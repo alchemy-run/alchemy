@@ -342,12 +342,12 @@ describe("Domain.Saga", () => {
     ),
   );
 
-  it.effect("a step's external system call waits until the story resolves it", () =>
+  it.effect("a step's external system call waits until the story answers it", () =>
     checks(
       Story.when(transfer, request(40)),
       Story.saga(Screen, "t-1", { _tag: "Running" }),
-      Story.expectCall(Sanctions.check, { wallet: "alice" }),
-      Story.resolve(Sanctions.check, { clear: false }),
+      Story.call(Sanctions.check, { wallet: "alice" }),
+      Story.succeed(Sanctions.check, { clear: false }),
       Story.saga(Screen, "t-1", { _tag: "Rejected", rejection: new Flagged() }),
     ),
   );
@@ -355,7 +355,7 @@ describe("Domain.Saga", () => {
   it.effect("a step's external system call fails with the operation's declared error", () =>
     checks(
       Story.when(transfer, request(40)),
-      Story.expectCall(Sanctions.check, { wallet: "alice" }),
+      Story.call(Sanctions.check, { wallet: "alice" }),
       Story.fail(Sanctions.check, new SanctionsDown()),
       Story.saga(Screen, "t-1", { _tag: "Rejected", rejection: new ScreeningUnavailable() }),
     ),
@@ -364,7 +364,7 @@ describe("Domain.Saga", () => {
   it.effect("a step's external system call that dies kills the saga", () =>
     checks(
       Story.when(transfer, request(40)),
-      Story.expectCall("t-1", Sanctions.check, { wallet: "alice" }),
+      Story.call("t-1", Sanctions.check, { wallet: "alice" }),
       Story.die("t-1", Sanctions.check, new Error("socket closed")),
       Story.saga(Screen, "t-1", { _tag: "Died" }),
     ),

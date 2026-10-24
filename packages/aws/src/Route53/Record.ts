@@ -3,6 +3,8 @@ import { isResolved } from "alchemy/Diff";
 import type { Input } from "alchemy/Input";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
+import { Stack } from "alchemy/Stack";
+import { State, isActionState } from "alchemy/State/State";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -497,6 +499,60 @@ const toAttrs = (recordSet: route53.ResourceRecordSet, hostedZoneId: string) => 
   healthCheckId: recordSet.HealthCheckId,
 });
 
+/**
+ * Route 53 identifies a record set by zone + name + type (+ set identifier),
+ * so two resources can hold the same record set at different times — e.g.
+ * swapping the names of two records replaces both, and each replacement's
+ * UPSERT takes over the record set the other one's old generation still
+ * points at. Returns whether another current resource in this stack holds
+ * the record set, in which case deleting it would delete the live record.
+ */
+const isRecordSetClaimed = Effect.fn(function* (
+  instanceId: string,
+  recordSet: Pick<Record["Attributes"], "hostedZoneId" | "name" | "type" | "setIdentifier">,
+) {
+  const stack = yield* Stack;
+  const state = yield* yield* State;
+  const zone = normalizeHostedZoneId(recordSet.hostedZoneId);
+  const name = canonicalName(recordSet.name);
+  for (const fqn of yield* state.list({ stack: stack.name, stage: stack.stage })) {
+    const row = yield* state.get({ stack: stack.name, stage: stack.stage, fqn });
+    if (
+      !row ||
+      isActionState(row) ||
+      row.status === "deleting" ||
+      // The generation being deleted is not a claim on its own record set.
+      row.instanceId === instanceId ||
+      row.attr === undefined
+    ) {
+      continue;
+    }
+    const attr = row.attr;
+    if (row.resourceType === "AWS.Route53.Record") {
+      if (
+        attr.hostedZoneId !== undefined &&
+        normalizeHostedZoneId(attr.hostedZoneId) === zone &&
+        canonicalName(attr.name) === name &&
+        attr.type === recordSet.type &&
+        (attr.setIdentifier ?? undefined) === (recordSet.setIdentifier ?? undefined)
+      ) {
+        return true;
+      }
+    } else if (row.resourceType === "AWS.Route53.Records") {
+      if (
+        recordSet.setIdentifier === undefined &&
+        attr.hostedZoneId !== undefined &&
+        normalizeHostedZoneId(attr.hostedZoneId) === zone &&
+        attr.type === recordSet.type &&
+        (attr.names ?? []).some((candidate: string) => canonicalName(candidate) === name)
+      ) {
+        return true;
+      }
+    }
+  }
+  return false;
+});
+
 export const RecordProvider = () =>
   Provider.effect(
     Record,
@@ -683,7 +739,13 @@ export const RecordProvider = () =>
           yield* session.note(`${news.type} ${normalizeName(news.name)}`);
           return toAttrs(recordSet, hostedZoneId);
         }),
-        delete: Effect.fn(function* ({ output }) {
+        delete: Effect.fn(function* ({ instanceId, output, session }) {
+          if (yield* isRecordSetClaimed(instanceId, output)) {
+            yield* session.note(
+              `${output.type} ${output.name} is now managed by another resource — leaving it in place`,
+            );
+            return;
+          }
           yield* route53
             .changeResourceRecordSets({
               HostedZoneId: normalizeHostedZoneId(output.hostedZoneId),
