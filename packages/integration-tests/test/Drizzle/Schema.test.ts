@@ -17,6 +17,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as Predicate from "effect/Predicate";
 import * as Result from "effect/Result";
+import * as S from "effect/Schema";
 
 const { test } = Test.make({ providers: Drizzle.providers() });
 
@@ -649,6 +650,92 @@ test.provider(
 );
 
 test.provider(
+  "a rename after unmerged migration branches is still offered",
+  (stack) =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const ws = yield* stageWorkspace(SCHEMA_SOURCE);
+      const kitGenerate = (schema: string, out: string) =>
+        Effect.promise(() => generate({ dialect: "postgresql", schema, out }));
+      const posts = `\nexport const posts = pgTable("posts", {\n  id: serial("id").primaryKey(),\n});\n`;
+      const email = (source: string) =>
+        source.replace(
+          'name: text("name").notNull(),',
+          'name: text("name").notNull(),\n  email: text("email"),',
+        );
+
+      // Two branches off one base: one adds a column, the other a table.
+      expect((yield* kitGenerate(ws.schemaPath, ws.out)).status).toEqual("ok");
+      const branchOut = path.join(ws.root, "branch");
+      yield* fs.copy(ws.out, branchOut);
+      const emailPath = path.join(ws.root, "schema-email.ts");
+      yield* fs.writeFileString(emailPath, email(SCHEMA_SOURCE));
+      const postsPath = path.join(ws.root, "schema-posts.ts");
+      yield* fs.writeFileString(postsPath, SCHEMA_SOURCE + posts);
+      yield* Effect.sleep("1 second");
+      expect((yield* kitGenerate(emailPath, ws.out)).status).toEqual("ok");
+      expect((yield* kitGenerate(postsPath, branchOut)).status).toEqual("ok");
+      const [, postsDir] = yield* readMigrationDirs(branchOut);
+      yield* fs.copy(path.join(branchOut, postsDir!), path.join(ws.out, postsDir!));
+
+      // Both branches merged, with `name` renamed on top.
+      const renamedPath = path.join(ws.root, "schema-renamed.ts");
+      yield* fs.writeFileString(
+        renamedPath,
+        email(SCHEMA_SOURCE + posts).replace('name: text("name")', 'fullName: text("full_name")'),
+      );
+      yield* Effect.sleep("1 second");
+      const asked: Array<string[]> = [];
+      const scripted = yield* scriptedSelect((options) =>
+        Effect.sync(() => {
+          asked.push(options.options.map((option) => option.label));
+          return options.options.at(-1)!.value;
+        }),
+      );
+      yield* stack
+        .deploy(Drizzle.Schema("app-schema", { schema: renamedPath, out: ws.out }))
+        .pipe(Effect.provideService(Interaction, scripted));
+
+      expect(asked).toEqual([["+ users.full_name", "~ users.name › users.full_name"]]);
+      const dirs = yield* readMigrationDirs(ws.out);
+      expect(dirs).toHaveLength(4);
+      const sql = yield* fs.readFileString(path.join(ws.out, dirs[3]!, "migration.sql"));
+      expect(sql).toContain('RENAME COLUMN "name" TO "full_name"');
+      expect(sql).not.toContain("DROP");
+    }),
+  { tags: ["unit", "local"] },
+);
+
+test.provider(
+  "an invalid schema fails the deploy instead of exiting the process",
+  (stack) =>
+    Effect.gen(function* () {
+      const ws = yield* stageWorkspace(
+        SQLITE_SCHEMA_SOURCE.replace('name: text("name")', 'name: text("id")'),
+      );
+      const exit = yield* Effect.sync(() => process.exit);
+
+      const result = yield* Effect.result(
+        stack.deploy(
+          Drizzle.Schema("sqlite-schema", {
+            dialect: "sqlite",
+            schema: ws.schemaPath,
+            out: ws.out,
+          }),
+        ),
+      );
+
+      expect(Result.isFailure(result)).toBe(true);
+      if (Result.isFailure(result)) {
+        expect(String(result.failure)).toContain("found errors in the schema");
+      }
+      expect(yield* Effect.sync(() => process.exit)).toBe(exit);
+    }),
+  { tags: ["unit", "local"] },
+);
+
+test.provider(
   "converts postgres snapshots written by earlier Alchemy versions",
   (stack) =>
     Effect.gen(function* () {
@@ -685,10 +772,14 @@ test.provider(
 
       const dirs = yield* readMigrationDirs(ws.out);
       expect(dirs).toHaveLength(3);
+      const decodeSnapshot = S.decodeEffect(
+        S.fromJsonString(S.Struct({ type: S.optional(S.String) })),
+      );
       const types = yield* Effect.forEach(dirs, (dir) =>
-        fs
-          .readFileString(path.join(ws.out, dir, "snapshot.json"))
-          .pipe(Effect.map((text) => (JSON.parse(text) as { type?: string }).type)),
+        fs.readFileString(path.join(ws.out, dir, "snapshot.json")).pipe(
+          Effect.flatMap(decodeSnapshot),
+          Effect.map((snapshot) => snapshot.type),
+        ),
       );
       expect(types).toEqual(["base", "diff", "diff"]);
       // Applied migrations are untouched; only the new one has SQL to run.

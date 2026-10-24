@@ -12,6 +12,7 @@ import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Record from "effect/Record";
 import * as S from "effect/Schema";
+import * as Semaphore from "effect/Semaphore";
 import type { Providers } from "./Providers.ts";
 
 export type Dialect = "postgres" | "mysql" | "sqlite";
@@ -137,6 +138,14 @@ class DrizzleKitFailed extends Data.TaggedError("DrizzleKitFailed")<{
   }
 }
 
+class DrizzleKitExited extends Data.TaggedError("DrizzleKitExited")<{
+  readonly command: string;
+}> {
+  override get message() {
+    return `drizzle-kit ${this.command} found errors in the schema (such as two columns with one name) and tried to exit the process`;
+  }
+}
+
 /** An ambiguous schema change with no terminal to ask. */
 class UndecidedSchemaChange extends Data.TaggedError("UndecidedSchemaChange")<{
   readonly props: SchemaProps;
@@ -249,14 +258,45 @@ const importModule = <A>(module: string) =>
     catch: (cause) => new DrizzleKitLoadFailed({ module, cause }),
   });
 
+// drizzle-kit runs in-process but calls `process.exit` on schema errors.
+// Calls trap the exit and fail instead, one at a time since the trap swaps
+// the global.
+const exitTrap = Semaphore.makeUnsafe(1);
+
+const callDrizzleKit = <A>(command: string, run: () => Promise<A>) =>
+  Effect.acquireUseRelease(
+    Effect.sync(() => {
+      const trap = { exit: process.exit, exited: false };
+      process.exit = () => {
+        trap.exited = true;
+        throw new Error("drizzle-kit exited");
+      };
+      return trap;
+    }),
+    (trap) =>
+      // `cli` commands catch the trap's throw and report it as an error result.
+      Effect.tryPromise({
+        try: run,
+        catch: (cause) =>
+          trap.exited
+            ? new DrizzleKitExited({ command })
+            : new DrizzleKitFailed({ command, cause }),
+      }).pipe(
+        Effect.flatMap((result) =>
+          trap.exited ? Effect.fail(new DrizzleKitExited({ command })) : Effect.succeed(result),
+        ),
+      ),
+    (trap) =>
+      Effect.sync(() => {
+        process.exit = trap.exit;
+      }),
+  ).pipe(exitTrap.withPermit);
+
 // A `drizzle-kit/cli` command as an Effect, failing on a thrown or reported error.
 const command = <K extends keyof Commands>(name: K) =>
   Effect.fn(`drizzleKit.${name}`)(function* (options: Commands[K][0]) {
     const cli = yield* importModule<DrizzleKitCli>("drizzle-kit/cli");
-    const result = yield* Effect.tryPromise({
-      try: () => cli[name](options),
-      catch: (cause) => new DrizzleKitFailed({ command: name, cause }),
-    });
+    const result = yield* callDrizzleKit(name, () => cli[name](options));
     if (result.status === "error") {
       return yield* new DrizzleKitFailed({ command: name, cause: result.error });
     }
@@ -362,12 +402,18 @@ export const SchemaProvider = () =>
       ) {
         const reconstruct = kit.reconstruct;
         if (reconstruct === undefined) return (yield* readLatestSnapshot(out))?.snapshot;
-        const snapshots = yield* readSnapshots(out);
-        if (Record.isEmptyRecord(snapshots)) return undefined;
-        return yield* Effect.tryPromise({
-          try: () => reconstruct(Record.map(snapshots, ({ snapshot }) => snapshot)),
-          catch: (cause) => new DrizzleKitFailed({ command: "reconstruct", cause }),
-        });
+        const files = Record.map(yield* readSnapshots(out), ({ snapshot }) => snapshot);
+        // Unmerged branches leave several leaves; offer what any of them has.
+        const parents = new Set(Record.values(files).flatMap((file) => file.prevIds ?? []));
+        const leaves = Record.values(files).flatMap(({ id }) =>
+          id !== undefined && !parents.has(id) ? [id] : [],
+        );
+        const states = yield* Effect.forEach(leaves, (id) =>
+          callDrizzleKit("reconstruct", () => reconstruct(files, id)),
+        );
+        return states.length === 0
+          ? undefined
+          : { ddl: states.flatMap((state) => state.ddl ?? []) };
       });
 
       /**
@@ -387,10 +433,9 @@ export const SchemaProvider = () =>
             >,
           catch: (cause) => new SchemaImportFailed({ schema: props.schema, cause }),
         });
-        const cur = yield* Effect.tryPromise({
-          try: () => kit.generateDrizzleJson(schemaModule),
-          catch: (cause) => new DrizzleKitFailed({ command: "generateDrizzleJson", cause }),
-        });
+        const cur = yield* callDrizzleKit("generateDrizzleJson", () =>
+          kit.generateDrizzleJson(schemaModule),
+        );
         const prev = yield* readPreviousSnapshot(kit, out);
         return { prev: prev?.ddl ?? [], cur: cur.ddl ?? [] };
       });
@@ -572,7 +617,7 @@ const formatEntity = (entity: ReadonlyArray<string>) =>
 
 type Located = { entityType: string; schema: string; table: string; name: string };
 
-const locate = (row: DdlEntry): Located => ({
+const locate = (row: DdlEntry) => ({
   entityType: row.entityType,
   schema: row.schema ?? DEFAULT_SCHEMA,
   table: row.table ?? "",
@@ -596,7 +641,7 @@ const withId = (row: Located, to: ReadonlyArray<string>) =>
     Match.orElse(() => ({ ...row, schema: to[0]!, table: to[1]!, name: to[2]! })),
   );
 
-const renameRow = (row: Located, rename: Rename): Located => {
+const renameRow = (row: Located, rename: Rename) => {
   const { from, to } = rename;
   return Match.value(rename).pipe(
     // Schema rows name themselves; everything else names its schema.
@@ -660,9 +705,14 @@ const renameCandidates = (
   const ofKind = (rows: ReadonlyArray<Located>) =>
     rows.filter((row) => row.entityType === entityType);
   const current = new Set(ofKind(cur.map(locate)).map((row) => JSON.stringify(idOf(row, arity))));
-  const gone = ofKind(applyRenames(prev.map(locate), hints))
-    .map((row) => idOf(row, arity))
-    .filter((id) => !current.has(JSON.stringify(id)));
+  const gone = [
+    ...new Map(
+      ofKind(applyRenames(prev.map(locate), hints))
+        .map((row) => idOf(row, arity))
+        .filter((id) => !current.has(JSON.stringify(id)))
+        .map((id) => [JSON.stringify(id), id]),
+    ).values(),
+  ];
   const sameParent = gone.filter(
     (id) => arity < 3 || (id[0] === hint.entity[0] && id[1] === hint.entity[1]),
   );
