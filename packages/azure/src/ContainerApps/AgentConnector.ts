@@ -192,12 +192,17 @@ export const AgentConnectorProvider = () =>
       let observed = yield* get;
 
       // Ensure + sync: one full PUT, skipped when nothing changed. Azure
-      // returns `dataSource` as null, so a changed data source is detected
-      // against the previous props.
+      // returns `dataSource` and every `extendedProperties` value as null,
+      // so those are compared against the previous props; without previous
+      // props (adoption) the PUT always runs.
       if (
         observed === undefined ||
-        !matchesDesired({ ...properties, dataSource: undefined }, observed.properties) ||
-        (olds !== undefined && fingerprint(properties) !== fingerprint(toProperties(olds)))
+        !matchesDesired(
+          { ...properties, dataSource: undefined, extendedProperties: undefined },
+          observed.properties,
+        ) ||
+        olds === undefined ||
+        fingerprint(properties) !== fingerprint(toProperties(olds))
       ) {
         yield* app.AgentsConnectorsCreateOrUpdate({
           subscriptionId,

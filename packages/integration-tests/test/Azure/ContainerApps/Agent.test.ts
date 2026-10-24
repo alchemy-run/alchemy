@@ -79,10 +79,12 @@ test.provider(
         program({ name: "alchemy-sre-two", mode: "Autonomous", tags: { env: "prod" } }),
       );
       expect(replaced.agent.agentName).toEqual("alchemy-sre-two");
-      expect(yield* waitGone(getAgent(group.resourceGroupName, agent.agentName))).toEqual("gone");
+      const oldAgent = yield* waitGone(getAgent(group.resourceGroupName, agent.agentName));
+      expect(oldAgent).toEqual("gone");
 
       yield* stack.destroy();
-      expect(yield* waitGone(getAgent(group.resourceGroupName, "alchemy-sre-two"))).toEqual("gone");
+      const newAgent = yield* waitGone(getAgent(group.resourceGroupName, "alchemy-sre-two"));
+      expect(newAgent).toEqual("gone");
     }).pipe(logLevel),
   {
     tags: ["provider:azure", "provider:azure:containerapps", "live"],

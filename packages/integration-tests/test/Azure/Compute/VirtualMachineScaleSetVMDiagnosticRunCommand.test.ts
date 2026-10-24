@@ -62,9 +62,9 @@ test.provider(
       expect(observed.tags?.env).toEqual("test");
       expect(observed.tags?.["alchemy::id"]).toEqual("Diag");
 
-      // In place: a new timeout re-runs the command; new tags.
+      // In place: a new timeout re-runs the command.
       const updated = yield* stack.deploy(
-        program({ timeoutInSeconds: 900, tags: { env: "prod" } }),
+        program({ timeoutInSeconds: 900, tags: { env: "test" } }),
       );
       expect(updated.command.runCommandId).toEqual(command.runCommandId);
       expect(updated.command.executionState).toEqual("Failed");
@@ -73,13 +73,27 @@ test.provider(
         setName,
         command.runCommandName,
       );
-      expect(reobserved.tags?.env).toEqual("prod");
       expect(reobserved.properties?.timeoutInSeconds).toEqual(900);
 
-      yield* stack.destroy();
+      // Replace: Azure does not update tags in place. The replacement gets
+      // a new name, runs again, and the old run command is deleted.
+      const retagged = yield* stack.deploy(
+        program({ timeoutInSeconds: 900, tags: { env: "prod" } }),
+      );
+      const newName = retagged.command.runCommandName;
+      expect(newName).not.toEqual(command.runCommandName);
+      expect(retagged.command.tags).toEqual({ env: "prod" });
+      expect(retagged.command.executionState).toEqual("Failed");
+      const replaced = yield* getRunCommand(group.resourceGroupName, setName, newName);
+      expect(replaced.tags?.env).toEqual("prod");
       expect(
         yield* untilGone(getRunCommand(group.resourceGroupName, setName, command.runCommandName)),
       ).toEqual("gone");
+
+      yield* stack.destroy();
+      expect(yield* untilGone(getRunCommand(group.resourceGroupName, setName, newName))).toEqual(
+        "gone",
+      );
     }).pipe(withVcpus(1), logLevel),
   { tags, timeout: 900_000 },
 );

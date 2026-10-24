@@ -16,6 +16,7 @@ import {
   resourceGroupOf,
   tagsDiffer,
   userTags,
+  waitForProvisioned,
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
@@ -27,7 +28,6 @@ import {
   sameId,
   sameSet,
   waitComputeGone,
-  waitComputeProvisioned,
   whileComputeBusy,
 } from "./common.ts";
 import type { VirtualMachineIdentity, VirtualMachineImage } from "./VirtualMachine.ts";
@@ -450,10 +450,15 @@ export const VirtualMachineScaleSetProvider = () =>
       };
       const label = `virtual machine scale set ${name}`;
       const get = getScaleSet(subscriptionId, resourceGroup, name);
-      const wait = waitComputeProvisioned(label, get, {
-        interval: "5 seconds",
-        times: 150,
-      });
+      // A scale set always reports a provisioning state; one seen without it
+      // right after the create PUT is still being set up (a deploy once
+      // returned after 1.7s while the scale set was still `Creating`).
+      const wait = waitForProvisioned(
+        label,
+        get,
+        (set) => set.properties?.provisioningState ?? "Creating",
+        { interval: "5 seconds", times: 150 },
+      );
 
       // Observe.
       let observed = yield* get;

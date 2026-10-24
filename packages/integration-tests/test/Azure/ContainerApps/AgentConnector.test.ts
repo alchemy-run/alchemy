@@ -24,7 +24,11 @@ const getConnector = (resourceGroupName: string, agentName: string, connectorNam
     });
   });
 
-const program = (props: { name?: string; database: string; owner: string }) =>
+const program = (props: {
+  name?: string;
+  database: string;
+  extendedProperties: Record<string, string>;
+}) =>
   Effect.gen(function* () {
     const group = yield* Azure.Resources.ResourceGroup("Group", {
       location: LOCATION,
@@ -40,7 +44,7 @@ const program = (props: { name?: string; database: string; owner: string }) =>
       dataConnectorType: "Kusto",
       dataSource: `${KUSTO_CLUSTER}/${props.database}`,
       identity: "system",
-      extendedProperties: { owner: props.owner },
+      extendedProperties: props.extendedProperties,
     });
     return { group, agent, connector };
   });
@@ -54,7 +58,7 @@ test.provider(
       yield* stack.destroy();
 
       const { group, agent, connector } = yield* stack.deploy(
-        program({ database: "Samples", owner: "alpha" }),
+        program({ database: "Samples", extendedProperties: { owner: "alpha" } }),
       );
       expect(connector.connectorName).toMatch(/^[a-z][a-z0-9-]{1,31}$/);
       expect(connector.dataConnectorType).toEqual("Kusto");
@@ -62,37 +66,44 @@ test.provider(
       const observed = yield* get(connector.connectorName);
       expect(observed.properties?.provisioningState).toEqual("Succeeded");
       expect(observed.properties?.dataConnectorType).toEqual("Kusto");
-      expect(observed.properties?.extendedProperties?.owner).toEqual("alpha");
+      // Azure echoes `extendedProperties` keys with null values and returns
+      // `dataSource` as null, so only the keys are verifiable out of band.
+      expect(Object.keys(observed.properties?.extendedProperties ?? {})).toEqual(["owner"]);
 
       // In-place update: data source database and extended properties.
-      // Azure returns `dataSource` as null, so only the echoed settings
-      // are verifiable out of band.
-      const updated = yield* stack.deploy(program({ database: "SampleLogs", owner: "beta" }));
+      const updated = yield* stack.deploy(
+        program({ database: "SampleLogs", extendedProperties: { team: "beta" } }),
+      );
       expect(updated.connector.connectorId).toEqual(connector.connectorId);
       const reobserved = yield* get(connector.connectorName);
       expect(reobserved.properties?.provisioningState).toEqual("Succeeded");
-      expect(reobserved.properties?.extendedProperties?.owner).toEqual("beta");
+      expect(Object.keys(reobserved.properties?.extendedProperties ?? {})).toEqual(["team"]);
 
       // Replacement: a new name creates a new connector.
       const replaced = yield* stack.deploy(
-        program({ name: "alchemy-kusto-two", database: "SampleLogs", owner: "beta" }),
+        program({
+          name: "alchemy-kusto-two",
+          database: "SampleLogs",
+          extendedProperties: { team: "beta" },
+        }),
       );
       expect(replaced.connector.connectorName).toEqual("alchemy-kusto-two");
-      expect(yield* waitGone(get(connector.connectorName))).toEqual("gone");
+      const oldConnector = yield* waitGone(get(connector.connectorName));
+      expect(oldConnector).toEqual("gone");
 
       yield* stack.destroy();
-      expect(
-        yield* waitGone(
-          Effect.gen(function* () {
-            const { subscriptionId } = yield* Azure.AzureEnvironment.current;
-            return yield* app.GetAgent({
-              subscriptionId,
-              resourceGroupName: group.resourceGroupName,
-              agentName: agent.agentName,
-            });
-          }),
-        ),
-      ).toEqual("gone");
+      // The new connector lives inside the agent, so a gone agent proves both.
+      const oldAgent = yield* waitGone(
+        Effect.gen(function* () {
+          const { subscriptionId } = yield* Azure.AzureEnvironment.current;
+          return yield* app.GetAgent({
+            subscriptionId,
+            resourceGroupName: group.resourceGroupName,
+            agentName: agent.agentName,
+          });
+        }),
+      );
+      expect(oldAgent).toEqual("gone");
     }).pipe(logLevel),
   {
     tags: ["provider:azure", "provider:azure:containerapps", "live"],

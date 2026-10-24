@@ -161,9 +161,19 @@ interface Where {
   readonly runCommandName: string;
 }
 
+// Once a newer diagnostic run command runs on the instance (e.g. a
+// replacement), Azure holds the earlier ones as full-privilege run commands
+// that the diagnostic surface rejects. Both surfaces address the same
+// `runCommands` resource, so fall back to the full one.
 const getRunCommand = (where: Where) =>
   orUndefinedIfNotFound(
-    compute.GetVirtualMachineScaleSetVMDiagnosticRunCommand({ ...where, _expand: "instanceView" }),
+    compute
+      .GetVirtualMachineScaleSetVMDiagnosticRunCommand({ ...where, _expand: "instanceView" })
+      .pipe(
+        Effect.catchTag("RunCommandRequiresFullPrivilege", () =>
+          compute.GetVirtualMachineScaleSetVMRunCommand({ ...where, _expand: "instanceView" }),
+        ),
+      ),
   );
 
 const toAttrs = (
@@ -298,6 +308,12 @@ export const VirtualMachineScaleSetVMDiagnosticRunCommandProvider = () =>
       };
       yield* ignoreNotFound(compute.DeleteVirtualMachineScaleSetVMDiagnosticRunCommand(where)).pipe(
         Effect.retry(whileComputeBusy),
+        // See `getRunCommand`: delete it through the full surface instead.
+        Effect.catchTag("RunCommandRequiresFullPrivilege", () =>
+          ignoreNotFound(compute.DeleteVirtualMachineScaleSetVMRunCommand(where)).pipe(
+            Effect.retry(whileComputeBusy),
+          ),
+        ),
       );
       yield* waitComputeGone(
         `scale set VM diagnostic run command ${output.runCommandName}`,
