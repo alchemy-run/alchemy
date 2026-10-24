@@ -58,17 +58,35 @@ export function handleWebSocket(
     const upstream = NodeNet.connect({ host: target.hostname, port: Number(target.port) });
     track(socket);
     track(upstream);
+    socket.on("close", () => upstream.destroy());
+    upstream.on("close", () => {
+      if (sockets.has(socket)) socket.destroy();
+    });
+
+    // Other plugins serve their own WebSockets on the dev server (a DevTools
+    // relay, `server.proxy` with `ws: true`), and every `upgrade` listener sees
+    // every upgrade. This listener runs first (see `prependListener` below),
+    // so it records the socket's state before any other listener can touch
+    // it. A socket another listener has since written to, ended, or attached
+    // its own listeners to belongs to that listener: the Worker's answer is
+    // dropped rather than written over the other listener's handshake.
+    const before = socketActivity(socket);
+    const claimed = () => isClaimed(socket, before);
+    // Leaves a socket another listener claimed to that listener.
+    const release = () => {
+      sockets.delete(socket);
+      upstream.destroy();
+    };
     upstream.on("error", () => {
       upstream.destroy();
-      socket.destroy();
+      if (!claimed()) socket.destroy();
     });
-    socket.on("close", () => upstream.destroy());
-    upstream.on("close", () => socket.destroy());
     upstream.once("connect", () => {
       if (socket.destroyed) {
         upstream.destroy();
         return;
       }
+      if (claimed()) return release();
       const lines = [`${request.method ?? "GET"} ${target.pathname}${target.search} HTTP/1.1`];
       for (const [name, value] of Object.entries(
         proxyRequestHeaders(request, url, proxySharedSecret),
@@ -82,12 +100,19 @@ export function handleWebSocket(
       if (head.length > 0) {
         upstream.write(head);
       }
-      // oxlint-disable-next-line effecttsgo/unnecessary-pipe-chain -- Node stream piping (socket -> upstream -> socket), not Effect pipe
-      socket.pipe(upstream).pipe(socket);
+      // The Worker's first bytes decide who answers the client: an
+      // asynchronous listener may have claimed the socket while the request
+      // was in flight.
+      upstream.once("data", (chunk: Buffer) => {
+        if (claimed()) return release();
+        socket.write(chunk);
+        // oxlint-disable-next-line effecttsgo/unnecessary-pipe-chain -- Node stream piping (socket -> upstream -> socket), not Effect pipe
+        socket.pipe(upstream).pipe(socket);
+      });
     });
   };
 
-  httpServer.on("upgrade", onUpgrade);
+  httpServer.prependListener("upgrade", onUpgrade);
   return () => {
     httpServer.off("upgrade", onUpgrade);
     for (const socket of sockets) {
@@ -96,6 +121,35 @@ export function handleWebSocket(
     sockets.clear();
   };
 }
+
+interface SocketActivity {
+  readonly written: number;
+  readonly listeners: number;
+}
+
+// `bytesWritten` counts what Node has queued; Bun counts only what it has
+// flushed, so the queued `writableLength` is added for both.
+const socketActivity = (socket: Duplex): SocketActivity => ({
+  written: ((socket as Partial<NodeNet.Socket>).bytesWritten ?? 0) + socket.writableLength,
+  listeners: (["data", "error", "close", "end"] as const).reduce(
+    (count, event) => count + socket.listenerCount(event),
+    0,
+  ),
+});
+
+// A listener that takes an upgrade writes its handshake or refusal, or
+// subscribes to the socket synchronously, before it answers: `ws` listens for
+// `error` before an async `verifyClient`, and Vite's `server.proxy` for
+// `close` and `error` before it dials its target.
+const isClaimed = (socket: Duplex, before: SocketActivity) => {
+  const now = socketActivity(socket);
+  return (
+    socket.destroyed ||
+    socket.writableEnded ||
+    now.written > before.written ||
+    now.listeners > before.listeners
+  );
+};
 
 /**
  * Matches the origin of a Sandbox SDK preview URL.
