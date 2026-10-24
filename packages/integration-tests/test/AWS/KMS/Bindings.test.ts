@@ -33,7 +33,7 @@
  */
 import * as AWS from "@alchemy.run/aws";
 import * as kms from "@distilled.cloud/aws/kms";
-import { describe, expect } from "alchemy-test";
+import { describe, expect } from "@alchemy.run/test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Core from "alchemy/Test/Core";
 import * as Data from "effect/Data";

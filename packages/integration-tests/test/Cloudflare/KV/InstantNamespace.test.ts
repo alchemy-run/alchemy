@@ -2,7 +2,7 @@ import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
 import * as KV from "@alchemy.run/cloudflare/KV";
 import * as kv from "@distilled.cloud/cloudflare/kv";
-import { expect } from "alchemy-test";
+import { expect } from "@alchemy.run/test";
 import { Action } from "alchemy/Action";
 import * as Provider from "alchemy/Provider";
 import { State } from "alchemy/State";

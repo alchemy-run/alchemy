@@ -6,7 +6,7 @@ import * as ecr from "@distilled.cloud/aws/ecr";
 import * as ecs from "@distilled.cloud/aws/ecs";
 import * as elbv2 from "@distilled.cloud/aws/elastic-load-balancing-v2";
 import * as iam from "@distilled.cloud/aws/iam";
-import { expect } from "alchemy-test";
+import { expect } from "@alchemy.run/test";
 import { isResourceState, State, type ResourceState } from "alchemy/State";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";

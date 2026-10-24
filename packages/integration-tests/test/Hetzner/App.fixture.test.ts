@@ -6,7 +6,7 @@ import * as servers from "@distilled.cloud/hetzner/servers";
 import * as volumes from "@distilled.cloud/hetzner/volumes";
 import * as zoneRrsets from "@distilled.cloud/hetzner/zone_rrsets";
 import * as Alchemy from "alchemy";
-import { expect } from "alchemy-test";
+import { expect } from "@alchemy.run/test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -74,12 +74,12 @@ const Stack = Alchemy.Stack(
 );
 
 const stack = hasHetznerCreds
-  ? beforeAll(deploy(Stack), { timeout: 180_000, exclusive: true })
+  ? beforeAll(deploy(Stack), { timeout: 180_000, exclusive: "hetzner" })
   : null;
 
 afterAll.skipIf(!hasHetznerCreds || !!process.env.NO_DESTROY)(destroy(Stack), {
   timeout: 120_000,
-  exclusive: true,
+  exclusive: "hetzner",
 });
 
 test.skipIf(!hasHetznerCreds)(
@@ -179,6 +179,6 @@ test.skipIf(!hasHetznerCreds)(
       "live",
     ],
     timeout: 180_000,
-    exclusive: true,
+    exclusive: "hetzner",
   },
 );

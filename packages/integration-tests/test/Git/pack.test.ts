@@ -28,7 +28,7 @@ import { makeStreamingSource } from "@alchemy.run/git/Store/StreamingSource";
  * round-trips, and `git index-pack --strict` as the oracle for writer output.
  */
 import * as BunServices from "@effect/platform-bun/BunServices";
-import { describe, expect, it } from "alchemy-test";
+import { describe, expect, it } from "@alchemy.run/test";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as FileSystem from "effect/FileSystem";

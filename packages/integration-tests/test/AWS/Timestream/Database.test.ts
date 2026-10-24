@@ -3,7 +3,7 @@ import { Database, Table } from "@alchemy.run/aws/Timestream";
 import { withQueryEndpoint, withWriteEndpoint } from "@alchemy.run/aws/Timestream/internal";
 import * as TSQ from "@distilled.cloud/aws/timestream-query";
 import * as TSW from "@distilled.cloud/aws/timestream-write";
-import { describe, expect } from "alchemy-test";
+import { describe, expect } from "@alchemy.run/test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 

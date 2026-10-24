@@ -8,7 +8,7 @@ import * as queues from "@distilled.cloud/cloudflare/queues";
 import * as r2 from "@distilled.cloud/cloudflare/r2";
 import * as vectorize from "@distilled.cloud/cloudflare/vectorize";
 import * as workers from "@distilled.cloud/cloudflare/workers";
-import { describe, expect, test as unitTest } from "alchemy-test";
+import { describe, expect, test as unitTest } from "@alchemy.run/test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as TestCore from "alchemy/Test/Core";
 import * as Cause from "effect/Cause";
@@ -417,7 +417,7 @@ describe.sequential(
             "provider:cloudflare:worker",
           ],
           timeout: 120_000,
-          exclusive: true,
+          exclusive: "cloudflare:event-subscriptions",
         },
       );
     }
@@ -466,7 +466,7 @@ describe.sequential(
           "provider:cloudflare:worker",
         ],
         timeout: 120_000,
-        exclusive: true,
+        exclusive: "cloudflare:event-subscriptions",
       },
     );
 
@@ -541,7 +541,7 @@ describe.sequential(
           "provider:cloudflare:worker",
         ],
         timeout: 120_000,
-        exclusive: true,
+        exclusive: "cloudflare:event-subscriptions",
       },
     );
 
@@ -595,7 +595,7 @@ describe.sequential(
           Effect.ensuring(stack.destroy().pipe(Effect.andThen(host.destroy()), Effect.orDie)),
         );
       },
-      { timeout: 120_000, exclusive: true },
+      { timeout: 120_000, exclusive: "cloudflare:event-subscriptions" },
     );
   },
 );
@@ -1044,7 +1044,7 @@ for (const change of ["replacement", "update", "paused-update"] as const) {
         "live",
       ],
       timeout: 120_000,
-      exclusive: true,
+      exclusive: "cloudflare:event-subscriptions",
     },
   );
 }

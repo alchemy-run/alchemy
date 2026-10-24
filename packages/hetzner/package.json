@@ -1,6 +1,6 @@
 {
   "name": "@alchemy.run/hetzner",
-  "version": "2.0.0-beta.83",
+  "version": "2.0.0-beta.84",
   "description": "Hetzner Cloud servers and networking for Alchemy.",
   "keywords": [
     "alchemy",

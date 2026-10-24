@@ -7,7 +7,7 @@ import { FlyAuth } from "@alchemy.run/fly/AuthProvider";
 import { fromAuthProvider } from "@alchemy.run/fly/Credentials";
 import * as machines from "@distilled.cloud/fly-io/machines";
 import * as Alchemy from "alchemy";
-import { expect } from "alchemy-test";
+import { expect } from "@alchemy.run/test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";

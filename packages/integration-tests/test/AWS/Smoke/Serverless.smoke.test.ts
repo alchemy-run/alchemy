@@ -6,7 +6,7 @@ import * as lambda from "@distilled.cloud/aws/lambda";
 import * as S3 from "@distilled.cloud/aws/s3";
 import * as sfn from "@distilled.cloud/aws/sfn";
 import * as sqs from "@distilled.cloud/aws/sqs";
-import { describe, expect } from "alchemy-test";
+import { describe, expect } from "@alchemy.run/test";
 import * as Output from "alchemy/Output";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Core from "alchemy/Test/Core";

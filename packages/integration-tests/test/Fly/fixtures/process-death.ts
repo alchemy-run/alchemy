@@ -1,7 +1,7 @@
 import * as Fly from "@alchemy.run/fly";
 import * as machines from "@distilled.cloud/fly-io/machines";
 import * as Retry from "@distilled.cloud/fly-io/Retry";
-import { expect } from "alchemy-test";
+import { expect } from "@alchemy.run/test";
 import { State } from "alchemy/State/State";
 import type { ScratchStack } from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";

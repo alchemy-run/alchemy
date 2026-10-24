@@ -6,7 +6,7 @@ import {
 import { connectEnvKeys } from "@alchemy.run/prisma/Connect";
 import { Connection, ConnectionProvider } from "@alchemy.run/prisma/Connection";
 import type { DatabaseConnection, DatabaseConnectionWithSecrets } from "@alchemy.run/prisma/Types";
-import { describe, expect, it } from "alchemy-test";
+import { describe, expect, it } from "@alchemy.run/test";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { AlchemyContext } from "alchemy/AlchemyContext";
 import * as Provider from "alchemy/Provider";

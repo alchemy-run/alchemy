@@ -7,7 +7,7 @@ import {
 } from "@alchemy.run/railway/hosted";
 import { ServiceProvider } from "@alchemy.run/railway/ServiceProvider";
 import { Credentials, GqlTransport } from "@distilled.cloud/railway";
-import { expect } from "alchemy-test";
+import { expect } from "@alchemy.run/test";
 import { AlchemyContext } from "alchemy/AlchemyContext";
 import * as Bundle from "alchemy/Bundle/Bundle";
 import * as Provider from "alchemy/Provider";

@@ -1,7 +1,7 @@
 import * as AWS from "@alchemy.run/aws";
 import { ActiveReceiptRuleSet, ReceiptRuleSet } from "@alchemy.run/aws/SES";
 import * as ses from "@distilled.cloud/aws/ses";
-import { expect } from "alchemy-test";
+import { expect } from "@alchemy.run/test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 
@@ -12,8 +12,8 @@ const activeRuleSetName = ses
   .pipe(Effect.map((response) => response.Metadata?.Name));
 
 // Account-singleton pointer: capture whatever the account currently points at,
-// run the lifecycle, then restore it. `exclusive` takes the whole-process lock
-// so no other test observes the mutated active pointer.
+// run the lifecycle, then restore it. The "aws:ses-account" label keeps the
+// other SES account-singleton tests from observing the mutated active pointer.
 test.provider(
   "active receipt rule set: point the account at a rule set, then deactivate",
   (stack) =>
@@ -53,6 +53,6 @@ test.provider(
   {
     tags: ["provider:aws", "provider:aws:ses", "live"],
     timeout: 120_000,
-    exclusive: true,
+    exclusive: "aws:ses-account",
   },
 );

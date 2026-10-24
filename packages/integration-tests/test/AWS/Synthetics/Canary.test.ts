@@ -2,7 +2,7 @@ import * as AWS from "@alchemy.run/aws";
 import { Bucket } from "@alchemy.run/aws/S3";
 import { Canary, Group } from "@alchemy.run/aws/Synthetics";
 import * as synthetics from "@distilled.cloud/aws/synthetics";
-import { describe, expect } from "alchemy-test";
+import { describe, expect } from "@alchemy.run/test";
 import * as Output from "alchemy/Output";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";

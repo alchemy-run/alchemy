@@ -4,7 +4,7 @@ import { encodeDurableObjectTags } from "@alchemy.run/cloudflare/Workers/WorkerP
 import * as durableObjects from "@distilled.cloud/cloudflare/durable-objects";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import * as wfp from "@distilled.cloud/cloudflare/workers-for-platforms";
-import { describe, expect } from "alchemy-test";
+import { describe, expect } from "@alchemy.run/test";
 import { adopt } from "alchemy/AdoptPolicy";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";

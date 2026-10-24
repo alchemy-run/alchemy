@@ -5,7 +5,7 @@ import { makeEksTransport } from "@alchemy.run/aws/EKS/KubernetesAdapter";
 import * as Kubernetes from "@alchemy.run/kubernetes";
 import { readObject } from "@alchemy.run/kubernetes/Client";
 import * as dynamodb from "@distilled.cloud/aws/dynamodb";
-import { describe, expect } from "alchemy-test";
+import { describe, expect } from "@alchemy.run/test";
 import * as Provider from "alchemy/Provider";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Core from "alchemy/Test/Core";

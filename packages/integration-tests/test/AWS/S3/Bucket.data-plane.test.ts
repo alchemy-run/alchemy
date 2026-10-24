@@ -3,7 +3,7 @@ import { AWSEnvironment } from "@alchemy.run/aws/Environment";
 import { flociServices } from "@alchemy.run/aws/Local/FlociServices";
 import { Bucket, PutObject, PutObjectHttp } from "@alchemy.run/aws/S3";
 import * as S3 from "@distilled.cloud/aws/s3";
-import { expect } from "alchemy-test";
+import { expect } from "@alchemy.run/test";
 import { Action } from "alchemy/Action";
 import { remote } from "alchemy/ProviderMode";
 import * as Test from "alchemy/Test/Alchemy";

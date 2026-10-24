@@ -1,7 +1,7 @@
 import * as AWS from "@alchemy.run/aws";
 import { AWSEnvironment } from "@alchemy.run/aws/Environment";
 import * as ag from "@distilled.cloud/aws/api-gateway";
-import { expect } from "alchemy-test";
+import { expect } from "@alchemy.run/test";
 import { createInternalTags, hasTags } from "alchemy/Tags";
 import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";

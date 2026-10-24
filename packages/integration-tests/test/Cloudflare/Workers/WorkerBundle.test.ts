@@ -2,7 +2,7 @@ import * as Cloudflare from "@alchemy.run/cloudflare";
 import { WorkerBundle } from "@alchemy.run/cloudflare/Workers/Sources/Rolldown";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as Alchemy from "alchemy";
-import { describe, expect, layer } from "alchemy-test";
+import { describe, expect, layer } from "@alchemy.run/test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";

@@ -1,7 +1,7 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
 import * as mnm from "@distilled.cloud/cloudflare/magic-network-monitoring";
-import { describe, expect } from "alchemy-test";
+import { describe, expect } from "@alchemy.run/test";
 import * as Provider from "alchemy/Provider";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Data from "effect/Data";
@@ -90,7 +90,7 @@ describe.sequential(
 
           yield* stack.destroy();
         }).pipe(logLevel),
-      { exclusive: true },
+      { exclusive: "cloudflare:mnm" },
     );
   },
 );

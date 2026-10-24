@@ -1,6 +1,6 @@
 import * as Fly from "@alchemy.run/fly";
 import * as Alchemy from "alchemy";
-import { describe, expect } from "alchemy-test";
+import { describe, expect } from "@alchemy.run/test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";

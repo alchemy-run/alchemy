@@ -3,7 +3,7 @@ import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnviron
 import { findZoneByName } from "@alchemy.run/cloudflare/Zone/lookup";
 import * as dns from "@distilled.cloud/cloudflare/dns";
 import * as workers from "@distilled.cloud/cloudflare/workers";
-import { expect } from "alchemy-test";
+import { expect } from "@alchemy.run/test";
 import * as Drift from "alchemy/Drift";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Cause from "effect/Cause";

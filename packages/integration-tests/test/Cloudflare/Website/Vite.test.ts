@@ -2,7 +2,7 @@ import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
 import { isLocalId } from "@alchemy.run/cloudflare/LocalRuntime";
 import * as r2 from "@distilled.cloud/cloudflare/r2";
-import { assert, describe, expect } from "alchemy-test";
+import { assert, describe, expect } from "@alchemy.run/test";
 import * as Test from "alchemy/Test/Alchemy";
 import { initialCwd } from "alchemy/Util/Node";
 import * as Cause from "effect/Cause";

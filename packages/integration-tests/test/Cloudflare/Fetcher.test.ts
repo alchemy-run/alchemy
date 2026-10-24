@@ -1,5 +1,5 @@
 import { fromCloudflareFetcher } from "@alchemy.run/cloudflare/Fetcher";
-import { describe, expect, it } from "alchemy-test";
+import { describe, expect, it } from "@alchemy.run/test";
 import * as Effect from "effect/Effect";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 

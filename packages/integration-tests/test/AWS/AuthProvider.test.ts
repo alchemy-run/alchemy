@@ -1,5 +1,5 @@
 import { applyEnvRegionOverride, parseAwsSsoLoginOutput } from "@alchemy.run/aws/AuthProvider";
-import { describe, expect, it } from "alchemy-test";
+import { describe, expect, it } from "@alchemy.run/test";
 import { loadConfigProvider } from "alchemy/Util/ConfigProvider";
 import { PlatformServices } from "alchemy/Util/PlatformServices";
 import * as ConfigProvider from "effect/ConfigProvider";

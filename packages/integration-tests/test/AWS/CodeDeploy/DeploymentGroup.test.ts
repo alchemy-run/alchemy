@@ -3,7 +3,7 @@ import { Application } from "@alchemy.run/aws/CodeDeploy/Application";
 import { DeploymentConfig } from "@alchemy.run/aws/CodeDeploy/DeploymentConfig";
 import { DeploymentGroup } from "@alchemy.run/aws/CodeDeploy/DeploymentGroup";
 import * as codedeploy from "@distilled.cloud/aws/codedeploy";
-import { expect } from "alchemy-test";
+import { expect } from "@alchemy.run/test";
 import * as Provider from "alchemy/Provider";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";

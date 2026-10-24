@@ -1,7 +1,7 @@
 import * as AWS from "@alchemy.run/aws";
 import * as logs from "@distilled.cloud/aws/cloudwatch-logs";
 import * as SQS from "@distilled.cloud/aws/sqs";
-import { describe, expect } from "alchemy-test";
+import { describe, expect } from "@alchemy.run/test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Clock from "effect/Clock";
 import * as Data from "effect/Data";

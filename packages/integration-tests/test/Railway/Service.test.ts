@@ -3,7 +3,7 @@ import { activeReplicaRegions, serviceRegionPlacement } from "@alchemy.run/railw
 import { withEnvironmentConfigLock } from "@alchemy.run/railway/transient";
 import { Query } from "@distilled.cloud/core/query";
 import { Railway as RailwayApi } from "@distilled.cloud/railway";
-import { expect } from "alchemy-test";
+import { expect } from "@alchemy.run/test";
 import * as Provider from "alchemy/Provider";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";

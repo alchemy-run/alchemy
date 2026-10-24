@@ -1,5 +1,5 @@
 import { getProject } from "@distilled.cloud/prisma/management";
-import { expect } from "alchemy-test";
+import { expect } from "@alchemy.run/test";
 import { isActionState, State } from "alchemy/State/State";
 import type * as Test from "alchemy/Test/Alchemy";
 import * as Cause from "effect/Cause";

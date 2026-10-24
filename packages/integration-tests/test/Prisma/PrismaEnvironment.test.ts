@@ -1,7 +1,7 @@
 import { PrismaAuth } from "@alchemy.run/prisma/AuthProvider";
 import { PrismaEnvironment, fromProfile } from "@alchemy.run/prisma/PrismaEnvironment";
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { describe, expect, it } from "alchemy-test";
+import { describe, expect, it } from "@alchemy.run/test";
 import { AuthProviders } from "alchemy/Auth/AuthProvider";
 import { ProfileStore } from "alchemy/Auth/Profile";
 import * as CliKit from "alchemy/Cli/CliKit";

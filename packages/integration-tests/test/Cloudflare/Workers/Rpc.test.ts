@@ -17,7 +17,7 @@ import {
   type RpcErrorEnvelope,
   type RpcStreamEnvelope,
 } from "@alchemy.run/cloudflare/Workers/Rpc";
-import { describe, expect, it } from "alchemy-test";
+import { describe, expect, it } from "@alchemy.run/test";
 import * as Cause from "effect/Cause";
 import * as Data from "effect/Data";
 import * as Deferred from "effect/Deferred";

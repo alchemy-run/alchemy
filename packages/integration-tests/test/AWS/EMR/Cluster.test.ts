@@ -2,7 +2,7 @@ import * as AWS from "@alchemy.run/aws";
 import { Cluster } from "@alchemy.run/aws/EMR/Cluster";
 import * as EC2 from "@distilled.cloud/aws/ec2";
 import * as emr from "@distilled.cloud/aws/emr";
-import { expect } from "alchemy-test";
+import { expect } from "@alchemy.run/test";
 import * as Output from "alchemy/Output";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Duration from "effect/Duration";

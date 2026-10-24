@@ -1,7 +1,7 @@
 import * as AWS from "@alchemy.run/aws";
 import { Schedule } from "@alchemy.run/aws/DataBrew";
 import * as databrew from "@distilled.cloud/aws/databrew";
-import { expect } from "alchemy-test";
+import { expect } from "@alchemy.run/test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 

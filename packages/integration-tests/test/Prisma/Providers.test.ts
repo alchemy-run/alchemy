@@ -1,7 +1,7 @@
 import * as Prisma from "@alchemy.run/prisma";
 import { PrismaLogStreamError } from "@alchemy.run/prisma/PrismaLogs";
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { describe, expect, it } from "alchemy-test";
+import { describe, expect, it } from "@alchemy.run/test";
 import { AlchemyContext } from "alchemy/AlchemyContext";
 import { ArtifactStore, createArtifactStore } from "alchemy/Artifacts";
 import { AuthProviders } from "alchemy/Auth/AuthProvider";

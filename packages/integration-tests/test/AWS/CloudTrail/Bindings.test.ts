@@ -3,7 +3,7 @@ import { Trail } from "@alchemy.run/aws/CloudTrail";
 import { AWSEnvironment } from "@alchemy.run/aws/Environment";
 import { Bucket } from "@alchemy.run/aws/S3/Bucket";
 import * as s3 from "@distilled.cloud/aws/s3";
-import { describe, expect } from "alchemy-test";
+import { describe, expect } from "@alchemy.run/test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Core from "alchemy/Test/Core";
 import * as Data from "effect/Data";

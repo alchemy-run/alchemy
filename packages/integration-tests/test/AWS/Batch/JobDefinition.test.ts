@@ -2,7 +2,7 @@ import * as AWS from "@alchemy.run/aws";
 import { JobDefinition } from "@alchemy.run/aws/Batch/JobDefinition";
 import { Role } from "@alchemy.run/aws/IAM/Role";
 import * as batch from "@distilled.cloud/aws/batch";
-import { expect } from "alchemy-test";
+import { expect } from "@alchemy.run/test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";

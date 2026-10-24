@@ -3,7 +3,7 @@ import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnviron
 import { isLocalId } from "@alchemy.run/cloudflare/LocalRuntime";
 import * as kv from "@distilled.cloud/cloudflare/kv";
 import * as Alchemy from "alchemy";
-import { describe, expect } from "alchemy-test";
+import { describe, expect } from "@alchemy.run/test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";

@@ -5,7 +5,7 @@ import {
 } from "@alchemy.run/aws/IAM/Policy";
 import { Policy } from "@alchemy.run/aws/Organizations";
 import * as organizations from "@distilled.cloud/aws/organizations";
-import { expect } from "alchemy-test";
+import { expect } from "@alchemy.run/test";
 import * as Provider from "alchemy/Provider";
 import * as Effect from "effect/Effect";
 import * as OrganizationLease from "./OrganizationLease.ts";

@@ -5,7 +5,7 @@ import { LocalRuntimeState } from "@alchemy.run/cloudflare/LocalRuntime";
 import { apiTokenCredentials, Credentials } from "@distilled.cloud/cloudflare/Credentials";
 import * as r2 from "@distilled.cloud/cloudflare/r2";
 import { NodeServices } from "@effect/platform-node";
-import { describe, expect, it } from "alchemy-test";
+import { describe, expect, it } from "@alchemy.run/test";
 import { AlchemyContext } from "alchemy/AlchemyContext";
 import { ArtifactStore, createArtifactStore } from "alchemy/Artifacts";
 import * as Drift from "alchemy/Drift";

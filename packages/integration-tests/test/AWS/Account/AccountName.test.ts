@@ -1,7 +1,7 @@
 import * as AWS from "@alchemy.run/aws";
 import { AccountName } from "@alchemy.run/aws/Account";
 import * as account from "@distilled.cloud/aws/account";
-import { describe, expect } from "alchemy-test";
+import { describe, expect } from "@alchemy.run/test";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";

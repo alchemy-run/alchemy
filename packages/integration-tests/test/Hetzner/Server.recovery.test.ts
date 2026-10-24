@@ -1,7 +1,7 @@
 import * as Hetzner from "@alchemy.run/hetzner";
 import * as servers from "@distilled.cloud/hetzner/servers";
 import * as sshKeys from "@distilled.cloud/hetzner/ssh_keys";
-import { expect } from "alchemy-test";
+import { expect } from "@alchemy.run/test";
 import { isActionState, State } from "alchemy/State/State";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
@@ -63,7 +63,7 @@ for (const name of [undefined, "alchemy-server-recovery-explicit"]) {
     {
       tags: ["provider:hetzner", "provider:hetzner:server", "provider:hetzner:service", "live"],
       timeout: 120_000,
-      exclusive: true,
+      exclusive: "hetzner",
     },
   );
 }

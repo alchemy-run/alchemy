@@ -2,7 +2,7 @@ import * as AWS from "@alchemy.run/aws";
 import * as DynamoDB from "@distilled.cloud/aws/dynamodb";
 import * as Lambda from "@distilled.cloud/aws/lambda";
 import * as SQS from "@distilled.cloud/aws/sqs";
-import { describe, expect } from "alchemy-test";
+import { describe, expect } from "@alchemy.run/test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";

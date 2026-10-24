@@ -1,7 +1,7 @@
 import * as AWS from "@alchemy.run/aws";
 import { EventSourcesConfig } from "@alchemy.run/aws/DevOpsGuru/EventSourcesConfig";
 import * as devopsguru from "@distilled.cloud/aws/devops-guru";
-import { expect } from "alchemy-test";
+import { expect } from "@alchemy.run/test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 

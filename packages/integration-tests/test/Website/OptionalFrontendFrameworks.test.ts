@@ -1,6 +1,6 @@
 import { fileURLToPath } from "node:url";
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { describe, expect, it } from "alchemy-test";
+import { describe, expect, it } from "@alchemy.run/test";
 import { exec } from "alchemy/Util/exec";
 import { nodeLoaderArgs } from "alchemy/Util/Node";
 import * as Effect from "effect/Effect";

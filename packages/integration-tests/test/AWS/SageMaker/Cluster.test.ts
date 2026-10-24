@@ -5,7 +5,7 @@ import { Bucket } from "@alchemy.run/aws/S3/Bucket";
 import { Cluster } from "@alchemy.run/aws/SageMaker";
 import * as s3 from "@distilled.cloud/aws/s3";
 import * as sagemaker from "@distilled.cloud/aws/sagemaker";
-import { expect } from "alchemy-test";
+import { expect } from "@alchemy.run/test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 

@@ -4,7 +4,7 @@ import { VirtualCluster } from "@alchemy.run/aws/EMRContainers";
 import { Role } from "@alchemy.run/aws/IAM";
 import * as ec2 from "@distilled.cloud/aws/ec2";
 import * as emrc from "@distilled.cloud/aws/emr-containers";
-import { expect } from "alchemy-test";
+import { expect } from "@alchemy.run/test";
 import * as Provider from "alchemy/Provider";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";

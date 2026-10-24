@@ -4,7 +4,7 @@ import { ClientVpnRoute, type ClientVpnRouteProps } from "@alchemy.run/aws/EC2/C
 import { ClientVpnTargetNetworkAssociation } from "@alchemy.run/aws/EC2/ClientVpnTargetNetworkAssociation";
 import * as ec2 from "@distilled.cloud/aws/ec2";
 import * as Alchemy from "alchemy";
-import { describe, expect } from "alchemy-test";
+import { describe, expect } from "@alchemy.run/test";
 import * as Provider from "alchemy/Provider";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";

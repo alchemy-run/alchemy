@@ -4,7 +4,7 @@ import { Project, waitForOperations } from "@alchemy.run/neon/Project";
 import { providers } from "@alchemy.run/neon/Providers";
 import { Role } from "@alchemy.run/neon/Role";
 import { createProjectBranchRole, getProjectBranchRole } from "@distilled.cloud/neon";
-import { describe, expect } from "alchemy-test";
+import { describe, expect } from "@alchemy.run/test";
 import { adopt, OwnedBySomeoneElse } from "alchemy/AdoptPolicy";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";

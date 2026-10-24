@@ -5,7 +5,7 @@ import {
 } from "@alchemy.run/neon/ProjectVPCEndpoint";
 import { providers } from "@alchemy.run/neon/Providers";
 import * as SDK from "@distilled.cloud/neon";
-import { expect } from "alchemy-test";
+import { expect } from "@alchemy.run/test";
 import { adopt } from "alchemy/AdoptPolicy";
 import * as Output from "alchemy/Output";
 import * as Test from "alchemy/Test/Alchemy";
@@ -230,6 +230,6 @@ test.provider.skipIf(!enabled)(
   {
     tags: ["provider:neon", "provider:neon:project", "provider:neon:projectvpcendpoint", "live"],
     timeout: 120_000,
-    exclusive: true,
+    exclusive: "neon:governance",
   },
 );

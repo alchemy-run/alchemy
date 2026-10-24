@@ -2,7 +2,7 @@ import { Docker, DockerLive, dockerLive } from "@alchemy.run/docker";
 import type { RegistryCredentials } from "@alchemy.run/docker/Docker";
 import { classifyDockerRegistryError } from "@alchemy.run/docker/RegistryError";
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { assert, expect, layer } from "alchemy-test";
+import { assert, expect, layer } from "@alchemy.run/test";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";

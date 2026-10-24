@@ -2,7 +2,7 @@ import * as AWS from "@alchemy.run/aws";
 import { RuleGroup } from "@alchemy.run/aws/WAFv2";
 import type * as WAFV2 from "@distilled.cloud/aws/wafv2";
 import * as wafv2 from "@distilled.cloud/aws/wafv2";
-import { expect } from "alchemy-test";
+import { expect } from "@alchemy.run/test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";

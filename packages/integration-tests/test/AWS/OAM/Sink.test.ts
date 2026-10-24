@@ -2,7 +2,7 @@ import * as AWS from "@alchemy.run/aws";
 import { AWSEnvironment } from "@alchemy.run/aws/Environment";
 import { Link, Sink } from "@alchemy.run/aws/OAM";
 import * as oam from "@distilled.cloud/aws/oam";
-import { describe, expect } from "alchemy-test";
+import { describe, expect } from "@alchemy.run/test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";

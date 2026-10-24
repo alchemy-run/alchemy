@@ -1,6 +1,6 @@
 import * as GCP from "@alchemy.run/gcp";
 import * as oslogin from "@distilled.cloud/gcp/oslogin_v1";
-import { expect } from "alchemy-test";
+import { expect } from "@alchemy.run/test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
@@ -127,6 +127,6 @@ test.provider.skipIf(!user || !!process.env.FAST)(
   {
     tags: ["provider:gcp", "provider:gcp:oslogin", "live"],
     timeout: 90_000,
-    exclusive: true,
+    exclusive: "gcp:oslogin",
   },
 );

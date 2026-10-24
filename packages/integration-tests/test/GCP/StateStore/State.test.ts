@@ -4,7 +4,7 @@ import { makeGcsState } from "@alchemy.run/gcp";
 import { createStateBucketName } from "@alchemy.run/gcp/StateStore/State";
 import { makeObjectMedia } from "@alchemy.run/gcp/Storage/ObjectMedia";
 import * as storage from "@distilled.cloud/gcp/storage_v1";
-import { expect } from "alchemy-test";
+import { expect } from "@alchemy.run/test";
 import { StateStoreError, type ResourceState, type StateService } from "alchemy/State";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";

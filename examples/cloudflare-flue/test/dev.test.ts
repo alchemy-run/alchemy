@@ -6,7 +6,7 @@
 import { afterAll, expect, test } from "bun:test";
 import * as path from "node:path";
 import { createFlueClient } from "@flue/sdk";
-import { DevCli, fetchOk } from "alchemy-test/DevCli";
+import { DevCli, fetchOk } from "@alchemy.run/test/DevCli";
 
 const root = path.resolve(import.meta.dirname, "..");
 const cli = new DevCli({ root, stage: "dev-cli-test" });

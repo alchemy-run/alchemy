@@ -6,7 +6,7 @@ import * as Cloudflare from "@alchemy.run/cloudflare";
  * DESIGN §22.4: this is what decides the push-ingest CPU story.
  */
 import * as Alchemy from "alchemy";
-import { expect } from "alchemy-test";
+import { expect } from "@alchemy.run/test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";

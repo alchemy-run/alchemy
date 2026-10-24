@@ -3,7 +3,7 @@ import { Repository } from "@alchemy.run/aws/ECR/Repository";
 import type { PolicyDocument } from "@alchemy.run/aws/IAM/Policy";
 import { normalizePolicyDocument } from "@alchemy.run/aws/IAM/Policy";
 import * as ecr from "@distilled.cloud/aws/ecr";
-import { expect } from "alchemy-test";
+import { expect } from "@alchemy.run/test";
 import * as Provider from "alchemy/Provider";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Data from "effect/Data";

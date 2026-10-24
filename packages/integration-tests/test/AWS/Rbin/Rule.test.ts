@@ -1,7 +1,7 @@
 import * as AWS from "@alchemy.run/aws";
 import { Rule } from "@alchemy.run/aws/Rbin";
 import * as rbin from "@distilled.cloud/aws/rbin";
-import { describe, expect } from "alchemy-test";
+import { describe, expect } from "@alchemy.run/test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";

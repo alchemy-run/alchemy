@@ -1,6 +1,6 @@
 {
   "name": "alchemy",
-  "version": "2.0.0-beta.83",
+  "version": "2.0.0-beta.84",
   "description": "Infrastructure as Effects for TypeScript.",
   "keywords": [
     "alchemy",
@@ -157,7 +157,7 @@
     "@types/react": "catalog:",
     "@types/ws": "catalog:",
     "@vitejs/plugin-rsc": "catalog:",
-    "alchemy-test": "workspace:*",
+    "@alchemy.run/test": "workspace:*",
     "astro": "catalog:",
     "drizzle-orm": "catalog:",
     "effect": "catalog:",

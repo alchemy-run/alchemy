@@ -4,7 +4,7 @@ import type { Branch } from "@alchemy.run/neon/Branch";
 import { runSql } from "@alchemy.run/neon/Migrations";
 import { providers } from "@alchemy.run/neon/Providers";
 import { getConnectionURI, getProjectBranch } from "@distilled.cloud/neon";
-import { expect } from "alchemy-test";
+import { expect } from "@alchemy.run/test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";

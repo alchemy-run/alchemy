@@ -3,7 +3,7 @@ import { AutoScalingGroup, LaunchTemplate } from "@alchemy.run/aws/AutoScaling";
 import { amazonLinux2023 } from "@alchemy.run/aws/EC2";
 import { CapacityProvider } from "@alchemy.run/aws/ECS";
 import * as ecs from "@distilled.cloud/aws/ecs";
-import { expect } from "alchemy-test";
+import { expect } from "@alchemy.run/test";
 import * as Provider from "alchemy/Provider";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";

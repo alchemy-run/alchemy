@@ -1,7 +1,7 @@
 import * as AWS from "@alchemy.run/aws";
 import { Contact, ContactList } from "@alchemy.run/aws/SES";
 import * as sesv2 from "@distilled.cloud/aws/sesv2";
-import { expect } from "alchemy-test";
+import { expect } from "@alchemy.run/test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -100,7 +100,7 @@ test.provider(
   {
     tags: ["provider:aws", "provider:aws:ses", "live"],
     timeout: 120_000,
-    exclusive: true,
+    exclusive: "aws:ses-account",
   },
 );
 
@@ -149,6 +149,6 @@ test.provider(
   {
     tags: ["provider:aws", "provider:aws:ses", "live"],
     timeout: 120_000,
-    exclusive: true,
+    exclusive: "aws:ses-account",
   },
 );

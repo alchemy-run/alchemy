@@ -6,7 +6,7 @@ import {
   UserPoolDomain,
 } from "@alchemy.run/aws/Cognito";
 import * as cip from "@distilled.cloud/aws/cognito-identity-provider";
-import { expect } from "alchemy-test";
+import { expect } from "@alchemy.run/test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";

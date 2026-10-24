@@ -7,9 +7,12 @@ import {
 } from "@alchemy.run/aws/DataZone";
 import * as IAM from "@alchemy.run/aws/IAM";
 import * as S3 from "@alchemy.run/aws/S3";
+import * as athena from "@distilled.cloud/aws/athena";
+import * as logs from "@distilled.cloud/aws/cloudwatch-logs";
 import * as datazone from "@distilled.cloud/aws/datazone";
+import * as glue from "@distilled.cloud/aws/glue";
 import * as lf from "@distilled.cloud/aws/lakeformation";
-import { expect } from "alchemy-test";
+import { expect } from "@alchemy.run/test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
@@ -186,6 +189,15 @@ test.provider.skipIf(!RUN_SLOW)(
       // DataZone made the blueprint's manage-access role a Lake Formation
       // administrator when it deployed the environment.
       expect(yield* lakeFormationAdmins).toContain(base.manageAccessRoleArn);
+      // The blueprint stack retains these on delete; the provider removes them.
+      const provisioned = (name: string) =>
+        created.provisionedResources?.find((r) => r.name === name)?.value;
+      const databases = [provisioned("glueProducerDBName"), provisioned("glueConsumerDBName")];
+      const workGroup = provisioned("athenaWorkGroupName");
+      const logGroup = provisioned("logGroupArn")?.split(":")[6];
+      expect(databases.every(Boolean)).toBe(true);
+      expect(workGroup).toBeDefined();
+      expect(logGroup).toBeDefined();
 
       // 3. Destroy — environment, project, blueprint config, and domain.
       yield* stack.destroy();
@@ -207,6 +219,15 @@ test.provider.skipIf(!RUN_SLOW)(
       const adminsAfterDestroy = yield* lakeFormationAdmins;
       expect(adminsAfterDestroy).not.toContain(base.manageAccessRoleArn);
       expect(adminsAfterDestroy).not.toContain(base.provisioningRoleArn);
+      // ...and nothing the environment's stack retained was left behind.
+      for (const database of databases) {
+        const lookup = yield* glue.getDatabase({ Name: database! }).pipe(Effect.result);
+        expect(Result.isFailure(lookup) && lookup.failure._tag).toBe("EntityNotFoundException");
+      }
+      const workGroups = yield* athena.listWorkGroups({});
+      expect((workGroups.WorkGroups ?? []).map((w) => w.Name)).not.toContain(workGroup);
+      const logGroups = yield* logs.describeLogGroups({ logGroupNamePrefix: logGroup });
+      expect(logGroups.logGroups ?? []).toHaveLength(0);
     }),
   {
     tags: ["provider:aws", "provider:aws:datazone", "provider:aws:iam", "provider:aws:s3", "live"],

@@ -2,7 +2,7 @@ import * as AWS from "@alchemy.run/aws";
 import { AutoScalingGroup, LaunchTemplate, LifecycleHook } from "@alchemy.run/aws/AutoScaling";
 import { amazonLinux2023 } from "@alchemy.run/aws/EC2";
 import * as autoscaling from "@distilled.cloud/aws/auto-scaling";
-import { expect } from "alchemy-test";
+import { expect } from "@alchemy.run/test";
 import * as Test from "alchemy/Test/Alchemy";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
