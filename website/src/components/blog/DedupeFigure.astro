@@ -1,0 +1,502 @@
+---
+/**
+ * `<DedupeFigure />` — partition refinement on a made-up spec.
+ *
+ * Boxes are groups ("these might be the same schema"). Each field shows a
+ * dot in the color of the group it points at. Every round, a card whose
+ * dots don't match its box-mates moves to a new box, and that change can
+ * make cards that point at it split next round. When nothing moves, each
+ * box is one schema. The rounds are computed below from the shapes, so the
+ * animation is the real algorithm's result for this example.
+ */
+---
+
+<figure class="dd not-content" id="dd" aria-label="Partition refinement merging eleven shapes into seven schemas">
+  <div class="dd-top">
+    <span class="dd-step" id="dd-step"></span>
+    <span class="dd-count" id="dd-count"></span>
+    <button type="button" id="dd-replay">↻ Replay</button>
+  </div>
+  <div class="dd-stage" id="dd-stage"></div>
+  <div class="dd-real">
+    <span><b>Stripe</b> 12,529 → <b class="dd-to">2,720</b></span>
+    <span><b>Cloudflare Workers</b> 2,643 → <b class="dd-to">491</b></span>
+    <span><b>EC2</b> 3,851 → <b class="dd-to">2,553</b></span>
+  </div>
+  <figcaption class="dd-cap">Made-up shapes · real numbers below</figcaption>
+</figure>
+
+<style is:global>
+  .dd {
+    margin: 2rem 0;
+    padding: 12px 14px 10px;
+    font: 14px/1.5 var(--alc-font-sans);
+    color: var(--alc-fg-1);
+    background: var(--alc-bg-elev-1);
+    border: 1px solid var(--alc-hairline-2);
+    border-radius: 12px;
+  }
+  .dd * {
+    box-sizing: border-box;
+  }
+  .dd-top {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-height: 30px;
+    margin-bottom: 10px;
+  }
+  .dd-step {
+    flex: 1;
+    font-weight: 700;
+    font-size: 15px;
+  }
+  .dd-step.in {
+    animation: ddin 0.35s ease both;
+  }
+  .dd-count {
+    font: 600 13px var(--alc-font-mono);
+    color: var(--alc-fg-3);
+    white-space: nowrap;
+  }
+  .dd-count b {
+    font-size: 17px;
+    color: var(--alc-fg-1);
+  }
+  .dd-count.done b {
+    color: var(--alc-accent-text);
+  }
+  .dd button {
+    all: unset;
+    flex: none;
+    cursor: pointer;
+    padding: 3px 10px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--alc-fg-1);
+    background: var(--alc-bg-elev-1);
+    border: 1px solid var(--alc-hairline-3);
+    border-radius: 7px;
+  }
+  .dd button:focus-visible {
+    outline: 2px solid var(--alc-accent);
+  }
+  .dd-stage {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    transition: opacity 0.2s;
+  }
+  .dd-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: 10px;
+  }
+  .dd-cl {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 6px;
+    background: color-mix(in srgb, var(--c) 10%, transparent);
+    border: 1.5px solid color-mix(in srgb, var(--c) 70%, transparent);
+    border-radius: 10px;
+    transition:
+      background 0.5s,
+      border-color 0.5s;
+  }
+  .dd-cl.stable {
+    animation: ddstable 0.9s ease;
+  }
+  @keyframes ddstable {
+    50% {
+      box-shadow: 0 0 0 4px color-mix(in srgb, var(--c) 35%, transparent);
+    }
+  }
+  .dd-card {
+    padding: 4px 9px 5px;
+    background: var(--alc-bg-elev-2);
+    border: 1px solid var(--alc-hairline-2);
+    border-left: 3px solid var(--c);
+    border-radius: 7px;
+    transition: border-color 0.5s;
+  }
+  .dd-nm {
+    display: flex;
+    gap: 6px;
+    font-size: 11.5px;
+    color: var(--alc-fg-3);
+  }
+  .dd-nm .x {
+    font: 700 11px var(--alc-font-mono);
+    color: var(--alc-accent-text);
+  }
+  .dd-bd {
+    font: 600 12.5px/20px var(--alc-font-mono);
+    white-space: nowrap;
+  }
+  .dd-kind {
+    color: var(--alc-fg-2);
+  }
+  .dd-dot {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    margin: 0 3px 0 1px;
+    vertical-align: -1px;
+    background: var(--d);
+    border-radius: 50%;
+    transition:
+      background 0.5s,
+      box-shadow 0.3s;
+  }
+  .dd-dot.ping {
+    animation: ddping 1s ease 2;
+  }
+  @keyframes ddping {
+    50% {
+      box-shadow: 0 0 0 5px color-mix(in srgb, var(--d) 45%, transparent);
+    }
+  }
+  .dd-card.odd {
+    box-shadow: 0 0 0 2px var(--alc-fg-1);
+  }
+  .dd-card.odd .dd-dot {
+    box-shadow: 0 0 0 3px var(--alc-fg-1);
+  }
+  .dd-tgt {
+    color: var(--d);
+    transition: color 0.5s;
+  }
+  .dd-card.gone {
+    opacity: 0;
+    transform: scale(0.85);
+    transition:
+      opacity 0.3s,
+      transform 0.3s;
+  }
+  .dd-real {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 18px;
+    margin-top: 12px;
+    padding-top: 10px;
+    font: 12.5px var(--alc-font-mono);
+    color: var(--alc-fg-4);
+    border-top: 1px solid var(--alc-hairline-2);
+  }
+  .dd-real b {
+    font-family: var(--alc-font-sans);
+    color: var(--alc-fg-2);
+  }
+  .dd-real .dd-to {
+    font-family: var(--alc-font-mono);
+    color: var(--alc-accent-text);
+  }
+  .dd-cap {
+    margin-top: 6px;
+    font-size: 11.5px;
+    color: var(--alc-fg-4);
+  }
+  @keyframes ddin {
+    from {
+      opacity: 0;
+      transform: translateY(-3px);
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .dd * {
+      animation: none !important;
+      transition: none !important;
+    }
+  }
+</style>
+
+<script>
+  type Kind = "string" | "integer" | "object";
+  interface Shape {
+    id: string;
+    kind: Kind;
+    fields: [name: string, target: string][];
+  }
+
+  // Shown in this (unsorted) order at the start.
+  const SHAPES: Shape[] = [
+    { id: "Region", kind: "object", fields: [["id", "Code"]] },
+    { id: "Code", kind: "string", fields: [] },
+    { id: "RegionList", kind: "object", fields: [["item", "Region"]] },
+    { id: "Node", kind: "object", fields: [["child", "Node"]] },
+    { id: "Zone", kind: "object", fields: [["id", "Name"]] },
+    { id: "Count", kind: "integer", fields: [] },
+    { id: "QuotaList", kind: "object", fields: [["item", "Quota"]] },
+    { id: "Name", kind: "string", fields: [] },
+    { id: "Quota", kind: "object", fields: [["id", "Count"]] },
+    { id: "ZoneList", kind: "object", fields: [["item", "Zone"]] },
+    { id: "TreeNode", kind: "object", fields: [["child", "TreeNode"]] },
+  ];
+  const BY = new Map(SHAPES.map((s) => [s.id, s]));
+
+  // First five are the kind groups; split-offs get the loud colors after them.
+  const PAL = [
+    "var(--alc-info)",
+    "var(--alc-terracotta)",
+    "var(--alc-accent)",
+    "var(--alc-warn)",
+    "var(--alc-fg-3)",
+    "var(--alc-danger)",
+    "color-mix(in srgb, var(--alc-info) 45%, var(--alc-danger))",
+    "color-mix(in srgb, var(--alc-warn) 45%, var(--alc-danger))",
+  ];
+  const NEUTRAL = "var(--alc-hairline-3)";
+
+  /** A partition: groups in display order, each with a stable color index. */
+  interface Group {
+    color: number;
+    ids: string[];
+  }
+  type Partition = Group[];
+
+  // ---- the algorithm ----
+  const KIND_ORDER = ["string", "integer", "object"];
+  function byKind(): Partition {
+    const keyOf = (s: Shape) => `${s.kind}{${s.fields.map((f) => f[0]).join(",")}}`;
+    const keys: string[] = [];
+    const map = new Map<string, string[]>();
+    const sorted = [...SHAPES].sort((a, b) => KIND_ORDER.indexOf(a.kind) - KIND_ORDER.indexOf(b.kind));
+    for (const s of sorted) {
+      const k = keyOf(s);
+      if (!map.has(k)) (keys.push(k), map.set(k, []));
+      map.get(k)!.push(s.id);
+    }
+    // Inside a group, keep a readable order.
+    const order = ["Code", "Name", "Count", "Region", "Zone", "Quota", "RegionList", "ZoneList", "QuotaList", "Node", "TreeNode"];
+    return keys.map((k, i) => ({ color: i, ids: map.get(k)!.sort((a, b) => order.indexOf(a) - order.indexOf(b)) }));
+  }
+  function groupOf(p: Partition) {
+    const g = new Map<string, number>();
+    p.forEach((grp, i) => grp.ids.forEach((id) => g.set(id, i)));
+    return g;
+  }
+  /** One round: split each group by where its members' fields point. */
+  function refine(p: Partition, nextColor: { n: number }): { next: Partition; moved: string[] } {
+    const g = groupOf(p);
+    const next: Partition = [];
+    const moved: string[] = [];
+    for (const grp of p) {
+      const subs = new Map<string, string[]>();
+      for (const id of grp.ids) {
+        const sig = BY.get(id)!.fields.map(([f, t]) => `${f}:${g.get(t)}`).join(",");
+        if (!subs.has(sig)) subs.set(sig, []);
+        subs.get(sig)!.push(id);
+      }
+      [...subs.values()].forEach((ids, i) => {
+        if (i === 0) next.push({ color: grp.color, ids });
+        else (next.push({ color: nextColor.n++, ids }), moved.push(...ids));
+      });
+    }
+    return { next, moved };
+  }
+
+  // Precompute every round.
+  const P1 = byKind();
+  /** Each shape keeps one row for the whole animation: leaves first, then one row per object family. */
+  const ROW = new Map<string, number>();
+  {
+    let r = 0;
+    const leafRow = r++;
+    for (const grp of P1) {
+      const leaf = BY.get(grp.ids[0]!)!.kind !== "object";
+      const row = leaf ? leafRow : r++;
+      grp.ids.forEach((id) => ROW.set(id, row));
+    }
+  }
+  const nextColor = { n: P1.length };
+  const ROUNDS: { p: Partition; moved: string[] }[] = [];
+  let cur = P1;
+  for (;;) {
+    const r = refine(cur, nextColor);
+    ROUNDS.push({ p: r.next, moved: r.moved });
+    if (!r.moved.length) break;
+    cur = r.next;
+  }
+
+  const root = document.getElementById("dd");
+  if (root) {
+    const $ = (id: string) => document.getElementById(`dd-${id}`)!;
+    const reduced = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const wait = (ms: number) => new Promise((r) => setTimeout(r, reduced() ? 0 : ms));
+
+    // Cards are created once and moved between boxes.
+    const card = new Map<string, HTMLElement>();
+    for (const s of SHAPES) {
+      const el = document.createElement("div");
+      el.className = "dd-card";
+      el.dataset.id = s.id;
+      const body =
+        s.kind === "object"
+          ? `{ ${s.fields.map(([f, t]) => `${f}: <i class="dd-dot" data-t="${t}"></i><span class="dd-tgt" data-t="${t}">${t}</span>`).join(", ")} }`
+          : `<span class="dd-kind">${s.kind}</span>`;
+      el.innerHTML = `<div class="dd-nm"><span class="n">${s.id}</span></div><div class="dd-bd">${body}</div>`;
+      card.set(s.id, el);
+    }
+
+    /** Move cards into boxes for partition `p` (null = one neutral box), animating each card's move. */
+    function layout(p: Partition | null, animate = true) {
+      const before = new Map([...card].map(([id, el]) => [id, el.isConnected ? el.getBoundingClientRect() : null]));
+      const stage = $("stage");
+      const groups = p ?? [{ color: -1, ids: SHAPES.map((s) => s.id) }];
+      const g = p ? groupOf(p) : null;
+      const rows = new Map<number, HTMLElement>();
+      const rowEl = (grp: Group) => {
+        const r = p ? ROW.get(grp.ids[0]!)! : 0;
+        if (!rows.has(r)) {
+          const el = document.createElement("div");
+          el.className = "dd-row";
+          rows.set(r, el);
+        }
+        return rows.get(r)!;
+      };
+      for (const grp of groups) {
+          const box = document.createElement("div");
+          box.className = "dd-cl";
+          box.style.setProperty("--c", grp.color < 0 ? NEUTRAL : PAL[grp.color]!);
+          for (const id of grp.ids) {
+            const el = card.get(id)!;
+            el.style.setProperty("--c", grp.color < 0 ? NEUTRAL : PAL[grp.color]!);
+            box.appendChild(el);
+          }
+          rowEl(grp).appendChild(box);
+      }
+      stage.replaceChildren(...[...rows.entries()].sort((a, b) => a[0] - b[0]).map(([, el]) => el));
+      // Dots take the color of the group their target is in.
+      for (const el of card.values())
+        el.querySelectorAll<HTMLElement>("[data-t]").forEach((d) => {
+          const gi = g?.get(d.dataset.t!);
+          d.style.setProperty("--d", gi === undefined ? "var(--alc-fg-4)" : PAL[groups[gi]!.color]!);
+        });
+      if (reduced() || !animate) return;
+      for (const [id, el] of card) {
+        const a = before.get(id);
+        if (!a) continue;
+        const b = el.getBoundingClientRect();
+        const dx = a.left - b.left;
+        const dy = a.top - b.top;
+        if (Math.abs(dx) + Math.abs(dy) > 1)
+          el.animate([{ transform: `translate(${dx}px, ${dy}px)` }, { transform: "none" }], {
+            duration: 700,
+            easing: "cubic-bezier(.4,0,.2,1)",
+          });
+      }
+    }
+
+    function step(text: string) {
+      const el = $("step");
+      el.textContent = text;
+      el.classList.remove("in");
+      void el.offsetWidth;
+      el.classList.add("in");
+    }
+    function count(groups: number | null, done = false) {
+      const el = $("count");
+      el.classList.toggle("done", done);
+      el.innerHTML =
+        groups === null
+          ? `<b>${SHAPES.length}</b> shapes`
+          : done
+            ? `<b>${SHAPES.length}</b> shapes → <b>${groups}</b> schemas`
+            : `<b>${groups}</b> groups`;
+    }
+
+    let run = 0;
+    async function play() {
+      const me = ++run;
+      const live = async (ms: number) => (await wait(ms), me === run);
+      for (const el of card.values()) {
+        el.classList.remove("odd", "gone");
+        el.querySelectorAll(".dd-dot").forEach((d) => d.classList.remove("ping"));
+        el.querySelector(".dd-nm")!.innerHTML = `<span class="n">${el.dataset.id}</span>`;
+      }
+      $("stage").style.opacity = "1";
+      layout(null);
+      step("11 shapes from a spec");
+      count(null);
+      if (!(await live(1600))) return;
+
+      step("Group by kind and field names");
+      layout(P1);
+      count(P1.length);
+      if (!(await live(1700))) return;
+
+      let prev = P1;
+      for (const [i, r] of ROUNDS.entries()) {
+        step(`Round ${i + 1}: do the dots match?`);
+        if (!(await live(900))) return;
+        if (!r.moved.length) {
+          $("stage")
+            .querySelectorAll(".dd-cl")
+            .forEach((b) => b.classList.add("stable"));
+          step("Nothing moved. Each box is one schema");
+          if (!(await live(1600))) return;
+          break;
+        }
+        // Mark the cards whose dots differ from their box-mates.
+        r.moved.forEach((id) => card.get(id)!.classList.add("odd"));
+        if (!(await live(1300))) return;
+        r.moved.forEach((id) => card.get(id)!.classList.remove("odd"));
+        layout(r.p);
+        count(r.p.length);
+        // Ripple: dots that point at a card that just moved change color.
+        const g0 = groupOf(prev);
+        const g1 = groupOf(r.p);
+        for (const el of card.values())
+          el.querySelectorAll<HTMLElement>(".dd-dot").forEach((d) => {
+            const t = d.dataset.t!;
+            if (prev[g0.get(t)!]!.color !== r.p[g1.get(t)!]!.color) {
+              d.classList.remove("ping");
+              void d.offsetWidth;
+              d.classList.add("ping");
+            }
+          });
+        prev = r.p;
+        if (!(await live(1900))) return;
+      }
+
+      // Merge: each box becomes one card.
+      step("Merge");
+      const final = ROUNDS[ROUNDS.length - 1]!.p;
+      for (const grp of final) grp.ids.slice(1).forEach((id) => card.get(id)!.classList.add("gone"));
+      if (!(await live(350))) return;
+      $("stage").style.opacity = "0";
+      if (!(await live(200))) return;
+      const merged: Partition = final.map((grp) => ({ color: grp.color, ids: [grp.ids[0]!] }));
+      for (const grp of final) {
+        const head = card.get(grp.ids[0]!)!;
+        head.querySelector(".dd-nm")!.innerHTML =
+          grp.ids.map((id) => `<span class="n">${id}</span>`).join("") +
+          (grp.ids.length > 1 ? `<span class="x">×${grp.ids.length}</span>` : "");
+      }
+      for (const el of card.values()) {
+        el.classList.remove("gone");
+        el.querySelectorAll(".dd-dot").forEach((d) => d.classList.remove("ping"));
+      }
+      layout(merged, false);
+      $("stage").style.opacity = "1";
+      count(final.length, true);
+    }
+
+    $("replay").onclick = () => void play();
+    layout(null);
+    step("11 shapes from a spec");
+    count(null);
+    const io = new IntersectionObserver(
+      (es) => {
+        if (es.some((e) => e.isIntersecting)) {
+          io.disconnect();
+          void play();
+        }
+      },
+      { threshold: 0.5 },
+    );
+    io.observe(root);
+  }
+</script>
