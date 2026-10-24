@@ -1,7 +1,7 @@
 import * as AWS from "@alchemy.run/aws";
 import { FeatureGroup } from "@alchemy.run/aws/SageMaker";
-import { expect } from "@alchemy.run/test";
 import * as sagemaker from "@distilled.cloud/aws/sagemaker";
+import { expect } from "@alchemy.run/test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 

@@ -1,12 +1,12 @@
 import { fileURLToPath } from "node:url";
 import * as AWS from "@alchemy.run/aws";
 import { flociServices } from "@alchemy.run/aws/Local/FlociServices";
-import { expect } from "@alchemy.run/test";
 import * as DynamoDB from "@distilled.cloud/aws/dynamodb";
 import * as S3 from "@distilled.cloud/aws/s3";
 import * as SQS from "@distilled.cloud/aws/sqs";
 import * as SSM from "@distilled.cloud/aws/ssm";
 import * as Alchemy from "alchemy";
+import { expect } from "@alchemy.run/test";
 /**
  * Actions under `alchemy dev`: the common shapes a deploy-time binding client
  * takes, each proven to land on the floci emulator rather than the real

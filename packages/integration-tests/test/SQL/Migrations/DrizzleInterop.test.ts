@@ -1,7 +1,7 @@
 import { Database } from "bun:sqlite";
 import { applyMigrations } from "@alchemy.run/sql/Migrations";
-import { expect, layer } from "@alchemy.run/test";
 import * as NodeServices from "@effect/platform-node/NodeServices";
+import { expect, layer } from "@alchemy.run/test";
 import { drizzle } from "drizzle-orm/bun-sqlite";
 import { migrate as drizzleMigrate } from "drizzle-orm/bun-sqlite/migrator";
 import * as Effect from "effect/Effect";

@@ -1,7 +1,7 @@
 import * as AWS from "@alchemy.run/aws";
 import { Alias, Key } from "@alchemy.run/aws/PaymentCryptography";
-import { expect } from "@alchemy.run/test";
 import * as paymentcryptography from "@distilled.cloud/aws/payment-cryptography";
+import { expect } from "@alchemy.run/test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { reapLeakedKeys } from "./reapKeys.ts";

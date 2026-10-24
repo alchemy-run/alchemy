@@ -16,7 +16,6 @@ import { writePackBytes } from "@alchemy.run/git/Protocol/PackWriter";
 import type { ManifestEntry, ObjectSource } from "@alchemy.run/git/Protocol/Store";
 import { inflate, inflateEntry } from "@alchemy.run/git/Protocol/Zlib";
 import { makeStreamingSource } from "@alchemy.run/git/Store/StreamingSource";
-import { describe, expect, it } from "@alchemy.run/test";
 /**
  * Tier-1 pack parse/write round-trip tests (DESIGN.md §9) against the
  * checked-in fixture packs in `test/fixtures/packs/` (generated once by the
@@ -29,6 +28,7 @@ import { describe, expect, it } from "@alchemy.run/test";
  * round-trips, and `git index-pack --strict` as the oracle for writer output.
  */
 import * as BunServices from "@effect/platform-bun/BunServices";
+import { describe, expect, it } from "@alchemy.run/test";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as FileSystem from "effect/FileSystem";

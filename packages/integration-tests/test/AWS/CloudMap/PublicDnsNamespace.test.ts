@@ -1,7 +1,7 @@
 import * as AWS from "@alchemy.run/aws";
 import { PublicDnsNamespace } from "@alchemy.run/aws/CloudMap";
-import { expect } from "@alchemy.run/test";
 import * as sd from "@distilled.cloud/aws/servicediscovery";
+import { expect } from "@alchemy.run/test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 

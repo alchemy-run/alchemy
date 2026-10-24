@@ -20,7 +20,6 @@ import {
   retireMachine,
 } from "@alchemy.run/fly/replicas";
 import { ReplicaChecksNotPassing } from "@alchemy.run/fly/replicas";
-import { expect, assert, it, describe } from "@alchemy.run/test";
 import {
   GatewayTimeout,
   HTTP_STATUS_MAP,
@@ -32,6 +31,7 @@ import * as machines from "@distilled.cloud/fly-io/machines";
 import { type Machine } from "@distilled.cloud/fly-io/machines";
 import * as Retry from "@distilled.cloud/fly-io/Retry";
 import * as Alchemy from "alchemy";
+import { expect, assert, it, describe } from "@alchemy.run/test";
 import { DestroyError } from "alchemy/Apply";
 import { localState, makeLocalState } from "alchemy/State/LocalState";
 import * as Test from "alchemy/Test/Alchemy";

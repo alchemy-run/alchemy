@@ -3,8 +3,8 @@ import { Cluster, ClusterPolicy } from "@alchemy.run/aws/DSQL";
 // Internal to alchemy, so not exported.
 import { withDsqlClient } from "@alchemy.run/aws/DSQL/Migrations";
 import * as Drizzle from "@alchemy.run/drizzle";
-import { expect } from "@alchemy.run/test";
 import * as dsql from "@distilled.cloud/aws/dsql";
+import { expect } from "@alchemy.run/test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";

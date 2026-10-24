@@ -1,8 +1,8 @@
 import * as AWS from "@alchemy.run/aws";
 import { CredentialLocker, ManagedThing } from "@alchemy.run/aws/IoTManagedIntegrations";
 import { Region } from "@alchemy.run/aws/Region";
-import { expect } from "@alchemy.run/test";
 import * as mi from "@distilled.cloud/aws/iot-managed-integrations";
+import { expect } from "@alchemy.run/test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";

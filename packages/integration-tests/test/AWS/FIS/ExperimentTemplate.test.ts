@@ -1,8 +1,8 @@
 import * as AWS from "@alchemy.run/aws";
 import { ExperimentTemplate } from "@alchemy.run/aws/FIS";
 import { Role } from "@alchemy.run/aws/IAM/Role";
-import { expect } from "@alchemy.run/test";
 import * as fis from "@distilled.cloud/aws/fis";
+import { expect } from "@alchemy.run/test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";

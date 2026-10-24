@@ -11,8 +11,8 @@ import { spawn } from "node:child_process";
  */
 import * as AWS from "@alchemy.run/aws";
 import { AWSEnvironment } from "@alchemy.run/aws/Environment";
-import { expect } from "@alchemy.run/test";
 import * as cloudfront from "@distilled.cloud/aws/cloudfront";
+import { expect } from "@alchemy.run/test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";

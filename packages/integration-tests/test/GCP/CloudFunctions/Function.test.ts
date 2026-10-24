@@ -1,7 +1,7 @@
 import * as GCP from "@alchemy.run/gcp";
 import { GcpEnvironment } from "@alchemy.run/gcp/Environment";
-import { expect } from "@alchemy.run/test";
 import * as cloudfunctions from "@distilled.cloud/gcp/cloudfunctions_v2";
+import { expect } from "@alchemy.run/test";
 import * as Test from "alchemy/Test/Alchemy";
 import { zipFiles } from "alchemy/Util/zip";
 import * as Effect from "effect/Effect";

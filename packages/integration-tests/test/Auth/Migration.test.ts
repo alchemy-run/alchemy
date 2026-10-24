@@ -1,6 +1,6 @@
 import { GitHubAuthConfigSchema } from "@alchemy.run/github/AuthProvider";
-import { expect, it } from "@alchemy.run/test";
 import * as NodeServices from "@effect/platform-node/NodeServices";
+import { expect, it } from "@alchemy.run/test";
 import { AuthProviders } from "alchemy/Auth/AuthProvider";
 import {
   PROFILE_FORMAT,

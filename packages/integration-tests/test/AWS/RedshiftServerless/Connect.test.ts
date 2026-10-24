@@ -1,6 +1,6 @@
 import * as AWS from "@alchemy.run/aws";
-import { describe, expect } from "@alchemy.run/test";
 import * as serverless from "@distilled.cloud/aws/redshift-serverless";
+import { describe, expect } from "@alchemy.run/test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Core from "alchemy/Test/Core";
 import * as Effect from "effect/Effect";

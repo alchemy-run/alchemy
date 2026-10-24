@@ -1,7 +1,7 @@
 import * as AWS from "@alchemy.run/aws";
 import { Subnet, Vpc } from "@alchemy.run/aws/EC2";
-import { expect } from "@alchemy.run/test";
 import * as EC2 from "@distilled.cloud/aws/ec2";
+import { expect } from "@alchemy.run/test";
 import * as Provider from "alchemy/Provider";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";

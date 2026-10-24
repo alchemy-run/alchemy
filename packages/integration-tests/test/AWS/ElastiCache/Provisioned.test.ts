@@ -11,8 +11,8 @@ import {
   validateReplicationGroupProps,
 } from "@alchemy.run/aws/ElastiCache";
 import { sameStringSet } from "@alchemy.run/aws/ElastiCache/internal";
-import { expect } from "@alchemy.run/test";
 import * as ElastiCache from "@distilled.cloud/aws/elasticache";
+import { expect } from "@alchemy.run/test";
 import * as Output from "alchemy/Output";
 import { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Test from "alchemy/Test/Alchemy";

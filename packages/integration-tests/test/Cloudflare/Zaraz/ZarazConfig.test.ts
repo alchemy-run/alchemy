@@ -1,8 +1,8 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
 import { findZoneByName } from "@alchemy.run/cloudflare/Zone/lookup";
-import { describe, expect } from "@alchemy.run/test";
 import * as zaraz from "@distilled.cloud/cloudflare/zaraz";
+import { describe, expect } from "@alchemy.run/test";
 import { deepEqual } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { isResourceState, State, type ResourceState } from "alchemy/State";

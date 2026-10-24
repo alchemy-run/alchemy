@@ -1,8 +1,8 @@
 import * as GCP from "@alchemy.run/gcp";
 import { GcpEnvironment } from "@alchemy.run/gcp/Environment";
 import { findClusterAdapter } from "@alchemy.run/kubernetes/ClusterAdapter";
-import { expect } from "@alchemy.run/test";
 import * as container from "@distilled.cloud/gcp/container_v1";
+import { expect } from "@alchemy.run/test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";

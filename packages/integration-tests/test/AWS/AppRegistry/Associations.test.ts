@@ -6,8 +6,8 @@ import {
   ResourceAssociation,
 } from "@alchemy.run/aws/AppRegistry";
 import { Stack } from "@alchemy.run/aws/CloudFormation";
-import { expect } from "@alchemy.run/test";
 import * as appregistry from "@distilled.cloud/aws/service-catalog-appregistry";
+import { expect } from "@alchemy.run/test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";

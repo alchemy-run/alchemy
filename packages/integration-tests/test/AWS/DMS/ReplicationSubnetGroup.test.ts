@@ -1,9 +1,9 @@
 import * as AWS from "@alchemy.run/aws";
 import { ReplicationSubnetGroup } from "@alchemy.run/aws/DMS";
 import { Subnet, Vpc } from "@alchemy.run/aws/EC2";
-import { expect } from "@alchemy.run/test";
 import * as dms from "@distilled.cloud/aws/database-migration-service";
 import * as ec2 from "@distilled.cloud/aws/ec2";
+import { expect } from "@alchemy.run/test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";

@@ -15,9 +15,9 @@ import {
   Vpc,
   VpcEndpoint,
 } from "@alchemy.run/aws/EC2";
-import { expect } from "@alchemy.run/test";
 import * as EC2 from "@distilled.cloud/aws/ec2";
 import * as ec2 from "@distilled.cloud/aws/ec2";
+import { expect } from "@alchemy.run/test";
 import { Data, Schedule } from "effect";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";

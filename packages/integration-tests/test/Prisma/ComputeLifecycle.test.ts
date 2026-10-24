@@ -5,8 +5,8 @@ import {
   destroyProjectApps,
   waitForDeploymentStatus,
 } from "@alchemy.run/prisma/ComputeLifecycle";
-import { describe, expect, it } from "@alchemy.run/test";
 import { Retry, fromApiToken } from "@distilled.cloud/prisma";
+import { describe, expect, it } from "@alchemy.run/test";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as HttpClient from "effect/http/HttpClient";

@@ -1,7 +1,7 @@
 import * as AWS from "@alchemy.run/aws";
 import { Keyspace } from "@alchemy.run/aws/Keyspaces";
-import { expect } from "@alchemy.run/test";
 import * as keyspaces from "@distilled.cloud/aws/keyspaces";
+import { expect } from "@alchemy.run/test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 

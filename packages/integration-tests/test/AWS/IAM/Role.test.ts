@@ -1,10 +1,10 @@
 import * as AWS from "@alchemy.run/aws";
 import { AWSEnvironment } from "@alchemy.run/aws/Environment";
 import { Role } from "@alchemy.run/aws/IAM";
-import { expect } from "@alchemy.run/test";
 import type { ResolvedCredentials } from "@distilled.cloud/aws/Credentials";
 import * as IAM from "@distilled.cloud/aws/iam";
 import * as STS from "@distilled.cloud/aws/sts";
+import { expect } from "@alchemy.run/test";
 import { adopt } from "alchemy/AdoptPolicy";
 import * as Provider from "alchemy/Provider";
 import { State } from "alchemy/State";

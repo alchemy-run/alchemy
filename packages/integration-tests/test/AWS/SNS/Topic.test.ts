@@ -1,8 +1,8 @@
 import * as AWS from "@alchemy.run/aws";
 import { AWSEnvironment } from "@alchemy.run/aws/Environment";
 import { Topic } from "@alchemy.run/aws/SNS";
-import { describe, expect } from "@alchemy.run/test";
 import * as SNS from "@distilled.cloud/aws/sns";
+import { describe, expect } from "@alchemy.run/test";
 import { adopt } from "alchemy/AdoptPolicy";
 import * as Provider from "alchemy/Provider";
 import { State } from "alchemy/State";

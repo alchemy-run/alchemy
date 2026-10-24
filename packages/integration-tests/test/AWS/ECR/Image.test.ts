@@ -1,8 +1,8 @@
 import * as AWS from "@alchemy.run/aws";
 import { Image, type ImageProps } from "@alchemy.run/aws/ECR/Image";
 import { Repository } from "@alchemy.run/aws/ECR/Repository";
-import { expect } from "@alchemy.run/test";
 import * as ecr from "@distilled.cloud/aws/ecr";
+import { expect } from "@alchemy.run/test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";

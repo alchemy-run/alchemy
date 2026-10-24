@@ -1,8 +1,8 @@
 import * as AWS from "@alchemy.run/aws";
 import { DbInstance } from "@alchemy.run/aws/Timestream";
-import { describe, expect } from "@alchemy.run/test";
 import * as EC2 from "@distilled.cloud/aws/ec2";
 import * as influxdb from "@distilled.cloud/aws/timestream-influxdb";
+import { describe, expect } from "@alchemy.run/test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";

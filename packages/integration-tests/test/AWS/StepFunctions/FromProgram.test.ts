@@ -8,8 +8,8 @@
 import * as AWS from "@alchemy.run/aws";
 import * as Lambda from "@alchemy.run/aws/Lambda";
 import { StateMachine } from "@alchemy.run/aws/StepFunctions";
-import { expect } from "@alchemy.run/test";
 import * as sfn from "@distilled.cloud/aws/sfn";
+import { expect } from "@alchemy.run/test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";

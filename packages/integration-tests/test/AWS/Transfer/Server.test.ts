@@ -1,8 +1,8 @@
 import * as AWS from "@alchemy.run/aws";
 import { Role } from "@alchemy.run/aws/IAM";
 import { Server, User } from "@alchemy.run/aws/Transfer";
-import { expect } from "@alchemy.run/test";
 import * as transfer from "@distilled.cloud/aws/transfer";
+import { expect } from "@alchemy.run/test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";

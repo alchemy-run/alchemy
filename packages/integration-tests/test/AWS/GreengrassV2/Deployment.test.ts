@@ -1,8 +1,8 @@
 import * as AWS from "@alchemy.run/aws";
 import { ComponentVersion, Deployment } from "@alchemy.run/aws/GreengrassV2";
 import { Thing } from "@alchemy.run/aws/IoT";
-import { expect } from "@alchemy.run/test";
 import * as greengrassv2 from "@distilled.cloud/aws/greengrassv2";
+import { expect } from "@alchemy.run/test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";

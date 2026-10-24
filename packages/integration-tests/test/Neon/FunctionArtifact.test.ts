@@ -1,6 +1,6 @@
 import { buildFunctionArtifact, validateFunctionZip } from "@alchemy.run/neon/FunctionArtifact";
-import { expect, test } from "@alchemy.run/test";
 import * as NodeServices from "@effect/platform-node/NodeServices";
+import { expect, test } from "@alchemy.run/test";
 import { zipFiles } from "alchemy/Util/zip";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";

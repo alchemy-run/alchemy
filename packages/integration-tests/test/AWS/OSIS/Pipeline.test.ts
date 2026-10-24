@@ -1,7 +1,7 @@
 import * as AWS from "@alchemy.run/aws";
 import { AWSEnvironment } from "@alchemy.run/aws/Environment";
-import { expect } from "@alchemy.run/test";
 import * as osis from "@distilled.cloud/aws/osis";
+import { expect } from "@alchemy.run/test";
 import * as Output from "alchemy/Output";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";

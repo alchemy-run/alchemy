@@ -1,7 +1,7 @@
 import * as AWS from "@alchemy.run/aws";
 import { FHIRDatastore } from "@alchemy.run/aws/HealthLake";
-import { expect } from "@alchemy.run/test";
 import * as healthlake from "@distilled.cloud/aws/healthlake";
+import { expect } from "@alchemy.run/test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";

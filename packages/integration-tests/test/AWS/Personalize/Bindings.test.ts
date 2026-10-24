@@ -1,7 +1,7 @@
 import * as AWS from "@alchemy.run/aws";
 import { AWSEnvironment } from "@alchemy.run/aws/Environment";
-import { describe, expect } from "@alchemy.run/test";
 import * as personalize from "@distilled.cloud/aws/personalize";
+import { describe, expect } from "@alchemy.run/test";
 import * as Output from "alchemy/Output";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Core from "alchemy/Test/Core";

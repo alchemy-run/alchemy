@@ -1,7 +1,7 @@
 import * as AWS from "@alchemy.run/aws";
 import { Alarm, CompositeAlarm } from "@alchemy.run/aws/CloudWatch";
-import { expect } from "@alchemy.run/test";
 import * as cloudwatch from "@distilled.cloud/aws/cloudwatch";
+import { expect } from "@alchemy.run/test";
 import * as Output from "alchemy/Output";
 import * as Provider from "alchemy/Provider";
 import * as Test from "alchemy/Test/Alchemy";

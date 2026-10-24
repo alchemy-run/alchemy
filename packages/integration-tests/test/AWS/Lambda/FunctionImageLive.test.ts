@@ -1,7 +1,7 @@
 import * as AWS from "@alchemy.run/aws";
-import { expect } from "@alchemy.run/test";
 import * as ecr from "@distilled.cloud/aws/ecr";
 import * as Lambda from "@distilled.cloud/aws/lambda";
+import { expect } from "@alchemy.run/test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";

@@ -1,7 +1,7 @@
 import * as Planetscale from "@alchemy.run/planetscale";
 import { Credentials } from "@alchemy.run/planetscale/Credentials";
-import { expect, it } from "@alchemy.run/test";
 import * as NodeServices from "@effect/platform-node/NodeServices";
+import { expect, it } from "@alchemy.run/test";
 import { AlchemyContext } from "alchemy/AlchemyContext";
 import { AuthProviders } from "alchemy/Auth/AuthProvider";
 import * as CliKit from "alchemy/Cli/CliKit";

@@ -1,6 +1,6 @@
 import { fileURLToPath } from "node:url";
-import { expect, it } from "@alchemy.run/test";
 import * as BunServices from "@effect/platform-bun/BunServices";
+import { expect, it } from "@alchemy.run/test";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";

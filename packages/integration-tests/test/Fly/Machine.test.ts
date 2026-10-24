@@ -1,9 +1,9 @@
 import * as Fly from "@alchemy.run/fly";
 import type { MachineContainer } from "@alchemy.run/fly/Machine";
 import { ensureStarted } from "@alchemy.run/fly/replicas";
-import { expect } from "@alchemy.run/test";
 import * as machines from "@distilled.cloud/fly-io/machines";
 import * as Retry from "@distilled.cloud/fly-io/Retry";
+import { expect } from "@alchemy.run/test";
 import * as Provider from "alchemy/Provider";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";

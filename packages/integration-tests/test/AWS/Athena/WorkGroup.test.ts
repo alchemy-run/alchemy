@@ -1,7 +1,7 @@
 import * as AWS from "@alchemy.run/aws";
 import { WorkGroup } from "@alchemy.run/aws/Athena/WorkGroup";
-import { expect } from "@alchemy.run/test";
 import * as athena from "@distilled.cloud/aws/athena";
+import { expect } from "@alchemy.run/test";
 import * as Provider from "alchemy/Provider";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";

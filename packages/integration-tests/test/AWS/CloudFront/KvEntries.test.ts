@@ -1,9 +1,9 @@
 import * as AWS from "@alchemy.run/aws";
 import { KeyValueStore, KvEntries } from "@alchemy.run/aws/CloudFront";
 import { extractValue, withKvsRegion } from "@alchemy.run/aws/CloudFront/common";
-import { describe, expect } from "@alchemy.run/test";
 import * as cloudfront from "@distilled.cloud/aws/cloudfront";
 import * as kvs from "@distilled.cloud/aws/cloudfront-keyvaluestore";
+import { describe, expect } from "@alchemy.run/test";
 import * as Provider from "alchemy/Provider";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";

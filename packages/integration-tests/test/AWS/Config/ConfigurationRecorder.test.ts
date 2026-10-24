@@ -1,10 +1,10 @@
 import * as AWS from "@alchemy.run/aws";
 import { ConfigurationRecorder, DeliveryChannel } from "@alchemy.run/aws/Config";
 import { Bucket } from "@alchemy.run/aws/S3";
-import { expect } from "@alchemy.run/test";
 import * as config from "@distilled.cloud/aws/config-service";
 import * as iam from "@distilled.cloud/aws/iam";
 import * as sts from "@distilled.cloud/aws/sts";
+import { expect } from "@alchemy.run/test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { makeConfigTestLease } from "./TestLease.ts";

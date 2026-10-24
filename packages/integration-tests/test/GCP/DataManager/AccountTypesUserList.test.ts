@@ -1,7 +1,7 @@
 import * as GCP from "@alchemy.run/gcp";
 import { PROBE_NAME, PROBE_PARENT } from "@alchemy.run/gcp/DataManager/internal";
-import { expect } from "@alchemy.run/test";
 import * as datamanager from "@distilled.cloud/gcp/datamanager_v1";
+import { expect } from "@alchemy.run/test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";

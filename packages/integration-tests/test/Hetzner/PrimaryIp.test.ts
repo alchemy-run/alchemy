@@ -1,6 +1,6 @@
 import * as Hetzner from "@alchemy.run/hetzner";
-import { expect } from "@alchemy.run/test";
 import * as primaryIps from "@distilled.cloud/hetzner/primary_ips";
+import { expect } from "@alchemy.run/test";
 import * as Provider from "alchemy/Provider";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";

@@ -1,7 +1,7 @@
 import * as AWS from "@alchemy.run/aws";
 import { Application } from "@alchemy.run/aws/AppRegistry";
-import { expect } from "@alchemy.run/test";
 import * as appregistry from "@distilled.cloud/aws/service-catalog-appregistry";
+import { expect } from "@alchemy.run/test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";

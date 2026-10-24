@@ -141,7 +141,6 @@
   },
   "devDependencies": {
     "@alchemy.run/frontend-frameworks": "workspace:*",
-    "@alchemy.run/test": "workspace:*",
     "@effect/platform-bun": "catalog:",
     "@effect/platform-node": "catalog:",
     "@effect/vitest": "catalog:",
@@ -152,6 +151,7 @@
     "@types/react": "catalog:",
     "@types/ws": "catalog:",
     "@vitejs/plugin-rsc": "catalog:",
+    "@alchemy.run/test": "workspace:*",
     "astro": "catalog:",
     "drizzle-orm": "catalog:",
     "effect": "catalog:",

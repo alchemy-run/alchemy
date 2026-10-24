@@ -1,6 +1,6 @@
 import * as AWS from "@alchemy.run/aws";
-import { expect } from "@alchemy.run/test";
 import * as lf from "@distilled.cloud/aws/lakeformation";
+import { expect } from "@alchemy.run/test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 

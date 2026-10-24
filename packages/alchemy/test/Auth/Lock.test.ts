@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import { resolve } from "node:path";
-import { assert, describe, expect, it, layer } from "@alchemy.run/test";
 import * as NodeServices from "@effect/platform-node/NodeServices";
+import { assert, describe, expect, it, layer } from "@alchemy.run/test";
 import * as Clock from "effect/Clock";
 import * as Console from "effect/Console";
 import * as Deferred from "effect/Deferred";

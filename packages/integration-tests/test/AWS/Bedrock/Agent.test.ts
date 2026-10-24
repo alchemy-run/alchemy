@@ -1,8 +1,8 @@
 import * as AWS from "@alchemy.run/aws";
 import { Agent, AgentAlias } from "@alchemy.run/aws/Bedrock";
-import { expect } from "@alchemy.run/test";
 import * as bedrock from "@distilled.cloud/aws/bedrock-agent";
 import * as iam from "@distilled.cloud/aws/iam";
+import { expect } from "@alchemy.run/test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";

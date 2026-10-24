@@ -1,7 +1,7 @@
 import * as AWS from "@alchemy.run/aws";
 import { Memory } from "@alchemy.run/aws/BedrockAgentCore";
-import { expect } from "@alchemy.run/test";
 import * as control from "@distilled.cloud/aws/bedrock-agentcore-control";
+import { expect } from "@alchemy.run/test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";

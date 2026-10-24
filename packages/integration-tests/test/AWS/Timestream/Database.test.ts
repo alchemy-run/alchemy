@@ -1,9 +1,9 @@
 import * as AWS from "@alchemy.run/aws";
 import { Database, Table } from "@alchemy.run/aws/Timestream";
 import { withQueryEndpoint, withWriteEndpoint } from "@alchemy.run/aws/Timestream/internal";
-import { describe, expect } from "@alchemy.run/test";
 import * as TSQ from "@distilled.cloud/aws/timestream-query";
 import * as TSW from "@distilled.cloud/aws/timestream-write";
+import { describe, expect } from "@alchemy.run/test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 

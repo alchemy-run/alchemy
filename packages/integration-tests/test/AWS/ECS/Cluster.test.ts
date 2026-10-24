@@ -1,7 +1,7 @@
 import * as AWS from "@alchemy.run/aws";
 import { Cluster } from "@alchemy.run/aws/ECS/Cluster";
-import { expect } from "@alchemy.run/test";
 import * as ecs from "@distilled.cloud/aws/ecs";
+import { expect } from "@alchemy.run/test";
 import * as Provider from "alchemy/Provider";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";

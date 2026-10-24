@@ -8,8 +8,8 @@ import {
   ServiceNetwork,
   ServiceNetworkVpcAssociation,
 } from "@alchemy.run/aws/VpcLattice";
-import { expect } from "@alchemy.run/test";
 import * as vpclattice from "@distilled.cloud/aws/vpc-lattice";
+import { expect } from "@alchemy.run/test";
 import * as Provider from "alchemy/Provider";
 import type { ScopedPlanStatusSession } from "alchemy/Report";
 import * as Test from "alchemy/Test/Alchemy";

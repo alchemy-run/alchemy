@@ -1,9 +1,9 @@
 import * as AWS from "@alchemy.run/aws";
 import { Bucket } from "@alchemy.run/aws/S3";
 import { Product } from "@alchemy.run/aws/ServiceCatalog";
-import { expect } from "@alchemy.run/test";
 import * as s3 from "@distilled.cloud/aws/s3";
 import * as servicecatalog from "@distilled.cloud/aws/service-catalog";
+import { expect } from "@alchemy.run/test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";

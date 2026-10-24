@@ -1,7 +1,7 @@
 import * as AWS from "@alchemy.run/aws";
 import { Lexicon } from "@alchemy.run/aws/Polly/Lexicon";
-import { expect } from "@alchemy.run/test";
 import * as polly from "@distilled.cloud/aws/polly";
+import { expect } from "@alchemy.run/test";
 import * as Provider from "alchemy/Provider";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";

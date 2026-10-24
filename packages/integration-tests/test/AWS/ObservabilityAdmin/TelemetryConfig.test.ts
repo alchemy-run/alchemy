@@ -1,7 +1,7 @@
 import * as AWS from "@alchemy.run/aws";
 import { TelemetryConfig } from "@alchemy.run/aws/ObservabilityAdmin";
-import { describe, expect } from "@alchemy.run/test";
 import * as obs from "@distilled.cloud/aws/observabilityadmin";
+import { describe, expect } from "@alchemy.run/test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { makeObservabilityAdminTestLease } from "./TestLease.ts";

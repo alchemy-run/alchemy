@@ -1,8 +1,8 @@
 import * as AWS from "@alchemy.run/aws";
 import { Domain } from "@alchemy.run/aws/CodeArtifact/Domain";
 import { Repository } from "@alchemy.run/aws/CodeArtifact/Repository";
-import { expect } from "@alchemy.run/test";
 import * as codeartifact from "@distilled.cloud/aws/codeartifact";
+import { expect } from "@alchemy.run/test";
 import * as Provider from "alchemy/Provider";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";

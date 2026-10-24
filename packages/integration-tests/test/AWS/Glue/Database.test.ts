@@ -1,7 +1,7 @@
 import * as AWS from "@alchemy.run/aws";
 import { Database } from "@alchemy.run/aws/Glue";
-import { expect } from "@alchemy.run/test";
 import * as glue from "@distilled.cloud/aws/glue";
+import { expect } from "@alchemy.run/test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 

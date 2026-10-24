@@ -1,8 +1,8 @@
 import * as AWS from "@alchemy.run/aws";
 import { EventSubscription } from "@alchemy.run/aws/Redshift";
 import * as SNS from "@alchemy.run/aws/SNS";
-import { expect } from "@alchemy.run/test";
 import * as redshift from "@distilled.cloud/aws/redshift";
+import { expect } from "@alchemy.run/test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 

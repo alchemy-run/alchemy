@@ -1,7 +1,7 @@
 import * as AWS from "@alchemy.run/aws";
 import { Domain } from "@alchemy.run/aws/SimpleDB";
-import { expect } from "@alchemy.run/test";
 import * as sdb from "@distilled.cloud/aws/simpledb";
+import { expect } from "@alchemy.run/test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";

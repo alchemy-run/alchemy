@@ -1,6 +1,6 @@
 import * as Planetscale from "@alchemy.run/planetscale";
-import { describe, expect } from "@alchemy.run/test";
 import * as ps from "@distilled.cloud/planetscale";
+import { describe, expect } from "@alchemy.run/test";
 import { adopt } from "alchemy/AdoptPolicy";
 import * as Provider from "alchemy/Provider";
 import * as RemovalPolicy from "alchemy/RemovalPolicy";

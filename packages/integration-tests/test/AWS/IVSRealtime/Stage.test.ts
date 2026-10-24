@@ -1,8 +1,8 @@
 import * as AWS from "@alchemy.run/aws";
 import { Stage } from "@alchemy.run/aws/IVSRealtime";
-import { expect } from "@alchemy.run/test";
 import * as ivsrealtime from "@distilled.cloud/aws/ivs-realtime";
 import * as sts from "@distilled.cloud/aws/sts";
+import { expect } from "@alchemy.run/test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";

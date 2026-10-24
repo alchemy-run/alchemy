@@ -24,11 +24,11 @@
 import * as AWS from "@alchemy.run/aws";
 import * as Endpoint from "@alchemy.run/aws/Endpoint";
 import * as Region from "@alchemy.run/aws/Region";
-import { expect } from "@alchemy.run/test";
 import { Credentials } from "@distilled.cloud/aws/Credentials";
 import * as Lambda from "@distilled.cloud/aws/lambda";
 import type { RegionName } from "@distilled.cloud/aws/Region";
 import * as SQS from "@distilled.cloud/aws/sqs";
+import { expect } from "@alchemy.run/test";
 import * as Test from "alchemy/Test/Alchemy";
 import { zipCode } from "alchemy/Util/zip";
 import * as Effect from "effect/Effect";

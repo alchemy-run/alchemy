@@ -1,6 +1,6 @@
 import * as AWS from "@alchemy.run/aws";
-import { expect } from "@alchemy.run/test";
 import * as DynamoDB from "@distilled.cloud/aws/dynamodb";
+import { expect } from "@alchemy.run/test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";

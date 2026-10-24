@@ -1,8 +1,8 @@
 import * as AWS from "@alchemy.run/aws";
 import { DBCluster, DBInstance, DBSubnetGroup } from "@alchemy.run/aws/DocDB";
-import { expect } from "@alchemy.run/test";
 import * as docdb from "@distilled.cloud/aws/docdb";
 import * as EC2 from "@distilled.cloud/aws/ec2";
+import { expect } from "@alchemy.run/test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";

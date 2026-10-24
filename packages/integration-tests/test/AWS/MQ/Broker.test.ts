@@ -1,7 +1,7 @@
 import * as AWS from "@alchemy.run/aws";
 import { Broker } from "@alchemy.run/aws/MQ";
-import { expect } from "@alchemy.run/test";
 import * as mq from "@distilled.cloud/aws/mq";
+import { expect } from "@alchemy.run/test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";

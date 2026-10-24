@@ -8,7 +8,6 @@ import { ingestPackFrom, ingestStoreOf } from "@alchemy.run/git/RepoObject";
 import { makeObjectStore } from "@alchemy.run/git/Store/ObjectStore";
 import { sliceRandomAccess } from "@alchemy.run/git/Store/PackSource";
 import { makeStreamingSource } from "@alchemy.run/git/Store/StreamingSource";
-import { describe, expect, test } from "@alchemy.run/test";
 /**
  * The hasher-driven ingest (packages/git/src/RepoObject.ts `ingestPackFrom` with a
  * hasher, DESIGN §22.7) over the store harness: tiny parts force every
@@ -16,6 +15,7 @@ import { describe, expect, test } from "@alchemy.run/test";
  * and thin-pack bases from the store are exercised in-process.
  */
 import * as BunServices from "@effect/platform-bun/BunServices";
+import { describe, expect, test } from "@alchemy.run/test";
 import { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
