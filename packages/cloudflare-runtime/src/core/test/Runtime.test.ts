@@ -1,7 +1,9 @@
 import * as NodeHttp from "node:http";
+import * as NodeNet from "node:net";
 import { expect, layer } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import { afterEach, vi } from "vitest";
 import * as WorkerProxy from "../proxy/WorkerProxy.ts";
 import * as Runtime from "../Runtime.ts";
 import { localRuntimeLayer, PredicateFailed } from "./helpers/runtime.ts";
@@ -17,7 +19,54 @@ export default {
 };
 `;
 
+/** A port that was free a moment ago, for listeners that need a fixed address. */
+const freePort = Effect.callback<number>((resume) => {
+  const server = NodeNet.createServer();
+  server.listen(0, "127.0.0.1", () => {
+    const { port } = server.address() as NodeNet.AddressInfo;
+    server.close(() => resume(Effect.succeed(port)));
+  });
+});
+
 layer(localRuntimeLayer, { excludeTestServices: true })("Runtime", (it) => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it.effect(
+    "exposes the V8 inspector for the worker named by WORKERD_INSPECTOR_WORKER",
+    () =>
+      Effect.gen(function* () {
+        const port = yield* freePort;
+        vi.stubEnv("WORKERD_INSPECTOR_WORKER", "inspected");
+        vi.stubEnv("WORKERD_INSPECTOR_ADDR", `127.0.0.1:${port}`);
+        const runtime = yield* Runtime.Runtime;
+        const worker = (name: string) =>
+          runtime.start({
+            name,
+            compatibilityDate: "2026-03-10",
+            compatibilityFlags: [],
+            bindings: [],
+            modules: [{ name: "main.js", type: "ESModule", content: HELLO_SCRIPT }],
+          });
+        yield* worker("inspected");
+        const targets = yield* Effect.tryPromise(async () => {
+          const response = await fetch(`http://127.0.0.1:${port}/json`, {
+            signal: AbortSignal.timeout(10_000),
+          });
+          return (await response.json()) as Array<{ webSocketDebuggerUrl?: string }>;
+        });
+        expect(targets.length).toBeGreaterThan(0);
+        expect(targets[0].webSocketDebuggerUrl).toMatch(/^ws:\/\//);
+        // Any other worker starts without the inspector: binding the same
+        // address in a second workerd process would fail its startup.
+        const other = yield* worker("other");
+        const hello = yield* Effect.promise(() => fetch(new URL("/hello", other)));
+        expect(yield* Effect.promise(() => hello.text())).toBe("hello");
+      }),
+    { timeout: 30_000 },
+  );
+
   it.effect(
     "starts a worker and returns an http://127.0.0.1:<port> URL",
     () =>
