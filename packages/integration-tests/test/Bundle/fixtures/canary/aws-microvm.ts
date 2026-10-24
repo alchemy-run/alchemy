@@ -6,6 +6,11 @@ import * as HttpServerResponse from "effect/http/HttpServerResponse";
 /** A Node MicroVM program that reaches the AWS package through `import * as AWS`. */
 export class CanaryMicrovm extends AWS.Lambda.MicrovmImage<CanaryMicrovm>()("CanaryMicrovm") {}
 
+/** Throws so `/trace` can show how a stack trace reads from the minified bundle. */
+function canaryThrows(): never {
+  throw new Error("canary");
+}
+
 export default CanaryMicrovm.make(
   {
     main: import.meta.filename,
@@ -17,6 +22,13 @@ export default CanaryMicrovm.make(
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;
         const url = new URL(request.url, "http://microvm");
+        if (url.pathname === "/trace") {
+          const stack = yield* Effect.try({
+            try: canaryThrows,
+            catch: (error) => String((error as { stack?: unknown }).stack),
+          }).pipe(Effect.flip);
+          return yield* HttpServerResponse.json({ stack });
+        }
         return yield* HttpServerResponse.json({ path: url.pathname });
       }),
     };
