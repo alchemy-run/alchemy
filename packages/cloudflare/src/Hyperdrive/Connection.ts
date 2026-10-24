@@ -517,7 +517,7 @@ const isInSync = (
 ): boolean => {
   if (observed.name !== name) return false;
 
-  const live = observed.origin as Record<string, unknown>;
+  const live: Readonly<Record<string, unknown>> = { ...observed.origin };
   if (
     Object.entries(desired.origin).some(
       ([key, value]) => !SECRET_ORIGIN_KEYS.has(key) && live[key] !== value,
