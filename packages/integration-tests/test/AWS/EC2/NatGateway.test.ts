@@ -93,3 +93,94 @@ test.provider.skipIf(!process.env.AWS_TEST_NAT_GATEWAY)(
     }).pipe(logLevel),
   { tags: ["provider:aws", "provider:aws:ec2", "live"], timeout: 900_000 },
 );
+
+test.provider.skipIf(!!process.env.FAST)(
+  "regional NAT gateways in automatic and manual mode",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const azResult = yield* EC2.describeAvailabilityZones({});
+      const [az1, az2] = (azResult.AvailabilityZones ?? [])
+        .filter((az) => az.State === "available" && az.ZoneType === "availability-zone")
+        .map((az) => az.ZoneName!);
+
+      const network = Effect.gen(function* () {
+        const vpc = yield* Vpc("RegionalNatVpc", {
+          cidrBlock: "10.0.0.0/16",
+        });
+        const igw = yield* InternetGateway("RegionalNatIgw", {
+          vpcId: vpc.vpcId,
+        });
+        const eip1 = yield* EIP("RegionalNatEip1", {});
+        const eip2 = yield* EIP("RegionalNatEip2", {});
+        return { vpc, igw, eip1, eip2 };
+      });
+
+      // A regional NAT gateway needs the IGW attached before it is created.
+      yield* stack.deploy(network);
+
+      const regional = (manualZones: 1 | 2) =>
+        Effect.gen(function* () {
+          const { vpc, igw, eip1, eip2 } = yield* network;
+          const autoNat = yield* NatGateway("RegionalAutoNat", {
+            availabilityMode: "regional",
+            vpcId: vpc.vpcId,
+          });
+          const manualNat = yield* NatGateway("RegionalManualNat", {
+            availabilityMode: "regional",
+            vpcId: vpc.vpcId,
+            availabilityZoneAddresses: [
+              { availabilityZone: az1, allocationIds: [eip1.allocationId] },
+              ...(manualZones === 2
+                ? [{ availabilityZone: az2, allocationIds: [eip2.allocationId] }]
+                : []),
+            ],
+          });
+          return { vpc, igw, eip1, eip2, autoNat, manualNat };
+        });
+
+      const describe = (natGatewayId: string) =>
+        EC2.describeNatGateways({ NatGatewayIds: [natGatewayId] }).pipe(
+          Effect.map((r) => r.NatGateways![0]!),
+        );
+
+      const created = yield* stack.deploy(regional(1));
+
+      const auto = yield* describe(created.autoNat.natGatewayId);
+      expect(auto.AvailabilityMode).toBe("regional");
+      expect(auto.VpcId).toBe(created.vpc.vpcId);
+      expect(auto.SubnetId).toBeUndefined();
+      expect(auto.AutoProvisionZones).toBe("enabled");
+      expect(created.autoNat.availabilityMode).toBe("regional");
+
+      const manual = yield* describe(created.manualNat.natGatewayId);
+      expect(manual.AvailabilityMode).toBe("regional");
+      expect(manual.AutoProvisionZones).toBe("disabled");
+      expect(
+        manual.NatGatewayAddresses?.find((a) => a.AllocationId === created.eip1.allocationId)
+          ?.AvailabilityZone,
+      ).toBe(az1);
+
+      // Adding a zone associates its Elastic IP in place.
+      const updated = yield* stack.deploy(regional(2));
+      expect(updated.manualNat.natGatewayId).toBe(created.manualNat.natGatewayId);
+      const expanded = yield* describe(updated.manualNat.natGatewayId);
+      const addresses = (expanded.NatGatewayAddresses ?? []).filter(
+        (a) => a.Status !== "disassociating" && a.Status !== "failed",
+      );
+      expect(
+        addresses.find((a) => a.AllocationId === created.eip1.allocationId)?.AvailabilityZone,
+      ).toBe(az1);
+      expect(
+        addresses.find((a) => a.AllocationId === created.eip2.allocationId)?.AvailabilityZone,
+      ).toBe(az2);
+
+      yield* stack.destroy();
+
+      yield* assertEipGone(created.eip1.allocationId);
+      yield* assertEipGone(created.eip2.allocationId);
+      yield* assertVpcGone(created.vpc.vpcId);
+    }).pipe(logLevel),
+  { tags: ["provider:aws", "provider:aws:ec2", "live"], timeout: 900_000 },
+);
