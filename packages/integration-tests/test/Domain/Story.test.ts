@@ -1,7 +1,8 @@
 import * as Domain from "@alchemy.run/domain";
 import { InMemory } from "@alchemy.run/domain/InMemory";
-import { Story } from "@alchemy.run/domain/Story";
+import { type Step, Story } from "@alchemy.run/domain/Story";
 import { describe, expect, it } from "@alchemy.run/test";
+import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as Headers from "effect/http/Headers";
@@ -190,8 +191,14 @@ const CapWhenOverdrawnLive = CapWhenOverdrawn.toLayer(
   }),
 );
 
+class ApprovalUnavailable extends Domain.Rejection("ApprovalUnavailable") {}
+
 class Approval extends Domain.ExternalSystem("Approval", {
-  check: { args: { total: Schema.Number }, success: { ok: Schema.Boolean } },
+  check: {
+    args: { total: Schema.Number },
+    success: { ok: Schema.Boolean },
+    error: ApprovalUnavailable,
+  },
 }) {}
 
 class CapWhenLarge extends Domain.Policy("CapWhenLarge", { from: Counter, on: [Incremented] }) {}
@@ -201,7 +208,11 @@ const CapWhenLargeLive = CapWhenLarge.toLayer(
     const counters = yield* Counter;
     return Effect.fn(function* ({ source, event }) {
       if (event.total < 15) return;
-      const { ok } = yield* approval.check({ total: event.total });
+      // Without an answer, the counter stays uncapped.
+      const ok = yield* approval.check({ total: event.total }).pipe(
+        Effect.map(({ ok }) => ok),
+        Effect.catchTag("ApprovalUnavailable", () => Effect.succeed(false)),
+      );
       if (ok) yield* counters.send(source, new Cap());
     });
   }),
@@ -226,8 +237,33 @@ class Counters extends Domain.Model("Counters", {
 
 const story = Story.make(Counters, {
   layer: Layer.mergeAll(CapWhenLargeLive, CapWhenOverdrawnLive, RemindWhenCappedLive),
-  externalSystems: [Approval],
+  stub: [Approval],
 });
+
+// Approval called for real, through an adapter: 20 and over is unavailable,
+// 17 breaks the connection, 19 answers slowly, and even totals are approved.
+const ApprovalAdapter = Approval.toLayer(
+  Effect.succeed({
+    check: ({ total }) =>
+      total >= 20
+        ? Effect.fail(new ApprovalUnavailable())
+        : total === 17
+          ? Effect.die(new Error("socket closed"))
+          : Effect.succeed({ ok: total % 2 === 0 }).pipe(
+              Effect.delay(total === 19 ? "50 millis" : "0 millis"),
+            ),
+  }),
+);
+const unstubbed = Story.make(Counters, {
+  layer: Layer.mergeAll(CapWhenLargeLive, CapWhenOverdrawnLive, RemindWhenCappedLive),
+});
+const real = (...steps: ReadonlyArray<Step>) =>
+  unstubbed(...steps).pipe(Effect.provide(ApprovalAdapter));
+
+// A system that is not stubbed must be provided as a Layer.
+// @ts-expect-error Approval is not provided
+export const unprovided: Effect.Effect<void, unknown, never> = unstubbed();
+
 const c1 = Counter.ref("c-1");
 const c2 = Counter.ref("c-2");
 const m1 = Move.ref("m-1");
@@ -291,6 +327,139 @@ describe("Domain Story", () => {
       Story.resolve("c2", Approval.check, { ok: true }),
       Story.then(c1, new Incremented({ by: 6, total: 16 })),
       Story.then(c2, new Incremented({ by: 6, total: 16 }), new Capped()),
+    ),
+  );
+
+  it.effect("fails a pending call with the operation's declared error", () =>
+    story(
+      Story.given(c1, new Incremented({ by: 10, total: 10 })),
+      Story.when(c1, new Increment({ by: 6 })),
+      Story.expectCall(Approval.check, { total: 16 }),
+      Story.fail(Approval.check, new ApprovalUnavailable()),
+      Story.then(c1, new Incremented({ by: 6, total: 16 })),
+      Story.state(c1, (s) => expect(s.capped).toBe(false)),
+    ),
+  );
+
+  it.effect("a pending call that dies fails the policy", () =>
+    story(
+      Story.given(c1, new Incremented({ by: 10, total: 10 })),
+      Story.when(c1, new Increment({ by: 6 })),
+      Story.expectCall("c1", Approval.check, { total: 16 }),
+      Story.die("c1", Approval.check, new Error("socket closed")),
+    ).pipe(
+      Effect.flip,
+      Effect.map((failure) =>
+        expect(String((failure as any).message)).toMatch(
+          /a policy or projection failed: .*socket closed/,
+        ),
+      ),
+    ),
+  );
+
+  it.effect("asserts what a real call was sent and returned", () =>
+    real(
+      Story.given(c1, new Incremented({ by: 10, total: 10 })),
+      Story.when(c1, new Increment({ by: 6 })),
+      Story.expectCall(Approval.check, { total: 16 }),
+      Story.returned(Approval.check, { ok: true }),
+      Story.then(c1, new Incremented({ by: 6, total: 16 }), new Capped()),
+    ),
+  );
+
+  it.effect("asserts a real call's declared error", () =>
+    real(
+      Story.given(c1, new Incremented({ by: 10, total: 10 })),
+      Story.when(c1, new Increment({ by: 10 })),
+      Story.expectCall(Approval.check, { total: 20 }),
+      Story.failed(Approval.check, new ApprovalUnavailable()),
+      Story.then(c1, new Incremented({ by: 10, total: 20 })),
+    ),
+  );
+
+  it.effect("asserts that a real call died", () =>
+    real(
+      Story.given(c1, new Incremented({ by: 10, total: 10 })),
+      Story.when(c1, new Increment({ by: 7 })),
+      Story.expectCall("c1", Approval.check, { total: 17 }),
+      Story.died("c1", Approval.check),
+    ).pipe(
+      Effect.flip,
+      // The policy did not handle the defect, so the story still fails on it.
+      Effect.map((failure) =>
+        expect(String((failure as any).message)).toMatch(/a policy or projection failed/),
+      ),
+    ),
+  );
+
+  it.live("waits for a slow real call", () =>
+    real(
+      Story.given(c1, new Incremented({ by: 10, total: 10 })),
+      Story.when(c1, new Increment({ by: 9 })),
+      Story.expectCall(Approval.check, { total: 19 }),
+      Story.returned(Approval.check, { ok: false }),
+      Story.then(c1, new Incremented({ by: 9, total: 19 })),
+    ),
+  );
+
+  it.effect("a real call returning something else fails", () =>
+    real(
+      Story.given(c1, new Incremented({ by: 10, total: 10 })),
+      Story.when(c1, new Increment({ by: 6 })),
+      Story.expectCall(Approval.check, { total: 16 }),
+      Story.returned(Approval.check, { ok: false }),
+    ).pipe(
+      Effect.flip,
+      Effect.map((failure) =>
+        expect(String((failure as any).message)).toContain(
+          'expected {"_tag":"Success","value":{"ok":false}}',
+        ),
+      ),
+    ),
+  );
+
+  it.effect("a real call no step asserts fails the story", () =>
+    real(
+      Story.given(c1, new Incremented({ by: 10, total: 10 })),
+      Story.when(c1, new Increment({ by: 6 })),
+      Story.expectCall(Approval.check, { total: 16 }),
+    ).pipe(
+      Effect.flip,
+      Effect.map((failure) =>
+        expect(String((failure as any).message)).toContain(
+          "real external system calls no step asserts",
+        ),
+      ),
+    ),
+  );
+
+  it.effect("answering a call no expectCall checked fails", () =>
+    story(
+      Story.given(c1, new Incremented({ by: 10, total: 10 })),
+      Story.when(c1, new Increment({ by: 6 })),
+      Story.resolve(Approval.check, { ok: true }),
+    ).pipe(
+      Effect.flip,
+      Effect.map((failure) =>
+        expect(String((failure as any).message)).toContain(
+          'Approval.check({"total":16}) is answered before an expectCall checks its arguments',
+        ),
+      ),
+    ),
+  );
+
+  it.effect("asserting a real call no expectCall checked fails", () =>
+    real(
+      Story.given(c1, new Incremented({ by: 10, total: 10 })),
+      Story.when(c1, new Increment({ by: 6 })),
+      Story.returned(Approval.check, { ok: true }),
+    ).pipe(
+      Effect.flip,
+      Effect.map((failure) =>
+        expect(String((failure as any).message)).toContain(
+          'Approval.check({"total":16}) is asserted before an expectCall checks its arguments',
+        ),
+      ),
     ),
   );
 
@@ -646,7 +815,7 @@ describe("Domain Story", () => {
       Story.then(c1, new Capped()),
       Story.clock("2026-01-01T00:59:00Z"),
       Story.then(c1),
-      Story.clock("2026-01-01T01:00:00Z"),
+      Story.clock(DateTime.makeUnsafe("2026-01-01T01:00:00Z")),
       Story.then(c1, new Reminded()),
     ),
   );

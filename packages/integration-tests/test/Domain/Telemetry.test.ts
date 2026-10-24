@@ -159,7 +159,7 @@ class Reviewed extends Domain.Model("TelemetryReviews", {
 
 const reviewStory = Story.make(Reviewed, {
   layer: Layer.mergeAll(ReviewDebitsLive, ReviewLive, MovementsLive),
-  externalSystems: [Scorer],
+  stub: [Scorer],
 });
 
 const story = Story.make(Bank, { layer: Layer.mergeAll(AuditDebitsLive) });

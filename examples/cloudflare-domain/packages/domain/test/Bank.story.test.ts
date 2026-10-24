@@ -80,7 +80,7 @@ const as = (actor: Actor) => provide(CurrentActor, actor);
 
 const story = Story.make(Bank, {
   layer: BankHandlers.pipe(Layer.provide(MemoryLedgerStore)),
-  externalSystems: [FraudCheck, Payments],
+  stub: [FraudCheck, Payments],
 });
 
 const a1 = Account.ref("a-1");
@@ -458,7 +458,7 @@ it.effect("an unresolved external system call fails the story", () =>
 /** A story whose projections write a ledger the test can read. */
 const ledgerStory = Story.make(Bank, {
   layer: BankHandlers,
-  externalSystems: [FraudCheck, Payments],
+  stub: [FraudCheck, Payments],
 });
 
 it.effect("the Ledger projection records each movement in a store outside the model", () =>
