@@ -70,6 +70,12 @@
       "worker": "./dist/astro/cloudflare.js",
       "import": "./dist/astro/cloudflare.js"
     },
+    "./astro/config": {
+      "types": "./dist/astro/config.d.ts",
+      "bun": "./dist/astro/config.js",
+      "worker": "./dist/astro/config.js",
+      "import": "./dist/astro/config.js"
+    },
     "./astro/source": {
       "types": "./dist/astro/source.d.ts",
       "bun": "./dist/astro/source.js",

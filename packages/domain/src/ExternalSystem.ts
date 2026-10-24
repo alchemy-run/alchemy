@@ -100,7 +100,7 @@ export type Shape<Ops extends Record<string, OpSpec>> = {
 };
 
 /**
- * A reference to one external system operation, used by stories (`expectCall`, `resolve`, `fail`).
+ * A reference to one external system operation, used by stories (`call`, `succeed`, `fail`).
  */
 export interface Op<Args = unknown, Success = unknown, Error = unknown> {
   readonly kind: "ExternalSystemOp";

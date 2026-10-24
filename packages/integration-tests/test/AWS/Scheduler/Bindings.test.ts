@@ -1,7 +1,9 @@
 import * as AWS from "@alchemy.run/aws";
 import { describe, expect } from "@alchemy.run/test";
+import * as lambda from "@distilled.cloud/aws/lambda";
 import * as scheduler from "@distilled.cloud/aws/scheduler";
 import * as SQS from "@distilled.cloud/aws/sqs";
+import * as Alchemy from "alchemy";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Core from "alchemy/Test/Core";
 import * as Data from "effect/Data";
@@ -9,6 +11,7 @@ import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Schedule from "effect/Schedule";
+import SchedulerEnvFunctionLive, { SchedulerEnvFunction } from "./env-handler";
 import SchedulerTestFunctionLive, { SchedulerTestFunction } from "./handler";
 
 const testOptions = { providers: AWS.providers() };
@@ -388,5 +391,49 @@ describe(
         { timeout: 120_000 },
       );
     });
+  },
+);
+
+// #1842: `AWS.state()` builds the AWS environment outside the test's config,
+// and the stack's providers reuse it. Its first resolution then runs while the
+// function's init binds CreateSchedule, where every config key read is bound
+// into the function's env — the deployer's profile or credentials included.
+const withState = { providers: AWS.providers(), state: AWS.state() };
+const withStateHarness = Test.make(withState);
+
+const EnvStack = Alchemy.Stack(
+  "SchedulerBindingsEnv",
+  withState,
+  Effect.gen(function* () {
+    const fn = yield* SchedulerEnvFunction;
+    return { functionName: fn.functionName };
+  }).pipe(Effect.provide(SchedulerEnvFunctionLive)),
+);
+
+describe(
+  "Scheduler Bindings with the S3 state store",
+  { tags: ["provider:aws", "provider:aws:lambda", "provider:aws:scheduler", "live"] },
+  () => {
+    const deployed = withStateHarness.beforeAll(withStateHarness.deploy(EnvStack), {
+      timeout: 120_000,
+    });
+    withStateHarness.afterAll.skipIf(!!process.env.NO_DESTROY)(withStateHarness.destroy(EnvStack), {
+      timeout: 120_000,
+    });
+
+    withStateHarness.test(
+      "resolving the AWS environment in a function's init leaves its env clean",
+      Effect.gen(function* () {
+        const { functionName } = yield* deployed;
+        const config = yield* Core.withProviders(
+          lambda.getFunctionConfiguration({ FunctionName: functionName }),
+          withState,
+          "SchedulerBindingsEnv",
+        );
+        const keys = Object.keys(config.Environment?.Variables ?? {});
+        expect(keys.filter((key) => /^(AWS_|ALCHEMY_PROFILE$|CI$)/.test(key))).toEqual([]);
+      }),
+      { timeout: 180_000 },
+    );
   },
 );

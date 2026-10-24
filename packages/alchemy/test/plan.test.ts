@@ -3381,6 +3381,14 @@ describe("cyclic delete-first admission", { tags: ["unit", "local"] }, () => {
     { self: string }
   > {}
   const Unread = Resource<Unread>("Test.CyclicDeleteFirstUnread");
+  /** `Cyclic` with `observe`: it checks ownership before precreate. */
+  interface Observed extends Resource<
+    "Test.CyclicDeleteFirstObserved",
+    { name: string },
+    { name: string },
+    { self: string }
+  > {}
+  const Observed = Resource<Observed>("Test.CyclicDeleteFirstObserved");
   class Knobs extends Context.Service<
     Knobs,
     {
@@ -3424,6 +3432,14 @@ describe("cyclic delete-first admission", { tags: ["unit", "local"] }, () => {
       delete: () => Effect.void,
     }),
     Provider.succeed(Unread, { diff, precreate, reconcile, delete: () => Effect.void }),
+    Provider.succeed(Observed, {
+      diff,
+      read: () => Effect.succeed(undefined),
+      observe: () => Effect.succeed(undefined),
+      precreate,
+      reconcile,
+      delete: () => Effect.void,
+    }),
   ).pipe(
     Layer.provideMerge(
       Layer.effect(
@@ -3449,6 +3465,7 @@ describe("cyclic delete-first admission", { tags: ["unit", "local"] }, () => {
       cycle?: boolean;
       resolved?: boolean;
       unread?: boolean;
+      observed?: boolean;
       adopt?: boolean;
     } = {},
   ) =>
@@ -3459,12 +3476,17 @@ describe("cyclic delete-first admission", { tags: ["unit", "local"] }, () => {
         opts.adopt === undefined ? effect : effect.pipe(adopt(opts.adopt));
       const resource = opts.unread
         ? yield* scoped(Unread("Subject", props))
-        : yield* scoped(Cyclic("Subject", props));
+        : opts.observed
+          ? yield* scoped(Observed("Subject", props))
+          : yield* scoped(Cyclic("Subject", props));
       if (opts.cycle ?? true) yield* resource.bind("Self", { self: resource.name });
       return resource;
     });
 
-  const setup = Effect.fn(function* (stack: Test.ScratchStack, opts?: { unread?: boolean }) {
+  const setup = Effect.fn(function* (
+    stack: Test.ScratchStack,
+    opts?: { unread?: boolean; observed?: boolean },
+  ) {
     const knobs = yield* Knobs;
     yield* stack.destroy();
     Object.assign(knobs, { action: "replace", deleteFirst: false, crash: false });
@@ -3556,6 +3578,21 @@ describe("cyclic delete-first admission", { tags: ["unit", "local"] }, () => {
       }),
     );
   }
+
+  test.provider(
+    "plans a provider with `observe`, which checks ownership before the delete",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* setup(stack, { observed: true });
+        const plan = yield* stack.plan(subject("fresh", { observed: true }));
+        expect(plan.resources.Subject).toMatchObject({
+          action: "replace",
+          deleteFirst: true,
+          deferredAdoption: { adopt: false },
+        });
+        yield* stack.destroy();
+      }),
+  );
 
   test.provider("plans a provider without `read`, which has no ownership to check", (stack) =>
     Effect.gen(function* () {

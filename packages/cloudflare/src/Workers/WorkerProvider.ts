@@ -4667,6 +4667,31 @@ export const LiveWorkerProvider = () =>
             }
           }
         }),
+        observe: Effect.fn(function* ({ id, news }) {
+          // The script precreate (or, for a dispatch-namespace worker,
+          // reconcile) writes to. A version/preview worker uploads to its
+          // parent's script and claims none of its own.
+          if (news.version?.parent != null || news.preview?.of != null) return undefined;
+          // Neither name nor namespace can be checked until it resolves.
+          if (!isResolved(news.name) || !isResolved(news.namespace)) return undefined;
+          const { accountId } = yield* yield* CloudflareEnvironment;
+          const name = yield* createWorkerName(id, news.name);
+          const settings = yield* getScriptSettings(
+            accountId,
+            name,
+            resolveNamespaceName(news.namespace),
+          ).pipe(
+            Effect.catchTags({
+              WorkerNotFound: () => Effect.succeed(undefined),
+              WorkerHasNoVersions: () => Effect.succeed(undefined),
+              DispatchNamespaceScriptNotFound: () => Effect.succeed(undefined),
+              DispatchNamespaceNotFound: () => Effect.succeed(undefined),
+            }),
+          );
+          if (settings === undefined) return undefined;
+          const observed = { workerName: name };
+          return hasAlchemyWorkerTags(id, settings.tags ?? []) ? observed : Unowned(observed);
+        }),
         precreate: Effect.fn(function* ({ id, news, session, bindings }) {
           const { accountId } = yield* yield* CloudflareEnvironment;
           yield* assertCloudflareTelemetryCompatibility(news as WorkerProps, bindings);
@@ -4799,8 +4824,8 @@ export const LiveWorkerProvider = () =>
           let placeholder: { tag?: string | null } | undefined;
           if (existingSettings) {
             // Engine has already cleared this resource for write via
-            // `read` + AdoptPolicy. Either we own it (matching tags) or
-            // the user opted in to a takeover (`--adopt` / `adopt(true)`).
+            // `observe` or `read` + AdoptPolicy. Either we own it (matching
+            // tags) or the user opted in to a takeover (`--adopt` / `adopt(true)`).
             yield* Effect.logInfo(`Cloudflare Worker precreate: reusing existing ${name}`);
           } else {
             yield* session.note("Pre-creating worker...", { kind: "status" });

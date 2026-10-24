@@ -2058,13 +2058,15 @@ const makePlan = <A>(
 
     // A delete-first replacement in a cycle deletes its previous generation
     // before precreate, which runs on unresolved props. While its identity is
-    // unresolved, ownership cannot be checked before that delete, so refuse
-    // it here — before apply touches anything — unless adoption is allowed.
+    // unresolved, only the provider's `observe` can check ownership before
+    // that delete. Without it, refuse here — before apply touches anything —
+    // unless adoption is allowed.
     for (const [fqn, node] of Object.entries(resourceGraph)) {
       if (
         node.action === "replace" &&
         node.deleteFirst &&
         cycleMembers.has(fqn) &&
+        !node.provider.observe &&
         node.deferredAdoption?.adopt === false &&
         !isResolved(node.props) &&
         // A resumed replacement already holds its precreated identity.

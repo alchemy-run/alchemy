@@ -103,10 +103,12 @@ export interface ImageProps {
    */
   repositoryUri?: string;
   /**
-   * Docker build context directory. Every file under the context (plus the
-   * Dockerfile, platform, and build args) participates in the content hash
-   * that identifies the image. An existing image with the same hash is reused;
-   * missing images are rebuilt and pushed to the desired repository.
+   * Docker build context directory. The files Docker receives from the
+   * context (after `.dockerignore`), plus the Dockerfile, platform, and build
+   * args, participate in the content hash that identifies the image. Ignored
+   * files are never read and never change the tag. An existing image with the
+   * same hash is reused; missing images are rebuilt and pushed to the desired
+   * repository.
    */
   context: string;
   /**
@@ -189,6 +191,22 @@ export interface Image extends Resource<
  * Dockerfile, platform, build-argument, and repository changes still update
  * the image. A deleted image or auto-created repository is recreated on deploy.
  *
+ * ### Ignoring Files with `.dockerignore`
+ * **Example:** Build from the repository root
+ * ```typescript
+ * // .dockerignore next to the context keeps node_modules/ and target/ out
+ * const image = yield* AWS.ECR.Image("ServiceImage", {
+ *   repositoryUri: repository.repositoryUri,
+ *   context: "..",
+ *   dockerfile: "docker/service.Dockerfile",
+ * });
+ * ```
+ *
+ * The content hash covers only the files Docker receives, so ignored trees
+ * are never read and a local `bun install` or `cargo build` does not change
+ * the tag. A `<Dockerfile>.dockerignore` takes precedence over the context's
+ * `.dockerignore`, as in Docker.
+ *
  * ### Build Configuration
  * **Example:** Custom Dockerfile, Platform, and Build Args
  * ```typescript
@@ -232,7 +250,7 @@ export const ImageProvider = () =>
         });
 
       // Content hash over everything that affects the built image: the
-      // Dockerfile, every file in the build context (relative path + bytes),
+      // Dockerfile, the context files `.dockerignore` keeps (relative path + bytes),
       // the target platform, and the build args. Absolute paths deliberately
       // do NOT participate, so relocating an identical context (e.g. a temp
       // dir) produces the same tag.
@@ -244,7 +262,7 @@ export const ImageProvider = () =>
             platform: props.platform ?? "linux/amd64",
             buildArgs: props.buildArgs,
           },
-          "all",
+          "effective",
         );
 
       // Observe the pushed image in ECR. Missing repository or tag → undefined.

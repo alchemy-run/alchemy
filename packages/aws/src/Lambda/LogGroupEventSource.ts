@@ -97,7 +97,7 @@ export const LogGroupEventSource = Layer.effect(
           Effect.gen(function* () {
             yield* Permission(`AWS.Logs.InvokePermission(${logGroup.LogicalId})`, {
               action: "lambda:InvokeFunction",
-              functionName: host.functionName,
+              functionName: Lambda.qualifiedNameOf(host),
               principal: "logs.amazonaws.com",
               sourceArn: Output.interpolate`${logGroup.logGroupArn}:*`,
             });
@@ -105,7 +105,7 @@ export const LogGroupEventSource = Layer.effect(
               logGroupName: logGroup.logGroupName,
               filterName: props.filterName,
               filterPattern: props.filterPattern ?? "",
-              destinationArn: host.functionArn,
+              destinationArn: Lambda.qualifiedArnOf(host),
             });
           }),
         );

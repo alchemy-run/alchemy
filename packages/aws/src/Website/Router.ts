@@ -188,12 +188,18 @@ export const Router = Effect.fn("AWS.Website.Router")(
 
         if (typeof route === "string" || "url" in (route as any)) {
           const url = typeof route === "string" ? route : (route as any).url;
-          inlineRouteEntries[`${routeNs}:metadata`] = stringifyResolvedString(url, (resolvedUrl) =>
-            JSON.stringify({
-              host: new URL(resolvedUrl).host,
-              origin: (route as any).origin,
-              rewrite: (route as any).rewrite,
-            }),
+          const origin = (route as any).origin;
+          inlineRouteEntries[`${routeNs}:metadata`] = stringifyResolvedString(
+            url,
+            (resolvedUrl) => {
+              const { host, protocol } = new URL(resolvedUrl);
+              return JSON.stringify({
+                host,
+                // `setUrlOrigin` defaults to https:443, so keep an `http://` url on http.
+                origin: protocol === "http:" ? { protocol: "http", ...origin } : origin,
+                rewrite: (route as any).rewrite,
+              });
+            },
           );
           yield* KvRoutesUpdate(`Route${routeIndex}`, {
             store: kvStore.keyValueStoreArn as any,
