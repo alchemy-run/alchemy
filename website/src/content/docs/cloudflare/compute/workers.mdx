@@ -627,17 +627,15 @@ fetch: Effect.gen(function* () {
 }),
 ```
 
-For ad-hoc background work, `WorkerExecutionContext.waitUntil` forks
-an Effect with the caller's full context and keeps the invocation
-alive until it settles:
+For ad-hoc background work, `Cloudflare.waitUntil` forks an Effect
+with the caller's full context and keeps the invocation alive until it
+settles:
 
 ```typescript
 Effect.gen(function* () {
-  const exec = yield* Cloudflare.WorkerExecutionContext;
-
   return {
     fetch: Effect.gen(function* () {
-      yield* exec.waitUntil(writeAuditLog(event));
+      yield* Cloudflare.waitUntil(writeAuditLog(event));
       return HttpServerResponse.text("accepted", { status: 202 });
     }),
   };
