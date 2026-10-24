@@ -263,8 +263,13 @@ export const AccessEntryProvider = () =>
         }
       }
 
+      // EKS keeps one association per policy ARN and `associateAccessPolicy`
+      // replaces its scope in place, while `disassociateAccessPolicy` takes no
+      // scope. Disassociating a still-desired ARN would undo the associate
+      // above, so only disassociate ARNs that are no longer desired.
+      const desiredPolicyArns = new Set(desiredPolicies.map((policy) => policy.policyArn));
       for (const [key, policy] of observedPolicyMap) {
-        if (!desiredPolicyMap.has(key)) {
+        if (!desiredPolicyMap.has(key) && !desiredPolicyArns.has(policy.policyArn)) {
           yield* eks.disassociateAccessPolicy({
             clusterName,
             principalArn,
@@ -304,9 +309,14 @@ const normalizeTags = (tags: Record<string, string | undefined> | undefined) =>
     Object.entries(tags ?? {}).filter((entry): entry is [string, string] => entry[1] !== undefined),
   );
 
+// EKS reports a cluster scope as `{ type: "cluster", namespaces: [] }`, so
+// compare scopes in one canonical shape rather than as raw JSON.
+const scopeKey = (scope: eks.AccessScope) =>
+  JSON.stringify({ type: scope.type, namespaces: [...(scope.namespaces ?? [])].sort() });
+
 const comparePolicyAssociation = (a: AccessPolicyAssociation, b: AccessPolicyAssociation) =>
   a.policyArn.localeCompare(b.policyArn) ||
-  JSON.stringify(a.accessScope).localeCompare(JSON.stringify(b.accessScope));
+  scopeKey(a.accessScope).localeCompare(scopeKey(b.accessScope));
 
 const normalizeAccessPolicies = (
   policies: ReadonlyArray<AccessPolicyAssociation | eks.AssociatedAccessPolicy> | undefined,
@@ -325,7 +335,7 @@ const normalizeAccessPolicies = (
     .sort(comparePolicyAssociation);
 
 const policyKey = (policy: AccessPolicyAssociation) =>
-  `${policy.policyArn}::${JSON.stringify(policy.accessScope)}`;
+  `${policy.policyArn}::${scopeKey(policy.accessScope)}`;
 
 const listAccessPolicies = Effect.fn(function* ({
   clusterName,

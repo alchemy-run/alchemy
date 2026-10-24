@@ -47,7 +47,7 @@ import type { WorkerAccessConfig, WorkerAccessIdentity } from "./WorkerAccess.ts
 import { bindWorkerAsyncBindings } from "./WorkerAsyncBindings.ts";
 import type { WorkerBinding, WorkerBindingResource, WorkerBindings } from "./WorkerBinding.ts";
 import { transformWorkerDomainProps } from "./WorkerDomainDns.ts";
-import { WorkerEnvironment, WorkerExecutionContext, WorkerTypeId } from "./WorkerRuntime.ts";
+import { WorkerEnvironment, WorkerTypeId } from "./WorkerRuntime.ts";
 import {
   makeWorkerRuntimeContext,
   type WorkerExport,
@@ -109,7 +109,6 @@ export type WorkerServices =
   | Worker
   | WebhookHost
   | Request
-  | WorkerExecutionContext
   | WorkerEnvironment
   | CloudflareEnvironment
   | Container.Application<any>
@@ -2431,11 +2430,10 @@ export const isSelf = (value: unknown): value is Self =>
  * until they settle. Streaming responses transfer the scope to the stream,
  * so those finalizers run when the stream completes instead.
  *
- * For ad-hoc background work, `WorkerExecutionContext.waitUntil(effect)`
- * forks an Effect with the caller's full context and keeps the invocation
- * alive until it settles. The context can be yielded once in the
- * constructor and used from any handler; its methods are `RuntimeContext`-
- * colored, so they can only run inside a handler.
+ * For ad-hoc background work, `Cloudflare.waitUntil(effect)` forks an
+ * Effect with the caller's full context and keeps the invocation alive
+ * until it settles. It is `RuntimeContext`-colored, so it can only run
+ * inside a handler.
  *
  * The constructor is evaluated once per isolate: the bridge builds the
  * Worker's layer stack on the first event and every later event reuses the
@@ -2461,13 +2459,10 @@ export const isSelf = (value: unknown): value is Self =>
  *
  * **Example:** Background work with waitUntil
  * ```typescript
- * // Construction
- * const exec = yield* Cloudflare.WorkerExecutionContext;
- *
  * return {
  *   fetch: Effect.gen(function* () {
  *     // respond now; the audit write completes in the background
- *     yield* exec.waitUntil(writeAuditLog(event));
+ *     yield* Cloudflare.waitUntil(writeAuditLog(event));
  *     return HttpServerResponse.text("accepted", { status: 202 });
  *   }),
  * };

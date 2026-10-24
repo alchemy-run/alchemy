@@ -264,11 +264,19 @@ export interface MakeStackProps<ROut = never> {
   stack?: StackSpec;
 }
 
+/**
+ * The scope a stack's state store is built into when it must close sooner
+ * than the rest of the stack. A store holds its stack's lease until its scope
+ * closes, so {@link evalStack} gives it one per call even when the caller
+ * keeps providers alive in a longer scope.
+ */
+class StateScope extends Context.Service<StateScope, Scope.Scope>()("alchemy/Stack/StateScope") {}
+
 export const make =
   <ROut = never>(options: MakeStackProps<ROut>) =>
   <A, Err = never, Req extends ROut | StackServices = never>(effect: Effect.Effect<A, Err, Req>) =>
-    Effect.scope.pipe(
-      Effect.flatMap((scope) => {
+    Effect.all([Effect.scope, Effect.serviceOption(StateScope)]).pipe(
+      Effect.flatMap(([scope, stateScope]) => {
         if (options.state == null) {
           return Effect.die(
             new Error(
@@ -295,7 +303,13 @@ export const make =
           );
         }
         return options.providers.pipe(
-          Layer.provideMerge(options.state),
+          Layer.provideMerge(
+            Option.match(stateScope, {
+              onNone: () => options.state,
+              onSome: (stateScope) =>
+                Layer.effectContext(Layer.buildWithScope(options.state, stateScope)),
+            }),
+          ),
           Layer.provideMerge(stackConfigLayer(options.secrets)),
           Layer.provideMerge(
             Layer.effect(
@@ -367,7 +381,8 @@ export const evalStack = <A, B, StackErr, Err, Req>(
      * scope instead of being torn down when `evalStack` resolves. Used
      * by the test harness so the sidecar survives across `beforeAll`,
      * tests, and `afterAll`. When omitted, behaves as before with a
-     * private scope closed on completion.
+     * private scope closed on completion. The state store never outlives
+     * the call.
      */
     scope?: Scope.Scope;
   },
@@ -395,5 +410,12 @@ export const evalStack = <A, B, StackErr, Err, Req>(
     ),
   );
 
-  return options.scope === undefined ? Effect.scoped(body) : Scope.provide(body, options.scope);
+  const scope = options.scope;
+  return scope === undefined
+    ? Effect.scoped(body)
+    : // The state store closes with this call and releases its lease, so
+      // the next call on the same long-lived scope can take it.
+      Effect.scopedWith((stateScope) =>
+        Scope.provide(body.pipe(Effect.provideService(StateScope, stateScope)), scope),
+      );
 };
