@@ -5,8 +5,45 @@ import AlchemicalDivider from "../components/marketing/AlchemicalDivider.astro";
 import Yantra from "../brand/Yantra.astro";
 import TestLoop from "../components/compare/TestLoop.astro";
 import OneLine from "../components/compare/OneLine.astro";
+import CodeBlock from "../components/marketing/CodeBlock.astro";
 
 const TOOLS = ["Alchemy", "SST", "Pulumi", "Terraform", "AWS CDK"] as const;
+
+// ---------- more than IaC: the same app, split vs together ----------
+const IAC_INFRA_SRC = `export const Uploads = Cloudflare.R2.Bucket("Uploads");
+
+export const Api = Cloudflare.Worker("Api", {
+  main: "./src/api.ts",
+  env: { Uploads },
+});`;
+
+const IAC_HANDLER_SRC = `export default {
+  async fetch(request: Request, env: Env) {
+    const obj = await env.Uploads.get("hello.txt");
+    return obj
+      ? new Response(await obj.text())
+      : new Response("Not found", { status: 404 });
+  },
+};`;
+
+const IAE_SRC = `export const Uploads = Cloudflare.R2.Bucket("Uploads");
+
+export default Cloudflare.Worker(
+  "Api",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const bucket = yield* Cloudflare.R2.ReadWriteBucket(Uploads);
+
+    return {
+      fetch: Effect.gen(function* () {
+        const obj = yield* bucket.get("hello.txt");
+        return obj
+          ? HttpServerResponse.text(yield* obj.text())
+          : HttpServerResponse.text("Not found", { status: 404 });
+      }),
+    };
+  }).pipe(Effect.provide(Cloudflare.R2.ReadWriteBucketBinding)),
+);`;
 
 // One row per dimension; the first cell is Alchemy.
 const ROWS: {
@@ -34,7 +71,7 @@ const ROWS: {
         ],
     },
     {
-        label: "App code in the same program",
+        label: "Infrastructure and app code together",
         cells: ["Yes, as typed Effects and Layers", "No", "No", "No", "No"],
     },
     {
@@ -462,7 +499,7 @@ const ALCHEMY_MODE_DATA = ALCHEMY_MODES.map((m) => {
 
 <Marketing
     title="Alchemy vs SST, Pulumi & Terraform"
-    description="How Alchemy compares to SST, Pulumi, and Terraform: pure TypeScript and Effect instead of wrapped Go engines, infrastructure and app code in one type-checked program, true local emulation, and deploy-test-destroy loops built for agents."
+    description="How Alchemy compares to SST, Pulumi, and Terraform: pure TypeScript and Effect instead of wrapped Go engines, infrastructure and app code built together with Effects and Layers, true local emulation, and deploy-test-destroy loops built for agents."
 >
     <!-- ───────────────── HERO ───────────────── -->
     <section class="cmp-hero cmp-pat-1">
@@ -470,10 +507,10 @@ const ALCHEMY_MODE_DATA = ALCHEMY_MODES.map((m) => {
             <Yantra class="cmp-hero__mark" size={40} />
             <p class="cmp-eyebrow">Compare</p>
             <h1 class="cmp-hero__title" data-copy>
-                Alchemy vs existing IaC solutions
+                More than Infrastructure as Code
             </h1>
             <p class="cmp-hero__lede" data-copy>
-                Most existing IaC solutions wrap terraform or are managed services in some way. Alchemy ships its own IaC engine in TypeScript, opening the door for more fully integrated features: <a href="#testing">testing</a>, <a href="#engine">engine</a>, <a href="#bindings">bindings</a>, <a href="#permissions">permissions</a>, and <a href="#local">local dev</a>.
+                Terraform, Pulumi, SST, and the CDK deploy your infrastructure and stop there. Alchemy is built on its own Infrastructure as Code engine in TypeScript, and builds your application on top of it with Effects and Layers. That opens the door to fully integrated features: <a href="#app-code">app code</a>, <a href="#testing">testing</a>, <a href="#engine">engine</a>, <a href="#bindings">bindings</a>, <a href="#permissions">permissions</a>, and <a href="#local">local dev</a>.
             </p>
         </div>
     </section>
@@ -525,6 +562,35 @@ const ALCHEMY_MODE_DATA = ALCHEMY_MODES.map((m) => {
                         ))}
                     </tbody>
                 </table>
+            </div>
+        </div>
+    </section>
+
+    <AlchemicalDivider variant="dot" class="cmp-divider" />
+
+    <!-- ───────────────── APP CODE ───────────────── -->
+    <section
+        class="cmp-section cmp-pat-3"
+        id="app-code"
+        aria-labelledby="app-code-h"
+    >
+        <div class="cmp-container">
+            <h2 class="cmp-h2" id="app-code-h" data-copy>
+                Infrastructure and app code, together
+            </h2>
+            <p class="cmp-lede" data-copy>
+                Other IaC tools only cover your infrastructure. The code that runs on it is a separate program that finds the Bucket through an environment variable, so the two halves meet at one name and every feature has to change in both. In Alchemy the Worker is an Effect that asks for the Bucket itself: one line gives it access when you deploy and a typed client while it runs. Layers then let a service bring its own infrastructure. <a href="/what-is-alchemy">What is Alchemy?</a>
+            </p>
+            <div class="cmp-vs">
+                <div class="cmp-vs__side">
+                    <h3 class="cmp-vs__label" data-copy>Other IaC tools: two programs</h3>
+                    <CodeBlock filename="infra.ts" code={IAC_INFRA_SRC} compact />
+                    <CodeBlock filename="src/api.ts" code={IAC_HANDLER_SRC} compact />
+                </div>
+                <div class="cmp-vs__side is-ours">
+                    <h3 class="cmp-vs__label" data-copy>Alchemy: Effects and Layers</h3>
+                    <CodeBlock filename="src/api.ts" code={IAE_SRC} compact highlight={[[7, 7]]} />
+                </div>
             </div>
         </div>
     </section>
@@ -1699,6 +1765,28 @@ const ALCHEMY_MODE_DATA = ALCHEMY_MODES.map((m) => {
         gap: 24px;
         align-items: start;
     }
+    .cmp-vs {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 24px;
+        align-items: start;
+    }
+    .cmp-vs__side {
+        display: grid;
+        gap: 12px;
+        min-width: 0;
+    }
+    .cmp-vs__label {
+        margin: 0;
+        font-family: var(--alc-font-serif);
+        font-weight: 500;
+        font-size: 20px;
+        line-height: 1.25;
+        color: var(--alc-fg-2);
+    }
+    .cmp-vs__side.is-ours .cmp-vs__label {
+        color: var(--alc-fg-1);
+    }
     .cmp-cards {
         list-style: none;
         margin: 0;
@@ -2184,6 +2272,7 @@ const ALCHEMY_MODE_DATA = ALCHEMY_MODES.map((m) => {
     /* ---------- responsive ---------- */
     @media (max-width: 900px) {
         .cmp-split,
+        .cmp-vs,
         .cmp-cards--2,
         .cmp-cards--3,
         .dg-trace {
