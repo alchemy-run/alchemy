@@ -1311,18 +1311,30 @@
       const chunk = CHUNK[id]!;
       const box = root!.getBoundingClientRect();
       const src = fileLines.find((l) => l.dataset.id === id)!.getBoundingClientRect();
-      // Render memory with the new entry, hidden, so we know where it lands.
+      // Measure where the new entry will land by laying out the next state
+      // and putting the old one back in the same tick, so it never paints.
       const next = new Set(loaded).add(id);
-      paintLeft(next, true, id);
-      const landing = $("left").querySelector<HTMLElement>(`[data-id="${id}"]`);
-      await showInMemory(landing);
-      if (me !== run) return;
-      const dst = (landing ?? $("left")).getBoundingClientRect();
       const view = root!.querySelector<HTMLElement>(".lz-memview")!;
-      const keep = view.scrollTop;
-      // Show the old memory while the pill is in the air.
+      const prevScroll = view.scrollTop;
+      paintLeft(next, true, id);
+      const landing = $("left").querySelector<HTMLElement>(`[data-id="${id}"]`) ?? ($("left") as HTMLElement);
+      const land = { top: landing.offsetTop, left: landing.offsetLeft, w: landing.offsetWidth, h: landing.offsetHeight };
+      const keep = Math.max(0, land.top - view.clientHeight / 2 + land.h / 2);
       paintLeft(loaded, true);
-      view.scrollTop = keep;
+      view.scrollTop = prevScroll;
+      // Bring the landing spot into view (old content still showing), then aim at it.
+      if (Math.abs(view.scrollTop - keep) >= 4) {
+        view.scrollTo({ top: keep, behavior: reduced() ? "auto" : "smooth" });
+        await wait(380);
+        if (me !== run) return;
+      }
+      const vr = view.getBoundingClientRect();
+      const dst = {
+        left: vr.left + view.clientLeft + land.left,
+        top: vr.top + view.clientTop + land.top - view.scrollTop,
+        width: land.w,
+        height: land.h,
+      };
 
       // Where the slice starts (on the disk bar) and ends (top of the memory bar).
       const hot = slice(id, true);
