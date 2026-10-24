@@ -310,6 +310,9 @@ overrides:
   mysql2: 3.24.5
   zod: 4.5.4
   rolldown: 1.2.13
+  # Old glob majors are deprecated; their dependents (archiver-utils,
+  # @node-minify/core) only use `sync`/`globSync`, which glob 13 keeps.
+  "glob@<11": ^13.0.6
 
 patchedDependencies:
   "@astrojs/starlight@0.42.0": patches/@astrojs%2Fstarlight@0.42.0.patch
