@@ -579,6 +579,7 @@ export const providers = () =>
         EventBridge.ApiDestination,
         EventBridge.Archive,
         EventBridge.Connection,
+        EventBridge.Endpoint,
         EventBridge.EventBus,
         EventBridge.Permission,
         EventBridge.Rule,
@@ -1310,6 +1311,7 @@ export const providers = () =>
           flociDual(EventBridge.ApiDestination, () => EventBridge.ApiDestinationProvider()),
           flociDual(EventBridge.Archive, () => EventBridge.ArchiveProvider()),
           flociDual(EventBridge.Connection, () => EventBridge.ConnectionProvider()),
+          EventBridge.EndpointProvider(),
           flociDual(EventBridge.EventBus, () => EventBridge.EventBusProvider()),
           // Dual like EventBus/Rule: a live PutPermission against a
           // floci-emulated bus would fail with ResourceNotFoundException.
