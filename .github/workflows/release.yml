@@ -23,6 +23,8 @@ concurrency:
 permissions:
   contents: write
   id-token: write
+  issues: write
+  pull-requests: write
 
 env:
   ALCHEMY_REPO: alchemy-run/alchemy
@@ -135,6 +137,13 @@ jobs:
           VERSION: ${{ needs.build.outputs.version }}
           CHANNEL: ${{ needs.build.outputs.channel }}
         run: bun scripts/release/github-release.ts "v${VERSION}" "$CHANNEL"
+
+      - name: Mark released PRs and issues
+        if: needs.build.outputs.channel != 'tag'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.build.outputs.version }}
+        run: bun scripts/release/mark-released.ts "v${VERSION}"
 
       - name: Notify Discord
         if: needs.build.outputs.channel != 'tag'
