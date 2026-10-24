@@ -15,16 +15,14 @@ const put = (headers: string, body = "") =>
 
 describe("ExpectContinue observer", () => {
   it("answers a request head that expects 100-continue", () => {
-    expect(
-      run([put("Content-Length: 5\r\nExpect: 100-continue\r\n", "hello")]),
-    ).toEqual({ continues: 1, stopped: false });
+    expect(run([put("Content-Length: 5\r\nExpect: 100-continue\r\n", "hello")])).toEqual({
+      continues: 1,
+      stopped: false,
+    });
   });
 
   it("matches the expectation case-insensitively", () => {
-    expect(
-      run([put("content-length: 1\r\nEXPECT: 100-Continue\r\n", "x")])
-        .continues,
-    ).toBe(1);
+    expect(run([put("content-length: 1\r\nEXPECT: 100-Continue\r\n", "x")]).continues).toBe(1);
   });
 
   it("ignores requests without the expectation", () => {
@@ -33,9 +31,7 @@ describe("ExpectContinue observer", () => {
 
   it("ignores HTTP/1.0 expectations", () => {
     expect(
-      run([
-        "PUT /x HTTP/1.0\r\nContent-Length: 1\r\nExpect: 100-continue\r\n\r\nx",
-      ]).continues,
+      run(["PUT /x HTTP/1.0\r\nContent-Length: 1\r\nExpect: 100-continue\r\n\r\nx"]).continues,
     ).toBe(0);
   });
 
@@ -47,9 +43,7 @@ describe("ExpectContinue observer", () => {
   it("does not mistake body bytes for a request head", () => {
     // The body contains something that looks like a head with the expectation
     const fake = "PUT /y HTTP/1.1\r\nExpect: 100-continue\r\n\r\n";
-    expect(
-      run([put(`Content-Length: ${fake.length}\r\n`, fake)]).continues,
-    ).toBe(0);
+    expect(run([put(`Content-Length: ${fake.length}\r\n`, fake)]).continues).toBe(0);
   });
 
   it("tracks keep-alive requests after a Content-Length body", () => {
@@ -67,9 +61,10 @@ describe("ExpectContinue observer", () => {
       "Transfer-Encoding: chunked\r\nExpect: 100-continue\r\n",
       "5;ext=1\r\nhello\r\n3\r\n\r\n\r\n\r\n0\r\nX-Trailer: 1\r\n\r\n",
     );
-    expect(
-      run([chunked, put("Content-Length: 1\r\nExpect: 100-continue\r\n", "x")]),
-    ).toEqual({ continues: 2, stopped: false });
+    expect(run([chunked, put("Content-Length: 1\r\nExpect: 100-continue\r\n", "x")])).toEqual({
+      continues: 2,
+      stopped: false,
+    });
   });
 
   it("tolerates CRLFs between messages", () => {
@@ -93,15 +88,11 @@ describe("ExpectContinue observer", () => {
   it("stops on a malformed head or framing", () => {
     expect(run(["garbage\r\n\r\n"]).stopped).toBe(true);
     expect(run([put("Content-Length: nope\r\n")]).stopped).toBe(true);
-    expect(run([put("Transfer-Encoding: chunked\r\n", "zz\r\n")]).stopped).toBe(
-      true,
-    );
+    expect(run([put("Transfer-Encoding: chunked\r\n", "zz\r\n")]).stopped).toBe(true);
     expect(run([put("Transfer-Encoding: gzip\r\n")]).stopped).toBe(true);
   });
 
   it("stops on an oversized head", () => {
-    expect(
-      run([`PUT /x HTTP/1.1\r\nX: ${"a".repeat(70 * 1024)}`]).stopped,
-    ).toBe(true);
+    expect(run([`PUT /x HTTP/1.1\r\nX: ${"a".repeat(70 * 1024)}`]).stopped).toBe(true);
   });
 });

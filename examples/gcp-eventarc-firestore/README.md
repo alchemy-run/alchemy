@@ -4,7 +4,7 @@ A public API writes orders to Firestore; a private Cloud Run service reacts to e
 
 ## What it builds
 
-- [`Shop`](./src/resources.ts): a named Firestore database in Native mode, in `us-central1`.
+- [`Shop`](./src/resources.ts): a named Firestore database in Native mode, in `LOCATION` (`us-central1`).
 - [`Api`](./src/Api.ts): a public `GCP.Function`. `POST /orders` with `{ item, quantity }` creates `orders/{id}`.
 - [`Auditor`](./src/Auditor.ts): a private `GCP.Function`. An Eventarc trigger sends it `google.cloud.firestore.document.v1.created` events for `orders/{id}` in `Shop`, and it writes `audit/{id}` for each one.
 
@@ -16,7 +16,7 @@ The trigger filters on:
 | `database` | the `Shop` database id                       | exact                |
 | `document` | `orders/{id}`                                | `match-path-pattern` |
 
-Eventarc only delivers Firestore events to triggers in the database's own location. For that reason the database, the trigger, and both services all use `LOCATION`.
+Eventarc only delivers Firestore events to triggers in the database's own location. For that reason the database and the trigger both use `LOCATION`; the services run in the stack's region.
 
 Firestore events are `application/protobuf` (`DocumentEventData`), so the handler gets `event.data` as a `Uint8Array`. The CloudEvent attributes already name the document (`event.attributes.document === "orders/{id}"`, `event.subject === "documents/orders/{id}"`). That is enough for an audit trail. If a reaction needs the document's fields, it can decode the protobuf or read the document back by path.
 
@@ -32,13 +32,14 @@ Every delivery carries an OIDC token for the Auditor's own service account, and 
 
 ## Deploy
 
+Credentials come from your alchemy profile: run `alchemy profile` once and pick GCP (*Service account JSON* for a key file, or *Stored* for an access token or key kept in `~/.alchemy/credentials`, plus a default region), then deploy with `--profile <name>`.
+
 From the repository root:
 
 ```sh
 pnpm install
 cd examples/gcp-eventarc-firestore
-source ~/.config/gcloud/alchemy-env   # GOOGLE_PROJECT_ID + GOOGLE_APPLICATION_CREDENTIALS
-pnpm deploy --profile alchemy-testing
+pnpm deploy --profile <name>
 ```
 
 Docker must be running, because both services are built locally from `main`.
@@ -53,7 +54,7 @@ After a few seconds, `audit/{id}` shows up in the database. On a first deploy, t
 ## Live test
 
 ```sh
-ALCHEMY_PROFILE=alchemy-testing bun test --timeout 1200000
+ALCHEMY_PROFILE=<name> bun test --timeout 1200000
 ```
 
 [The test](./test/integ.test.ts) deploys the stack and checks the trigger's filters. It then creates two orders and polls Firestore until each one has an audit entry. At the end it destroys the stack and confirms that the trigger and the database are gone.
@@ -63,7 +64,7 @@ A new trigger can take a couple of minutes after it reports healthy before Event
 ## Destroy
 
 ```sh
-pnpm destroy --profile alchemy-testing
+pnpm destroy --profile <name>
 ```
 
 This deletes both services, the trigger, the IAM grants, and the database with all of its documents.

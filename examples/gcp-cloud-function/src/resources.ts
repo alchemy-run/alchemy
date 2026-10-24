@@ -1,4 +1,4 @@
-import * as GCP from "alchemy/GCP";
+import * as GCP from "@alchemy.run/gcp";
 
 /**
  * One Firestore document per note, at `notes/{id}`. The project's
@@ -6,6 +6,5 @@ import * as GCP from "alchemy/GCP";
  * named Native-mode database.
  */
 export const NotesDb = GCP.Firestore.Database("NotesDb", {
-  location: "us-central1",
   type: "FIRESTORE_NATIVE",
 });

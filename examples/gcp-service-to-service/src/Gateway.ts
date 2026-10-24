@@ -1,4 +1,4 @@
-import * as GCP from "alchemy/GCP";
+import * as GCP from "@alchemy.run/gcp";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
@@ -19,7 +19,6 @@ export default class Gateway extends GCP.Function<Gateway>()(
   "Gateway",
   {
     main: import.meta.url,
-    location: "us-central1",
     invokerIamDisabled: true,
   },
   Effect.gen(function* () {
@@ -50,10 +49,7 @@ export default class Gateway extends GCP.Function<Gateway>()(
           });
         }
 
-        return yield* HttpServerResponse.json(
-          { error: "not found" },
-          { status: 404 },
-        );
+        return yield* HttpServerResponse.json({ error: "not found" }, { status: 404 });
       }),
     };
   }).pipe(Effect.provide(GCP.Run.InvokeServiceHttp)),

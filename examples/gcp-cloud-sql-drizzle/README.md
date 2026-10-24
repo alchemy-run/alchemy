@@ -24,7 +24,7 @@ Invalid bodies and ids get `400`.
 - `Alchemy.Random` `AppPassword` — the user's password, generated once and
   kept in state.
 - `GCP.SecretManager.LocationsSecret` `AppPassword` — a regional secret in
-  `us-central1` holding that password. The Data API only reads passwords
+  the instance's region (`location: instance.region`) holding that password. The Data API only reads passwords
   from regional secrets in the instance's region.
 - `Drizzle.Schema` `Schema` — regenerates `./migrations` with drizzle-kit
   when [`src/schema.ts`](./src/schema.ts) changes.
@@ -56,8 +56,10 @@ The deploying identity needs `cloudsql.instances.executeSql` (e.g.
 
 ## Deploy
 
+Credentials come from your alchemy profile: run `alchemy profile` once and pick GCP (*Service account JSON* for a key file, or *Stored* for an access token or key kept in `~/.alchemy/credentials`, plus a default region), then deploy with `--profile <name>`.
+
 ```sh
-pnpm deploy
+pnpm deploy --profile <name>
 ```
 
 Creating the Cloud SQL instance takes 5–10 minutes. The stack prints the
@@ -81,20 +83,19 @@ applies it, and the service rolls a new revision.
 ## Test
 
 ```sh
-pnpm test
+ALCHEMY_PROFILE=<name> bun test
 ```
 
 Deploys the stack, checks through the Data API that the migration was
 applied, drives create / read / update / list / delete over HTTP while
 checking the rows directly in Cloud SQL, then destroys the stack and
-checks that the instance, secret, and service are gone. Needs GCP
-credentials (`GOOGLE_PROJECT_ID` + `GOOGLE_APPLICATION_CREDENTIALS`) and
+checks that the instance, secret, and service are gone. Needs
 Docker (the service image is built locally). Allow about 20 minutes.
 
 ## Destroy
 
 ```sh
-pnpm destroy
+pnpm destroy --profile <name>
 ```
 
 Deletes the service, its image repository and service account, the

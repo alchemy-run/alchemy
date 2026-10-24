@@ -1,8 +1,7 @@
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
-
-import * as ts from "typescript-api/unstable/ast";
-import type { Node, SourceFile } from "typescript-api/unstable/ast";
+import * as ts from "tsrs/unstable/ast";
+import type { Node, SourceFile } from "tsrs/unstable/ast";
 import {
   docCommentLines,
   jsdocCopyId,
@@ -38,8 +37,7 @@ const config = {
    * it came from. Dev only — production builds never set this.
    */
   copyMarkers:
-    process.env.API_REFERENCE_COPY_MARKERS === "1" ||
-    process.argv.includes("--copy-markers"),
+    process.env.API_REFERENCE_COPY_MARKERS === "1" || process.argv.includes("--copy-markers"),
   roots: [
     {
       srcRoot: path.join(import.meta.dir, "../packages/alchemy/src"),
@@ -50,6 +48,116 @@ const config = {
       srcRoot: path.join(import.meta.dir, "../packages/better-auth/src"),
       providerPrefix: "BetterAuth",
       sourceDisplayPrefix: "packages/better-auth/src",
+    },
+    {
+      srcRoot: path.join(import.meta.dir, "../packages/git/src"),
+      providerPrefix: "Git",
+      sourceDisplayPrefix: "packages/git/src",
+    },
+    {
+      srcRoot: path.join(import.meta.dir, "../packages/drizzle/src"),
+      providerPrefix: "Drizzle",
+      sourceDisplayPrefix: "packages/drizzle/src",
+    },
+    {
+      srcRoot: path.join(import.meta.dir, "../packages/acme/src"),
+      providerPrefix: "ACME",
+      sourceDisplayPrefix: "packages/acme/src",
+    },
+    {
+      srcRoot: path.join(import.meta.dir, "../packages/axiom/src"),
+      providerPrefix: "Axiom",
+      sourceDisplayPrefix: "packages/axiom/src",
+    },
+    {
+      srcRoot: path.join(import.meta.dir, "../packages/doppler/src"),
+      providerPrefix: "Doppler",
+      sourceDisplayPrefix: "packages/doppler/src",
+    },
+    {
+      srcRoot: path.join(import.meta.dir, "../packages/infisical/src"),
+      providerPrefix: "Infisical",
+      sourceDisplayPrefix: "packages/infisical/src",
+    },
+    {
+      srcRoot: path.join(import.meta.dir, "../packages/turso/src"),
+      providerPrefix: "Turso",
+      sourceDisplayPrefix: "packages/turso/src",
+    },
+    {
+      srcRoot: path.join(import.meta.dir, "../packages/planetscale/src"),
+      providerPrefix: "Planetscale",
+      sourceDisplayPrefix: "packages/planetscale/src",
+    },
+    {
+      srcRoot: path.join(import.meta.dir, "../packages/neon/src"),
+      providerPrefix: "Neon",
+      sourceDisplayPrefix: "packages/neon/src",
+    },
+    {
+      srcRoot: path.join(import.meta.dir, "../packages/prisma/src"),
+      providerPrefix: "Prisma",
+      sourceDisplayPrefix: "packages/prisma/src",
+    },
+    {
+      srcRoot: path.join(import.meta.dir, "../packages/hetzner/src"),
+      providerPrefix: "Hetzner",
+      sourceDisplayPrefix: "packages/hetzner/src",
+    },
+    {
+      srcRoot: path.join(import.meta.dir, "../packages/railway/src"),
+      providerPrefix: "Railway",
+      sourceDisplayPrefix: "packages/railway/src",
+    },
+    {
+      srcRoot: path.join(import.meta.dir, "../packages/fly/src"),
+      providerPrefix: "Fly",
+      sourceDisplayPrefix: "packages/fly/src",
+    },
+    {
+      srcRoot: path.join(import.meta.dir, "../packages/github/src"),
+      providerPrefix: "GitHub",
+      sourceDisplayPrefix: "packages/github/src",
+    },
+    {
+      srcRoot: path.join(import.meta.dir, "../packages/stripe/src"),
+      providerPrefix: "Stripe",
+      sourceDisplayPrefix: "packages/stripe/src",
+    },
+    {
+      srcRoot: path.join(import.meta.dir, "../packages/cloudflare/src"),
+      providerPrefix: "Cloudflare",
+      sourceDisplayPrefix: "packages/cloudflare/src",
+    },
+    {
+      srcRoot: path.join(import.meta.dir, "../packages/gcp/src"),
+      providerPrefix: "GCP",
+      sourceDisplayPrefix: "packages/gcp/src",
+    },
+    {
+      srcRoot: path.join(import.meta.dir, "../packages/aws/src"),
+      providerPrefix: "AWS",
+      sourceDisplayPrefix: "packages/aws/src",
+    },
+    {
+      srcRoot: path.join(import.meta.dir, "../packages/domain/src"),
+      providerPrefix: "Domain",
+      sourceDisplayPrefix: "packages/domain/src",
+    },
+    {
+      srcRoot: path.join(import.meta.dir, "../packages/kubernetes/src"),
+      providerPrefix: "Kubernetes",
+      sourceDisplayPrefix: "packages/kubernetes/src",
+    },
+    {
+      srcRoot: path.join(import.meta.dir, "../packages/docker/src"),
+      providerPrefix: "Docker",
+      sourceDisplayPrefix: "packages/docker/src",
+    },
+    {
+      srcRoot: path.join(import.meta.dir, "../packages/sql/src"),
+      providerPrefix: "SQL",
+      sourceDisplayPrefix: "packages/sql/src",
     },
   ] satisfies SourceRoot[],
 };
@@ -100,9 +208,7 @@ async function discoverFiles(root: SourceRoot): Promise<FileEntry[]> {
   // Flat single-provider packages: every file under srcRoot belongs to the
   // synthetic provider directory.
   if (root.providerPrefix) {
-    const files = (await fs.readdir(root.srcRoot, {
-      recursive: true,
-    })) as string[];
+    const files = (await fs.readdir(root.srcRoot, { recursive: true })) as string[];
     for (const file of files) {
       if (!isSourceFile(path.basename(file))) continue;
       entries.push({
@@ -115,12 +221,8 @@ async function discoverFiles(root: SourceRoot): Promise<FileEntry[]> {
     return entries;
   }
 
-  const topLevelEntries = await fs.readdir(root.srcRoot, {
-    withFileTypes: true,
-  });
-  const dirs = topLevelEntries
-    .filter((entry) => entry.isDirectory())
-    .map((entry) => entry.name);
+  const topLevelEntries = await fs.readdir(root.srcRoot, { withFileTypes: true });
+  const dirs = topLevelEntries.filter((entry) => entry.isDirectory()).map((entry) => entry.name);
 
   for (const dir of dirs) {
     const dirPath = path.join(root.srcRoot, dir);
@@ -167,12 +269,19 @@ interface ParsedJSDoc {
   hasBindingTag: boolean;
   /** `@layer` — a Layer factory providing a Context service. */
   hasLayerTag: boolean;
+  /**
+   * `@primitive` — a building block exported as a module's `make` (e.g.
+   * `Domain.Event`). Its page is named after the file, not the export.
+   */
+  hasPrimitiveTag: boolean;
   /** `@provides <Service.Tag>` — service tags the Layer satisfies. */
   provides: string[];
   /** `@peer <package>` — optional peer dependencies the Layer needs. */
   peers: string[];
   category: string;
   product: string;
+  /** `@title <Heading>` — overrides the section heading (the export name). */
+  title: string;
 }
 
 /** Where a declaration's JSDoc lives, for copy markers. */
@@ -210,10 +319,12 @@ function parseJSDoc(node: Node, markers?: MarkerContext): ParsedJSDoc {
       hasResourceTag: false,
       hasBindingTag: false,
       hasLayerTag: false,
+      hasPrimitiveTag: false,
       provides: [],
       peers: [],
       category: "",
       product: "",
+      title: "",
     };
   }
 
@@ -226,8 +337,10 @@ function parseJSDoc(node: Node, markers?: MarkerContext): ParsedJSDoc {
   let hasResourceTag = false;
   let hasBindingTag = false;
   let hasLayerTag = false;
+  let hasPrimitiveTag = false;
   let category = "";
   let product = "";
+  let title = "";
   let sawTag = false;
   let currentSection: ExampleSection | undefined;
   let currentExample: ExampleBlock | undefined;
@@ -275,27 +388,18 @@ function parseJSDoc(node: Node, markers?: MarkerContext): ParsedJSDoc {
       sawTag = true;
       flushExample();
       flushSectionDesc();
-      currentSection = {
-        title: section[1]!.trim(),
-        description: "",
-        examples: [],
-      };
+      currentSection = { title: section[1]!.trim(), description: "", examples: [] };
       sections.push(currentSection);
       collectingSectionDesc = true;
       continue;
     }
 
-    const example = insideFence
-      ? null
-      : line.trim().match(/^\*\*Example:\*\*\s*(.*)$/);
+    const example = insideFence ? null : line.trim().match(/^\*\*Example:\*\*\s*(.*)$/);
     if (example) {
       sawTag = true;
       flushSectionDesc();
       flushExample();
-      currentExample = {
-        title: example[1]!.trim() || "Example",
-        body: "",
-      };
+      currentExample = { title: example[1]!.trim() || "Example", body: "" };
       continue;
     }
 
@@ -314,6 +418,9 @@ function parseJSDoc(node: Node, markers?: MarkerContext): ParsedJSDoc {
         case "layer":
           hasLayerTag = true;
           break;
+        case "primitive":
+          hasPrimitiveTag = true;
+          break;
         case "provides":
           if (value) provides.push(value);
           break;
@@ -328,14 +435,13 @@ function parseJSDoc(node: Node, markers?: MarkerContext): ParsedJSDoc {
         case "label":
           if (value) product = value;
           break;
+        case "title":
+          if (value) title = value;
+          break;
         case "section":
           flushExample();
           flushSectionDesc();
-          currentSection = {
-            title: value || "Examples",
-            description: "",
-            examples: [],
-          };
+          currentSection = { title: value || "Examples", description: "", examples: [] };
           sections.push(currentSection);
           collectingSectionDesc = true;
           break;
@@ -369,10 +475,12 @@ function parseJSDoc(node: Node, markers?: MarkerContext): ParsedJSDoc {
     hasResourceTag,
     hasBindingTag,
     hasLayerTag,
+    hasPrimitiveTag,
     provides,
     peers,
     category,
     product,
+    title,
   };
 }
 
@@ -397,8 +505,7 @@ interface Primary {
   product: string;
 }
 
-const hasContent = (doc: ParsedJSDoc) =>
-  Boolean(doc.summary) || doc.sections.length > 0;
+const hasContent = (doc: ParsedJSDoc) => Boolean(doc.summary) || doc.sections.length > 0;
 
 /**
  * Map a public export name back to its local declaration name when a file
@@ -412,19 +519,14 @@ export function exportedNames(sourceFile: SourceFile): string[] {
     if (ts.isIdentifier(name)) names.add(name.text);
     else
       for (const element of name.elements) {
-        if (ts.isBindingElement(element) && element.name)
-          addBinding(element.name);
+        if (ts.isBindingElement(element) && element.name) addBinding(element.name);
       }
   };
   for (const statement of sourceFile.statements) {
     if (ts.isExportDeclaration(statement)) {
       if (statement.exportClause && ts.isNamedExports(statement.exportClause)) {
-        for (const spec of statement.exportClause.elements)
-          names.add(spec.name.text);
-      } else if (
-        statement.exportClause &&
-        ts.isNamespaceExport(statement.exportClause)
-      ) {
+        for (const spec of statement.exportClause.elements) names.add(spec.name.text);
+      } else if (statement.exportClause && ts.isNamespaceExport(statement.exportClause)) {
         names.add(statement.exportClause.name.text);
       }
     } else if (ts.isExportAssignment(statement)) {
@@ -440,8 +542,7 @@ export function exportedNames(sourceFile: SourceFile): string[] {
         ts.isImportEqualsDeclaration(statement)) &&
       statement.modifierFlags & ts.ModifierFlags.Export
     ) {
-      if (statement.modifierFlags & ts.ModifierFlags.Default)
-        names.add("default");
+      if (statement.modifierFlags & ts.ModifierFlags.Default) names.add("default");
       else if (ts.isVariableStatement(statement)) {
         for (const declaration of statement.declarationList.declarations)
           addBinding(declaration.name);
@@ -461,10 +562,7 @@ export function exportedNames(sourceFile: SourceFile): string[] {
   return [...names];
 }
 
-function localNameForExport(
-  sourceFile: SourceFile,
-  publicName: string,
-): string | undefined {
+function localNameForExport(sourceFile: SourceFile, publicName: string): string | undefined {
   for (const ed of sourceFile.statements.filter(ts.isExportDeclaration)) {
     if (ed.moduleSpecifier) continue;
     for (const spec of ed.exportClause && ts.isNamedExports(ed.exportClause)
@@ -505,18 +603,22 @@ export function findTaggedPrimary(
 
   for (const node of candidates) {
     const doc = parseJSDoc(node, markers);
-    if (!doc.hasResourceTag && !doc.hasBindingTag && !doc.hasLayerTag) {
+    if (!doc.hasResourceTag && !doc.hasBindingTag && !doc.hasLayerTag && !doc.hasPrimitiveTag) {
       continue;
     }
-    const name = declName(node);
-    if (!name) continue;
+    // A primitive is its module's `make`; the page is named after the module.
+    const exportName = doc.hasPrimitiveTag
+      ? path.basename(sourceFile.fileName).replace(/\.tsx?$/, "")
+      : declName(node);
+    if (!exportName) continue;
+    const name = doc.title || exportName;
     const category = doc.category;
     const product = doc.product;
     if (hasContent(doc)) return { name, doc, category, product };
 
     // Tagged declaration has no prose — look for the related declaration that
     // carries the docs (same name, or re-exported under this name).
-    const localName = localNameForExport(sourceFile, name);
+    const localName = localNameForExport(sourceFile, exportName);
     const related: Node[] = [
       ...sourceFile.statements.filter(ts.isVariableStatement),
       ...sourceFile.statements.filter(ts.isClassDeclaration),
@@ -525,7 +627,7 @@ export function findTaggedPrimary(
     ].filter((d) => {
       if (d === node) return false;
       const dn = declName(d);
-      return dn === name || (localName !== undefined && dn === localName);
+      return dn === exportName || (localName !== undefined && dn === localName);
     });
 
     let best: ParsedJSDoc | undefined;
@@ -543,6 +645,7 @@ export function findTaggedPrimary(
       hasResourceTag: doc.hasResourceTag,
       hasBindingTag: doc.hasBindingTag,
       hasLayerTag: doc.hasLayerTag,
+      hasPrimitiveTag: doc.hasPrimitiveTag,
       provides: doc.provides,
       peers: doc.peers,
     };
@@ -564,9 +667,7 @@ type LinkResolver = (target: string) => string | undefined;
  * (`Cluster#capacityProviders`), provider-qualified names (`Cloudflare.Worker`)
  * and `FooProps` interfaces resolve to the base resource's page.
  */
-function makeLinkResolverFactory(
-  pages: PageEntry[],
-): (fromDir: string) => LinkResolver {
+function makeLinkResolverFactory(pages: PageEntry[]): (fromDir: string) => LinkResolver {
   const byName = new Map<string, PageEntry[]>();
   const byExport = new Map<string, PageEntry[]>();
   for (const p of pages) {
@@ -594,9 +695,7 @@ function makeLinkResolverFactory(
       if (sameDirExporting.length === 1) return sameDirExporting[0];
       const providerNamed = named.filter((c) => c.provider === fromProvider);
       if (providerNamed.length === 1) return providerNamed[0];
-      const providerExporting = exporting.filter(
-        (c) => c.provider === fromProvider,
-      );
+      const providerExporting = exporting.filter((c) => c.provider === fromProvider);
       if (providerExporting.length === 1) return providerExporting[0];
       if (named.length === 1) return named[0];
       return undefined;
@@ -657,10 +756,7 @@ function linkifyMarkdown(markdown: string, resolve: LinkResolver): string {
       const target = normalizeLinkTarget(parsed.target);
       const url = resolve(target);
       if (!url) {
-        unresolvedLinkTargets.set(
-          target,
-          (unresolvedLinkTargets.get(target) ?? 0) + 1,
-        );
+        unresolvedLinkTargets.set(target, (unresolvedLinkTargets.get(target) ?? 0) + 1);
       }
       const text = label ?? `\`${target}\``;
       return url ? `[${text}](${url})` : text;
@@ -750,16 +846,10 @@ function renderResource(doc: PageDoc, resolve: LinkResolver): string {
   if (doc.isLayer) {
     const meta = ["**Kind:** Layer"];
     if (doc.provides.length > 0) {
-      meta.push(
-        `**Provides:** ${doc.provides.map((tag) => `\`${tag}\``).join(", ")}`,
-      );
+      meta.push(`**Provides:** ${doc.provides.map((tag) => `\`${tag}\``).join(", ")}`);
     }
     if (doc.peers.length > 0) {
-      meta.push(
-        `**Peer dependencies:** ${doc.peers
-          .map((peer) => `\`${peer}\``)
-          .join(", ")}`,
-      );
+      meta.push(`**Peer dependencies:** ${doc.peers.map((peer) => `\`${peer}\``).join(", ")}`);
     }
     headerLines.push(`> ${meta.join(" · ")}`);
   }
@@ -774,10 +864,9 @@ function renderResource(doc: PageDoc, resolve: LinkResolver): string {
 
 /** Change this grouping to experiment with larger or smaller reference pages. */
 function referenceLocation(outputRelative: string, product: string) {
-  const parts = normalizeSlashes(outputRelative)
-    .replace(/\.md$/, "")
-    .split("/");
-  // Flat providers declare service-sized pages with @product instead of folders.
+  const parts = normalizeSlashes(outputRelative).replace(/\.md$/, "").split("/");
+  // Flat providers declare service-sized pages with @product instead of
+  // folders; a resource without one gets its own page.
   const group =
     parts.length > 2
       ? parts.slice(0, 2)
@@ -790,16 +879,12 @@ function referenceLocation(outputRelative: string, product: string) {
               .replace(/[^a-z0-9]+/g, "-")
               .replace(/^-|-$/g, ""),
           ]
-        : [parts[0], "reference"];
+        : parts;
   const title = parts.slice(parts.length > 2 ? 2 : 1).join("-");
   return {
     outputRelative: `${group.join("/")}.md`,
     title:
-      parts.length > 2
-        ? group.join(".")
-        : product
-          ? `${parts[0]}.${product}`
-          : parts[0],
+      parts.length > 2 ? group.join(".") : product ? `${parts[0]}.${product}` : parts.join("."),
     resourceTitle: title,
     link: `/providers/${group.join("/").toLowerCase()}#${title.toLowerCase()}`,
   };
@@ -814,8 +899,7 @@ function nestResourceHeadings(markdown: string, resource: string): string {
       const marker = line.match(/^\s{0,3}(`{3,}|~{3,})/);
       if (marker) {
         if (!fence) fence = marker[1];
-        else if (marker[1][0] === fence[0] && marker[1].length >= fence.length)
-          fence = undefined;
+        else if (marker[1][0] === fence[0] && marker[1].length >= fence.length) fence = undefined;
         return line;
       }
       if (fence) return line;
@@ -855,8 +939,7 @@ interface PageEntry {
   exports: string[];
 }
 
-const byLabel = (a: { label: string }, b: { label: string }) =>
-  a.label.localeCompare(b.label);
+const byLabel = (a: { label: string }, b: { label: string }) => a.label.localeCompare(b.label);
 
 function orderedKeys(keys: string[], order: string[]): string[] {
   const ranked = keys.filter((k) => order.includes(k));
@@ -868,10 +951,7 @@ function orderedKeys(keys: string[], order: string[]): string[] {
 /** The sidebar lists documents; resource anchors live in the page's TOC. */
 function buildServiceItems(pages: PageEntry[]): SidebarItem[] {
   return pages
-    .map((page) => ({
-      label: page.product || page.service || page.provider,
-      link: page.link,
-    }))
+    .map((page) => ({ label: page.product || page.service || page.resource, link: page.link }))
     .sort(byLabel);
 }
 
@@ -893,9 +973,7 @@ function buildProvidersSidebar(entries: PageEntry[]): SidebarItem[] {
     const pages = [...byPage].map(([link, resources]) => ({
       ...resources[0],
       link,
-      product: resources.every(
-        (resource) => resource.product === resources[0].product,
-      )
+      product: resources.every((resource) => resource.product === resources[0].product)
         ? resources[0].product
         : "",
     }));
@@ -948,9 +1026,7 @@ async function writeIfChanged(file: string, content: string): Promise<boolean> {
 
 /** Deletes files under `dir` not in `keep`, then any directories left empty. */
 async function pruneOutput(dir: string, keep: Set<string>): Promise<void> {
-  const entries = await fs
-    .readdir(dir, { withFileTypes: true })
-    .catch(() => []);
+  const entries = await fs.readdir(dir, { withFileTypes: true }).catch(() => []);
   for (const entry of entries) {
     const full = path.join(dir, entry.name);
     if (entry.isDirectory()) {
@@ -969,8 +1045,7 @@ async function main() {
 
   const seen = new Map<string, string>();
   const pageEntries: PageEntry[] = [];
-  const pending: { outputRelative: string; product: string; doc: PageDoc }[] =
-    [];
+  const pending: { outputRelative: string; product: string; doc: PageDoc }[] = [];
   let written = 0;
   const redirects: Record<string, string> = {};
   const anchors = new Set<string>();
@@ -984,14 +1059,10 @@ async function main() {
       )}.`,
     );
 
-    await using syntax = await createSyntaxProject(
-      entries.map((entry) => entry.absolutePath),
-    );
+    await using syntax = await createSyntaxProject(entries.map((entry) => entry.absolutePath));
 
     for (const entry of entries) {
-      const sourceFile = await syntax.project.program.getSourceFile(
-        entry.absolutePath,
-      );
+      const sourceFile = await syntax.project.program.getSourceFile(entry.absolutePath);
       if (!sourceFile) {
         throw new Error(`Missing source file ${entry.absolutePath}`);
       }
@@ -1000,9 +1071,7 @@ async function main() {
         sourceFile,
         config.copyMarkers
           ? {
-              file: normalizeSlashes(
-                path.relative(repoRoot, entry.absolutePath),
-              ),
+              file: normalizeSlashes(path.relative(repoRoot, entry.absolutePath)),
               text: sourceFile.text,
             }
           : undefined,
@@ -1052,7 +1121,8 @@ async function main() {
         throw new Error(`Duplicate reference anchor: ${location.link}`);
       }
       anchors.add(location.link);
-      redirects[oldLink] = location.link;
+      // A resource whose page kept its old URL needs no redirect.
+      if (oldLink !== location.link.split("#")[0]) redirects[oldLink] = location.link;
       pageEntries.push({
         provider: segments[0] ?? "",
         service: segments.length > 2 ? segments[1] : "",
@@ -1072,13 +1142,8 @@ async function main() {
   const groups = new Map<string, { title: string; sections: string[] }>();
   for (const page of pending) {
     const location = referenceLocation(page.outputRelative, page.product);
-    const resolve = resolverFor(
-      normalizeSlashes(path.dirname(page.outputRelative)),
-    );
-    const group = groups.get(location.outputRelative) ?? {
-      title: location.title,
-      sections: [],
-    };
+    const resolve = resolverFor(normalizeSlashes(path.dirname(page.outputRelative)));
+    const group = groups.get(location.outputRelative) ?? { title: location.title, sections: [] };
     group.sections.push(
       `## ${location.resourceTitle}\n\n${nestResourceHeadings(renderResource(page.doc, resolve), location.resourceTitle)}`,
     );
@@ -1124,10 +1189,7 @@ async function main() {
   await writeIfChanged(indexPath, referenceIndex);
   await pruneOutput(config.outRoot, outputs);
 
-  const sidebarPath = path.join(
-    websiteRoot,
-    "src/generated/providers-sidebar.json",
-  );
+  const sidebarPath = path.join(websiteRoot, "src/generated/providers-sidebar.json");
   await writeIfChanged(
     path.join(websiteRoot, "src/generated/reference-redirects.json"),
     `${JSON.stringify(redirects, null, 2)}\n`,
@@ -1138,18 +1200,14 @@ async function main() {
   console.log(
     `Done. Wrote ${written} changed reference pages containing ${pending.length} resources (skipped ${skipped} untagged${
       config.copyMarkers ? ", with copy markers" : ""
-    }) to ${normalizeSlashes(
-      path.relative(path.join(import.meta.dir, ".."), config.outRoot),
-    )}.`,
+    }) to ${normalizeSlashes(path.relative(path.join(import.meta.dir, ".."), config.outRoot))}.`,
   );
   if (unresolvedLinkTargets.size > 0) {
     const list = [...unresolvedLinkTargets.entries()]
       .sort((a, b) => b[1] - a[1])
       .map(([target, n]) => (n > 1 ? `${target} ×${n}` : target))
       .join(", ");
-    console.log(
-      `{@link} targets without a page (rendered as inline code): ${list}`,
-    );
+    console.log(`{@link} targets without a page (rendered as inline code): ${list}`);
   }
   console.log(
     `Wrote provider sidebar to ${normalizeSlashes(

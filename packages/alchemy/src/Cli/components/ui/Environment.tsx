@@ -1,9 +1,10 @@
+/** @jsxRuntime automatic */
 /** @jsxImportSource @alchemy.run/sigil */
 import { useWindowSize } from "@alchemy.run/sigil";
 import { createContext, useContext, useMemo } from "@alchemy.run/sigil/react";
 import type { ReactNode } from "react";
-import type { CliKitCapabilities } from "../types.ts";
 import { glyphsFor, theme, type KeyHint } from "../../../Util/Theme.ts";
+import type { CliKitCapabilities } from "../types.ts";
 
 const defaults: CliKitCapabilities = {
   input: false,
@@ -25,20 +26,13 @@ type ObservingEnvironmentProps = {
   readonly children?: ReactNode;
 };
 
-function ObservingEnvironment({
-  capabilities,
-  children,
-}: ObservingEnvironmentProps) {
+function ObservingEnvironment({ capabilities, children }: ObservingEnvironmentProps) {
   const window = useWindowSize();
   const environment = useMemo(
     () => ({ ...capabilities, columns: window.columns, rows: window.rows }),
     [capabilities, window.columns, window.rows],
   );
-  return (
-    <EnvironmentContext.Provider value={environment}>
-      {children}
-    </EnvironmentContext.Provider>
-  );
+  return <EnvironmentContext.Provider value={environment}>{children}</EnvironmentContext.Provider>;
 }
 
 type CliEnvironmentProps = {
@@ -54,13 +48,9 @@ export function CliEnvironment({
   children,
 }: CliEnvironmentProps) {
   return observeWindow ? (
-    <ObservingEnvironment capabilities={capabilities}>
-      {children}
-    </ObservingEnvironment>
+    <ObservingEnvironment capabilities={capabilities}>{children}</ObservingEnvironment>
   ) : (
-    <EnvironmentContext.Provider value={capabilities}>
-      {children}
-    </EnvironmentContext.Provider>
+    <EnvironmentContext.Provider value={capabilities}>{children}</EnvironmentContext.Provider>
   );
 }
 

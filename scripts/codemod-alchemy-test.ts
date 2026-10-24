@@ -1,15 +1,16 @@
 #!/usr/bin/env bun
+import path from "node:path";
 /**
  * Codemod: migrate the test suite from vitest to the alchemy-test harness.
  *
  * Rewrites, in every `packages/alchemy/test/**\/*.ts(x)` file:
  *
  *   1. `from "@/Test/Vitest"`   -> `from "@/Test/Alchemy"`
- *   2. `from "@effect/vitest"`  -> `from "alchemy-test"`
- *   3. `from "vitest"`          -> `from "alchemy-test"`
- *   4. `from "node:test"`       -> `from "alchemy-test"` (stray auto-imports;
+ *   2. `from "@effect/vitest"`  -> `from "@alchemy.run/test"`
+ *   3. `from "vitest"`          -> `from "@alchemy.run/test"`
+ *   4. `from "node:test"`       -> `from "@alchemy.run/test"` (stray auto-imports;
  *      node:test's describe/it throw outside the node/bun test runner)
- *   5. merges duplicate `import { ... } from "alchemy-test"` statements that
+ *   5. merges duplicate `import { ... } from "@alchemy.run/test"` statements that
  *      steps 2-4 can produce in the same file.
  *
  * Idempotent: re-running on an already-migrated (or partially migrated) tree
@@ -19,7 +20,6 @@
  *   bun scripts/codemod-alchemy-test.ts [--dry-run]
  */
 import { Glob } from "bun";
-import path from "node:path";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
 const TEST_DIR = path.join(ROOT, "packages", "alchemy", "test");
@@ -45,7 +45,7 @@ const rewriteSpecifier = (source: string, from: string, to: string): string => {
 };
 
 /**
- * Merge multiple `import { a } from "alchemy-test"` statements into one.
+ * Merge multiple `import { a } from "@alchemy.run/test"` statements into one.
  * Keeps `import type { ... }` statements separate from value imports.
  */
 const mergeDuplicateImports = (source: string, specifier: string): string => {
@@ -84,17 +84,16 @@ const mergeDuplicateImports = (source: string, specifier: string): string => {
   return source;
 };
 
-const escapeRegExp = (text: string): string =>
-  text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const escapeRegExp = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 const migrate = (source: string): string => {
   let out = source;
   out = rewriteSpecifier(out, "@/Test/Vitest", "@/Test/Alchemy");
   out = rewriteSpecifier(out, "@/Test/Vitest.ts", "@/Test/Alchemy.ts");
-  out = rewriteSpecifier(out, "@effect/vitest", "alchemy-test");
-  out = rewriteSpecifier(out, "vitest", "alchemy-test");
-  out = rewriteSpecifier(out, "node:test", "alchemy-test");
-  out = mergeDuplicateImports(out, "alchemy-test");
+  out = rewriteSpecifier(out, "@effect/vitest", "@alchemy.run/test");
+  out = rewriteSpecifier(out, "vitest", "@alchemy.run/test");
+  out = rewriteSpecifier(out, "node:test", "@alchemy.run/test");
+  out = mergeDuplicateImports(out, "@alchemy.run/test");
   return out;
 };
 

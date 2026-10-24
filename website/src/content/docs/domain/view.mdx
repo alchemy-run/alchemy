@@ -1,0 +1,184 @@
+---
+title: View
+description: How a view folds events into a read model per key, emits events of its own, combines other views, and serves reads.
+---
+
+import DAG from "../../../components/DAG.astro";
+
+A view answers a question: what's the balance of this account, what's on its statement, what does this customer hold across all their accounts. It reads events, folds them into state, and keeps that state current as new events arrive.
+
+Aggregates hold only what their rules need. Views hold everything people want to see, each shaped for one question. This page builds views up from the simplest case.
+
+## Fold one aggregate's events
+
+The simplest view follows one aggregate. `AccountSummary` reads the account's events and keeps its owner and balance.
+
+```typescript title="src/AccountSummary.view.ts"
+export class AccountSummary extends Domain.View("AccountSummary", {
+  from: [Account],
+  key: Account,
+  state: Schema.Struct({ owner: Schema.NullOr(Schema.String), balance: Schema.Int }),
+  initial: { owner: null, balance: 0 },
+  evolve: {
+    AccountOpened: (v, e) => ({ ...v, owner: e.owner }),
+    MoneyDeposited: (v, e) => ({ ...v, balance: e.balanceAfter }),
+    MoneyWithdrawn: (v, e) => ({ ...v, balance: e.balanceAfter }),
+  },
+}) {}
+```
+
+`from` lists where its events come from. `key` says what one instance of the view is about: here, one account. So every account gets its own summary, and an event from account `a-1` updates only the summary for `a-1`.
+
+<DAG
+  nodes={[
+    { id: "a1", label: "Account a-1", type: "aggregate", kind: "aggregate" },
+    { id: "a2", label: "Account a-2", type: "aggregate", kind: "aggregate" },
+    { id: "s1", label: "Summary a-1", type: "AccountSummary", kind: "view" },
+    { id: "s2", label: "Summary a-2", type: "AccountSummary", kind: "view" },
+  ]}
+  edges={[
+    { from: "a1", to: "s1", dashed: true },
+    { from: "a2", to: "s2", dashed: true },
+  ]}
+  caption="One summary per account, each fed by that account's events."
+/>
+
+`evolve` works like an aggregate's: one handler per event, returning the next state. A view only handles the events it names. The rest pass it by, so adding an event to the account never breaks a view that doesn't care about it.
+
+## Views catch up after the commit
+
+A view is never updated in the same step as the aggregate. The account commits its events first, then they're delivered to the view. Each view receives every event it reads at least once, in the order each source recorded them, and drops any it has already applied.
+
+So a view is always correct, but it can be a moment behind. Most screens never notice. One that has just sent a command and wants to show its result waits for the view to catch up, using the command's receipt.
+
+```typescript
+// packages/server/test/depositThenRead.ts
+import * as Effect from "effect/Effect";
+import type { AccountId } from "@bank/domain/Account/Account.id";
+import type { CustomerClient } from "./flows.ts";
+
+export const depositThenRead = Effect.fn(function* (bank: CustomerClient, accountId: AccountId) {
+  const receipt = yield* bank.DepositMoney({ target: accountId, amount: 500 });
+  const summary = yield* bank.AccountSummary.get(accountId, {
+    atLeast: { stream: receipt.stream, version: receipt.version },
+  });
+  return summary?.balance;
+});
+```
+
+`atLeast` makes `get` wait until the summary has applied that version of the account's stream.
+
+## Emit events of your own
+
+A view can record events as it folds, which is how you build lists like a statement. Instead of `evolve`, `Statement` has `emit`: for each deposit or withdrawal, it records one `StatementLine`.
+
+```typescript title="src/Statement.view.ts"
+export class Statement extends Domain.View("Statement", {
+  from: [Account],
+  key: Account,
+  events: [StatementLine],
+  emit: {
+    MoneyDeposited: (e) =>
+      new StatementLine({ kind: "deposit", amount: e.amount, balance: e.balanceAfter }),
+    MoneyWithdrawn: (e) =>
+      new StatementLine({ kind: "withdrawal", amount: e.amount, balance: e.balanceAfter }),
+  },
+}) {}
+```
+
+`StatementLine` is shaped for the reader, not the account. A client lists the lines a page at a time, or follows them live.
+
+A view that declares no `events` emits every event it applies, each paired with its state after that event. That makes any view a source for another.
+
+## Build on other views
+
+A customer's dashboard shows every account they own, with each balance. No single account knows that, and the customer aggregate doesn't track balances. But `AccountSummary` already knows each account's balance and owner, so the dashboard reads from it.
+
+<DAG
+  nodes={[
+    { id: "a1", label: "Summary a-1", type: "AccountSummary", kind: "view" },
+    { id: "a2", label: "Summary a-2", type: "AccountSummary", kind: "view" },
+    { id: "c", label: "Customer c-1", type: "aggregate", kind: "aggregate" },
+    { id: "d", label: "Dashboard c-1", type: "CustomerDashboard", kind: "view" },
+  ]}
+  edges={[
+    { from: "a1", to: "d", dashed: true },
+    { from: "a2", to: "d", dashed: true },
+    { from: "c", to: "d", dashed: true },
+  ]}
+  caption="The dashboard is keyed by customer and fed by every summary that customer owns."
+/>
+
+The dashboard is keyed by customer, but a summary's events come from accounts. `keyOf` tells the view which customer each one belongs to, using the summary's state after the event.
+
+```typescript title="packages/domain/src/Customer/CustomerDashboard.view.ts"
+keyOf: {
+  AccountSummary: ({ state }) => (state?.customerId ? Customer.ref(state.customerId) : undefined),
+```
+
+Returning `undefined` means the event belongs to no dashboard, like a summary for an account that hasn't been opened yet. The handler for those events receives the same state, and records that account's balance.
+
+```typescript title="packages/domain/src/Customer/CustomerDashboard.view.ts"
+AccountSummary: (d, _, { source, state }) => ({
+  ...d,
+  balances:
+    state && !state.closed
+      ? { ...d.balances, [source.id]: state.balance }
+      : without(d.balances, source.id),
+}),
+```
+
+## Route one event to several keys
+
+Some events matter to more than one key. A transfer request names two accounts, and both of their transfer histories should show it, one as money out and one as money in.
+
+`keyOf` can return named routes. Each route picks a key, and each has its own handler.
+
+```typescript title="packages/domain/src/Transfer/AccountTransfers.view.ts"
+keyOf: {
+  TransferRequested: {
+    out: ({ event }) => Account.ref(event.from),
+    in: ({ event }) => Account.ref(event.to),
+  },
+},
+events: [TransferMoved],
+emit: {
+  TransferRequested: { out: moved("out"), in: moved("in") },
+},
+```
+
+One `TransferRequested` updates both accounts: the sender's as `out` and the recipient's as `in`.
+
+## Read it
+
+Through an [Api](/domain/api), a view offers four reads for one key. `get` returns its current state, or `null` if nothing has happened to that key yet. `list` returns a page of its emitted events. `watch` streams the state now and after every change. `events` streams its emitted events, history first, then new ones as they're recorded.
+
+```typescript
+// packages/server/test/statementPage.ts
+import * as Effect from "effect/Effect";
+import type { AccountId } from "@bank/domain/Account/Account.id";
+import type { CustomerClient } from "./flows.ts";
+
+export const statementPage = Effect.fn(function* (bank: CustomerClient, accountId: AccountId) {
+  const page = yield* bank.Statement.list(accountId, { order: "desc", take: 10 });
+  return page.entries.map(({ event }) => `${event.kind} ${event.amount}`);
+});
+```
+
+A `where` filter narrows any read, like only deposits over a threshold. A filter can only narrow what you're already allowed to read; it never grants access.
+
+## Decide who may read it
+
+A view that's exposed through an Api declares `middleware` to identify the caller, and `validate` to judge each read against the view's state.
+
+```typescript title="packages/domain/src/Account/AccountSummary.view.ts"
+validate: Effect.fn(function* (_request, summary) {
+  yield* mustOwn(summary?.customerId ?? null);
+}),
+```
+
+`validate` runs on every read, and again on every change while a client watches. If an account changes owner, the previous owner's watch ends with `NotOwner`. See [Views as security boundaries](/domain/view-security).
+
+Every key keeps an input log: each delivery it applied, in order, kept for good. A view's state is a fold of that log.
+
+Next, [Projection](/domain/projection) writes events into a store you own, when a view's built-in store isn't the right one.

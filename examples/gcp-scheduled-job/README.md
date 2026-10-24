@@ -41,7 +41,7 @@ From the repository root:
 ```sh
 pnpm install
 cd examples/gcp-scheduled-job
-pnpm deploy --profile alchemy-testing
+pnpm deploy --profile <name>
 ```
 
 This needs a local Docker daemon to build the images. Then start a run with the printed `url`:
@@ -50,12 +50,12 @@ This needs a local Docker daemon to build the images. Then start a run with the 
 curl -X POST "$URL/run"
 ```
 
-A Cloud Run Job execution can take a couple of minutes to start. To run the schedule itself, use `gcloud scheduler jobs run <schedulerJobName> --location us-central1`.
+A Cloud Run Job execution can take a couple of minutes to start. To run the schedule itself, use `gcloud scheduler jobs run <schedulerJobName> --location <region>`.
 
 ## Live test
 
 ```sh
-ALCHEMY_PROFILE=alchemy-testing bun test
+ALCHEMY_PROFILE=<name> bun test
 ```
 
 The test deploys the stack and seeds five orders with BigQuery `insertAll`. It calls `POST /run`, polls the bucket until a summary with the seeded regions appears, and checks the counts and totals. It then forces the Cloud Scheduler job with `cloudscheduler.runProjectsLocationsJobs` and waits for a new execution of the job. Finally it destroys the stack and verifies the job, the scheduler job, and the bucket are gone.
@@ -63,5 +63,5 @@ The test deploys the stack and seeds five orders with BigQuery `insertAll`. It c
 ## Destroy
 
 ```sh
-pnpm destroy --profile alchemy-testing
+pnpm destroy --profile <name>
 ```

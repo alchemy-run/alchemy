@@ -1,8 +1,8 @@
-import * as GCP from "alchemy/GCP";
+import * as GCP from "@alchemy.run/gcp";
 
 /**
  * Eventarc only delivers Firestore events to triggers in the database's
- * own location, so the database, the trigger, and both services share it.
+ * own location, so the database and the trigger pin the same location.
  */
 export const LOCATION = "us-central1";
 

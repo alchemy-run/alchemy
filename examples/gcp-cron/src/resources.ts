@@ -1,9 +1,8 @@
-import * as GCP from "alchemy/GCP";
+import * as GCP from "@alchemy.run/gcp";
 import * as Effect from "effect/Effect";
 
 /** The warehouse every scheduled run reports into. */
 export const Monitoring = GCP.BigQuery.Dataset("Monitoring", {
-  location: "US-CENTRAL1",
   forceDestroy: true,
 });
 

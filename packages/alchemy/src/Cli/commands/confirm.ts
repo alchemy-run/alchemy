@@ -11,9 +11,7 @@ import { exitDeclined } from "./errors.ts";
  * failure log — the process just exits 1, matching the CLI's documented
  * "1 = failure or decline" contract.
  */
-export class ConfirmationDeclined extends Data.TaggedError(
-  "ConfirmationDeclined",
-) {
+export class ConfirmationDeclined extends Data.TaggedError("ConfirmationDeclined") {
   readonly [Runtime.errorReported] = false;
 }
 
@@ -42,5 +40,5 @@ export const confirmOrDecline = Effect.fn(function* (options: {
   if (approved) return;
   yield* CliKit.accessors.output.info(options.abortMessage ?? "Aborted.");
   yield* exitDeclined;
-  return yield* Effect.fail(new ConfirmationDeclined());
+  return yield* new ConfirmationDeclined();
 });

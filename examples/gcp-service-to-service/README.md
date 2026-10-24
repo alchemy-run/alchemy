@@ -18,7 +18,7 @@ identity. This is the GCP counterpart of `AWS.Lambda.InvokeFunction`.
 ## The binding
 
 ```ts
-const quotes = yield* GCP.Run.InvokeService(yield* Quotes);
+const quotes = yield* GCP.Run.InvokeService(Quotes);
 const response = yield* quotes.fetch("/quote");
 ```
 
@@ -34,13 +34,13 @@ to the `Gateway` only. Other services in the project still get `403`.
 
 ## Deploy
 
+Credentials come from your alchemy profile: run `alchemy profile` once and pick GCP (*Service account JSON* for a key file, or *Stored* for an access token or key kept in `~/.alchemy/credentials`, plus a default region), then deploy with `--profile <name>`.
+
 ```sh
-pnpm deploy
+pnpm deploy --profile <name>
 ```
 
-This needs Docker (Alchemy builds both images locally) and GCP
-credentials (`GOOGLE_PROJECT_ID` plus `GOOGLE_APPLICATION_CREDENTIALS` or
-`GOOGLE_ACCESS_TOKEN`). The stack outputs `url` (the gateway) and
+This needs Docker (Alchemy builds both images locally). The stack outputs `url` (the gateway) and
 `quotesUrl`:
 
 ```sh
@@ -58,18 +58,18 @@ curl -H "Authorization: Bearer $(gcloud auth print-identity-token)" "$quotesUrl/
 ## Test
 
 ```sh
-pnpm test
+ALCHEMY_PROFILE=<name> bun test
 ```
 
 The test deploys the stack and checks three things: the gateway returns
 `200` with a body from `Quotes`, a direct unauthenticated call to
 `Quotes` returns `403`, and `run.invoker` on `Quotes` is held by the
 gateway's service account only. It then destroys the stack and confirms
-both services are gone. The test is skipped when GCP credentials or
-Docker are missing.
+both services are gone. The test is skipped when
+Docker is not running.
 
 ## Destroy
 
 ```sh
-pnpm destroy
+pnpm destroy --profile <name>
 ```

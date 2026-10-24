@@ -1,5 +1,5 @@
-import * as GCP from "alchemy/GCP";
-import * as Kubernetes from "alchemy/Kubernetes";
+import * as GCP from "@alchemy.run/gcp";
+import * as Kubernetes from "@alchemy.run/kubernetes";
 import * as Effect from "effect/Effect";
 
 /**
@@ -19,6 +19,7 @@ import * as Effect from "effect/Effect";
  * how the workloads' bindings authenticate.
  */
 export const GuestbookCluster = GCP.Container.Cluster("GuestbookCluster", {
+  // Autopilot needs a region; the Cluster default is the zone `us-central1-a`.
   location: "us-central1",
   autopilot: true,
   releaseChannel: "REGULAR",
@@ -29,7 +30,6 @@ export const GuestbookCluster = GCP.Container.Cluster("GuestbookCluster", {
  * Entries are documents at `entries/<id>`.
  */
 export const EntriesDatabase = GCP.Firestore.Database("EntriesDatabase", {
-  location: "us-central1",
   type: "FIRESTORE_NATIVE",
 });
 
