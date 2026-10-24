@@ -212,7 +212,7 @@ test.provider(
       "provider:prisma:sourcerepository",
       "local",
     ],
-    exclusive: true,
+    exclusive: "prisma:dev",
   },
 );
 

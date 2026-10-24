@@ -1,4 +1,5 @@
 import * as Docker from "@alchemy.run/docker";
+import { DockerEnvironment } from "@alchemy.run/docker/Docker";
 import { describe, expect } from "@alchemy.run/test";
 import { inMemoryState, State } from "alchemy/State";
 import * as Test from "alchemy/Test/Alchemy";
@@ -377,6 +378,47 @@ describe(
             ),
           );
         expect(image.repoDigest).toContain(`${b.host}/two-registries-app@sha256:`);
+      }),
+    );
+
+    test.provider("merges a DockerEnvironment auth config with the process one", (stack) =>
+      Effect.gen(function* () {
+        // Base A behind the user's own DOCKER_AUTH_CONFIG, base C behind one a
+        // provider passes through DockerEnvironment, push to B's `registry`.
+        const a = yield* authenticatedRegistry();
+        const b = yield* authenticatedRegistry();
+        const c = yield* authenticatedRegistry();
+        const baseA = yield* publishPrivateBase(a.host, a.credentials, "base-a");
+        const baseC = yield* publishPrivateBase(c.host, c.credentials, "base-c");
+        const auth = yield* Effect.sync(() =>
+          Buffer.from("alchemy:alchemy-test-password").toString("base64"),
+        );
+        const root = yield* dockerfileContext(
+          `FROM ${baseA} AS a\nFROM ${baseC}\nCOPY --from=a /bin/busybox /from-a\n`,
+        );
+
+        const image = yield* stack
+          .deploy(
+            Docker.Image("merged-auth-app", {
+              name: `${b.host}/merged-auth-app`,
+              tag: "v1",
+              registry: b.credentials,
+              build: { context: root },
+            }),
+          )
+          .pipe(
+            Effect.provideService(DockerEnvironment, {
+              DOCKER_AUTH_CONFIG: JSON.stringify({ auths: { [c.host]: { auth } } }),
+            }),
+            Effect.provide(
+              ConfigProvider.layer(
+                ConfigProvider.fromUnknown({
+                  DOCKER_AUTH_CONFIG: JSON.stringify({ auths: { [a.host]: { auth } } }),
+                }),
+              ),
+            ),
+          );
+        expect(image.repoDigest).toContain(`${b.host}/merged-auth-app@sha256:`);
       }),
     );
 

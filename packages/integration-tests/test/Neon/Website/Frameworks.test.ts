@@ -6,14 +6,12 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as HttpClient from "effect/http/HttpClient";
 import * as Path from "effect/Path";
-import * as Semaphore from "effect/Semaphore";
 import { functionRolloutTimeout } from "../FunctionRollout.ts";
 import { browserRoundtrip } from "./Browser.ts";
 import { bodyContaining, exampleRoot, updatedBodyContaining } from "./Fixture.ts";
 import { frameworks } from "./Frameworks.ts";
 
 const { test } = Test.make({ providers: providers() });
-const deployments = Semaphore.makeUnsafe(1);
 
 describe.concurrent(
   "Neon Website complete lifecycle",
@@ -39,16 +37,14 @@ describe.concurrent(
             yield* Effect.addFinalizer(() =>
               fs.writeFileString(asset, original).pipe(Effect.orDie),
             );
-            const deploy = stack
-              .deploy(
-                Effect.gen(function* () {
-                  return yield* website("Web", {
-                    rootDir,
-                    env: { GREETING: `Hello from ${name} on Neon!` },
-                  });
-                }),
-              )
-              .pipe(deployments.withPermit);
+            const deploy = stack.deploy(
+              Effect.gen(function* () {
+                return yield* website("Web", {
+                  rootDir,
+                  env: { GREETING: `Hello from ${name} on Neon!` },
+                });
+              }),
+            );
             const site = yield* deploy;
             expect(site.url).toMatch(/^https:\/\//);
             const url = String(site.url).replace(/\/+$/, "");

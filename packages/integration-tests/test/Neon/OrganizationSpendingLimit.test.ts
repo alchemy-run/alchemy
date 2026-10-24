@@ -271,6 +271,6 @@ test.provider.skipIf(!enabled)(
   {
     tags: ["provider:neon", "provider:neon:organizationspendinglimit", "live"],
     timeout: 120_000,
-    exclusive: true,
+    exclusive: "neon:governance",
   },
 );

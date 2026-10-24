@@ -177,6 +177,6 @@ test.provider.skipIf(!canUpload)(
       "live",
     ],
     timeout: 120_000,
-    exclusive: true,
+    exclusive: "cloudflare:event-subscriptions",
   },
 );

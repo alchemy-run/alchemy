@@ -38,7 +38,6 @@ test.provider(
   {
     tags: ["provider:neon", "provider:neon:website", "local"],
     timeout: 120_000,
-    exclusive: true,
   },
 );
 
@@ -90,6 +89,5 @@ test.provider(
   {
     tags: ["provider:neon", "provider:neon:website", "live"],
     timeout: 120_000,
-    exclusive: true,
   },
 );

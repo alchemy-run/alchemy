@@ -58,7 +58,8 @@ const activeRuleSetName = ses
   .describeActiveReceiptRuleSet({})
   .pipe(Effect.map((response) => response.Metadata?.Name));
 
-// Mutates the account-singleton active receipt rule set: exclusive, and the
+// Mutates the account-singleton active receipt rule set: holds the
+// "aws:ses-account" label, and the
 // previously active set (if any) is captured and restored.
 test.provider.skipIf(GATED)(
   "end-to-end receive: MX -> SES inbound -> receipt rule -> S3 object",
@@ -258,6 +259,6 @@ test.provider.skipIf(GATED)(
       "live",
     ],
     timeout: 900_000,
-    exclusive: true,
+    exclusive: "aws:ses-account",
   },
 );

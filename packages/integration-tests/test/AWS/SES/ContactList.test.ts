@@ -10,8 +10,8 @@ import * as Schedule from "effect/Schedule";
 const { test } = Test.make({ providers: AWS.providers() });
 
 // SES allows only one contact list per AWS account, so every test that creates
-// one is `exclusive` — two contact-list suites running concurrently would
-// collide on the account-wide singleton.
+// one holds the "aws:ses-account" label — two contact-list suites running
+// concurrently would collide on the account-wide singleton.
 
 class ContactListStillExists extends Data.TaggedError("ContactListStillExists")<{
   readonly name: string;
@@ -97,7 +97,7 @@ test.provider(
   {
     tags: ["provider:aws", "provider:aws:ses", "live"],
     timeout: 120_000,
-    exclusive: true,
+    exclusive: "aws:ses-account",
   },
 );
 
@@ -134,6 +134,6 @@ test.provider(
   {
     tags: ["provider:aws", "provider:aws:ses", "live"],
     timeout: 120_000,
-    exclusive: true,
+    exclusive: "aws:ses-account",
   },
 );

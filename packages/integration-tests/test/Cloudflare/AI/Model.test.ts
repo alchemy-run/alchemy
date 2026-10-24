@@ -35,7 +35,7 @@ test.provider(
   {
     tags: ["provider:cloudflare", "provider:cloudflare:ai", "live"],
     timeout: 120_000,
-    exclusive: true,
+    exclusive: "cloudflare:event-subscriptions",
   },
 );
 
@@ -89,7 +89,7 @@ test.provider(
       "live",
     ],
     timeout: 120_000,
-    exclusive: true,
+    exclusive: "cloudflare:event-subscriptions",
   },
 );
 
@@ -189,6 +189,6 @@ test.provider(
       "live",
     ],
     timeout: 120_000,
-    exclusive: true,
+    exclusive: "cloudflare:event-subscriptions",
   },
 );
