@@ -26,7 +26,6 @@ import { sha256 } from "alchemy/Util/sha256";
 import { zipCode } from "alchemy/Util/zip";
 import type * as lambda from "aws-lambda";
 import * as Cause from "effect/Cause";
-import * as Config from "effect/Config";
 import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
@@ -55,14 +54,18 @@ import {
   type FunctionImageSource,
   makeFunctionImage,
 } from "./FunctionImage.ts";
-import { makeFunctionHttpHandler } from "./HttpServer.ts";
+import {
+  isResponseStreaming,
+  makeFunctionHttpHandler,
+  RESPONSE_STREAM_ENV,
+  streamifyHandler,
+} from "./HttpServer.ts";
 import {
   HandlerContext,
   TIMEOUT_MARGIN_ENV,
   toTimeoutMarginMillis,
   withInvocationDeadline,
 } from "./InvocationDeadline.ts";
-import { awslambdaGlobal, LambdaResponseStream, RESPONSE_STREAM_ENV } from "./ResponseStream.ts";
 
 export type { FunctionImageSource } from "./FunctionImage.ts";
 export {
@@ -1196,8 +1199,12 @@ export const Function: Platform<
         // must never resolve through `Config.String`.
         Effect.sync(() => unpackEnvValue<T>(process.env[key])),
       serve: (handler: HttpEffect) =>
-        // @ts-ignore
-        ctx.listen(makeFunctionHttpHandler(handler)),
+        ctx.listen(
+          // @ts-ignore
+          Effect.sync(() =>
+            makeFunctionHttpHandler(handler, { responseStream: isResponseStreaming() }),
+          ),
+        ),
       listen: ((handler: FunctionListener | Effect.Effect<FunctionListener>) =>
         Effect.sync(() =>
           Effect.isEffect(handler)
@@ -1217,11 +1224,7 @@ export const Function: Platform<
           // WorkerBridge). The build's memo map is stripped so a Layer the
           // user `Effect.provide`s inside a handler builds per invocation.
           const services = Context.omit(Layer.CurrentMemoMap)(yield* Effect.context<never>());
-          const dispatch = async (
-            event: any,
-            context: lambda.Context,
-            responseStream?: LambdaResponseStream["Service"],
-          ): Promise<any> => {
+          const dispatch = async (event: any, context: lambda.Context): Promise<any> => {
             for (const handler of handlers) {
               const eff = handler(event);
               if (Effect.isEffect(eff)) {
@@ -1251,11 +1254,6 @@ export const Function: Platform<
                       // values through `RuntimeContext.get`) run in the
                       // handler, like on every other host bridge.
                       Layer.succeed(RuntimeContext, ctx as FunctionContext),
-                      // A streaming invocation's response stream, which the
-                      // HTTP handler writes the response into.
-                      responseStream
-                        ? Layer.succeed(LambdaResponseStream, responseStream)
-                        : Layer.empty,
                       // The configured telemetry exporters, attached to the
                       // invocation scope by `buildEventTelemetry` so
                       // buffered spans/logs/metrics flush when it settles
@@ -1290,28 +1288,8 @@ export const Function: Platform<
             }
             throw new Error("No event handler found");
           };
-          const awslambda = awslambdaGlobal();
-          const streaming = yield* Config.Boolean(RESPONSE_STREAM_ENV).pipe(
-            Config.withDefault(false),
-          );
-          if (!streaming || awslambda === undefined) {
-            // Exactly two parameters: Node 24 rejects a handler declaring a
-            // third (`callback`) parameter.
-            return (event: any, context: lambda.Context) => dispatch(event, context);
-          }
-          // `invokeMode: "RESPONSE_STREAM"`: Lambda passes a response stream
-          // instead of reading the return value. HTTP responses are piped
-          // into it; any other listener's result (an SQS batch response, a
-          // direct `Invoke`) is written as JSON, which a buffered `Invoke`
-          // returns as its payload.
-          return awslambda.streamifyResponse(async (event, stream, context) => {
-            const responseStream = { awslambda, stream, used: false };
-            const result = await dispatch(event, context, responseStream);
-            if (!responseStream.used) {
-              stream.write(result === undefined ? "" : JSON.stringify(result));
-              stream.end();
-            }
-          });
+          // `invokeMode: "RESPONSE_STREAM"` needs a streaming handler.
+          return isResponseStreaming() ? streamifyHandler(dispatch) : dispatch;
         }),
       })),
     };
