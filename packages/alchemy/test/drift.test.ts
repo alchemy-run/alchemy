@@ -639,6 +639,7 @@ describe("plan", { tags: ["unit", "local"] }, () => {
       cloud.resources.delete("Topic");
       cloud.resources.delete("Subscription");
 
+      cloud.calls.length = 0;
       const stk = yield* Stack;
       const { plan } = yield* Drift.plan({ name: stk.name, stage: stk.stage });
 
