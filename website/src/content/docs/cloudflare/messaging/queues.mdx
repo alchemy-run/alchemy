@@ -188,11 +188,45 @@ Effect.gen(function* () {
 });
 ```
 
-`deadLetterQueue` also takes a queue from another stack,
-`yield* Cloudflare.Queues.Queue.ref("DeadLetters", { stack: "shared" })`,
-or a queue name as a string. One Worker can consume both queues. Replace the log with whatever should
+One Worker can consume both queues. Replace the log with whatever should
 happen to a failed message: persist it for replay, page someone, or send
 it back to the source queue after a fix.
+
+### Dead-letter to a queue in another stack
+
+If another stack owns the dead-letter queue, pass a reference to it:
+
+```typescript
+yield* Cloudflare.Queues.consumeQueueMessages<QueueMessageBody>(
+  queueResource,
+  {
+    maxRetries: 3,
+    deadLetterQueue: yield* Cloudflare.Queues.Queue.ref("DeadLetters", {
+      stack: "shared",
+      stage: "production",
+    }),
+  },
+  (stream) => Stream.runForEach(stream, (msg) => Effect.log(msg.body.id)),
+);
+```
+
+Deploy the `shared` stack first, because a reference reads its persisted
+state. That stack's Worker should consume the dead-letter queue.
+
+### Dead-letter to a queue by name
+
+For a queue Alchemy doesn't manage, pass its name:
+
+```typescript
+yield* Cloudflare.Queues.consumeQueueMessages<QueueMessageBody>(
+  queueResource,
+  { maxRetries: 3, deadLetterQueue: "orders-dead-letters" },
+  (stream) => Stream.runForEach(stream, (msg) => Effect.log(msg.body.id)),
+);
+```
+
+A name adds no deploy dependency on that queue, and nothing in this stack
+consumes it. Make sure something else does.
 
 ## Provide the runtime layer
 
