@@ -16,9 +16,15 @@
     {
       "path": "../alchemy/tsconfig.json"
     },
-    { "path": "../sql/tsconfig.json" },
-    { "path": "../docker/tsconfig.json" },
-    { "path": "../domain/tsconfig.json" },
+    {
+      "path": "../sql/tsconfig.json"
+    },
+    {
+      "path": "../docker/tsconfig.json"
+    },
+    {
+      "path": "../domain/tsconfig.json"
+    },
     {
       "path": "../../submodules/distilled/packages/cloudflare/tsconfig.json"
     },
@@ -30,6 +36,15 @@
     },
     {
       "path": "../acme/tsconfig.json"
+    },
+    {
+      "path": "../ai/tsconfig.json"
+    },
+    {
+      "path": "../sandbox/tsconfig.json"
+    },
+    {
+      "path": "../aws/tsconfig.json"
     }
   ]
 }

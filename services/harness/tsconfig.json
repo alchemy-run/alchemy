@@ -1,0 +1,35 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "include": [
+    "alchemy.run.ts",
+    "src/**/*.ts",
+    "web/src/**/*.ts",
+    "web/src/**/*.tsx",
+    "web/vite.config.ts"
+  ],
+  "compilerOptions": {
+    "noEmit": true,
+    "rootDir": ".",
+    "module": "Preserve",
+    "moduleResolution": "Bundler",
+    "target": "ESNext",
+    "jsx": "react-jsx",
+    "lib": ["ESNext", "DOM", "DOM.Iterable"],
+    "types": ["vite/client"],
+    "declaration": false,
+    "declarationMap": false,
+    "paths": {
+      "@/*": ["./web/src/*"]
+    }
+  },
+  "references": [
+    { "path": "../../packages/alchemy/tsconfig.json" },
+    { "path": "../../packages/ai/tsconfig.json" },
+    { "path": "../../packages/anthropic/tsconfig.json" },
+    { "path": "../../packages/aws/tsconfig.json" },
+    { "path": "../../packages/cloudflare/tsconfig.json" },
+    { "path": "../../packages/doppler/tsconfig.json" },
+    { "path": "../../packages/github/tsconfig.json" },
+    { "path": "../../packages/sandbox/tsconfig.json" }
+  ]
+}

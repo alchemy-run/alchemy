@@ -2,6 +2,7 @@ import type { Credentials } from "@distilled.cloud/aws/Credentials";
 import type * as microvms from "@distilled.cloud/aws/lambda-microvms";
 import type { Region } from "@distilled.cloud/aws/Region";
 import type * as Bundle from "alchemy/Bundle/Bundle";
+import type { ImageLayer } from "alchemy/Image/Layer";
 import { Platform } from "alchemy/Platform";
 import type { Main } from "alchemy/Platform";
 import type { Resource } from "alchemy/Resource";
@@ -26,7 +27,11 @@ const buildRolePolicyStatements: PolicyStatement[] = [
   {
     Effect: "Allow",
     Action: ["logs:CreateLogGroup", "logs:CreateLogStream", "logs:PutLogEvents"],
-    Resource: ["arn:aws:logs:*:*:log-group:/aws/lambda/microvms/*"],
+    Resource: [
+      "arn:aws:logs:*:*:log-group:/aws/lambda/microvms/*",
+      // Where Lambda writes MicroVM build logs.
+      "arn:aws:logs:*:*:log-group:/aws/lambda-microvms/*",
+    ],
   },
 ];
 
@@ -164,6 +169,13 @@ export interface MicrovmImageProps {
   tags?: Record<string, string>;
 
   /**
+   * @internal Image layers (tools, harness CLIs) rendered between the base
+   * and the program (effectful mode). Bindings contribute more through the
+   * binding contract's `image`.
+   */
+  imageLayers?: ImageLayer[];
+
+  /**
    * @internal Platform-managed: the bundled runtime entrypoint.
    */
   exports?: string[] | Record<string, any>;
@@ -204,6 +216,12 @@ export interface MicrovmImage extends Resource<
   {
     env?: Record<string, any>;
     policyStatements?: PolicyStatement[];
+    /**
+     * Dockerfile layers a binding installs into the image (a coding-agent
+     * CLI, `git`). Deduplicated by `id` and rendered between the base image
+     * and the program (effectful mode).
+     */
+    image?: ImageLayer[];
   },
   Providers
 > {}

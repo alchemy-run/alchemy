@@ -4,6 +4,7 @@ import {
   runProcess,
   stackConstant,
 } from "alchemy/Runtime/Bootstrap";
+import { startEgressProxy } from "alchemy/Runtime/EgressProxy";
 /**
  * Process bootstrap core for `AWS.Lambda.MicrovmImage` images. The runtime
  * (`bun` | `node`) is chosen at deploy time, and each is an optional peer,
@@ -48,7 +49,10 @@ export const bootstrapMicrovm = (
     Logger.layer([Logger.consolePretty()]),
   );
 
-  const program = resolveProgram("default", { telemetry: true }).pipe(
+  // Before the program: anything it starts must reach the network through
+  // the egress proxy (when the image runs one).
+  const program = startEgressProxy.pipe(
+    Effect.andThen(resolveProgram("default", { telemetry: true })),
     Effect.provide(
       entrypointLayer(entrypoint).pipe(
         Layer.provideMerge(stackConstant(options.stack.name, options.stack.stage)),

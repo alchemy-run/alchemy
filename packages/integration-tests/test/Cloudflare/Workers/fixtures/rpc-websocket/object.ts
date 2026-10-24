@@ -31,6 +31,7 @@ export const SocketObjectLive = SocketObject.make(
               }),
             )
             .pipe(Effect.orDie),
+        slow: ({ millis }) => Effect.sleep(millis).pipe(Effect.as(millis)),
         reject: () => Effect.fail(new Rejected({ message: "rejected by handler" })),
         numbers: ({ count }) => Stream.range(1, count),
         watch: ({ key }) =>

@@ -280,6 +280,12 @@ export const Platform = <
      * wherever the props effect is, including inside deployed bundles.
      */
     transformProps?: (id: string, props: any) => Effect.Effect<any, any, any>;
+    /**
+     * Wrap the user's construction effect (`impl`) before it runs, at deploy
+     * and at run time: a platform provides services its constructors may
+     * use (e.g. how a Worker reaches an egress gateway).
+     */
+    provideImpl?: (impl: Effect.Effect<any, any, any>) => Effect.Effect<any, any, any>;
   },
   methods?: { [key: string]: any },
 ): any => {
@@ -476,7 +482,7 @@ export const Platform = <
                 runtimeContext,
               );
 
-              yield* impl.pipe(
+              yield* (hooks.provideImpl?.(impl) ?? impl).pipe(
                 Effect.flatMap((impl) => {
                   if (!impl) return Effect.void;
                   const shape = impl as Record<string, unknown>;

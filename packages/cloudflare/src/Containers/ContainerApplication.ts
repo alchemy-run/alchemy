@@ -1,6 +1,7 @@
 import type { InlineDockerfile } from "@alchemy.run/docker/Dockerfile";
 import * as Containers from "@distilled.cloud/cloudflare/containers";
 import type * as Bundle from "alchemy/Bundle/Bundle";
+import type { ImageLayer } from "alchemy/Image/Layer";
 import * as ProviderLayer from "alchemy/Local/ProviderLayer";
 import { type Main, type PlatformProps, type PlatformServices } from "alchemy/Platform";
 import { Resource } from "alchemy/Resource";
@@ -455,8 +456,31 @@ export interface DurableObjectContainerProps
    * `context` defaults to the current directory.
    */
   context?: string;
-  /** Dockerfile path or inline content. Defaults to the context's Dockerfile. */
+  /**
+   * Dockerfile path or inline content. Defaults to the context's Dockerfile.
+   * With {@link main}, an inline environment Dockerfile for the program's
+   * generated Dockerfile (exclusive with {@link image}).
+   */
   dockerfile?: string | InlineDockerfile;
+  /**
+   * Entrypoint of a bundled Effect program (`Container.make`). The program is
+   * this Container's image: Alchemy bundles it into a generated Dockerfile
+   * whose environment comes from {@link image} or an inline
+   * {@link dockerfile} (default: the runtime's base image). Its bindings'
+   * image layers and plain env are baked into the image; pass secrets with
+   * `start({ env })` or keep them out with egress.
+   */
+  main?: string;
+  /** Runtime for {@link main}. @default "bun" */
+  runtime?: "bun" | "node";
+  /** Exported handler in {@link main}. @default "default" */
+  handler?: string;
+  /** Packages {@link main}'s bundle leaves external. */
+  external?: string[];
+  /** Install {@link external} packages into the image. */
+  autoInstallExternals?: boolean;
+  /** Bundler configuration for {@link main}. */
+  build?: Bundle.BundleConfig;
   /** Image publication and build-cache configuration. */
   publish?: ContainerApplicationPropsBase["publish"];
   /**
@@ -468,6 +492,9 @@ export interface DurableObjectContainerProps
    */
   imagePreparationTimeout?: Duration.Input;
 }
+
+/** A bundled Effect program (`Container.make`) scheduled by its Durable Object. */
+export type ProgramDurableObjectContainerProps = DurableObjectContainerProps & { main: string };
 
 /**
  * Fleet-scheduled applications select a deployment image through `main`
@@ -496,6 +523,11 @@ export interface AnyContainerApplicationProps extends Omit<
   authorizedKeys?: Containers.UserSSHPublicKeyList;
   imagePreparationTimeout?: Duration.Input;
   main?: string;
+  /**
+   * @internal Image layers contributed by bindings (folded in from the
+   * binding contract's `image` by the provider; never set by users).
+   */
+  imageLayers?: ImageLayer[];
   image?: string;
   context?: string;
   dockerfile?: string | InlineDockerfile;
@@ -929,6 +961,12 @@ export interface ContainerApplication<Shape = unknown> extends Resource<
      * Environment variables injected into the container runtime via the binding.
      */
     env?: Record<string, any>;
+    /**
+     * Dockerfile layers a binding installs into the container image (a
+     * mounted repository, a coding-agent CLI). Deduplicated by `id` across
+     * bindings and rendered between the base image and the program.
+     */
+    image?: ImageLayer[];
   },
   Providers
 > {

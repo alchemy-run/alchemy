@@ -772,8 +772,10 @@
   },
   "dependencies": {
     "@alchemy.run/acme": "workspace:*",
+    "@alchemy.run/ai": "workspace:*",
     "@alchemy.run/cloudflare-runtime": "workspace:*",
     "@alchemy.run/docker": "workspace:*",
+    "@alchemy.run/sandbox": "workspace:*",
     "@alchemy.run/sql": "workspace:*",
     "@distilled.cloud/aws4signer": "workspace:*",
     "@distilled.cloud/cloudflare": "workspace:*",
@@ -785,6 +787,7 @@
     "tinyglobby": "catalog:"
   },
   "devDependencies": {
+    "@alchemy.run/aws": "workspace:*",
     "@alchemy.run/domain": "workspace:*",
     "@alchemy.run/frontend-frameworks": "workspace:*",
     "@cloudflare/workers-types": "catalog:",
@@ -798,6 +801,7 @@
     "vite": "catalog:"
   },
   "peerDependencies": {
+    "@alchemy.run/aws": "workspace:*",
     "@alchemy.run/domain": "workspace:*",
     "@alchemy.run/frontend-frameworks": "workspace:*",
     "@effect/platform-bun": "catalog:",
@@ -807,6 +811,9 @@
     "vite": "catalog:"
   },
   "peerDependenciesMeta": {
+    "@alchemy.run/aws": {
+      "optional": true
+    },
     "@alchemy.run/domain": {
       "optional": true
     },

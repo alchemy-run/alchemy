@@ -683,12 +683,32 @@ export const ProviderLive = () =>
             ),
             Stream.map((o) => o.key),
             Stream.runForEachArray((chunk) =>
-              r2.deleteObjects({
-                accountId,
-                bucketName,
-                cfR2Jurisdiction: jurisdiction,
-                body: [...chunk],
-              }),
+              r2
+                .deleteObjects({
+                  accountId,
+                  bucketName,
+                  cfR2Jurisdiction: jurisdiction,
+                  body: [...chunk],
+                })
+                .pipe(
+                  // A key deleted since it was listed (by a writer still running)
+                  // fails the whole batch: delete the rest one at a time.
+                  Effect.catchTag("NoSuchKey", () =>
+                    Effect.forEach(
+                      chunk,
+                      (objectName) =>
+                        r2
+                          .deleteBucketObject({
+                            accountId,
+                            bucketName,
+                            cfR2Jurisdiction: jurisdiction,
+                            objectName,
+                          })
+                          .pipe(Effect.catchTag("NoSuchKey", () => Effect.void)),
+                      { concurrency: 16, discard: true },
+                    ),
+                  ),
+                ),
             ),
             Effect.catchTag("NoSuchBucket", () => Effect.void),
           );

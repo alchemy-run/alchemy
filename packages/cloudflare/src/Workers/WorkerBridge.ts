@@ -133,8 +133,8 @@ export const makeWorkerBridge = (
       super(ctx, env);
 
       for (const methodName of ExportedHandlerMethods) {
-        (this as any)[methodName] = async (input: any) =>
-          processEvent(
+        (this as any)[methodName] = async (input: any) => {
+          return processEvent(
             (built) =>
               built.export[methodName](input, this.env, this.ctx) as [
                 Effect.Effect<any>,
@@ -147,6 +147,7 @@ export const makeWorkerBridge = (
                 ? Promise.resolve(exit.value)
                 : Promise.reject(Cause.squash(exit.cause)),
           );
+        };
       }
 
       return new Proxy(this, {

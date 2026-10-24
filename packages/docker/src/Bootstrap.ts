@@ -12,6 +12,7 @@ import {
   runProcess,
   stackFromEnv,
 } from "alchemy/Runtime/Bootstrap";
+import { startEgressProxy } from "alchemy/Runtime/EgressProxy";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
@@ -30,7 +31,8 @@ export const bootstrap = (entrypoint: unknown): Promise<void> => {
     Logger.layer([Logger.consolePretty()]),
   );
 
-  const program = resolveProgram("program").pipe(
+  const program = startEgressProxy.pipe(
+    Effect.andThen(resolveProgram("program")),
     Effect.provide(
       entrypointLayer(entrypoint).pipe(
         Layer.provideMerge(stackFromEnv),

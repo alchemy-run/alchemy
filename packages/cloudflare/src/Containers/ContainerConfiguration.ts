@@ -135,6 +135,12 @@ const FLEET_ONLY_PROPS = [
   "sshPublicKeyIds",
 ] as const satisfies ReadonlyArray<keyof AnyContainerApplicationProps>;
 
+/**
+ * Fleet props a bundled `main` program keeps under Durable Object scheduling:
+ * its entrypoint, and plain env baked into its image (see `withProgramImage`).
+ */
+const MAIN_PROGRAM_PROPS: ReadonlyArray<string> = ["main", "env"];
+
 export const isDurableObjectContainer = (
   props: AnyContainerApplicationProps,
 ): props is DurableObjectContainerProps => props.schedulingPolicy === "durable_object";
@@ -193,10 +199,20 @@ export const validateContainerConfiguration = Effect.fn(function* (
     );
   }
 
+  if (props.main !== undefined && props.context !== undefined) {
+    return yield* invalid(
+      "A Durable Object-managed program (`main`) builds its own image: set its environment with `image` or an inline `dockerfile`, not `context`.",
+    );
+  }
+
   // The union type already forbids these, but untyped or Effect-produced
-  // props can still carry them.
+  // props can still carry them. A bundled program keeps its own entrypoint
+  // and environment image.
   const loose: AnyContainerApplicationProps = props;
-  const unsupported = FLEET_ONLY_PROPS.find((key) => loose[key] !== undefined);
+  const unsupported = FLEET_ONLY_PROPS.find(
+    (key) =>
+      loose[key] !== undefined && !(props.main !== undefined && MAIN_PROGRAM_PROPS.includes(key)),
+  );
   if (unsupported !== undefined) {
     return yield* invalid(
       `Container property '${unsupported}' is not supported with schedulingPolicy: 'durable_object'. The application is named and owned by the Durable Object class: attach the Container with Cloudflare.DurableObject(className, { containers }) on an async Worker, or yield it inside an Effect-native Durable Object. Pass per-instance settings to start().`,
@@ -206,7 +222,10 @@ export const validateContainerConfiguration = Effect.fn(function* (
 
 /** Whether a Durable Object-managed Container declares an image to publish. */
 export const hasImageSource = (props: DurableObjectContainerProps) =>
-  props.image !== undefined || props.context !== undefined || props.dockerfile !== undefined;
+  props.main !== undefined ||
+  props.image !== undefined ||
+  props.context !== undefined ||
+  props.dockerfile !== undefined;
 
 /** Read the scheduling policy off a declared Container resource's props. */
 export const isDurableObjectContainerResource = (container: ContainerApplication) => {

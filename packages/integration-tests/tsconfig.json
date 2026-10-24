@@ -107,6 +107,11 @@
     { "path": "../fly/tsconfig.json" },
     { "path": "../github/tsconfig.json" },
     { "path": "../stripe/tsconfig.json" },
-    { "path": "../cloudflare/tsconfig.json" }
+    { "path": "../cloudflare/tsconfig.json" },
+    { "path": "../ai/tsconfig.json" },
+    { "path": "../sandbox/tsconfig.json" },
+    { "path": "../anthropic/tsconfig.json" },
+    { "path": "../openai/tsconfig.json" },
+    { "path": "../openrouter/tsconfig.json" }
   ]
 }

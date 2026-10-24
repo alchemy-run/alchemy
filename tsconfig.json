@@ -56,6 +56,24 @@
     {
       "path": "./submodules/distilled/packages/zerossl/tsconfig.json"
     },
+    {
+      "path": "./submodules/distilled/packages/acp/tsconfig.json"
+    },
+    {
+      "path": "./submodules/distilled/packages/anthropic/tsconfig.json"
+    },
+    {
+      "path": "./submodules/distilled/packages/codex/tsconfig.json"
+    },
+    {
+      "path": "./submodules/distilled/packages/openai/tsconfig.json"
+    },
+    {
+      "path": "./submodules/distilled/packages/opencode/tsconfig.json"
+    },
+    {
+      "path": "./submodules/distilled/packages/openrouter/tsconfig.json"
+    },
     // Consolidated Cloudflare runtime, framework, and test-tool projects.
     {
       "path": "./packages/node-utils/tsconfig.json"
@@ -98,6 +116,21 @@
     },
     {
       "path": "./packages/doppler/tsconfig.json"
+    },
+    {
+      "path": "./packages/ai/tsconfig.json"
+    },
+    {
+      "path": "./packages/sandbox/tsconfig.json"
+    },
+    {
+      "path": "./packages/anthropic/tsconfig.json"
+    },
+    {
+      "path": "./packages/openai/tsconfig.json"
+    },
+    {
+      "path": "./packages/openrouter/tsconfig.json"
     },
     {
       "path": "./packages/infisical/tsconfig.json"
@@ -163,6 +196,9 @@
     // {
     //   "path": "./website/tsconfig.json"
     // },
+    {
+      "path": "./services/harness/tsconfig.json"
+    },
     {
       "path": "./examples/cloudflare-git-service/tsconfig.json"
     },

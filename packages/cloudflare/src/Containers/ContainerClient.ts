@@ -1,4 +1,5 @@
 import type * as cf from "@cloudflare/workers-types";
+import type { EgressError } from "alchemy/Egress/Gateway";
 import { makeFetchRpcStub } from "alchemy/Rpc";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Duration from "effect/Duration";
@@ -31,6 +32,44 @@ import {
   type ContainerStartupOptions,
 } from "./Container.ts";
 import { httpSchemePort } from "./ContainerPlatform.ts";
+import {
+  applyEgress,
+  clearEgress,
+  type ContainerEgress,
+  containerEnv,
+  isIntercepted,
+  isStored,
+  loadEgress,
+  nextEgress,
+  reapplyStored,
+  storeEgress,
+  TRUST_EGRESS_CA_THEN_EXEC,
+} from "./Egress.ts";
+import { controlsOf } from "./EgressRelay.ts";
+
+/** The platform's startup options with `enableInternet` optional. */
+type RelaxInternet<T> = T extends unknown
+  ? Omit<T, "enableInternet"> & { readonly enableInternet?: boolean }
+  : never;
+
+/** What the container may reach: egresses from `yield* SomeGateway`, and how long each grant lives. */
+export interface ContainerEgressOptions<Egress extends ContainerEgress = ContainerEgress> {
+  /**
+   * The egresses to grant (replacing what's stored). Their hosts and paths
+   * go to their gateways, which add the credentials; any other path on those
+   * hosts goes straight out. Omitted: what's stored is kept.
+   */
+  readonly egress?: ReadonlyArray<Egress>;
+  /** Each grant's lifetime; the relay mints a new one when 40% of it is left. @default "5 minutes" (or what's stored) */
+  readonly ttl?: Duration.Input;
+}
+
+/**
+ * `start` options: the platform's, plus the container's egress. With
+ * egress, `enableInternet` defaults to `false`: the egress hosts are
+ * reachable through their gateways, every other host isn't.
+ */
+export type ContainerStartOptions = RelaxInternet<ContainerStartupOptions> & ContainerEgressOptions;
 
 export type ContainerExecOptions = cf.ContainerExecOptions;
 export type ContainerExecOutput = cf.ExecOutput;
@@ -42,7 +81,8 @@ export type ContainerSnapshotOptions = cf.ContainerSnapshotOptions;
 export type ContainerStartError =
   | ContainerError
   | NoContainerInstanceError
-  | ContainerRateLimitedError;
+  | ContainerRateLimitedError
+  | EgressError;
 
 /** Errors a container port can fail with before the request reaches it. */
 export type ContainerPortError = ContainerError | ContainerNotRunningError | ContainerCrashedError;
@@ -121,10 +161,15 @@ export interface ContainerClient {
    * `options` names an `image` or a `containerSnapshot`. A no-op while any
    * image is running: `destroy()` first to switch images.
    */
-  start(
-    options?: ContainerStartupOptions,
-  ): Effect.Effect<void, ContainerStartError, RuntimeContext>;
-  /** Stop the container immediately. */
+  start(options?: ContainerStartOptions): Effect.Effect<void, ContainerStartError, RuntimeContext>;
+  /**
+   * Replace the container's egress (omitted fields are kept): stored, and
+   * applied at once to a running container, open connections included.
+   */
+  setEgress(
+    options: ContainerEgressOptions,
+  ): Effect.Effect<void, ContainerError | EgressError, RuntimeContext>;
+  /** Stop the container immediately. Its routes are cleared first; the stored egress stays for the next `start`. */
   destroy(error?: unknown): Effect.Effect<void, ContainerError, RuntimeContext>;
   /** Signal the container's main process. */
   signal(signo: number): Effect.Effect<void, ContainerError, RuntimeContext>;
@@ -227,15 +272,20 @@ const classifyStartError = (cause: unknown): ContainerStartError =>
  * never both call `container.start()` ("already running",
  * cloudflare/containers#173).
  */
-const coordination = new WeakMap<
-  object,
-  { readonly startMutex: Semaphore.Semaphore; readonly readyPorts: Set<number> }
->();
+interface Coordination {
+  readonly startMutex: Semaphore.Semaphore;
+  readonly readyPorts: Set<number>;
+}
+
+const coordination = new WeakMap<object, Coordination>();
 
 const coordinationFor = (container: cf.Container) => {
   let entry = coordination.get(container);
   if (!entry) {
-    entry = { startMutex: Semaphore.makeUnsafe(1), readyPorts: new Set<number>() };
+    entry = {
+      startMutex: Semaphore.makeUnsafe(1),
+      readyPorts: new Set<number>(),
+    };
     coordination.set(container, entry);
   }
   return entry;
@@ -320,6 +370,8 @@ export const fromContainer = (
   getContainer: () => cf.Container | undefined,
   /** The key of this Container's image in `ctx.container.images`. */
   imageKey?: string,
+  /** The owning Durable Object's state, for routing intercepted requests back to it. */
+  getState?: () => cf.DurableObjectState | undefined,
 ): ContainerClient => {
   const attached = Effect.suspend(() => {
     const container = getContainer();
@@ -366,11 +418,93 @@ export const fromContainer = (
     return ref === undefined ? options : ({ ...options, image: ref } as ContainerStartupOptions);
   };
 
-  const start = (options?: ContainerStartupOptions) =>
+  //#region egress
+
+  const ownState = Effect.suspend(() => {
+    const state = getState?.();
+    return state
+      ? Effect.succeed(state)
+      : Effect.fail(
+          new ContainerError({
+            message: "Container egress is only available inside the Durable Object that owns it.",
+          }),
+        );
+  });
+
+  /**
+   * What `start` will apply (DESIGN.md §10): the stored egress with `options`
+   * over it. Undefined when this container has no egress and no controls.
+   */
+  const planEgress = (options: ContainerEgressOptions) =>
     Effect.gen(function* () {
+      const state = getState?.();
+      if (!state) {
+        if (options.egress === undefined && options.ttl === undefined) return undefined;
+        return yield* new ContainerError({
+          message: "Container egress is only available inside the Durable Object that owns it.",
+        });
+      }
+      const stored = yield* loadEgress(state);
+      if (
+        stored === undefined &&
+        options.egress === undefined &&
+        options.ttl === undefined &&
+        controlsOf(state).length === 0
+      ) {
+        return undefined;
+      }
+      const next = nextEgress(stored, options);
+      // Already applied to the running container: nothing to mint or intercept.
+      const current =
+        isStored(stored, next) &&
+        (Object.keys(stored?.hosts ?? {}).length > 0 ||
+          (next.egress.length === 0 && controlsOf(state).length === 0));
+      return { state, next, current };
+    });
+
+  const setEgress = (options: ContainerEgressOptions) =>
+    Effect.gen(function* () {
+      const state = yield* ownState;
       const container = yield* attached;
+      const next = nextEgress(yield* loadEgress(state), options);
+      // Only hosts whose routes or granted egress changed are re-intercepted.
+      if (container.running) return yield* applyEgress(state, container, next, { fresh: false });
+      // Stopped: checked (conflicts, refusals) and stored; applied at the next start.
+      yield* storeEgress(state, next);
+    });
+
+  //#endregion
+
+  const start = (startOptions?: ContainerStartOptions) =>
+    Effect.gen(function* () {
+      const { egress, ttl, ...rest } = startOptions ?? {};
+      const container = yield* attached;
+      const plan = yield* planEgress({ egress, ttl });
       // Fast path: the steady state is one cheap `running` read, no lock.
-      if (container.running) return;
+      if (container.running) {
+        // Converge on the asked-for egress; hosts whose props are unchanged
+        // are left alone (the relay renews grants without re-intercepting).
+        if (plan && !plan.current) {
+          yield* applyEgress(plan.state, container, plan.next, { fresh: false });
+        }
+        return;
+      }
+      const granted = plan !== undefined && plan.next.egress.length > 0;
+      const env = granted
+        ? { ...containerEnv(plan.next.egress), ...(rest as { env?: Record<string, string> }).env }
+        : (rest as { env?: Record<string, string> }).env;
+      // With egress, only its hosts are reachable unless asked otherwise.
+      // With granted egress, `start()` with no options still sets its env.
+      const options: ContainerStartupOptions | undefined =
+        startOptions === undefined && !granted
+          ? undefined
+          : ({
+              ...rest,
+              ...(env !== undefined ? { env } : {}),
+              ...(granted && (rest as { enableInternet?: boolean }).enableInternet === undefined
+                ? { enableInternet: false }
+                : {}),
+            } as ContainerStartupOptions);
       const { startMutex, readyPorts } = coordinationFor(container);
       yield* Semaphore.withPermits(
         startMutex,
@@ -381,6 +515,9 @@ export const fromContainer = (
           if (container.running) return;
           // Nothing listens on a fresh start; re-probe every port.
           readyPorts.clear();
+          // Intercept before the program runs, so it never sees a moment
+          // with wider access than its egress.
+          if (plan) yield* applyEgress(plan.state, container, plan.next, { fresh: true });
           yield* Effect.try({
             try: () => container.start(withOwnImage(container, options)),
             catch: classifyStartError,
@@ -389,6 +526,11 @@ export const fromContainer = (
               while: (e) => e._tag === "ContainerRateLimitedError",
               schedule: Schedule.spaced(RATE_LIMIT_BACKOFF),
               times: RATE_LIMIT_RETRIES,
+            }),
+            Effect.retry({
+              while: (e) => e._tag === "NoContainerInstanceError",
+              schedule: Schedule.spaced(READINESS_POLL_INTERVAL),
+              times: GET_CONTAINER_RETRIES,
             }),
           );
           // Once the process exits (stopped, crashed, slept) its ports stop
@@ -401,13 +543,16 @@ export const fromContainer = (
           );
         }),
       );
-    }).pipe(
-      Effect.retry({
-        while: (e) => e._tag === "NoContainerInstanceError",
-        schedule: Schedule.spaced(READINESS_POLL_INTERVAL),
-        times: GET_CONTAINER_RETRIES,
-      }),
-    );
+    });
+
+  /** Refuse every routed host (revoking access at once), then stop. */
+  const destroy = (error?: unknown) =>
+    Effect.gen(function* () {
+      const container = yield* attached;
+      const state = getState?.();
+      if (state) yield* clearEgress(state, container).pipe(Effect.ignore);
+      yield* Effect.tryPromise({ try: () => container.destroy(error), catch: containerError });
+    });
 
   // A single readiness probe: any response (even non-2xx) proves the port
   // accepts connections. A process that has exited is a crash, not "not ready".
@@ -481,14 +626,29 @@ export const fromContainer = (
       },
     });
 
+  /** Whether the container's HTTPS is intercepted (so commands must trust the interception CA). */
+  const intercepted = Effect.suspend(() => {
+    const state = getState?.();
+    return state
+      ? loadEgress(state).pipe(
+          Effect.map(isIntercepted),
+          Effect.orElseSucceed(() => false),
+        )
+      : Effect.succeed(false);
+  });
+
   const startProcess = (cmd: string[], options?: ContainerExecOptions) =>
-    Effect.flatMap(attached, (container) =>
+    Effect.flatMap(Effect.zip(attached, intercepted), ([container, trustCa]) =>
       Effect.tryPromise({
         try: (interrupt) =>
-          container.exec(cmd, {
-            ...options,
-            signal: combineSignals(interrupt, options?.signal),
-          }),
+          container.exec(
+            // With egress, the command trusts its interception CA.
+            trustCa ? ["sh", "-c", TRUST_EGRESS_CA_THEN_EXEC, "sh", ...cmd] : cmd,
+            {
+              ...options,
+              signal: combineSignals(interrupt, options?.signal),
+            },
+          ),
         catch: containerError,
       }),
     ).pipe(Effect.map(fromProcess));
@@ -497,7 +657,8 @@ export const fromContainer = (
     image,
     running,
     start,
-    destroy: (error) => callAsync((container) => container.destroy(error)),
+    setEgress,
+    destroy,
     signal: (signo) => call((container) => container.signal(signo)),
     monitor: () =>
       Effect.flatMap(attached, (container) =>
@@ -527,6 +688,9 @@ export const fromContainer = (
   };
 };
 
+/** Durable Object instances whose stored intercepts were re-registered on construction. */
+const reapplied = new WeakSet<object>();
+
 /**
  * @internal What `yield* Container` runs inside a Durable Object: register the
  * container's bindings, then return its handle. Methods declared on the
@@ -539,7 +703,17 @@ export const makeContainerHandle = Effect.fnUntraced(function* (
 ) {
   yield* binding;
   const state = yield* DurableObjectState;
-  const client = fromContainer(() => state.container, id);
+  // A container still running from before this instance (the object was
+  // evicted, aborted or redeployed): re-register its stored intercepts once.
+  if (globalThis.__ALCHEMY_RUNTIME__ && state.raw && !reapplied.has(state.raw)) {
+    reapplied.add(state.raw);
+    yield* reapplyStored(state.raw);
+  }
+  const client = fromContainer(
+    () => state.container,
+    id,
+    () => state.raw,
+  );
   const rpcPort = client.getTcpPort(3000);
   return makeFetchRpcStub<ContainerClient>({
     // RPC methods only run inside the Durable Object, where RuntimeContext is

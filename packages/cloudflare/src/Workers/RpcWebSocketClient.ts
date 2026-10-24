@@ -11,7 +11,10 @@ import * as Socket from "effect/socket/Socket";
 export interface LayerOptions {
   /** Options passed to Effect's WebSocket transport. */
   readonly socket?: Parameters<typeof Socket.layerWebSocket>[1];
-  /** Options passed to Effect's socket RPC protocol. */
+  /**
+   * Options passed to Effect's socket RPC protocol.
+   * @default { pingTimeout: three ping intervals }
+   */
   readonly protocol?: Parameters<typeof RpcClient.layerProtocolSocket>[0];
   /** Options passed to the grouped Effect RPC client. */
   readonly client?: Omit<NonNullable<Parameters<typeof RpcClient.make>[1]>, "flatten">;
@@ -28,13 +31,16 @@ type ProtocolOptions = NonNullable<LayerOptions["protocol"]>;
  * Effect's pinger drops the connection when no frame arrived within
  * `pingTimeout` of a ping tick, and `pingTimeout` defaults to the interval:
  * a Pong that returns faster than the timer's own drift (any local server)
- * then misses the deadline by a few milliseconds. Allow two intervals.
+ * then misses the deadline by a few milliseconds. It also checks before
+ * sending the first ping, so a call quiet for one interval (a long unary
+ * RPC) drops a healthy socket. Allow three intervals: room for a ping and
+ * its pong.
  */
 const withPingTimeout = (protocol: LayerOptions["protocol"]): ProtocolOptions => ({
   ...protocol,
   pingTimeout:
     protocol?.pingTimeout ??
-    Duration.times(Duration.fromInputUnsafe(protocol?.pingInterval ?? "5 seconds"), 2),
+    Duration.times(Duration.fromInputUnsafe(protocol?.pingInterval ?? "5 seconds"), 3),
 });
 
 /**

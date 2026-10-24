@@ -274,7 +274,7 @@ export const makeEffectVirtualEntry = (
 import * as Effect from "effect/Effect";
 
 import { env, DurableObject, WorkerEntrypoint${hasWfClasses ? ", WorkflowEntrypoint" : ""} } from "cloudflare:workers";
-import { makeDurableObjectBridge, makeWorkerBridge${hasWfClasses ? ", makeWorkflowBridge" : ""}${hasMigrations ? ", withSqlMigrations" : ""} } from "@alchemy.run/cloudflare/Bridge";
+import { makeDurableObjectBridge, makeWorkerBridge${hasDoClasses ? ", makeEgressRelay" : ""}${hasWfClasses ? ", makeWorkflowBridge" : ""}${hasMigrations ? ", withSqlMigrations" : ""} } from "@alchemy.run/cloudflare/Bridge";
 import { makeEntrypointLayer } from "alchemy/Runtime";
 
 import entrypoint from ${JSON.stringify(importPath)};
@@ -295,6 +295,9 @@ ${[
     ? [
         "const DurableObjectBridge = makeDurableObjectBridge(DurableObject, meta);",
         ...doClasses.map((id) => `export class ${id} extends DurableObjectBridge("${id}") {}`),
+        // The relay a Durable Object's container egress is intercepted into
+        // (Containers/EgressRelay.ts), reached through ctx.exports.
+        "export class AlchemyEgress extends makeEgressRelay(WorkerEntrypoint) {}",
       ]
     : []),
   ...(hasWfClasses

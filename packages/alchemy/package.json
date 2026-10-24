@@ -37,6 +37,8 @@
     "./Auth": "./src/Auth/index.ts",
     "./Alchemist": "./src/Alchemist/index.ts",
     "./Command": "./src/Command/index.ts",
+    "./Egress": "./src/Egress/index.ts",
+    "./FS": "./src/FS/index.ts",
     "./Bundle": "./src/Bundle/index.ts",
     "./Cli": "./src/Cli/index.ts",
     "./Cli/CliKit": "./src/Cli/CliKit/index.ts",
@@ -74,6 +76,16 @@
         "types": "./lib/Command/index.d.ts",
         "bun": "./src/Command/index.ts",
         "default": "./lib/Command/index.js"
+      },
+      "./Egress": {
+        "types": "./lib/Egress/index.d.ts",
+        "bun": "./src/Egress/index.ts",
+        "default": "./lib/Egress/index.js"
+      },
+      "./FS": {
+        "types": "./lib/FS/index.d.ts",
+        "bun": "./src/FS/index.ts",
+        "default": "./lib/FS/index.js"
       },
       "./Bundle": {
         "types": "./lib/Bundle/index.d.ts",
@@ -131,10 +143,12 @@
   "dependencies": {
     "@alchemy.run/node-utils": "workspace:*",
     "@alchemy.run/sigil": "catalog:",
+    "@peculiar/x509": "catalog:",
     "capnweb": "catalog:",
     "fflate": "catalog:",
     "pathe": "catalog:",
     "picomatch": "catalog:",
+    "reflect-metadata": "catalog:",
     "rolldown": "catalog:",
     "tinyglobby": "catalog:",
     "yaml": "catalog:"

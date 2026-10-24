@@ -125,6 +125,31 @@ const config = {
       sourceDisplayPrefix: "packages/stripe/src",
     },
     {
+      srcRoot: path.join(import.meta.dir, "../packages/ai/src"),
+      providerPrefix: "AI",
+      sourceDisplayPrefix: "packages/ai/src",
+    },
+    {
+      srcRoot: path.join(import.meta.dir, "../packages/sandbox/src"),
+      providerPrefix: "Sandbox",
+      sourceDisplayPrefix: "packages/sandbox/src",
+    },
+    {
+      srcRoot: path.join(import.meta.dir, "../packages/anthropic/src"),
+      providerPrefix: "Anthropic",
+      sourceDisplayPrefix: "packages/anthropic/src",
+    },
+    {
+      srcRoot: path.join(import.meta.dir, "../packages/openai/src"),
+      providerPrefix: "OpenAI",
+      sourceDisplayPrefix: "packages/openai/src",
+    },
+    {
+      srcRoot: path.join(import.meta.dir, "../packages/openrouter/src"),
+      providerPrefix: "OpenRouter",
+      sourceDisplayPrefix: "packages/openrouter/src",
+    },
+    {
       srcRoot: path.join(import.meta.dir, "../packages/cloudflare/src"),
       providerPrefix: "Cloudflare",
       sourceDisplayPrefix: "packages/cloudflare/src",

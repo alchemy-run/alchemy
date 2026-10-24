@@ -81,5 +81,22 @@ describe(
         expect(calls).toBe(1);
       }),
     );
+    it.effect("fails immediately when a pending preparation's build failed", () =>
+      Effect.gen(function* () {
+        const { session } = fixture();
+        let calls = 0;
+        const error = yield* waitForContainerImage({
+          image,
+          name: "shell",
+          session,
+          prepare: Effect.sync(() => {
+            calls++;
+            return { image, status: "pending" as const, reason: "runtime image build failed" };
+          }),
+        }).pipe(Effect.flip);
+        expect(error.message).toBe("runtime image build failed");
+        expect(calls).toBe(1);
+      }),
+    );
   },
 );

@@ -1,3 +1,4 @@
+import { SandboxRuntime } from "@alchemy.run/sandbox/Sandbox";
 import type * as cf from "@cloudflare/workers-types";
 import type { Dependencies } from "alchemy/Dependencies";
 import type { HttpEffect } from "alchemy/Http";
@@ -16,10 +17,20 @@ import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Layer from "effect/Layer";
 import type { Scope } from "effect/Scope";
 import type { Container } from "../Containers/Container.ts";
+import { connectSandbox } from "../Containers/SandboxClient.ts";
 import { DurableObjectState, fromDurableObjectState } from "./DurableObjectState.ts";
+import { provideGatewayConsumer } from "./EgressGatewayConsumer.ts";
 import { makeRpcStub, type RpcErrorClass } from "./Rpc.ts";
+import { provideVolumeRuntime } from "./VolumeHeads.ts";
 import { type WebSocket } from "./WebSocket.ts";
-import { isWorker, Worker, WorkerEnvironment, type WorkerServices } from "./Worker.ts";
+import {
+  isWorker,
+  Worker,
+  WorkerEnvironment,
+  type HostedImplementation,
+  type WorkerServices,
+} from "./Worker.ts";
+import { provideWorkspaceRuntime } from "./WorkspaceRuntime.ts";
 
 export interface DurableObjectExport {
   readonly kind: "durableObject";
@@ -332,7 +343,7 @@ export interface DurableObjectClass extends Effect.Effect<DurableObject, never, 
   <Self>(): {
     <
       Shape extends MainRpc<DurableObjectState>,
-      Req extends DurableObjectServices | Container.Application<any> = never,
+      Req extends DurableObjectServices | HostedImplementation = never,
     >(
       name: string,
       impl: Effect.Effect<
@@ -340,11 +351,7 @@ export interface DurableObjectClass extends Effect.Effect<DurableObject, never, 
         never,
         Req
       >,
-    ): Effect.Effect<
-      DurableObject<Self>,
-      never,
-      Worker | Extract<Req, Container.Application<any>>
-    > & {
+    ): Effect.Effect<DurableObject<Self>, never, Worker | Extract<Req, HostedImplementation>> & {
       new (_: never): Shape;
     };
   };
@@ -1439,7 +1446,15 @@ export const DurableObject: DurableObjectClass = taggedFunction(
       // resolves the tag to a concrete namespace value.
       const self = yield* binding(undefined, classProps?.transferredFrom, classProps?.errors);
       const phase = yield* ALCHEMY_PHASE;
-      const constructor = impl.pipe(Effect.provideService(DurableObjectScope, self as any));
+      const constructor = impl.pipe(
+        Effect.provideService(DurableObjectScope, self as any),
+        // `yield* Sandbox` (a `Sandbox.Sandbox` declaration) connects to its
+        // host from here, and `yield* Gateway` (an `Egress.Gateway`) to its.
+        Effect.provideService(SandboxRuntime, { connect: connectSandbox }),
+        provideGatewayConsumer,
+        provideVolumeRuntime,
+        provideWorkspaceRuntime,
+      );
       if (phase === "plan") {
         // during plan time, we evaluate the constructor with a mock DurableObjectState
         // to trigger discovery of bindings

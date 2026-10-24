@@ -99,6 +99,7 @@ export const isSfnEffect = (value: unknown): value is SfnEffect<any, any> =>
 export const gen = <Y extends SfnEffect<any, any>, R, In = any>(
   body: (input: Expr<In>) => Generator<Y, R, any>,
 ): SfnEffect<UnwrapExpr<R>, [Y] extends [never] ? never : Error<Y>> =>
+  // Erase the generic body to its runtime form (TS2352 is order-dependent here).
   make({ kind: "gen", body: body as unknown as GenBody });
 
 type GenBody = (input: Expr<any>) => Generator<SfnEffect<any, any>, any, any>;

@@ -1,0 +1,41 @@
+[package]
+name = "volume"
+version = "0.1.0"
+description = "Forkable block volumes in object storage: extents, packs, manifests and heads."
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[features]
+default = []
+# S3, R2 and GCS (S3-compatible) through object_store.
+object = ["dep:object_store", "dep:futures"]
+# Heads served over HTTP (by a Durable Object, say): see store::HttpMetaStore.
+http = ["dep:reqwest"]
+
+[dependencies]
+async-trait.workspace = true
+blake3.workspace = true
+bytes.workspace = true
+thiserror.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+object_store = { workspace = true, optional = true }
+futures = { version = "0.3", optional = true }
+reqwest = { version = "0.12", default-features = false, features = [
+  "rustls-tls-native-roots",
+], optional = true }
+
+# zstd's C library natively; the pure-Rust ruzstd in WebAssembly (same format).
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+zstd.workspace = true
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+ruzstd = "0.9"
+
+[dev-dependencies]
+ruzstd = "0.9"
+tempfile.workspace = true
+tokio.workspace = true
+object_store.workspace = true

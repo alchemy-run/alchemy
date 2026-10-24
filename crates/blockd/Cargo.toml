@@ -1,0 +1,37 @@
+[package]
+name = "blockd"
+version = "0.1.0"
+description = "Serves a volume as a block device: lazy reads, a write-back cache, and flushes to the store."
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[features]
+default = ["object", "fuse", "ublk"]
+# Volumes in S3, R2 or GCS.
+object = ["volume/object", "volume/http", "dep:object_store"]
+# Loop attach: the volume served as one file over FUSE, on a loop device.
+fuse = ["dep:fuser"]
+# Kernel attach over ublk (Linux 6.0+, io_uring).
+ublk = ["dep:libublk", "dep:io-uring"]
+
+[dependencies]
+volume.workspace = true
+anyhow.workspace = true
+libc.workspace = true
+base64 = "0.22"
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+object_store = { workspace = true, optional = true }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+fuser = { version = "0.18", default-features = false, optional = true }
+libublk = { version = "0.4", optional = true }
+io-uring = { version = "0.7.12", optional = true }
+
+[dev-dependencies]
+tempfile.workspace = true

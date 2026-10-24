@@ -1,5 +1,7 @@
+import { fileURLToPath } from "node:url";
 import * as Bundle from "alchemy/Bundle/Bundle";
 import { findCwdForBundle } from "alchemy/Bundle/TempRoot";
+import { type ImageLayer, renderImageLayers } from "alchemy/Image/Layer";
 import { Stack } from "alchemy/Stack";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -25,8 +27,13 @@ export const buildMicrovmDockerfile = (
   userDockerfile: string | undefined,
   runtime: "bun" | "node",
   port: number,
+  /** Layers bindings contribute (tools, harness CLIs), between the base and the program. */
+  layers: ReadonlyArray<ImageLayer> = [],
 ): string => {
-  const base = userDockerfile?.trim() ?? `FROM ${MICROVM_BASE_DOCKER_IMAGE}`;
+  const base = renderImageLayers({
+    preamble: userDockerfile?.trim() ?? `FROM ${MICROVM_BASE_DOCKER_IMAGE}`,
+    layers,
+  });
   const installRuntime =
     runtime === "bun"
       ? // `bun.sh/install` unpacks a zip, so the minimal MicroVM base needs
@@ -34,7 +41,10 @@ export const buildMicrovmDockerfile = (
         "RUN dnf install -y unzip tar && curl -fsSL https://bun.sh/install | bash && ln -s /root/.bun/bin/bun /usr/local/bin/bun && dnf clean all"
       : // AL2023's default `nodejs` is Node 18, which lacks the global WebCrypto
         // that AWS request signing needs; `nodejs24` also links `node`.
-        "RUN dnf install -y nodejs24 && dnf clean all";
+        userDockerfile === undefined
+        ? "RUN dnf install -y nodejs24 && dnf clean all"
+        : // A custom base (e.g. `node:24-bookworm`) may already carry node.
+          "RUN command -v node >/dev/null 2>&1 || (dnf install -y nodejs24 && dnf clean all)";
   const runtimeBin = runtime === "bun" ? "bun" : "node";
   return [
     base,
@@ -83,7 +93,9 @@ export const bundleMicrovmProgram = Effect.fn(function* ({
   const stack = yield* Stack;
   const virtualEntryPlugin = yield* Bundle.virtualEntryPlugin;
 
-  const realMain = yield* fs.realPath(main);
+  // `main` may be `import.meta.url` (a file URL) or `import.meta.filename`.
+  const mainPath = main.startsWith("file:") ? yield* Effect.sync(() => fileURLToPath(main)) : main;
+  const realMain = yield* fs.realPath(mainPath);
   const cwd = yield* findCwdForBundle(realMain);
 
   const buildBundle = Effect.fn(function* (entry: string, plugins?: rolldown.RolldownPluginOption) {

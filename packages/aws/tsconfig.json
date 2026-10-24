@@ -16,11 +16,20 @@
     {
       "path": "../alchemy/tsconfig.json"
     },
-    { "path": "../sql/tsconfig.json" },
-    { "path": "../docker/tsconfig.json" },
-    { "path": "../kubernetes/tsconfig.json" },
+    {
+      "path": "../sql/tsconfig.json"
+    },
+    {
+      "path": "../docker/tsconfig.json"
+    },
+    {
+      "path": "../kubernetes/tsconfig.json"
+    },
     {
       "path": "../../submodules/distilled/packages/aws/tsconfig.json"
+    },
+    {
+      "path": "../sandbox/tsconfig.json"
     }
   ]
 }

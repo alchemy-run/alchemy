@@ -3,6 +3,8 @@ import { isInlineDockerfile } from "@alchemy.run/docker/Dockerfile";
 import { AlchemyContext } from "alchemy/AlchemyContext";
 import * as Bundle from "alchemy/Bundle/Bundle";
 import { findCwdForBundle, getStableContextDir, resolveMainPath } from "alchemy/Bundle/TempRoot";
+import { materializeImageContext } from "alchemy/Image/Context";
+import { dedupeImageLayers, renderImageLayers, type ImageLayer } from "alchemy/Image/Layer";
 import * as Output from "alchemy/Output";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import { Stack } from "alchemy/Stack";
@@ -12,6 +14,7 @@ import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
 import type * as rolldown from "rolldown";
 import type { AnyContainerApplicationProps } from "./ContainerApplication.ts";
+import { ContainerConfigurationError } from "./ContainerConfiguration.ts";
 
 /**
  * Fold the runtime-context `env` map (populated by `Binding.Service`s and
@@ -164,6 +167,90 @@ export const validateContainerImageProps = (
  * - neither → `undefined` (callers fall back to the runtime default base).
  */
 export const containerEnvPreamble = (
+  props: Pick<AnyContainerApplicationProps, "image" | "dockerfile" | "imageLayers" | "runtime">,
+): Effect.Effect<string | undefined> =>
+  baseEnvPreamble(props).pipe(
+    Effect.map((base) =>
+      props.imageLayers?.length
+        ? // Binding-contributed layers (environments, harness installs) sit
+          // between the base and the program layers.
+          renderImageLayers({
+            preamble: base ?? runtimeDefaultBase(props.runtime ?? "bun"),
+            layers: props.imageLayers,
+          })
+        : base,
+    ),
+  );
+
+/** The runtime's default `FROM` line for generated Dockerfiles. */
+const runtimeDefaultBase = (runtime: "bun" | "node") =>
+  runtime === "bun" ? "FROM oven/bun:1" : "FROM node:22-slim";
+
+/**
+ * Fold the image layers a Container's bindings contributed (the binding
+ * contract's `image`) into its props, so every Dockerfile-building path
+ * (live compute/build, local dev) sees them. Layers dedupe by id.
+ */
+export const withImageLayers = <P extends AnyContainerApplicationProps>(
+  props: P,
+  bindings: ReadonlyArray<{
+    readonly data?: { readonly image?: ReadonlyArray<ImageLayer>; readonly [key: string]: unknown };
+  }>,
+): P & { imageLayers?: ImageLayer[] } => {
+  const layers = dedupeImageLayers(bindings.flatMap((b) => b.data?.image ?? []));
+  return layers.length > 0 ? { ...props, imageLayers: layers } : props;
+};
+
+/**
+ * Under Durable Object scheduling a bundled `main` program has no
+ * application environment: its image is the Container's one image, so the
+ * program's bindings' image layers and plain env are baked into it (env as
+ * `ENV`). Secrets are refused — they would be baked into an image layer;
+ * pass them with `start({ env })` or keep them out with egress. Other props
+ * pass through unchanged.
+ */
+export const withProgramImage = <P extends AnyContainerApplicationProps>(
+  props: P,
+  bindings: ReadonlyArray<{
+    readonly data?: {
+      readonly image?: ReadonlyArray<ImageLayer>;
+      readonly env?: Record<string, unknown>;
+      readonly [key: string]: unknown;
+    };
+  }>,
+  env: Record<string, string | Redacted.Redacted<string>>,
+): Effect.Effect<P & { imageLayers?: ImageLayer[] }, ContainerConfigurationError> =>
+  Effect.gen(function* () {
+    if (props.schedulingPolicy !== "durable_object") return props;
+    // An image without a program still takes its bindings' layers.
+    if (props.main === undefined) return withImageLayers(props, bindings);
+    const secrets = Object.entries(env)
+      .filter(([, value]) => Redacted.isRedacted(value))
+      .map(([name]) => name);
+    if (secrets.length > 0) {
+      return yield* new ContainerConfigurationError({
+        message: `A Durable Object-managed container bakes its program's env into its image, so it can't hold secrets (${secrets.join(", ")}). Pass them with start({ env }), or keep them out of the container with egress.`,
+      });
+    }
+    const entries = Object.entries(env).filter(
+      (entry): entry is [string, string] => typeof entry[1] === "string",
+    );
+    const envLayer: ImageLayer[] =
+      entries.length > 0
+        ? [
+            {
+              id: "container-env",
+              stage: "setup",
+              instructions: `ENV ${entries.map(([name, value]) => `${name}=${JSON.stringify(value)}`).join(" ")}`,
+            },
+          ]
+        : [];
+    const layered = withImageLayers(props, bindings);
+    const imageLayers = dedupeImageLayers([...envLayer, ...(layered.imageLayers ?? [])]);
+    return imageLayers.length > 0 ? { ...props, imageLayers } : props;
+  });
+
+const baseEnvPreamble = (
   props: Pick<AnyContainerApplicationProps, "image" | "dockerfile">,
 ): Effect.Effect<string | undefined> => {
   const df = props.dockerfile;
@@ -210,7 +297,7 @@ export const buildFinalDockerfile = (
   external: string[] = [],
   autoInstallExternals = true,
 ): string => {
-  const base = envPreamble ?? (runtime === "bun" ? "FROM oven/bun:1" : "FROM node:22-slim");
+  const base = envPreamble ?? runtimeDefaultBase(runtime);
   const runtimeBin = runtime === "bun" ? "bun" : "node";
   const installCmd = runtime === "bun" ? "bun add" : "npm install";
   const installStep =
@@ -389,6 +476,11 @@ export const prepareContainerBuildContext = Effect.fn(function* (
     news.external,
     news.autoInstallExternals,
   );
+  // Mounted sources (files, folders) contributed by bindings.
+  const materialized = yield* materializeImageContext({
+    context,
+    sources: (news.imageLayers ?? []).flatMap((layer) => layer.context ?? []),
+  });
   const [bundle] = yield* Effect.all(
     [
       bundleContainerProgram({
@@ -415,6 +507,9 @@ export const prepareContainerBuildContext = Effect.fn(function* (
     hash: yield* sha256Object({
       bundle: bundle.hash,
       dockerfileContent,
+      ...(news.imageLayers?.some((layer) => layer.context?.length)
+        ? { contextDigest: materialized.digest }
+        : {}),
     }),
   };
 });

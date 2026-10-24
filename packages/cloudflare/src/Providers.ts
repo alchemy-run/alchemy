@@ -32,6 +32,7 @@ import * as Alerting from "./Alerting/index.ts";
 import * as ApiShield from "./ApiShield/index.ts";
 import * as ApiToken from "./ApiToken/index.ts";
 import * as Argo from "./Argo/index.ts";
+import * as Artifacts from "./Artifacts/index.ts";
 import { CloudflareAuth } from "./Auth/AuthProvider.ts";
 import * as Basin from "./Basin/index.ts";
 import * as BotManagement from "./BotManagement/index.ts";
@@ -181,6 +182,8 @@ export const providers = () =>
       ApiToken.UserApiToken,
       Argo.SmartRouting,
       Argo.TieredCaching,
+      Artifacts.Repository,
+      Artifacts.RepositoryToken,
       Basin.Table,
       Bookmark.Bookmark,
       BotManagement.BotManagement,
@@ -325,6 +328,7 @@ export const providers = () =>
       R2.BucketSippy,
       R2.DataCatalog,
       R2.SuperSlurperJob,
+      R2.VolumeImage,
       Random,
       RealtimeKit.App,
       RealtimeKit.Preset,
@@ -440,6 +444,8 @@ export const providers = () =>
         ApiToken.UserApiTokenProvider(),
         Argo.SmartRoutingProvider(),
         Argo.TieredCachingProvider(),
+        Artifacts.RepositoryProvider(),
+        Artifacts.RepositoryTokenProvider(),
         Bookmark.BookmarkProvider(),
         BotManagement.BotManagementProvider(),
         Cache.OriginCloudRegionProvider(),
@@ -585,6 +591,7 @@ export const providers = () =>
           R2.BucketSippyProvider(),
           R2.DataCatalogProvider(),
           R2.SuperSlurperJobProvider(),
+          R2.VolumeImageProvider(),
           RealtimeKit.AppProvider(),
           RealtimeKit.PresetProvider(),
           RealtimeKit.WebhookProvider(),

@@ -8,11 +8,13 @@ import type { PlatformProps } from "alchemy/Platform";
 import type { ScopedPlanStatusSession } from "alchemy/Report";
 import type { ResourceBinding } from "alchemy/Resource";
 import { createHostRuntimeContext, type HostRuntimeContext } from "alchemy/Runtime/Process";
+import { packEnvValue } from "alchemy/RuntimeContext";
 import { createInternalTags, createTagsList, hasTags } from "alchemy/Tags";
 import { sha256 } from "alchemy/Util/sha256";
 import { zipCode } from "alchemy/Util/zip";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import * as Redacted from "effect/Redacted";
 import type * as rolldown from "rolldown";
 import { Assets } from "../Assets.ts";
 import { roleHostBundle } from "../AWSBindings.ts";
@@ -262,7 +264,13 @@ await bootstrap(entrypoint);
   });
 
   const quoteEnvValue = (value: any) => {
-    const text = typeof value === "string" ? value : JSON.stringify(value ?? null);
+    // A secret keeps its value (as the runtime context's marker, which its
+    // `get` unpacks); everything else is a string or JSON.
+    const text = Redacted.isRedacted(value)
+      ? packEnvValue(value)
+      : typeof value === "string"
+        ? value
+        : JSON.stringify(value ?? null);
     return `'${text.replaceAll(/'/g, `'""'`).replaceAll(/\n/g, "\\n")}'`;
   };
 
@@ -817,7 +825,12 @@ systemctl enable --now ${unitName}.service
       | "availabilityZone"
       | "tags"
       | "metadataOptions"
-    >,
+    > & {
+      /** Launch spot instances (one-time, terminated on interruption). */
+      readonly spot?: boolean;
+      /** KVM inside the instance (nested virtualization). */
+      readonly nestedVirtualization?: boolean;
+    },
     runtime: Pick<Ec2HostedRuntimeState, "userData" | "instanceProfileName">,
   ) => {
     const encodedUserData = runtime.userData
@@ -838,6 +851,20 @@ systemctl enable --now ${unitName}.service
           }
         : undefined,
       UserData: encodedUserData,
+      InstanceMarketOptions: news.spot
+        ? {
+            MarketType: "spot",
+            SpotOptions: {
+              SpotInstanceType: "one-time",
+              InstanceInterruptionBehavior: "terminate",
+            },
+          }
+        : undefined,
+      CpuOptions: news.nestedVirtualization
+        ? {
+            NestedVirtualization: "enabled",
+          }
+        : undefined,
       Placement: news.availabilityZone
         ? {
             AvailabilityZone: news.availabilityZone,

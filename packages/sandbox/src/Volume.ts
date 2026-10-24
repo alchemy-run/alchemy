@@ -1,0 +1,813 @@
+import type { Named } from "alchemy/Named";
+import * as Output from "alchemy/Output";
+import { CurrentRuntimeContext, sanitizeKey, type RuntimeContext } from "alchemy/RuntimeContext";
+import * as Context from "effect/Context";
+import * as Data from "effect/Data";
+import * as Duration from "effect/Duration";
+import * as Effect from "effect/Effect";
+import * as Effectable from "effect/Effectable";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import * as Option from "effect/Option";
+import * as Redacted from "effect/Redacted";
+import type { Sandbox, SandboxClient, SandboxError } from "./Sandbox.ts";
+
+/** A volume operation failed. */
+export class VolumeError extends Data.TaggedError("VolumeError")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+/** A head moved since it was read: someone else committed or reset it first. */
+export class VolumeConflict extends Data.TaggedError("VolumeConflict")<{
+  readonly message: string;
+  readonly head: string;
+}> {}
+
+/** A snapshot of a volume: the id of an immutable manifest. */
+export type Snapshot = string;
+
+/**
+ * A volume's heads: named pointers to snapshots. Every operation here is
+ * metadata only (no machine runs, nothing is copied).
+ */
+export interface VolumeHeads {
+  /** The snapshot `head` points at, if it exists. */
+  head(name: string): Effect.Effect<Snapshot | undefined, VolumeError, RuntimeContext>;
+  /**
+   * A new head `to` on the snapshot `from` points at (`from` defaults to the
+   * volume's base image). Instant: nothing is copied.
+   */
+  fork(
+    to: string,
+    options?: { readonly from?: string },
+  ): Effect.Effect<Snapshot, VolumeError | VolumeConflict, RuntimeContext>;
+  /** Points `head` at `snapshot`: a rewind, or adopting another fork's work. */
+  reset(
+    head: string,
+    snapshot: Snapshot,
+  ): Effect.Effect<void, VolumeError | VolumeConflict, RuntimeContext>;
+  /** Deletes `head`; its snapshots stay until garbage collection. */
+  drop(head: string): Effect.Effect<void, VolumeError | VolumeConflict, RuntimeContext>;
+  /** `head`'s snapshot and its ancestors, newest first: one per committed command. */
+  history(
+    head: string,
+    options?: { readonly limit?: number },
+  ): Effect.Effect<ReadonlyArray<Snapshot>, VolumeError, RuntimeContext>;
+}
+
+/** What `exec` returns. */
+export interface DiskExecOutput {
+  readonly exitCode: number;
+  readonly stdout: string;
+  readonly stderr: string;
+}
+
+/** `exec` options. */
+export interface DiskExecOptions {
+  /** Where the volume is mounted in the sandbox. @default "/volumes/<head>" */
+  readonly dir?: string;
+  /** How it's attached; `auto` picks the best the host allows. @default "auto" */
+  readonly mode?: "auto" | "ublk" | "nbd" | "loop";
+  readonly env?: Record<string, string>;
+}
+
+/** `mount` options. */
+export interface DiskMountOptions {
+  /** Where the volume is mounted in the sandbox. */
+  readonly dir: string;
+  /** How it's attached; `auto` picks the best the host allows. @default "auto" */
+  readonly mode?: DiskExecOptions["mode"];
+  /**
+   * Where blockd reads and moves the head: a coordinator's URL (`blockd
+   * --heads`). Omitted, the store's own heads.
+   */
+  readonly heads?: string;
+  /**
+   * Where blockd keeps journal entries: a coordinator's URL (`blockd
+   * --journal`) that appends and checks the lease in one request. Omitted,
+   * the store.
+   */
+  readonly journal?: string;
+  /** Sync the journal every this many seconds even if nobody `fsync`s. @default 5 */
+  readonly flushEvery?: number;
+  /**
+   * The cache file blocks are kept in. One file serves every head: blocks
+   * shared between forks are fetched once. @default "/var/cache/blockd/<head>.cache"
+   */
+  readonly cache?: string;
+  readonly env?: Record<string, string>;
+}
+
+/** What a patch changes: its paths (a created directory is one path), and its size. */
+export interface PatchSummary {
+  readonly paths: ReadonlyArray<string>;
+  readonly bytes: number;
+  readonly operations: number;
+}
+
+/** `call` options. */
+export interface DiskCallOptions {
+  /** Where the fork is mounted. */
+  readonly dir: string;
+  /** The command's working directory. @default `dir` */
+  readonly cwd?: string;
+  readonly env?: Record<string, string>;
+  readonly timeoutMs?: number;
+  /** The store key the patch is uploaded to, if it changed anything. */
+  readonly patch: string;
+  /** @default "/var/cache/blockd/calls.cache" */
+  readonly cache?: string;
+  readonly mode?: DiskExecOptions["mode"];
+  /**
+   * Keep processes the command leaves running, and the fork with them:
+   * the call returns once the command does, with a {@link DiskHost} to
+   * commit what they change and to stop them.
+   */
+  readonly keep?: boolean;
+}
+
+/** What a kept call's commit returns. */
+export interface DiskHostCommit {
+  /** The store key of the patch; absent if nothing changed. */
+  readonly patch?: string;
+  readonly summary: PatchSummary;
+  /** Processes still running (after a detach: the ones it stopped). */
+  readonly survivors: ReadonlyArray<DiskSurvivor>;
+  readonly timings?: DiskTimings;
+}
+
+/**
+ * A kept call: its fork stays mounted for the processes it left running.
+ * Rebuild one from its `id` with `Disk.host`.
+ */
+export interface DiskHost {
+  /** The call's id in the machine's blockd. */
+  readonly id: string;
+  /** A patch of what changed since the last commit (`full`: since the fork). */
+  commit(
+    patch: string,
+    options?: { readonly full?: boolean },
+  ): Effect.Effect<DiskHostCommit, VolumeError | SandboxError, RuntimeContext>;
+  /** The processes still running. */
+  readonly status: Effect.Effect<
+    ReadonlyArray<DiskSurvivor>,
+    VolumeError | SandboxError,
+    RuntimeContext
+  >;
+  /** Stop them, commit what changed since the last commit, unmount. */
+  detach(patch?: string): Effect.Effect<DiskHostCommit, VolumeError | SandboxError, RuntimeContext>;
+}
+
+/** A process a command left running in the workspace. */
+export interface DiskSurvivor {
+  readonly pid: number;
+  readonly command: string;
+}
+
+/** Milliseconds per phase of one blockd operation, in the order they ran. */
+export type DiskTimings = Readonly<Record<string, number>>;
+
+/** What `call` returns. */
+export interface DiskCallOutput extends DiskExecOutput {
+  /** Where blockd's time went: attach, mount, run, commit, upload, unmount. */
+  readonly timings: DiskTimings;
+  readonly timedOut: boolean;
+  /** The store key of the command's patch; absent if it changed nothing. */
+  readonly patch?: string;
+  readonly summary: PatchSummary;
+  /** Processes it left running in the workspace: stopped, unless the call kept them. */
+  readonly survivors: ReadonlyArray<DiskSurvivor>;
+  /** The kept call, when `keep` was asked and something was left running. */
+  readonly host?: DiskHost;
+}
+
+/** What a mounted head changed since its last checkpoint; `null`: unknown, assume everything. */
+export type ChangedPaths = ReadonlyArray<string> | null;
+
+/** A head mounted in a sandbox until {@link detach}. */
+export interface DiskMount {
+  readonly head: string;
+  readonly dir: string;
+  /** The attach mode blockd picked. */
+  readonly mode: string;
+  /** The lease epoch this mount writes under. */
+  readonly epoch: number;
+  /** Make every write so far durable in the journal. */
+  readonly sync: Effect.Effect<void, VolumeError | SandboxError, RuntimeContext>;
+  /** Unmount and snapshot; returns the snapshot. */
+  readonly detach: Effect.Effect<Snapshot, VolumeError | SandboxError, RuntimeContext>;
+  /** `detach`, and what the head changed since its last checkpoint. */
+  readonly release: Effect.Effect<
+    { readonly snapshot: Snapshot; readonly paths: ChangedPaths },
+    VolumeError | SandboxError,
+    RuntimeContext
+  >;
+  /** What the head changed since the last checkpoint; a new checkpoint from here. */
+  readonly checkpoint: Effect.Effect<ChangedPaths, VolumeError | SandboxError, RuntimeContext>;
+  /**
+   * Take a checkpoint, then apply `patches` (store keys) to the mounted
+   * files. Their writes aren't in the next checkpoint.
+   */
+  apply(patches: ReadonlyArray<string>): Effect.Effect<
+    {
+      readonly paths: ChangedPaths;
+      readonly applied: ReadonlyArray<PatchSummary>;
+      readonly timings?: DiskTimings;
+    },
+    VolumeError | SandboxError,
+    RuntimeContext
+  >;
+  /** Snapshot the head while it stays mounted (the filesystem is frozen for it). */
+  readonly snapshot: Effect.Effect<Snapshot, VolumeError | SandboxError, RuntimeContext>;
+}
+
+/**
+ * A volume on a sandbox: its heads, and `exec` to run a command in the
+ * sandbox with a head mounted. The command's writes are committed as a new
+ * snapshot of that head when it exits.
+ */
+export interface Disk extends VolumeHeads {
+  /**
+   * Runs `command` (with `sh -c`) in the started sandbox, in `head`
+   * mounted at `dir`, then commits what it wrote. One command per head at a
+   * time: run concurrent commands on forks.
+   */
+  exec(
+    head: string,
+    command: string,
+    options?: DiskExecOptions,
+  ): Effect.Effect<DiskExecOutput, VolumeError | SandboxError, RuntimeContext>;
+  /**
+   * Mounts `head` at `dir` and leaves it mounted, for many commands (run
+   * them with the sandbox's `exec`), until the returned mount's `detach`
+   * snapshots it. Taking the head's lease supersedes any other mount of it.
+   */
+  mount(
+    head: string,
+    options: DiskMountOptions,
+  ): Effect.Effect<DiskMount, VolumeError | SandboxError, RuntimeContext>;
+  /**
+   * Garbage-collect the store from this sandbox: delete what no head can
+   * reach (keeping `history` snapshots per head, all by default), sparing
+   * anything younger than `graceSeconds`.
+   */
+  gc(options?: {
+    readonly history?: number;
+    readonly graceSeconds?: number;
+  }): Effect.Effect<Record<string, unknown>, VolumeError | SandboxError, RuntimeContext>;
+  /**
+   * Runs `command` on an ephemeral fork of `snapshot`: its writes never
+   * reach the store. What it changed is uploaded as a patch (`options.patch`),
+   * and processes it left running are stopped. Many machines can run calls
+   * on one snapshot at once.
+   */
+  call(
+    snapshot: Snapshot,
+    command: string,
+    options: DiskCallOptions,
+  ): Effect.Effect<DiskCallOutput, VolumeError | SandboxError, RuntimeContext>;
+  /** A kept call, from its id. */
+  host(id: string): DiskHost;
+  /**
+   * A head the sandbox's blockd has mounted at `dir`, without mounting it:
+   * for whoever mounted it and lost the handle (a Durable Object that
+   * restarted).
+   */
+  mounted(head: string, dir: string): DiskMount;
+  /** A patch from snapshot `from` to snapshot `to`, uploaded to `options.patch` if given. */
+  diff(
+    from: Snapshot,
+    to: Snapshot,
+    options?: { readonly patch?: string; readonly mode?: DiskExecOptions["mode"] },
+  ): Effect.Effect<
+    { readonly patch?: string; readonly summary: PatchSummary },
+    VolumeError | SandboxError,
+    RuntimeContext
+  >;
+}
+
+/**
+ * @internal What a host binds for a declaration and the owning Worker reads
+ * at run time: where the volume's store is, and its base image's head.
+ */
+export interface VolumeHostDescriptor {
+  readonly host: string;
+  /** The store, as blockd takes it: `s3://<bucket>/<prefix>`. */
+  readonly store: string;
+  /** The head every fork starts from by default: the base image. */
+  readonly base: string;
+}
+
+/** @internal The service a host constructor provides for declaration `id`. */
+export interface VolumeHostService {
+  /** Resolved at deploy (bucket names are Outputs until then). */
+  readonly descriptor: Output.Output<VolumeHostDescriptor>;
+  /**
+   * Deploy time: install blockd into a sandbox's image (the host resource `Sandbox.Application` gives).
+   */
+  readonly install: (image: unknown) => Effect.Effect<void, never, any>;
+  /**
+   * What a sandbox's command needs to reach the store (credentials and
+   * endpoint), as a JSON object of environment variables. The yielding
+   * Worker holds it as a secret and passes it to each `exec`: it is never
+   * baked into the sandbox's image.
+   */
+  readonly storeEnv: Output.Output<Redacted.Redacted<string>>;
+  /** Deploy time: grant the yielding Worker access to the volume's heads. */
+  readonly bind: Effect.Effect<void, never, any>;
+}
+
+/** @internal Connects a declaration's heads from inside a Worker or Durable Object. */
+export class VolumeRuntime extends Context.Service<
+  VolumeRuntime,
+  {
+    readonly connect: (
+      id: string,
+      descriptor: VolumeHostDescriptor,
+    ) => Effect.Effect<VolumeHeads, never, any>;
+  }
+>()("alchemy/Sandbox/VolumeRuntime") {}
+
+/** @internal The service a host constructor provides for declaration `id`. */
+export const volumeHost = (id: string) =>
+  Context.Service<Volume.Host<unknown>, VolumeHostService>(`alchemy/Sandbox/Volume<${id}>`);
+
+const descriptorKey = (id: string) => sanitizeKey(`ALCHEMY_VOLUME_${id}`);
+const storeEnvKey = (id: string) => sanitizeKey(`ALCHEMY_VOLUME_${id}_STORE_ENV`);
+
+/** @internal Marks a volume declaration. */
+export const VolumeTypeId = "~alchemy/Sandbox/Volume" as const;
+
+const connectHeads = Effect.fn(function* (id: string) {
+  const runtime = yield* Effect.serviceOption(VolumeRuntime);
+  if (Option.isNone(runtime)) {
+    return yield* Effect.die(
+      new VolumeError({
+        message: `Volume '${id}' can only be yielded inside a Worker or Durable Object.`,
+      }),
+    );
+  }
+  const host = yield* Effect.serviceOption(volumeHost(id));
+  const ctx = yield* CurrentRuntimeContext;
+  if (Option.isSome(host) && !globalThis.__ALCHEMY_RUNTIME__) {
+    yield* host.value.bind;
+    if (ctx) {
+      yield* ctx.set(descriptorKey(id), host.value.descriptor);
+      yield* ctx.set(storeEnvKey(id), host.value.storeEnv);
+    }
+  }
+  const descriptor = ctx ? yield* ctx.get<VolumeHostDescriptor>(descriptorKey(id)) : undefined;
+  // At deploy the descriptor is an unresolved Output: heads aren't used then.
+  const resolved: VolumeHostDescriptor = descriptor ?? { host: "unresolved", store: "", base: "" };
+  if (Option.isNone(host) && descriptor === undefined) {
+    return yield* Effect.die(
+      new VolumeError({
+        message: `Volume '${id}' has no host: provide one (e.g. Cloudflare.R2.Volume(${id}, …)) on the stack.`,
+      }),
+    );
+  }
+  // Read when a command runs: at deploy it's an unresolved Output.
+  const storeEnv = Effect.gen(function* () {
+    const value = ctx
+      ? yield* ctx.get<Redacted.Redacted<string> | string>(storeEnvKey(id))
+      : undefined;
+    if (value === undefined) {
+      return yield* new VolumeError({
+        message: `Volume '${id}' has no store credentials in this Worker.`,
+      });
+    }
+    const text = Redacted.isRedacted(value) ? Redacted.value(value) : value;
+    return yield* Effect.try({
+      try: () => JSON.parse(text) as Record<string, string>,
+      catch: (cause) =>
+        new VolumeError({ message: `Volume '${id}' has malformed store credentials.`, cause }),
+    });
+  });
+  return { heads: yield* runtime.value.connect(id, resolved), descriptor: resolved, storeEnv };
+});
+
+const quote = (text: string) => `'${text.replaceAll("'", `'\\''`)}'`;
+
+const makeDisk = (
+  heads: VolumeHeads,
+  descriptor: VolumeHostDescriptor,
+  storeEnv: Effect.Effect<Record<string, string>, VolumeError>,
+  sandbox: SandboxClient<any, any>,
+): Disk => ({
+  ...heads,
+  exec: Effect.fn(function* (head: string, command: string, options: DiskExecOptions = {}) {
+    const env = yield* storeEnv;
+    const dir = options.dir ?? `/volumes/${head}`;
+    const argv = [
+      "blockd",
+      "exec",
+      "--store",
+      descriptor.store,
+      "--head",
+      head,
+      "--cache",
+      `/var/cache/blockd/${head}.cache`,
+      "--dir",
+      dir,
+      "--mode",
+      options.mode ?? "auto",
+      "--command",
+      command,
+    ];
+    return yield* run(sandbox, `mkdir -p /var/cache/blockd && exec ${argv.map(quote).join(" ")}`, {
+      ...options.env,
+      ...env,
+    });
+  }),
+  gc: Effect.fn(function* (
+    options: { readonly history?: number; readonly graceSeconds?: number } = {},
+  ) {
+    const argv = [
+      "blockd",
+      "gc",
+      "--store",
+      descriptor.store,
+      "--grace-seconds",
+      String(options.graceSeconds ?? 3600),
+      ...(options.history !== undefined ? ["--history", String(options.history)] : []),
+    ];
+    const ran = yield* run(sandbox, argv.map(quote).join(" "), yield* storeEnv);
+    if (ran.exitCode !== 0) {
+      return yield* new VolumeError({ message: `garbage collection failed: ${ran.stderr}` });
+    }
+    return yield* Effect.try({
+      try: () => JSON.parse(ran.stdout.trim()) as Record<string, unknown>,
+      catch: (cause) => new VolumeError({ message: `blockd gc said ${ran.stdout}`, cause }),
+    });
+  }),
+  host: (id: string) => hostOf(daemonOf(sandbox, storeEnv), id),
+  mounted: (head: string, dir: string) => mountOf(daemonOf(sandbox, storeEnv), head, dir, "", 0),
+  call: Effect.fn(function* (snapshot: Snapshot, command: string, options: DiskCallOptions) {
+    const daemon = daemonOf(sandbox, storeEnv);
+    const timings: Record<string, number> = {};
+    yield* timed(timings, "daemon", daemon.ensure);
+    const { id } = yield* timed(
+      timings,
+      "start",
+      daemon.request<{ readonly id: string }>("/v1/calls", {
+        store: descriptor.store,
+        snapshot,
+        dir: options.dir,
+        command,
+        mode: options.mode ?? "auto",
+        ...(options.cache ? { cache: options.cache } : {}),
+        patch: options.patch,
+        ...(options.cwd ? { cwd: options.cwd } : {}),
+        ...(options.env ? { env: options.env } : {}),
+        ...(options.timeoutMs !== undefined ? { timeoutMs: options.timeoutMs } : {}),
+        ...(options.keep ? { keep: true } : {}),
+      }),
+    );
+    // Waited on in pieces: no request stays open for the length of a long command.
+    const done = yield* timed(
+      timings,
+      "wait",
+      daemon
+        .request<{
+          readonly done: boolean;
+          readonly exitCode: number;
+          readonly timedOut: boolean;
+          readonly patch: string | null;
+          readonly summary: PatchSummary;
+          readonly survivors: ReadonlyArray<DiskSurvivor>;
+          readonly kept: boolean;
+          readonly stdout: string;
+          readonly stderr: string;
+          readonly timings?: DiskTimings;
+        }>(`/v1/calls/${id}?wait=25000`)
+        .pipe(Effect.repeat({ until: (reply) => reply.done })),
+    );
+    return {
+      timings: { ...timings, ...done.timings },
+      exitCode: done.exitCode,
+      stdout: fromBase64(done.stdout),
+      stderr: fromBase64(done.stderr),
+      timedOut: done.timedOut,
+      ...(done.patch ? { patch: done.patch } : {}),
+      summary: done.summary,
+      survivors: done.survivors,
+      ...(done.kept ? { host: hostOf(daemon, id) } : {}),
+    } satisfies DiskCallOutput;
+  }),
+  diff: Effect.fn(function* (
+    from: Snapshot,
+    to: Snapshot,
+    options: { readonly patch?: string; readonly mode?: DiskExecOptions["mode"] } = {},
+  ) {
+    const daemon = daemonOf(sandbox, storeEnv);
+    yield* daemon.ensure;
+    const reply = yield* daemon.request<{
+      readonly patch: string | null;
+      readonly summary: PatchSummary;
+    }>("/v1/diffs", {
+      store: descriptor.store,
+      from,
+      to,
+      mode: options.mode ?? "auto",
+      ...(options.patch ? { patch: options.patch } : {}),
+    });
+    return {
+      ...(reply.patch ? { patch: reply.patch } : {}),
+      summary: reply.summary,
+    };
+  }),
+  mount: Effect.fn(function* (head: string, options: DiskMountOptions) {
+    const daemon = daemonOf(sandbox, storeEnv);
+    yield* daemon.ensure;
+    const ready = yield* daemon.request<{ readonly mode: string; readonly epoch: number }>(
+      "/v1/heads",
+      {
+        store: descriptor.store,
+        head,
+        dir: options.dir,
+        mode: options.mode ?? "auto",
+        flushEvery: options.flushEvery ?? 5,
+        ...(options.cache ? { cache: options.cache } : {}),
+        ...(options.heads ? { heads: options.heads } : {}),
+        ...(options.journal ? { journal: options.journal } : {}),
+        ...(options.env?.BLOCKD_HEADS_TOKEN ? { headsToken: options.env.BLOCKD_HEADS_TOKEN } : {}),
+      },
+    );
+    return mountOf(daemon, head, options.dir, ready.mode, ready.epoch);
+  }),
+});
+
+const DAEMON_PORT = 7681;
+
+/**
+ * The sandbox's `blockd daemon`, reached on its port with a token derived
+ * from the store's credentials (whoever holds them can drive the store
+ * anyway). `ensure` starts it unless it's running: one `exec`.
+ */
+const daemonOf = (
+  sandbox: SandboxClient<any, any>,
+  storeEnv: Effect.Effect<Record<string, string>, VolumeError>,
+) => {
+  const token = Effect.flatMap(storeEnv, (env) =>
+    Effect.promise(async () => {
+      const bytes = new TextEncoder().encode(
+        `blockd-daemon\n${JSON.stringify(Object.entries(env).sort())}`,
+      );
+      const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));
+      return Array.from(digest, (byte) => byte.toString(16).padStart(2, "0")).join("");
+    }),
+  );
+  const ensure = Effect.gen(function* () {
+    const env = { ...(yield* storeEnv), BLOCKD_DAEMON_TOKEN: yield* token };
+    const ran = yield* run(
+      sandbox,
+      [
+        "pid=/run/blockd/daemon.pid",
+        'if [ -f "$pid" ] && kill -0 "$(cat "$pid")" 2>/dev/null; then exit 0; fi',
+        "mkdir -p /run/blockd /var/cache/blockd",
+        'rm -f "$pid"',
+        `nohup blockd daemon --listen 0.0.0.0:${DAEMON_PORT} --pidfile "$pid" > /run/blockd/daemon.log 2>&1 < /dev/null &`,
+        'for i in $(seq 1 400); do [ -f "$pid" ] && exit 0; sleep 0.025; done',
+        "cat /run/blockd/daemon.log >&2; exit 1",
+      ].join("\n"),
+      env,
+    );
+    if (ran.exitCode !== 0) {
+      return yield* new VolumeError({
+        message: `starting blockd failed: ${ran.stderr.slice(-3000)}`,
+      });
+    }
+  });
+  const request = <A>(path: string, body?: unknown) =>
+    Effect.gen(function* () {
+      const client = yield* sandbox.httpClient(DAEMON_PORT);
+      const base = HttpClientRequest.bearerToken(
+        body === undefined
+          ? HttpClientRequest.get(`http://blockd${path}`)
+          : HttpClientRequest.post(`http://blockd${path}`).pipe(
+              HttpClientRequest.bodyJsonUnsafe(body),
+            ),
+        yield* token,
+      );
+      const response = yield* client
+        .execute(base)
+        .pipe(
+          Effect.mapError(
+            (cause) => new VolumeError({ message: `blockd ${path}: ${cause.message}`, cause }),
+          ),
+        );
+      const text = yield* response.text.pipe(
+        Effect.mapError(
+          (cause) => new VolumeError({ message: `blockd ${path}: ${cause.message}`, cause }),
+        ),
+      );
+      const parsed = yield* Effect.try({
+        try: () => JSON.parse(text) as { readonly ok?: boolean; readonly error?: string },
+        catch: (cause) =>
+          new VolumeError({
+            message: `blockd ${path} answered ${response.status}: ${text}`,
+            cause,
+          }),
+      });
+      if (response.status !== 200 || parsed.ok === false) {
+        return yield* new VolumeError({
+          message: `blockd ${path}: ${parsed.error ?? `status ${response.status}`}`,
+        });
+      }
+      return parsed as A;
+    });
+  return { ensure, request };
+};
+
+type Daemon = ReturnType<typeof daemonOf>;
+
+/** A head mounted by the sandbox's blockd, as a {@link DiskMount}. */
+const mountOf = (daemon: Daemon, head: string, dir: string, mode: string, epoch: number) => {
+  const op = <A>(name: string, body: unknown = {}) =>
+    daemon.request<A>(`/v1/heads/${encodeURIComponent(head)}/${name}`, body);
+  const release = Effect.map(
+    op<{ readonly snapshot: Snapshot; readonly paths?: ChangedPaths }>("detach"),
+    (reply) => ({ snapshot: reply.snapshot, paths: reply.paths ?? null }),
+  );
+  return {
+    head,
+    dir,
+    mode,
+    epoch,
+    sync: Effect.asVoid(op("sync")),
+    detach: Effect.map(release, (reply) => reply.snapshot),
+    release,
+    checkpoint: Effect.map(
+      op<{ readonly paths?: ChangedPaths }>("checkpoint"),
+      (reply) => reply.paths ?? null,
+    ),
+    apply: (patches) =>
+      Effect.map(
+        op<{
+          readonly paths?: ChangedPaths;
+          readonly applied?: ReadonlyArray<PatchSummary>;
+          readonly timings?: DiskTimings;
+        }>("apply", { patches }),
+        (reply) => ({
+          paths: reply.paths ?? null,
+          applied: reply.applied ?? [],
+          ...(reply.timings ? { timings: reply.timings } : {}),
+        }),
+      ),
+    snapshot: Effect.map(
+      op<{ readonly snapshot: Snapshot }>("snapshot", { freeze: dir }),
+      (reply) => reply.snapshot,
+    ),
+  } satisfies DiskMount;
+};
+
+/** A kept call in the sandbox's blockd, as a {@link DiskHost}. */
+const hostOf = (daemon: Daemon, id: string): DiskHost => {
+  const op = (name: string, body: unknown = {}) =>
+    Effect.map(
+      daemon.request<{
+        readonly patch?: string | null;
+        readonly summary?: PatchSummary;
+        readonly survivors?: ReadonlyArray<DiskSurvivor>;
+        readonly timings?: DiskTimings;
+      }>(`/v1/calls/${id}/${name}`, body),
+      (reply): DiskHostCommit => ({
+        ...(reply.patch ? { patch: reply.patch } : {}),
+        summary: reply.summary ?? { paths: [], bytes: 0, operations: 0 },
+        survivors: reply.survivors ?? [],
+        ...(reply.timings ? { timings: reply.timings } : {}),
+      }),
+    );
+  return {
+    id,
+    commit: (patch, options = {}) => op("commit", { patch, full: options.full ?? false }),
+    status: Effect.map(op("status"), (reply) => reply.survivors),
+    detach: (patch) => op("detach", patch ? { patch } : {}),
+  };
+};
+
+/** Runs `effect`, adding how long it took to `timings` as `phase`. */
+const timed = <A, E, R>(
+  timings: Record<string, number>,
+  phase: string,
+  effect: Effect.Effect<A, E, R>,
+) =>
+  Effect.map(Effect.timed(effect), ([duration, value]) => {
+    timings[phase] = Math.round(Duration.toMillis(duration) * 10) / 10;
+    return value;
+  });
+
+const fromBase64 = (text: string) =>
+  new TextDecoder().decode(Uint8Array.from(atob(text), (c) => c.charCodeAt(0)));
+
+/** Runs `script` with `sh -c` in the sandbox and waits for it. */
+const run = (sandbox: SandboxClient<any, any>, script: string, env: Record<string, string>) =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const process = yield* sandbox.exec(["sh", "-c", script], { env });
+      const output = yield* process.output();
+      const decode = (bytes: ArrayBuffer) => new TextDecoder().decode(bytes);
+      return {
+        exitCode: output.exitCode,
+        stdout: decode(output.stdout),
+        stderr: decode(output.stderr),
+      } satisfies DiskExecOutput;
+    }),
+  );
+
+/**
+ * A volume declaration: a disk that lives in object storage, forked per
+ * session from a base image, attached to a sandbox only for the length of
+ * one command. A host constructor (`Cloudflare.R2.Volume`) provides where
+ * it's stored and the base image.
+ *
+ * ### Declaring a volume
+ * **Example:** A workspace
+ * ```typescript
+ * // src/Workspace.ts
+ * import * as Sandbox from "@alchemy.run/sandbox";
+ *
+ * export class Workspace extends Sandbox.Volume<Workspace>()("Workspace") {}
+ * ```
+ *
+ * ### Using it from a Durable Object
+ * `Workspace.on(Machine)` installs blockd in the sandbox's image at deploy;
+ * at run time it gives the volume's heads and `exec`.
+ *
+ * **Example:** A session's disk: fork, run, keep
+ * ```typescript
+ * export class Agent extends Cloudflare.DurableObject<Agent>()(
+ *   "Agent",
+ *   Effect.gen(function* () {
+ *     const machine = yield* Machine;
+ *     const disk = yield* Workspace.on(Machine);
+ *     return Effect.gen(function* () {
+ *       return {
+ *         run: Effect.fn(function* (session: string, command: string) {
+ *           if (!(yield* disk.head(session))) yield* disk.fork(session);
+ *           yield* machine.start({ size: "small" });
+ *           return yield* disk.exec(session, command);
+ *         }),
+ *         rewind: Effect.fn(function* (session: string, steps: number) {
+ *           const history = yield* disk.history(session, { limit: steps + 1 });
+ *           yield* disk.reset(session, history[steps]!);
+ *         }),
+ *       };
+ *     });
+ *   }),
+ * ) {}
+ * ```
+ *
+ * @binding
+ * @product Sandbox
+ * @category Sandbox
+ */
+export const Volume =
+  <Self>() =>
+  <const Id extends string>(id: Id): Volume.Decl<Self, Id> => {
+    const host = volumeHost(id);
+    const heads = Effect.map(connectHeads(id), ({ heads }) => heads);
+    return Object.assign(
+      class {},
+      Effectable.Prototype({ label: `Sandbox.Volume<${id}>`, evaluate: () => heads }),
+      {
+        [VolumeTypeId]: VolumeTypeId,
+        "~alchemy/Id": id,
+        LogicalId: id,
+        on: (sandbox: Sandbox.Decl.Any) =>
+          Effect.gen(function* () {
+            if (!globalThis.__ALCHEMY_RUNTIME__) {
+              const provided = yield* Effect.serviceOption(host);
+              if (Option.isSome(provided))
+                yield* provided.value.install(yield* sandbox.Application);
+            }
+            const { heads, descriptor, storeEnv } = yield* connectHeads(id);
+            return makeDisk(heads, descriptor, storeEnv, yield* sandbox);
+          }),
+      },
+    ) as unknown as Volume.Decl<Self, Id>;
+  };
+
+export declare namespace Volume {
+  /** The service a host constructor's Layer provides for declaration `Self`. */
+  export interface Host<Self> {
+    readonly "~alchemy/VolumeHost": Self;
+  }
+
+  export interface Decl<Self = any, Id extends string = string>
+    extends Effect.Effect<VolumeHeads, never, Host<Self>>, Named<Id> {
+    new (_: never): VolumeHeads;
+    readonly [VolumeTypeId]: typeof VolumeTypeId;
+    readonly LogicalId: Id;
+    /**
+     * The volume on a sandbox the same Durable Object yields: installs blockd
+     * and the store's credentials into the sandbox's image at deploy.
+     */
+    on<S extends Sandbox.Decl.Any>(
+      sandbox: S,
+    ): Effect.Effect<Disk, never, Host<Self> | Effect.Services<S>>;
+  }
+  export namespace Decl {
+    export type Any = Decl<any, string>;
+  }
+}

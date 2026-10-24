@@ -1,7 +1,11 @@
+import type { Sandbox as AISandbox } from "@alchemy.run/sandbox/Sandbox";
+import type { Volume as AIVolume } from "@alchemy.run/sandbox/Volume";
+import type { Workspace as AIWorkspace } from "@alchemy.run/sandbox/Workspace";
 import type * as cf from "@cloudflare/workers-types";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import { type MemoOptions } from "alchemy/Command/Memo";
 import type { Dependencies } from "alchemy/Dependencies";
+import type { GatewayHost } from "alchemy/Egress/Gateway";
 import type { InputProps } from "alchemy/Input";
 import type { Named, Tag } from "alchemy/Named";
 import type * as Output from "alchemy/Output";
@@ -39,9 +43,11 @@ import type { DispatchNamespace } from "../WorkersForPlatforms/DispatchNamespace
 import type { WorkflowBinding, WorkflowLike } from "../Workflows/Workflow.ts";
 import type { Reference as ZoneReference } from "../Zone/lookup.ts";
 import { type Assets, type AssetsConfig, type AssetsProps } from "./Assets.ts";
+import { provideGatewayConsumer } from "./EgressGatewayConsumer.ts";
 import { Request } from "./Request.ts";
 import type { ModuleRule } from "./Sources/Prebuilt.ts";
 import type { WorkerBuildOptions } from "./Sources/Rolldown.ts";
+import { provideVolumeRuntime } from "./VolumeHeads.ts";
 import type { WorkerAccessConfig, WorkerAccessIdentity } from "./WorkerAccess.ts";
 import { bindWorkerAsyncBindings } from "./WorkerAsyncBindings.ts";
 import type { WorkerBinding, WorkerBindingResource, WorkerBindings } from "./WorkerBinding.ts";
@@ -51,6 +57,7 @@ import {
   type WorkerExport,
   type WorkerRuntimeContext,
 } from "./WorkerRuntimeContext.ts";
+import { provideWorkspaceRuntime } from "./WorkspaceRuntime.ts";
 
 export * from "./WorkerRuntime.ts";
 
@@ -109,8 +116,20 @@ export type WorkerServices =
   | WorkerExecutionContext
   | WorkerEnvironment
   | CloudflareEnvironment
-  | Container.Application<any>
+  | HostedImplementation
   | SelfService;
+
+/**
+ * Implementations provided on the stack that a Worker or Durable Object
+ * yields: a Container's program (`Container.make`) or a sandbox's host
+ * (`Cloudflare.Containers.Sandbox`).
+ */
+export type HostedImplementation =
+  | Container.Application<any>
+  | AISandbox.Host<any>
+  | AIVolume.Host<any>
+  | AIWorkspace.Host<any>
+  | GatewayHost<any>;
 
 export type WorkerShape<Req = never> = Main<WorkerServices | Req> & MainRpc<WorkerServices | Req>;
 
@@ -2617,7 +2636,7 @@ export const Worker: ResourceClassLike<Worker> &
       ): Effect.Effect<
         Worker & Rpc<Self> & Dependencies<Deps>,
         never,
-        Self | Extract<Deps, Container.Application<any>> | Providers
+        Self | Extract<Deps, HostedImplementation> | Providers
       > &
         Named<Id> &
         PlatformIdentity<Id> & {
@@ -2631,7 +2650,7 @@ export const Worker: ResourceClassLike<Worker> &
           ): Layer.Layer<
             Self,
             never,
-            | Extract<Deps, Container.Application<any>>
+            | Extract<Deps, HostedImplementation>
             | Providers
             | Exclude<PropsReq | InitReq, Self | WorkerServices | Tag<WorkerTypeId>>
           >;
@@ -2641,7 +2660,7 @@ export const Worker: ResourceClassLike<Worker> &
       <
         const Id extends string,
         Shape extends WorkerShape,
-        Req extends WorkerServices | Container.Application<any> | PlatformServices | Tag,
+        Req extends WorkerServices | HostedImplementation | PlatformServices | Tag,
         PropsReq = never,
       >(
         id: Id,
@@ -2652,7 +2671,7 @@ export const Worker: ResourceClassLike<Worker> &
       ): Effect.Effect<
         Worker & Rpc<Self>,
         never,
-        Extract<Req, Container.Application<any>> | Providers | PropsReq
+        Extract<Req, HostedImplementation> | Providers | PropsReq
       > &
         Named<Id> &
         PlatformIdentity<Id> & {
@@ -2718,16 +2737,12 @@ export const Worker: ResourceClassLike<Worker> &
     <
       const Id extends string,
       Shape extends WorkerShape,
-      Req extends WorkerServices | Container.Application<any> | PlatformServices,
+      Req extends WorkerServices | HostedImplementation | PlatformServices,
     >(
       id: Id,
       props: InputProps<WorkerProps> | Effect.Effect<InputProps<WorkerProps>, ConfigError>,
       impl: Effect.Effect<Shape, ConfigError, Req>,
-    ): Effect.Effect<
-      Worker & Rpc<Shape>,
-      never,
-      Extract<Req, Container.Application<any>> | Providers
-    > &
+    ): Effect.Effect<Worker & Rpc<Shape>, never, Extract<Req, HostedImplementation> | Providers> &
       Named<Id> &
       PlatformIdentity<Id>;
     /**
@@ -2743,6 +2758,10 @@ export const Worker: ResourceClassLike<Worker> &
     // WorkerAsyncBindings imports isWorker; defer access until module initialization completes.
     onCreate: (resource, props) => bindWorkerAsyncBindings(resource as Worker, props),
     createRuntimeContext: (id) => makeWorkerRuntimeContext(id),
+    // `yield* Gateway` (an `Egress.Gateway` declaration) connects from here.
+    // Called lazily: EgressGatewayConsumer.ts imports this module.
+    provideImpl: (impl) =>
+      provideWorkspaceRuntime(provideVolumeRuntime(provideGatewayConsumer(impl))),
     transformProps: (_id, props) =>
       Effect.sync(() =>
         globalThis.__ALCHEMY_RUNTIME__ || typeof props.main !== "string"

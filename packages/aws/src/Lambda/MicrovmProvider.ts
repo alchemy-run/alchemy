@@ -2,10 +2,12 @@ import type { ValidationException } from "@distilled.cloud/aws/Errors";
 import * as microvms from "@distilled.cloud/aws/lambda-microvms";
 import * as Artifacts from "alchemy/Artifacts";
 import { isResolved } from "alchemy/Diff";
+import { materializeImageContext } from "alchemy/Image/Context";
 import type { Input, InputProps } from "alchemy/Input";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import type { ScopedPlanStatusSession } from "alchemy/Report";
+import type { ResourceBinding } from "alchemy/Resource";
 import { createInternalTags, diffTags } from "alchemy/Tags";
 import { sha256 } from "alchemy/Util/sha256";
 import * as Data from "effect/Data";
@@ -39,7 +41,33 @@ const foldEnv = (env: Record<string, any> | undefined): Record<string, string> |
   return Object.keys(out).length > 0 ? out : undefined;
 };
 
+/**
+ * Fold what bindings contribute (`env`, `image` layers) into the props, so
+ * they reach the build identity and the image like the declared ones.
+ */
+const withBindings = (
+  news: MicrovmImageProps,
+  bindings: ReadonlyArray<ResourceBinding<MicrovmImage["Binding"]>>,
+): MicrovmImageProps => {
+  const active = bindings.filter(
+    (binding: ResourceBinding<MicrovmImage["Binding"]> & { action?: string }) =>
+      binding.action !== "delete",
+  );
+  const layers = active.flatMap((binding) => binding.data?.image ?? []);
+  const env = active.reduce<Record<string, any>>(
+    (acc, binding) => ({ ...acc, ...binding.data?.env }),
+    {},
+  );
+  if (layers.length === 0 && Object.keys(env).length === 0) return news;
+  return {
+    ...news,
+    ...(layers.length > 0 ? { imageLayers: [...(news.imageLayers ?? []), ...layers] } : {}),
+    ...(Object.keys(env).length > 0 ? { env: { ...env, ...news.env } } : {}),
+  };
+};
+
 const READY_STATES = new Set<string>(["CREATED", "UPDATED"]);
+const BUILDING_STATES = new Set<string>(["CREATING", "UPDATING"]);
 const FAILED_STATES = new Set<string>(["CREATE_FAILED", "UPDATE_FAILED", "DELETE_FAILED"]);
 
 const toIso = (value: Date | string | undefined): string | undefined =>
@@ -112,6 +140,7 @@ type ContentInputs = Pick<
   | "isExternal"
   | "external"
   | "build"
+  | "imageLayers"
 >;
 
 /**
@@ -134,6 +163,7 @@ const resolvedContentInputs = (news: Input<MicrovmImageProps>): ContentInputs | 
     isExternal: n.isExternal,
     external: n.external,
     build: n.build,
+    imageLayers: n.imageLayers,
   };
   if (!isResolved(picked)) return undefined;
   // `isResolved` has verified every field; the cast only re-states that
@@ -206,10 +236,22 @@ const artifactContent = (
         port,
         build: news.build,
       });
-      const dockerfile = buildMicrovmDockerfile(news.dockerfile, runtime, port);
-      const identity = `${bundleHash}:${dockerfile}`;
+      const dockerfile = buildMicrovmDockerfile(
+        news.dockerfile,
+        runtime,
+        port,
+        news.imageLayers ?? [],
+      );
+      // The layers' context sources (a volume's blockd, say) go into the
+      // build context beside the Dockerfile, where their COPYs expect them.
+      const layerFiles = yield* layerContextFiles(news.imageLayers ?? []);
+      const identity = `${bundleHash}:${dockerfile}:${layerFiles.digest}`;
       const contentHash = yield* sha256(identity);
-      const archive = yield* zipFiles([{ path: "Dockerfile", content: dockerfile }, ...files]);
+      const archive = yield* zipFiles([
+        { path: "Dockerfile", content: dockerfile },
+        ...files,
+        ...layerFiles.files,
+      ]);
       return { contentHash, identity, archive } satisfies ArtifactContent;
     }
 
@@ -254,7 +296,11 @@ const artifactContent = (
     // Re-widen: inference normalizes the object-literal union (adding
     // `uri?: undefined`), which defeats `"uri" in content` narrowing.
     Effect.map((content): ArtifactContent => content),
-    Artifacts.cached(`microvm-image-content:${id}`),
+    // Bindings' layers fold in only at reconcile: key on them so `diff`'s
+    // memoized bundle (without them) is never reused for the build.
+    Artifacts.cached(
+      `microvm-image-content:${id}:${(news.imageLayers ?? []).map((layer) => layer.id).join(",")}`,
+    ),
   );
 
 // Materialize + upload the code artifact and compute its build identity hash
@@ -442,7 +488,8 @@ export const MicrovmImageProvider = () =>
         return images.flatMap((image) => (image ? [toAttrs(image)] : []));
       }),
 
-    reconcile: Effect.fn(function* ({ id, news, output, session }) {
+    reconcile: Effect.fn(function* ({ id, news: declared, bindings, output, session }) {
+      const news = withBindings(declared, bindings);
       const name = yield* resolveName(id, news.name);
       const internalTags = yield* createInternalTags(id);
       const desiredTags = { ...internalTags, ...news.tags };
@@ -452,15 +499,21 @@ export const MicrovmImageProvider = () =>
       const artifact = yield* resolveArtifact(id, news, session);
 
       // Observe — prefer the cached ARN; otherwise look up by name (a name
-      // is not a valid `getMicrovmImage` identifier).
-      const observed = output?.imageArn
+      // is not a valid `getMicrovmImage` identifier). A build still in
+      // flight (an interrupted deploy) can't be updated: wait it out.
+      const found = output?.imageArn
         ? yield* getImage(output.imageArn)
         : yield* findImageByName(name);
+      const observed =
+        found && BUILDING_STATES.has(found.state)
+          ? yield* waitUntilSettled(found.imageArn, session)
+          : found;
 
       // Ensure + sync: rebuild only when the build identity changed.
       const image = !observed
         ? yield* createImage(name, news, artifact, baseImageArn, desiredTags, session)
-        : output?.codeArtifact?.hash === artifact.hash
+        : // A failed build is rebuilt even when nothing changed.
+          output?.codeArtifact?.hash === artifact.hash && !FAILED_STATES.has(observed.state)
           ? observed
           : yield* updateImage(observed.imageArn, news, artifact, baseImageArn, session);
 
@@ -476,13 +529,19 @@ export const MicrovmImageProvider = () =>
       yield* terminateRunningMicrovms(output.imageArn, session);
       yield* session.note(`Deleting MicroVM image ${output.name}...`);
 
+      // A build in flight blocks the delete ("current state"): wait it out.
+      const current = yield* getImage(output.imageArn);
+      if (current && BUILDING_STATES.has(current.state)) {
+        yield* waitUntilSettled(output.imageArn, session);
+      }
       yield* microvms.deleteMicrovmImage({ imageIdentifier: output.imageArn }).pipe(
         Effect.catchTag("ResourceNotFoundException", () => Effect.void),
         // A MicroVM caught mid-termination still blocks the delete; retry
         // briefly until the instances are fully gone.
         Effect.retry({
           while: (e): e is ValidationException =>
-            e._tag === "ValidationException" && e.message.includes("running MicroVMs"),
+            e._tag === "ValidationException" &&
+            (e.message.includes("running MicroVMs") || e.message.includes("current state")),
           schedule: Schedule.max([Schedule.fixed(5_000), Schedule.recurs(12)]),
         }),
       );
@@ -608,6 +667,23 @@ const waitForReady = (imageArn: string, session: ScopedPlanStatusSession) =>
     }),
   );
 
+/** Wait until no build is in flight; the image may have built or failed. */
+const waitUntilSettled = (imageArn: string, session: ScopedPlanStatusSession) =>
+  Effect.gen(function* () {
+    const image = yield* microvms.getMicrovmImage({ imageIdentifier: imageArn });
+    if (!BUILDING_STATES.has(image.state)) return image;
+    return yield* new ImageBuilding({ imageArn, state: image.state });
+  }).pipe(
+    Effect.retry({
+      while: (e) => e._tag === "ImageBuilding",
+      schedule: Schedule.max([Schedule.fixed(10_000), Schedule.recurs(72)]).pipe(
+        Schedule.tap(({ attempt }) =>
+          session.note(`Waiting for an earlier MicroVM image build... (${attempt * 10}s)`),
+        ),
+      ),
+    }),
+  );
+
 const waitForDeleted = (imageArn: string, session: ScopedPlanStatusSession) =>
   Effect.gen(function* () {
     const image = yield* microvms
@@ -628,3 +704,21 @@ const waitForDeleted = (imageArn: string, session: ScopedPlanStatusSession) =>
       ),
     }),
   );
+
+/**
+ * The files image layers' context sources contribute to a build context,
+ * materialized in a temporary directory, and their digest ("" without any).
+ */
+const layerContextFiles = (layers: ReadonlyArray<{ readonly context?: ReadonlyArray<unknown> }>) =>
+  Effect.gen(function* () {
+    const sources = layers.flatMap((layer) => layer.context ?? []) as Parameters<
+      typeof materializeImageContext
+    >[0]["sources"];
+    if (sources.length === 0) return { files: [], digest: "" };
+    const fs = yield* FileSystem.FileSystem;
+    const context = yield* fs.makeTempDirectory({ prefix: "alchemy-microvm-layers-" });
+    const materialized = yield* materializeImageContext({ context, sources });
+    const files = yield* readContextDirectory(context);
+    yield* fs.remove(context, { recursive: true });
+    return { files, digest: materialized.digest };
+  });

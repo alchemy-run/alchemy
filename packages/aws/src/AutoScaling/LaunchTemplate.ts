@@ -8,6 +8,7 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import { Platform, type Main, type PlatformProps } from "alchemy/Platform";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
+import type { ServerHost } from "alchemy/Runtime/Process";
 import { Stack } from "alchemy/Stack";
 import { Stage } from "alchemy/Stage";
 import { createInternalTags, diffTags, hasTags } from "alchemy/Tags";
@@ -34,6 +35,19 @@ export type LaunchTemplateArn =
   `arn:aws:ec2:${RegionID}:${AccountID}:launch-template/${LaunchTemplateId}`;
 
 export interface LaunchTemplateProps extends PlatformProps {
+  /**
+   * Launch spot instances: one-time requests, terminated on interruption.
+   * Cheaper; an instance can be taken back with two minutes' notice.
+   * @default false
+   */
+  spot?: boolean;
+  /**
+   * Run instances with nested virtualization: KVM inside the instance, for
+   * microVMs (Firecracker). Only some instance types support it (`c8i`,
+   * `m8i`, `r8i`); bare-metal types have KVM without it.
+   * @default false
+   */
+  nestedVirtualization?: boolean;
   /**
    * Launch template name. If omitted, a deterministic name is generated.
    */
@@ -190,7 +204,8 @@ export interface LaunchTemplate extends Resource<
   Providers
 > {}
 
-export type LaunchTemplateServices = Credentials | Region;
+/** What a hosted program can use: like an `AWS.EC2.Instance`'s, a host loop (`ServerHost.run`) too. */
+export type LaunchTemplateServices = ServerHost | Credentials | Region;
 
 export type LaunchTemplateShape = Main<LaunchTemplateServices>;
 
@@ -354,6 +369,8 @@ export const LaunchTemplateProvider = () =>
               associatePublicIpAddress: news.associatePublicIpAddress,
               metadataOptions: news.metadataOptions,
               tags: news.tags,
+              spot: news.spot,
+              nestedVirtualization: news.nestedVirtualization,
             },
             runtime,
           ),
@@ -504,6 +521,8 @@ export const LaunchTemplateProvider = () =>
                   associatePublicIpAddress: news.associatePublicIpAddress,
                   metadataOptions: news.metadataOptions,
                   tags: desiredTags,
+                  spot: news.spot,
+                  nestedVirtualization: news.nestedVirtualization,
                 },
                 runtime,
               ),
