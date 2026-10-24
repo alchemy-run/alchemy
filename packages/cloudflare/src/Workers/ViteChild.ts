@@ -43,13 +43,26 @@ export interface ViteChildHandle {
 const resolveRunner = (basename: string) =>
   fileURLToPath(import.meta.resolve(`./${basename}${moduleExtension(import.meta.url)}`));
 
+// The runner for a Node child spawned from Bun. Bun runs a published
+// install from `src/*.ts` (the `bun` export condition), but Node can't load
+// that: `nodeLoaderArgs` pairs a `.ts` entry with the checkout-only
+// `bin/register-dev-mode.js` (not published), and `bin/register-oxc.js`
+// leaves `node_modules` untranspiled. The package ships `lib/` beside `src/`,
+// so an installed copy hands Node the built runner (loaded under
+// `bin/register-oxc.js`); a checkout keeps the source runner.
+const resolveNodeRunner = (basename: string) => {
+  const runner = resolveRunner(basename);
+  return /[\\/]node_modules[\\/]/.test(runner) && runner.endsWith(".ts")
+    ? fileURLToPath(new URL(`../../lib/Workers/${basename}.js`, import.meta.url))
+    : runner;
+};
+
 export const startViteChild = (
   config: ViteChildConfig,
   onOutput: (channel: "stdout" | "stderr", line: string) => Effect.Effect<void>,
 ) =>
   Effect.gen(function* () {
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-    const runner = resolveRunner("ViteChildRunner");
     const isBun = typeof globalThis.Bun !== "undefined";
     // The dev server runs on node, as `@cloudflare/vite-plugin`'s does,
     // whenever node is installed; otherwise on the engine's own runtime.
@@ -57,6 +70,10 @@ export const startViteChild = (
     // headers and never delivers bytes written to an upgraded socket, so a
     // Vite dev server on it loses `server.headers` arrays and WebSockets.
     const nodeExecPath = isBun ? (globalThis.Bun.which("node") ?? undefined) : undefined;
+    const runner =
+      nodeExecPath !== undefined
+        ? resolveNodeRunner("ViteChildRunner")
+        : resolveRunner("ViteChildRunner");
     // Redacted values can't cross the process boundary — the config is
     // plain data once unwrapped. bun's `v8.serialize` output is not
     // readable by real V8 (and vice versa), so a cross-runtime spawn
