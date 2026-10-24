@@ -8,12 +8,18 @@ import { PERMISSION_GROUPS_BY_NAME, type PermissionGroupName } from "./Permissio
  * key (e.g. `com.cloudflare.api.account.<accountId>`); pass the fully-qualified
  * key — no rewriting is performed.
  *
+ * Individual-Worker roles (e.g. `"Individual Workers Editor"`) take a
+ * `com.cloudflare.edge.worker.script.<workerId>` key, where `<workerId>` is the
+ * Worker's script tag (the Worker's `workerId` attribute). Cloudflare only
+ * accepts it nested under the account key, and only on account-owned tokens.
+ *
  * @see https://developers.cloudflare.com/fundamentals/api/reference/permissions/
  */
 export type ResourceKey =
   | `com.cloudflare.api.account.${string}`
   | `com.cloudflare.api.account.zone.${string}`
   | `com.cloudflare.edge.r2.bucket.${string}`
+  | `com.cloudflare.edge.worker.script.${string}`
   | (string & {});
 
 /**
@@ -136,6 +142,16 @@ export const resolvePolicies = (policies: Policy[]): ResolvedPolicy[] =>
     permissionGroups: policy.permissionGroups.map(resolvePermissionGroup),
     resources: resolveResources(policy.resources),
   }));
+
+/**
+ * Find a `com.cloudflare.edge.worker.script.*` key placed at the top level of
+ * a policy's resources. Cloudflare answers those with a 500 that distilled
+ * retries indefinitely, so callers reject them up front.
+ */
+export const findTopLevelWorkerScriptKey = (policies: ResolvedPolicy[]): string | undefined =>
+  policies
+    .flatMap((policy) => Object.keys(policy.resources))
+    .find((key) => key.startsWith("com.cloudflare.edge.worker.script."));
 
 export const policyFingerprint = (policies: ResolvedPolicy[]): string =>
   JSON.stringify(

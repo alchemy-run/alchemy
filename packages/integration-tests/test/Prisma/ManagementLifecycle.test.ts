@@ -24,7 +24,7 @@ import type {
   Project as ApiProject,
   SourceRepository as ApiSourceRepository,
 } from "@alchemy.run/prisma/Types";
-import { expect, it } from "alchemy-test";
+import { expect, it } from "@alchemy.run/test";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { AlchemyContext } from "alchemy/AlchemyContext";
 import * as Output from "alchemy/Output";

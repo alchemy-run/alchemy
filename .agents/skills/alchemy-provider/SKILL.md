@@ -659,7 +659,7 @@ verification through distilled, typed wait-until-gone). Run with the
 profile from step 0:
 
 ```sh
-timeout 240 pnpm test:integration test/<Provider>/<Service>/<Resource>.test.ts --profile testing --retry 0
+pnpm test:integration test/<Provider>/<Service>/<Resource>.test.ts --profile testing --retry 0
 ```
 
 What a test must prove:

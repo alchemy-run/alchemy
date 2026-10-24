@@ -2,6 +2,7 @@ import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
+import type { PlatformError } from "effect/PlatformError";
 import { Docker, dockerContextName } from "./Docker.ts";
 import type { Providers } from "./Providers.ts";
 import {
@@ -13,14 +14,14 @@ import {
 } from "./Registry.ts";
 
 export interface RemoteImageProps {
-  /** Docker image name to pull, without tag. */
+  /** Docker image name to use as the source, without tag. */
   name: string;
-  /** Docker image tag to pull. @default "latest" */
+  /** Docker source image tag. @default "latest" */
   tag?: string;
-  /** Pull for this platform. */
+  /** Pull for this platform when the source is not already local or alwaysPull is enabled. */
   platform?: string;
   /**
-   * Pull even when an image with the same reference already exists locally.
+   * Always pull the source image, even when that reference exists locally.
    *
    * @default true
    */
@@ -54,8 +55,10 @@ export interface RemoteImage extends Resource<
   {
     /** Final image reference. Includes the registry host when pushed there. */
     imageRef: string;
-    /** Local image id after pull. */
+    /** Local image id after reuse or pull. */
     imageId: string;
+    /** Source image id used for the last reconcile, preserved across refresh. */
+    sourceImageId?: string;
     /** Pull timestamp in milliseconds since epoch. */
     createdAt: number;
     /** Final image repository/name. */
@@ -70,13 +73,13 @@ export interface RemoteImage extends Resource<
 > {}
 
 /**
- * Pulls a remote Docker image through the active Docker context, optionally
- * re-tagging it and pushing it to a registry.
+ * Makes a source Docker image available through the active Docker context,
+ * optionally re-tagging it and pushing it to a registry.
  *
  * The image is available to other Docker resources by `imageRef`. Use
- * `alwaysPull: false` when you want to reuse an existing tag in the configured
- * Docker daemon instead of pulling on every deploy. Set `targetName`/`targetTag`
- * to re-tag the pulled image, and `registry` to push it (mirroring it from a
+ * `alwaysPull: false` reuses the source tag when it exists in the configured
+ * Docker daemon, pulling only when it is missing. Set `targetName`/`targetTag`
+ * to re-tag the source image, and `registry` to push it (mirroring it from a
  * source registry into your own, for example).
  *
  *
@@ -134,22 +137,30 @@ export const RemoteImageProvider = () =>
     RemoteImage,
     Effect.gen(function* () {
       const docker = yield* Docker;
+      const inspectImage = (ref: string, context: string | undefined) =>
+        docker.image
+          .inspect(ref, context)
+          .pipe(Effect.catchIf(isMissingImageError, () => Effect.succeed(undefined)));
 
       return RemoteImage.Provider.of({
         list: () => Effect.succeed([]),
         read: Effect.fn(function* ({ olds, output }) {
           const context = dockerContextName(olds.context);
           const ref = output?.imageRef ?? targetImageRef(olds);
-          return yield* docker.image.inspect(ref, context).pipe(
-            Effect.map((image) => ({
-              imageRef: ref,
-              imageId: image.Id,
-              createdAt: output?.createdAt ?? parseCreatedAt(image.Created),
-              name: output?.name ?? repositoryFromImageRef(ref),
-              tag: output?.tag ?? targetTag(olds),
-              repoDigest: output?.repoDigest,
-            })),
-            Effect.catchReason("PlatformError", "NotFound", () => Effect.undefined),
+          return yield* inspectImage(ref, context).pipe(
+            Effect.map((image) =>
+              image
+                ? {
+                    imageRef: ref,
+                    imageId: image.Id,
+                    createdAt: output?.createdAt ?? parseCreatedAt(image.Created),
+                    sourceImageId: output?.sourceImageId ?? output?.imageId ?? image.Id,
+                    name: output?.name ?? repositoryFromImageRef(ref),
+                    tag: output?.tag ?? targetTag(olds),
+                    repoDigest: output?.repoDigest,
+                  }
+                : undefined,
+            ),
           );
         }),
         diff: Effect.fn(function* ({ output, news, olds }) {
@@ -162,17 +173,37 @@ export const RemoteImageProvider = () =>
           ) {
             return { action: "update" };
           }
+          const source = yield* inspectImage(remoteImageRef(news), dockerContextName(news.context));
+          const target = yield* inspectImage(targetImageRef(news), dockerContextName(news.context));
+          if (
+            !source ||
+            !target ||
+            source.Id !== (output.sourceImageId ?? output.imageId) ||
+            source.Id !== target.Id
+          ) {
+            return { action: "update" };
+          }
         }),
         reconcile: Effect.fn(function* ({ news, session }) {
           const context = dockerContextName(news.context);
           const sourceRef = remoteImageRef(news);
-          yield* session.note(`Pulling Docker image: ${sourceRef}`);
-          yield* docker.image.pull(sourceRef, news.platform, context);
+          let source: Docker.Image | undefined;
+          if (news.alwaysPull === false) {
+            source = yield* inspectImage(sourceRef, context);
+            if (source) {
+              yield* session.note(`Reusing local Docker image: ${sourceRef}`);
+            }
+          }
+          if (!source) {
+            yield* session.note(`Pulling Docker image: ${sourceRef}`);
+            yield* docker.image.pull(sourceRef, news.platform, context);
+            source = yield* docker.image.inspect(sourceRef, context);
+          }
 
           const finalRef = targetImageRef(news);
-          if (finalRef !== sourceRef) {
-            yield* session.note(`Tagging Docker image: ${sourceRef} -> ${finalRef}`);
-            yield* docker.image.tag(sourceRef, finalRef, context);
+          if (finalRef !== sourceRef || (news.registry && !news.skipPush)) {
+            yield* session.note(`Tagging Docker image: ${source.Id} -> ${finalRef}`);
+            yield* docker.image.tag(source.Id, finalRef, context);
           }
 
           let pushed: { stdout: string; stderr: string } | undefined;
@@ -189,6 +220,7 @@ export const RemoteImageProvider = () =>
           return {
             imageRef: finalRef,
             imageId: inspected.Id,
+            sourceImageId: source.Id,
             createdAt: parseCreatedAt(inspected.Created),
             name: repositoryFromImageRef(finalRef),
             tag: targetTag(news),
@@ -206,6 +238,10 @@ export const RemoteImageProvider = () =>
 /** The reference the image is pulled from. */
 const remoteImageRef = (props: RemoteImageProps): string =>
   `${props.name}:${props.tag ?? "latest"}`;
+
+const isMissingImageError = (error: PlatformError): boolean =>
+  error.reason._tag === "NotFound" &&
+  /no such image|image not known|image not found/i.test(error.reason.description ?? "");
 
 const targetTag = (props: RemoteImageProps): string => props.targetTag ?? props.tag ?? "latest";
 

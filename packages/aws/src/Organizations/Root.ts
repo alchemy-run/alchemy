@@ -147,12 +147,15 @@ export const RootProvider = () =>
             );
             return attrs.filter((attr): attr is Root["Attributes"] => attr !== undefined);
           }),
-        diff: Effect.fn(function* ({ olds, news }) {
+        diff: Effect.fn(function* ({ olds, news, output }) {
           if (!isResolved(news)) return;
-          if (olds?.rootId !== news?.rootId) {
+          // `rootId` and `name` only select which root to adopt. Adding,
+          // removing, or pinning one that matches the adopted root is a noop;
+          // only a selector pointing at a different root replaces.
+          if (news.rootId !== undefined && news.rootId !== (output?.rootId ?? olds?.rootId)) {
             return { action: "replace" } as const;
           }
-          if (olds?.name !== news?.name) {
+          if (news.name !== undefined && news.name !== (output?.rootName ?? olds?.name)) {
             return { action: "replace" } as const;
           }
         }),

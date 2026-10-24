@@ -184,7 +184,7 @@ contract — include every item:
    never hides a leak in the test.
 6. **No `tsc`, no `pnpm build`, no `pnpm nuke`** — the coordinator owns these.
 7. Speed doctrine: every run is
-   `timeout 240 pnpm test --tags '<its tag>' --profile testing`; per-test
+   `pnpm test --tags '<its tag>' --profile testing`; per-test
    timeouts ≤ 90–120s; every retry bounded (`times ≤ 8–10`, < 60s total);
    three-iteration budget, then gate and report.
 8. Distilled patches for its service only, regenerated in place:

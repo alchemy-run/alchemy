@@ -1,7 +1,7 @@
 /** @jsxImportSource @alchemy.run/sigil */
 import { PassThrough } from "node:stream";
 import { stripVTControlCharacters } from "node:util";
-import { expect, it } from "alchemy-test";
+import { expect, it } from "@alchemy.run/test";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";

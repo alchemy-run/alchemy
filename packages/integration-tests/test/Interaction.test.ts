@@ -1,6 +1,6 @@
 import { PassThrough } from "node:stream";
 import { fileURLToPath } from "node:url";
-import { expect, it } from "alchemy-test";
+import { expect, it } from "@alchemy.run/test";
 import { Interaction, layerNonInteractive, accessors } from "alchemy/Interaction";
 import { nodeLoaderArgs } from "alchemy/Util/Node";
 import { PlatformServices } from "alchemy/Util/PlatformServices";

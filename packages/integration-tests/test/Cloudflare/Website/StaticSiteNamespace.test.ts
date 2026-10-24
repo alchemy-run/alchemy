@@ -1,5 +1,5 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
-import { expect } from "alchemy-test";
+import { expect } from "@alchemy.run/test";
 import * as Namespace from "alchemy/Namespace";
 import * as Stack from "alchemy/Stack";
 import { Stage } from "alchemy/Stage";

@@ -1,6 +1,6 @@
 import * as Docker from "@alchemy.run/docker";
 import { healthcheckCommand, isHealthcheckDisabled } from "@alchemy.run/docker/HealthcheckCommand";
-import { describe, expect } from "alchemy-test";
+import { describe, expect } from "@alchemy.run/test";
 import { Action } from "alchemy/Action";
 import * as Provider from "alchemy/Provider";
 import { inMemoryState, isResourceState, State, type ResourceState } from "alchemy/State";

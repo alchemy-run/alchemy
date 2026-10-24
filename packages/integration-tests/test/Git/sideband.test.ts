@@ -11,7 +11,7 @@ import {
   sidebandFramedLength,
   sidebandRechunk,
 } from "@alchemy.run/git/Protocol/Sideband";
-import { describe, expect, test } from "alchemy-test";
+import { describe, expect, test } from "@alchemy.run/test";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 

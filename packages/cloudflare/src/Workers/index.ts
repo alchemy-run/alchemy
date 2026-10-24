@@ -17,6 +17,7 @@ export * from "./EmailEventSource.ts";
 export * from "./Fetch.ts";
 export * from "./HttpServer.ts";
 export * from "./InferEnv.ts";
+export * from "./IssueAutomation.ts";
 export * from "./LocalWorkerProvider.ts";
 export * from "./ObservabilityDestination.ts";
 export * from "./RateLimit.ts";

@@ -1,4 +1,4 @@
-import type { TestOptions } from "alchemy-test";
+import type { TestOptions } from "@alchemy.run/test";
 import * as Test from "alchemy/Test/Alchemy";
 import { makeApiGatewayTestLease } from "./TestLease.ts";
 

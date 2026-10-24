@@ -1,7 +1,7 @@
 import * as AWS from "@alchemy.run/aws";
 import { Detector } from "@alchemy.run/aws/GuardDuty/Detector";
+import { expect } from "@alchemy.run/test";
 import * as guardduty from "@distilled.cloud/aws/guardduty";
-import { expect } from "alchemy-test";
 import * as Provider from "alchemy/Provider";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
