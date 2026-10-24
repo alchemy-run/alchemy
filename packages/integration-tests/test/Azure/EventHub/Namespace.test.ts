@@ -56,7 +56,6 @@ test.provider(
         `${namespace.namespaceName}.servicebus.windows.net`,
       );
       expect(namespace.tags).toEqual({ env: "test" });
-      expect(namespace.primaryConnectionString).toBeDefined();
       expect(Redacted.value(namespace.primaryConnectionString!)).toContain(
         "SharedAccessKeyName=RootManageSharedAccessKey",
       );

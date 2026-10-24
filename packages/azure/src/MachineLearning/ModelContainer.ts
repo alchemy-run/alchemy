@@ -27,6 +27,9 @@ export interface ModelContainer extends Resource<
  * versions of a trained model. Register versions with {@link ModelVersion}.
  *
  * Description, properties, tags, and the archive flag update in place.
+ * In a workspace Azure drops a model's tags (a registry keeps them), so
+ * Alchemy sends none there and the workspace's stack/stage tags mark
+ * Alchemy ownership.
  *
  * :::caution
  * Changing `resourceGroup`, `workspace`, `registry`, or `name` replaces the
@@ -41,7 +44,6 @@ export interface ModelContainer extends Resource<
  * const modelContainer = yield* Azure.MachineLearning.ModelContainer("churn", {
  *   workspace: workspace.workspaceName,
  *   description: "Churn classifier",
- *   tags: { team: "ml" },
  * });
  * ```
  *
@@ -106,4 +108,7 @@ const ops: ContainerOps = {
 };
 
 export const ModelContainerProvider = () =>
-  Provider.succeed(ModelContainer, containerProvider("model container", ops));
+  Provider.succeed(
+    ModelContainer,
+    containerProvider("model container", ops, { untaggedInWorkspace: true }),
+  );

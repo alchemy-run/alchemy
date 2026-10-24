@@ -52,13 +52,12 @@ test.provider(
       expect(service.idScope).toMatch(/^0ne/i);
       expect(service.deviceProvisioningHostName).toEqual("global.azure-devices-provisioning.net");
       expect(service.tags).toEqual({ env: "test" });
-      expect(service.primaryConnectionString).toBeDefined();
       expect(Redacted.value(service.primaryConnectionString!)).toContain(
         "SharedAccessKeyName=provisioningserviceowner",
       );
       const observed = yield* getService(rg, service.provisioningServiceName);
       expect(observed.tags?.env).toEqual("test");
-      expect(observed.tags?.["alchemy::id"]).toBeDefined();
+      expect(observed.tags?.["alchemy::id"]).toEqual("Dps");
       expect(observed.properties.idScope).toEqual(service.idScope);
 
       // In place: tags, allocation policy, and IP filter rules.

@@ -50,10 +50,8 @@ test.provider.skip(
       const updated = yield* stack.deploy(program({ dnsServerIps: ["10.0.0.4", "10.0.0.5"] }));
       expect(updated.resource.dnsZoneName).toEqual(resource.dnsZoneName);
       const reobserved = yield* get();
-      expect([...(reobserved.properties?.dnsServerIps ?? [])].sort()).toEqual([
-        "10.0.0.4",
-        "10.0.0.5",
-      ]);
+      const dnsServerIps = [...(reobserved.properties?.dnsServerIps ?? [])].sort();
+      expect(dnsServerIps).toEqual(["10.0.0.4", "10.0.0.5"]);
 
       yield* stack.destroy();
       expect(yield* waitGone(get())).toEqual("gone");

@@ -50,6 +50,7 @@ test.provider(
       const observed = yield* getSubscription(group, topic, sub.eventSubscriptionName);
       expect(observed.properties?.provisioningState).toEqual("Succeeded");
       expect(observed.properties?.filter?.includedEventTypes).toEqual(["Contoso.OrderCreated"]);
+      expect(observed.properties?.eventDeliverySchema).toEqual("CloudEventSchemaV1_0");
       expect(observed.properties?.labels?.[0]).toMatch(/^alchemy:.+\/OrdersCreated$/);
 
       // In place: the filter.

@@ -30,7 +30,7 @@ const deepEqual = (a: unknown, b: unknown): boolean => {
     !Array.isArray(a) &&
     !Array.isArray(b)
   ) {
-    return subsetEqual(a as Record<string, unknown>, b as Record<string, unknown>);
+    return subsetEqual(a, b);
   }
   return false;
 };
@@ -40,13 +40,10 @@ const deepEqual = (a: unknown, b: unknown): boolean => {
  * Fields the service adds (timestamps, defaults) are ignored; `undefined`
  * desired fields are skipped.
  */
-export const subsetEqual = (
-  desired: Record<string, unknown>,
-  observed: Record<string, unknown> | undefined,
-): boolean =>
+export const subsetEqual = (desired: object, observed: object | undefined): boolean =>
   observed !== undefined &&
   Object.entries(desired).every(
-    ([key, value]) => value === undefined || deepEqual(value, observed[key]),
+    ([key, value]) => value === undefined || deepEqual(value, Reflect.get(observed, key)),
   );
 
 /** Whether a description carries this stack/stage/id's ownership marker. */

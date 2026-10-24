@@ -110,7 +110,8 @@ test.provider.skipIf(!runExpensive)(
       expect(endpoint.privateLinkResourceId?.toLowerCase()).toEqual(
         account.storageAccountId.toLowerCase(),
       );
-      expect(["Pending", "Approved"]).toContain(endpoint.connectionStatus);
+      // Nothing approves the connection on the storage account side.
+      expect(endpoint.connectionStatus).toEqual("Pending");
       const observed = yield* getEndpoint(
         group.resourceGroupName,
         workspace.workspaceName,

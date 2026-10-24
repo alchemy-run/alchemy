@@ -85,9 +85,8 @@ test.provider.skipIf(!runPaidOnly)(
       expect(pinned.certificate.certificateName).not.toEqual(certificate.certificateName);
       const pinnedObserved = yield* get(pinned.certificate.certificateName);
       expect(pinnedObserved.properties.provisioningState).toEqual("Succeeded");
-      expect(pinnedObserved.properties.keyVaultSecretVersion).toBeDefined();
-      expect(pinned.secret.secretUriWithVersion).toContain(
-        pinnedObserved.properties.keyVaultSecretVersion!,
+      expect(pinnedObserved.properties.keyVaultSecretVersion).toEqual(
+        pinned.secret.secretUriWithVersion.split("/").pop(),
       );
       expect(yield* waitGone(get(certificate.certificateName))).toEqual("gone");
 

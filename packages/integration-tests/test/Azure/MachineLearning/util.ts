@@ -131,11 +131,11 @@ const appInsightsTemplate = {
 };
 
 /**
- * A `Default` workspace with a template-deployed Application Insights
- * component (`Default` workspaces require one). No hourly charge;
- * ~3-5 minutes.
+ * A `Default` (or, with `kind`, `FeatureStore`) workspace with a
+ * template-deployed Application Insights component (both kinds require
+ * one). No hourly charge; ~3-5 minutes.
  */
-export const baseDefault = () =>
+export const baseDefault = (kind: "Default" | "FeatureStore" = "Default") =>
   baseWorkspace((group) =>
     Effect.gen(function* () {
       const insights = yield* Azure.Resources.Deployment("AppInsights", {
@@ -143,7 +143,7 @@ export const baseDefault = () =>
         template: appInsightsTemplate,
       });
       return {
-        kind: "Default" as const,
+        kind,
         applicationInsights: Output.map(insights.outputs, (outputs) => String(outputs.componentId)),
       };
     }),

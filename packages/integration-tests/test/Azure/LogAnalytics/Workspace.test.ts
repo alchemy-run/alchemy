@@ -64,8 +64,15 @@ test.provider(
       expect(first.workspaceName).toMatch(/^[a-zA-Z0-9][a-zA-Z0-9-]{2,61}[a-zA-Z0-9]$/);
       expect(first.customerId).toMatch(/^[0-9a-f-]{36}$/);
       expect(first.skuName).toEqual("PerGB2018");
-      expect(first.primarySharedKey).toBeDefined();
-      expect(Redacted.value(first.primarySharedKey!).length).toBeGreaterThan(10);
+      const { subscriptionId } = yield* Azure.AzureEnvironment.current;
+      const keys = yield* operationalinsights.GetSharedKeySharedKeys({
+        subscriptionId,
+        resourceGroupName: rg,
+        workspaceName: first.workspaceName,
+      });
+      const primaryKey =
+        first.primarySharedKey === undefined ? "" : Redacted.value(first.primarySharedKey);
+      expect(primaryKey).toEqual(keys.primarySharedKey);
       const observed = yield* getWorkspace(rg, first.workspaceName);
       expect(observed.properties?.provisioningState).toEqual("Succeeded");
       expect(observed.properties?.retentionInDays).toEqual(30);

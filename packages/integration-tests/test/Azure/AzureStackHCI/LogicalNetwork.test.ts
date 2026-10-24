@@ -24,6 +24,8 @@ const getLogicalNetwork = (resourceGroupName: string, name: string) =>
     });
   });
 
+const vmSwitchName = process.env.AZURE_TEST_HCI_VM_SWITCH ?? "ConvergedSwitch(compute_management)";
+
 const program = (props: { second: boolean; tags: Record<string, string> }) =>
   Effect.gen(function* () {
     const group = yield* Azure.Resources.ResourceGroup("Group", {
@@ -35,13 +37,11 @@ const program = (props: { second: boolean; tags: Record<string, string> }) =>
       extendedLocation: { name: customLocationId() },
       ...(props.second
         ? {
-            vmSwitchName:
-              process.env.AZURE_TEST_HCI_VM_SWITCH ?? "ConvergedSwitch(compute_management)",
+            vmSwitchName,
             subnets: [{ name: "lan2", properties: { ipAllocationMethod: "Dynamic" } }],
           }
         : {
-            vmSwitchName:
-              process.env.AZURE_TEST_HCI_VM_SWITCH ?? "ConvergedSwitch(compute_management)",
+            vmSwitchName,
             subnets: [{ name: "lan", properties: { ipAllocationMethod: "Dynamic" } }],
           }),
       tags: props.tags,
@@ -67,7 +67,7 @@ test.provider.skip(
       );
       const get = (name: string) => getLogicalNetwork(group.resourceGroupName, name);
       const observed = yield* get(resource.logicalNetworkName);
-      expect(observed.properties?.vmSwitchName).toBeDefined();
+      expect(observed.properties?.vmSwitchName).toEqual(vmSwitchName);
       expect(observed.tags?.env).toEqual("a");
 
       // In place: tags.

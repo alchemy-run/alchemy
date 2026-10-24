@@ -37,7 +37,6 @@ const program = (props: {
     const container = yield* Azure.MachineLearning.ModelContainer("Churn", {
       resourceGroup: base.group.resourceGroupName,
       workspace: base.workspace.workspaceName,
-      tags: { role: "container" },
     });
     if (props.withVersion === false) return { ...base, container, version: undefined };
     const version = yield* Azure.MachineLearning.ModelVersion("ChurnV1", {
@@ -61,7 +60,11 @@ const program = (props: {
   });
 
 // Model assets are free; the Default workspace has no hourly charge. ~4-6 minutes.
-// Skipped: BadRequest: Request is invalid and/or missing fields. — workspace model version PUT with `modelUri: azureml://datastores/workspaceblobstore/paths/models/churn-a` and `modelType: custom_model`.
+// Skipped: BadRequest: Request is invalid and/or missing fields. — every
+// workspace model version PUT with `modelType: custom_model` and
+// `modelUri: azureml://datastores/workspaceblobstore/paths/models/churn-a`
+// fails (with and without tags or a description, and without `modelType`),
+// probably because no model files were uploaded under that path. UNCLEAR.
 test.provider.skip(
   "create, update, replace, and delete a model version",
   (stack) =>
@@ -108,13 +111,14 @@ test.provider.skip(
         }),
       );
       expect(yield* waitGone(get("1"))).toEqual("gone");
+      const subscriptionId = yield* subscription;
       const observedContainer = yield* ml.GetModelContainer({
-        subscriptionId: yield* subscription,
+        subscriptionId,
         resourceGroupName: group.resourceGroupName,
         workspaceName: workspace.workspaceName,
         name: container.containerName,
       });
-      expect(observedContainer.properties.tags?.role).toEqual("container");
+      expect(observedContainer.id).toEqual(container.containerId);
 
       yield* stack.destroy();
       expect(yield* waitGone(get("1"))).toEqual("gone");

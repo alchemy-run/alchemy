@@ -10,6 +10,9 @@ import { account, logLevel, subscription, tags, waitGone, sharedAccountTest } fr
 
 const { test } = Test.make({ providers: Azure.providers() });
 
+const reveal = (uri: Redacted.Redacted<string> | undefined) =>
+  uri === undefined ? undefined : Redacted.value(uri);
+
 const program = (props: { name?: string; isEnabled: boolean; who: string }) =>
   Effect.gen(function* () {
     const { where } = yield* account;
@@ -54,14 +57,15 @@ test.provider(
         const { where, webhook } = yield* stack.deploy(program({ isEnabled: true, who: "a" }));
         const get = (name: string) =>
           getWebhook(where.resourceGroup, where.automationAccount, name);
-        expect(webhook.uri).toBeDefined();
+        const secretUrl = reveal(webhook.uri);
+        expect(secretUrl).toMatch(/^https:\/\/[^/]+\.azure-automation\.net\/webhooks\?token=/);
         const observed = yield* get(webhook.webhookName);
         expect(observed.properties?.isEnabled).toEqual(true);
         expect(observed.properties?.parameters?.who).toEqual("a");
 
         // The secret URL starts a job.
         const client = yield* HttpClient.HttpClient;
-        const response = yield* client.post(Redacted.value(webhook.uri!)).pipe(
+        const response = yield* client.post(secretUrl!).pipe(
           Effect.retry({
             schedule: Schedule.exponential("1 second"),
             times: 5,
@@ -74,7 +78,7 @@ test.provider(
         // In-place: disable and change parameters; the URL is kept.
         const updated = yield* stack.deploy(program({ isEnabled: false, who: "b" }));
         expect(updated.webhook.webhookId).toEqual(webhook.webhookId);
-        expect(updated.webhook.uri).toBeDefined();
+        expect(reveal(updated.webhook.uri)).toEqual(secretUrl);
         const reobserved = yield* get(webhook.webhookName);
         expect(reobserved.properties?.isEnabled).toEqual(false);
         expect(reobserved.properties?.parameters?.who).toEqual("b");

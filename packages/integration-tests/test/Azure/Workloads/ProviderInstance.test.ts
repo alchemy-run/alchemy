@@ -120,7 +120,7 @@ test.provider.skipIf(!runExpensive)(
 );
 
 // Ungated probe (free: one empty resource group): reading a provider
-// instance of a monitor that does not exist fails with the typed `NotFound`
+// instance of a monitor that does not exist fails with the typed `ResourceNotFound`
 // the provider treats as "absent" on read and delete.
 test.provider(
   "a provider instance of a missing monitor reads as a typed not-found",
@@ -139,7 +139,7 @@ test.provider(
       const error = yield* getInstance(group.resourceGroupName, "missing", "missing").pipe(
         Effect.flip,
       );
-      expect(error._tag).toEqual("NotFound");
+      expect(error._tag).toEqual("ResourceNotFound");
       const deleteError = yield* Effect.gen(function* () {
         return yield* workloads.DeleteProviderInstance({
           subscriptionId: yield* subscription,
@@ -148,7 +148,7 @@ test.provider(
           providerInstanceName: "missing",
         });
       }).pipe(Effect.flip);
-      expect(deleteError._tag).toEqual("NotFound");
+      expect(deleteError._tag).toEqual("ResourceNotFound");
 
       yield* stack.destroy();
     }).pipe(logLevel),

@@ -1,4 +1,5 @@
 import type { AzureOpContext, AzureOpError } from "@distilled.cloud/azure";
+import * as ml from "@distilled.cloud/azure/machinelearningservices";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import type { Input } from "alchemy/Input";
@@ -10,6 +11,7 @@ import {
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
+  stackAndStage,
   tagsDiffer,
   userTags,
   waitForProvisioned,
@@ -179,6 +181,14 @@ export interface AssetKindOptions {
    * `delete` archives it; the workspace's deletion removes it.
    */
   archiveInWorkspace?: boolean;
+  /**
+   * Azure rejects Alchemy's ownership tags on this kind in a workspace:
+   * feature store containers take no tags, feature store versions take at
+   * most 3 with keys of letters, digits, `.`, `-`, and `_`, and model
+   * containers drop them. Alchemy sends only the user tags there (none for
+   * containers), and the parent workspace's stack/stage tags mark ownership.
+   */
+  untaggedInWorkspace?: boolean;
   /** Kind-specific container props that replace the container when changed. */
   immutableProps?: readonly string[];
 }
@@ -286,8 +296,8 @@ export interface ObservedAsset {
 export interface AssetBody {
   description?: string;
   properties?: Record<string, string>;
-  /** User tags plus the Alchemy ownership tags. */
-  tags: Record<string, string>;
+  /** User tags plus the Alchemy ownership tags; omitted for untagged kinds. */
+  tags?: Record<string, string>;
   isArchived?: boolean;
   stage?: string;
 }
@@ -303,7 +313,7 @@ const budgetOf = (scope: AssetScope): WaitBudget =>
 
 const mutableDiffers = (observed: ObservedAsset, desired: AssetBody) =>
   (observed.properties.description ?? "") !== (desired.description ?? "") ||
-  tagsDiffer(armTags(observed.properties.tags), desired.tags) ||
+  (desired.tags !== undefined && tagsDiffer(armTags(observed.properties.tags), desired.tags)) ||
   (observed.properties.isArchived ?? false) !== (desired.isArchived ?? false) ||
   (desired.stage !== undefined && observed.properties.stage !== desired.stage) ||
   !containsValue(armTags(observed.properties.properties) ?? {}, desired.properties);
@@ -328,14 +338,21 @@ export const reconcileAsset = Effect.fn(function* (args: {
   const observed = yield* get;
 
   // Ensure + sync.
-  if (observed === undefined || mutableDiffers(observed, args.desired)) {
+  const wrote = observed === undefined || mutableDiffers(observed, args.desired);
+  if (wrote) {
     yield* args.put(args.desired);
   }
 
+  // GET can return the previous body for a few seconds after a PUT, so
+  // wait until it reflects the write.
   return yield* waitForProvisioned(
     args.label,
     get,
-    (asset) => asset.properties.provisioningState,
+    (asset) => {
+      const state = asset.properties.provisioningState;
+      if (state !== undefined && state !== "Succeeded") return state;
+      return wrote && mutableDiffers(asset, args.desired) ? "Updating" : "Succeeded";
+    },
     budgetOf(args.scope),
   );
 });
@@ -349,6 +366,25 @@ export const observeAsset = Effect.fn(function* (
   if (observed === undefined) return undefined;
   const owned = yield* isOwned(id, armTags(observed.properties.tags));
   return { observed, owned };
+});
+
+/**
+ * Whether this stack/stage owns the workspace an untagged asset lives in
+ * (its own ownership marker when the asset cannot carry tags).
+ */
+const workspaceOwned = Effect.fn(function* (scope: AssetScope) {
+  if (scope.workspaceName === undefined) return false;
+  const workspace = yield* orUndefinedIfNotFound(
+    ml.GetWorkspace({
+      subscriptionId: scope.subscriptionId,
+      resourceGroupName: scope.resourceGroupName,
+      workspaceName: scope.workspaceName,
+    }),
+  );
+  const { stack, stage } = yield* stackAndStage;
+  return (
+    workspace?.tags?.["alchemy::stack"] === stack && workspace?.tags?.["alchemy::stage"] === stage
+  );
 });
 
 /** Delete an asset (idempotent) and wait until it is gone. */
@@ -438,139 +474,146 @@ export const containerProvider = <P extends AssetContainerProps>(
   label: string,
   ops: ContainerOps<P>,
   options: AssetKindOptions = {},
-) => ({
-  stables: CONTAINER_STABLES,
+) => {
+  const untagged = (scope: AssetScope) =>
+    options.untaggedInWorkspace === true && scope.workspaceName !== undefined;
+  const tagsFor = (id: string, scope: AssetScope, tags: Record<string, string> | undefined) =>
+    untagged(scope) ? Effect.succeed(undefined) : desiredTags(id, tags);
+  return {
+    stables: CONTAINER_STABLES,
 
-  // Containers are deleted with their workspace or registry.
-  list: Effect.fn(function* () {
-    const none: AssetContainerAttributes[] = [];
-    return none;
-  }),
+    // Containers are deleted with their workspace or registry.
+    list: Effect.fn(function* () {
+      const none: AssetContainerAttributes[] = [];
+      return none;
+    }),
 
-  diff: Effect.fn(function* ({
-    news,
-    olds,
-    output,
-  }: {
-    news: Input<AssetContainerProps>;
-    olds: AssetContainerProps | undefined;
-    output: AssetContainerAttributes | undefined;
-  }) {
-    if (output === undefined) return undefined;
-    // Parent names are stable upstream; an unresolved one means the parent
-    // is being replaced.
-    const fields = inputFields(news);
-    if (
-      fields === undefined ||
-      !isResolved(fields.resourceGroup) ||
-      !isResolved(fields.workspace) ||
-      !isResolved(fields.registry) ||
-      !isResolved(fields.name)
-    ) {
-      return { action: "replace" } as const;
-    }
-    if (
-      !sameArm(fields.resourceGroup, output.resourceGroup) ||
-      !sameArm(fields.workspace, output.workspace) ||
-      !sameArm(fields.registry, output.registry) ||
-      (fields.name !== undefined && fields.name !== output.containerName)
-    ) {
-      return { action: "replace" } as const;
-    }
-    const immutable = options.immutableProps ?? [];
-    if (immutable.length > 0 && olds !== undefined) {
-      if (!isResolved(news)) return { action: "replace" } as const;
-      const pick = (props: object) =>
-        Object.fromEntries(Object.entries(props).filter(([key]) => immutable.includes(key)));
-      if (!sameValue(pick(news), pick(olds))) return { action: "replace" } as const;
-    }
-    return undefined;
-  }),
-
-  read: Effect.fn(function* ({
-    id,
-    olds,
-    output,
-  }: {
-    id: string;
-    olds: AssetContainerProps | undefined;
-    output: AssetContainerAttributes | undefined;
-  }) {
-    const { subscriptionId } = yield* AzureEnvironment.current;
-    const name = output?.containerName ?? olds?.name ?? (yield* createChildName(id, 64));
-    let scope: AssetScope;
-    if (output !== undefined) {
-      scope = scopeOf(subscriptionId, output, name);
-    } else if (hasParent(olds)) {
-      scope = yield* assetScope(subscriptionId, olds, name, options);
-    } else {
-      // No state, or props persisted before their parent resolved.
+    diff: Effect.fn(function* ({
+      news,
+      olds,
+      output,
+    }: {
+      news: Input<AssetContainerProps>;
+      olds: AssetContainerProps | undefined;
+      output: AssetContainerAttributes | undefined;
+    }) {
+      if (output === undefined) return undefined;
+      // Parent names are stable upstream; an unresolved one means the parent
+      // is being replaced.
+      const fields = inputFields(news);
+      if (
+        fields === undefined ||
+        !isResolved(fields.resourceGroup) ||
+        !isResolved(fields.workspace) ||
+        !isResolved(fields.registry) ||
+        !isResolved(fields.name)
+      ) {
+        return { action: "replace" } as const;
+      }
+      if (
+        !sameArm(fields.resourceGroup, output.resourceGroup) ||
+        !sameArm(fields.workspace, output.workspace) ||
+        !sameArm(fields.registry, output.registry) ||
+        (fields.name !== undefined && fields.name !== output.containerName)
+      ) {
+        return { action: "replace" } as const;
+      }
+      const immutable = options.immutableProps ?? [];
+      if (immutable.length > 0 && olds !== undefined) {
+        if (!isResolved(news)) return { action: "replace" } as const;
+        const pick = (props: object) =>
+          Object.fromEntries(Object.entries(props).filter(([key]) => immutable.includes(key)));
+        if (!sameValue(pick(news), pick(olds))) return { action: "replace" } as const;
+      }
       return undefined;
-    }
-    const found = yield* observeAsset(id, ops.get(scope));
-    if (found === undefined) return undefined;
-    const attrs = containerAttrs(scope, found.observed);
-    return found.owned ? attrs : Unowned(attrs);
-  }),
+    }),
 
-  reconcile: Effect.fn(function* ({
-    id,
-    news,
-    output,
-  }: {
-    id: string;
-    news: P;
-    output: AssetContainerAttributes | undefined;
-  }) {
-    const { subscriptionId } = yield* AzureEnvironment.current;
-    const name = news.name ?? output?.containerName ?? (yield* createChildName(id, 64));
-    const scope = yield* assetScope(subscriptionId, news, name, options);
-    const tags = yield* desiredTags(id, news.tags);
-    const observed = yield* reconcileAsset({
-      label: `machine learning ${label} ${name}`,
-      scope,
-      get: ops.get(scope),
-      put: (body) => ops.put(scope, body, news),
-      desired: {
-        description: news.description,
-        properties: news.properties,
-        tags,
-        isArchived: news.isArchived,
-      },
-    });
-    return containerAttrs(scope, observed);
-  }),
+    read: Effect.fn(function* ({
+      id,
+      olds,
+      output,
+    }: {
+      id: string;
+      olds: AssetContainerProps | undefined;
+      output: AssetContainerAttributes | undefined;
+    }) {
+      const { subscriptionId } = yield* AzureEnvironment.current;
+      const name = output?.containerName ?? olds?.name ?? (yield* createChildName(id, 64));
+      let scope: AssetScope;
+      if (output !== undefined) {
+        scope = scopeOf(subscriptionId, output, name);
+      } else if (hasParent(olds)) {
+        scope = yield* assetScope(subscriptionId, olds, name, options);
+      } else {
+        // No state, or props persisted before their parent resolved.
+        return undefined;
+      }
+      const found = yield* observeAsset(id, ops.get(scope));
+      if (found === undefined) return undefined;
+      const attrs = containerAttrs(scope, found.observed);
+      const owned = untagged(scope) ? yield* workspaceOwned(scope) : found.owned;
+      return owned ? attrs : Unowned(attrs);
+    }),
 
-  delete: Effect.fn(function* ({
-    id,
-    olds,
-    output,
-  }: {
-    id: string;
-    olds: P | undefined;
-    output: AssetContainerAttributes;
-  }) {
-    const { subscriptionId } = yield* AzureEnvironment.current;
-    const scope = scopeOf(subscriptionId, output, output.containerName);
-    if (options.archiveInWorkspace && scope.workspaceName !== undefined && olds !== undefined) {
-      const tags = yield* desiredTags(id, olds.tags);
-      return yield* archiveAsset(ops.get(scope), (body) => ops.put(scope, body, olds), {
-        description: olds.description,
-        properties: olds.properties,
-        tags,
-        isArchived: true,
+    reconcile: Effect.fn(function* ({
+      id,
+      news,
+      output,
+    }: {
+      id: string;
+      news: P;
+      output: AssetContainerAttributes | undefined;
+    }) {
+      const { subscriptionId } = yield* AzureEnvironment.current;
+      const name = news.name ?? output?.containerName ?? (yield* createChildName(id, 64));
+      const scope = yield* assetScope(subscriptionId, news, name, options);
+      const tags = yield* tagsFor(id, scope, news.tags);
+      const observed = yield* reconcileAsset({
+        label: `machine learning ${label} ${name}`,
+        scope,
+        get: ops.get(scope),
+        put: (body) => ops.put(scope, body, news),
+        desired: {
+          description: news.description,
+          properties: news.properties,
+          tags,
+          isArchived: news.isArchived,
+        },
       });
-    }
-    yield* deleteAsset({
-      label: `machine learning ${label} ${output.containerName}`,
-      scope,
-      get: ops.get(scope),
-      delete: ops.delete(scope),
-    });
-  }),
+      return containerAttrs(scope, observed);
+    }),
 
-  nuke: ASSET_NUKE,
-});
+    delete: Effect.fn(function* ({
+      id,
+      olds,
+      output,
+    }: {
+      id: string;
+      olds: P | undefined;
+      output: AssetContainerAttributes;
+    }) {
+      const { subscriptionId } = yield* AzureEnvironment.current;
+      const scope = scopeOf(subscriptionId, output, output.containerName);
+      if (options.archiveInWorkspace && scope.workspaceName !== undefined && olds !== undefined) {
+        const tags = yield* tagsFor(id, scope, olds.tags);
+        return yield* archiveAsset(ops.get(scope), (body) => ops.put(scope, body, olds), {
+          description: olds.description,
+          properties: olds.properties,
+          tags,
+          isArchived: true,
+        });
+      }
+      yield* deleteAsset({
+        label: `machine learning ${label} ${output.containerName}`,
+        scope,
+        get: ops.get(scope),
+        delete: ops.delete(scope),
+      });
+    }),
+
+    nuke: ASSET_NUKE,
+  };
+};
 
 export interface VersionOps<P> {
   get: (scope: AssetVersionScope) => AzureEffect<ObservedAsset>;
@@ -614,135 +657,142 @@ export const versionProvider = <P extends AssetVersionProps>(
   label: string,
   ops: VersionOps<P>,
   options: AssetKindOptions = {},
-) => ({
-  stables: VERSION_STABLES,
+) => {
+  const untagged = (scope: AssetScope) =>
+    options.untaggedInWorkspace === true && scope.workspaceName !== undefined;
+  const tagsFor = (id: string, scope: AssetScope, tags: Record<string, string> | undefined) =>
+    untagged(scope) ? Effect.succeed(tags ?? {}) : desiredTags(id, tags);
+  return {
+    stables: VERSION_STABLES,
 
-  // Versions are deleted with their workspace or registry.
-  list: Effect.fn(function* () {
-    const none: AssetVersionAttributes[] = [];
-    return none;
-  }),
+    // Versions are deleted with their workspace or registry.
+    list: Effect.fn(function* () {
+      const none: AssetVersionAttributes[] = [];
+      return none;
+    }),
 
-  diff: Effect.fn(function* ({
-    news,
-    olds,
-    output,
-  }: {
-    news: Input<AssetVersionProps>;
-    olds: AssetVersionProps | undefined;
-    output: AssetVersionAttributes | undefined;
-  }) {
-    if (output === undefined) return undefined;
-    const fields = inputFields(news);
-    if (
-      fields === undefined ||
-      !isResolved(fields.resourceGroup) ||
-      !isResolved(fields.workspace) ||
-      !isResolved(fields.registry) ||
-      !isResolved(fields.name) ||
-      !isResolved(fields.version)
-    ) {
-      return { action: "replace" } as const;
-    }
-    if (
-      !sameArm(fields.resourceGroup, output.resourceGroup) ||
-      !sameArm(fields.workspace, output.workspace) ||
-      !sameArm(fields.registry, output.registry) ||
-      fields.name !== output.name ||
-      (fields.version ?? "1") !== output.version
-    ) {
-      return { action: "replace" } as const;
-    }
-    // Same identity: new content must delete the old version first.
-    if (!isResolved(news)) return { action: "replace", deleteFirst: true } as const;
-    if (olds !== undefined && !sameValue(immutablePart(news), immutablePart(olds))) {
-      return { action: "replace", deleteFirst: true } as const;
-    }
-    return undefined;
-  }),
-
-  read: Effect.fn(function* ({
-    id,
-    olds,
-    output,
-  }: {
-    id: string;
-    olds: AssetVersionProps | undefined;
-    output: AssetVersionAttributes | undefined;
-  }) {
-    const { subscriptionId } = yield* AzureEnvironment.current;
-    let scope: AssetVersionScope;
-    if (output !== undefined) {
-      scope = { ...scopeOf(subscriptionId, output, output.name), version: output.version };
-    } else if (hasParent(olds) && olds.name !== undefined) {
-      const base = yield* assetScope(subscriptionId, olds, olds.name, options);
-      scope = { ...base, version: olds.version ?? "1" };
-    } else {
-      // No state, or props persisted before their parent resolved.
+    diff: Effect.fn(function* ({
+      news,
+      olds,
+      output,
+    }: {
+      news: Input<AssetVersionProps>;
+      olds: AssetVersionProps | undefined;
+      output: AssetVersionAttributes | undefined;
+    }) {
+      if (output === undefined) return undefined;
+      const fields = inputFields(news);
+      if (
+        fields === undefined ||
+        !isResolved(fields.resourceGroup) ||
+        !isResolved(fields.workspace) ||
+        !isResolved(fields.registry) ||
+        !isResolved(fields.name) ||
+        !isResolved(fields.version)
+      ) {
+        return { action: "replace" } as const;
+      }
+      if (
+        !sameArm(fields.resourceGroup, output.resourceGroup) ||
+        !sameArm(fields.workspace, output.workspace) ||
+        !sameArm(fields.registry, output.registry) ||
+        fields.name !== output.name ||
+        (fields.version ?? "1") !== output.version
+      ) {
+        return { action: "replace" } as const;
+      }
+      // Same identity: new content must delete the old version first.
+      if (!isResolved(news)) return { action: "replace", deleteFirst: true } as const;
+      if (olds !== undefined && !sameValue(immutablePart(news), immutablePart(olds))) {
+        return { action: "replace", deleteFirst: true } as const;
+      }
       return undefined;
-    }
-    const found = yield* observeAsset(id, unlessDeleted(ops.get(scope)));
-    if (found === undefined) return undefined;
-    const attrs = versionAttrs(scope, found.observed);
-    return found.owned ? attrs : Unowned(attrs);
-  }),
+    }),
 
-  reconcile: Effect.fn(function* ({ id, news }: { id: string; news: P }) {
-    const { subscriptionId } = yield* AzureEnvironment.current;
-    const base = yield* assetScope(subscriptionId, news, news.name, options);
-    const scope: AssetVersionScope = { ...base, version: news.version ?? "1" };
-    const tags = yield* desiredTags(id, news.tags);
-    const observed = yield* reconcileAsset({
-      label: `machine learning ${label} ${news.name}:${scope.version}`,
-      scope,
-      get: unlessDeleted(ops.get(scope)),
-      put: (body) => ops.put(scope, body, news),
-      desired: {
-        description: news.description,
-        properties: news.properties,
-        tags,
-        isArchived: news.isArchived,
-        stage: ops.stageOf?.(news),
-      },
-    });
-    return versionAttrs(scope, observed);
-  }),
+    read: Effect.fn(function* ({
+      id,
+      olds,
+      output,
+    }: {
+      id: string;
+      olds: AssetVersionProps | undefined;
+      output: AssetVersionAttributes | undefined;
+    }) {
+      const { subscriptionId } = yield* AzureEnvironment.current;
+      let scope: AssetVersionScope;
+      if (output !== undefined) {
+        scope = { ...scopeOf(subscriptionId, output, output.name), version: output.version };
+      } else if (hasParent(olds) && olds.name !== undefined) {
+        const base = yield* assetScope(subscriptionId, olds, olds.name, options);
+        scope = { ...base, version: olds.version ?? "1" };
+      } else {
+        // No state, or props persisted before their parent resolved.
+        return undefined;
+      }
+      const found = yield* observeAsset(id, unlessDeleted(ops.get(scope)));
+      if (found === undefined) return undefined;
+      const attrs = versionAttrs(scope, found.observed);
+      const owned = untagged(scope) ? yield* workspaceOwned(scope) : found.owned;
+      return owned ? attrs : Unowned(attrs);
+    }),
 
-  delete: Effect.fn(function* ({
-    id,
-    olds,
-    output,
-  }: {
-    id: string;
-    olds: P | undefined;
-    output: AssetVersionAttributes;
-  }) {
-    const { subscriptionId } = yield* AzureEnvironment.current;
-    const scope: AssetVersionScope = {
-      ...scopeOf(subscriptionId, output, output.name),
-      version: output.version,
-    };
-    if (options.archiveInWorkspace && scope.workspaceName !== undefined && olds !== undefined) {
-      const tags = yield* desiredTags(id, olds.tags);
-      return yield* archiveAsset(
-        unlessDeleted(ops.get(scope)),
-        (body) => ops.put(scope, body, olds),
-        {
-          description: olds.description,
-          properties: olds.properties,
+    reconcile: Effect.fn(function* ({ id, news }: { id: string; news: P }) {
+      const { subscriptionId } = yield* AzureEnvironment.current;
+      const base = yield* assetScope(subscriptionId, news, news.name, options);
+      const scope: AssetVersionScope = { ...base, version: news.version ?? "1" };
+      const tags = yield* tagsFor(id, scope, news.tags);
+      const observed = yield* reconcileAsset({
+        label: `machine learning ${label} ${news.name}:${scope.version}`,
+        scope,
+        get: unlessDeleted(ops.get(scope)),
+        put: (body) => ops.put(scope, body, news),
+        desired: {
+          description: news.description,
+          properties: news.properties,
           tags,
-          isArchived: true,
-          stage: ops.stageOf?.(olds),
+          isArchived: news.isArchived,
+          stage: ops.stageOf?.(news),
         },
-      );
-    }
-    yield* deleteAsset({
-      label: `machine learning ${label} ${output.name}:${output.version}`,
-      scope,
-      get: unlessDeleted(ops.get(scope)),
-      delete: unlessDeleted(ops.delete(scope)),
-    });
-  }),
+      });
+      return versionAttrs(scope, observed);
+    }),
 
-  nuke: ASSET_NUKE,
-});
+    delete: Effect.fn(function* ({
+      id,
+      olds,
+      output,
+    }: {
+      id: string;
+      olds: P | undefined;
+      output: AssetVersionAttributes;
+    }) {
+      const { subscriptionId } = yield* AzureEnvironment.current;
+      const scope: AssetVersionScope = {
+        ...scopeOf(subscriptionId, output, output.name),
+        version: output.version,
+      };
+      if (options.archiveInWorkspace && scope.workspaceName !== undefined && olds !== undefined) {
+        const tags = yield* tagsFor(id, scope, olds.tags);
+        return yield* archiveAsset(
+          unlessDeleted(ops.get(scope)),
+          (body) => ops.put(scope, body, olds),
+          {
+            description: olds.description,
+            properties: olds.properties,
+            tags,
+            isArchived: true,
+            stage: ops.stageOf?.(olds),
+          },
+        );
+      }
+      yield* deleteAsset({
+        label: `machine learning ${label} ${output.name}:${output.version}`,
+        scope,
+        get: unlessDeleted(ops.get(scope)),
+        delete: unlessDeleted(ops.delete(scope)),
+      });
+    }),
+
+    nuke: ASSET_NUKE,
+  };
+};

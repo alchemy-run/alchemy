@@ -3,6 +3,7 @@ import * as vmware from "@distilled.cloud/azure/vmware";
 import { expect } from "alchemy-test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
 import { runPaidOnly } from "../gates.ts";
 import { AVS_TIMEOUT, logLevel, privateCloud, subscription, tags, waitGone } from "./util.ts";
 
@@ -41,7 +42,10 @@ test.provider.skip(
         });
       const observed = yield* get(authorization.authorizationName);
       expect(observed.properties?.provisioningState).toEqual("Succeeded");
-      expect(authorization.expressRouteAuthorizationKey).toBeDefined();
+      const key = authorization.expressRouteAuthorizationKey;
+      expect(Redacted.isRedacted(key) ? Redacted.value(key) : "missing").toEqual(
+        observed.properties?.expressRouteAuthorizationKey,
+      );
 
       // Replacement: a new logical ID yields a new authorization.
       const replaced = yield* stack.deploy(program({ logicalId: "Gateway2" }));

@@ -18,7 +18,15 @@ export interface FeaturestoreIndexColumn {
   dataType: "String" | "Integer" | "Long" | "Float" | "Double" | "Binary" | "Datetime" | "Boolean";
 }
 
-export interface FeaturestoreEntityVersionProps extends AssetVersionProps {
+/**
+ * Azure drops `properties` and ignores the archive flag on feature store
+ * versions, and limits `tags` to 3 with keys of letters, digits, `.`, `-`,
+ * and `_`.
+ */
+export interface FeaturestoreEntityVersionProps extends Omit<
+  AssetVersionProps,
+  "properties" | "isArchived"
+> {
   /** Index columns of the entity. Changing them replaces the version. */
   indexColumns: FeaturestoreIndexColumn[];
   /** Lifecycle stage label of the version (e.g. `Development`). */
@@ -39,15 +47,19 @@ export interface FeaturestoreEntityVersion extends Resource<
  * (`Microsoft.MachineLearningServices/workspaces/featurestoreEntities/versions`)
  * — an immutable set of index columns that feature sets join on. Azure
  * creates the {@link FeaturestoreEntityContainer} named by `name` if it does
- * not exist; declare one to manage its description and tags.
+ * not exist.
  *
- * Versions are immutable: only the description, tags, archive flag, and
- * stage update in place.
+ * Versions are immutable: only the description, tags, and stage update in
+ * place. Azure accepts at most 3 tags with keys of letters, digits, `.`,
+ * `-`, and `_`, which rules out Alchemy's `alchemy::*` ownership tags, so
+ * the feature store workspace's stack/stage tags mark Alchemy ownership.
  *
  * :::caution
  * Changing `resourceGroup`, `workspace`, `name`, `version`, or any content
- * prop replaces the version. When `name` and `version` stay the same, the
- * old version is deleted before the new one is created.
+ * prop replaces the version. Azure never reuses a deleted version id, so
+ * bump `version` when the content changes: at the same `name` and
+ * `version` the old version is deleted and the new one is rejected
+ * ("Asset ... was deleted").
  * :::
  *
  * @see https://learn.microsoft.com/azure/machine-learning/concept-what-is-managed-feature-store
@@ -87,5 +99,8 @@ const ops: VersionOps<FeaturestoreEntityVersionProps> = {
 export const FeaturestoreEntityVersionProvider = () =>
   Provider.succeed(
     FeaturestoreEntityVersion,
-    versionProvider("feature store entity version", ops, { workspaceOnly: true }),
+    versionProvider("feature store entity version", ops, {
+      workspaceOnly: true,
+      untaggedInWorkspace: true,
+    }),
   );

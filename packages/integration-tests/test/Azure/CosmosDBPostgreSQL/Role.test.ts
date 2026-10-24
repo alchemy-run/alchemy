@@ -32,7 +32,7 @@ test.provider.skipIf(existingCluster === undefined)(
 
       const role = yield* stack.deploy(program({ name: "alchemy_app" }));
       expect(role.roleName).toEqual("alchemy_app");
-      expect(role.password).toBeDefined();
+      expect(Redacted.value(role.password!)).toMatch(/^Aa1-[A-Za-z0-9_-]{32}$/);
       const observed = yield* getRole("alchemy_app");
       expect(observed.properties.provisioningState).toEqual("Succeeded");
 

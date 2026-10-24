@@ -44,7 +44,8 @@ test.provider(
       const observed = yield* getPeerAsn(first.registration.peerAsnName);
       expect(observed.properties?.peerAsn).toEqual(asn);
       expect(observed.properties?.peerName).toEqual("Alchemy Test");
-      expect(first.registration.validationState).toBeDefined();
+      expect(first.registration.validationState).toEqual(observed.properties?.validationState);
+      expect(first.registration.validationState).toEqual("Pending");
 
       const second = yield* stack.deploy(program("Alchemy Test Renamed"));
       expect(second.registration.peerAsnId).toEqual(first.registration.peerAsnId);

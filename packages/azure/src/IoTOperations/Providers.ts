@@ -1,5 +1,7 @@
 import * as Layer from "effect/Layer";
+import { AkriConnector, AkriConnectorProvider } from "./AkriConnector.ts";
 import { AkriConnectorTemplate, AkriConnectorTemplateProvider } from "./AkriConnectorTemplate.ts";
+import { AkriService, AkriServiceProvider } from "./AkriService.ts";
 import { Broker, BrokerProvider } from "./Broker.ts";
 import { BrokerAuthentication, BrokerAuthenticationProvider } from "./BrokerAuthentication.ts";
 import { BrokerAuthorization, BrokerAuthorizationProvider } from "./BrokerAuthorization.ts";
@@ -12,7 +14,9 @@ import { Instance, InstanceProvider } from "./Instance.ts";
 import { RegistryEndpoint, RegistryEndpointProvider } from "./RegistryEndpoint.ts";
 
 export const resources = [
+  AkriConnector,
   AkriConnectorTemplate,
+  AkriService,
   Broker,
   BrokerAuthentication,
   BrokerAuthorization,
@@ -26,7 +30,9 @@ export const resources = [
 ];
 export const layers = () =>
   Layer.mergeAll(
+    AkriConnectorProvider(),
     AkriConnectorTemplateProvider(),
+    AkriServiceProvider(),
     BrokerProvider(),
     BrokerAuthenticationProvider(),
     BrokerAuthorizationProvider(),

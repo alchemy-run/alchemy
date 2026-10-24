@@ -71,7 +71,7 @@ test.provider(
       expect(server.fullyQualifiedDomainName).toEqual(
         `${server.serverName}.postgres.database.azure.com`,
       );
-      expect(server.administratorLoginPassword).toBeDefined();
+      expect(Redacted.value(server.administratorLoginPassword!)).toMatch(/^Aa1-[A-Za-z0-9_-]{32}$/);
       expect(Redacted.value(server.connectionString!)).toContain(
         `@${server.fullyQualifiedDomainName}:5432/postgres`,
       );

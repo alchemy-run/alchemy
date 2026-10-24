@@ -104,7 +104,8 @@ test.provider.skipIf(!process.env.AZURE_TEST_DATAREPLICATION_ALERTS)(
       expect(updated.alerts.alertSettingId).toEqual(created.alerts.alertSettingId);
       const reobserved = yield* getAlerts(rg, vault);
       expect(reobserved.properties?.sendToOwners).toEqual(false);
-      expect([...(reobserved.properties?.customEmailAddresses ?? [])].sort()).toEqual([
+      const emails = [...(reobserved.properties?.customEmailAddresses ?? [])].sort();
+      expect(emails).toEqual([
         "a@example.com",
         "b@example.com",
       ]);

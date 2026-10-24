@@ -54,7 +54,6 @@ test.provider(
       expect(account.location).toEqual(regions.account);
       expect(account.accountEndpoint).toContain(".batch.azure.com");
       expect(account.tags).toEqual({ env: "test" });
-      expect(account.primaryKey).toBeDefined();
       expect(Redacted.value(account.primaryKey!).length).toBeGreaterThan(10);
       const observed = yield* getAccount(group.resourceGroupName, account.accountName);
       expect(observed.properties?.provisioningState).toEqual("Succeeded");

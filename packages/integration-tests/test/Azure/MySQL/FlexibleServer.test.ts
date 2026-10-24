@@ -53,9 +53,12 @@ test.provider(
       expect(server.fullyQualifiedDomainName).toEqual(
         `${server.serverName}.mysql.database.azure.com`,
       );
-      expect(server.administratorLoginPassword).toBeDefined();
-      expect(Redacted.value(server.connectionString!)).toContain(
-        `@${server.fullyQualifiedDomainName}:3306/`,
+      // The provider generates the password: `Aa1-` + 24 random bytes base64url.
+      expect(Redacted.value(server.administratorLoginPassword!)).toMatch(/^Aa1-[A-Za-z0-9_-]{32}$/);
+      expect(Redacted.value(server.connectionString!)).toEqual(
+        `mysql://alchemyadmin:${encodeURIComponent(
+          Redacted.value(server.administratorLoginPassword!),
+        )}@${server.fullyQualifiedDomainName}:3306/?ssl-mode=REQUIRED`,
       );
 
       const observed = yield* getServer(group.resourceGroupName, server.serverName);

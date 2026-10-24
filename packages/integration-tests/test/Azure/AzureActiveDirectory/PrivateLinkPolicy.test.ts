@@ -47,7 +47,7 @@ test.provider.skipIf(!runPaidOnly)(
       expect(policy.tenants.map((t) => t.toLowerCase())).toEqual([tenantId.toLowerCase()]);
       const observed = yield* getPolicy(group.resourceGroupName, policy.policyName);
       expect(observed.tags?.env).toEqual("test");
-      expect(observed.tags?.["alchemy::id"]).toBeDefined();
+      expect(observed.tags?.["alchemy::id"]).toEqual("Policy");
 
       // In-place: tags (PATCH) and tenants (PUT re-send).
       const partner = "00000000-0000-0000-0000-000000000001";

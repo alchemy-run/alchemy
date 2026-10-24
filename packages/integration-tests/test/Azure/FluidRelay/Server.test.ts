@@ -70,7 +70,6 @@ test.provider(
       expect(server.frsTenantId).not.toEqual("");
       expect(server.serviceEndpoints.length).toBeGreaterThan(0);
       expect(server.storagesku).toEqual("standard");
-      expect(server.primaryKey).toBeDefined();
       expect(Redacted.value(server.primaryKey!).length).toBeGreaterThan(0);
       const observed = yield* getServer(group.resourceGroupName, server.serverName);
       expect(observed.properties?.frsTenantId).toEqual(server.frsTenantId);
@@ -88,10 +87,13 @@ test.provider(
       );
       expect(updated.server.serverId).toEqual(server.serverId);
       expect(updated.server.tags).toEqual({ env: "updated" });
-      expect(updated.server.principalId).toBeDefined();
+      expect(updated.server.principalId).toMatch(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
+      );
       const reobserved = yield* getServer(group.resourceGroupName, server.serverName);
       expect(reobserved.tags?.env).toEqual("updated");
       expect(reobserved.identity?.type).toEqual("SystemAssigned");
+      expect(reobserved.identity?.principalId).toEqual(updated.server.principalId);
 
       // Replacement: location is immutable. (`storagesku: "basic"` would be
       // the natural replacement trigger, but ARM answers 500 for it.)

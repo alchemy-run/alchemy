@@ -40,7 +40,7 @@ test.provider(
 
       const { group, server, backup } = yield* stack.deploy(program("snapshot-1"));
       expect(backup.backupName).toEqual("snapshot-1");
-      expect(backup.completedTime).toBeDefined();
+      expect(Number.isNaN(Date.parse(backup.completedTime ?? ""))).toBe(false);
       const observed = yield* getBackup(group.resourceGroupName, server.serverName, "snapshot-1");
       expect(observed.properties?.backupType).toEqual("Customer On-Demand");
 

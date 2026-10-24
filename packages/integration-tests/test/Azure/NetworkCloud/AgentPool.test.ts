@@ -109,7 +109,7 @@ test.provider.skipIf(!runPaidOnly || !hasWorkloadNetworks || !nexus.kubernetesVe
 // Ungated probe: the trial has no Nexus Kubernetes cluster, so ARM rejects
 // an agent pool under a cluster that does not exist. Only a resource group
 // is created ($0, ~1 minute). ARM reports code `ParentResourceNotFound`,
-// which distilled does not map yet, so it surfaces as the HTTP 404 class.
+// which distilled maps to `ResourceNotFound`.
 test.provider(
   "the trial rejects a Nexus agent pool without a Kubernetes cluster",
   (stack) =>
@@ -134,8 +134,10 @@ test.provider(
           properties: { count: 1, mode: "User", vmSkuName: "NC_P10_56_v1" },
         })
         .pipe(Effect.flip);
-      expect(error._tag).toEqual("NotFound");
-      expect(error.message).toContain("parent resource");
+      expect(error._tag).toEqual("ResourceNotFound");
+      expect(error._tag === "ResourceNotFound" ? error.code : undefined).toEqual(
+        "ParentResourceNotFound",
+      );
 
       yield* stack.destroy();
     }).pipe(logLevel),

@@ -84,7 +84,13 @@ test.provider(
       expect(observed.properties.description).toMatch(/^first \[alchemy .+\/Connection\]$/);
 
       expect(observed.properties.connectionStatus).toEqual("Pending");
-      expect(connection.privateEndpointResourceId).toBeDefined();
+      // Azure creates the private endpoint on the service's side.
+      expect(connection.privateEndpointResourceId?.toLowerCase()).toContain(
+        "/providers/microsoft.network/privateendpoints/",
+      );
+      expect(connection.privateEndpointResourceId?.toLowerCase()).toEqual(
+        observed.properties.privateEndpointResourceId?.toLowerCase(),
+      );
 
       // Replacement: Azure ignores description changes on an existing
       // connection, so a new description replaces it.

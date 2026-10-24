@@ -40,7 +40,7 @@ test.provider.skip(
         });
       const observed = yield* get(resource.publicIPName);
       expect(observed.properties?.numberOfPublicIPs).toEqual(1);
-      expect(resource.publicIPBlock).toBeDefined();
+      expect(resource.publicIPBlock).toMatch(/^\d{1,3}(\.\d{1,3}){3}\/32$/);
 
       // Replacement: the block size is immutable.
       const replaced = yield* stack.deploy(program({ numberOfPublicIPs: 2 }));

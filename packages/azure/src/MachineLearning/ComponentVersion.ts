@@ -1,6 +1,7 @@
 import * as ml from "@distilled.cloud/azure/machinelearningservices";
 import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
+import * as Effect from "effect/Effect";
 import type { Providers } from "../Providers.ts";
 import { GroupedResource } from "../StackResourceGroup.ts";
 import {
@@ -14,7 +15,9 @@ export interface ComponentVersionProps extends AssetVersionProps {
   /**
    * Component definition in the YAML schema's JSON form (`$schema`,
    * `name`, `version`, `type`, `command`, `environment`, `inputs`,
-   * `outputs`, ...). Changing it replaces the version.
+   * `outputs`, ...). Azure stores the version's description in the spec,
+   * so the `description` prop replaces `componentSpec.description`.
+   * Changing it replaces the version.
    * @see https://learn.microsoft.com/azure/machine-learning/reference-yaml-component-command
    */
   componentSpec: Record<string, unknown>;
@@ -95,23 +98,52 @@ export const ComponentVersion = GroupedResource<ComponentVersion>(
   "Azure.MachineLearning.ComponentVersion",
 );
 
+/**
+ * Azure keeps a component version's description in its spec and reads the
+ * top-level `description` back as null; surface the spec's.
+ */
+const withSpecDescription = <A extends { properties: { componentSpec?: unknown } }>(version: A) => {
+  const spec = version.properties.componentSpec;
+  const description =
+    typeof spec === "object" && spec !== null && "description" in spec
+      ? spec.description
+      : undefined;
+  return {
+    ...version,
+    properties: {
+      ...version.properties,
+      description: typeof description === "string" ? description : undefined,
+    },
+  };
+};
+
+/** The spec sent to Azure: the `description` prop replaces the spec's own. */
+const specWithDescription = (news: ComponentVersionProps, description: string | undefined) => ({
+  ...news.componentSpec,
+  description,
+});
+
 const ops: VersionOps<ComponentVersionProps> = {
   get: (s) =>
     s.registryName !== undefined
-      ? ml.GetRegistryComponentVersion({
-          subscriptionId: s.subscriptionId,
-          resourceGroupName: s.resourceGroupName,
-          registryName: s.registryName,
-          componentName: s.name,
-          version: s.version,
-        })
-      : ml.GetComponentVersion({
-          subscriptionId: s.subscriptionId,
-          resourceGroupName: s.resourceGroupName,
-          workspaceName: s.workspaceName,
-          name: s.name,
-          version: s.version,
-        }),
+      ? ml
+          .GetRegistryComponentVersion({
+            subscriptionId: s.subscriptionId,
+            resourceGroupName: s.resourceGroupName,
+            registryName: s.registryName,
+            componentName: s.name,
+            version: s.version,
+          })
+          .pipe(Effect.map(withSpecDescription))
+      : ml
+          .GetComponentVersion({
+            subscriptionId: s.subscriptionId,
+            resourceGroupName: s.resourceGroupName,
+            workspaceName: s.workspaceName,
+            name: s.name,
+            version: s.version,
+          })
+          .pipe(Effect.map(withSpecDescription)),
   put: (s, body, news) =>
     s.registryName !== undefined
       ? ml.RegistryComponentVersionsCreateOrUpdate({
@@ -122,7 +154,7 @@ const ops: VersionOps<ComponentVersionProps> = {
           version: s.version,
           properties: {
             ...body,
-            componentSpec: news.componentSpec,
+            componentSpec: specWithDescription(news, body.description),
           },
         })
       : ml.ComponentVersionsCreateOrUpdate({
@@ -133,7 +165,7 @@ const ops: VersionOps<ComponentVersionProps> = {
           version: s.version,
           properties: {
             ...body,
-            componentSpec: news.componentSpec,
+            componentSpec: specWithDescription(news, body.description),
           },
         }),
   delete: (s) =>

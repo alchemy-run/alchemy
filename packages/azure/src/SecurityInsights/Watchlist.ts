@@ -270,7 +270,7 @@ export const WatchlistProvider = () =>
       let observed = yield* getWatchlist(subscriptionId, resourceGroup, workspace, alias);
       if (
         observed === undefined ||
-        !subsetEqual(mutable, observed.properties as unknown as Record<string, unknown>)
+        !subsetEqual(mutable, observed.properties)
       ) {
         observed = yield* securityinsights.WatchlistsCreateOrUpdate({
           subscriptionId,

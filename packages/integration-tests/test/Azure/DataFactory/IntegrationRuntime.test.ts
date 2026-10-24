@@ -105,8 +105,7 @@ test.provider(
 
       expect(selfHosted.type).toEqual("SelfHosted");
       expect(selfHosted.state).toEqual("NeedRegistration");
-      expect(selfHosted.authKey1).toBeDefined();
-      expect(Redacted.value(selfHosted.authKey1!)).toMatch(/^IR@/);
+      expect(selfHosted.authKey1 && Redacted.value(selfHosted.authKey1)).toMatch(/^IR@/);
 
       // In place: data flow time-to-live and description.
       const updated = yield* stack.deploy(

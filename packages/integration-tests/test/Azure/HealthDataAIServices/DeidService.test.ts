@@ -64,10 +64,13 @@ test.provider(
       const { group, deid } = created;
       expect(deid.provisioningState).toEqual("Succeeded");
       expect(deid.serviceUrl).toMatch(/^https:\/\//);
-      expect(deid.principalId).toBeDefined();
+      expect(deid.principalId).toMatch(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
+      );
       expect(deid.publicNetworkAccess).toEqual("Enabled");
       const observed = yield* getDeidService(group.resourceGroupName, deid.deidServiceName);
       expect(observed.identity?.type).toEqual("SystemAssigned");
+      expect(observed.identity?.principalId).toEqual(deid.principalId);
       expect(observed.tags?.env).toEqual("test");
       expect(observed.tags?.["alchemy::id"]).toEqual("Deid");
 

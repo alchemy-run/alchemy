@@ -24,7 +24,16 @@ export interface PartnerTopicEventSubscriptionProps extends EventSubscriptionSet
   resourceGroup: string;
   /** Name of the parent partner topic. Changing it replaces the subscription. */
   partnerTopic: string;
+  /**
+   * Schema of delivered events. Partner topics take CloudEvents v1.0 input,
+   * so Event Grid accepts only `CloudEventSchemaV1_0`.
+   * @default "CloudEventSchemaV1_0"
+   */
+  eventDeliverySchema?: "CloudEventSchemaV1_0";
 }
+
+/** The only delivery schema a partner topic's CloudEvents input allows. */
+const deliverySchema = "CloudEventSchemaV1_0" as const;
 
 export interface PartnerTopicEventSubscription extends Resource<
   "Azure.EventGrid.PartnerTopicEventSubscription",
@@ -120,7 +129,7 @@ export const PartnerTopicEventSubscriptionProvider = () =>
         !sameName(news.resourceGroup, output.resourceGroup) ||
         !sameName(news.partnerTopic, output.partnerTopic) ||
         (news.name !== undefined && news.name !== output.eventSubscriptionName) ||
-        (news.eventDeliverySchema ?? "EventGridSchema") !== output.eventDeliverySchema
+        (news.eventDeliverySchema ?? deliverySchema) !== output.eventDeliverySchema
       ) {
         return { action: "replace" } as const;
       }
@@ -154,7 +163,10 @@ export const PartnerTopicEventSubscriptionProvider = () =>
         partnerTopicName: partnerTopic,
         eventSubscriptionName: name,
       };
-      const desired = yield* desiredSubscription(id, news);
+      const desired = yield* desiredSubscription(id, {
+        ...news,
+        eventDeliverySchema: news.eventDeliverySchema ?? deliverySchema,
+      });
       const observed = yield* reconcileSubscription(
         {
           label: `partner topic event subscription ${name}`,

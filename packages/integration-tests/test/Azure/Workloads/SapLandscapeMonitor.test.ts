@@ -58,7 +58,7 @@ test.provider.skipIf(!runExpensive)(
 );
 
 // Ungated probe (free: one empty resource group): the landscape monitor of
-// a monitor that does not exist reads and deletes as the typed `NotFound`
+// a monitor that does not exist reads and deletes as the typed `ResourceNotFound`
 // the provider treats as "absent".
 test.provider(
   "the landscape monitor of a missing monitor reads as a typed not-found",
@@ -75,7 +75,7 @@ test.provider(
         }),
       );
       const error = yield* getLandscape(group.resourceGroupName, "missing").pipe(Effect.flip);
-      expect(error._tag).toEqual("NotFound");
+      expect(error._tag).toEqual("ResourceNotFound");
       const deleteError = yield* Effect.gen(function* () {
         return yield* workloads.DeleteSapLandscapeMonitor({
           subscriptionId: yield* subscription,
@@ -83,7 +83,7 @@ test.provider(
           monitorName: "missing",
         });
       }).pipe(Effect.flip);
-      expect(deleteError._tag).toEqual("NotFound");
+      expect(deleteError._tag).toEqual("ResourceNotFound");
 
       yield* stack.destroy();
     }).pipe(logLevel),

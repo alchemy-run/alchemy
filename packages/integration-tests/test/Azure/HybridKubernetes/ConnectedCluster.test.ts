@@ -75,11 +75,14 @@ test.provider(
       );
       expect(cluster.clusterName).toMatch(/^[A-Za-z0-9][-_A-Za-z0-9]{0,62}$/);
       expect(cluster.identityType).toEqual("SystemAssigned");
-      expect(cluster.principalId).toBeDefined();
+      expect(cluster.principalId).toMatch(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+      );
       expect(cluster.agentPublicKeyCertificate).toEqual(AGENT_PUBLIC_KEY_A);
       expect(cluster.tags).toEqual({ env: "test" });
 
       const observed = yield* getCluster(group.resourceGroupName, cluster.clusterName);
+      expect(observed.identity.principalId).toEqual(cluster.principalId);
       expect(observed.properties.provisioningState).toEqual("Succeeded");
       expect(observed.properties.distribution).toEqual("k3s");
       expect(observed.properties.infrastructure).toEqual("generic");

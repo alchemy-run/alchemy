@@ -156,7 +156,15 @@ test.provider.skipIf(!runExpensive)(
         target.vaultId.toLowerCase(),
       );
       expect(observed.properties?.requestMessage).toEqual("first");
-      expect(link.status).toBeDefined();
+      // The forked approver approves the copy's connection on the vault.
+      const approved = yield* get(link.sharedPrivateLinkResourceName).pipe(
+        Effect.repeat({
+          schedule: Schedule.spaced("10 seconds"),
+          until: (l) => l.properties?.status === "Approved",
+          times: 18,
+        }),
+      );
+      expect(approved.properties?.status).toEqual("Approved");
 
       // Replacement: a new primary link (new target) yields a new copy.
       const replaced = yield* stack.deploy(program({ target: "B", requestMessage: "second" }));

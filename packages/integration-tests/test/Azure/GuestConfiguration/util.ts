@@ -28,8 +28,8 @@ export const PUBLIC_KEY =
  * Region and size for VM-backed tests: the 1-vCPU F-series v7 sizes are
  * unrestricted on the trial subscription (B-series is `SkuNotAvailable`).
  */
-export const VM_LOCATION = process.env.AZURE_TEST_VM_LOCATION ?? "eastus";
-export const VM_SIZE = process.env.AZURE_TEST_VM_SIZE ?? "Standard_F1als_v7";
+export const VM_LOCATION = "eastus";
+export const VM_SIZE = "Standard_F1als_v7";
 
 /**
  * Resource group, VNet, subnet, and a NIC without a public IP. All free.

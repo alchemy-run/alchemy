@@ -3,6 +3,7 @@ import * as vmware from "@distilled.cloud/azure/vmware";
 import { expect } from "alchemy-test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
 import { runPaidOnly } from "../gates.ts";
 import { AVS_TIMEOUT, logLevel, privateCloud, subscription, tags, waitGone } from "./util.ts";
 
@@ -45,7 +46,10 @@ test.provider.skip(
         });
       const observed = yield* get();
       expect(observed.properties?.status).toEqual("Available");
-      expect(site.activationKey).toBeDefined();
+      const activationKey = site.activationKey;
+      expect(
+        Redacted.isRedacted(activationKey) ? Redacted.value(activationKey) : "missing",
+      ).toEqual(observed.properties?.activationKey);
 
       yield* stack.destroy();
       expect(yield* waitGone(get())).toEqual("gone");

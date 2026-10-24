@@ -40,9 +40,12 @@ test.provider.skipIf(!runExpensive)(
       yield* stack.destroy();
 
       const { group, community: hub, dedicated } = yield* stack.deploy(program({ env: "test" }));
-      expect(dedicated.vHubResourceId).toBeDefined();
       const get = getHub(group.resourceGroupName, hub.communityName, dedicated.dedicatedHubName);
       const observed = yield* get;
+      expect(dedicated.vHubResourceId).toMatch(
+        /\/providers\/Microsoft\.Network\/virtualHubs\/[^/]+$/i,
+      );
+      expect(dedicated.vHubResourceId).toEqual(observed.properties?.vHubResourceId);
       expect(observed.properties?.designation).toEqual("Reserved");
       expect(observed.tags?.env).toEqual("test");
 

@@ -207,7 +207,11 @@ export const HostPool = GroupedResource<HostPool>("Azure.DesktopVirtualization.H
 
 type ObservedHostPool = desktopvirtualization.GetHostPoolResponse;
 
-const getHostPool = (subscriptionId: string, resourceGroupName: string, hostPoolName: string) =>
+export const getHostPool = (
+  subscriptionId: string,
+  resourceGroupName: string,
+  hostPoolName: string,
+) =>
   orUndefinedIfNotFound(
     desktopvirtualization.GetHostPool({
       subscriptionId,

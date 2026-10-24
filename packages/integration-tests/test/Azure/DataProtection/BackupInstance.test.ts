@@ -82,9 +82,8 @@ test.provider(
       const { instance } = yield* stack.deploy(
         program({ instance: { friendlyName: "blobs", tags: { env: "test" } } }),
       );
-      expect(instance).toBeDefined();
+      expect(instance?.currentProtectionState).toEqual("ProtectionConfigured");
       const name = instance!.backupInstanceName;
-      expect(instance!.currentProtectionState).toEqual("ProtectionConfigured");
       expect(instance!.dataSourceId.toLowerCase()).toEqual(
         base.account.storageAccountId.toLowerCase(),
       );

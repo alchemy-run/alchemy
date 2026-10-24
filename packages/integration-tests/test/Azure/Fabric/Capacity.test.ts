@@ -68,7 +68,9 @@ test.provider.skipIf(!runPaidOnly)(
       expect(updated.capacity.capacityId).toEqual(capacity.capacityId);
       const reobserved = yield* getCapacity(group.resourceGroupName, capacity.capacityName);
       expect(reobserved.tags?.env).toEqual("updated");
-      expect(["Paused", "Suspended"]).toContain(reobserved.properties.state);
+      // The REST action is "suspend"; the resulting run state is "Paused".
+      expect(reobserved.properties.state).toEqual("Paused");
+      expect(updated.capacity.state).toEqual("Paused");
 
       // Replacement: the name is immutable.
       const replaced = yield* stack.deploy(

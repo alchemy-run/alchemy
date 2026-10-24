@@ -34,6 +34,10 @@ const getVersion = (
     });
   });
 
+/** Azure keeps a component version's description in its spec. */
+const specOf = (observed: ml.GetComponentVersionResponse) =>
+  observed.properties.componentSpec as { command?: string; description?: string };
+
 const program = (props: {
   variant: "a" | "b";
   version: "1" | "2";
@@ -63,10 +67,7 @@ const program = (props: {
   });
 
 // Component assets are free; the Default workspace has no hourly charge. ~4-6 minutes.
-// Skipped: AssertionError: expected null to equal "v1" — the workspace
-// component version GET returns `description: null` after a PUT that set it
-// (also when merged into `componentSpec`); in-place updates need a rework.
-test.provider.skip(
+test.provider(
   "create, update, replace, and delete a component version",
   (stack) =>
     Effect.gen(function* () {
@@ -80,10 +81,10 @@ test.provider.skip(
       expect(version?.version).toEqual("1");
       expect(version?.tags).toEqual({ env: "test" });
       let observed = yield* get("1");
-      expect(observed.properties.description).toEqual("v1");
+      expect(specOf(observed).description).toEqual("v1");
       expect(observed.properties.tags?.env).toEqual("test");
       expect(observed.properties.tags?.["alchemy::id"]).toEqual("PrepV1");
-      expect((observed.properties.componentSpec as { command?: string }).command).toEqual("echo a");
+      expect(specOf(observed).command).toEqual("echo a");
 
       // In place: description and tags.
       const updated = yield* stack.deploy(
@@ -91,7 +92,7 @@ test.provider.skip(
       );
       expect(updated.version?.versionId).toEqual(version?.versionId);
       observed = yield* get("1");
-      expect(observed.properties.description).toEqual("v1 updated");
+      expect(specOf(observed).description).toEqual("v1 updated");
       expect(observed.properties.tags?.env).toEqual("prod");
 
       // Azure only archives workspace component versions: new content takes a
@@ -100,7 +101,7 @@ test.provider.skip(
         program({ variant: "b", version: "2", description: "v1 updated", tags: { env: "prod" } }),
       );
       observed = yield* get("2");
-      expect((observed.properties.componentSpec as { command?: string }).command).toEqual("echo b");
+      expect(specOf(observed).command).toEqual("echo b");
       expect((yield* get("1")).properties.isArchived).toEqual(true);
 
       // Removing the version archives it.

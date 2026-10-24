@@ -66,10 +66,8 @@ test.provider(
         }),
       );
       const updated = yield* observe;
-      expect([...(updated.properties?.ipRules ?? []).map((r) => r.ipMask)].sort()).toEqual([
-        "198.51.100.7",
-        "203.0.113.0/24",
-      ]);
+      const masks = (updated.properties?.ipRules ?? []).map((r) => r.ipMask).sort();
+      expect(masks).toEqual(["198.51.100.7", "203.0.113.0/24"]);
       expect(updated.properties?.trustedServiceAccessEnabled).toEqual(true);
 
       // Removing the resource resets the firewall (there is no DELETE).

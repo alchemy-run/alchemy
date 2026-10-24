@@ -60,6 +60,25 @@ export interface MetadataCategories {
   verticals?: string[];
 }
 
+/**
+ * A dependency of a piece of content: one item (`kind` + `contentId`), or
+ * an `operator` over a list of `criteria`.
+ */
+export interface MetadataDependency {
+  /** Static ID of the content depended on. */
+  contentId?: string;
+  /** Kind of the content depended on, e.g. `DataConnector`. */
+  kind?: string;
+  /** Version required; blank or `*` accepts any version. */
+  version?: string;
+  /** Name of the content depended on. */
+  name?: string;
+  /** How `criteria` combine: `AND` or `OR`. */
+  operator?: "AND" | "OR" | (string & {});
+  /** Dependencies combined by `operator`. */
+  criteria?: MetadataDependency[];
+}
+
 export interface MetadataProps {
   /** Resource group of the Sentinel workspace. Changing it replaces the metadata. */
   resourceGroup: string;
@@ -106,7 +125,7 @@ export interface MetadataProps {
   /** MITRE ATT&CK techniques covered by the content. */
   threatAnalysisTechniques?: string[];
   /** Dependencies of the content (`{ operator, criteria: [{ kind, contentId }] }`). */
-  dependencies?: Record<string, unknown>;
+  dependencies?: MetadataDependency;
 }
 
 export interface Metadata extends Resource<
@@ -287,7 +306,7 @@ export const MetadataProvider = () =>
       if (
         observed === undefined ||
         !sameText(parentId, observed.properties?.parentId) ||
-        !subsetEqual(rest, observed.properties as unknown as Record<string, unknown>)
+        !subsetEqual(rest, observed.properties)
       ) {
         observed = yield* securityinsights.CreateMetadata({
           subscriptionId,
@@ -295,7 +314,7 @@ export const MetadataProvider = () =>
           workspaceName: workspace,
           metadataName: name,
           etag: observed?.etag,
-          properties: desired as unknown as securityinsights.MetadataProperties,
+          properties: desired,
         });
       }
       return toAttrs(resourceGroup, workspace, name, observed);

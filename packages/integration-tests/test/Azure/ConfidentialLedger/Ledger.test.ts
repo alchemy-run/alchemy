@@ -73,7 +73,7 @@ test.provider(
       expect(ledger.ledgerUri).toMatch(/^https:\/\//);
       const observed = yield* getLedger(group, ledger.ledgerName);
       expect(observed.tags?.env).toEqual("test");
-      expect(observed.tags?.["alchemy::id"]).toBeDefined();
+      expect(observed.tags?.["alchemy::id"]).toEqual("Ledger");
       expect(observed.properties?.aadBasedSecurityPrincipals?.map((p) => p.principalId)).toEqual([
         admin,
       ]);

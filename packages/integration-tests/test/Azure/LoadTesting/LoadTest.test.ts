@@ -80,8 +80,9 @@ test.provider(
         }),
       );
       expect(updated.load.loadTestId).toEqual(load.loadTestId);
-      expect(updated.load.principalId).toBeDefined();
+      expect(updated.load.principalId).toMatch(/^[0-9a-f-]{36}$/);
       const reobserved = yield* getLoadTest(group.resourceGroupName, load.loadTestName);
+      expect(reobserved.identity?.principalId).toEqual(updated.load.principalId);
       expect(reobserved.properties?.description).toEqual("second");
       expect(reobserved.identity?.type).toEqual("SystemAssigned");
       expect(reobserved.tags?.env).toEqual("prod");

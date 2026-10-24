@@ -274,7 +274,7 @@ export const AutomationRuleProvider = () =>
       let observed = yield* getRule(subscriptionId, resourceGroup, workspace, ruleId);
       if (
         observed === undefined ||
-        !subsetEqual(desired, observed.properties as unknown as Record<string, unknown>)
+        !subsetEqual(desired, observed.properties)
       ) {
         observed = yield* securityinsights.AutomationRulesCreateOrUpdate({
           subscriptionId,

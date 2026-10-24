@@ -58,7 +58,6 @@ test.provider(
       expect(service.dataLocation).toEqual("United States");
       expect(service.hostName).toContain("communication.azure.com");
       expect(service.disableLocalAuth).toEqual(false);
-      expect(service.primaryConnectionString).toBeDefined();
       expect(Redacted.value(service.primaryConnectionString!).toLowerCase()).toContain(
         "endpoint=https://",
       );

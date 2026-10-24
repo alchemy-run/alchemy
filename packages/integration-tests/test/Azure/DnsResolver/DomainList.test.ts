@@ -63,7 +63,8 @@ test.provider(
       );
       expect(updated.list.domainListName).toEqual(list.domainListName);
       const reobserved = yield* getList(rg, list.domainListName);
-      expect([...(reobserved.properties?.domains ?? [])].sort()).toEqual([
+      const domains = [...(reobserved.properties?.domains ?? [])].sort();
+      expect(domains).toEqual([
         "contoso.com.",
         "fabrikam.net.",
       ]);

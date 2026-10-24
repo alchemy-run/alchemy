@@ -70,7 +70,9 @@ test.provider(
       expect(observed.properties?.privateLinkResourceId?.toLowerCase()).toEqual(
         target.vaultId.toLowerCase(),
       );
-      expect(observed.properties?.status).toBeDefined();
+      // Nothing approves the vault's private endpoint connection.
+      expect(observed.properties?.status).toEqual("Pending");
+      expect(link.status).toEqual("Pending");
 
       // Replacement: the target and request message are fixed after
       // creation.

@@ -49,7 +49,7 @@ test.provider.skipIf(!runPaidOnly)(
       const observed = yield* getMonitor(group.resourceGroupName, monitor.monitorName);
       expect(observed.properties?.provisioningState).toEqual("Succeeded");
       expect(observed.tags?.env).toEqual("test");
-      expect(monitor.kibanaServiceUrl).toBeDefined();
+      expect(monitor.kibanaServiceUrl).toMatch(/^https:\/\//);
 
       // In place: tags.
       const updated = yield* stack.deploy(program({ tags: { env: "prod" } }));

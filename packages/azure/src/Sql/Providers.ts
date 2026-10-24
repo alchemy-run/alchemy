@@ -72,6 +72,10 @@ import {
   ManagedDatabaseSecurityAlertPolicyProvider,
 } from "./ManagedDatabaseSecurityAlertPolicy.ts";
 import {
+  ManagedDatabaseSensitivityLabel,
+  ManagedDatabaseSensitivityLabelProvider,
+} from "./ManagedDatabaseSensitivityLabel.ts";
+import {
   ManagedDatabaseVulnerabilityAssessment,
   ManagedDatabaseVulnerabilityAssessmentProvider,
 } from "./ManagedDatabaseVulnerabilityAssessment.ts";
@@ -128,6 +132,7 @@ import {
   PrivateEndpointConnection,
   PrivateEndpointConnectionProvider,
 } from "./PrivateEndpointConnection.ts";
+import { SensitivityLabel, SensitivityLabelProvider } from "./SensitivityLabel.ts";
 import { Server, ServerProvider } from "./Server.ts";
 import {
   ServerAdvancedThreatProtectionSettings,
@@ -227,6 +232,7 @@ export const resources = [
   ManagedDatabase,
   ManagedDatabaseAdvancedThreatProtectionSettings,
   ManagedDatabaseSecurityAlertPolicy,
+  ManagedDatabaseSensitivityLabel,
   ManagedDatabaseVulnerabilityAssessment,
   ManagedDatabaseVulnerabilityAssessmentRuleBaseline,
   ManagedInstance,
@@ -245,6 +251,7 @@ export const resources = [
   ManagedTransparentDataEncryption,
   OutboundFirewallRule,
   PrivateEndpointConnection,
+  SensitivityLabel,
   Server,
   ServerAdvancedThreatProtectionSettings,
   ServerAzureADAdministrator,
@@ -305,6 +312,7 @@ export const layers = () =>
       ManagedDatabaseProvider(),
       ManagedDatabaseAdvancedThreatProtectionSettingsProvider(),
       ManagedDatabaseSecurityAlertPolicyProvider(),
+      ManagedDatabaseSensitivityLabelProvider(),
       ManagedDatabaseVulnerabilityAssessmentProvider(),
       ManagedDatabaseVulnerabilityAssessmentRuleBaselineProvider(),
       ManagedInstanceProvider(),
@@ -325,6 +333,7 @@ export const layers = () =>
       ManagedTransparentDataEncryptionProvider(),
       OutboundFirewallRuleProvider(),
       PrivateEndpointConnectionProvider(),
+      SensitivityLabelProvider(),
       ServerProvider(),
       ServerAdvancedThreatProtectionSettingsProvider(),
       ServerAzureADAdministratorProvider(),

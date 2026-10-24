@@ -55,10 +55,9 @@ test.provider(
       // In-place: rights.
       const updated = yield* stack.deploy(program({ name: "clients", rights: ["Send", "Listen"] }));
       expect(updated.rule.authorizationRuleId).toEqual(rule.authorizationRuleId);
-      expect([...((yield* get("clients")).properties?.rights ?? [])].sort()).toEqual([
-        "Listen",
-        "Send",
-      ]);
+      const clients = yield* get("clients");
+      const rights = [...(clients.properties?.rights ?? [])].sort();
+      expect(rights).toEqual(["Listen", "Send"]);
       const keys = yield* eventhub.ListNamespaceKeys(where("clients"));
       expect(keys.primaryKey).toEqual(Redacted.value(updated.rule.primaryKey!));
 

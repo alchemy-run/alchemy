@@ -3,10 +3,14 @@ import * as appconfiguration from "@distilled.cloud/azure/appconfiguration";
 import { expect } from "alchemy-test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 
 const { test } = Test.make({ providers: Azure.providers() });
+
+const reveal = (secret: Redacted.Redacted<string> | undefined) =>
+  secret === undefined ? undefined : Redacted.value(secret);
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
@@ -90,8 +94,14 @@ test.provider(
       expect(store.configurationStoreName).toMatch(/^[a-z0-9-]{5,50}$/);
       expect(store.sku.toLowerCase()).toEqual("free");
       expect(store.endpoint).toEqual(`https://${store.configurationStoreName}.azconfig.io`);
-      expect(store.primaryConnectionString).toBeDefined();
-      expect(store.primaryReadOnlyConnectionString).toBeDefined();
+      const connectionString = new RegExp(
+        `^Endpoint=https://${store.configurationStoreName}\\.azconfig\\.io;Id=[^;]+;Secret=.+$`,
+      );
+      const readWrite = reveal(store.primaryConnectionString);
+      const readOnly = reveal(store.primaryReadOnlyConnectionString);
+      expect(readWrite).toMatch(connectionString);
+      expect(readOnly).toMatch(connectionString);
+      expect(readOnly).not.toEqual(readWrite);
       const observed = yield* getStore(group.resourceGroupName, store.configurationStoreName);
       expect(observed.properties?.provisioningState).toEqual("Succeeded");
       expect(observed.tags?.env).toEqual("test");

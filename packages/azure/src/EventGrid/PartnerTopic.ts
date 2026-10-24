@@ -120,6 +120,9 @@ type ObservedPartnerTopic = Pick<
   "id" | "location" | "properties" | "identity" | "tags"
 >;
 
+/** Tags of a partner topic; one a channel just created has `tags: null`. */
+const tagsOf = (topic: ObservedPartnerTopic) => topic.tags ?? undefined;
+
 const getPartnerTopic = (
   subscriptionId: string,
   resourceGroupName: string,
@@ -143,7 +146,7 @@ const toAttrs = (
   activationState: observed.properties?.activationState,
   eventTypes: Object.keys(observed.properties?.eventTypeInfo?.inlineEventTypes ?? {}).sort(),
   principalId: observed.identity?.principalId,
-  tags: userTags(observed.tags),
+  tags: userTags(tagsOf(observed)),
 });
 
 const provisioned = (topic: ObservedPartnerTopic) => topic.properties?.provisioningState;
@@ -159,7 +162,7 @@ export const PartnerTopicProvider = () =>
         .pipe(Effect.flatMap((page) => requireSinglePage("ListPartnerTopicBySubscription", page)));
       return (page.value ?? []).flatMap((topic) => {
         const group = resourceGroupOf(topic.id);
-        return hasAnyAlchemyTag(topic.tags) && group !== undefined && topic.name !== undefined
+        return hasAnyAlchemyTag(tagsOf(topic)) && group !== undefined && topic.name !== undefined
           ? [toAttrs(group, topic.name, topic)]
           : [];
       });
@@ -186,8 +189,8 @@ export const PartnerTopicProvider = () =>
       const attrs = toAttrs(resourceGroup, name, observed);
       // A partner's channel always creates the topic, so a topic no stack
       // has claimed yet is ours to claim; one claimed by another is not.
-      if (!hasAnyAlchemyTag(observed.tags)) return attrs;
-      return (yield* isOwned(id, observed.tags)) ? attrs : Unowned(attrs);
+      if (!hasAnyAlchemyTag(tagsOf(observed))) return attrs;
+      return (yield* isOwned(id, tagsOf(observed))) ? attrs : Unowned(attrs);
     }),
 
     reconcile: Effect.fn(function* ({ id, news }) {
@@ -214,7 +217,7 @@ export const PartnerTopicProvider = () =>
       }
 
       // Sync tags and identity; PATCH only the delta.
-      const tagsChanged = tagsDiffer(observed.tags, tags);
+      const tagsChanged = tagsDiffer(tagsOf(observed), tags);
       const identityChanged = identityDiffers(observed.identity, news.identity);
       if (tagsChanged || identityChanged) {
         yield* eventgrid.UpdatePartnerTopic({

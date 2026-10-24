@@ -58,7 +58,6 @@ test.provider(
       );
       const rg = group.resourceGroupName;
       expect(pool.hostPoolType).toEqual("Pooled");
-      expect(pool.registrationToken).toBeDefined();
       const token = Redacted.value(pool.registrationToken!);
       expect(token.length).toBeGreaterThan(20);
       expect(pool.tags).toEqual({ env: "test" });

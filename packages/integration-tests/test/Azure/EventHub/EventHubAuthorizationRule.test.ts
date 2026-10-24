@@ -63,11 +63,9 @@ test.provider(
         program({ name: "readers", rights: ["Manage", "Send", "Listen"] }),
       );
       expect(updated.rule.authorizationRuleId).toEqual(rule.authorizationRuleId);
-      expect([...((yield* get("readers")).properties?.rights ?? [])].sort()).toEqual([
-        "Listen",
-        "Manage",
-        "Send",
-      ]);
+      const readers = yield* get("readers");
+      const rights = [...(readers.properties?.rights ?? [])].sort();
+      expect(rights).toEqual(["Listen", "Manage", "Send"]);
       const keys = yield* eventhub.ListEventHubKeys(where("readers"));
       expect(keys.primaryKey).toEqual(Redacted.value(updated.rule.primaryKey!));
 

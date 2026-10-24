@@ -3,7 +3,7 @@ import * as codesigning from "@distilled.cloud/azure/codesigning";
 import { expect } from "alchemy-test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
-import { runPaidOnly } from "../gates.ts";
+import { runExpensive } from "../gates.ts";
 import { logLevel, subscription, tags, waitGone } from "./util.ts";
 
 const { test } = Test.make({ providers: Azure.providers() });
@@ -33,10 +33,9 @@ const program = (props: {
     return { group, account };
   });
 
-// Artifact Signing rejects free-trial subscriptions. On a paid subscription
-// the full monthly fee is billed on creation, not prorated: Basic $9.99,
+// The full monthly fee is billed on creation, not prorated: Basic $9.99,
 // Premium $99.99 (the SKU update below) — ~$110 per run, ~1-2 minutes.
-test.provider.skipIf(!runPaidOnly)(
+test.provider.skipIf(!runExpensive)(
   "create, update, and delete an artifact signing account",
   (stack) =>
     Effect.gen(function* () {
@@ -48,7 +47,7 @@ test.provider.skipIf(!runPaidOnly)(
       const observed = yield* getAccount(group.resourceGroupName, account.accountName);
       expect(observed.properties?.sku?.name).toEqual("Basic");
       expect(observed.tags?.env).toEqual("test");
-      expect(observed.tags?.["alchemy::id"]).toBeDefined();
+      expect(observed.tags?.["alchemy::id"]).toEqual("Signing");
 
       // In-place: tags and SKU.
       const updated = yield* stack.deploy(program({ sku: "Premium", tags: { env: "prod" } }));
@@ -65,10 +64,11 @@ test.provider.skipIf(!runPaidOnly)(
   { tags, timeout: 900_000 },
 );
 
-// Ungated probe (free: name check + a rejected PUT in an empty resource
-// group). The free trial rejects account creation with the typed error.
+// Free, no resources: the testing subscription is pay-as-you-go, so a
+// create here would succeed and bill the $9.99 Basic fee. Only the name
+// check runs ungated.
 test.provider(
-  "a free-trial subscription rejects artifact signing accounts with a typed error",
+  "an unused artifact signing account name is reported available",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
@@ -77,33 +77,11 @@ test.provider(
       const availability = yield* codesigning.CheckCodeSigningAccountNameAvailability({
         subscriptionId,
         type: "Microsoft.CodeSigning/codeSigningAccounts",
-        name: "alchemyprobe7c1",
+        name: "alchemynamecheck7c1",
       });
-      expect(typeof availability.nameAvailable).toEqual("boolean");
-
-      const { group } = yield* stack.deploy(
-        Effect.gen(function* () {
-          const group = yield* Azure.Resources.ResourceGroup("Group", {
-            location: "eastus",
-          });
-          return { group };
-        }),
-      );
-      const error = yield* codesigning
-        .CreateCodeSigningAccount({
-          subscriptionId,
-          resourceGroupName: group.resourceGroupName,
-          accountName: "alchemyprobe7c1",
-          location: "eastus",
-          properties: { sku: { name: "Basic" } },
-        })
-        .pipe(Effect.flip);
-      expect(error._tag).toEqual("CodeSigningSubscriptionNotSupported");
-      expect(yield* waitGone(getAccount(group.resourceGroupName, "alchemyprobe7c1"))).toEqual(
-        "gone",
-      );
+      expect(availability.nameAvailable).toEqual(true);
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { tags, timeout: 600_000 },
+  { tags, timeout: 120_000 },
 );

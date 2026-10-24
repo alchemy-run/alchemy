@@ -61,8 +61,9 @@ test.provider.skipIf(!runExpensive)(
         }),
       );
       expect(fs.provisioningState).toEqual("Succeeded");
-      expect(fs.mgsAddress).toBeDefined();
       const observed = yield* getFilesystem(group.resourceGroupName, fs.amlFilesystemName);
+      expect(fs.mgsAddress).toMatch(/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/);
+      expect(fs.mgsAddress).toEqual(observed.properties?.clientInfo?.mgsAddress);
       expect(observed.sku?.name).toEqual("AMLFS-Durable-Premium-500");
       expect(observed.properties?.storageCapacityTiB).toEqual(4);
       expect(observed.properties?.maintenanceWindow).toEqual({
@@ -153,7 +154,7 @@ test.provider(
       const missing = yield* getFilesystem(group.resourceGroupName, "alchemy-missing-amlfs").pipe(
         Effect.flip,
       );
-      expect(["ResourceNotFound", "NotFound"]).toContain(missing._tag);
+      expect(missing._tag).toEqual("ResourceNotFound");
 
       const missingJob = yield* storagecache
         .GetAutoExportJob({
@@ -163,7 +164,7 @@ test.provider(
           autoExportJobName: "missing",
         })
         .pipe(Effect.flip);
-      expect(["ResourceNotFound", "NotFound"]).toContain(missingJob._tag);
+      expect(missingJob._tag).toEqual("ResourceNotFound");
 
       yield* stack.destroy();
     }).pipe(logLevel),

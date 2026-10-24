@@ -3,6 +3,7 @@ import { AppAttachPackage, AppAttachPackageProvider } from "./AppAttachPackage.t
 import { Application, ApplicationProvider } from "./Application.ts";
 import { ApplicationGroup, ApplicationGroupProvider } from "./ApplicationGroup.ts";
 import { HostPool, HostPoolProvider } from "./HostPool.ts";
+import { MsixPackage, MsixPackageProvider } from "./MsixPackage.ts";
 import { ScalingPlan, ScalingPlanProvider } from "./ScalingPlan.ts";
 import {
   ScalingPlanPersonalSchedule,
@@ -19,6 +20,7 @@ export const resources = [
   Application,
   ApplicationGroup,
   HostPool,
+  MsixPackage,
   ScalingPlan,
   ScalingPlanPersonalSchedule,
   ScalingPlanPooledSchedule,
@@ -30,6 +32,7 @@ export const layers = () =>
     ApplicationProvider(),
     ApplicationGroupProvider(),
     HostPoolProvider(),
+    MsixPackageProvider(),
     ScalingPlanProvider(),
     ScalingPlanPersonalScheduleProvider(),
     ScalingPlanPooledScheduleProvider(),

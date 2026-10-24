@@ -67,8 +67,9 @@ export interface BotProps {
    */
   resourceGroup: string;
   /**
-   * Bot name, 2-64 characters of letters, digits, `_`, `.` and `-`,
-   * starting with a letter or digit. If omitted, a unique name is generated
+   * Bot name, 2-30 characters of lowercase letters, digits, and single
+   * dashes, starting with a letter and not ending with a dash. If omitted, a
+   * unique name is generated
    * from the app, stage, and logical ID. Changing it replaces the bot.
    */
   name?: string;
@@ -177,8 +178,18 @@ export const Bot = GroupedResource<Bot>("Azure.HealthBot.Bot");
 
 type ObservedBot = healthbot.GetBotResponse;
 
+/**
+ * Health Bot names are 2-30 characters of lowercase letters, digits, and
+ * single dashes, start with a letter, and do not end with a dash.
+ */
 const createBotName = (id: string) =>
-  createPhysicalName({ id, maxLength: 64, lowercase: true, delimiter: "-" });
+  createPhysicalName({ id, maxLength: 30, lowercase: true, delimiter: "-" }).pipe(
+    Effect.map((raw) => {
+      const collapsed = raw.replace(/-+/g, "-");
+      const lettered = /^[a-z]/.test(collapsed) ? collapsed : `b${collapsed}`.slice(0, 30);
+      return lettered.replace(/^-+|-+$/g, "");
+    }),
+  );
 
 export const getHealthBot = (subscriptionId: string, resourceGroupName: string, botName: string) =>
   orUndefinedIfNotFound(healthbot.GetBot({ subscriptionId, resourceGroupName, botName }));

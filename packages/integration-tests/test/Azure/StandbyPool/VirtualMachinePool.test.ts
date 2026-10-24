@@ -11,9 +11,9 @@ const { test } = Test.make({ providers: Azure.providers() });
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const LOCATION = process.env.AZURE_TEST_VM_LOCATION ?? "eastus";
+const LOCATION = "eastus";
 /** The B-series is capacity-restricted on the trial; the F v7 1-vCPU size is not. */
-const VM_SIZE = process.env.AZURE_TEST_VM_SIZE ?? "Standard_F1als_v7";
+const VM_SIZE = "Standard_F1als_v7";
 /** Checked-in OpenSSH public key (private half discarded). */
 const PUBLIC_KEY =
   "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDENxJhC8/syZZ882HXvsvtHroY2qgTIi0Pbxn3I8ypeeKuerxliUK1Ht9xFcz2phTMNwoHzDcS5hdHT6GiYX+kxhbrrWA/b7D1MoqRu0WlIhB/vocs4WU06nWGQi0UXKWfVyfIHGZKgnw9vTcIutmW8KbQySIzgCYtYMD6a9PLL61O0LJaDcH5XDXEeygGLN9yVWitUJy0RNCZmS4qHB3QYzrXisDD0lzxRleIlp4KDpWvriuI8Chswe5rQ6RAEZXpEXYQfEwXm7jO7yO7ZSACh22am2suq4TRcTKlEFPw0V8ksCNzstQdbGsCStfB396XqmPEvz2IqSzMDljGodF/ alchemy-test-1";

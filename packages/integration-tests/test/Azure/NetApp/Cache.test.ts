@@ -83,7 +83,7 @@ test.provider.skip(
             cacheName: cache.cacheName,
           });
         });
-      expect(cache.clusterPeeringCommand).toBeDefined();
+      expect(cache.clusterPeeringCommand).toMatch(/^cluster peer create /);
       const observed = yield* get();
       expect(observed.properties.size).toEqual(100 * Azure.NetApp.GiB);
 

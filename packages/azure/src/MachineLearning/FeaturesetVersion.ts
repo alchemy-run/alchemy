@@ -15,7 +15,15 @@ import {
 /** Offline/online materialization of a feature set (schedule, compute, store type). */
 export type FeaturesetMaterializationSettings = MaterializationSettings;
 
-export interface FeaturesetVersionProps extends AssetVersionProps {
+/**
+ * Azure drops `properties` and ignores the archive flag on feature store
+ * versions, and limits `tags` to 3 with keys of letters, digits, `.`, `-`,
+ * and `_`.
+ */
+export interface FeaturesetVersionProps extends Omit<
+  AssetVersionProps,
+  "properties" | "isArchived"
+> {
   /**
    * Path of the feature set specification folder (the folder holding
    * `FeatureSetSpec.yaml`), e.g.
@@ -51,11 +59,13 @@ export interface FeaturesetVersion extends Resource<
  * workspace
  * (`Microsoft.MachineLearningServices/workspaces/featuresets/versions`) — an
  * immutable feature set specification (source, transformation, features)
- * joined on feature store entities. Azure creates the {@link FeaturesetContainer} named by `name` if it does not exist; declare one to
- * manage its description and tags.
+ * joined on feature store entities. Azure creates the
+ * {@link FeaturesetContainer} named by `name` if it does not exist.
  *
- * Versions are immutable: only the description, tags, archive flag, and
- * stage update in place.
+ * Versions are immutable: only the description, tags, and stage update in
+ * place. Azure accepts at most 3 tags with keys of letters, digits, `.`,
+ * `-`, and `_`, which rules out Alchemy's `alchemy::*` ownership tags, so
+ * the feature store workspace's stack/stage tags mark Alchemy ownership.
  *
  * :::caution
  * Changing `resourceGroup`, `workspace`, `name`, `version`, or any content
@@ -103,5 +113,8 @@ const ops: VersionOps<FeaturesetVersionProps> = {
 export const FeaturesetVersionProvider = () =>
   Provider.succeed(
     FeaturesetVersion,
-    versionProvider("feature set version", ops, { workspaceOnly: true }),
+    versionProvider("feature set version", ops, {
+      workspaceOnly: true,
+      untaggedInWorkspace: true,
+    }),
   );

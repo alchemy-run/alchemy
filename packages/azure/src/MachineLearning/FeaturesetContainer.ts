@@ -11,7 +11,14 @@ import {
   workspacePath,
 } from "./internal.ts";
 
-export type FeaturesetContainerProps = AssetContainerProps;
+/**
+ * Azure rejects tags, a description, and properties on feature set
+ * containers ("Tags are not supported.") and ignores the archive flag.
+ */
+export type FeaturesetContainerProps = Omit<
+  AssetContainerProps,
+  "tags" | "description" | "properties" | "isArchived"
+>;
 
 export interface FeaturesetContainer extends Resource<
   "Azure.MachineLearning.FeaturesetContainer",
@@ -27,8 +34,10 @@ export interface FeaturesetContainer extends Resource<
  * container that groups the versions of a feature set in a `FeatureStore`
  * workspace. Register versions with {@link FeaturesetVersion}.
  *
- * Description, properties, tags, and the archive flag update in place.
- * Feature store assets live only in `FeatureStore` workspaces.
+ * The container has nothing mutable: Azure rejects tags, a description,
+ * and properties on it and ignores the archive flag. The feature store
+ * workspace's stack/stage tags mark Alchemy ownership. Feature store
+ * assets live only in `FeatureStore` workspaces.
  *
  * :::caution
  * Changing `resourceGroup`, `workspace`, or `name` replaces the feature set.
@@ -41,8 +50,6 @@ export interface FeaturesetContainer extends Resource<
  * ```typescript
  * const featuresetContainer = yield* Azure.MachineLearning.FeaturesetContainer("transactions", {
  *   workspace: featureStore.workspaceName,
- *   description: "Transaction aggregates",
- *   tags: { team: "ml" },
  * });
  * ```
  *
@@ -62,5 +69,8 @@ const ops: ContainerOps = {
 export const FeaturesetContainerProvider = () =>
   Provider.succeed(
     FeaturesetContainer,
-    containerProvider("feature set container", ops, { workspaceOnly: true }),
+    containerProvider("feature set container", ops, {
+      workspaceOnly: true,
+      untaggedInWorkspace: true,
+    }),
   );

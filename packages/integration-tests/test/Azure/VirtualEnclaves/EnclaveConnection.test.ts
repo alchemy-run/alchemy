@@ -71,9 +71,11 @@ test.provider.skipIf(!runExpensive)(
       yield* stack.destroy();
 
       const { group, connection } = yield* stack.deploy(program({ env: "test" }));
-      expect(connection.state).toBeDefined();
       const get = getConnection(group.resourceGroupName, connection.enclaveConnectionName);
       const observed = yield* get;
+      expect(connection.state).toEqual(observed.properties?.state);
+      // No approval settings on the community, so the connection is not pending.
+      expect(observed.properties?.state).toMatch(/^(Approved|Active|Connected)$/);
       expect(observed.tags?.env).toEqual("test");
       // Defaulted to the source enclave's address space.
       expect(observed.properties?.sourceCidr).toMatch(/^10\./);

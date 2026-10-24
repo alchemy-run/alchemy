@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import * as Azure from "@alchemy.run/azure";
 import * as hybridnetwork from "@distilled.cloud/azure/hybridnetwork";
 import { expect } from "alchemy-test";
@@ -89,9 +90,10 @@ test.provider(
       expect(reobserved.tags?.env).toEqual("two");
 
       // Replacement: switching open -> secret replaces the value.
+      const secretValue = JSON.stringify({ region: "centralus" });
       const replaced = yield* stack.deploy(
         program({
-          secretConfigurationValue: Redacted.make(JSON.stringify({ region: "centralus" })),
+          secretConfigurationValue: Redacted.make(secretValue),
           tags: { env: "two" },
         }),
       );
@@ -99,7 +101,10 @@ test.provider(
         value.configurationGroupValueName,
       );
       expect(replaced.value.configurationType).toEqual("Secret");
-      expect(replaced.value.secretValueHash).toBeDefined();
+      const expectedHash = yield* Effect.sync(() =>
+        createHash("sha256").update(secretValue).digest("hex"),
+      );
+      expect(replaced.value.secretValueHash).toEqual(expectedHash);
       const secretObserved = yield* get(replaced.value.configurationGroupValueName);
       expect(secretObserved.properties?.configurationType).toEqual("Secret");
       expect(yield* waitGone(get(value.configurationGroupValueName))).toEqual("gone");

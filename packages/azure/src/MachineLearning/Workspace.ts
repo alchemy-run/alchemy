@@ -38,6 +38,25 @@ export type WorkspaceIsolationMode =
   | "AllowInternetOutbound"
   | "AllowOnlyApprovedOutbound";
 
+export interface WorkspaceFeatureStoreSettings {
+  /**
+   * Spark runtime version of the feature store's materialization jobs.
+   * @default "3.4.0"
+   */
+  sparkRuntimeVersion?: string;
+  /**
+   * Name of the workspace connection to the offline (ADLS Gen2)
+   * materialization store.
+   * @default "OfflineStoreConnectionName"
+   */
+  offlineStoreConnectionName?: string;
+  /**
+   * Name of the workspace connection to the online (Redis)
+   * materialization store.
+   */
+  onlineStoreConnectionName?: string;
+}
+
 export interface WorkspaceProps {
   /** Resource group the workspace is created in. Changing it replaces the workspace. */
   resourceGroup: string;
@@ -121,6 +140,13 @@ export interface WorkspaceProps {
    */
   primaryUserAssignedIdentity?: string;
   /**
+   * Feature store settings of a `FeatureStore` workspace. Azure rejects a
+   * `FeatureStore` workspace without them, so Alchemy sends the defaults
+   * below for that kind. Updated in place.
+   * @default for `FeatureStore`: `{ sparkRuntimeVersion: "3.4.0", offlineStoreConnectionName: "OfflineStoreConnectionName" }`
+   */
+  featureStoreSettings?: WorkspaceFeatureStoreSettings;
+  /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
    */
@@ -195,6 +221,17 @@ export interface Workspace extends Resource<
  * });
  * ```
  *
+ * ### Creating a Feature Store
+ * **Example:** Feature store workspace on a pinned Spark runtime
+ * ```typescript
+ * const store = yield* Azure.MachineLearning.Workspace("features", {
+ *   kind: "FeatureStore",
+ *   storageAccount: storage.storageAccountId,
+ *   keyVault: vaultId,
+ *   featureStoreSettings: { sparkRuntimeVersion: "3.4.0" },
+ * });
+ * ```
+ *
  * @resource
  */
 export const Workspace = GroupedResource<Workspace>("Azure.MachineLearning.Workspace");
@@ -226,6 +263,18 @@ const toAttrs = (
 
 const changedOptional = (desired: string | undefined, observed: string | undefined) =>
   desired !== undefined && !sameArm(desired, observed);
+
+/** The ARM feature store settings to send: the defaults for a `FeatureStore`, else only what was set. */
+const desiredFeatureStoreSettings = (news: WorkspaceProps): ml.FeatureStoreSettings | undefined => {
+  const settings = news.featureStoreSettings;
+  if (settings === undefined && news.kind !== "FeatureStore") return undefined;
+  return {
+    computeRuntime: { sparkRuntimeVersion: settings?.sparkRuntimeVersion ?? "3.4.0" },
+    offlineStoreConnectionName:
+      settings?.offlineStoreConnectionName ?? "OfflineStoreConnectionName",
+    onlineStoreConnectionName: settings?.onlineStoreConnectionName,
+  };
+};
 
 export const WorkspaceProvider = () =>
   Provider.succeed(Workspace, {
@@ -295,6 +344,7 @@ export const WorkspaceProvider = () =>
       const location = news.location ?? output?.location ?? env.location;
       const tags = yield* desiredTags(id, news.tags);
       const identity = news.identity ?? { type: "SystemAssigned" as const };
+      const featureStoreSettings = desiredFeatureStoreSettings(news);
       const where = {
         subscriptionId,
         resourceGroupName: resourceGroup,
@@ -333,6 +383,7 @@ export const WorkspaceProvider = () =>
             systemDatastoresAuthMode: news.systemDatastoresAuthMode,
             primaryUserAssignedIdentity: news.primaryUserAssignedIdentity,
             managedNetwork: news.isolationMode ? { isolationMode: news.isolationMode } : undefined,
+            featureStoreSettings,
           },
         });
       }
@@ -373,6 +424,12 @@ export const WorkspaceProvider = () =>
         (props.managedNetwork?.isolationMode ?? "Disabled") !== news.isolationMode
       ) {
         changed.managedNetwork = { isolationMode: news.isolationMode };
+      }
+      if (
+        featureStoreSettings !== undefined &&
+        !containsValue(props.featureStoreSettings, featureStoreSettings)
+      ) {
+        changed.featureStoreSettings = featureStoreSettings;
       }
       const tagsChanged = tagsDiffer(observed.tags, tags);
       const identityChanged = identityDiffers(observed.identity, identity);

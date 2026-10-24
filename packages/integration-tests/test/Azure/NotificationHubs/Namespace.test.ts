@@ -36,7 +36,6 @@ test.provider(
       expect(ns.sku).toEqual("Free");
       expect(ns.serviceBusEndpoint).toContain(`${ns.namespaceName}.servicebus.windows.net`);
       expect(ns.tags).toEqual({ env: "test" });
-      expect(ns.primaryConnectionString).toBeDefined();
       expect(Redacted.value(ns.primaryConnectionString!)).toContain(
         `Endpoint=sb://${ns.namespaceName}.servicebus.windows.net/`,
       );

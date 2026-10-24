@@ -39,7 +39,7 @@ const deviceUpdatePrincipalId = Effect.gen(function* () {
     ).pipe(HttpClientRequest.bearerToken(Redacted.value(token.accessToken))),
   );
   const body = (yield* response.json) as { id?: string };
-  expect(body.id).toBeDefined();
+  expect(body.id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
   return body.id!;
 });
 

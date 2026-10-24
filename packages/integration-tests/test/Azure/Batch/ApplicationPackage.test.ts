@@ -79,7 +79,7 @@ test.provider(
       expect(withContent.pkg.contentHash).toMatch(/^[0-9a-f]{64}$/);
       const active = yield* get("1.0.0");
       expect(active.properties?.state).toEqual("Active");
-      expect(active.properties?.lastActivationTime).toBeDefined();
+      expect(Number.isNaN(Date.parse(active.properties?.lastActivationTime ?? ""))).toBe(false);
 
       // Replacement: new version.
       const replaced = yield* stack.deploy(program({ version: "2.0.0", content: HELLO_ZIP }));

@@ -42,9 +42,8 @@ test.provider(
       );
       expect(service.sku).toEqual("basic");
       expect(service.endpoint).toContain(".search.windows.net");
-      expect(service.primaryAdminKey).toBeDefined();
       expect(Redacted.value(service.primaryAdminKey!).length).toBeGreaterThan(10);
-      expect(service.queryKey).toBeDefined();
+      expect(Redacted.value(service.queryKey!).length).toBeGreaterThan(10);
       const observed = yield* getService(group.resourceGroupName, service.searchServiceName);
       expect(observed.sku?.name).toEqual("basic");
       expect(observed.tags?.env).toEqual("test");

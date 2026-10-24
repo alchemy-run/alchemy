@@ -70,10 +70,16 @@ test.provider(
       expect(account.kind).toEqual("Gen2");
       expect(account.uniqueId).not.toEqual("");
       expect(account.disableLocalAuth).toEqual(false);
-      expect(account.primaryKey).toBeDefined();
-      expect(Redacted.value(account.primaryKey!).length).toBeGreaterThan(10);
+      expect(Redacted.isRedacted(account.primaryKey)).toEqual(true);
 
       const observed = yield* getAccount(group.resourceGroupName, account.accountName);
+      const { subscriptionId } = yield* Azure.AzureEnvironment.current;
+      const keys = yield* maps.ListAccountKeys({
+        subscriptionId,
+        resourceGroupName: group.resourceGroupName,
+        accountName: account.accountName,
+      });
+      expect(Redacted.value(account.primaryKey!)).toEqual(keys.primaryKey);
       expect(observed.location.toLowerCase()).toEqual("eastus");
       expect(observed.sku.name).toEqual("G2");
       expect(observed.kind).toEqual("Gen2");

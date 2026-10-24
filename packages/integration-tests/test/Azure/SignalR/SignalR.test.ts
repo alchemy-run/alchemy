@@ -56,7 +56,7 @@ test.provider(
       );
       expect(observed.properties?.cors?.allowedOrigins).toEqual(["https://a.example.com"]);
       expect(observed.tags?.env).toEqual("test");
-      expect(observed.tags?.["alchemy::id"]).toBeDefined();
+      expect(observed.tags?.["alchemy::id"]).toEqual("Realtime");
 
       // In place: CORS, serverless timeout, and tags.
       const updated = yield* stack.deploy(
@@ -69,10 +69,8 @@ test.provider(
       );
       expect(updated.service.signalRId).toEqual(service.signalRId);
       const reobserved = yield* getSignalR(group.resourceGroupName, service.signalRName);
-      expect([...(reobserved.properties?.cors?.allowedOrigins ?? [])].sort()).toEqual([
-        "https://a.example.com",
-        "https://b.example.com",
-      ]);
+      const origins = [...(reobserved.properties?.cors?.allowedOrigins ?? [])].sort();
+      expect(origins).toEqual(["https://a.example.com", "https://b.example.com"]);
       expect(reobserved.properties?.serverless?.connectionTimeoutInSeconds).toEqual(60);
       expect(reobserved.tags?.env).toEqual("prod");
 

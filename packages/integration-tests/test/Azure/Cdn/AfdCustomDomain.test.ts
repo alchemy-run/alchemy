@@ -64,8 +64,11 @@ test.provider.skipIf(!runPaidOnly)(
       );
       const get = (name: string) => getDomain(group.resourceGroupName, profile.profileName, name);
       expect(customDomain.hostName).toEqual(`www.${domain}`);
-      expect(customDomain.validationToken).toBeDefined();
+      expect(customDomain.validationToken).toMatch(/^\S+$/);
       const observed = yield* get(customDomain.customDomainName);
+      expect(observed.properties?.validationProperties?.validationToken).toEqual(
+        customDomain.validationToken,
+      );
       expect(observed.properties?.tlsSettings?.cipherSuiteSetType).toEqual("TLS12_2022");
 
       // In place: Front Door locks a domain whose ownership validation is

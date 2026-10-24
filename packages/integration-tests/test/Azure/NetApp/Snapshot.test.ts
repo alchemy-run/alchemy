@@ -40,7 +40,9 @@ test.provider.skipIf(!runPaidOnly)(
             snapshotName: snapshot.snapshotName,
           });
         });
-      expect(snapshot.snapshotUuid).toBeDefined();
+      expect(snapshot.snapshotUuid).toMatch(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
+      );
       const observed = yield* get();
       expect(observed.properties?.snapshotId).toEqual(snapshot.snapshotUuid);
 

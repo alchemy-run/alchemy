@@ -41,10 +41,14 @@ test.provider(
       const { group, center } = yield* stack.deploy(
         program({ location: "eastus", displayName: "One", tags: { a: "1" } }),
       );
-      expect(center.devCenterUri).toBeDefined();
-      expect(center.principalId).toBeDefined();
       expect(center.identityType).toEqual("SystemAssigned");
       const observed = yield* getDevCenter(group.resourceGroupName, center.devCenterName);
+      expect(center.devCenterUri).toMatch(/^https:\/\/[^/]+\.devcenter\.azure\.com\/?$/);
+      expect(center.devCenterUri).toEqual(observed.properties?.devCenterUri);
+      expect(center.principalId).toMatch(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
+      );
+      expect(center.principalId).toEqual(observed.identity?.principalId);
       expect(observed.properties?.displayName).toEqual("One");
       expect(observed.tags?.a).toEqual("1");
       expect(observed.tags?.["alchemy::id"]).toEqual("Center");

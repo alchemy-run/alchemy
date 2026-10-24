@@ -65,7 +65,10 @@ test.provider(
       const first = created.syncGroup!;
       const observed = yield* getSyncGroup(rg, service, first.syncGroupName);
       expect(observed.id?.toLowerCase()).toEqual(first.syncGroupId.toLowerCase());
-      expect(first.uniqueId).toBeDefined();
+      expect(first.uniqueId).toMatch(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+      );
+      expect(observed.properties?.uniqueId).toEqual(first.uniqueId);
 
       // Renaming replaces the sync group.
       const replaced = yield* stack.deploy(program("docs-renamed"));

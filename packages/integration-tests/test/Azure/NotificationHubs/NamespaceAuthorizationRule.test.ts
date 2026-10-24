@@ -43,7 +43,6 @@ test.provider(
       const { group, ns, rule } = yield* stack.deploy(program({ rights: ["Listen"] }));
       const rg = group.resourceGroupName;
       expect(rule.rights).toEqual(["Listen"]);
-      expect(rule.primaryConnectionString).toBeDefined();
       expect(Redacted.value(rule.primaryConnectionString!)).toContain(
         `SharedAccessKeyName=${rule.authorizationRuleName}`,
       );
@@ -55,7 +54,8 @@ test.provider(
       expect(updated.rule.authorizationRuleName).toEqual(rule.authorizationRuleName);
       expect(updated.rule.rights).toEqual(["Listen", "Send"]);
       const reobserved = yield* getRule(rg, ns.namespaceName, rule.authorizationRuleName);
-      expect([...(reobserved.properties?.rights ?? [])].sort()).toEqual(["Listen", "Send"]);
+      const rights = [...(reobserved.properties?.rights ?? [])].sort();
+      expect(rights).toEqual(["Listen", "Send"]);
 
       // Replacement: explicit name.
       const replaced = yield* stack.deploy(

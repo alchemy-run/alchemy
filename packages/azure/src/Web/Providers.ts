@@ -16,6 +16,7 @@ import {
 } from "./GatewayVirtualNetworkIntegration.ts";
 import { HostNameBinding, HostNameBindingProvider } from "./HostNameBinding.ts";
 import { HybridConnection, HybridConnectionProvider } from "./HybridConnection.ts";
+import { PremierAddOn, PremierAddOnProvider } from "./PremierAddOn.ts";
 import { PrivateAccess, PrivateAccessProvider } from "./PrivateAccess.ts";
 import { PublicCertificate, PublicCertificateProvider } from "./PublicCertificate.ts";
 import {
@@ -74,6 +75,7 @@ export const resources = [
   GatewayVirtualNetworkIntegration,
   HostNameBinding,
   HybridConnection,
+  PremierAddOn,
   PrivateAccess,
   PublicCertificate,
   PublishingCredentialsPolicy,
@@ -109,6 +111,7 @@ export const layers = () =>
     GatewayVirtualNetworkIntegrationProvider(),
     HostNameBindingProvider(),
     HybridConnectionProvider(),
+    PremierAddOnProvider(),
     PrivateAccessProvider(),
     PublicCertificateProvider(),
     PublishingCredentialsPolicyProvider(),

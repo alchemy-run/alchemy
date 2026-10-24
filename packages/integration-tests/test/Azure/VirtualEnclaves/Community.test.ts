@@ -43,8 +43,11 @@ test.provider.skipIf(!runExpensive)(
 
       const { group, community } = yield* stack.deploy(program({ tags: { env: "test" } }));
       expect(community.provisioningState).toEqual("Succeeded");
-      expect(community.managedResourceGroupName).toBeDefined();
       const observed = yield* getCommunity(group.resourceGroupName, community.communityName);
+      expect(community.managedResourceGroupName).toMatch(/^[-\w.()]+$/);
+      expect(community.managedResourceGroupName).toEqual(
+        observed.properties?.managedResourceGroupName,
+      );
       expect(observed.properties?.firewallSku).toEqual("Standard");
       expect(observed.tags?.env).toEqual("test");
       expect(observed.tags?.["alchemy::id"]).toEqual("Community");

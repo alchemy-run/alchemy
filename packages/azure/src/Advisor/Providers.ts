@@ -3,6 +3,7 @@ import {
   ResourceGroupConfiguration,
   ResourceGroupConfigurationProvider,
 } from "./ResourceGroupConfiguration.ts";
+import { Suppression, SuppressionProvider } from "./Suppression.ts";
 
-export const resources = [ResourceGroupConfiguration];
-export const layers = () => Layer.mergeAll(ResourceGroupConfigurationProvider());
+export const resources = [ResourceGroupConfiguration, Suppression];
+export const layers = () => Layer.mergeAll(ResourceGroupConfigurationProvider(), SuppressionProvider());

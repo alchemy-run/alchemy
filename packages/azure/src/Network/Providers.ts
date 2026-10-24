@@ -52,6 +52,7 @@ import {
   ExpressRoutePortAuthorizationProvider,
 } from "./ExpressRoutePortAuthorization.ts";
 import { FirewallPolicy, FirewallPolicyProvider } from "./FirewallPolicy.ts";
+import { FirewallPolicyDraft, FirewallPolicyDraftProvider } from "./FirewallPolicyDraft.ts";
 import {
   FirewallPolicyIdpsSignatureOverrides,
   FirewallPolicyIdpsSignatureOverridesProvider,
@@ -64,6 +65,10 @@ import {
   FirewallPolicyRuleCollectionGroup,
   FirewallPolicyRuleCollectionGroupProvider,
 } from "./FirewallPolicyRuleCollectionGroup.ts";
+import {
+  FirewallPolicyRuleCollectionGroupDraft,
+  FirewallPolicyRuleCollectionGroupDraftProvider,
+} from "./FirewallPolicyRuleCollectionGroupDraft.ts";
 import { FlowLog, FlowLogProvider } from "./FlowLog.ts";
 import { HubRouteTable, HubRouteTableProvider } from "./HubRouteTable.ts";
 import {
@@ -349,6 +354,8 @@ export const resources = [
   NetworkProfile,
   ExpressRouteCircuitPeering,
   VirtualApplianceSite,
+  FirewallPolicyDraft,
+  FirewallPolicyRuleCollectionGroupDraft,
 ];
 
 export const layers = () =>
@@ -470,5 +477,7 @@ export const layers = () =>
       NetworkProfileProvider(),
       ExpressRouteCircuitPeeringProvider(),
       VirtualApplianceSiteProvider(),
+      FirewallPolicyDraftProvider(),
+      FirewallPolicyRuleCollectionGroupDraftProvider(),
     ),
   );

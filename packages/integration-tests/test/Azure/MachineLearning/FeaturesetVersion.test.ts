@@ -4,7 +4,7 @@ import { expect } from "alchemy-test";
 import * as Output from "alchemy/Output";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
-import { baseWorkspace, logLevel, subscription, tags, waitGone } from "./util.ts";
+import { baseDefault, logLevel, subscription, tags, waitGone } from "./util.ts";
 
 const { test } = Test.make({ providers: Azure.providers() });
 
@@ -21,7 +21,7 @@ const getVersion = (resourceGroupName: string, workspaceName: string, name: stri
 
 const program = (props: { description: string; tags: Record<string, string> }) =>
   Effect.gen(function* () {
-    const base = yield* baseWorkspace({ kind: "FeatureStore" });
+    const base = yield* baseDefault("FeatureStore");
     const entity = yield* Azure.MachineLearning.FeaturestoreEntityVersion("AccountV1", {
       resourceGroup: base.group.resourceGroupName,
       workspace: base.workspace.workspaceName,
@@ -42,10 +42,10 @@ const program = (props: { description: string; tags: Record<string, string> }) =
     return { ...base, featureset };
   });
 
-// Skipped: BadRequest: Received workspace of type feature store with no
-// feature store settings. — Workspace does not expose `featureStoreSettings`
-// yet, and the version also needs a `FeatureSetSpec.yaml` uploaded under
-// `specificationPath`.
+// Skipped: the version needs a `FeatureSetSpec.yaml` uploaded under
+// `specificationPath` first, and the test has no blob upload step yet.
+// (The earlier blocker, "Received workspace of type feature store with no
+// feature store settings", is fixed by `Workspace.featureStoreSettings`.)
 // Feature sets are free; the FeatureStore workspace has no hourly charge. ~4-6 minutes.
 test.provider.skip(
   "create, update, and delete a feature set version",
@@ -60,7 +60,8 @@ test.provider.skip(
         getVersion(group.resourceGroupName, workspace.workspaceName, featureset.name);
       let observed = yield* get();
       expect(observed.properties.description).toEqual("v1");
-      expect(observed.properties.tags?.["alchemy::id"]).toEqual("TransactionsV1");
+      // Azure rejects `alchemy::*` tag keys here: only the user tags are sent.
+      expect(observed.properties.tags).toEqual({ env: "test" });
       expect(observed.properties.entities).toEqual(["azureml:account:1"]);
 
       // In place: description and tags.

@@ -9,6 +9,7 @@ export * from "./FunctionKey.ts";
 export * from "./GatewayVirtualNetworkIntegration.ts";
 export * from "./HostNameBinding.ts";
 export * from "./HybridConnection.ts";
+export * from "./PremierAddOn.ts";
 export * from "./PrivateAccess.ts";
 export * from "./PublicCertificate.ts";
 export * from "./PublishingCredentialsPolicy.ts";

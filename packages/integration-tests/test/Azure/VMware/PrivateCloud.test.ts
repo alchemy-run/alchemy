@@ -49,7 +49,8 @@ test.provider.skip(
       expect(observed.properties?.provisioningState).toEqual("Succeeded");
       expect(observed.properties?.networkBlock).toEqual("10.175.0.0/22");
       expect(observed.tags?.env).toEqual("test");
-      expect(cloud.endpoints.vcsa).toBeDefined();
+      expect(cloud.endpoints.vcsa).toEqual(observed.properties?.endpoints?.vcsa);
+      expect(cloud.endpoints.vcsa).toMatch(/^https:\/\//);
 
       // In-place: enable internet and change tags.
       const updated = yield* stack.deploy(
@@ -201,12 +202,27 @@ test.provider(
         segment: yield* tagOf(vmware.GetWorkloadNetworkSegment({ ...parent, segmentId: "s" })),
         vmGroup: yield* tagOf(vmware.GetWorkloadNetworkVMGroup({ ...parent, vmGroupId: "v" })),
       };
-      for (const [type, tag] of Object.entries(results)) {
-        expect([type, ["ResourceNotFound", "NotFound"].includes(tag) ? "ok" : tag]).toEqual([
-          type,
-          "ok",
-        ]);
-      }
+      expect(results).toEqual({
+        privateCloud: "ResourceNotFound",
+        cluster: "ResourceNotFound",
+        datastore: "ResourceNotFound",
+        placementPolicy: "ResourceNotFound",
+        addon: "ResourceNotFound",
+        authorization: "ResourceNotFound",
+        cloudLink: "ResourceNotFound",
+        globalReach: "ResourceNotFound",
+        hcxSite: "ResourceNotFound",
+        iscsiPath: "ResourceNotFound",
+        license: "ResourceNotFound",
+        pureStoragePolicy: "ResourceNotFound",
+        dhcp: "ResourceNotFound",
+        dnsService: "ResourceNotFound",
+        dnsZone: "ResourceNotFound",
+        portMirroring: "ResourceNotFound",
+        publicIP: "ResourceNotFound",
+        segment: "ResourceNotFound",
+        vmGroup: "ResourceNotFound",
+      });
 
       yield* stack.destroy();
     }).pipe(logLevel),

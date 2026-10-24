@@ -55,7 +55,6 @@ test.provider(
       const rg = group.resourceGroupName;
       const hubName = hub.notificationHubName;
       expect(rule.rights).toEqual(["Listen"]);
-      expect(rule.primaryConnectionString).toBeDefined();
       expect(Redacted.value(rule.primaryConnectionString!)).toContain(
         `SharedAccessKeyName=${rule.authorizationRuleName}`,
       );

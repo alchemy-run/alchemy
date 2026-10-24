@@ -97,7 +97,7 @@ test.provider.skip(
       expect(observed.properties?.coordinatorVCores).toEqual(1);
       expect(observed.properties?.nodeCount).toEqual(0);
       expect(observed.properties?.maintenanceWindow?.startHour).toEqual(2);
-      expect(observed.tags?.["alchemy::id"]).toBeDefined();
+      expect(observed.tags?.["alchemy::id"]).toEqual("Cluster");
 
       // Maintenance window and tags are mutable in place.
       const updated = yield* stack.deploy(program({ startHour: 4, env: "updated" }));

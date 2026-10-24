@@ -11,7 +11,15 @@ import {
   workspacePath,
 } from "./internal.ts";
 
-export type FeaturestoreEntityContainerProps = AssetContainerProps;
+/**
+ * Azure rejects tags, a description, and properties on feature store
+ * entity containers ("Tags are not supported.") and ignores the archive
+ * flag; set them on the versions.
+ */
+export type FeaturestoreEntityContainerProps = Omit<
+  AssetContainerProps,
+  "tags" | "description" | "properties" | "isArchived"
+>;
 
 export interface FeaturestoreEntityContainer extends Resource<
   "Azure.MachineLearning.FeaturestoreEntityContainer",
@@ -28,7 +36,10 @@ export interface FeaturestoreEntityContainer extends Resource<
  * columns feature sets join on) in a `FeatureStore` workspace. Register
  * versions with {@link FeaturestoreEntityVersion}.
  *
- * Description, properties, tags, and the archive flag update in place.
+ * The container has nothing mutable: Azure rejects tags, a description,
+ * and properties on it and ignores the archive flag (set them on the
+ * versions). The feature store workspace's stack/stage tags mark Alchemy
+ * ownership.
  * Feature store assets live only in `FeatureStore` workspaces.
  *
  * :::caution
@@ -43,8 +54,6 @@ export interface FeaturestoreEntityContainer extends Resource<
  * ```typescript
  * const featurestoreEntityContainer = yield* Azure.MachineLearning.FeaturestoreEntityContainer("account", {
  *   workspace: featureStore.workspaceName,
- *   description: "Customer account",
- *   tags: { team: "ml" },
  * });
  * ```
  *
@@ -64,5 +73,8 @@ const ops: ContainerOps = {
 export const FeaturestoreEntityContainerProvider = () =>
   Provider.succeed(
     FeaturestoreEntityContainer,
-    containerProvider("feature store entity container", ops, { workspaceOnly: true }),
+    containerProvider("feature store entity container", ops, {
+      workspaceOnly: true,
+      untaggedInWorkspace: true,
+    }),
   );

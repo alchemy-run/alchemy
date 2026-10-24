@@ -1,5 +1,6 @@
 import * as Azure from "@alchemy.run/azure";
 import type { AzureOpError } from "@distilled.cloud/azure";
+import * as hybridconnectivity from "@distilled.cloud/azure/hybridconnectivity";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
@@ -53,3 +54,22 @@ export const machines = Effect.gen(function* () {
   });
   return { group, machineA, machineB };
 });
+
+export const subscriptionId = Effect.map(
+  Azure.AzureEnvironment.current,
+  (env) => env.subscriptionId,
+);
+
+/** Out-of-band GET of a public cloud connector. */
+export const getConnector = (resourceGroupName: string, publicCloudConnector: string) =>
+  Effect.flatMap(subscriptionId, (subscriptionId) =>
+    hybridconnectivity.GetPublicCloudConnector({
+      subscriptionId,
+      resourceGroupName,
+      publicCloudConnector,
+    }),
+  );
+
+/** Fake AWS account IDs: creating a connector needs no access to AWS. */
+export const fixtureAwsAccountA = "123456789012";
+export const fixtureAwsAccountB = "123456789013";

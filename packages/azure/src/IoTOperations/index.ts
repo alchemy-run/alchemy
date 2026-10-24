@@ -1,4 +1,6 @@
+export * from "./AkriConnector.ts";
 export * from "./AkriConnectorTemplate.ts";
+export * from "./AkriService.ts";
 export * from "./Broker.ts";
 export * from "./BrokerAuthentication.ts";
 export * from "./BrokerAuthorization.ts";

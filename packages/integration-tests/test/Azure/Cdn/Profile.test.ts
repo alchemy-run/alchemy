@@ -43,8 +43,9 @@ test.provider.skipIf(!runPaidOnly)(
         program({ timeout: 60, tags: { env: "test" } }),
       );
       expect(profile.sku).toEqual("Standard_AzureFrontDoor");
-      expect(profile.frontDoorId).toBeDefined();
+      expect(profile.frontDoorId).toMatch(/^[0-9a-f-]{36}$/);
       const observed = yield* getProfile(group.resourceGroupName, profile.profileName);
+      expect(observed.properties?.frontDoorId).toEqual(profile.frontDoorId);
       expect(observed.properties?.originResponseTimeoutSeconds).toEqual(60);
       expect(observed.tags?.env).toEqual("test");
       expect(observed.tags?.["alchemy::id"]).toEqual("FrontDoor");
