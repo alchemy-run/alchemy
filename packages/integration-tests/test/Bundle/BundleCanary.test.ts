@@ -101,12 +101,24 @@ const report = (label: string, stats: BundleStats, pkg: "aws" | "cloudflare") =>
     `${label}: parsed=${stats.parsed.length} bundled=${stats.bundled.length} bytes=${stats.bytes} services=${servicesOf(stats.bundled, pkg).join(",")}`,
   );
 
+/**
+ * Deploy-time code that must never ship in a runtime: the bundler, the CLI's
+ * platform layer (Bun's platform and `ws` came with it), and profile and
+ * credential stores.
+ */
+const DEPLOY_ONLY = [
+  /[\\/](rolldown|@rolldown)[\\/]/,
+  /[\\/]node_modules[\\/](\.pnpm[\\/][^\\/]+[\\/]node_modules[\\/])?ws[\\/]/,
+  /[\\/]@effect[\\/]platform-bun[\\/]/,
+  /[\\/]alchemy[\\/]src[\\/](Auth|Cli|Bundle)[\\/]/,
+  /[\\/]alchemy[\\/]src[\\/](EvalStack|Deploy|Destroy|Plan|Apply)\.ts$/,
+];
+
 const expectWithinBudget = (stats: BundleStats, pkg: "aws" | "cloudflare", budget: Budget) => {
   expect(stats.parsed.length).toBeLessThanOrEqual(budget.parsed);
   expect(stats.bytes).toBeLessThanOrEqual(budget.bytes);
   expect(servicesOf(stats.bundled, pkg)).toEqual(budget.services);
-  // Deploy-time machinery never ships in a runtime.
-  expect(stats.bundled.filter((id) => /[\\/](rolldown|@rolldown)[\\/]/.test(id))).toEqual([]);
+  expect(stats.bundled.filter((id) => DEPLOY_ONLY.some((re) => re.test(id)))).toEqual([]);
 };
 
 /**
@@ -125,7 +137,7 @@ const expectSameCost = (namespace: BundleStats, subpath: BundleStats) => {
 // change that is meant to grow every runtime.
 const AWS_LAMBDA: Budget = {
   parsed: 1_000,
-  bytes: 1_600_000,
+  bytes: 640_000,
   services: ["Bootstrap", "Lambda", "S3"],
 };
 const CLOUDFLARE_WORKER: Budget = {

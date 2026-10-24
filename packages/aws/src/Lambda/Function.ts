@@ -118,6 +118,11 @@ export interface FunctionBuildOptions
    * ```
    */
   readonly install?: PackageInstall;
+  /**
+   * Rolldown output options. The bundle is minified with `keepNames` by
+   * default; source maps ship with it and Node maps stack traces back to your
+   * source. Set `minify: false` to ship readable code.
+   */
   readonly output?: Partial<rolldown.OutputOptions>;
 }
 
