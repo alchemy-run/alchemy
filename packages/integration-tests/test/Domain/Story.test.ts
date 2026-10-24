@@ -8,6 +8,7 @@ import * as Fiber from "effect/Fiber";
 import * as Headers from "effect/http/Headers";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as Redacted from "effect/Redacted";
 import * as RpcMiddleware from "effect/rpc/RpcMiddleware";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
@@ -666,6 +667,146 @@ describe("Domain Story", () => {
       ),
     ),
   );
+
+  it.effect("a failed then reports every step and the events so far", () =>
+    story(
+      Story.clock("2026-03-01T09:00:00Z"),
+      Story.given(c1, new Incremented({ by: 2, total: 2 })),
+      Story.when(c1, new Increment({ by: 3 })),
+      Story.then(c1, new Incremented({ by: 4, total: 6 })),
+      Story.replied({ total: 6 }),
+    ).pipe(
+      Effect.flip,
+      Effect.map((failure) => {
+        expect(failure.step).toBe(4);
+        expect(failure.reason).toContain("Then: on Counter/c-1");
+        expect(failure.message).toBe(
+          [
+            failure.reason,
+            "",
+            "  ✓ 1 Clock      2026-03-01T09:00:00.000Z",
+            "  ✓ 2 Given      Counter/c-1: Incremented { by: 2, total: 2 }",
+            "  ✓ 3 When       Counter/c-1: Increment { by: 3 }",
+            "  ✗ 4 Then       Counter/c-1: expected Incremented { by: 4, total: 6 }",
+            "                              got      Incremented { by: 3, total: 5 }",
+            "    5 Replied    { total: 6 }",
+            "  events so far",
+            "    Counter/c-1: Incremented → Incremented",
+          ].join("\n"),
+        );
+        expect(failure.steps.map((s) => s.status)).toEqual([
+          "passed",
+          "passed",
+          "passed",
+          "failed",
+          "not-run",
+        ]);
+        expect(failure.events).toEqual({ "Counter/c-1": ["Incremented", "Incremented"] });
+      }),
+    ),
+  );
+
+  it.effect("an unasserted rejection is marked on its command", () =>
+    story(
+      Story.given(c1, new Incremented({ by: 2, total: 2 })),
+      Story.when(c1, new Increment({ by: 99 })),
+      Story.then(c1),
+    ).pipe(
+      Effect.flip,
+      Effect.map((failure) =>
+        expect(failure.message).toBe(
+          [
+            "the command was rejected with TooBig, which no step asserts",
+            "",
+            "  ✓ 1 Given      Counter/c-1: Incremented { by: 2, total: 2 }",
+            "  ✗ 2 When       Counter/c-1: Increment { by: 99 }",
+            "                 rejected TooBig { max: 10 }",
+            "    3 Then       Counter/c-1: nothing new",
+            "  events so far",
+            "    Counter/c-1: Incremented",
+          ].join("\n"),
+        ),
+      ),
+    ),
+  );
+
+  it.effect("a wrong rejection shows what was expected and what came", () =>
+    story(Story.when(c1, new Increment({ by: 99 })), Story.rejected(new TooBig({ max: 5 }))).pipe(
+      Effect.flip,
+      Effect.map((failure) =>
+        expect(failure.message.split("\n\n")[1]).toBe(
+          [
+            "  ✓ 1 When       Counter/c-1: Increment { by: 99 }",
+            "  ✗ 2 Rejected   expected TooBig { max: 5 }",
+            "                 got      TooBig { max: 10 }",
+            "  events so far",
+            "    Counter/c-1: nothing",
+          ].join("\n"),
+        ),
+      ),
+    ),
+  );
+
+  it.effect("a failed policy is marked on the step that ran it", () => {
+    class Boom extends Domain.Policy("Boom", { from: Counter, on: [Capped] }) {}
+    class Breaks extends Domain.Model("Breaks", { aggregates: [Counter], policies: [Boom] }) {}
+    const breaks = Story.make(Breaks, {
+      layer: Boom.toLayer(Effect.succeed(() => Effect.die(new Error("boom")))),
+    });
+    return breaks(
+      Story.when(c1, new Increment({ by: 1 })),
+      Story.when(c1, new Cap()),
+      Story.then(c1, new Incremented({ by: 1, total: 1 }), new Capped()),
+    ).pipe(
+      Effect.flip,
+      Effect.map((failure) => {
+        expect(failure.step).toBe(2);
+        expect(failure.reason).toContain("a policy or projection failed");
+        expect(failure.reason).toContain("boom");
+        expect(failure.message.split("\n\n").at(-1)).toBe(
+          [
+            "  ✓ 1 When       Counter/c-1: Increment { by: 1 }",
+            "  ✗ 2 When       Counter/c-1: Cap",
+            "    3 Then       Counter/c-1: Incremented { by: 1, total: 1 }, Capped",
+            "  events so far",
+            "    Counter/c-1: Incremented → Capped",
+          ].join("\n"),
+        );
+      }),
+    );
+  });
+
+  it.effect("a report never prints a redacted value", () => {
+    class Keyed extends Domain.Event("Keyed", { secret: Schema.Redacted(Schema.String) }) {}
+    class SetKey extends Domain.Command("SetKey", {
+      target: Schema.String,
+      input: { secret: Schema.Redacted(Schema.String) },
+      events: [Keyed],
+    }) {}
+    class Lock extends Domain.Aggregate("Lock", {
+      id: Schema.String,
+      state: Schema.Struct({}),
+      initial: {},
+      commands: [SetKey],
+      decide: { SetKey: (_, { secret }) => [new Keyed({ secret })] },
+      evolve: { Keyed: (s) => s },
+    }) {}
+    class Locks extends Domain.Model("Locks", { aggregates: [Lock] }) {}
+    const lock = Lock.ref("l-1");
+    return Story.make(Locks)(
+      Story.when(lock, new SetKey({ secret: Redacted.make("hunter2") })),
+      Story.then(lock, new Keyed({ secret: Redacted.make("swordfish") })),
+    ).pipe(
+      Effect.flip,
+      Effect.map((failure) => {
+        expect(failure.message).not.toContain("hunter2");
+        expect(failure.message).not.toContain("swordfish");
+        expect(failure.message).toContain(
+          "  ✗ 2 Then       Lock/l-1: expected Keyed { secret: <redacted> }",
+        );
+      }),
+    );
+  });
 
   it.effect("a scheduled command fires when the clock reaches it", () =>
     story(
