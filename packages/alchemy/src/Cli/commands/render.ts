@@ -7,6 +7,7 @@ import { Progress } from "../../Alchemist/Progress.ts";
 import type { Plan } from "../../Plan.ts";
 import * as Report from "../../Report.ts";
 import { CliKit } from "../CliKit/CliKit.ts";
+import { isPromptCancellation } from "./errors.ts";
 
 export const renderPlanning =
   (options: { operation: string; stage: string; computingLabel?: string; readyLabel?: string }) =>
@@ -67,7 +68,11 @@ export const renderPlanning =
               return Effect.void;
           }
         }),
-        Effect.tapError(() => planning.fail("Planning failed")),
+        // A prompt dismissed mid-plan (e.g. a provider asking the user to
+        // resolve an ambiguity) is a cancellation, not a planning failure.
+        Effect.tapError((error) =>
+          planning.fail(isPromptCancellation(error) ? "Planning was canceled" : "Planning failed"),
+        ),
         Effect.ensuring(planning.close),
       );
     });

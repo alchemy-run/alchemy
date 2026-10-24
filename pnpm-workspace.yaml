@@ -187,8 +187,8 @@ catalog:
   devalue: "5.8.1"
   diff: "^9.0.0"
   dotenv: "^17.4.2"
-  drizzle-kit: "1.0.0-rc.5-ab785fc"
-  drizzle-orm: "1.0.0-rc.5-ab785fc"
+  drizzle-kit: "1.0.0-rc.5"
+  drizzle-orm: "1.0.0-rc.5"
   effect: "^4.0.5"
   esbuild: "^0.28.1"
   fflate: "^0.8.3"
@@ -303,8 +303,8 @@ overrides:
   "@effect/platform-browser": 4.0.5
   "@effect/sql-d1": 4.0.5
   "@effect/sql-sqlite-do": 4.0.5
-  drizzle-kit: 1.0.0-rc.5-ab785fc
-  drizzle-orm: 1.0.0-rc.5-ab785fc
+  drizzle-kit: 1.0.0-rc.5
+  drizzle-orm: 1.0.0-rc.5
   # Keep drizzle-orm's optional peer graph identical across workspace
   # packages so TypeScript sees one drizzle-orm identity.
   mysql2: 3.24.5
@@ -351,3 +351,5 @@ minimumReleaseAgeExclude:
   - miniflare@5.20260930.0-alpha
   - wrangler@4.145.0
   - "@foldkit/ui@0.167.0"
+  - drizzle-kit@1.0.0-rc.5
+  - drizzle-orm@1.0.0-rc.5
