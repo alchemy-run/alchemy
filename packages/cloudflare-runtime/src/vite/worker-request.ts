@@ -55,11 +55,11 @@ export function forwardWorkerRequest(
   if (client.destroyed) {
     return;
   }
-  // A connection per request, as a defense: with a pooled connection, requests
-  // were reported to fail with a 502 under load after workerd cut a stream
-  // short (#1869). We couldn't reproduce that against workerd, but a fresh
-  // loopback connection costs next to nothing. See
-  // https://github.com/alchemy-run/alchemy/pull/2242.
+  // A connection per request. workerd closes a connection after 5s idle,
+  // counted from its response; Node's agent keeps one for 5s, counted from
+  // when it reads the response. On a busy event loop that is later, so the
+  // pool hands out connections workerd has closed and requests answer 502
+  // (#1869). A fresh loopback connection costs next to nothing.
   const upstream = NodeHttp.request(target, {
     agent: false,
     method: request.method,

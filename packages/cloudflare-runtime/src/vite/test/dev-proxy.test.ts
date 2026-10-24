@@ -1,13 +1,12 @@
 import * as fs from "node:fs/promises";
 import * as NodeHttp from "node:http";
-import type { AddressInfo, Socket } from "node:net";
+import type { AddressInfo } from "node:net";
 import * as path from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { URL as NodeURL } from "node:url";
 import * as vite from "vite";
 import { expect, onTestFinished, test, vi } from "vitest";
 import cloudflareVitePlugin from "../plugin.ts";
-import { forwardWorkerRequest } from "../worker-request.ts";
 
 // Starts a dev server for a Worker whose module source is `source`.
 const devServer = async (source: string): Promise<string> => {
@@ -61,6 +60,12 @@ const send = (
     request.end(options.body);
   });
 
+// Blocks the event loop for `ms`, like a dev server busy transforming modules.
+const busy = (ms: number) => {
+  const until = performance.now() + ms;
+  while (performance.now() < until) {}
+};
+
 // Listens on a free loopback port until the test finishes.
 const listen = async (server: NodeHttp.Server): Promise<NodeURL> => {
   onTestFinished(() => {
@@ -72,16 +77,6 @@ const listen = async (server: NodeHttp.Server): Promise<NodeURL> => {
     server.listen(0, "127.0.0.1", resolve);
   });
   return new NodeURL(`http://127.0.0.1:${(server.address() as AddressInfo).port}`);
-};
-
-// Proxies every request to `runtime` the way the dev server does.
-const proxyTo = (runtime: NodeURL): Promise<NodeURL> => {
-  const logger = vite.createLogger("silent");
-  return listen(
-    NodeHttp.createServer((request, response) => {
-      forwardWorkerRequest(request, response, runtime, "secret", logger);
-    }),
-  );
 };
 
 test("stops the Worker's stream when the client hangs up", async () => {
@@ -174,32 +169,37 @@ test("streams the Worker's response while the request body is still arriving", a
   expect(echo.body.length).toBe(body.length);
 });
 
-test("forwards each request on a connection of its own", async () => {
-  // Pins the defensive connection per request (see worker-request.ts). The
-  // reuse failure it guards against hasn't been reproduced with workerd, so a
-  // stand-in plays workerd having closed a connection the proxy still holds:
-  // a second request on any connection finds it gone.
-  const served = new WeakSet<Socket>();
-  const runtime = await listen(
-    NodeHttp.createServer((request, response) => {
-      if (served.has(request.socket)) {
-        request.socket.destroy();
-        return;
-      }
-      served.add(request.socket);
-      response.end("worker");
-    }),
-  );
-  const proxy = await proxyTo(runtime);
+test("never reuses a connection workerd closed after 5 seconds idle (#1869)", async () => {
+  const url = await devServer(`
+    export default {
+      fetch() {
+        return new Response("ok");
+      },
+    };
+  `);
+  // The client's own connections to the dev server stay alive throughout.
+  const client = new NodeHttp.Agent({ keepAlive: true });
+  onTestFinished(() => client.destroy());
+  const connections = 20;
+  const getAll = () =>
+    Array.from({ length: connections }, () => send(new URL("/", url), { agent: client }));
 
-  // `fetch` keeps the client's connection alive, so the proxy alone decides
-  // whether its upstream connection is reused.
-  const get = async () => {
-    const response = await fetch(proxy, { signal: AbortSignal.timeout(5_000) });
-    return { status: response.status, body: await response.text() };
-  };
-  expect(await get()).toEqual({ status: 200, body: "worker" });
-  expect(await get()).toEqual({ status: 200, body: "worker" });
+  // workerd closes a connection after 5s idle, counted from its response.
+  // Node's agent keeps one for 5s, counted from when it reads the response,
+  // which on a busy event loop is later. Here the loop is busy while workerd
+  // answers.
+  const warmUp = getAll();
+  busy(250);
+  await Promise.all(warmUp);
+  const answered = performance.now();
+
+  // Past workerd's 5s but within the agent's, the loop is busy again just as
+  // the next requests come in.
+  await sleep(answered + 4_850 - performance.now());
+  const probes = getAll();
+  process.nextTick(() => busy(150));
+  const responses = await Promise.all(probes);
+  expect(responses.filter((response) => response.status !== 200)).toEqual([]);
 });
 
 test("never forwards to a host named in the request path", async () => {
