@@ -85,10 +85,10 @@ ceremony, an entrypoint, and an empty runtime:
 
 ```typescript
 // src/api.ts
-import * as AWS from "@alchemy.run/aws";
+import * as Lambda from "@alchemy.run/aws/Lambda";
 import * as Effect from "effect/Effect";
 
-export default class Api extends AWS.Lambda.Function<Api>()(
+export default class Api extends Lambda.Function<Api>()(
   "Api",
   { main: import.meta.url },
   Effect.gen(function* () {
@@ -106,6 +106,28 @@ your code looks completely normal.
 bundle entrypoint. At deploy time it'll be bundled with Rolldown
 into a zip and uploaded as the function's code.
 
+## Import services, not the whole package
+
+Code that runs inside the function imports each AWS service from
+its own path, like `@alchemy.run/aws/Lambda` above:
+
+```typescript
+// src/api.ts
+import * as Lambda from "@alchemy.run/aws/Lambda";
+import * as S3 from "@alchemy.run/aws/S3";
+import { AWSEnvironment } from "@alchemy.run/aws/Environment";
+```
+
+`@alchemy.run/aws` re-exports every AWS service. Rolldown drops
+the ones you don't use, but it still has to parse all of them
+first, which makes each bundle slower to build and uses much more
+memory. Importing a service path means it only reads what that
+service needs.
+
+`alchemy.run.ts` and your tests don't get bundled, so they keep
+`import * as AWS from "@alchemy.run/aws"`. `AWS.providers()` needs
+every service anyway.
+
 ## Serve HTTP from a Function URL
 
 The empty function compiles, but it doesn't do anything yet.
@@ -115,11 +137,11 @@ is wired up to handle incoming HTTP requests:
 
 ```diff lang="typescript"
 // src/api.ts
-import * as AWS from "@alchemy.run/aws";
+import * as Lambda from "@alchemy.run/aws/Lambda";
 import * as Effect from "effect/Effect";
 +import * as HttpServerResponse from "effect/http/HttpServerResponse";
 
-export default class Api extends AWS.Lambda.Function<Api>()(
+export default class Api extends Lambda.Function<Api>()(
   "Api",
   { main: import.meta.url },
   Effect.gen(function* () {
@@ -144,7 +166,7 @@ endpoint (`authType: "NONE"`) and lets anyone invoke it. Spell it out
 so the access level is visible in the code:
 
 ```diff lang="typescript"
-export default class Api extends AWS.Lambda.Function<Api>()(
+export default class Api extends Lambda.Function<Api>()(
   "Api",
 -  { main: import.meta.url },
 +  { main: import.meta.url, functionUrl: true },
@@ -179,12 +201,12 @@ value in the surrounding Effect context:
 
 ```diff lang="typescript"
 // src/api.ts
-import * as AWS from "@alchemy.run/aws";
+import * as Lambda from "@alchemy.run/aws/Lambda";
 +import { Stack } from "alchemy/Stack";
 import * as Effect from "effect/Effect";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 
-export default class Api extends AWS.Lambda.Function<Api>()(
+export default class Api extends Lambda.Function<Api>()(
   "Api",
 -  { main: import.meta.url, functionUrl: true },
 +  Stack.useSync((stack) => ({
@@ -324,7 +346,7 @@ A Lambda that hits its timeout is killed mid-flight, and its buffered
 telemetry is lost with it, on exactly the invocation you most want a
 trace for. So the runtime watches the deadline. If the handler is
 still running 500 ms before the timeout, the runtime ends the
-invocation's root span with an `AWS.Lambda.InvocationTimeoutError`,
+invocation's root span with an `Lambda.InvocationTimeoutError`,
 logs a warning, and drains the exporters. The handler is not
 interrupted and the response is not changed: if it does finish in
 that last half second, it returns as normal, and its root span stays
@@ -335,12 +357,12 @@ or set it to zero to turn the flush off:
 
 ```typescript
 // src/api.ts
-import * as AWS from "@alchemy.run/aws";
+import * as Lambda from "@alchemy.run/aws/Lambda";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 
-export default class Api extends AWS.Lambda.Function<Api>()(
+export default class Api extends Lambda.Function<Api>()(
   "Api",
   {
     main: import.meta.url,
