@@ -1,5 +1,6 @@
 import { describe, expect } from "@alchemy.run/test";
 import * as Cause from "effect/Cause";
+import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
@@ -55,6 +56,30 @@ const withCloud =
 
 const reconcileCalls = (cloud: TestCloudService) =>
   cloud.calls.filter((c) => c.op === "reconcile").map((c) => c.id);
+
+// `id[sid,…]` per reconcile, in call order — shows both the order and which
+// bindings each reconcile carried.
+const reconcileTrace = (cloud: TestCloudService) =>
+  cloud.calls
+    .filter((c) => c.op === "reconcile")
+    .map((c) => `${c.id}[${(c.bindings ?? []).join(",")}]`);
+
+const statusesOf = (events: ApplyEvent[], fqn: string) =>
+  events.flatMap((e) => (e._tag === "apply.resource.status" && e.fqn === fqn ? [e.status] : []));
+
+const recordingSession = () => {
+  const events: ApplyEvent[] = [];
+  return {
+    events,
+    session: {
+      emit: (event: ApplyEvent) =>
+        Effect.sync(() => {
+          events.push(event);
+        }),
+      done: () => Effect.void,
+    },
+  };
+};
 
 const readCalls = (cloud: TestCloudService) =>
   cloud.calls.filter((c) => c.op === "read").map((c) => c.id);
@@ -754,6 +779,438 @@ describe("session events", { tags: ["unit", "local"] }, () => {
             e._tag === "apply.resource.note" && e.id === "MyBucket" && e.message.includes("read"),
         ),
       ).toBe(true);
+    }).pipe(withCloud(cloud));
+  });
+});
+
+// Repairs follow the persisted `downstream` edges, like Apply: an upstream
+// is recreated before anything that points at it. The TestCloud enforces
+// this — a DriftResource reconcile fails when a `dependsOn` id is missing.
+describe("dependency order", { tags: ["unit", "local"] }, () => {
+  test.provider("a deleted chain is recreated upstream first", (stack) => {
+    const cloud = makeTestCloud();
+    return Effect.gen(function* () {
+      yield* stack.deploy(
+        Effect.gen(function* () {
+          const topic = yield* DriftResource("Topic", { value: "topic" });
+          const queue = yield* DriftResource("Queue", { value: "queue", dependsOn: [topic.id] });
+          yield* DriftResource("Subscription", { value: "sub", dependsOn: [queue.id] });
+        }),
+      );
+      expect((yield* getState("Topic"))?.downstream).toEqual(["Queue"]);
+
+      for (const id of ["Topic", "Queue", "Subscription"]) cloud.resources.delete(id);
+      cloud.calls.length = 0;
+      const result = yield* runDrift();
+
+      expect(result.resources).toMatchObject({
+        Topic: { action: "recreated" },
+        Queue: { action: "recreated" },
+        Subscription: { action: "recreated" },
+      });
+      expect(reconcileCalls(cloud)).toEqual(["Topic", "Queue", "Subscription"]);
+    }).pipe(withCloud(cloud));
+  });
+
+  test.provider("a diamond waits for every upstream", (stack) => {
+    const cloud = makeTestCloud();
+    return Effect.gen(function* () {
+      yield* stack.deploy(
+        Effect.gen(function* () {
+          const root = yield* DriftResource("Root", {});
+          const left = yield* DriftResource("Left", { dependsOn: [root.id] });
+          const right = yield* DriftResource("Right", { dependsOn: [root.id] });
+          yield* DriftResource("Leaf", { dependsOn: [left.id, right.id] });
+        }),
+      );
+
+      for (const id of ["Root", "Left", "Right", "Leaf"]) cloud.resources.delete(id);
+      cloud.calls.length = 0;
+      yield* runDrift();
+
+      const order = reconcileCalls(cloud);
+      expect(order[0]).toEqual("Root");
+      expect(order.slice(1, 3).sort()).toEqual(["Left", "Right"]);
+      expect(order[3]).toEqual("Leaf");
+    }).pipe(withCloud(cloud));
+  });
+
+  test.provider("independent resources are repaired concurrently", (stack) => {
+    const cloud = makeTestCloud();
+    return Effect.gen(function* () {
+      yield* stack.deploy(
+        Effect.gen(function* () {
+          yield* DriftResource("X", {});
+          yield* DriftResource("Y", {});
+        }),
+      );
+      cloud.resources.delete("X");
+      cloud.resources.delete("Y");
+
+      // Each create waits for the other to start: only a concurrent
+      // repair can finish.
+      const started = {
+        X: yield* Deferred.make<void>(),
+        Y: yield* Deferred.make<void>(),
+      };
+      const hooks = {
+        create: (id: string) =>
+          id === "X" || id === "Y"
+            ? Deferred.succeed(started[id], undefined).pipe(
+                Effect.andThen(Deferred.await(started[id === "X" ? "Y" : "X"])),
+                Effect.timeout("2 seconds"),
+              )
+            : Effect.void,
+      };
+      const result = yield* runDrift().pipe(
+        Effect.provide(Layer.succeed(TestResourceHooks, hooks)),
+      );
+
+      expect(result.resources).toMatchObject({
+        X: { action: "recreated" },
+        Y: { action: "recreated" },
+      });
+    }).pipe(withCloud(cloud));
+  });
+
+  test.provider("a missing resource under an intact upstream recreates directly", (stack) => {
+    const cloud = makeTestCloud();
+    return Effect.gen(function* () {
+      yield* stack.deploy(
+        Effect.gen(function* () {
+          const topic = yield* DriftResource("Topic", { value: "topic" });
+          yield* DriftResource("Subscription", { value: "sub", dependsOn: [topic.id] });
+        }),
+      );
+      cloud.resources.delete("Subscription");
+
+      cloud.calls.length = 0;
+      const result = yield* runDrift();
+
+      expect(result.resources).toMatchObject({
+        Topic: { action: "unchanged" },
+        Subscription: { action: "recreated" },
+      });
+      expect(reconcileCalls(cloud)).toEqual(["Subscription"]);
+    }).pipe(withCloud(cloud));
+  });
+
+  test.provider(
+    "a drifted resource is repaired after its missing upstream is recreated",
+    (stack) => {
+      const cloud = makeTestCloud();
+      return Effect.gen(function* () {
+        yield* stack.deploy(
+          Effect.gen(function* () {
+            const topic = yield* DriftResource("Topic", { value: "topic" });
+            yield* DriftResource("Subscription", { value: "sub", dependsOn: [topic.id] });
+          }),
+        );
+        cloud.resources.delete("Topic");
+        cloud.resources.get("Subscription")!.value = "hijacked";
+
+        cloud.calls.length = 0;
+        const result = yield* runDrift();
+
+        expect(result.resources).toMatchObject({
+          Topic: { action: "recreated" },
+          Subscription: { action: "repaired", attr: { value: "sub" } },
+        });
+        expect(reconcileCalls(cloud)).toEqual(["Topic", "Subscription"]);
+      }).pipe(withCloud(cloud));
+    },
+  );
+
+  test.provider("namespaced resources order by FQN", (stack) => {
+    const cloud = makeTestCloud();
+    return Effect.gen(function* () {
+      yield* stack.deploy(
+        Effect.gen(function* () {
+          const topic = yield* DriftResource("Topic", {});
+          yield* DriftResource("Subscription", { dependsOn: [topic.id] });
+        }).pipe(Namespace.push("Uploads")),
+      );
+      expect((yield* getState("Uploads/Topic"))?.downstream).toEqual(["Uploads/Subscription"]);
+      cloud.resources.delete("Topic");
+      cloud.resources.delete("Subscription");
+
+      cloud.calls.length = 0;
+      const result = yield* runDrift();
+
+      expect(result.resources["Uploads/Subscription"]?.action).toEqual("recreated");
+      expect(reconcileCalls(cloud)).toEqual(["Topic", "Subscription"]);
+    }).pipe(withCloud(cloud));
+  });
+
+  test.provider("cyclic or dangling persisted edges do not deadlock the repair", () => {
+    const cloud = makeTestCloud();
+    const row = (fqn: string, downstream: string[]) => ({
+      status: "created",
+      fqn,
+      logicalId: fqn,
+      instanceId,
+      resourceType: "Test.DriftResource",
+      namespace: undefined,
+      providerVersion: 0,
+      props: { value: fqn },
+      attr: { id: fqn, value: fqn, tags: {}, env: {} },
+      bindings: [],
+      downstream,
+    });
+    return Effect.gen(function* () {
+      // Merged historical edges can disagree with each other; a cycle among
+      // them, or an edge to a row that no longer exists, must not block.
+      yield* seed({ A: row("A", ["B", "Ghost"]), B: row("B", ["A"]), C: row("C", ["A"]) });
+
+      const result = yield* runDrift().pipe(Effect.timeout("2 seconds"));
+
+      expect(result.resources).toMatchObject({
+        A: { action: "recreated" },
+        B: { action: "recreated" },
+        C: { action: "recreated" },
+      });
+      // the acyclic edge still orders C before A
+      const order = reconcileCalls(cloud);
+      expect(order.indexOf("C")).toBeLessThan(order.indexOf("A"));
+    }).pipe(withCloud(cloud));
+  });
+
+  test.provider("dry run reports a deleted chain without ordering any repair", (stack) => {
+    const cloud = makeTestCloud();
+    return Effect.gen(function* () {
+      yield* stack.deploy(
+        Effect.gen(function* () {
+          const topic = yield* DriftResource("Topic", {});
+          yield* DriftResource("Subscription", { dependsOn: [topic.id] });
+        }),
+      );
+      cloud.resources.delete("Topic");
+      cloud.resources.delete("Subscription");
+
+      cloud.calls.length = 0;
+      const result = yield* runDrift({ dryRun: true });
+
+      expect(result.resources).toMatchObject({
+        Topic: { action: "missing" },
+        Subscription: { action: "missing" },
+      });
+      expect(reconcileCalls(cloud)).toEqual([]);
+    }).pipe(withCloud(cloud));
+  });
+});
+
+// Missing resources are recreated bare, then bound once every missing
+// resource exists again: binding data can point at a resource recreated
+// later, and a binding edge inside a cycle is not a persisted `downstream`
+// edge. The TestCloud fails a reconcile whose binding `targets` are missing.
+describe("bindings of recreated resources", { tags: ["unit", "local"] }, () => {
+  test.provider("a missing resource is recreated bare, then bound", (stack) => {
+    const cloud = makeTestCloud();
+    return Effect.gen(function* () {
+      yield* stack.deploy(
+        Effect.gen(function* () {
+          const a = yield* DriftResource("A", { value: "a" });
+          yield* a.bind("Env", { env: { FEATURE_FLAG: "on" } });
+        }),
+      );
+      cloud.resources.delete("A");
+
+      cloud.calls.length = 0;
+      const { events, session } = recordingSession();
+      const result = yield* runDrift({ session });
+
+      expect(result.resources.A).toMatchObject({
+        action: "recreated",
+        attr: { env: { FEATURE_FLAG: "on" } },
+      });
+      expect(reconcileTrace(cloud)).toEqual(["A[]", "A[Env]"]);
+      expect(cloud.resources.get("A")!.env).toEqual({ FEATURE_FLAG: "on" });
+      expect(yield* getState("A")).toMatchObject({
+        status: "created",
+        bindings: [{ sid: "Env" }],
+        attr: { env: { FEATURE_FLAG: "on" } },
+      });
+      // one create lifecycle, even across both reconciles
+      expect(statusesOf(events, "A")).toEqual(["creating", "created"]);
+    }).pipe(withCloud(cloud));
+  });
+
+  test.provider("a missing resource without bindings is reconciled once", (stack) => {
+    const cloud = makeTestCloud();
+    return Effect.gen(function* () {
+      yield* stack.deploy(DriftResource("A", { value: "a" }));
+      cloud.resources.delete("A");
+
+      cloud.calls.length = 0;
+      yield* runDrift();
+
+      expect(reconcileTrace(cloud)).toEqual(["A[]"]);
+    }).pipe(withCloud(cloud));
+  });
+
+  test.provider("a drifted resource keeps its bindings in a single reconcile", (stack) => {
+    const cloud = makeTestCloud();
+    return Effect.gen(function* () {
+      yield* stack.deploy(
+        Effect.gen(function* () {
+          const a = yield* DriftResource("A", { value: "a" });
+          yield* a.bind("Env", { env: { FEATURE_FLAG: "on" } });
+        }),
+      );
+      cloud.resources.get("A")!.value = "hijacked";
+
+      cloud.calls.length = 0;
+      yield* runDrift();
+
+      expect(reconcileTrace(cloud)).toEqual(["A[Env]"]);
+    }).pipe(withCloud(cloud));
+  });
+
+  // The #1536 shape: the topic's props point at the bucket, and the bucket's
+  // notification binding points back at the topic.
+  test.provider("a binding cycle is recreated bare, then bound", (stack) => {
+    const cloud = makeTestCloud();
+    return Effect.gen(function* () {
+      yield* stack.deploy(
+        Effect.gen(function* () {
+          const bucket = yield* DriftResource("Bucket", { value: "bucket" });
+          const topic = yield* DriftResource("Topic", { value: "topic", dependsOn: [bucket.id] });
+          yield* bucket.bind("Notifications", { targets: [topic.id] });
+        }),
+      );
+      // the cyclic binding edge is not persisted as a downstream edge
+      expect((yield* getState("Topic"))?.downstream).toEqual([]);
+      cloud.resources.delete("Bucket");
+      cloud.resources.delete("Topic");
+
+      cloud.calls.length = 0;
+      const result = yield* runDrift();
+
+      expect(result.resources).toMatchObject({
+        Bucket: { action: "recreated" },
+        Topic: { action: "recreated" },
+      });
+      expect(reconcileTrace(cloud)).toEqual(["Bucket[]", "Topic[]", "Bucket[Notifications]"]);
+      expect((yield* getState("Bucket"))?.bindings).toMatchObject([{ sid: "Notifications" }]);
+    }).pipe(withCloud(cloud));
+  });
+
+  test.provider("a binding pointing at a later-recreated resource is attached last", (stack) => {
+    const cloud = makeTestCloud();
+    return Effect.gen(function* () {
+      yield* stack.deploy(
+        Effect.gen(function* () {
+          const a = yield* DriftResource("A", {});
+          const b = yield* DriftResource("B", { dependsOn: [a.id] });
+          yield* a.bind("Points", { targets: [b.id] });
+        }),
+      );
+      cloud.resources.delete("A");
+      cloud.resources.delete("B");
+
+      cloud.calls.length = 0;
+      yield* runDrift();
+
+      expect(reconcileTrace(cloud)).toEqual(["A[]", "B[]", "A[Points]"]);
+    }).pipe(withCloud(cloud));
+  });
+
+  test.provider("a failed bind leaves an unbound row that the next deploy binds", (stack) => {
+    const cloud = makeTestCloud();
+    return Effect.gen(function* () {
+      const program = Effect.gen(function* () {
+        const a = yield* DriftResource("A", { value: "a" });
+        yield* a.bind("Env", { env: { FEATURE_FLAG: "on" } });
+        return a;
+      });
+      yield* stack.deploy(program);
+      cloud.resources.delete("A");
+
+      // the bare recreate succeeds; attaching the binding (an update of the
+      // recreated resource) fails
+      const exit = yield* runDrift().pipe(
+        Effect.provide(Layer.succeed(TestResourceHooks, failOn("A", "update"))),
+        Effect.exit,
+      );
+      expect(Exit.isFailure(exit)).toBe(true);
+      expect(cloud.resources.get("A")).toMatchObject({ value: "a", env: {} });
+      // state records the resource without the binding it does not have
+      expect(yield* getState("A")).toMatchObject({ status: "created", bindings: [] });
+
+      // so the next deploy plans the binding and attaches it
+      const deployed = yield* stack.deploy(program);
+      expect(deployed.env).toEqual({ FEATURE_FLAG: "on" });
+      expect(cloud.resources.get("A")!.env).toEqual({ FEATURE_FLAG: "on" });
+    }).pipe(withCloud(cloud));
+  });
+});
+
+describe("dependency failures", { tags: ["unit", "local"] }, () => {
+  test.provider(
+    "a failed upstream recreate fails its dependents but not unrelated repairs",
+    (stack) => {
+      const cloud = makeTestCloud();
+      return Effect.gen(function* () {
+        yield* stack.deploy(
+          Effect.gen(function* () {
+            const topic = yield* DriftResource("Topic", {});
+            yield* DriftResource("Subscription", { dependsOn: [topic.id] });
+            yield* DriftResource("Other", {});
+          }),
+        );
+        for (const id of ["Topic", "Subscription", "Other"]) cloud.resources.delete(id);
+
+        const exit = yield* runDrift().pipe(
+          Effect.provide(Layer.succeed(TestResourceHooks, failOn("Topic", "create"))),
+          Effect.exit,
+        );
+
+        expect(Exit.isFailure(exit)).toBe(true);
+        if (Exit.isFailure(exit)) {
+          const rendered = Cause.pretty(exit.cause);
+          expect(rendered).toContain("Resource 'Topic' (Test.DriftResource) failed during create");
+          expect(rendered).toContain(
+            "Resource 'Subscription' (Test.DriftResource) failed during create",
+          );
+        }
+        expect(cloud.resources.has("Topic")).toBe(false);
+        expect(cloud.resources.has("Subscription")).toBe(false);
+        expect(cloud.resources.has("Other")).toBe(true);
+
+        // the next drift converges the rest of the chain
+        const result = yield* runDrift();
+        expect(result.resources).toMatchObject({
+          Topic: { action: "recreated" },
+          Subscription: { action: "recreated" },
+          Other: { action: "unchanged" },
+        });
+      }).pipe(withCloud(cloud));
+    },
+  );
+
+  test.provider("a failed bare recreate skips attaching its bindings", (stack) => {
+    const cloud = makeTestCloud();
+    return Effect.gen(function* () {
+      yield* stack.deploy(
+        Effect.gen(function* () {
+          const a = yield* DriftResource("A", {});
+          yield* a.bind("Env", { env: { KEY: "on" } });
+        }),
+      );
+      cloud.resources.delete("A");
+
+      cloud.calls.length = 0;
+      const exit = yield* runDrift().pipe(
+        Effect.provide(Layer.succeed(TestResourceHooks, failOn("A", "create"))),
+        Effect.exit,
+      );
+
+      expect(Exit.isFailure(exit)).toBe(true);
+      expect(reconcileTrace(cloud)).toEqual(["A[]"]);
+      // the row is untouched, so the resource is still reported missing
+      expect(yield* getState("A")).toMatchObject({ bindings: [{ sid: "Env" }] });
+      const detected = yield* runDrift({ dryRun: true });
+      expect(detected.resources.A?.action).toEqual("missing");
     }).pipe(withCloud(cloud));
   });
 });

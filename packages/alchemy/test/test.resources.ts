@@ -916,8 +916,15 @@ export interface TestCloudService {
   readonly resources: Map<string, Record<string, any>>;
   /** Ids whose `read` result is branded {@link Unowned} (foreign tags). */
   readonly unowned: Set<string>;
-  /** Lifecycle invocations, in order. Clear between phases to scope asserts. */
-  readonly calls: { op: "read" | "reconcile" | "delete"; id: string }[];
+  /**
+   * Lifecycle invocations, in order. Clear between phases to scope asserts.
+   * `reconcile` calls record the sids of the bindings they received.
+   */
+  readonly calls: {
+    op: "read" | "precreate" | "reconcile" | "delete";
+    id: string;
+    bindings?: string[];
+  }[];
 }
 
 export class TestCloud extends Context.Service<TestCloud, TestCloudService>()("TestCloud") {}
@@ -931,6 +938,12 @@ export const makeTestCloud = (): TestCloudService => ({
 export type DriftResourceProps = {
   value?: string;
   tags?: Record<string, string>;
+  /**
+   * Ids of resources that must exist in the TestCloud for reconcile to
+   * succeed — models a prop pointing at another cloud resource (an SNS
+   * subscription's topic).
+   */
+  dependsOn?: string[];
 };
 
 export interface DriftResource extends Resource<
@@ -944,6 +957,12 @@ export interface DriftResource extends Resource<
   },
   {
     env?: Record<string, string>;
+    /**
+     * Ids of resources this binding points at, which must exist in the
+     * TestCloud — models a binding validated by the cloud (an S3
+     * notification targeting a topic).
+     */
+    targets?: string[];
   }
 > {}
 
@@ -969,10 +988,32 @@ export const driftResourceProvider = () =>
           const attrs = copy(live);
           return cloud.unowned.has(id) ? Unowned(attrs) : attrs;
         }),
+        // A bare stub so deploys can break binding cycles (like S3 Bucket).
+        precreate: Effect.fn(function* ({ id, news = {} }) {
+          const cloud = yield* cloudOf;
+          cloud?.calls.push({ op: "precreate", id });
+          const attrs = { id, value: news.value ?? id, tags: news.tags ?? {}, env: {} };
+          cloud?.resources.set(id, copy(attrs));
+          return attrs;
+        }),
         reconcile: Effect.fn(function* ({ id, news = {}, olds, bindings }) {
           const cloud = yield* cloudOf;
-          cloud?.calls.push({ op: "reconcile", id });
+          cloud?.calls.push({
+            op: "reconcile",
+            id,
+            bindings: bindings.map((binding: any) => binding.sid),
+          });
           const hooks = Option.getOrUndefined(yield* Effect.serviceOption(TestResourceHooks));
+          const required = [
+            ...(news.dependsOn ?? []),
+            ...bindings.flatMap((binding: any) => binding.data?.targets ?? []),
+          ];
+          const absent = cloud ? required.filter((dep) => !cloud.resources.has(dep)) : [];
+          if (absent.length > 0) {
+            return yield* Effect.fail(
+              new ResourceFailure(`${id} depends on missing ${absent.join(", ")}`),
+            );
+          }
           if (olds === undefined) {
             if (hooks?.create) {
               yield* hooks.create(id, { string: news.value });
