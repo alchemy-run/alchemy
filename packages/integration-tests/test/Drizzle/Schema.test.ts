@@ -10,7 +10,7 @@ import * as Provider from "alchemy/Provider";
 import * as Stack from "alchemy/Stack";
 import { isResourceState, State } from "alchemy/State";
 import * as Test from "alchemy/Test/Alchemy";
-import { generate } from "drizzle-kit/cli";
+import { generate, type GenerateOptions } from "drizzle-kit/cli";
 import * as PostgresKit from "drizzle-kit/payload/postgres";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -650,41 +650,43 @@ test.provider(
 );
 
 test.provider(
-  "a rename after unmerged migration branches is still offered",
+  "renames after unmerged migration branches are offered from their combined state",
   (stack) =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
       const ws = yield* stageWorkspace(SCHEMA_SOURCE);
-      const kitGenerate = (schema: string, out: string) =>
-        Effect.promise(() => generate({ dialect: "postgresql", schema, out }));
+      const kitGenerate = (schema: string, out: string, hints?: GenerateOptions["hints"]) =>
+        Effect.promise(() => generate({ dialect: "postgresql", schema, out, hints }));
+      const rename = (source: string, to: string) =>
+        source.replace('name: text("name")', `name: text("${to}")`);
       const posts = `\nexport const posts = pgTable("posts", {\n  id: serial("id").primaryKey(),\n});\n`;
-      const email = (source: string) =>
-        source.replace(
-          'name: text("name").notNull(),',
-          'name: text("name").notNull(),\n  email: text("email"),',
-        );
 
-      // Two branches off one base: one adds a column, the other a table.
+      // Two branches off one base: one renames `name`, the other adds a table.
       expect((yield* kitGenerate(ws.schemaPath, ws.out)).status).toEqual("ok");
       const branchOut = path.join(ws.root, "branch");
       yield* fs.copy(ws.out, branchOut);
-      const emailPath = path.join(ws.root, "schema-email.ts");
-      yield* fs.writeFileString(emailPath, email(SCHEMA_SOURCE));
+      const fullNamePath = path.join(ws.root, "schema-full-name.ts");
+      yield* fs.writeFileString(fullNamePath, rename(SCHEMA_SOURCE, "full_name"));
       const postsPath = path.join(ws.root, "schema-posts.ts");
       yield* fs.writeFileString(postsPath, SCHEMA_SOURCE + posts);
       yield* Effect.sleep("1 second");
-      expect((yield* kitGenerate(emailPath, ws.out)).status).toEqual("ok");
+      const renamed = yield* kitGenerate(fullNamePath, ws.out, [
+        {
+          type: "rename",
+          kind: "column",
+          from: ["public", "users", "name"],
+          to: ["public", "users", "full_name"],
+        },
+      ]);
+      expect(renamed.status).toEqual("ok");
       expect((yield* kitGenerate(postsPath, branchOut)).status).toEqual("ok");
       const [, postsDir] = yield* readMigrationDirs(branchOut);
       yield* fs.copy(path.join(branchOut, postsDir!), path.join(ws.out, postsDir!));
 
-      // Both branches merged, with `name` renamed on top.
-      const renamedPath = path.join(ws.root, "schema-renamed.ts");
-      yield* fs.writeFileString(
-        renamedPath,
-        email(SCHEMA_SOURCE + posts).replace('name: text("name")', 'fullName: text("full_name")'),
-      );
+      // Both branches merged, with `full_name` renamed again on top.
+      const displayNamePath = path.join(ws.root, "schema-display-name.ts");
+      yield* fs.writeFileString(displayNamePath, rename(SCHEMA_SOURCE + posts, "display_name"));
       yield* Effect.sleep("1 second");
       const asked: Array<string[]> = [];
       const scripted = yield* scriptedSelect((options) =>
@@ -694,14 +696,15 @@ test.provider(
         }),
       );
       yield* stack
-        .deploy(Drizzle.Schema("app-schema", { schema: renamedPath, out: ws.out }))
+        .deploy(Drizzle.Schema("app-schema", { schema: displayNamePath, out: ws.out }))
         .pipe(Effect.provideService(Interaction, scripted));
 
-      expect(asked).toEqual([["+ users.full_name", "~ users.name › users.full_name"]]);
+      // `name` is gone in the combined state, so it is not offered.
+      expect(asked).toEqual([["+ users.display_name", "~ users.full_name › users.display_name"]]);
       const dirs = yield* readMigrationDirs(ws.out);
       expect(dirs).toHaveLength(4);
       const sql = yield* fs.readFileString(path.join(ws.out, dirs[3]!, "migration.sql"));
-      expect(sql).toContain('RENAME COLUMN "name" TO "full_name"');
+      expect(sql).toContain('RENAME COLUMN "full_name" TO "display_name"');
       expect(sql).not.toContain("DROP");
     }),
   { tags: ["unit", "local"] },

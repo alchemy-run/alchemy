@@ -275,6 +275,8 @@ const callDrizzleKit = <A>(command: string, run: () => Promise<A>) =>
     }),
     (trap) =>
       // `cli` commands catch the trap's throw and report it as an error result.
+      // Uninterruptible: the promise can't be cancelled, so the trap stays
+      // until it settles.
       Effect.tryPromise({
         try: run,
         catch: (cause) =>
@@ -285,6 +287,7 @@ const callDrizzleKit = <A>(command: string, run: () => Promise<A>) =>
         Effect.flatMap((result) =>
           trap.exited ? Effect.fail(new DrizzleKitExited({ command })) : Effect.succeed(result),
         ),
+        Effect.uninterruptible,
       ),
     (trap) =>
       Effect.sync(() => {
@@ -403,17 +406,25 @@ export const SchemaProvider = () =>
         const reconstruct = kit.reconstruct;
         if (reconstruct === undefined) return (yield* readLatestSnapshot(out))?.snapshot;
         const files = Record.map(yield* readSnapshots(out), ({ snapshot }) => snapshot);
-        // Unmerged branches leave several leaves; offer what any of them has.
+        if (Record.isEmptyRecord(files)) return undefined;
         const parents = new Set(Record.values(files).flatMap((file) => file.prevIds ?? []));
-        const leaves = Record.values(files).flatMap(({ id }) =>
-          id !== undefined && !parents.has(id) ? [id] : [],
+        const leaves = Record.values(files).filter(
+          ({ id }) => id !== undefined && !parents.has(id),
         );
-        const states = yield* Effect.forEach(leaves, (id) =>
-          callDrizzleKit("reconstruct", () => reconstruct(files, id)),
+        if (leaves.length < 2) {
+          return yield* callDrizzleKit("reconstruct", () => reconstruct(files));
+        }
+        // Unmerged branches: reconstruct an empty merge of their leaves, the
+        // combined state drizzle-kit's generate diffs against.
+        const merge = {
+          ...leaves[0]!,
+          id: MERGE_ID,
+          prevIds: leaves.map(({ id }) => id!),
+          deltas: [],
+        };
+        return yield* callDrizzleKit("reconstruct", () =>
+          reconstruct({ ...files, [`99999999999999_${MERGE_ID}`]: merge }, MERGE_ID),
         );
-        return states.length === 0
-          ? undefined
-          : { ddl: states.flatMap((state) => state.ddl ?? []) };
       });
 
       /**
@@ -609,6 +620,8 @@ const ddlEntityTypes: Record.ReadonlyRecord<string, string> = {
   "foreign key": "fks",
 };
 
+const MERGE_ID = "alchemy-unmerged-branches";
+
 // mysql and sqlite have no schemas; drizzle-kit fills ids with `public`.
 const DEFAULT_SCHEMA = "public";
 
@@ -705,14 +718,9 @@ const renameCandidates = (
   const ofKind = (rows: ReadonlyArray<Located>) =>
     rows.filter((row) => row.entityType === entityType);
   const current = new Set(ofKind(cur.map(locate)).map((row) => JSON.stringify(idOf(row, arity))));
-  const gone = [
-    ...new Map(
-      ofKind(applyRenames(prev.map(locate), hints))
-        .map((row) => idOf(row, arity))
-        .filter((id) => !current.has(JSON.stringify(id)))
-        .map((id) => [JSON.stringify(id), id]),
-    ).values(),
-  ];
+  const gone = ofKind(applyRenames(prev.map(locate), hints))
+    .map((row) => idOf(row, arity))
+    .filter((id) => !current.has(JSON.stringify(id)));
   const sameParent = gone.filter(
     (id) => arity < 3 || (id[0] === hint.entity[0] && id[1] === hint.entity[1]),
   );
