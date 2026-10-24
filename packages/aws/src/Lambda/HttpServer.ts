@@ -14,6 +14,7 @@ import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Option from "effect/Option";
 import type { Scope } from "effect/Scope";
 import { withInvocationDeadline } from "./InvocationDeadline.ts";
+import { LambdaResponseStream, pipeResponseToStream } from "./ResponseStream.ts";
 
 export const isFunctionURLEvent = (event: any): event is LambdaFunctionURLEvent =>
   event.requestContext?.http?.method !== undefined;
@@ -83,7 +84,7 @@ export const makeFunctionHttpHandler = <Req>(handler: Http.HttpEffect<Req>) => {
       // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- safeHandler handles failures; generic Exclude on R can't be proven statically
       return safeHandler.pipe(
         Effect.provideService(HttpServerRequest.HttpServerRequest, request),
-        Effect.flatMap(toLambdaFunctionURLResult),
+        Effect.flatMap(toFunctionURLResponse),
       ) as Effect.Effect<
         LambdaFunctionURLResult,
         never,
@@ -283,6 +284,20 @@ const apiGatewayProxyEventToWebRequest = (event: APIGatewayProxyEvent): Request 
     body: body && method !== "GET" && method !== "HEAD" ? body : undefined,
   });
 };
+
+// A streaming Function (`invokeMode: "RESPONSE_STREAM"`) provides the
+// invocation's response stream: write the response into it chunk by chunk.
+// Otherwise return the buffered Function URL result.
+const toFunctionURLResponse = (
+  response: HttpServerResponse.HttpServerResponse,
+): Effect.Effect<LambdaFunctionURLResult | undefined> =>
+  Effect.serviceOption(LambdaResponseStream).pipe(
+    Effect.flatMap((sink) =>
+      Option.isSome(sink)
+        ? pipeResponseToStream(response, sink.value).pipe(Effect.as(undefined))
+        : toLambdaFunctionURLResult(response),
+    ),
+  );
 
 const toLambdaFunctionURLResult = (
   response: HttpServerResponse.HttpServerResponse,

@@ -17,6 +17,7 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
 import { TestFunction, TestFunctionLive } from "./handler.ts";
+import StreamingFunctionLive, { StreamingFunction } from "./streaming-handler.ts";
 
 const asyncHandlerPath = fileURLToPath(new URL("./async-handler.ts", import.meta.url));
 const namedHandlerPath = fileURLToPath(new URL("./named-handler.ts", import.meta.url));
@@ -712,6 +713,63 @@ test.provider(
 
       yield* stack.destroy();
       yield* assertFunctionDeleted(deployed.functionName);
+    }).pipe(
+      Effect.tap(() => stack.destroy()),
+      Effect.onError(() => stack.destroy().pipe(Effect.ignore)),
+    ),
+  { tags: ["provider:aws", "provider:aws:lambda", "live"], timeout: 180_000 },
+);
+
+test.provider(
+  "streams an Effect HttpServerResponse through a RESPONSE_STREAM function URL",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const { functionName, functionUrl } = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* StreamingFunction;
+        }).pipe(Effect.provide(StreamingFunctionLive)),
+      );
+      expect(functionUrl).toBeTruthy();
+
+      const response = yield* HttpClient.get(functionUrl!).pipe(
+        Effect.flatMap((response) =>
+          response.status === 200
+            ? Effect.succeed(response)
+            : Effect.fail(new Error(`Function URL returned ${response.status}`)),
+        ),
+        Effect.retry({
+          schedule: Schedule.max([Schedule.exponential(500), Schedule.recurs(10)]),
+        }),
+      );
+      expect(response.headers["content-type"]).toBe("text/event-stream");
+      expect(response.headers["x-streamed"]).toBe("true");
+      expect(response.headers["set-cookie"]).toContain("session=abc");
+
+      // Record when each event arrives: streamed events are ~2s apart, a
+      // buffered body arrives in one piece at the end.
+      const arrivals = yield* response.stream.pipe(
+        Stream.decodeText(),
+        Stream.mapEffect((text) =>
+          Effect.map(
+            Effect.clockWith((clock) => clock.currentTimeMillis),
+            (at) => ({
+              text,
+              at,
+            }),
+          ),
+        ),
+        Stream.runCollect,
+      );
+      expect(arrivals.map((a) => a.text).join("")).toBe(
+        "data: one\n\ndata: two\n\ndata: three\n\n",
+      );
+      expect(arrivals.length).toBeGreaterThanOrEqual(3);
+      expect(arrivals[arrivals.length - 1]!.at - arrivals[0]!.at).toBeGreaterThanOrEqual(3_000);
+
+      yield* stack.destroy();
+      yield* assertFunctionDeleted(functionName);
     }).pipe(
       Effect.tap(() => stack.destroy()),
       Effect.onError(() => stack.destroy().pipe(Effect.ignore)),

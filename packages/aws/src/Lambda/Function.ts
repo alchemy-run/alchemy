@@ -26,6 +26,7 @@ import { sha256 } from "alchemy/Util/sha256";
 import { zipCode } from "alchemy/Util/zip";
 import type * as lambda from "aws-lambda";
 import * as Cause from "effect/Cause";
+import * as Config from "effect/Config";
 import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
@@ -61,6 +62,7 @@ import {
   toTimeoutMarginMillis,
   withInvocationDeadline,
 } from "./InvocationDeadline.ts";
+import { awslambdaGlobal, LambdaResponseStream, RESPONSE_STREAM_ENV } from "./ResponseStream.ts";
 
 export type { FunctionImageSource } from "./FunctionImage.ts";
 export {
@@ -1180,7 +1182,11 @@ export const Function: Platform<
           // WorkerBridge). The build's memo map is stripped so a Layer the
           // user `Effect.provide`s inside a handler builds per invocation.
           const services = Context.omit(Layer.CurrentMemoMap)(yield* Effect.context<never>());
-          return async (event: any, context: lambda.Context): Promise<any> => {
+          const dispatch = async (
+            event: any,
+            context: lambda.Context,
+            responseStream?: LambdaResponseStream["Service"],
+          ): Promise<any> => {
             for (const handler of handlers) {
               const eff = handler(event);
               if (Effect.isEffect(eff)) {
@@ -1210,6 +1216,11 @@ export const Function: Platform<
                       // values through `RuntimeContext.get`) run in the
                       // handler, like on every other host bridge.
                       Layer.succeed(RuntimeContext, ctx as FunctionContext),
+                      // A streaming invocation's response stream, which the
+                      // HTTP handler writes the response into.
+                      responseStream
+                        ? Layer.succeed(LambdaResponseStream, responseStream)
+                        : Layer.empty,
                       // The configured telemetry exporters, attached to the
                       // invocation scope by `buildEventTelemetry` so
                       // buffered spans/logs/metrics flush when it settles
@@ -1244,6 +1255,26 @@ export const Function: Platform<
             }
             throw new Error("No event handler found");
           };
+          const awslambda = awslambdaGlobal();
+          const streaming = yield* Config.Boolean(RESPONSE_STREAM_ENV).pipe(
+            Config.withDefault(false),
+          );
+          if (!streaming || awslambda === undefined) {
+            return dispatch;
+          }
+          // `invokeMode: "RESPONSE_STREAM"`: Lambda passes a response stream
+          // instead of reading the return value. HTTP responses are piped
+          // into it; any other listener's result (an SQS batch response, a
+          // direct `Invoke`) is written as JSON, which a buffered `Invoke`
+          // returns as its payload.
+          return awslambda.streamifyResponse(async (event, stream, context) => {
+            const responseStream = { awslambda, stream, used: false };
+            const result = await dispatch(event, context, responseStream);
+            if (!responseStream.used) {
+              stream.write(result === undefined ? "" : JSON.stringify(result));
+              stream.end();
+            }
+          });
         }),
       })),
     };
@@ -1560,6 +1591,13 @@ export const FunctionProvider = () =>
         const ms = toTimeoutMarginMillis(margin);
         return ms === undefined ? {} : { [TIMEOUT_MARGIN_ENV]: String(ms) };
       };
+
+      // A `RESPONSE_STREAM` Function URL tells the runtime to export its
+      // handler through `awslambda.streamifyResponse`.
+      const responseStreamEnv = (url: FunctionProps["functionUrl"]): Record<string, string> =>
+        normalizeFunctionUrl(url)?.invokeMode === "RESPONSE_STREAM"
+          ? { [RESPONSE_STREAM_ENV]: "true" }
+          : {};
 
       const retryFunctionMutation = Effect.retry({
         while: (e: any) =>
@@ -1887,6 +1925,7 @@ export const FunctionProvider = () =>
               ...runtimeEnv,
               ...alchemyEnv,
               ...timeoutMarginEnv(news.timeoutMargin),
+              ...responseStreamEnv(news.functionUrl),
             },
           },
           Tags: tags,
