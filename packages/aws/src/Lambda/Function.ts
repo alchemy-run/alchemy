@@ -54,7 +54,12 @@ import {
   type FunctionImageSource,
   makeFunctionImage,
 } from "./FunctionImage.ts";
-import { makeFunctionHttpHandler } from "./HttpServer.ts";
+import {
+  isResponseStreaming,
+  makeFunctionHttpHandler,
+  RESPONSE_STREAM_ENV,
+  streamifyHandler,
+} from "./HttpServer.ts";
 import {
   HandlerContext,
   TIMEOUT_MARGIN_ENV,
@@ -190,7 +195,9 @@ export interface FunctionUrlConfig {
    */
   cors?: Lambda.Cors;
   /**
-   * Invocation mode for the function URL.
+   * Invocation mode for the function URL. `RESPONSE_STREAM` streams an
+   * Effect handler's `HttpServerResponse` body to the client as it is
+   * produced; `BUFFERED` returns it once complete (up to 6 MB).
    * @default "BUFFERED"
    */
   invokeMode?: Lambda.InvokeMode;
@@ -898,6 +905,39 @@ export const normalizeFunctionUrl = (
  * });
  * ```
  *
+ * ### Streaming responses
+ * Set the Function URL's `invokeMode` to `"RESPONSE_STREAM"` and a streamed
+ * `HttpServerResponse` reaches the client chunk by chunk instead of being
+ * buffered. Use it for server-sent events, LLM tokens, progressive HTML, and
+ * responses over the 6 MB buffered limit (streams go up to 20 MB).
+ *
+ * **Example:** Server-sent events
+ * ```typescript
+ * // src/events.ts
+ * import * as AWS from "@alchemy.run/aws";
+ * import * as Effect from "effect/Effect";
+ * import * as HttpServerResponse from "effect/http/HttpServerResponse";
+ * import * as Stream from "effect/Stream";
+ *
+ * export default class Events extends AWS.Lambda.Function<Events>()(
+ *   "Events",
+ *   { main: import.meta.url, functionUrl: { invokeMode: "RESPONSE_STREAM" } },
+ *   Effect.gen(function* () {
+ *     return {
+ *       fetch: Effect.succeed(
+ *         HttpServerResponse.stream(
+ *           Stream.make("data: one\n\n", "data: two\n\n").pipe(
+ *             Stream.tap(() => Effect.sleep("1 second")),
+ *             Stream.encodeText,
+ *           ),
+ *           { contentType: "text/event-stream" },
+ *         ),
+ *       ),
+ *     };
+ *   }),
+ * ) {}
+ * ```
+ *
  * ### Configuration
  * **Example:** Function in a VPC
  * ```typescript
@@ -1212,8 +1252,12 @@ export const Function: Platform<
         // must never resolve through `Config.String`.
         Effect.sync(() => unpackEnvValue<T>(process.env[key])),
       serve: (handler: HttpEffect) =>
-        // @ts-ignore
-        ctx.listen(makeFunctionHttpHandler(handler)),
+        ctx.listen(
+          // @ts-ignore
+          Effect.map(isResponseStreaming, (responseStream) =>
+            makeFunctionHttpHandler(handler, { responseStream }),
+          ),
+        ),
       listen: ((handler: FunctionListener | Effect.Effect<FunctionListener>) =>
         Effect.sync(() =>
           Effect.isEffect(handler)
@@ -1233,7 +1277,7 @@ export const Function: Platform<
           // WorkerBridge). The build's memo map is stripped so a Layer the
           // user `Effect.provide`s inside a handler builds per invocation.
           const services = Context.omit(Layer.CurrentMemoMap)(yield* Effect.context<never>());
-          return async (event: any, context: lambda.Context): Promise<any> => {
+          const dispatch = async (event: any, context: lambda.Context): Promise<any> => {
             for (const handler of handlers) {
               const eff = handler(event);
               if (Effect.isEffect(eff)) {
@@ -1297,6 +1341,8 @@ export const Function: Platform<
             }
             throw new Error("No event handler found");
           };
+          // `invokeMode: "RESPONSE_STREAM"` needs a streaming handler.
+          return (yield* isResponseStreaming) ? streamifyHandler(dispatch) : dispatch;
         }),
       })),
     };
@@ -1613,6 +1659,13 @@ export const FunctionProvider = () =>
         const ms = toTimeoutMarginMillis(margin);
         return ms === undefined ? {} : { [TIMEOUT_MARGIN_ENV]: String(ms) };
       };
+
+      // A `RESPONSE_STREAM` Function URL tells the runtime to export its
+      // handler through `awslambda.streamifyResponse`.
+      const responseStreamEnv = (url: FunctionProps["functionUrl"]): Record<string, string> =>
+        normalizeFunctionUrl(url)?.invokeMode === "RESPONSE_STREAM"
+          ? { [RESPONSE_STREAM_ENV]: "true" }
+          : {};
 
       const retryFunctionMutation = Effect.retry({
         while: (e: any) =>
@@ -1940,6 +1993,7 @@ export const FunctionProvider = () =>
               ...runtimeEnv,
               ...alchemyEnv,
               ...timeoutMarginEnv(news.timeoutMargin),
+              ...responseStreamEnv(news.functionUrl),
             },
           },
           Tags: tags,
