@@ -2,7 +2,7 @@ import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
 import { CloudflareApiLive } from "@alchemy.run/cloudflare/Providers";
 import * as workers from "@distilled.cloud/cloudflare/workers";
-import { expect } from "alchemy-test";
+import { expect } from "@alchemy.run/test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";

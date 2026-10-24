@@ -1,7 +1,7 @@
 import * as AWS from "@alchemy.run/aws";
 import { ActiveReceiptRuleSet, ReceiptRuleSet } from "@alchemy.run/aws/SES";
 import * as ses from "@distilled.cloud/aws/ses";
-import { expect } from "alchemy-test";
+import { expect } from "@alchemy.run/test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 

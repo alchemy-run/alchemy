@@ -2,7 +2,7 @@ import * as AWS from "@alchemy.run/aws";
 import { Application } from "@alchemy.run/aws/KinesisAnalyticsV2";
 import * as iam from "@distilled.cloud/aws/iam";
 import * as analytics from "@distilled.cloud/aws/kinesis-analytics-v2";
-import { describe, expect } from "alchemy-test";
+import { describe, expect } from "@alchemy.run/test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";

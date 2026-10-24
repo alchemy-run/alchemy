@@ -69,7 +69,7 @@
     "@types/bun": "catalog:",
     "@types/pg": "catalog:",
     "alchemy": "workspace:*",
-    "alchemy-test": "workspace:*",
+    "@alchemy.run/test": "workspace:*",
     "better-auth": "catalog:",
     "better-auth-1.6": "npm:better-auth@1.6.25",
     "drizzle-orm": "catalog:",

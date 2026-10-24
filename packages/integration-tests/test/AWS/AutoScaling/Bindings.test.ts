@@ -1,7 +1,7 @@
 import * as AWS from "@alchemy.run/aws";
 import * as autoscaling from "@distilled.cloud/aws/auto-scaling";
 import * as eventbridge from "@distilled.cloud/aws/eventbridge";
-import { describe, expect } from "alchemy-test";
+import { describe, expect } from "@alchemy.run/test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Core from "alchemy/Test/Core";
 import * as Effect from "effect/Effect";

@@ -1,6 +1,6 @@
 import * as Stripe from "@alchemy.run/stripe";
 import { GetTaxSettings } from "@distilled.cloud/stripe/stripe";
-import { describe, expect } from "alchemy-test";
+import { describe, expect } from "@alchemy.run/test";
 import * as Provider from "alchemy/Provider";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";

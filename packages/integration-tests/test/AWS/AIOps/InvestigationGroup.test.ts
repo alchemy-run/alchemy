@@ -3,7 +3,7 @@ import { InvestigationGroup } from "@alchemy.run/aws/AIOps";
 import type { PolicyStatement } from "@alchemy.run/aws/IAM/Policy";
 import { Role } from "@alchemy.run/aws/IAM/Role";
 import * as aiops from "@distilled.cloud/aws/aiops";
-import { expect } from "alchemy-test";
+import { expect } from "@alchemy.run/test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Data from "effect/Data";
 import type * as Duration from "effect/Duration";

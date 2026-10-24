@@ -1,4 +1,4 @@
-import { expect } from "alchemy-test";
+import { expect } from "@alchemy.run/test";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";

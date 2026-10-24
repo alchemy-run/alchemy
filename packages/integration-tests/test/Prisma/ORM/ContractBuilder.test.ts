@@ -3,7 +3,7 @@ import {
   defineContract as nativeDefineContract,
   model as nativeModel,
 } from "@prisma/orm-postgres/contract-builder";
-import { expect, it } from "alchemy-test";
+import { expect, it } from "@alchemy.run/test";
 import * as Effect from "effect/Effect";
 import { contract } from "./fixtures/client/contract.ts";
 

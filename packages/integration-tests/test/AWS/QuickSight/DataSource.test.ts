@@ -2,7 +2,7 @@ import * as AWS from "@alchemy.run/aws";
 import { AWSEnvironment } from "@alchemy.run/aws/Environment";
 import { DataSource } from "@alchemy.run/aws/QuickSight";
 import * as quicksight from "@distilled.cloud/aws/quicksight";
-import { expect } from "alchemy-test";
+import { expect } from "@alchemy.run/test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";

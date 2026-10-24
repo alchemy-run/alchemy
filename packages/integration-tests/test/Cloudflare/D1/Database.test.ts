@@ -3,7 +3,7 @@ import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnviron
 import { hashMigrations } from "@alchemy.run/sql/SqlFile";
 import * as d1 from "@distilled.cloud/cloudflare/d1";
 import * as workers from "@distilled.cloud/cloudflare/workers";
-import { expect } from "alchemy-test";
+import { expect } from "@alchemy.run/test";
 import { State } from "alchemy/State";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Data from "effect/Data";

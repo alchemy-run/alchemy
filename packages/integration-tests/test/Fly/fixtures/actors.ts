@@ -1,4 +1,4 @@
-import { expect } from "alchemy-test";
+import { expect } from "@alchemy.run/test";
 import type { ScratchStack } from "alchemy/Test/Alchemy";
 import { scratchStack } from "alchemy/Test/Core";
 import * as Effect from "effect/Effect";

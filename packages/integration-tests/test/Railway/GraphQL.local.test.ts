@@ -1,6 +1,6 @@
 import { ResourceDeletionPending, waitUntilDeleted } from "@alchemy.run/railway/GraphQL";
 import { GraphQLFailure, type GraphQLIssue } from "@distilled.cloud/railway";
-import { describe, expect, it } from "alchemy-test";
+import { describe, expect, it } from "@alchemy.run/test";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as TestClock from "effect/testing/TestClock";

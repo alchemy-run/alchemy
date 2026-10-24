@@ -3,7 +3,7 @@ import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnviron
 import { findZoneByName } from "@alchemy.run/cloudflare/Zone/lookup";
 import * as rules from "@distilled.cloud/cloudflare/rules";
 import * as rulesets from "@distilled.cloud/cloudflare/rulesets";
-import { expect } from "alchemy-test";
+import { expect } from "@alchemy.run/test";
 import * as Output from "alchemy/Output";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";

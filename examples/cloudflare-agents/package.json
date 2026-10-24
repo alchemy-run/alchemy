@@ -33,7 +33,7 @@
     "@types/react-dom": "catalog:",
     "@vitejs/plugin-react": "catalog:",
     "alchemy": "workspace:*",
-    "alchemy-test": "workspace:*",
+    "@alchemy.run/test": "workspace:*",
     "effect": "catalog:",
     "tailwindcss": "catalog:",
     "typescript": "catalog:",

@@ -2,7 +2,7 @@ import * as AWS from "@alchemy.run/aws";
 import { EventDataStore } from "@alchemy.run/aws/CloudTrail";
 import { AWSEnvironment } from "@alchemy.run/aws/Environment";
 import * as cloudtrail from "@distilled.cloud/aws/cloudtrail";
-import { expect } from "alchemy-test";
+import { expect } from "@alchemy.run/test";
 import * as Test from "alchemy/Test/Alchemy";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";

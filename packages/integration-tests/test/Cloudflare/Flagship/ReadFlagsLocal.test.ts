@@ -1,5 +1,5 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
-import { expect } from "alchemy-test";
+import { expect } from "@alchemy.run/test";
 import { Action } from "alchemy/Action";
 import * as Test from "alchemy/Test/Alchemy";
 import { poll } from "alchemy/Util/poll";

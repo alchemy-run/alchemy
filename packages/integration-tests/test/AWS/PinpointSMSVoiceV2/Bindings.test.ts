@@ -1,6 +1,6 @@
 import * as AWS from "@alchemy.run/aws";
 import * as smsvoice from "@distilled.cloud/aws/pinpoint-sms-voice-v2";
-import { describe, expect } from "alchemy-test";
+import { describe, expect } from "@alchemy.run/test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Core from "alchemy/Test/Core";
 import * as Data from "effect/Data";

@@ -9,7 +9,7 @@ import {
   TargetGroup,
 } from "@alchemy.run/aws/VpcLattice";
 import * as vpclattice from "@distilled.cloud/aws/vpc-lattice";
-import { expect } from "alchemy-test";
+import { expect } from "@alchemy.run/test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";

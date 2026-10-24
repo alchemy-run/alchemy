@@ -2,7 +2,7 @@ import * as AWS from "@alchemy.run/aws";
 import { amazonLinux2023, Instance, Subnet, Vpc, type InstanceProps } from "@alchemy.run/aws/EC2";
 import { Queue } from "@alchemy.run/aws/SQS";
 import * as ec2 from "@distilled.cloud/aws/ec2";
-import { describe, expect } from "alchemy-test";
+import { describe, expect } from "@alchemy.run/test";
 import * as Output from "alchemy/Output";
 import * as Provider from "alchemy/Provider";
 import { State } from "alchemy/State/State";

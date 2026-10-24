@@ -1,6 +1,6 @@
 import * as GCP from "@alchemy.run/gcp";
 import * as privateca from "@distilled.cloud/gcp/privateca_v1";
-import { describe, expect } from "alchemy-test";
+import { describe, expect } from "@alchemy.run/test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Core from "alchemy/Test/Core";
 import * as Effect from "effect/Effect";

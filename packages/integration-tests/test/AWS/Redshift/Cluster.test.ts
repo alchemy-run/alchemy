@@ -3,7 +3,7 @@ import type { SubnetId } from "@alchemy.run/aws/EC2/Subnet";
 import { Cluster, ClusterSubnetGroup } from "@alchemy.run/aws/Redshift";
 import * as EC2 from "@distilled.cloud/aws/ec2";
 import * as redshift from "@distilled.cloud/aws/redshift";
-import { expect } from "alchemy-test";
+import { expect } from "@alchemy.run/test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";

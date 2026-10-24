@@ -1,7 +1,7 @@
 import { generateKeyPairSync } from "node:crypto";
 import * as Hetzner from "@alchemy.run/hetzner";
 import * as sshKeys from "@distilled.cloud/hetzner/ssh_keys";
-import { expect } from "alchemy-test";
+import { expect } from "@alchemy.run/test";
 import * as Provider from "alchemy/Provider";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";

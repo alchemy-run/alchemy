@@ -1,4 +1,4 @@
-import { describe, expect, test } from "alchemy-test";
+import { describe, expect, test } from "@alchemy.run/test";
 import { canonicalCidr } from "@/Util/ip-address.ts";
 
 const valid: [string, string][] = [

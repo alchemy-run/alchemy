@@ -4,7 +4,7 @@ import { Cluster, ClusterPolicy } from "@alchemy.run/aws/DSQL";
 import { withDsqlClient } from "@alchemy.run/aws/DSQL/Migrations";
 import * as Drizzle from "@alchemy.run/drizzle";
 import * as dsql from "@distilled.cloud/aws/dsql";
-import { expect } from "alchemy-test";
+import { expect } from "@alchemy.run/test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";

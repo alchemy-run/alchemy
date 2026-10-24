@@ -7,7 +7,7 @@ import {
 import type { Worker } from "@alchemy.run/cloudflare/Workers/Worker";
 import { resolveObservability } from "@alchemy.run/cloudflare/Workers/WorkerAsyncBindings";
 import * as workers from "@distilled.cloud/cloudflare/workers";
-import { describe, expect, test as unit } from "alchemy-test";
+import { describe, expect, test as unit } from "@alchemy.run/test";
 import type { ResourceBinding } from "alchemy/Resource";
 import * as Test from "alchemy/Test/Alchemy";
 import * as ConfigProvider from "effect/ConfigProvider";

@@ -2,7 +2,7 @@ import * as AWS from "@alchemy.run/aws";
 import { LaunchTemplate } from "@alchemy.run/aws/AutoScaling";
 import { amazonLinux2023 } from "@alchemy.run/aws/EC2";
 import * as ec2 from "@distilled.cloud/aws/ec2";
-import { expect } from "alchemy-test";
+import { expect } from "@alchemy.run/test";
 import * as Provider from "alchemy/Provider";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";

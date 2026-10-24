@@ -4,7 +4,7 @@ import { AWSEnvironment } from "@alchemy.run/aws/Environment";
 import { Bucket } from "@alchemy.run/aws/S3";
 import { Queue } from "@alchemy.run/aws/SQS";
 import * as Alchemy from "alchemy";
-import { expect } from "alchemy-test";
+import { expect } from "@alchemy.run/test";
 /**
  * Credential-free `alchemy dev` for AWS.
  *

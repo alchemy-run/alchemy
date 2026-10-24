@@ -4,7 +4,7 @@ import { makeS3State } from "@alchemy.run/aws";
 import { createStateBucketName } from "@alchemy.run/aws/StateStore/State";
 import * as kms from "@distilled.cloud/aws/kms";
 import * as s3 from "@distilled.cloud/aws/s3";
-import { expect } from "alchemy-test";
+import { expect } from "@alchemy.run/test";
 import { StateStoreError, type ResourceState, type StateService } from "alchemy/State";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";

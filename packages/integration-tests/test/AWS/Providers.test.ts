@@ -2,7 +2,7 @@ import * as AWS from "@alchemy.run/aws";
 import { AWSEnvironment } from "@alchemy.run/aws/Environment";
 import * as s3 from "@distilled.cloud/aws/s3";
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { expect, it } from "alchemy-test";
+import { expect, it } from "@alchemy.run/test";
 import { AlchemyContext } from "alchemy/AlchemyContext";
 import { ArtifactStore, createArtifactStore } from "alchemy/Artifacts";
 import { AuthProviders } from "alchemy/Auth/AuthProvider";

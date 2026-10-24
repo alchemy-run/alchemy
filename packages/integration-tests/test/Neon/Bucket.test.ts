@@ -6,7 +6,7 @@ import { Project } from "@alchemy.run/neon/Project";
 import { providers } from "@alchemy.run/neon/Providers";
 import { makeStorageClient } from "@alchemy.run/neon/Storage";
 import * as SDK from "@distilled.cloud/neon";
-import { expect } from "alchemy-test";
+import { expect } from "@alchemy.run/test";
 import { adopt, Unowned } from "alchemy/AdoptPolicy";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";

@@ -3,7 +3,7 @@ import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnviron
 import { CloudflareApiLive } from "@alchemy.run/cloudflare/Providers";
 import * as durableObjects from "@distilled.cloud/cloudflare/durable-objects";
 import * as workers from "@distilled.cloud/cloudflare/workers";
-import { describe, expect } from "alchemy-test";
+import { describe, expect } from "@alchemy.run/test";
 import { adopt } from "alchemy/AdoptPolicy";
 import * as Output from "alchemy/Output";
 import { State } from "alchemy/State";

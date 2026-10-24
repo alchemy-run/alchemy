@@ -1,6 +1,6 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as originCa from "@distilled.cloud/cloudflare/origin-ca-certificates";
-import { expect } from "alchemy-test";
+import { expect } from "@alchemy.run/test";
 import { adopt } from "alchemy/AdoptPolicy";
 import * as Provider from "alchemy/Provider";
 import { isResourceState, State, type ResourceState } from "alchemy/State";

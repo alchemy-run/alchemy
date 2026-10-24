@@ -11,7 +11,7 @@ import { Bucket } from "@alchemy.run/aws/S3";
 import * as cloudfront from "@distilled.cloud/aws/cloudfront";
 import * as LambdaWeb from "@distilled.cloud/aws/lambda-web";
 import * as S3 from "@distilled.cloud/aws/s3";
-import { describe, expect } from "alchemy-test";
+import { describe, expect } from "@alchemy.run/test";
 import * as Output from "alchemy/Output";
 import * as Provider from "alchemy/Provider";
 import * as Test from "alchemy/Test/Alchemy";

@@ -8,7 +8,7 @@ import {
   writeStoreCredentials,
 } from "@alchemy.run/cloudflare/StateStore/CredentialsFile";
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { describe, expect, it } from "alchemy-test";
+import { describe, expect, it } from "@alchemy.run/test";
 import type { CredentialsStoreService } from "alchemy/Auth/Credentials";
 import { profileStateStoresDirPath } from "alchemy/Auth/Paths";
 import * as Effect from "effect/Effect";

@@ -2,7 +2,7 @@ import * as AWS from "@alchemy.run/aws";
 import * as emr from "@distilled.cloud/aws/emr-serverless";
 import * as eventbridge from "@distilled.cloud/aws/eventbridge";
 import * as sts from "@distilled.cloud/aws/sts";
-import { describe, expect } from "alchemy-test";
+import { describe, expect } from "@alchemy.run/test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Core from "alchemy/Test/Core";
 import * as Data from "effect/Data";

@@ -4,7 +4,7 @@ import { Stream as KinesisStream } from "@alchemy.run/aws/Kinesis/Stream";
 import { LogGroup } from "@alchemy.run/aws/Logs/LogGroup";
 import { SubscriptionFilter } from "@alchemy.run/aws/Logs/SubscriptionFilter";
 import * as logs from "@distilled.cloud/aws/cloudwatch-logs";
-import { expect } from "alchemy-test";
+import { expect } from "@alchemy.run/test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";

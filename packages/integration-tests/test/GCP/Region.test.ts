@@ -3,7 +3,7 @@ import { fromCredentials, GcpEnvironment } from "@alchemy.run/gcp/Environment";
 import { Credentials } from "@distilled.cloud/gcp/Credentials";
 import * as Region from "@distilled.cloud/gcp/Region";
 import * as secretmanager from "@distilled.cloud/gcp/secretmanager_v1";
-import { expect } from "alchemy-test";
+import { expect } from "@alchemy.run/test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";

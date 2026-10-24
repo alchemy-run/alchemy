@@ -8,7 +8,7 @@ import {
 } from "@distilled.cloud/cloudflare/workers-for-platforms";
 import { buildRequest } from "@distilled.cloud/core/protocol-http";
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { expect, layer } from "alchemy-test";
+import { expect, layer } from "@alchemy.run/test";
 import * as Effect from "effect/Effect";
 import * as pathe from "pathe";
 

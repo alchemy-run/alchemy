@@ -2,7 +2,7 @@ import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
 import { findZoneByName } from "@alchemy.run/cloudflare/Zone/lookup";
 import * as emailSending from "@distilled.cloud/cloudflare/email-sending";
-import { expect } from "alchemy-test";
+import { expect } from "@alchemy.run/test";
 import { adopt, OwnedBySomeoneElse } from "alchemy/AdoptPolicy";
 import * as Provider from "alchemy/Provider";
 import * as Test from "alchemy/Test/Alchemy";

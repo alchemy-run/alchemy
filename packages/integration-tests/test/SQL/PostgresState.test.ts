@@ -1,6 +1,6 @@
 import { makePostgresState, type PostgresStateOptions } from "@alchemy.run/sql/PostgresState";
 import * as PgClient from "@effect/sql-pg/PgClient";
-import { describe, expect, it } from "alchemy-test";
+import { describe, expect, it } from "@alchemy.run/test";
 import { StateStoreError, type StateService } from "alchemy/State/State";
 import * as Config from "effect/Config";
 import * as Deferred from "effect/Deferred";

@@ -7,7 +7,7 @@ import {
 } from "@alchemy.run/cloudflare/Workers/Source";
 import type { WorkerProps } from "@alchemy.run/cloudflare/Workers/Worker";
 import { NodeServices } from "@effect/platform-node";
-import { describe, expect, it } from "alchemy-test";
+import { describe, expect, it } from "@alchemy.run/test";
 import { Artifacts, createArtifactStore, makeScopedArtifacts } from "alchemy/Artifacts";
 import * as Effect from "effect/Effect";
 

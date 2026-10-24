@@ -3,7 +3,7 @@ import { Cluster } from "@alchemy.run/aws/ECS/Cluster";
 import { every } from "@alchemy.run/aws/ECS/Schedule";
 import { Task } from "@alchemy.run/aws/ECS/Task";
 import * as scheduler from "@distilled.cloud/aws/scheduler";
-import { expect } from "alchemy-test";
+import { expect } from "@alchemy.run/test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { getDefaultVpcNetwork } from "../DefaultVpc.ts";

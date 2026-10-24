@@ -1,5 +1,5 @@
 import { splitSqliteStatements, splitSqlStatements } from "@alchemy.run/sql/SqlFile";
-import { describe, expect, test } from "alchemy-test";
+import { describe, expect, test } from "@alchemy.run/test";
 
 describe("SqlFile", { tags: ["unit", "local"] }, () => {
   describe("splitSqlStatements", () => {

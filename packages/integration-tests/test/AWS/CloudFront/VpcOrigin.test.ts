@@ -4,7 +4,7 @@ import { Network } from "@alchemy.run/aws/EC2/Network";
 import { SecurityGroup } from "@alchemy.run/aws/EC2/SecurityGroup";
 import { LoadBalancer } from "@alchemy.run/aws/ELBv2/LoadBalancer";
 import * as cloudfront from "@distilled.cloud/aws/cloudfront";
-import { describe, expect } from "alchemy-test";
+import { describe, expect } from "@alchemy.run/test";
 import * as Provider from "alchemy/Provider";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";

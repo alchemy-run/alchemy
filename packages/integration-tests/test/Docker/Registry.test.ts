@@ -5,7 +5,7 @@ import {
   repositoryFromImageRef,
   withRegistryHost,
 } from "@alchemy.run/docker/Registry";
-import { describe, expect, it } from "alchemy-test";
+import { describe, expect, it } from "@alchemy.run/test";
 
 const digest = `sha256:${"a".repeat(64)}`;
 const other = `sha256:${"b".repeat(64)}`;

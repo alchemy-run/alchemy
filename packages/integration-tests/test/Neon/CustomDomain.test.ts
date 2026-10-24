@@ -7,7 +7,7 @@ import { Project } from "@alchemy.run/neon/Project";
 import { providers } from "@alchemy.run/neon/Providers";
 import * as dns from "@distilled.cloud/cloudflare/dns";
 import * as Api from "@distilled.cloud/neon";
-import { expect } from "alchemy-test";
+import { expect } from "@alchemy.run/test";
 import * as AlchemyOutput from "alchemy/Output";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Config from "effect/Config";

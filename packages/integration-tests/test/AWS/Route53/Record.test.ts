@@ -1,7 +1,7 @@
 import * as AWS from "@alchemy.run/aws";
 import { HostedZone, Record, Records } from "@alchemy.run/aws/Route53";
 import * as route53 from "@distilled.cloud/aws/route-53";
-import { expect } from "alchemy-test";
+import { expect } from "@alchemy.run/test";
 import * as Provider from "alchemy/Provider";
 import { isResourceState, State, type ResourceState } from "alchemy/State";
 import * as Test from "alchemy/Test/Alchemy";

@@ -2,7 +2,7 @@ import * as AWS from "@alchemy.run/aws";
 import * as iam from "@distilled.cloud/aws/iam";
 import * as lf from "@distilled.cloud/aws/lakeformation";
 import * as sts from "@distilled.cloud/aws/sts";
-import { describe, expect } from "alchemy-test";
+import { describe, expect } from "@alchemy.run/test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";

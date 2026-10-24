@@ -14,7 +14,7 @@ import {
 } from "@alchemy.run/neon/ProjectMemberRole";
 import { providers } from "@alchemy.run/neon/Providers";
 import * as SDK from "@distilled.cloud/neon";
-import { expect, test as unit } from "alchemy-test";
+import { expect, test as unit } from "@alchemy.run/test";
 import { adopt } from "alchemy/AdoptPolicy";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";

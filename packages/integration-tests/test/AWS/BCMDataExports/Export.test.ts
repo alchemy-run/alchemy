@@ -3,7 +3,7 @@ import { Export } from "@alchemy.run/aws/BCMDataExports/Export";
 import { AWSEnvironment } from "@alchemy.run/aws/Environment";
 import { Bucket } from "@alchemy.run/aws/S3/Bucket";
 import * as bcm from "@distilled.cloud/aws/bcm-data-exports";
-import { expect } from "alchemy-test";
+import { expect } from "@alchemy.run/test";
 import * as Provider from "alchemy/Provider";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";

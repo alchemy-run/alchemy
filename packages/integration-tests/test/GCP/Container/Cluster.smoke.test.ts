@@ -11,7 +11,7 @@ import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import * as compute from "@distilled.cloud/gcp/compute_v1";
 import * as container from "@distilled.cloud/gcp/container_v1";
 import * as storage from "@distilled.cloud/gcp/storage_v1";
-import { describe, expect } from "alchemy-test";
+import { describe, expect } from "@alchemy.run/test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Core from "alchemy/Test/Core";
 import * as Data from "effect/Data";
