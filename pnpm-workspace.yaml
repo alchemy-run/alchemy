@@ -179,7 +179,7 @@ catalog:
   better-auth: "^1.7.5"
   capnp-es: "^0.0.16"
   capnweb: "^0.12.0"
-  changelogithub: "^13.16.1"
+  changelogen: "^0.6.2"
   chokidar: "^5.0.0"
   cookie: "^2.0.1"
   cuelume: "^0.2.4"

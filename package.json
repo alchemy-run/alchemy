@@ -97,7 +97,7 @@
     "@types/bun": "catalog:",
     "@types/node": "catalog:",
     "alchemy": "workspace:*",
-    "changelogithub": "catalog:",
+    "changelogen": "catalog:",
     "effect": "catalog:",
     "husky": "catalog:",
     "oxfmt": "catalog:",

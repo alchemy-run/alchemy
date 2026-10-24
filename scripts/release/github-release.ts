@@ -108,7 +108,7 @@ const command = Command.make(
     );
     const repo = yield* repository;
     const { md } = yield* Effect.tryPromise({
-      try: () => generate({ from, to: tag, emoji: true, contributors: true, repo }),
+      try: () => generate({ from, to: tag, repo }),
       catch: (cause) =>
         new ChangelogFailed({ message: `Cannot generate release notes for ${tag}`, cause }),
     });

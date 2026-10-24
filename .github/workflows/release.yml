@@ -111,7 +111,7 @@ jobs:
           cache: true
           install: false
 
-      # Release scripts import changelogithub, but publishing does not need
+      # Release scripts import changelogen, but publishing does not need
       # package lifecycle scripts.
       - name: Install dependencies
         run: pnpm install --frozen-lockfile --ignore-scripts

@@ -12,7 +12,6 @@ import { join } from "node:path";
 import { $ } from "bun";
 import { generate } from "./changelog.ts";
 import { repo } from "./config.ts";
-import { renderMarkdown } from "./render.ts";
 
 const tag = process.argv[2];
 if (!tag) {
@@ -35,13 +34,6 @@ const tagExists =
 const toRev = tagExists ? tag : "HEAD";
 
 console.log(`Generating release notes for ${tag} (using ${toRev})`);
-const { commits, config } = await generate({
-  to: toRev,
-  emoji: true,
-  contributors: true,
-  repo: repo(),
-});
-
-const md = renderMarkdown(commits, config);
+const { md } = await generate({ to: toRev, repo: repo() });
 
 await writeFile(changelogPath, `## ${tag}\n\n${md}\n\n---\n\n${existing}`);
