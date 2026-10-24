@@ -53,9 +53,10 @@ export class OwnedBySomeoneElse extends Data.TaggedError("OwnedBySomeoneElse")<{
 /**
  * Engine-raised failure produced when a delete-first replacement in a
  * dependency cycle must delete its previous generation before its new
- * identity is known: precreate runs on unresolved props, so ownership cannot
- * be checked first. Refusing up front keeps the previous generation; re-run
- * with `--adopt` (or `adopt(true)`) to accept whatever the identity resolves to.
+ * identity is known: precreate runs on unresolved props, and a provider
+ * without `observe` cannot check ownership first. Refusing up front keeps the
+ * previous generation; re-run with `--adopt` (or `adopt(true)`) to accept
+ * whatever the identity resolves to.
  */
 export class UnverifiableReplacement extends Data.TaggedError("UnverifiableReplacement")<{
   /** A human-readable description of why the replacement was refused. */
