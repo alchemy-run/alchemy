@@ -1,5 +1,5 @@
 import * as hyperdrive from "@distilled.cloud/cloudflare/hyperdrive";
-import { isResolved } from "alchemy/Diff";
+import { deepEqual, isResolved } from "alchemy/Diff";
 import * as ProviderLayer from "alchemy/Local/ProviderLayer";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
@@ -331,27 +331,53 @@ export const ProviderLive = () =>
       }
       return undefined;
     }),
-    reconcile: Effect.fn(function* ({ id, news, output }) {
+    reconcile: Effect.fn(function* ({ id, news, olds, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const name = output?.name ?? (yield* createConfigName(id, news.name));
 
-      const requestBody = {
-        origin: toRequestOrigin(news.origin),
-        caching: news.caching,
-        mtls: news.mtls,
-        originConnectionLimit: news.originConnectionLimit,
-      };
+      const requestBody = toRequestBody(news);
 
-      // Observe + ensure. When we know the hyperdriveId we go straight
-      // to update; otherwise we createConfig and fall back to "find by
-      // name then update" if Cloudflare reports the name is already in
-      // use (race or a cold-start adoption).
+      // Observe the live config. `output` is only a cache of the id: a
+      // config deleted out of band falls through to create.
+      const observed = output?.hyperdriveId
+        ? yield* hyperdrive
+            .getConfig({ accountId: output.accountId, hyperdriveId: output.hyperdriveId })
+            .pipe(Effect.catchTag("HyperdriveConfigNotFound", () => Effect.succeed(undefined)))
+        : undefined;
+
+      // Every `updateConfig` opens a new origin pool and leaves the old one
+      // connected until its idle timeout, so skip it unless something would
+      // change. The API never returns the password or Access client secret:
+      // readable fields are compared against the live config (so drift is
+      // corrected), and the write-only secrets against the last applied
+      // request in `olds`. Without `olds` (adoption) the secrets are unknown,
+      // so the config is updated.
+      if (
+        observed &&
+        olds !== undefined &&
+        deepEqual(requestBody, toRequestBody(olds)) &&
+        isInSync(observed, news.name ?? name, requestBody)
+      ) {
+        return {
+          hyperdriveId: observed.id,
+          name: observed.name,
+          accountId: output?.accountId ?? accountId,
+          origin: news.origin,
+          mtls: news.mtls ?? {},
+          dev: news.dev,
+        };
+      }
+
+      // Ensure + sync. With a live config we update it in place; otherwise
+      // we createConfig and fall back to "find by name then update" if
+      // Cloudflare reports the name is already in use (race or a cold-start
+      // adoption).
       const synced = yield* (
-        output?.hyperdriveId
+        observed
           ? hyperdrive.updateConfig({
-              accountId: output.accountId,
-              hyperdriveId: output.hyperdriveId,
-              name: news.name ?? output.name,
+              accountId: output?.accountId ?? accountId,
+              hyperdriveId: observed.id,
+              name: news.name ?? observed.name,
               ...requestBody,
             })
           : hyperdrive.createConfig({ accountId, name, ...requestBody }).pipe(
@@ -468,6 +494,65 @@ export const defaultPort = (scheme: Scheme): number => (scheme === "mysql" ? 330
 
 const unwrap = (v: string | Redacted.Redacted<string>): string =>
   Redacted.isRedacted(v) ? Redacted.value(v) : v;
+
+const toRequestBody = (props: Props) => ({
+  origin: toRequestOrigin(props.origin),
+  caching: props.caching,
+  mtls: props.mtls,
+  originConnectionLimit: props.originConnectionLimit,
+});
+
+const SECRET_ORIGIN_KEYS = new Set(["password", "accessClientSecret"]);
+const DEFAULT_MAX_AGE = 60;
+const DEFAULT_STALE_WHILE_REVALIDATE = 15;
+
+/**
+ * Whether the live config already matches every readable field of the
+ * desired request. Secrets are write-only and are not compared here.
+ */
+const isInSync = (
+  observed: hyperdrive.GetConfigResponse,
+  name: string,
+  desired: ReturnType<typeof toRequestBody>,
+): boolean => {
+  if (observed.name !== name) return false;
+
+  const live: Readonly<Record<string, unknown>> = { ...observed.origin };
+  if (
+    Object.entries(desired.origin).some(
+      ([key, value]) => !SECRET_ORIGIN_KEYS.has(key) && live[key] !== value,
+    )
+  ) {
+    return false;
+  }
+
+  const caching = desired.caching ?? {};
+  if ((caching.disabled ?? false) !== observed.caching.disabled) return false;
+  if (
+    !observed.caching.disabled &&
+    ((caching.maxAge ?? DEFAULT_MAX_AGE) !== (observed.caching.maxAge ?? DEFAULT_MAX_AGE) ||
+      (caching.staleWhileRevalidate ?? DEFAULT_STALE_WHILE_REVALIDATE) !==
+        (observed.caching.staleWhileRevalidate ?? DEFAULT_STALE_WHILE_REVALIDATE))
+  ) {
+    return false;
+  }
+
+  // `updateConfig` preserves omitted mTLS settings, so only the specified
+  // ones are compared.
+  const mtls = desired.mtls ?? {};
+  if (
+    (["caCertificateId", "mtlsCertificateId", "sslmode"] as const).some(
+      (key) => mtls[key] !== undefined && mtls[key] !== (observed.mtls?.[key] ?? undefined),
+    )
+  ) {
+    return false;
+  }
+
+  return (
+    desired.originConnectionLimit === undefined ||
+    desired.originConnectionLimit === (observed.originConnectionLimit ?? undefined)
+  );
+};
 
 /**
  * Build the request body shape that the distilled `createConfig`/`updateConfig`
