@@ -203,10 +203,7 @@ import * as Schema from "effect/Schema";
 +import { NotOpen } from "./NotOpen.rejection.ts";
 
 export class MoneyDeposited extends Domain.Event("MoneyDeposited", {
-```
-
-```diff lang="typescript"
-// src/DepositMoney.command.ts
+  amount: Schema.Int,
   balanceAfter: Schema.Int,
 }) {}
 +
@@ -230,11 +227,7 @@ import { AccountId } from "./Account.id.ts";
 +import { DepositMoney, MoneyDeposited } from "./DepositMoney.command.ts";
 +import { NotOpen } from "./NotOpen.rejection.ts";
 import { AccountOpened, AlreadyOpen, OpenAccount } from "./OpenAccount.command.ts";
-
-```
-
-```diff lang="typescript"
-// src/Account.aggregate.ts
+// ...
 type State = typeof State.Type;
 
 +// An event can only follow an open account; anything else is a bug.
@@ -278,11 +271,7 @@ import { Bank } from "../src/Bank.model.ts";
 +import { DepositMoney, MoneyDeposited } from "../src/DepositMoney.command.ts";
 +import { NotOpen } from "../src/NotOpen.rejection.ts";
 import { AccountOpened, AlreadyOpen, OpenAccount } from "../src/OpenAccount.command.ts";
-
-```
-
-```diff lang="typescript"
-// test/Account.test.ts
+    // ...
     Story.rejected(new AlreadyOpen()),
   ),
 );
@@ -342,20 +331,20 @@ import { AccountOpened, AlreadyOpen, OpenAccount } from "./OpenAccount.command.t
 +import { InsufficientFunds, MoneyWithdrawn, WithdrawMoney } from "./WithdrawMoney.command.ts";
 
 const State = Schema.Union([
-```
-
-```diff lang="typescript"
-// src/Account.aggregate.ts
+  // ...
+]);
+// ...
+export class Account extends Domain.Aggregate("Account", {
+  id: AccountId,
   state: State,
   initial: { _tag: "Unopened" },
 -  commands: [OpenAccount, DepositMoney],
 +  commands: [OpenAccount, DepositMoney, WithdrawMoney],
   decide: {
     OpenAccount: (s, cmd) =>
-```
-
-```diff lang="typescript"
-// src/Account.aggregate.ts
+      s._tag !== "Unopened" ? new AlreadyOpen() : [new AccountOpened({ owner: cmd.owner })],
+    DepositMoney: (s, cmd) =>
+      s._tag !== "Open"
         ? new NotOpen()
         : [new MoneyDeposited({ amount: cmd.amount, balanceAfter: s.balance + cmd.amount })],
 +    WithdrawMoney: (s, cmd) =>
@@ -388,10 +377,7 @@ import { AccountOpened, AlreadyOpen, OpenAccount } from "../src/OpenAccount.comm
 +import { InsufficientFunds, WithdrawMoney } from "../src/WithdrawMoney.command.ts";
 
 const story = Story.make(Bank);
-```
-
-```diff lang="typescript"
-// test/Account.test.ts
+  // ...
   story(Story.when(account, new DepositMoney({ amount: 100 })), Story.rejected(new NotOpen())),
 );
 +
