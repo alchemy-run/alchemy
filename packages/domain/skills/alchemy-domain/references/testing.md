@@ -70,19 +70,20 @@ Story.resolve("a-2", FraudCheck.score, { risk: 0.1 }),
 Story.resolve("a-1", FraudCheck.score, { risk: 0.95 }),
 ```
 
-An untagged `resolve` with several calls waiting fails the story, and so does a call left unanswered at the end.
+Every call needs an `expectCall` before it's answered; each one matches a single call, earliest first. An untagged `resolve` with several calls waiting fails the story, and so does a call left unanswered at the end.
 
 `fail` answers a waiting call with the operation's declared `error:`, to test the branch where the vendor refuses. `die` answers it with a defect, as when the transport breaks. Both find the call the way `resolve` does, untagged or by tag, and only a declared error type-checks:
 
 ```ts
 Story.expectCall(Payments.refund, { settlementId: "st_1" }),
 Story.fail(Payments.refund, new RefundDeclined({ reason: "card-closed" })),
+Story.expectCall("r-2", Payments.refund, { settlementId: "st_2" }),
 Story.die("r-2", Payments.refund, new Error("socket closed")),
 ```
 
 ### Real calls
 
-A system left out of `stub` is called for real through its adapter Layer, which you provide to the story (its type requires it). The story records each call: `expectCall` checks what it was sent, and `returned` / `failed` / `died` check how it ended, found like `resolve`. A real call no step asserts fails the story, and the story waits for real calls to finish before each step.
+A system left out of `stub` is called for real through its adapter Layer, which you provide to the story (its type requires it). The story records each call: `expectCall` checks what it was sent and must come first, and `returned` / `failed` / `died` check how it ended, found like `resolve`. A real call no step asserts fails the story, and the story waits for real calls to finish before each step.
 
 ```ts
 const story = Story.make(Bank, { layer: BankHandlers, stub: [FraudCheck] });   // Payments runs for real

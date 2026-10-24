@@ -128,7 +128,7 @@ Story.resolve("a-2", FraudCheck.score, { risk: 0.1 }),
 Story.resolve("a-1", FraudCheck.score, { risk: 0.95 }),
 ```
 
-When several waiting calls match, `expectCall` names the earliest one made. A `resolve` without a name fails if more than one call is waiting, so a story never answers the wrong one.
+Every call needs an `expectCall` before it's answered, so a story always checks what was sent. Each `expectCall` matches one call, the earliest made. A `resolve` without a name fails if more than one call is waiting, so a story never answers the wrong one.
 
 ## Fail a call
 
@@ -142,6 +142,7 @@ Story.fail(Payments.refund, new RefundDeclined({ reason: "card-closed" })),
 `Story.die` fails a call with a defect instead, as when the connection to the vendor breaks:
 
 ```typescript
+Story.expectCall(Payments.refund, { settlementId: "st_1" }),
 Story.die(Payments.refund, new Error("socket closed")),
 ```
 
@@ -164,7 +165,7 @@ it.effect("refunds through the real payments adapter", () =>
 );
 ```
 
-The story records every real call. `expectCall` checks what a call was sent, and `returned` checks what it returned. `failed` checks a declared error instead, and `died` a defect. They find the call the way `resolve` does, and a story fails if no step asserts how a real call ended. The story waits for real calls to finish before each step.
+The story records every real call. `expectCall` checks what a call was sent, and `returned` checks what it returned. `failed` checks a declared error instead, and `died` a defect. Like a stubbed call, each real call needs its `expectCall` first, and a story fails if no step asserts how a real call ended. The story waits for real calls to finish before each step.
 
 ## Move the clock
 
@@ -172,7 +173,7 @@ A story's clock starts at `2026-01-01T00:00:00Z`, and `Story.clock` moves it to 
 
 ## Trust a passing story
 
-A story fails if a command is rejected and no `rejected` step checks it, if a stubbed call is left waiting at the end, or if no step asserts how a real call ended. A passing story has accounted for every outcome.
+A story fails if a command is rejected and no `rejected` step checks it, if a call is answered or asserted before an `expectCall` checks it, if a stubbed call is left waiting at the end, or if no step asserts how a real call ended. A passing story has accounted for every outcome.
 
 :::note
 Test what clients see through an Api in [Testing an Api](/domain/testing-apis).

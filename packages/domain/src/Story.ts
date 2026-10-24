@@ -196,9 +196,10 @@ const streamed = <S extends DomainStream.Any>(
 });
 
 /**
- * An external system call matching these (partial) arguments is waiting.
- * With a tag first, the tag names that call, so a later `resolve` can answer
- * exactly it; when several match, it names the earliest one made.
+ * An external system call was made with these (partial) arguments. Every
+ * call needs one: a stubbed call before it's answered, a real call before
+ * it's asserted. Each call is matched once, earliest first. With a tag first,
+ * the tag names that call, so a later step can answer or assert exactly it.
  */
 const expectCall: {
   <Args>(op: ExternalSystem.Op<Args, any>, args: Partial<Args>): Step;
@@ -215,9 +216,9 @@ const answer = (a: ReadonlyArray<any>, exit: (value: any) => Exit.Exit<unknown, 
     : { _tag: "Resolve", tag: undefined, op: a[0], exit: exit(a[1]) };
 
 /**
- * Answer an external system call. With a tag first, answers the call
- * `expectCall` tagged; without one, answers the only pending call to the
- * operation, and fails if several are pending.
+ * Answer an external system call an `expectCall` has checked. With a tag
+ * first, answers the call `expectCall` tagged; without one, answers the only
+ * pending call to the operation, and fails if several are pending.
  */
 const resolve: {
   <Success>(op: ExternalSystem.Op<any, Success>, value: Success): Step;
@@ -251,7 +252,8 @@ const outcome = (a: ReadonlyArray<any>, expected: (value: any) => any): Step =>
 /**
  * A real call to an external system that is not stubbed returned this value.
  * Finds the call the way `resolve` does: by tag, or the only unasserted call
- * to the operation. Every real call needs one of `returned`, `failed` or `died`.
+ * to the operation. Every real call needs an `expectCall`, then one of
+ * `returned`, `failed` or `died`.
  */
 const returned: {
   <Success>(op: ExternalSystem.Op<any, Success>, value: Success): Step;
@@ -388,6 +390,8 @@ interface PendingCall {
   readonly deferred: Deferred.Deferred<unknown, unknown>;
   /** The name `expectCall` gave it, if any. */
   tag: string | undefined;
+  /** Whether `expectCall` checked its arguments. */
+  expected: boolean;
 }
 
 interface ObservedCall {
@@ -508,6 +512,7 @@ const make =
                         args,
                         deferred,
                         tag: undefined,
+                        expected: false,
                       });
                       return yield* Deferred.await(deferred);
                     }),
@@ -765,11 +770,11 @@ const make =
                 break;
               }
               const pending = calls.filter((c) => c.system === s.op.system && c.op === s.op.op);
-              // Calls are kept in the order they were made: a tag names the earliest match.
-              const match = pending.find((c) => c.tag === undefined && partial(s.args, c.args));
+              // Calls are kept in the order they were made: each is matched once, earliest first.
+              const match = pending.find((c) => !c.expected && partial(s.args, c.args));
               if (!match) {
                 return yield* fail(
-                  `no pending call to ${name} matches ${show(s.args)}; pending: ${show(pending.map((c) => c.args))}`,
+                  `no unmatched pending call to ${name} matches ${show(s.args)}; pending: ${show(pending.map((c) => c.args))}`,
                 );
               }
               if (s.tag !== undefined) {
@@ -778,6 +783,7 @@ const make =
                 }
                 match.tag = s.tag;
               }
+              match.expected = true;
               break;
             }
             case "Signal": {
@@ -841,6 +847,11 @@ const make =
                 }
                 call = pending[0];
               }
+              if (!call!.expected) {
+                return yield* fail(
+                  `${name}(${show(call!.args)}) is answered before an expectCall checks its arguments`,
+                );
+              }
               calls.splice(calls.indexOf(call!), 1);
               yield* Deferred.done(call!.deferred, s.exit);
               yield* settle(step);
@@ -871,6 +882,11 @@ const make =
                   );
                 }
                 call = made[0]!;
+              }
+              if (!call.expected) {
+                return yield* fail(
+                  `${name}(${show(call.args)}) is asserted before an expectCall checks its arguments`,
+                );
               }
               const actual = exitJson(call.exit!);
               const expected =

@@ -405,6 +405,7 @@ describe("Domain Story", () => {
     real(
       Story.given(c1, new Incremented({ by: 10, total: 10 })),
       Story.when(c1, new Increment({ by: 6 })),
+      Story.expectCall(Approval.check, { total: 16 }),
       Story.returned(Approval.check, { ok: false }),
     ).pipe(
       Effect.flip,
@@ -426,6 +427,36 @@ describe("Domain Story", () => {
       Effect.map((failure) =>
         expect(String((failure as any).message)).toContain(
           "real external system calls no step asserts",
+        ),
+      ),
+    ),
+  );
+
+  it.effect("answering a call no expectCall checked fails", () =>
+    story(
+      Story.given(c1, new Incremented({ by: 10, total: 10 })),
+      Story.when(c1, new Increment({ by: 6 })),
+      Story.resolve(Approval.check, { ok: true }),
+    ).pipe(
+      Effect.flip,
+      Effect.map((failure) =>
+        expect(String((failure as any).message)).toContain(
+          'Approval.check({"total":16}) is answered before an expectCall checks its arguments',
+        ),
+      ),
+    ),
+  );
+
+  it.effect("asserting a real call no expectCall checked fails", () =>
+    real(
+      Story.given(c1, new Incremented({ by: 10, total: 10 })),
+      Story.when(c1, new Increment({ by: 6 })),
+      Story.returned(Approval.check, { ok: true }),
+    ).pipe(
+      Effect.flip,
+      Effect.map((failure) =>
+        expect(String((failure as any).message)).toContain(
+          'Approval.check({"total":16}) is asserted before an expectCall checks its arguments',
         ),
       ),
     ),
