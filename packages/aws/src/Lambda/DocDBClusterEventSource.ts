@@ -53,7 +53,7 @@ export const DocDBClusterEventSource = Layer.effect(
             yield* Mapping(
               `AWS.Lambda.EventSourceMapping(${host.LogicalId}, ${cluster.LogicalId})`,
               {
-                functionName: host.functionName,
+                functionName: Lambda.qualifiedNameOf(host),
                 eventSourceArn: cluster.dbClusterArn,
                 startingPosition: props.startingPosition ?? "LATEST",
                 batchSize: props.batchSize,

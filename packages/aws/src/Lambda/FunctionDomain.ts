@@ -23,6 +23,7 @@ import { ApiMapping } from "../ApiGatewayV2/ApiMapping.ts";
 import { DomainName } from "../ApiGatewayV2/DomainName.ts";
 import { HttpApi } from "../ApiGatewayV2/HttpApi.ts";
 import { domainCertificate, resolveDomainDns } from "../CustomDomain.ts";
+import { qualifiedArnOf, qualifiedNameOf } from "./QualifiedArn.ts";
 
 /** Object form of the `AWS.Lambda.Function` `domain` prop. */
 export interface FunctionDomainConfig {
@@ -89,6 +90,7 @@ interface FunctionDomainHost {
   readonly Mode: ProviderMode | undefined;
   readonly functionArn: Output.Output<string>;
   readonly functionName: Output.Output<string>;
+  readonly qualifiedArn: Output.Output<string>;
 }
 
 /**
@@ -138,11 +140,12 @@ export const composeFunctionDomain = (
     }
 
     yield* Effect.gen(function* () {
+      // Integrate and grant invoke on the alias when the Function has one.
       const { api, stage } = yield* HttpApi("Api", {
         handler: {
           LogicalId: id,
-          functionArn: fn.functionArn,
-          functionName: fn.functionName,
+          functionArn: qualifiedArnOf(fn),
+          functionName: qualifiedNameOf(fn),
         },
       });
 

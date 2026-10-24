@@ -1,6 +1,7 @@
 import type { MemoOptions } from "alchemy/Command/Memo";
 import type { InputProps } from "alchemy/Input";
 import { effectClass } from "alchemy/Util/effect";
+import { resolveAstroOutput } from "alchemy/Website/AstroOutput";
 import * as Effect from "effect/Effect";
 import { Namespace } from "../KV/Namespace.ts";
 import type { Providers } from "../Providers.ts";
@@ -70,9 +71,9 @@ export interface AstroProps<Bindings extends WorkerBindingProps = {}> extends Om
      * code runs at request time). `"server"` renders pages on demand in
      * the Worker; individual pages opt into prerendering with
      * `export const prerender = true`. `"static"` prerenders every page
-     * at build time and deploys assets-only. Supersedes a file-level
-     * `output`.
-     * @default "server"
+     * at build time and deploys assets-only. Overrides the `output` in
+     * your `astro.config.*`; leave it unset to use the file's value.
+     * @default the config file's `output`, else `"server"`
      */
     output?: "server" | "static";
     /** Source directory (astro's `srcDir`). */
@@ -100,7 +101,7 @@ export interface AstroProps<Bindings extends WorkerBindingProps = {}> extends Om
 // the outer props Effect; pass-through properties can remain deferred Inputs.
 type AstroInput<Bindings extends WorkerBindingProps> = InputProps<
   AstroProps<Bindings>,
-  "sessionKVBindingName" | "astro" | "env"
+  "sessionKVBindingName" | "astro" | "env" | "rootDir" | "config"
 >;
 
 /**
@@ -137,11 +138,12 @@ type AstroInput<Bindings extends WorkerBindingProps> = InputProps<
  * ```
  *
  * ### Static Sites
- * With `astro: { output: "static" }` every page is prerendered at build
- * time and the deploy is **assets-only**: no server bundle is uploaded —
+ * When your `astro.config.*` or `astro: { output: "static" }` declares
+ * `output: "static"`, every page is prerendered at build time and the
+ * deploy is **assets-only**: no server bundle is uploaded —
  * Cloudflare's asset layer answers every request (serve the built
  * `404.html` via `assets: { notFoundHandling: "404-page" }`). Session
- * provisioning is skipped for declared-static sites since no Worker
+ * provisioning is skipped for static sites since no Worker
  * code runs at request time.
  *
  * **Example:** Fully static Astro site
@@ -218,9 +220,10 @@ type AstroInput<Bindings extends WorkerBindingProps> = InputProps<
  * in the config file fails the build. The `astro` prop is a
  * deploy-time override bag merged OVER the file (values here win) for
  * settings that vary per stage or derive from other resources'
- * Outputs, which a config file cannot consume. `output` defaults to
- * `"server"` — astro's zero-config `"static"` default would prerender
- * every page inside workerd, where the Worker's bindings don't exist.
+ * Outputs, which a config file cannot consume. `output` comes from the
+ * prop, then the config file, then defaults to `"server"` — astro's
+ * zero-config `"static"` default would prerender every page inside
+ * workerd, where the Worker's bindings don't exist.
  * Use `config` to point at an alternate config file (relative to
  * `rootDir`).
  *
@@ -288,21 +291,26 @@ export const Astro: {
         id,
         Effect.gen(function* () {
           const props = (Effect.isEffect(propsEff) ? yield* propsEff : propsEff) ?? {};
+          // The prop wins, then the config file's `output`, then
+          // `"server"`: astro's own zero-config default is `"static"`,
+          // which would prerender every page at build time inside workerd
+          // — where the Worker's bindings don't exist.
+          const output = yield* resolveAstroOutput({
+            rootDir: props.rootDir,
+            config: props.config,
+            output: props.astro?.output,
+          });
           const session = props.sessionKVBindingName;
           const sessionBindingName = typeof session === "string" ? session : "SESSION";
           let env: WorkerBindingProps | undefined = props.env;
           // Auto-provision the KV namespace backing Astro's session API
           // unless the user opted out (`sessionKVBindingName: false`) or
           // already bound their own namespace under the session name.
-          // A declared `output: "static"` site is assets-only — no Worker
+          // An `output: "static"` site is assets-only — no Worker
           // script runs at request time, so a session namespace could never
           // be read; skip provisioning it. Resource creation is deduped by
           // logical id, so re-evaluating this props effect is safe.
-          if (
-            session !== false &&
-            props.astro?.output !== "static" &&
-            env?.[sessionBindingName] === undefined
-          ) {
+          if (session !== false && output !== "static" && env?.[sessionBindingName] === undefined) {
             const sessions = yield* Namespace(`${id}Session`);
             env = { ...env, [sessionBindingName]: sessions };
           }
@@ -327,12 +335,8 @@ export const Astro: {
                 sessionKVBindingName: props.sessionKVBindingName,
                 prerenderEnvironment: props.prerenderEnvironment,
                 // The `astro` bag is the deploy-time overlay merged OVER
-                // the natively-loaded `astro.config.*`. Server output is
-                // the documented default: astro's own zero-config default
-                // is `"static"`, which would prerender every page at
-                // build time inside workerd — where the Worker's bindings
-                // don't exist.
-                astro: { ...props.astro, output: props.astro?.output ?? "server" },
+                // the natively-loaded `astro.config.*`.
+                astro: { ...props.astro, output },
                 config: props.config,
               },
             },

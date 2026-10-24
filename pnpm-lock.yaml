@@ -970,9 +970,6 @@ importers:
       diff:
         specifier: 'catalog:'
         version: 9.0.0
-      pg:
-        specifier: 'catalog:'
-        version: 8.23.1
       react:
         specifier: 'catalog:'
         version: 19.3.0
@@ -1073,9 +1070,6 @@ importers:
       '@effect/sql-pg':
         specifier: 'catalog:'
         version: 4.0.5(effect@4.0.5)
-      '@types/pg':
-        specifier: 'catalog:'
-        version: 8.20.4
       alchemy:
         specifier: workspace:*
         version: link:../../packages/alchemy
@@ -1085,9 +1079,6 @@ importers:
       effect:
         specifier: 4.0.5
         version: 4.0.5
-      pg:
-        specifier: 'catalog:'
-        version: 8.23.1
 
   examples/aws-bedrock-ai:
     dependencies:
@@ -1143,9 +1134,6 @@ importers:
       '@effect/sql-pg':
         specifier: 'catalog:'
         version: 4.0.5(effect@4.0.5)
-      '@types/pg':
-        specifier: 'catalog:'
-        version: 8.20.4
       alchemy:
         specifier: workspace:*
         version: link:../../packages/alchemy
@@ -1155,9 +1143,6 @@ importers:
       effect:
         specifier: 4.0.5
         version: 4.0.5
-      pg:
-        specifier: 'catalog:'
-        version: 8.23.1
 
   examples/aws-ec2:
     dependencies:
@@ -1304,24 +1289,24 @@ importers:
       '@alchemy.run/aws':
         specifier: workspace:*
         version: link:../../packages/aws
+      '@alchemy.run/sql':
+        specifier: workspace:*
+        version: link:../../packages/sql
       '@distilled.cloud/aws':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/aws
       '@effect/platform-node':
         specifier: 'catalog:'
         version: 4.0.5(effect@4.0.5)(redis@6.2.1)
-      '@types/pg':
+      '@effect/sql-pg':
         specifier: 'catalog:'
-        version: 8.20.4
+        version: 4.0.5(effect@4.0.5)
       alchemy:
         specifier: workspace:*
         version: link:../../packages/alchemy
       effect:
         specifier: 4.0.5
         version: 4.0.5
-      pg:
-        specifier: 'catalog:'
-        version: 8.23.1
 
   examples/aws-rest-api:
     dependencies:
@@ -2698,13 +2683,7 @@ importers:
       effect:
         specifier: 4.0.5
         version: 4.0.5
-      pg:
-        specifier: 'catalog:'
-        version: 8.23.1
     devDependencies:
-      '@types/pg':
-        specifier: 'catalog:'
-        version: 8.20.4
       drizzle-kit:
         specifier: 1.0.0-rc.5-ab785fc
         version: 1.0.0-rc.5-ab785fc
@@ -2852,9 +2831,6 @@ importers:
       effect:
         specifier: 4.0.5
         version: 4.0.5
-      mysql2:
-        specifier: 3.24.5
-        version: 3.24.5(@types/node@26.6.5)
     devDependencies:
       drizzle-kit:
         specifier: 1.0.0-rc.5-ab785fc
@@ -2892,13 +2868,7 @@ importers:
       effect:
         specifier: 4.0.5
         version: 4.0.5
-      pg:
-        specifier: 'catalog:'
-        version: 8.23.1
     devDependencies:
-      '@types/pg':
-        specifier: 'catalog:'
-        version: 8.20.4
       drizzle-kit:
         specifier: 1.0.0-rc.5-ab785fc
         version: 1.0.0-rc.5-ab785fc
@@ -3039,9 +3009,6 @@ importers:
       effect:
         specifier: 4.0.5
         version: 4.0.5
-      pg:
-        specifier: 'catalog:'
-        version: 8.23.1
       react:
         specifier: 'catalog:'
         version: 19.3.0
@@ -3052,9 +3019,6 @@ importers:
       '@cloudflare/workers-types':
         specifier: 5.20261012.1
         version: 5.20261012.1
-      '@types/pg':
-        specifier: 'catalog:'
-        version: 8.20.4
       '@types/react':
         specifier: 'catalog:'
         version: 19.3.0
@@ -4108,13 +4072,7 @@ importers:
       effect:
         specifier: 4.0.5
         version: 4.0.5
-      pg:
-        specifier: 'catalog:'
-        version: 8.23.1
     devDependencies:
-      '@types/pg':
-        specifier: 'catalog:'
-        version: 8.20.4
       drizzle-kit:
         specifier: 1.0.0-rc.5-ab785fc
         version: 1.0.0-rc.5-ab785fc
@@ -4622,9 +4580,6 @@ importers:
       effect:
         specifier: 4.0.5
         version: 4.0.5
-      pg:
-        specifier: 'catalog:'
-        version: 8.23.1
       react:
         specifier: 'catalog:'
         version: 19.3.0
@@ -4635,9 +4590,6 @@ importers:
       '@tailwindcss/vite':
         specifier: 'catalog:'
         version: 4.3.3(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))
-      '@types/pg':
-        specifier: 'catalog:'
-        version: 8.20.4
       '@types/react':
         specifier: 'catalog:'
         version: 19.3.0
@@ -5654,9 +5606,6 @@ importers:
       effect:
         specifier: 4.0.5
         version: 4.0.5
-      pg:
-        specifier: 'catalog:'
-        version: 8.23.1
       react:
         specifier: 'catalog:'
         version: 19.3.0
@@ -5667,9 +5616,6 @@ importers:
       '@tailwindcss/vite':
         specifier: 'catalog:'
         version: 4.3.3(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))
-      '@types/pg':
-        specifier: 'catalog:'
-        version: 8.20.4
       '@types/react':
         specifier: 'catalog:'
         version: 19.3.0
@@ -7427,13 +7373,6 @@ importers:
       effect:
         specifier: 4.0.5
         version: 4.0.5
-      pg:
-        specifier: 'catalog:'
-        version: 8.23.1
-    devDependencies:
-      '@types/pg':
-        specifier: 'catalog:'
-        version: 8.20.4
 
   examples/railway-website-astro:
     dependencies:
@@ -7884,9 +7823,6 @@ importers:
       effect:
         specifier: 4.0.5
         version: 4.0.5
-      pg:
-        specifier: 'catalog:'
-        version: 8.23.1
       react:
         specifier: 'catalog:'
         version: 19.3.0
@@ -7897,9 +7833,6 @@ importers:
       '@tailwindcss/vite':
         specifier: 'catalog:'
         version: 4.3.3(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))
-      '@types/pg':
-        specifier: 'catalog:'
-        version: 8.20.4
       '@types/react':
         specifier: 'catalog:'
         version: 19.3.0
@@ -9864,6 +9797,9 @@ importers:
       '@effect/platform-node':
         specifier: 'catalog:'
         version: 4.0.5(effect@4.0.5)(redis@6.2.1)
+      '@effect/sql-mysql2':
+        specifier: 'catalog:'
+        version: 4.0.5(@types/node@26.6.5)(effect@4.0.5)
       '@effect/sql-pg':
         specifier: 'catalog:'
         version: 4.0.5(effect@4.0.5)
@@ -10020,9 +9956,6 @@ importers:
       isbot:
         specifier: 'catalog:'
         version: 5.2.2
-      mysql2:
-        specifier: 3.24.5
-        version: 3.24.5(@types/node@26.6.5)
       next:
         specifier: 'catalog:'
         version: 16.2.10(@babel/core@7.29.7(supports-color@10.2.2))(@playwright/test@1.64.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
