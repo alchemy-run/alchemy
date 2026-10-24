@@ -625,6 +625,18 @@ export interface Function extends Resource<
   Providers
 > {}
 
+/**
+ * Lambda refused to publish a version or create the alias for a Function
+ * with `alias`. Published versions are retained, so they count toward the
+ * account's code-storage quota until you delete the ones no alias serves.
+ */
+export class FunctionAliasPublishFailed extends Data.TaggedError("FunctionAliasPublishFailed")<{
+  functionName: string;
+  alias: string;
+  reason: "CodeStorageExceeded" | "VersionLimitExceeded" | "AliasLimitExceeded";
+  message: string;
+}> {}
+
 /** An event source was used inside a Lambda Web Function. */
 export class EventSourceRequiresFunction extends Data.TaggedError("EventSourceRequiresFunction")<{
   eventSource: string;
@@ -2193,8 +2205,29 @@ export const FunctionProvider = () =>
         functionArn: string;
         alias: string;
       }) {
+        const deleteHint = `Delete versions no alias serves (\`aws lambda list-versions-by-function --function-name ${functionName}\`, then \`aws lambda delete-function --function-name ${functionName} --qualifier <version>\`)`;
         const published = yield* Lambda.publishVersion({ FunctionName: functionName }).pipe(
           retryFunctionMutation,
+          Effect.catchTags({
+            CodeStorageExceededException: (cause) =>
+              Effect.fail(
+                new FunctionAliasPublishFailed({
+                  functionName,
+                  alias,
+                  reason: "CodeStorageExceeded",
+                  message: `Cannot publish a version of ${functionName} for alias "${alias}": the account's Lambda code storage quota is full (${cause.message ?? "CodeStorageExceededException"}). Published versions are retained. ${deleteHint} or request a code storage quota increase.`,
+                }),
+              ),
+            FunctionVersionsPerCapacityProviderLimitExceededException: (cause) =>
+              Effect.fail(
+                new FunctionAliasPublishFailed({
+                  functionName,
+                  alias,
+                  reason: "VersionLimitExceeded",
+                  message: `Cannot publish a version of ${functionName} for alias "${alias}": its capacity provider has reached its version limit (${cause.message ?? "FunctionVersionsPerCapacityProviderLimitExceededException"}). ${deleteHint}.`,
+                }),
+              ),
+          }),
         );
         const version = published.Version!;
         const desired = {
@@ -2217,6 +2250,16 @@ export const FunctionProvider = () =>
             // Created by a concurrent or interrupted reconcile.
             Effect.catchTag("ResourceConflictException", () => Lambda.updateAlias(desired)),
             retryFunctionMutation,
+            Effect.catchTag("AliasLimitExceededException", (cause) =>
+              Effect.fail(
+                new FunctionAliasPublishFailed({
+                  functionName,
+                  alias,
+                  reason: "AliasLimitExceeded",
+                  message: `Cannot create alias "${alias}" on ${functionName}: the function has reached Lambda's alias limit (${cause.message ?? "AliasLimitExceededException"}). Delete aliases it no longer uses (\`aws lambda list-aliases --function-name ${functionName}\`, then \`aws lambda delete-alias --function-name ${functionName} --name <alias>\`).`,
+                }),
+              ),
+            ),
           );
         } else if (
           observed.FunctionVersion !== version ||
