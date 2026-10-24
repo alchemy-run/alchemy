@@ -100,6 +100,8 @@ export interface OpenOptions {
   readonly adopt?: boolean;
   /** Upgrade an out-of-date state store without prompting. */
   readonly updateStateStore?: boolean;
+  /** A destroy skips the stack program and plans from state alone. */
+  readonly operation?: "deploy" | "destroy";
 }
 
 interface SessionServicesOptions {
@@ -166,6 +168,7 @@ const stackSessionKey = (target: Target, options: OpenOptions) =>
     options.dev ?? false,
     options.adopt ?? false,
     options.updateStateStore ?? false,
+    options.operation ?? "deploy",
   ]);
 
 const authRegistryKey = (options: CollectAuthProvidersOptions) =>
@@ -258,7 +261,9 @@ const openUncached = Effect.fn("openStackSessionUncached")(function* (
     shared,
   );
   const sessionContext = yield* Layer.build(services);
-  const stack = yield* Effect.provide(stackEffect, sessionContext);
+  const stack = yield* Effect.provide(stackEffect, sessionContext).pipe(
+    Effect.provideService(Stack.EvaluateProgram, options.operation !== "destroy"),
+  );
   return {
     stack,
     /**

@@ -264,6 +264,18 @@ export interface MakeStackProps<ROut = never> {
   stack?: StackSpec;
 }
 
+/**
+ * Whether {@link make} runs the stack's program. A destroy sets this to
+ * `false`: it builds the providers and state store but plans from state alone,
+ * since every row records the provider mode that deletes it. Skipping the
+ * program keeps destroy from calling cloud APIs that declarations make while
+ * they are declared, such as `AWS.EC2.Network` reading availability zones.
+ * @default true
+ */
+export const EvaluateProgram = Context.Reference<boolean>("alchemy/Stack/EvaluateProgram", {
+  defaultValue: () => true,
+});
+
 export const make =
   <ROut = never>(options: MakeStackProps<ROut>) =>
   <A, Err = never, Req extends ROut | StackServices = never>(effect: Effect.Effect<A, Err, Req>) =>
@@ -318,7 +330,16 @@ export const make =
         );
       }),
       Effect.flatMap((context) =>
-        Effect.all([effect, Stack, Effect.context<ROut | StackServices>()]).pipe(
+        Effect.all([
+          EvaluateProgram.pipe(
+            Effect.flatMap((evaluate) =>
+              // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- a destroy plan never reads the output
+              evaluate ? effect : (Effect.undefined as Effect.Effect<A>),
+            ),
+          ),
+          Stack,
+          Effect.context<ROut | StackServices>(),
+        ]).pipe(
           Effect.map(([output, stack, services]): CompiledStack<A, ROut | StackServices> => ({
             ...stack,
             output,

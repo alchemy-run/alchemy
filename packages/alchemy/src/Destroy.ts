@@ -5,7 +5,7 @@ import type { AlchemyContext } from "./AlchemyContext.ts";
 import * as Apply from "./Apply.ts";
 import * as Plan from "./Plan.ts";
 import type { CompiledStack, StackEffect } from "./Stack.ts";
-import { evalStack } from "./Stack.ts";
+import { EvaluateProgram, evalStack } from "./Stack.ts";
 import type { Stage } from "./Stage.ts";
 
 export const destroy = ({
@@ -29,8 +29,12 @@ export const destroy = ({
     ? Effect.die(
         new Plan.InvalidResourceSelection({ message: "Filtered destroy is not supported." }),
       )
-    : evalStack(stack, (stack) => Plan.destroy(stack).pipe(Effect.flatMap(Apply.apply)), {
-        stage,
-        dev,
-        scope,
-      });
+    : evalStack(
+        Effect.provideService(stack, EvaluateProgram, false),
+        (stack) => Plan.destroy(stack).pipe(Effect.flatMap(Apply.apply)),
+        {
+          stage,
+          dev,
+          scope,
+        },
+      );
