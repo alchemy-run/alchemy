@@ -1,4 +1,5 @@
 import { ConfigProvider } from "effect/ConfigProvider";
+import type * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
@@ -10,7 +11,7 @@ import { provideFreshArtifactStore } from "./Artifacts.ts";
 import { AuthProviders } from "./Auth/AuthProvider.ts";
 import { CredentialsStoreLive } from "./Auth/Credentials.ts";
 import { ProfileStoreLive } from "./Auth/Profile.ts";
-import { type CompiledStack, type StackEffect, StateScope } from "./Stack.ts";
+import { type StackEffect, StateScope } from "./Stack.ts";
 import { Stage } from "./Stage.ts";
 import { loadConfigProvider } from "./Util/ConfigProvider.ts";
 import { fileLogger } from "./Util/FileLogger.ts";
@@ -42,9 +43,9 @@ const alchemy = (overrides?: { dev?: boolean }) =>
       : AlchemyContextLive,
   );
 
-export const evalStack = <A, B, StackErr, Err, Req>(
-  effect: StackEffect<CompiledStack<A>, StackErr, Stage | AlchemyContext>,
-  fn: (stack: CompiledStack<A>) => Effect.Effect<B, Err, Req>,
+export const evalStack = <S extends { services: Context.Context<any> }, B, StackErr, Err, Req>(
+  effect: StackEffect<S, StackErr, Stage | AlchemyContext>,
+  fn: (stack: S) => Effect.Effect<B, Err, Req>,
   options: {
     stage: string;
     dev?: boolean;
