@@ -126,6 +126,15 @@ export interface WorkerExecutionContextService {
    * the Worker alive until it settles. The Effect runs with the caller's
    * full context (services, tracing), and the resulting promise is
    * registered with workerd's `ctx.waitUntil`.
+   *
+   * `Cloudflare.waitUntil` is shorthand that skips yielding the context
+   * first:
+   *
+   * ```typescript
+   * yield* Cloudflare.waitUntil(writeAuditLog(event));
+   * // same as
+   * yield* (yield* Cloudflare.WorkerExecutionContext).waitUntil(writeAuditLog(event));
+   * ```
    */
   waitUntil<A, E, R>(
     effect: Effect.Effect<A, E, R>,
