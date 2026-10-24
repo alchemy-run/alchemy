@@ -135,7 +135,7 @@ const principalTrustPolicy = {
 // unchanged. Provisions its own Auto Mode cluster (~10 min create, ~5 min
 // delete), so it skips under `--fast`.
 test.provider.skipIf(!!process.env.FAST)(
-  "reconcile keeps unchanged policies and updates scopes in place",
+  "reconcile converges policies, groups, and username without spurious updates",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
@@ -143,6 +143,7 @@ test.provider.skipIf(!!process.env.FAST)(
       const deployEntry = (
         revision: string,
         accessPolicies?: { policyArn: string; accessScope: eks.AccessScope }[],
+        identity: { kubernetesGroups?: string[]; username?: string } = {},
       ) =>
         stack.deploy(
           Effect.gen(function* () {
@@ -164,6 +165,8 @@ test.provider.skipIf(!!process.env.FAST)(
               clusterName: cluster.clusterName,
               principalArn: principal.roleArn,
               accessPolicies,
+              kubernetesGroups: identity.kubernetesGroups,
+              username: identity.username,
               tags: { revision },
             });
           }),
@@ -188,6 +191,14 @@ test.provider.skipIf(!!process.env.FAST)(
               ),
             ),
           );
+
+      const described = (entry: AccessEntry["Attributes"]) =>
+        eks
+          .describeAccessEntry({
+            clusterName: entry.clusterName,
+            principalArn: entry.principalArn,
+          })
+          .pipe(Effect.map((response) => response.accessEntry!));
 
       const clusterScope = { type: "cluster", namespaces: [] };
 
@@ -265,6 +276,34 @@ test.provider.skipIf(!!process.env.FAST)(
       expect(yield* associated(emptied)).toEqual({});
       expect(emptied.accessPolicies).toEqual([]);
 
+      // Groups and a username set in props are applied.
+      const named = yield* deployEntry("8", [], {
+        kubernetesGroups: ["group-b", "group-a"],
+        username: "deployer",
+      });
+      const namedEntry = yield* described(named);
+      expect([...(namedEntry.kubernetesGroups ?? [])].sort()).toEqual(["group-a", "group-b"]);
+      expect(namedEntry.username).toBe("deployer");
+
+      // Groups are a set: the same groups in another order are not rewritten.
+      // EKS stores groups in the order given and bumps `modifiedAt` only when
+      // an update changes the entry.
+      const reordered = yield* deployEntry("9", [], {
+        kubernetesGroups: ["group-a", "group-b"],
+        username: "deployer",
+      });
+      expect((yield* described(reordered)).modifiedAt).toEqual(namedEntry.modifiedAt);
+
+      // Removing the username resets it to the EKS-generated default.
+      const unnamed = yield* deployEntry("10", [], {
+        kubernetesGroups: ["group-a", "group-b"],
+      });
+      expect((yield* described(unnamed)).username).toContain(":assumed-role/");
+
+      // A group change still applies.
+      const regrouped = yield* deployEntry("11", [], { kubernetesGroups: ["group-a"] });
+      expect((yield* described(regrouped)).kubernetesGroups).toEqual(["group-a"]);
+
       yield* stack.destroy();
 
       const gone = yield* eks.describeCluster({ name: emptied.clusterName }).pipe(
@@ -275,7 +314,7 @@ test.provider.skipIf(!!process.env.FAST)(
     }),
   {
     tags: ["provider:aws", "provider:aws:eks", "provider:aws:ec2", "provider:aws:iam", "live"],
-    // Auto Mode cluster create (~10 min) + seven reconciles + delete (~5 min).
+    // Auto Mode cluster create (~10 min) + eleven reconciles + delete (~5 min).
     timeout: 2_700_000,
   },
 );

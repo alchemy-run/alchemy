@@ -2,9 +2,10 @@ import { Effect } from "effect";
 import * as Context from "effect/Context";
 import type * as Scope from "effect/Scope";
 import * as Apply from "./Apply.ts";
+import { evalStack } from "./EvalStack.ts";
 import * as Plan from "./Plan.ts";
 import type { StackDefinition } from "./Stack.ts";
-import { build, evalStack, Stack } from "./Stack.ts";
+import { build, Stack } from "./Stack.ts";
 
 export const destroy = <ROut>({
   stack,

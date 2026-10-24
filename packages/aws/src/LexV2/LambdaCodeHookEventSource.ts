@@ -3,6 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Lambda from "../Lambda/Function.ts";
 import { Permission as LambdaPermission } from "../Lambda/Permission.ts";
+import { qualifiedArnOf, qualifiedNameOf } from "../Lambda/QualifiedArn.ts";
 import type { BotAlias } from "./BotAlias.ts";
 import {
   CodeHookEventSource,
@@ -73,12 +74,12 @@ export const LambdaCodeHookEventSource = Layer.effect(
           host.LogicalId,
           Effect.gen(function* () {
             yield* alias.bind`AWS.LexV2.CodeHook(${host}, ${alias}, ${props.localeId})`({
-              codeHooks: { [props.localeId]: host.functionArn },
+              codeHooks: { [props.localeId]: qualifiedArnOf(host) },
             });
 
             yield* LambdaPermission(`${alias.LogicalId}-${props.localeId}-CodeHookPermission`, {
               action: "lambda:InvokeFunction",
-              functionName: host.functionName,
+              functionName: qualifiedNameOf(host),
               principal: "lexv2.amazonaws.com",
               sourceArn: alias.botAliasArn,
             });

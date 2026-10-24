@@ -110,7 +110,11 @@ const buildLocalImage = Effect.fn(function* (id: string, news: MicrovmImageProps
       news.dockerfile !== undefined && isInlineDockerfile(news.dockerfile)
         ? (news.dockerfile.content as string)
         : news.dockerfile;
-    const dockerfile = rewriteBaseImage(buildMicrovmDockerfile(userDockerfile, runtime, port));
+    const dockerfile = rewriteBaseImage(
+      buildMicrovmDockerfile(userDockerfile, runtime, port, {
+        sourceMaps: files.some((f) => f.path.endsWith(".map")),
+      }),
+    );
     const contentHash = yield* sha256(`${bundleHash}:${dockerfile}`);
     const context = yield* getStableContextDir(process.cwd(), dotAlchemy, `${id}-microvm`);
     yield* docker.materialize({

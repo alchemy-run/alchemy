@@ -135,7 +135,7 @@ export const AppConfigDeploymentEventSource = Layer.effect(
                     {
                       Effect: "Allow",
                       Action: ["lambda:InvokeFunction"],
-                      Resource: [host.functionArn as any],
+                      Resource: [Lambda.qualifiedArnOf(host) as any],
                     },
                   ],
                 },
@@ -152,7 +152,7 @@ export const AppConfigDeploymentEventSource = Layer.effect(
                     [
                       {
                         name: event,
-                        uri: host.functionArn as any,
+                        uri: Lambda.qualifiedArnOf(host) as any,
                         roleArn: role.roleArn as any,
                       },
                     ],
