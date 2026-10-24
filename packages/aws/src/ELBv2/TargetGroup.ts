@@ -12,6 +12,7 @@ import * as Stream from "effect/Stream";
 import type { AccountID } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
+import { attributeDelta, observedAttributes } from "./common.ts";
 
 export type TargetGroupName = string;
 export type TargetGroupArn =
@@ -84,6 +85,11 @@ export interface TargetGroup extends Resource<
     vpcId: string | undefined;
     /** The tags applied to the target group. */
     tags: Record<string, string>;
+    /**
+     * The live values of the keys declared in `attributes`. Undeclared
+     * attributes are left out so AWS defaults never register as drift.
+     */
+    attributes?: Record<string, string>;
   },
   never,
   Providers
@@ -150,6 +156,19 @@ export const TargetGroupProvider = () =>
           ? Effect.succeed(props.name)
           : createPhysicalName({ id, maxLength: 32, lowercase: true });
 
+      // The observed values of the declared attribute keys; skips the call
+      // when nothing is declared.
+      const readAttributes = Effect.fn(function* (
+        targetGroupArn: string,
+        declared: Record<string, string> | undefined,
+      ) {
+        if (!declared || Object.keys(declared).length === 0) return undefined;
+        const observed = yield* elbv2.describeTargetGroupAttributes({
+          TargetGroupArn: targetGroupArn,
+        });
+        return observedAttributes(declared, observed.Attributes);
+      });
+
       return {
         stables: ["targetGroupArn", "targetGroupName", "vpcId"],
         diff: Effect.fn(function* ({ id, olds, news }) {
@@ -180,7 +199,7 @@ export const TargetGroupProvider = () =>
             return { action: "replace" } as const;
           }
         }),
-        read: Effect.fn(function* ({ output }) {
+        read: Effect.fn(function* ({ olds, output }) {
           if (!output) {
             return undefined;
           }
@@ -193,12 +212,19 @@ export const TargetGroupProvider = () =>
           if (!targetGroup?.TargetGroupArn) {
             return undefined;
           }
+          const attributes = yield* readAttributes(output.targetGroupArn, olds?.attributes).pipe(
+            Effect.catchTag("TargetGroupNotFoundException", () => Effect.succeed(null)),
+          );
+          if (attributes === null) {
+            return undefined;
+          }
           return {
             ...output,
             port: targetGroup.Port,
             protocol: targetGroup.Protocol,
             targetType: targetGroup.TargetType!,
             vpcId: targetGroup.VpcId,
+            attributes,
           };
         }),
         // Target groups are account/region-scoped. Exhaustively paginate
@@ -334,16 +360,19 @@ export const TargetGroupProvider = () =>
             });
           }
 
-          // Sync attributes — observed ↔ desired. Always apply when desired
-          // attrs are non-empty.
-          if (news.attributes && Object.keys(news.attributes).length > 0) {
-            yield* elbv2.modifyTargetGroupAttributes({
+          // Sync attributes — diff the observed values of the declared keys
+          // against desired and apply only the delta.
+          let attributes = yield* readAttributes(targetGroupArn, news.attributes);
+          const attributeChanges = attributeDelta(news.attributes, attributes);
+          if (attributeChanges.length > 0) {
+            const modified = yield* elbv2.modifyTargetGroupAttributes({
               TargetGroupArn: targetGroupArn,
-              Attributes: Object.entries(news.attributes).map(([Key, Value]) => ({
-                Key,
-                Value,
-              })),
+              Attributes: attributeChanges,
             });
+            attributes = {
+              ...attributes,
+              ...observedAttributes(news.attributes, modified.Attributes),
+            };
           }
 
           // Sync tags — diff observed cloud tags against desired.
@@ -381,6 +410,7 @@ export const TargetGroupProvider = () =>
             targetType: targetGroup.TargetType!,
             vpcId: targetGroup.VpcId,
             tags: desiredTags,
+            attributes,
           };
         }),
         delete: Effect.fn(function* ({ output }) {

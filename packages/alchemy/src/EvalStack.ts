@@ -10,7 +10,7 @@ import { provideFreshArtifactStore } from "./Artifacts.ts";
 import { AuthProviders } from "./Auth/AuthProvider.ts";
 import { CredentialsStoreLive } from "./Auth/Credentials.ts";
 import { ProfileStoreLive } from "./Auth/Profile.ts";
-import type { CompiledStack, StackEffect } from "./Stack.ts";
+import { type CompiledStack, type StackEffect, StateScope } from "./Stack.ts";
 import { Stage } from "./Stage.ts";
 import { loadConfigProvider } from "./Util/ConfigProvider.ts";
 import { fileLogger } from "./Util/FileLogger.ts";
@@ -54,7 +54,8 @@ export const evalStack = <A, B, StackErr, Err, Req>(
      * scope instead of being torn down when `evalStack` resolves. Used
      * by the test harness so the sidecar survives across `beforeAll`,
      * tests, and `afterAll`. When omitted, behaves as before with a
-     * private scope closed on completion.
+     * private scope closed on completion. The state store never outlives
+     * the call.
      */
     scope?: Scope.Scope;
   },
@@ -82,5 +83,12 @@ export const evalStack = <A, B, StackErr, Err, Req>(
     ),
   );
 
-  return options.scope === undefined ? Effect.scoped(body) : Scope.provide(body, options.scope);
+  const scope = options.scope;
+  return scope === undefined
+    ? Effect.scoped(body)
+    : // The state store closes with this call and releases its lease, so
+      // the next call on the same long-lived scope can take it.
+      Effect.scopedWith((stateScope) =>
+        Scope.provide(body.pipe(Effect.provideService(StateScope, stateScope)), scope),
+      );
 };

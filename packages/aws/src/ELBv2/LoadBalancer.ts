@@ -17,6 +17,7 @@ import type { SubnetId } from "../EC2/Subnet.ts";
 import type { AccountID } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
+import { attributeDelta, observedAttributes } from "./common.ts";
 
 export type LoadBalancerName = string;
 export type LoadBalancerArn =
@@ -99,6 +100,11 @@ export interface LoadBalancer extends Resource<
     subnets: string[];
     /** The tags applied to the load balancer. */
     tags: Record<string, string>;
+    /**
+     * The live values of the keys declared in `attributes`. Undeclared
+     * attributes are left out so AWS defaults never register as drift.
+     */
+    attributes?: Record<string, string>;
   },
   never,
   Providers
@@ -155,6 +161,19 @@ export const LoadBalancerProvider = () =>
           ? Effect.succeed(props.name)
           : createPhysicalName({ id, maxLength: 32, lowercase: true });
 
+      // The observed values of the declared attribute keys; skips the call
+      // when nothing is declared.
+      const readAttributes = Effect.fn(function* (
+        loadBalancerArn: string,
+        declared: Record<string, string> | undefined,
+      ) {
+        if (!declared || Object.keys(declared).length === 0) return undefined;
+        const observed = yield* elbv2.describeLoadBalancerAttributes({
+          LoadBalancerArn: loadBalancerArn,
+        });
+        return observedAttributes(declared, observed.Attributes);
+      });
+
       return {
         stables: [
           "loadBalancerArn",
@@ -190,7 +209,7 @@ export const LoadBalancerProvider = () =>
             return { action: "replace" } as const;
           }
         }),
-        read: Effect.fn(function* ({ output }) {
+        read: Effect.fn(function* ({ olds, output }) {
           if (!output) {
             return undefined;
           }
@@ -205,6 +224,12 @@ export const LoadBalancerProvider = () =>
           if (!loadBalancer?.LoadBalancerArn) {
             return undefined;
           }
+          const attributes = yield* readAttributes(output.loadBalancerArn, olds?.attributes).pipe(
+            Effect.catchTag("LoadBalancerNotFoundException", () => Effect.succeed(null)),
+          );
+          if (attributes === null) {
+            return undefined;
+          }
           return {
             ...output,
             dnsName: loadBalancer.DNSName!,
@@ -217,6 +242,7 @@ export const LoadBalancerProvider = () =>
               loadBalancer.AvailabilityZones?.flatMap((zone) =>
                 zone.SubnetId ? [zone.SubnetId] : [],
               ) ?? [],
+            attributes,
           };
         }),
         list: () =>
@@ -383,18 +409,19 @@ export const LoadBalancerProvider = () =>
             });
           }
 
-          // Sync attributes — observed ↔ desired. We always apply when
-          // desired attrs are non-empty; AWS rejects an empty list anyway,
-          // and reading observed attributes is an extra round-trip we
-          // don't need for convergence.
-          if (news.attributes && Object.keys(news.attributes).length > 0) {
-            yield* elbv2.modifyLoadBalancerAttributes({
+          // Sync attributes — diff the observed values of the declared keys
+          // against desired and apply only the delta.
+          let attributes = yield* readAttributes(loadBalancerArn, news.attributes);
+          const attributeChanges = attributeDelta(news.attributes, attributes);
+          if (attributeChanges.length > 0) {
+            const modified = yield* elbv2.modifyLoadBalancerAttributes({
               LoadBalancerArn: loadBalancerArn,
-              Attributes: Object.entries(news.attributes).map(([Key, Value]) => ({
-                Key,
-                Value,
-              })),
+              Attributes: attributeChanges,
             });
+            attributes = {
+              ...attributes,
+              ...observedAttributes(news.attributes, modified.Attributes),
+            };
           }
 
           // Sync tags — diff observed cloud tags against desired.
@@ -438,6 +465,7 @@ export const LoadBalancerProvider = () =>
                 zone.SubnetId ? [zone.SubnetId] : [],
               ) ?? [],
             tags: desiredTags,
+            attributes,
           };
         }),
         delete: Effect.fn(function* ({ output }) {

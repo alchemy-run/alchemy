@@ -92,6 +92,11 @@ describe.skipIf(!!process.env.FAST)(
         yield* expectUrlContains(`${url}/bg-do`, "bg-do-scheduled", {
           label: "waitUntil /bg-do",
         });
+        // Regression for #2173: an HttpApi handler built in init sees the
+        // live per-event context, not init's deferred stand-in.
+        yield* expectUrlContains(`${url}/api/bg`, "bg-api-scheduled", {
+          label: "waitUntil /api/bg",
+        });
 
         // The entries only appear if waitUntil kept the invocations alive until
         // the delayed writes completed.
@@ -107,13 +112,16 @@ describe.skipIf(!!process.env.FAST)(
           Effect.repeat({
             schedule: Schedule.spaced("1 second"),
             until: (entries) =>
-              entries.includes("from-worker-wait-until") && entries.includes("from-do-wait-until"),
+              entries.includes("from-worker-wait-until") &&
+              entries.includes("from-do-wait-until") &&
+              entries.includes("from-http-api-wait-until"),
             times: 30,
           }),
         );
 
         expect(entries).toContain("from-worker-wait-until");
         expect(entries).toContain("from-do-wait-until");
+        expect(entries).toContain("from-http-api-wait-until");
       }).pipe(logLevel),
       { timeout: 180_000 },
     );

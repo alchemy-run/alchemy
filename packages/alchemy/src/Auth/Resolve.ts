@@ -105,9 +105,21 @@ export const resolveProviderConfig = <C extends { method: string } = any, Creden
  * runs on first use, outside the layer build, so the services it needs are
  * captured now and provided to it. Building the layer then never runs the
  * effect, e.g. never requires a configured profile.
+ *
+ * The `ConfigProvider` is a reference, so it is not part of `R`; capture it
+ * too. Otherwise the first use reads config through whatever provider is
+ * ambient there — e.g. a Function's init, which binds every key it loads into
+ * the Function's env and would ship the deployer's credentials (#1842).
  */
 export const deferUntilFirstUse = <A, E, R>(resolve: Effect.Effect<A, E, R>) =>
-  Effect.map(Effect.context<R>(), (context) => resolve.pipe(Effect.provideContext(context)));
+  Effect.map(
+    Effect.all([Effect.context<R>(), ConfigProvider.ConfigProvider]),
+    ([context, configProvider]) =>
+      resolve.pipe(
+        Effect.provideService(ConfigProvider.ConfigProvider, configProvider),
+        Effect.provideContext(context),
+      ),
+  );
 
 /**
  * A provider's credentials could not be resolved when a cloud operation first
