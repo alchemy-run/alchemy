@@ -8,13 +8,13 @@ import { DBCluster, DBInstance, MigrationRunner, type DBInstanceProps } from "@a
 import { Aurora, type AuroraProps } from "@alchemy.run/aws/RDS/Aurora";
 import { DBParameterGroup } from "@alchemy.run/aws/RDS/DBParameterGroup";
 import { DBSubnetGroup } from "@alchemy.run/aws/RDS/DBSubnetGroup";
+import { describe, expect } from "@alchemy.run/test";
 import * as ec2 from "@distilled.cloud/aws/ec2";
 import * as Lambda from "@distilled.cloud/aws/lambda";
 import * as rds from "@distilled.cloud/aws/rds";
 import * as rdsdata from "@distilled.cloud/aws/rds-data";
 import * as secretsmanager from "@distilled.cloud/aws/secrets-manager";
 import * as PgClient from "@effect/sql-pg/PgClient";
-import { describe, expect } from "alchemy-test";
 import * as Drift from "alchemy/Drift";
 import * as Output from "alchemy/Output";
 import * as Provider from "alchemy/Provider";

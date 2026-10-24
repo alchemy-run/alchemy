@@ -1,6 +1,6 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
+import { assert, describe, expect } from "@alchemy.run/test";
 import * as Containers from "@distilled.cloud/cloudflare/containers";
-import { assert, describe, expect } from "alchemy-test";
 import { destroy as destroyStack } from "alchemy/Destroy";
 import * as Plan from "alchemy/Plan";
 import { Stage } from "alchemy/Stage";

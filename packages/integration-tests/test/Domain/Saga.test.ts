@@ -1,7 +1,7 @@
 import * as Domain from "@alchemy.run/domain";
 import { InMemory } from "@alchemy.run/domain/InMemory";
 import { Story } from "@alchemy.run/domain/Story";
-import { describe, expect, it } from "alchemy-test";
+import { describe, expect, it } from "@alchemy.run/test";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
@@ -232,16 +232,23 @@ class Retries extends Domain.Model("Retries", {
 }) {}
 
 // A screening saga that asks an external system, and a saga whose step dies.
+class SanctionsDown extends Domain.Rejection("SanctionsDown") {}
+
 class Sanctions extends Domain.ExternalSystem("Sanctions", {
-  check: { args: { wallet: Schema.String }, success: { clear: Schema.Boolean } },
+  check: {
+    args: { wallet: Schema.String },
+    success: { clear: Schema.Boolean },
+    error: SanctionsDown,
+  },
 }) {}
 
 class Flagged extends Domain.Rejection("Flagged") {}
+class ScreeningUnavailable extends Domain.Rejection("ScreeningUnavailable") {}
 
 class Screen extends Domain.Saga("Screen", {
   key: Schema.String,
   input: { wallet: Schema.String },
-  rejects: [Flagged],
+  rejects: [Flagged, ScreeningUnavailable],
 }) {}
 
 const ScreenLive = Screen.toLayer(
@@ -251,8 +258,9 @@ const ScreenLive = Screen.toLayer(
       const { clear } = yield* Activity.make({
         name: "check",
         success: Schema.Struct({ clear: Schema.Boolean }),
+        error: SanctionsDown,
         execute: sanctions.check({ wallet }),
-      });
+      }).pipe(Effect.catchTag("SanctionsDown", () => Effect.fail(new ScreeningUnavailable())));
       if (!clear) return yield* new Flagged();
       yield* Activity.make({ name: "approve", execute: Effect.void });
     });
@@ -291,7 +299,7 @@ class Checks extends Domain.Model("Checks", {
 
 const checks = Story.make(Checks, {
   layer: Layer.mergeAll(StartChecksLive, ScreenLive, ExplodeLive),
-  externalSystems: [Sanctions],
+  stub: [Sanctions],
 });
 
 describe("Domain.Saga", () => {
@@ -341,6 +349,24 @@ describe("Domain.Saga", () => {
       Story.expectCall(Sanctions.check, { wallet: "alice" }),
       Story.resolve(Sanctions.check, { clear: false }),
       Story.saga(Screen, "t-1", { _tag: "Rejected", rejection: new Flagged() }),
+    ),
+  );
+
+  it.effect("a step's external system call fails with the operation's declared error", () =>
+    checks(
+      Story.when(transfer, request(40)),
+      Story.expectCall(Sanctions.check, { wallet: "alice" }),
+      Story.fail(Sanctions.check, new SanctionsDown()),
+      Story.saga(Screen, "t-1", { _tag: "Rejected", rejection: new ScreeningUnavailable() }),
+    ),
+  );
+
+  it.effect("a step's external system call that dies kills the saga", () =>
+    checks(
+      Story.when(transfer, request(40)),
+      Story.expectCall("t-1", Sanctions.check, { wallet: "alice" }),
+      Story.die("t-1", Sanctions.check, new Error("socket closed")),
+      Story.saga(Screen, "t-1", { _tag: "Died" }),
     ),
   );
 

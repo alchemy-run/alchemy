@@ -1,5 +1,5 @@
 import * as Prisma from "@alchemy.run/prisma";
-import { expect } from "alchemy-test";
+import { expect } from "@alchemy.run/test";
 import * as Provider from "alchemy/Provider";
 import * as Stack from "alchemy/Stack";
 import { State } from "alchemy/State";

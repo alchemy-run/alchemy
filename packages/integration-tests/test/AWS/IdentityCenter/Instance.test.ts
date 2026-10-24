@@ -1,6 +1,6 @@
 import * as AWS from "@alchemy.run/aws";
 import { Instance } from "@alchemy.run/aws/IdentityCenter";
-import { expect } from "alchemy-test";
+import { expect } from "@alchemy.run/test";
 import * as Provider from "alchemy/Provider";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
@@ -29,6 +29,35 @@ test.provider(
         expect(instance.identityStoreId.length).toBeGreaterThan(0);
         expect(instance.mode).toBe("existing");
       }
+    }),
+  { tags: ["provider:aws", "provider:aws:identitycenter", "live"] },
+);
+
+// `instanceArn` and `name` only select which instance to adopt, so adding,
+// removing, or pinning one that matches the adopted instance plans an update. A
+// replace in `account` mode would delete the instance it just re-adopted.
+// Needs an enabled instance, so it is gated like the rest of this service.
+test.provider.skipIf(!process.env.ALCHEMY_TEST_IDENTITY_CENTER)(
+  "pinning or dropping the lookup arn of the adopted instance updates in place",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const instance = yield* stack.deploy(Instance("IdentityCenter", { mode: "existing" }));
+
+      const pinned = yield* stack.plan(
+        Instance("IdentityCenter", { instanceArn: instance.instanceArn }),
+      );
+      expect(pinned.resources.IdentityCenter?.action).toBe("update");
+
+      yield* stack.deploy(
+        Instance("IdentityCenter", { instanceArn: instance.instanceArn, mode: "existing" }),
+      );
+
+      const dropped = yield* stack.plan(Instance("IdentityCenter", {}));
+      expect(dropped.resources.IdentityCenter?.action).toBe("update");
+
+      yield* stack.destroy();
     }),
   { tags: ["provider:aws", "provider:aws:identitycenter", "live"] },
 );

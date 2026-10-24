@@ -1,6 +1,6 @@
 import * as Fly from "@alchemy.run/fly";
+import { expect } from "@alchemy.run/test";
 import * as machines from "@distilled.cloud/fly-io/machines";
-import { expect } from "alchemy-test";
 import * as Provider from "alchemy/Provider";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";

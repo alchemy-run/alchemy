@@ -1,6 +1,6 @@
 import * as Domain from "@alchemy.run/domain";
 import { Story } from "@alchemy.run/domain/Story";
-import { describe, expect, it } from "alchemy-test";
+import { describe, expect, it } from "@alchemy.run/test";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
@@ -159,7 +159,7 @@ class Reviewed extends Domain.Model("TelemetryReviews", {
 
 const reviewStory = Story.make(Reviewed, {
   layer: Layer.mergeAll(ReviewDebitsLive, ReviewLive, MovementsLive),
-  externalSystems: [Scorer],
+  stub: [Scorer],
 });
 
 const story = Story.make(Bank, { layer: Layer.mergeAll(AuditDebitsLive) });

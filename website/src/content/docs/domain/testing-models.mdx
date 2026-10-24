@@ -7,7 +7,7 @@ Your model is tested with [stories](/domain/story): given some history, when a c
 
 ## Create a story runner
 
-Give `Story.make` your model, its policies' Layer, and the external systems its policies call.
+Give `Story.make` your model, its policies' Layer, and the external systems to fake, in `stub`. The story answers their calls itself. Any other external system the model calls runs for real, from a Layer you provide.
 
 ```typescript
 // packages/domain/test/withdrawals.test.ts
@@ -31,7 +31,7 @@ import { Payments } from "../src/Settlement/Payments.external.ts";
 
 const story = Story.make(Bank, {
   layer: BankHandlers.pipe(Layer.provide(MemoryLedgerStore)),
-  externalSystems: [FraudCheck, Payments],
+  stub: [FraudCheck, Payments],
 });
 const account = Account.ref("a-1");
 const opened = new AccountOpened({ customerId: CustomerId.make("c-1"), owner: "sam" });
@@ -96,7 +96,7 @@ import { Payments } from "../src/Settlement/Payments.external.ts";
 
 const story = Story.make(Bank, {
   layer: BankHandlers.pipe(Layer.provide(MemoryLedgerStore)),
-  externalSystems: [FraudCheck, Payments],
+  stub: [FraudCheck, Payments],
 });
 const account = Account.ref("a-1");
 
@@ -128,15 +128,52 @@ Story.resolve("a-2", FraudCheck.score, { risk: 0.1 }),
 Story.resolve("a-1", FraudCheck.score, { risk: 0.95 }),
 ```
 
-When several waiting calls match, `expectCall` names the earliest one made. A `resolve` without a name fails if more than one call is waiting, so a story never answers the wrong one.
+Every call needs an `expectCall` before it's answered, so a story always checks what was sent. Each `expectCall` matches one call, the earliest made. A `resolve` without a name fails if more than one call is waiting, so a story never answers the wrong one.
+
+## Fail a call
+
+An operation can declare the error its vendor answers with when it refuses ([Declare its errors](/domain/external-system#declare-its-errors)). `Story.fail` answers a waiting call with that error, so a story can test the branch where the vendor says no. It finds the call the way `resolve` does, and only the operation's declared error type-checks:
+
+```typescript
+Story.expectCall(Payments.refund, { settlementId: "st_1" }),
+Story.fail(Payments.refund, new RefundDeclined({ reason: "card-closed" })),
+```
+
+`Story.die` fails a call with a defect instead, as when the connection to the vendor breaks:
+
+```typescript
+Story.expectCall(Payments.refund, { settlementId: "st_1" }),
+Story.die(Payments.refund, new Error("socket closed")),
+```
+
+## Assert real calls
+
+An external system you don't stub is called for real, through its adapter. Provide the adapter's Layer to the story; the story's type requires it.
+
+```typescript
+const story = Story.make(Bank, {
+  layer: BankHandlers.pipe(Layer.provide(MemoryLedgerStore)),
+  stub: [FraudCheck],
+});
+
+it.effect("refunds through the real payments adapter", () =>
+  story(
+    Story.when(account, new RecordSettlement({ settlementId: "st_1", amount: 500 })),
+    Story.expectCall(Payments.refund, { settlementId: "st_1", amount: 500 }),
+    Story.returned(Payments.refund, { refundId: "re_st_1" }),
+  ).pipe(Effect.provide(StripePayments)),
+);
+```
+
+The story records every real call. `expectCall` checks what a call was sent, and `returned` checks what it returned. `failed` checks a declared error instead, and `died` a defect. Like a stubbed call, each real call needs its `expectCall` first, and a story fails if no step asserts how a real call ended. The story waits for real calls to finish before each step.
 
 ## Move the clock
 
-A story's clock starts at `2026-01-01T00:00:00Z`, and `Story.clock` moves it. Commands are stamped with it, so time-based rules like a daily limit are easy to test, and scheduled commands fire when it passes their time. See [Deadlines](/domain/deadlines).
+A story's clock starts at `2026-01-01T00:00:00Z`, and `Story.clock` moves it to an ISO string, epoch milliseconds or a `DateTime`. Commands are stamped with it, so time-based rules like a daily limit are easy to test, and scheduled commands fire when it passes their time. See [Deadlines](/domain/deadlines).
 
 ## Trust a passing story
 
-A story fails if a command is rejected and no `rejected` step checks it, or if an external system call is left waiting at the end. A passing story has accounted for every outcome.
+A story fails if a command is rejected and no `rejected` step checks it, if a call is answered or asserted before an `expectCall` checks it, if a stubbed call is left waiting at the end, or if no step asserts how a real call ended. A passing story has accounted for every outcome.
 
 :::note
 Test what clients see through an Api in [Testing an Api](/domain/testing-apis).

@@ -2,6 +2,7 @@ export * from "./Address.ts";
 export * from "./AllowPolicy.ts";
 export * from "./BlockSender.ts";
 export * from "./CatchAll.ts";
+export * from "./DmarcReports.ts";
 export * from "./Domain.ts";
 export * from "./ImpersonationRegistryEntry.ts";
 export * from "./Routing.ts";

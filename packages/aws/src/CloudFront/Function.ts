@@ -57,10 +57,6 @@ export interface Function extends Resource<
      */
     stage: cloudfront.FunctionStage;
     /**
-     * Current status.
-     */
-    status: string;
-    /**
      * Last modified time.
      */
     lastModifiedTime: Date | undefined;
@@ -353,7 +349,6 @@ const toAttrs = (
   runtime: summary.FunctionConfig.Runtime,
   comment: summary.FunctionConfig.Comment ?? "",
   stage: summary.FunctionMetadata.Stage ?? "DEVELOPMENT",
-  status: summary.Status ?? "UNKNOWN",
   lastModifiedTime: summary.FunctionMetadata.LastModifiedTime,
   etag,
   keyValueStoreArns:

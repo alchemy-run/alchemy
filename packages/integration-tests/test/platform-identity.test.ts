@@ -1,6 +1,6 @@
 import { normalizeTransferredFrom } from "@alchemy.run/cloudflare/Workers/DurableObject";
 import { Worker } from "@alchemy.run/cloudflare/Workers/Worker";
-import { expect, test } from "alchemy-test";
+import { expect, test } from "@alchemy.run/test";
 import { Platform, type PlatformIdentity, type PlatformProps } from "alchemy/Platform";
 import type { Resource } from "alchemy/Resource";
 import type { BaseRuntimeContext } from "alchemy/RuntimeContext";
