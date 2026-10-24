@@ -14,9 +14,7 @@ import { WebhookHostLive } from "./WebhookHost.ts";
 import {
   ExportedHandlerMethods,
   WorkerEnvironment,
-  WorkerExecutionContext,
   WorkerTypeId,
-  deferredExecutionContext,
   type WorkerEvent,
 } from "./WorkerRuntime.ts";
 
@@ -78,13 +76,7 @@ export const makeWorkerRuntimeContext = (id: string): WorkerRuntimeContext => {
       }),
     // Every Worker can receive webhooks, so event sources need no host wiring.
     hostServices: WebhookHostLive,
-    planServices: Layer.mergeAll(
-      Layer.succeed(WorkerEnvironment, {}),
-      // Lets the init closure `yield*` WorkerExecutionContext during plan;
-      // its RuntimeContext-colored methods can't run until a real handler
-      // provides the live per-event context.
-      Layer.succeed(WorkerExecutionContext, deferredExecutionContext),
-    ),
+    planServices: Layer.mergeAll(Layer.succeed(WorkerEnvironment, {})),
     exports: Effect.gen(function* () {
       const handlers = yield* Effect.all(listeners, {
         concurrency: "unbounded",

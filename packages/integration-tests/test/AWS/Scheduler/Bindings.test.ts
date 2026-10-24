@@ -414,20 +414,22 @@ describe(
   "Scheduler Bindings with the S3 state store",
   { tags: ["provider:aws", "provider:aws:lambda", "provider:aws:scheduler", "live"] },
   () => {
-    // Core.deploy/destroy release the state lease when they finish; the
-    // leading destroy runs in its own hook so the deploy below is the first
-    // to resolve the environment.
-    withStateHarness.beforeAll(Core.destroy(withState, EnvStack), { timeout: 120_000 });
-    withStateHarness.afterAll.skipIf(!!process.env.NO_DESTROY)(Core.destroy(withState, EnvStack), {
+    const deployed = withStateHarness.beforeAll(withStateHarness.deploy(EnvStack), {
+      timeout: 120_000,
+    });
+    withStateHarness.afterAll.skipIf(!!process.env.NO_DESTROY)(withStateHarness.destroy(EnvStack), {
       timeout: 120_000,
     });
 
     withStateHarness.test(
       "resolving the AWS environment in a function's init leaves its env clean",
       Effect.gen(function* () {
-        const { functionName } = yield* Core.deploy(withState, EnvStack);
-
-        const config = yield* lambda.getFunctionConfiguration({ FunctionName: functionName });
+        const { functionName } = yield* deployed;
+        const config = yield* Core.withProviders(
+          lambda.getFunctionConfiguration({ FunctionName: functionName }),
+          withState,
+          "SchedulerBindingsEnv",
+        );
         const keys = Object.keys(config.Environment?.Variables ?? {});
         expect(keys.filter((key) => /^(AWS_|ALCHEMY_PROFILE$|CI$)/.test(key))).toEqual([]);
       }),

@@ -31,5 +31,5 @@ import type { WorkerExecutionContextAccess } from "../Workers/WorkerAccess.ts";
 export const Context: Effect.Effect<
   WorkerExecutionContextAccess | undefined,
   never,
-  RuntimeContext | WorkerExecutionContext
+  RuntimeContext
 > = WorkerExecutionContext.pipe(Effect.flatMap((ctx) => ctx.access));
