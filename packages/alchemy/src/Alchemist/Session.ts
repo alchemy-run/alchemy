@@ -95,7 +95,7 @@ export interface OpenOptions {
   readonly adopt?: boolean;
   /** Upgrade an out-of-date state store without prompting. */
   readonly updateStateStore?: boolean;
-  /** A destroy builds the stack's providers and state without running its program. */
+  /** A destroy builds the stack's services but never runs its program. */
   readonly operation?: "deploy" | "destroy";
 }
 
@@ -256,12 +256,22 @@ const openUncached = Effect.fn("openStackSessionUncached")(function* (
     shared,
   );
   const sessionContext = yield* Layer.build(services);
-  const compile: Effect.Effect<
-    Stack.CompiledStack,
-    Effect.Error<StackModule>,
-    Effect.Services<StackModule>
-  > = options.operation === "destroy" ? Stack.withoutProgram(stackEffect) : stackEffect;
-  const stack = yield* Effect.provide(compile, sessionContext);
+  if (options.operation === "destroy") {
+    const services = yield* Effect.provide(
+      Stack.build({
+        name: stackEffect.stackName,
+        providers: stackEffect.providers,
+        state: stackEffect.state,
+        secrets: stackEffect.secrets,
+      }),
+      sessionContext,
+    );
+    return {
+      stack: { ...Context.get(services, Stack.Stack), output: undefined },
+      context: Context.merge(sessionContext, services),
+    };
+  }
+  const stack = yield* Effect.provide(stackEffect, sessionContext);
   return {
     stack,
     /**

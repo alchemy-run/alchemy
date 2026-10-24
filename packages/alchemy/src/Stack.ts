@@ -274,65 +274,75 @@ export interface MakeStackProps<ROut = never> {
  */
 class StateScope extends Context.Service<StateScope, Scope.Scope>()("alchemy/Stack/StateScope") {}
 
-export const make =
-  <ROut = never>(options: MakeStackProps<ROut>) =>
-  <A, Err = never, Req extends ROut | StackServices = never>(effect: Effect.Effect<A, Err, Req>) =>
-    Effect.all([Effect.scope, Effect.serviceOption(StateScope)]).pipe(
-      Effect.flatMap(([scope, stateScope]) => {
-        if (options.state == null) {
-          return Effect.die(
-            new Error(
-              `Stack "${options.name}" is missing a state store. ` +
-                `Add a \`state\` layer to the stack options, e.g.:\n` +
-                `  Alchemy.Stack("${options.name}", {\n` +
-                `    providers: Cloudflare.providers(),\n` +
-                `    state: Cloudflare.state(), // <-- required\n` +
-                `  }, ...)\n` +
-                `See https://alchemy.run/state-store for available state stores.`,
-            ),
-          );
-        }
-        if (options.providers == null) {
-          return Effect.die(
-            new Error(
-              `Stack "${options.name}" is missing a providers layer. ` +
-                `Add a \`providers\` layer to the stack options, e.g.:\n` +
-                `  Alchemy.Stack("${options.name}", {\n` +
-                `    providers: Cloudflare.providers(), // <-- required\n` +
-                `    state: Cloudflare.state(),\n` +
-                `  }, ...)`,
-            ),
-          );
-        }
-        const state = options.state;
-        return options.providers.pipe(
-          Layer.provideMerge(
-            Option.match(stateScope, {
-              onNone: () => state,
-              onSome: (stateScope) => Layer.effectContext(Layer.buildWithScope(state, stateScope)),
-            }),
+/**
+ * Build a stack's providers, state store, secrets config and `Stack` spec,
+ * without running its program. Destroy needs nothing more: it plans from state
+ * alone, and every row records the provider mode that deletes it.
+ */
+export const build = <ROut = never>(options: MakeStackProps<ROut>) =>
+  Effect.all([Effect.scope, Effect.serviceOption(StateScope)]).pipe(
+    Effect.flatMap(([scope, stateScope]) => {
+      if (options.state == null) {
+        return Effect.die(
+          new Error(
+            `Stack "${options.name}" is missing a state store. ` +
+              `Add a \`state\` layer to the stack options, e.g.:\n` +
+              `  Alchemy.Stack("${options.name}", {\n` +
+              `    providers: Cloudflare.providers(),\n` +
+              `    state: Cloudflare.state(), // <-- required\n` +
+              `  }, ...)\n` +
+              `See https://alchemy.run/state-store for available state stores.`,
           ),
-          Layer.provideMerge(stackConfigLayer(options.secrets)),
-          Layer.provideMerge(
-            Layer.effect(
-              Stack,
-              Stage.pipe(
-                Effect.map(
-                  (stage) =>
-                    options.stack ?? {
-                      name: options.name,
-                      stage,
-                      resources: {},
-                      bindings: {},
-                      actions: {},
-                    },
-                ),
+        );
+      }
+      if (options.providers == null) {
+        return Effect.die(
+          new Error(
+            `Stack "${options.name}" is missing a providers layer. ` +
+              `Add a \`providers\` layer to the stack options, e.g.:\n` +
+              `  Alchemy.Stack("${options.name}", {\n` +
+              `    providers: Cloudflare.providers(), // <-- required\n` +
+              `    state: Cloudflare.state(),\n` +
+              `  }, ...)`,
+          ),
+        );
+      }
+      const state = options.state;
+      return options.providers.pipe(
+        Layer.provideMerge(
+          Option.match(stateScope, {
+            onNone: () => state,
+            onSome: (stateScope) => Layer.effectContext(Layer.buildWithScope(state, stateScope)),
+          }),
+        ),
+        Layer.provideMerge(stackConfigLayer(options.secrets)),
+        Layer.provideMerge(
+          Layer.effect(
+            Stack,
+            Stage.pipe(
+              Effect.map(
+                (stage) =>
+                  options.stack ?? {
+                    name: options.name,
+                    stage,
+                    resources: {},
+                    bindings: {},
+                    actions: {},
+                  },
               ),
             ),
           ),
-          Layer.buildWithScope(scope),
-        );
-      }),
+        ),
+        Layer.buildWithScope(scope),
+      );
+    }),
+  );
+
+/** Build a stack's services with {@link build}, then run its program under them. */
+export const make =
+  <ROut = never>(options: MakeStackProps<ROut>) =>
+  <A, Err = never, Req extends ROut | StackServices = never>(effect: Effect.Effect<A, Err, Req>) =>
+    build(options).pipe(
       Effect.flatMap((context) =>
         Effect.all([effect, Stack, Effect.context<ROut | StackServices>()]).pipe(
           Effect.map(([output, stack, services]): CompiledStack<A, ROut | StackServices> => ({
@@ -345,26 +355,13 @@ export const make =
       ),
     );
 
-/** The configuration a stack definition carries: everything but its program. */
+/** What `Alchemy.Stack(...)` attaches to the stack it returns: everything but its program. */
 export interface StackDefinition<ROut = never> {
   readonly stackName: string;
   readonly providers?: Layer.Layer<ROut, never, StackServices>;
   readonly state?: Layer.Layer<State, never, StackServices>;
   readonly secrets?: StackSecrets;
 }
-
-/**
- * Build a stack's providers and state store without running its program.
- * Destroy needs nothing else: it plans from state alone, and every row records
- * the provider mode that deletes it.
- */
-export const withoutProgram = <ROut>(definition: StackDefinition<ROut>) =>
-  make({
-    name: definition.stackName,
-    providers: definition.providers,
-    state: definition.state,
-    secrets: definition.secrets,
-  })(Effect.void);
 
 export const CurrentStack = Effect.serviceOption(Stack)
 
@@ -392,9 +389,9 @@ const alchemy = (overrides?: { dev?: boolean }) =>
       : AlchemyContextLive,
   );
 
-export const evalStack = <A, B, StackErr, Err, Req>(
-  effect: StackEffect<CompiledStack<A>, StackErr, Stage | AlchemyContext>,
-  fn: (stack: CompiledStack<A>) => Effect.Effect<B, Err, Req>,
+export const evalStack = <S extends { services: Context.Context<any> }, B, StackErr, Err, Req>(
+  effect: StackEffect<S, StackErr, Stage | AlchemyContext>,
+  fn: (stack: S) => Effect.Effect<B, Err, Req>,
   options: {
     stage: string;
     dev?: boolean;

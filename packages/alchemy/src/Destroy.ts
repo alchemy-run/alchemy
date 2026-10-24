@@ -1,9 +1,10 @@
 import { Effect } from "effect";
+import * as Context from "effect/Context";
 import type * as Scope from "effect/Scope";
 import * as Apply from "./Apply.ts";
 import * as Plan from "./Plan.ts";
 import type { StackDefinition } from "./Stack.ts";
-import { evalStack, withoutProgram } from "./Stack.ts";
+import { build, evalStack, Stack } from "./Stack.ts";
 
 export const destroy = <ROut>({
   stack,
@@ -28,11 +29,13 @@ export const destroy = <ROut>({
         new Plan.InvalidResourceSelection({ message: "Filtered destroy is not supported." }),
       )
     : evalStack(
-        withoutProgram(stack),
-        (stack) => Plan.destroy(stack).pipe(Effect.flatMap(Apply.apply)),
-        {
-          stage,
-          dev,
-          scope,
-        },
+        build({
+          name: stack.stackName,
+          providers: stack.providers,
+          state: stack.state,
+          secrets: stack.secrets,
+        }).pipe(Effect.map((services) => ({ services }))),
+        ({ services }) =>
+          Plan.destroy(Context.get(services, Stack)).pipe(Effect.flatMap(Apply.apply)),
+        { stage, dev, scope },
       );
