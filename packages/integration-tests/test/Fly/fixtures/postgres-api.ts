@@ -34,7 +34,6 @@ export default class PostgresApi extends Fly.Service<PostgresApi>()(
     region: "iad",
     port: POSTGRES_PORT,
     guest: { cpuKind: "shared", cpus: 1, memoryMb: 512 },
-    build: { install: ["pg"] },
   },
   Effect.gen(function* () {
     const conn = yield* Fly.ConnectPostgres(Db);

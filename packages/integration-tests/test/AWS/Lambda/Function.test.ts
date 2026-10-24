@@ -688,6 +688,70 @@ test.provider(
   { tags: ["provider:aws", "provider:aws:lambda", "live"], timeout: 240_000 },
 );
 
+// #1536: drift recreates a deleted function without its bindings, then
+// attaches them — the environment and IAM statements come back.
+test.provider(
+  "drift repair recreates a deleted function and restores its bindings",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const fn = yield* stack.deploy(
+        Effect.gen(function* () {
+          const fn = yield* AWS.Lambda.Function("DriftBoundFn", {
+            main: timeoutHandlerPath,
+            handler: "handler",
+            isExternal: true,
+            functionUrl: false,
+          });
+          yield* fn.bind("DriftBinding", {
+            env: { DRIFT_MARKER: "bound" },
+            policyStatements: [
+              {
+                Sid: "DriftBinding",
+                Effect: "Allow",
+                Action: ["sqs:GetQueueUrl"],
+                Resource: ["*"],
+              },
+            ],
+          });
+          return fn;
+        }),
+      );
+
+      yield* Lambda.deleteFunction({ FunctionName: fn.functionName });
+      yield* assertFunctionDeleted(fn.functionName);
+
+      const target = { name: stack.name, stage: stack.stage };
+      const detected = yield* Drift.detect(target).pipe(Effect.provide(stack.state));
+      expect(detected.resources.DriftBoundFn?.action).toBe("missing");
+
+      const repaired = yield* Drift.repair(target).pipe(Effect.provide(stack.state));
+      expect(repaired.resources.DriftBoundFn?.action).toBe("recreated");
+
+      const config = yield* Lambda.getFunctionConfiguration({ FunctionName: fn.functionName });
+      const marker = config.Environment?.Variables?.DRIFT_MARKER;
+      expect(Redacted.isRedacted(marker) ? Redacted.value(marker) : marker).toBe("bound");
+      const policies = yield* iam.listRolePolicies({ RoleName: fn.roleName });
+      const documents = yield* Effect.all(
+        policies.PolicyNames.map((PolicyName) =>
+          iam.getRolePolicy({ RoleName: fn.roleName, PolicyName }),
+        ),
+      );
+      expect(
+        documents.some((doc) => decodeURIComponent(doc.PolicyDocument).includes("DriftBinding")),
+      ).toBe(true);
+      expect(
+        (yield* Drift.detect(target).pipe(Effect.provide(stack.state))).resources.DriftBoundFn
+          ?.action,
+      ).toBe("unchanged");
+
+      yield* stack.destroy();
+      yield* assertFunctionDeleted(fn.functionName);
+    }).pipe(Effect.onError(() => stack.destroy().pipe(Effect.ignore))),
+  { tags: ["provider:aws", "provider:aws:lambda", "live"], timeout: 240_000 },
+);
+
 // Canonical `list()` test (AWS account/region-scoped collection): deploy a
 // real function, resolve the provider from context via the typed
 // `Provider.findProvider`, call `list()`, and assert the deployed function

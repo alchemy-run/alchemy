@@ -120,11 +120,25 @@ export const ClusterProvider = () =>
         defaultCapacityProviderStrategy?: ecs.CapacityProviderStrategyItem[];
       }) {
         if (capacityProviders !== undefined || defaultCapacityProviderStrategy !== undefined) {
-          yield* ecs.putClusterCapacityProviders({
-            cluster,
-            capacityProviders: capacityProviders ?? [],
-            defaultCapacityProviderStrategy: defaultCapacityProviderStrategy ?? [],
-          });
+          yield* ecs
+            .putClusterCapacityProviders({
+              cluster,
+              capacityProviders: capacityProviders ?? [],
+              defaultCapacityProviderStrategy: defaultCapacityProviderStrategy ?? [],
+            })
+            .pipe(
+              // The first CreateCluster in an account creates the
+              // AWSServiceRoleForECS service-linked role asynchronously. Until
+              // it is usable, this call rejects the cluster we just observed
+              // ACTIVE as unassumable or not found.
+              Effect.retry({
+                while: (e) =>
+                  e._tag === "ServiceLinkedRoleNotAssumable" ||
+                  e._tag === "ClusterNotFoundException",
+                schedule: Schedule.spaced("3 seconds"),
+                times: 15,
+              }),
+            );
         }
       });
 
@@ -470,7 +484,7 @@ export const ClusterProvider = () =>
                   );
             }),
             Effect.retry({
-              while: (error) => error instanceof ClusterStillActive,
+              while: (error) => error._tag === "ClusterStillActive",
               schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(15)]),
             }),
           );

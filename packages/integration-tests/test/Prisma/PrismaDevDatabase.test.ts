@@ -1,37 +1,24 @@
 import { describe, expect, it } from "@alchemy.run/test";
 import * as NodeServices from "@effect/platform-node/NodeServices";
+import * as PgClient from "@effect/sql-pg/PgClient";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Result from "effect/Result";
 import * as TestClock from "effect/testing/TestClock";
-import { Client } from "pg";
 import {
   closePrismaDevDatabase,
   ensurePrismaDevDatabase,
 } from "../../../prisma/src/internal/PrismaDevDatabase.ts";
 
-const toError = (message: string) => (cause: unknown) =>
-  cause instanceof Error ? cause : new Error(`${message}: ${String(cause)}`);
-
-const queryAnswer = Effect.fn(function* (connectionString: string) {
-  const client = yield* Effect.sync(() => new Client({ connectionString }));
-  yield* Effect.tryPromise({
-    try: () => client.connect(),
-    catch: toError("Failed to connect to local Prisma database"),
-  });
-  return yield* Effect.tryPromise({
-    try: () => client.query("select 42::int as answer"),
-    catch: toError("Failed to query local Prisma database"),
-  }).pipe(
-    Effect.map((result) => Number(result.rows[0]?.answer)),
-    Effect.ensuring(
-      Effect.tryPromise({
-        try: () => client.end(),
-        catch: toError("Failed to close local Prisma database client"),
-      }).pipe(Effect.catch(() => Effect.void)),
-    ),
-  );
-});
+const queryAnswer = Effect.fn(
+  function* (_connectionString: string) {
+    const sql = yield* PgClient.PgClient;
+    const rows = yield* sql<{ answer: number }>`select 42::int as answer`;
+    return Number(rows[0]?.answer);
+  },
+  (effect, connectionString) =>
+    effect.pipe(Effect.provide(PgClient.layer({ url: Redacted.make(connectionString) }))),
+);
 
 describe(
   "Prisma dev database",

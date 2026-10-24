@@ -6,7 +6,7 @@ import { Db, Site } from "./shared.ts";
 
 /**
  * HTTP Service. Canvas Functions cap at 96KB and cannot hold
- * Drizzle/pg; this image is built from `main` like {@link Api}.
+ * Drizzle; this image is built from `main` like {@link Api}.
  * Binds the same {@link Db} via {@link Railway.ConnectPostgres}.
  */
 export default class Ping extends Railway.Service<Ping>()(
@@ -15,7 +15,6 @@ export default class Ping extends Railway.Service<Ping>()(
     project: Site,
     main: import.meta.url,
     port: 3000,
-    build: { install: ["pg"] },
     healthcheck: "/",
   },
   Effect.gen(function* () {
