@@ -232,19 +232,18 @@ const streamed = <S extends DomainStream.Any>(
 
 /**
  * A call to an external system was made with these (partial) arguments:
- * `Story.call(Payments.refund({ settlementId: "st_1" }))`. Every call needs
+ * `Story.call(Payments.refund, { settlementId: "st_1" })`. Every call needs
  * one: a stubbed call before it's answered, a real call before it's asserted.
  * Each call is matched once, earliest first. With a tag first, the tag names
  * that call, so a later step can answer or assert exactly it.
  */
 const callStep: {
-  (call: ExternalSystem.Call): Step;
-  (tag: string, call: ExternalSystem.Call): Step;
-} = (...a: ReadonlyArray<any>): Step => {
-  const [tag, call]: [string | undefined, ExternalSystem.Call] =
-    typeof a[0] === "string" ? [a[0], a[1]] : [undefined, a[0]];
-  return { _tag: "Call", tag, op: call.op, args: call.args };
-};
+  <Args>(op: ExternalSystem.Op<Args, any>, args: Partial<Args>): Step;
+  <Args>(tag: string, op: ExternalSystem.Op<Args, any>, args: Partial<Args>): Step;
+} = (...a: ReadonlyArray<any>): Step =>
+  typeof a[0] === "string"
+    ? { _tag: "Call", tag: a[0], op: a[1], args: a[2] }
+    : { _tag: "Call", tag: undefined, op: a[0], args: a[1] };
 
 /** Answer a pending call with an exit; the tag, when given, comes first. */
 const answer = (a: ReadonlyArray<any>, exit: (value: any) => Exit.Exit<unknown, unknown>): Step =>
@@ -1224,15 +1223,15 @@ const make =
  * ### External systems and the clock
  * **Example:** Answer an external system call, then move the clock
  * ```typescript
- * Story.call(FraudCheck.score({ accountId: account.id, amount: 60_000 })),
+ * Story.call(FraudCheck.score, { accountId: account.id, amount: 60_000 }),
  * Story.succeed(FraudCheck.score, { risk: 0.95 }),
  * Story.clock("2026-01-02T09:00:00Z"),
  * ```
  *
  * **Example:** Name calls when several are waiting
  * ```typescript
- * Story.call("a-1", FraudCheck.score({ accountId: a1.id })),
- * Story.call("a-2", FraudCheck.score({ accountId: a2.id })),
+ * Story.call("a-1", FraudCheck.score, { accountId: a1.id }),
+ * Story.call("a-2", FraudCheck.score, { accountId: a2.id }),
  * Story.succeed("a-2", FraudCheck.score, { risk: 0.1 }),
  * Story.succeed("a-1", FraudCheck.score, { risk: 0.95 }),
  * ```
@@ -1243,16 +1242,16 @@ const make =
  *
  * story(
  *   Story.when(account, new RecordSettlement({ settlementId: "st_1", amount: 500 })),
- *   Story.call(Payments.refund({ settlementId: "st_1", amount: 500 })),
+ *   Story.call(Payments.refund, { settlementId: "st_1", amount: 500 }),
  *   Story.returned(Payments.refund, { refundId: "re_st_1" }),
  * ).pipe(Effect.provide(StripePayments));
  * ```
  *
  * **Example:** Fail a call with the operation's declared error, or a defect
  * ```typescript
- * Story.call(LockVendor.deleteCode({ codeId: "pc_1" })),
+ * Story.call(LockVendor.deleteCode, { codeId: "pc_1" }),
  * Story.fail(LockVendor.deleteCode, new LockVendorRefused({ reason: "gateway-lost" })),
- * Story.call(LockVendor.deleteCode({ codeId: "pc_2" })),
+ * Story.call(LockVendor.deleteCode, { codeId: "pc_2" }),
  * Story.die(LockVendor.deleteCode, new Error("socket closed")),
  * ```
  *

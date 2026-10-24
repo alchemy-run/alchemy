@@ -299,7 +299,7 @@ describe("Domain telemetry", () => {
       yield* reviewStory(
         Story.given(alice, new Opened({ balance: 100 })),
         Story.when(alice, new Debit({ amount: 40, note: Redacted.make("rent") })),
-        Story.call(Scorer.score({ wallet: "alice" })),
+        Story.call(Scorer.score, { wallet: "alice" }),
         Story.succeed(Scorer.score, { risk: 0.9 }),
         Story.then(ledger, new Audited({ wallet: "alice" })),
         Story.saga(Review, "alice", { _tag: "Completed", result: undefined }),
@@ -333,7 +333,7 @@ describe("Domain telemetry", () => {
       yield* reviewStory(
         Story.given(alice, new Opened({ balance: 100 })),
         Story.when(alice, new Debit({ amount: 40, note: Redacted.make("rent") })),
-        Story.call(Scorer.score({ wallet: "alice" })),
+        Story.call(Scorer.score, { wallet: "alice" }),
         Story.succeed(Scorer.score, { risk: 0.1 }),
       ).pipe(Effect.withTracer(tracer));
 

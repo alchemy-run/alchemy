@@ -110,7 +110,7 @@ it.effect("a risky withdrawal freezes the account", () =>
     Story.provide(CurrentActor, customer("c-1")),
     Story.when(account, new WithdrawMoney({ amount: 60_000 })),
     Story.then(account, new MoneyWithdrawn({ amount: 60_000, balanceAfter: 30_000 })),
-    Story.call(FraudCheck.score({ accountId: account.id, amount: 60_000 })),
+    Story.call(FraudCheck.score, { accountId: account.id, amount: 60_000 }),
     Story.succeed(FraudCheck.score, { risk: 0.95 }),
     Story.then(account, new AccountFrozen({ reason: "fraud risk 0.95", by: system("FraudReview") })),
   ),
@@ -122,8 +122,8 @@ it.effect("a risky withdrawal freezes the account", () =>
 `succeed` answers the only call waiting on an operation. When several are waiting, name each one as you expect it, and answer it by name:
 
 ```typescript
-Story.call("a-1", FraudCheck.score({ accountId: a1.id })),
-Story.call("a-2", FraudCheck.score({ accountId: a2.id })),
+Story.call("a-1", FraudCheck.score, { accountId: a1.id }),
+Story.call("a-2", FraudCheck.score, { accountId: a2.id }),
 Story.succeed("a-2", FraudCheck.score, { risk: 0.1 }),
 Story.succeed("a-1", FraudCheck.score, { risk: 0.95 }),
 ```
@@ -135,14 +135,14 @@ Every call needs a `call` step before it's answered, so a story always checks wh
 An operation can declare the error its vendor answers with when it refuses ([Declare its errors](/domain/external-system#declare-its-errors)). `Story.fail` answers a waiting call with that error, so a story can test the branch where the vendor says no. It finds the call the way `succeed` does, and only the operation's declared error type-checks:
 
 ```typescript
-Story.call(Payments.refund({ settlementId: "st_1" })),
+Story.call(Payments.refund, { settlementId: "st_1" }),
 Story.fail(Payments.refund, new RefundDeclined({ reason: "card-closed" })),
 ```
 
 `Story.die` fails a call with a defect instead, as when the connection to the vendor breaks:
 
 ```typescript
-Story.call(Payments.refund({ settlementId: "st_1" })),
+Story.call(Payments.refund, { settlementId: "st_1" }),
 Story.die(Payments.refund, new Error("socket closed")),
 ```
 
@@ -159,7 +159,7 @@ const story = Story.make(Bank, {
 it.effect("refunds through the real payments adapter", () =>
   story(
     Story.when(account, new RecordSettlement({ settlementId: "st_1", amount: 500 })),
-    Story.call(Payments.refund({ settlementId: "st_1", amount: 500 })),
+    Story.call(Payments.refund, { settlementId: "st_1", amount: 500 }),
     Story.returned(Payments.refund, { refundId: "re_st_1" }),
   ).pipe(Effect.provide(StripePayments)),
 );

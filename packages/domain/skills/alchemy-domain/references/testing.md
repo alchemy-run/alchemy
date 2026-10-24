@@ -57,15 +57,15 @@ The steps:
 ### External system calls
 
 ```ts
-Story.call(FraudCheck.score({ accountId: a1.id })),  // a matching call is waiting (partial args)
+Story.call(FraudCheck.score, { accountId: a1.id }),  // a matching call is waiting (partial args)
 Story.succeed(FraudCheck.score, { risk: 0.95 }),           // answers the only waiting call to score
 ```
 
 When several calls are waiting, tag each one as you expect it, and answer it by tag. A tag names the earliest matching call, in the order calls were made:
 
 ```ts
-Story.call("a-1", FraudCheck.score({ accountId: a1.id })),
-Story.call("a-2", FraudCheck.score({ accountId: a2.id })),
+Story.call("a-1", FraudCheck.score, { accountId: a1.id }),
+Story.call("a-2", FraudCheck.score, { accountId: a2.id }),
 Story.succeed("a-2", FraudCheck.score, { risk: 0.1 }),
 Story.succeed("a-1", FraudCheck.score, { risk: 0.95 }),
 ```
@@ -75,9 +75,9 @@ Every call needs a `call` step before it's answered; each one matches a single c
 `fail` answers a waiting call with the operation's declared `error:`, to test the branch where the vendor refuses. `die` answers it with a defect, as when the transport breaks. Both find the call the way `succeed` does, untagged or by tag, and only a declared error type-checks:
 
 ```ts
-Story.call(Payments.refund({ settlementId: "st_1" })),
+Story.call(Payments.refund, { settlementId: "st_1" }),
 Story.fail(Payments.refund, new RefundDeclined({ reason: "card-closed" })),
-Story.call("r-2", Payments.refund({ settlementId: "st_2" })),
+Story.call("r-2", Payments.refund, { settlementId: "st_2" }),
 Story.die("r-2", Payments.refund, new Error("socket closed")),
 ```
 
@@ -90,7 +90,7 @@ const story = Story.make(Bank, { layer: BankHandlers, stub: [FraudCheck] });   /
 
 story(
   Story.when(account, new RecordSettlement({ settlementId: "st_1", amount: 500 })),
-  Story.call(Payments.refund({ settlementId: "st_1", amount: 500 })),
+  Story.call(Payments.refund, { settlementId: "st_1", amount: 500 }),
   Story.returned(Payments.refund, { refundId: "re_st_1" }),
 ).pipe(Effect.provide(StripePayments));
 ```

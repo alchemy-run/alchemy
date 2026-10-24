@@ -100,28 +100,15 @@ export type Shape<Ops extends Record<string, OpSpec>> = {
 };
 
 /**
- * A reference to one external system operation, used by stories. Pass it to
- * `succeed`, `fail` or `returned`; call it to describe a call for `Story.call`.
+ * A reference to one external system operation, used by stories (`call`, `succeed`, `fail`).
  */
-export interface Op<Args = any, Success = any, Error = any> {
-  /** Describe a call with these (partial) arguments, for `Story.call`. Nothing runs. */
-  (args: Partial<Args>): Call<Args, Success, Error>;
+export interface Op<Args = unknown, Success = unknown, Error = unknown> {
   readonly kind: "ExternalSystemOp";
   readonly system: string;
   readonly op: string;
   readonly "~args"?: Args;
   readonly "~success"?: Success;
   readonly "~error"?: Error;
-}
-
-/**
- * A call to an external system operation with (partial) arguments, as a story
- * expects it. Build one by calling the operation: `Payments.refund({ ... })`.
- */
-export interface Call<Args = any, Success = any, Error = any> {
-  readonly kind: "ExternalSystemCall";
-  readonly op: Op<Args, Success, Error>;
-  readonly args: Partial<Args>;
 }
 
 /**
@@ -209,11 +196,10 @@ export const make = <const Name extends string, const Ops extends Record<string,
     if (RESERVED.has(op)) {
       throw new Error(`ExternalSystem '${name}' cannot declare an operation named '${op}'`);
     }
-    const ref: Op = Object.assign(
-      (args: unknown): Call => ({ kind: "ExternalSystemCall", op: ref, args: args as never }),
-      { kind: "ExternalSystemOp" as const, system: name, op },
-    );
-    Object.defineProperty(cls, op, { value: ref, enumerable: true });
+    Object.defineProperty(cls, op, {
+      value: { kind: "ExternalSystemOp", system: name, op } satisfies Op,
+      enumerable: true,
+    });
   }
   return cls as unknown as ExternalSystemClass<Name, Ops>;
 };

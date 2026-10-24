@@ -215,7 +215,7 @@ it.effect("money that settles on a closed account is refunded", () =>
     ),
     Story.when(account, new RecordSettlement({ settlementId: "st_1", amount: 500 })),
     Story.then(account, new SettlementOnClosedAccount({ settlementId: "st_1", amount: 500 })),
-    Story.call(Payments.refund({ settlementId: "st_1", amount: 500 })),
+    Story.call(Payments.refund, { settlementId: "st_1", amount: 500 }),
     Story.succeed(Payments.refund, { refundId: "re_1" }),
   ),
 );
