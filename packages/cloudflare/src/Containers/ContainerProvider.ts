@@ -1289,10 +1289,12 @@ export const LiveContainerProvider = () =>
           // named here; ownership follows `read`.
           if (!isResolved(nameOf(news))) return undefined;
           const name = yield* createApplicationName(id, nameOf(news));
-          if ((yield* findApplicationByName(name)) === undefined) return undefined;
+          const existing = yield* findApplicationByName(name);
+          if (existing === undefined) return undefined;
+          const observed = toAttributes(existing);
           // Generated names identify this instance by its random suffix.
           // Explicit names alone do not establish ownership.
-          return nameOf(news) === undefined ? "owned" : "unowned";
+          return nameOf(news) === undefined ? observed : Unowned(observed);
         }),
         precreate: Effect.fn(function* ({ id, news = {}, session }) {
           yield* validateContainerConfiguration(news);

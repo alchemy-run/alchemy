@@ -9959,27 +9959,36 @@ describe("cyclic precreate observation", { tags: ["unit", "local"] }, () => {
       deleteFirst: boolean;
       /** Names whose reconcile fails after precreate. */
       crash: Set<string>;
+      /** Replace even when the name is unchanged, re-claiming the same identity. */
+      replaceSameName: boolean;
+      /** Like an explicitly named Container application: nothing existing is provably owned. */
+      unprovable: boolean;
     }
   >()("CyclicPrecreateObservationCloud") {}
+  const ownership = (cloud: Cloud["Service"], id: string, name: string) => {
+    const owner = cloud.owners.get(name);
+    if (owner === undefined) return undefined;
+    return owner === id && !cloud.unprovable ? { name } : Unowned({ name });
+  };
   const providers = Provider.succeed(Watched, {
+    // `observe`/`read` report only `name`: partial attributes match on the stables they carry.
+    stables: ["name", "tag"],
     diff: Effect.fn(function* ({ olds, news }) {
+      const cloud = yield* Cloud;
       // `tag` may be unresolved, but `name` is always literal.
-      if ("name" in news && news.name === olds.name) return undefined;
-      return { action: "replace" as const, deleteFirst: (yield* Cloud).deleteFirst };
+      if ("name" in news && news.name === olds.name && !cloud.replaceSameName) return undefined;
+      return { action: "replace" as const, deleteFirst: cloud.deleteFirst };
     }),
     observe: Effect.fn(function* ({ id, news }) {
       const cloud = yield* Cloud;
       cloud.events.push(`observe ${news.name}`);
-      const owner = cloud.owners.get(news.name);
-      return owner === undefined ? undefined : owner === id ? "owned" : "unowned";
+      return ownership(cloud, id, news.name);
     }),
     read: Effect.fn(function* ({ id, olds, output }) {
       const cloud = yield* Cloud;
       const name = output?.name ?? olds?.name;
       cloud.events.push(`read ${name}`);
-      const owner = name === undefined ? undefined : cloud.owners.get(name);
-      if (owner === undefined) return undefined;
-      return owner === id ? { name: name! } : Unowned({ name: name! });
+      return name === undefined ? undefined : ownership(cloud, id, name);
     }),
     precreate: Effect.fn(function* ({ id, news }) {
       const cloud = yield* Cloud;
@@ -10008,6 +10017,8 @@ describe("cyclic precreate observation", { tags: ["unit", "local"] }, () => {
           events: [] as string[],
           deleteFirst: false,
           crash: new Set<string>(),
+          replaceSameName: false,
+          unprovable: false,
         })),
       ),
     ),
@@ -10036,6 +10047,8 @@ describe("cyclic precreate observation", { tags: ["unit", "local"] }, () => {
     cloud.owners.clear();
     cloud.crash.clear();
     cloud.deleteFirst = false;
+    cloud.replaceSameName = false;
+    cloud.unprovable = false;
     cloud.events.length = 0;
     return cloud;
   });
@@ -10221,5 +10234,40 @@ describe("cyclic precreate observation", { tags: ["unit", "local"] }, () => {
         expect(cloud.events).toContain("delete old");
         yield* stack.destroy();
       }),
+  );
+
+  // A provider that cannot prove ownership of a name reports our own previous
+  // generation as `Unowned`. Matching its stables shows it is ours.
+  for (const [label, opts] of [
+    ["observed in a cycle", {}],
+    ["read once resolved", { resolved: true }],
+  ] as const) {
+    test.provider(
+      `a replacement re-claiming its previous generation is admitted (${label})`,
+      (stack) =>
+        Effect.gen(function* () {
+          const cloud = yield* reset(stack);
+          yield* stack.deploy(subject("old"));
+          cloud.replaceSameName = true;
+          cloud.unprovable = true;
+          cloud.events.length = 0;
+          yield* stack.deploy(subject("old", { ...opts, tag: "again" }));
+          expect(cloud.events[0]).toBe(opts.resolved ? "read old" : "observe old");
+          expect(cloud.events).toContain("reconcile old");
+          yield* stack.destroy();
+        }),
+    );
+  }
+
+  test.provider("an unprovable identity that is not the previous generation is refused", (stack) =>
+    Effect.gen(function* () {
+      const cloud = yield* deployed(stack);
+      cloud.unprovable = true;
+      cloud.owners.set("target", "Subject");
+      const error = yield* stack.deploy(subject("target")).pipe(Effect.flip);
+      expect(error).toMatchObject({ _tag: "OwnedBySomeoneElse" });
+      expect(cloud.events).toEqual(["observe target"]);
+      yield* stack.destroy();
+    }),
   );
 });

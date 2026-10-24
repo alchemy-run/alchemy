@@ -2423,7 +2423,8 @@ export const FunctionProvider = () =>
               Effect.succeed({} as Record<string, string>),
             ),
           );
-          return (yield* hasAlchemyTags(id, tags)) ? "owned" : "unowned";
+          const observed = { functionArn, functionName };
+          return (yield* hasAlchemyTags(id, tags)) ? observed : Unowned(observed);
         }),
         precreate: Effect.fn(function* ({ id, news, session }) {
           yield* validateFunctionPackageProps(id, news);

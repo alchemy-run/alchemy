@@ -291,15 +291,18 @@ export interface ProviderService<
   }): Effect.Effect<Diff | void, any, DiffReq>;
   // dev?:() => Effect.Effect<void, any, DevReq>;
   /**
-   * Reports who owns the physical resource {@link precreate} would claim,
-   * without writing. A dependency cycle precreates on raw, possibly unresolved
+   * Reports what exists at the physical resource {@link precreate} would
+   * claim, without writing. A dependency cycle precreates on raw, possibly unresolved
    * props, before `read` can run, so the engine asks `observe` first and
    * refuses a foreign resource before `precreate` touches it, unless adoption
    * is allowed (`--adopt` / `adopt(true)`).
    *
    * It receives the same raw props as `precreate` and must derive the same
-   * identity. Return `undefined` when nothing exists there, `"owned"` when it
-   * belongs to this stack/stage/logical-id, and `"unowned"` otherwise.
+   * identity. Report what exists there the way {@link read} does: `undefined`
+   * when nothing does, its attributes when it belongs to this
+   * stack/stage/logical-id, and `Unowned(attrs)` otherwise. The attributes
+   * may be partial, but should include the {@link stables} the provider can
+   * observe, so the engine recognizes a previous generation of this resource.
    *
    * Opt-in: implement it whenever `precreate` can write to a resource that
    * already exists. Without it, such a cycle precreates unchecked.
@@ -313,7 +316,7 @@ export interface ProviderService<
     fqn: string;
     news: Props<Res>;
     instanceId: string;
-  }): Effect.Effect<"owned" | "unowned" | undefined, any, PrecreateReq>;
+  }): Effect.Effect<Partial<Res["Attributes"]> | undefined, any, PrecreateReq>;
   precreate?(input: {
     id: string;
     /**

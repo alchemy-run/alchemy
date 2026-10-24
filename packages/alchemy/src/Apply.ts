@@ -152,14 +152,30 @@ const instrumentLifecycle =
     );
 
 /**
+ * Whether `observed` is this resource's previous generation: it matches that
+ * generation's attributes on every stable property it reports. A provider
+ * that cannot prove who owns a name it does not tag — an explicitly named
+ * Container application — reports even our own resource as `Unowned`.
+ */
+const isPreviousGeneration = (
+  observed: { readonly [key: string]: any },
+  stables: readonly string[] | undefined,
+  previous: { attr?: any } | undefined,
+): boolean => {
+  const keys = (stables ?? []).filter((key) => observed[key] !== undefined);
+  const attr = previous?.attr;
+  return keys.length > 0 && attr !== undefined && keys.every((key) => attr[key] === observed[key]);
+};
+
+/**
  * A dependency cycle precreates on raw props, before `read` can check
- * ownership. Ask the provider's `observe` who owns the identity precreate
- * would claim, and refuse a foreign one unless adoption is allowed. A
- * provider without `observe` precreates unchecked.
+ * ownership. Ask the provider's `observe` what exists at the identity
+ * precreate would claim, and refuse a foreign resource unless adoption is
+ * allowed. A provider without `observe` precreates unchecked.
  */
 const observeBeforePrecreate = Effect.fn(function* (
   node: {
-    provider: { observe?: ProviderService<any>["observe"] };
+    provider: Pick<ProviderService<any>, "observe" | "stables">;
     props: any;
     deferredAdoption?: { adopt: boolean };
     resource: { Type: string };
@@ -167,12 +183,18 @@ const observeBeforePrecreate = Effect.fn(function* (
   fqn: string,
   logicalId: string,
   instanceId: string,
+  previous?: { attr?: any },
 ) {
   if (node.provider.observe === undefined || node.deferredAdoption === undefined) return;
-  const owner = yield* node.provider
+  const observed = yield* node.provider
     .observe({ id: logicalId, fqn, instanceId, news: node.props })
     .pipe(instrumentLifecycle("observe", fqn, node.resource.Type, logicalId, instanceId));
-  if (owner === "unowned" && !node.deferredAdoption.adopt) {
+  if (
+    observed !== undefined &&
+    Unowned.is(observed) &&
+    !node.deferredAdoption.adopt &&
+    !isPreviousGeneration(observed, node.provider.stables, previous)
+  ) {
     return yield* new OwnedBySomeoneElse({
       message:
         `Cannot pre-create resource '${fqn}' (${node.resource.Type}): ` +
@@ -1237,7 +1259,11 @@ const executeNode = (
           output: undefined,
         }).pipe(instrumentLifecycle("read", fqn, node.resource.Type, logicalId, instanceId));
         if (observed === undefined) return;
-        if (Unowned.is(observed) && !node.deferredAdoption?.adopt) {
+        if (
+          Unowned.is(observed) &&
+          !node.deferredAdoption?.adopt &&
+          !isPreviousGeneration(observed, node.provider.stables, replState.old)
+        ) {
           return yield* new OwnedBySomeoneElse({
             message:
               `Cannot replace resource '${fqn}' (${node.resource.Type}): ` +
@@ -1260,7 +1286,7 @@ const executeNode = (
       // A cycle precreates before its props resolve, so `observe` admits the
       // identity precreate will claim — before delete-first, too.
       if (!admitted && inCycle) {
-        yield* observeBeforePrecreate(node, fqn, logicalId, instanceId);
+        yield* observeBeforePrecreate(node, fqn, logicalId, instanceId, replState.old);
       }
 
       // A cycle must delete before precreate claims the identity. Plan has

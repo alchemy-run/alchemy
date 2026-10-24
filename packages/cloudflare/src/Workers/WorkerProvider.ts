@@ -4689,7 +4689,8 @@ export const LiveWorkerProvider = () =>
             }),
           );
           if (settings === undefined) return undefined;
-          return hasAlchemyWorkerTags(id, settings.tags ?? []) ? "owned" : "unowned";
+          const observed = { workerName: name };
+          return hasAlchemyWorkerTags(id, settings.tags ?? []) ? observed : Unowned(observed);
         }),
         precreate: Effect.fn(function* ({ id, news, session, bindings }) {
           const { accountId } = yield* yield* CloudflareEnvironment;
