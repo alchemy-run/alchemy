@@ -2482,6 +2482,83 @@ lifecycle(2, process.env.RDS_TEST_LIFECYCLE)(
   },
 );
 
+// Regression for #2317: a deploy whose core modify resets the master
+// password and also enables IAM authentication. RDS keeps reporting
+// `available` for a few seconds after accepting the reset, so the follow-up
+// IAM modify used to reach a busy instance and fail with
+// `InvalidDBInstanceStateFault`.
+lifecycle(7, process.env.RDS_TEST_LIFECYCLE)(
+  "master password: a password reset followed by an IAM change in one deploy",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const startedAt = yield* Effect.sync(() => new Date());
+      const deployInstance = (password: string, iam: boolean) =>
+        stack.deploy(
+          Effect.gen(function* () {
+            const net = yield* Network("ResetIamNet", {
+              cidrBlock: "10.43.0.0/16",
+            });
+            const subnetGroup = yield* DBSubnetGroup("ResetIamSubnetGroup", {
+              description: "alchemy password reset + IAM lifecycle",
+              subnetIds: net.privateSubnetIds,
+            });
+            return yield* DBInstance("ResetIamInstance", {
+              engine: "postgres",
+              dbInstanceClass: "db.t3.micro",
+              allocatedStorage: 20,
+              masterUsername: "alchemy",
+              masterUserPassword: Redacted.make(password),
+              enableIAMDatabaseAuthentication: iam,
+              deletionProtection: false,
+              dbSubnetGroupName: subnetGroup.dbSubnetGroupName,
+              publiclyAccessible: false,
+            });
+          }),
+        );
+
+      const created = yield* deployInstance("ResetIamPass1", false);
+      const updated = yield* deployInstance("ResetIamPass2", true);
+      expect(updated.dbInstanceArn).toBe(created.dbInstanceArn);
+
+      const instance = (yield* rds.describeDBInstances({
+        DBInstanceIdentifier: updated.dbInstanceIdentifier,
+      })).DBInstances?.[0];
+      expect(instance?.IAMDatabaseAuthenticationEnabled).toBe(true);
+
+      // The password reset really applied, so the IAM modify followed it.
+      const resets = yield* rds
+        .describeEvents({
+          SourceIdentifier: updated.dbInstanceIdentifier,
+          SourceType: "db-instance",
+          StartTime: startedAt,
+        })
+        .pipe(
+          Effect.map((response) =>
+            (response.Events ?? []).filter((event) =>
+              /reset master credentials/i.test(event.Message ?? ""),
+            ),
+          ),
+          Effect.repeat({
+            schedule: Schedule.min([
+              Schedule.exponential("5 seconds"),
+              Schedule.spaced("1 minute"),
+            ]),
+            until: (found) => found.length > 0,
+            times: 10,
+          }),
+        );
+      expect(resets).toHaveLength(1);
+
+      yield* stack.destroy();
+    }),
+  {
+    tags: ["provider:aws", "provider:aws:ec2", "provider:aws:rds", "live"],
+    timeout: INSTANCE_TIMEOUT,
+  },
+);
+
 // Both guards fire while the stack is built, before any cloud call.
 test.provider(
   "Aurora rejects the Data API transport without the Data API, and non-Aurora engines",
