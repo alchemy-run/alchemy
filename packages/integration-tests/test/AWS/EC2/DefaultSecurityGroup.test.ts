@@ -1058,7 +1058,7 @@ for (const mode of ["omitted", "empty", "inline"] as const) {
         // Standalone rules belong to their SecurityGroupRule, not the group.
         expect(
           [...updated.group.ingressRules, ...updated.group.egressRules].filter((rule) =>
-            ownedIds.includes(rule.securityGroupRuleId),
+            ownedIds.some((id) => id === rule.securityGroupRuleId),
           ),
         ).toEqual([]);
 
