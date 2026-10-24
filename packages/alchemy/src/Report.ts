@@ -126,6 +126,20 @@ export interface ResourcePlanned extends PlannedResource {
   readonly total: number;
 }
 
+/**
+ * Emitted when a resource's diff fails. The failure itself still propagates
+ * unchanged out of the plan (its typed error is untouched); this event is
+ * how renderers name the resource that broke it.
+ */
+export interface ResourceDiffFailed {
+  readonly _tag: "plan.resource.failed";
+  readonly fqn: string;
+  readonly logicalId: string;
+  readonly resourceType: string;
+  /** One-line summary of the failure, e.g. `GatewayTimeout: 504 Gateway time-out`. */
+  readonly message: string;
+}
+
 /** Emitted as the planner decides one stack action. */
 export interface ActionPlanned extends PlannedAction {
   readonly _tag: "plan.action.completed";
@@ -156,7 +170,11 @@ export interface PlanPhaseChanged {
 }
 
 /** A per-node planning event (one resource or action diffed). */
-export type PlanNodeEvent = ResourceDiffStarted | ResourcePlanned | ActionPlanned;
+export type PlanNodeEvent =
+  | ResourceDiffStarted
+  | ResourceDiffFailed
+  | ResourcePlanned
+  | ActionPlanned;
 
 export type PlanEvent = PlanPhaseChanged | PlanNodeEvent;
 

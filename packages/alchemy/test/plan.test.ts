@@ -3694,6 +3694,41 @@ describe("RefExpr resolution", { tags: ["unit", "local"] }, () => {
       }
     }),
   );
+
+  test(
+    "a failed diff reports the resource that broke the plan",
+    Effect.gen(function* () {
+      const events: Array<ProgressEvent> = [];
+      const exit = yield* Effect.exit(
+        Effect.gen(function* () {
+          const shared = yield* TestResource.ref("Ghost", { stage: "other" });
+          yield* TestResource("Consumer", { string: shared.string });
+          yield* TestResource("Healthy", { string: "ok" });
+        }).pipe(
+          makePlan,
+          Effect.provideService(Progress, (event) =>
+            Effect.sync(() => {
+              events.push(event);
+            }),
+          ),
+        ),
+      );
+      // The typed error propagates unchanged ...
+      expect(Exit.isFailure(exit)).toBe(true);
+      if (Exit.isFailure(exit)) {
+        expect(Cause.squash(exit.cause)).toMatchObject({ _tag: "InvalidReferenceError" });
+      }
+      // ... and the progress stream names the resource whose diff failed.
+      const failed = events.filter((event) => event._tag === "plan.resource.failed");
+      expect(failed).toHaveLength(1);
+      expect(failed[0]).toMatchObject({
+        fqn: "Consumer",
+        logicalId: "Consumer",
+        resourceType: "Test.TestResource",
+      });
+      expect(failed[0]!.message).toContain("InvalidReferenceError");
+    }),
+  );
 });
 
 describe("StackRefExpr resolution", { tags: ["unit", "local"] }, () => {
