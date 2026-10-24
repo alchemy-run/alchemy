@@ -1,23 +1,20 @@
 import type { ConfigError } from "effect/Config";
-import { ConfigProvider } from "effect/ConfigProvider";
 import * as Context from "effect/Context";
 import type { Crypto } from "effect/Crypto";
 import * as Effect from "effect/Effect";
 import { FileSystem } from "effect/FileSystem";
-import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import type { HttpClient } from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
-import * as Logger from "effect/Logger";
 import * as Option from "effect/Option";
 import { Path } from "effect/Path";
 import type { ChildProcessSpawner } from "effect/process/ChildProcessSpawner";
-import * as Scope from "effect/Scope";
+import type * as Scope from "effect/Scope";
 import type { ActionLike } from "./Action.ts";
-import { AlchemyContext, AlchemyContextLive } from "./AlchemyContext.ts";
-import { type ArtifactStore, provideFreshArtifactStore } from "./Artifacts.ts";
-import { AuthProviders } from "./Auth/AuthProvider.ts";
-import { CredentialsStore, CredentialsStoreLive } from "./Auth/Credentials.ts";
-import { ProfileStore, ProfileStoreLive } from "./Auth/Profile.ts";
+import type { AlchemyContext } from "./AlchemyContext.ts";
+import type { ArtifactStore } from "./Artifacts.ts";
+import type { AuthProviders } from "./Auth/AuthProvider.ts";
+import type { CredentialsStore } from "./Auth/Credentials.ts";
+import type { ProfileStore } from "./Auth/Profile.ts";
 import type { Input, InputProps } from "./Input.ts";
 // Type-only: with verbatimModuleSyntax a value import would survive emit and
 // drag the terminal helpers (node:tty, Sigil's ansi helpers) into every unbundled
@@ -30,10 +27,9 @@ import type { SecretsEntry, SecretsOption } from "./Secrets/Provider.ts";
 import { StackContext } from "./StackContext.ts";
 import { Stage } from "./Stage.ts";
 import type { State } from "./State/State.ts";
-import { loadConfigProvider, stackConfigLayer } from "./Util/ConfigProvider.ts";
+import { stackConfigLayer } from "./Util/ConfigProvider.ts";
 import { effectClass, taggedFunction } from "./Util/effect.ts";
-import { fileLogger } from "./Util/FileLogger.ts";
-import { PlatformServices } from "./Util/PlatformServices.ts";
+import type { PlatformServices } from "./Util/PlatformServices.ts";
 
 export type StackServices =
   | Stack
@@ -267,10 +263,12 @@ export interface MakeStackProps<ROut = never> {
 /**
  * The scope a stack's state store is built into when it must close sooner
  * than the rest of the stack. A store holds its stack's lease until its scope
- * closes, so {@link evalStack} gives it one per call even when the caller
+ * closes, so `evalStack` (`EvalStack.ts`) gives it one per call even when the caller
  * keeps providers alive in a longer scope.
  */
-class StateScope extends Context.Service<StateScope, Scope.Scope>()("alchemy/Stack/StateScope") {}
+export class StateScope extends Context.Service<StateScope, Scope.Scope>()(
+  "alchemy/Stack/StateScope",
+) {}
 
 export const make =
   <ROut = never>(options: MakeStackProps<ROut>) =>
@@ -346,76 +344,3 @@ export const make =
 export const CurrentStack = Effect.serviceOption(Stack)
 
   .pipe(Effect.map(Option.getOrUndefined));
-
-const platform = Layer.mergeAll(
-  PlatformServices,
-  FetchHttpClient.layer,
-  Logger.layer([fileLogger("out")], { mergeWithExisting: true }),
-  Layer.provide(ProfileStoreLive, PlatformServices),
-  Layer.provide(CredentialsStoreLive, PlatformServices),
-);
-// override alchemy state store, CLI/reporting, state, and Config
-const alchemy = (overrides?: { dev?: boolean }) =>
-  Layer.mergeAll(
-    // optional
-    overrides?.dev
-      ? Layer.provide(
-          Layer.effect(
-            AlchemyContext,
-            AlchemyContext.useSync((ctx) => ({ ...ctx, dev: overrides.dev! })),
-          ),
-          AlchemyContextLive,
-        )
-      : AlchemyContextLive,
-  );
-
-export const evalStack = <A, B, StackErr, Err, Req>(
-  effect: StackEffect<CompiledStack<A>, StackErr, Stage | AlchemyContext>,
-  fn: (stack: CompiledStack<A>) => Effect.Effect<B, Err, Req>,
-  options: {
-    stage: string;
-    dev?: boolean;
-    /**
-     * Optional caller-supplied scope. When provided, scoped resources
-     * (e.g. the dev sidecar process) live until the caller closes this
-     * scope instead of being torn down when `evalStack` resolves. Used
-     * by the test harness so the sidecar survives across `beforeAll`,
-     * tests, and `afterAll`. When omitted, behaves as before with a
-     * private scope closed on completion. The state store never outlives
-     * the call.
-     */
-    scope?: Scope.Scope;
-  },
-) => {
-  const body = Effect.gen(function* () {
-    const stack = yield* effect;
-    const configProvider = yield* loadConfigProvider(Option.none());
-    return yield* fn(stack).pipe(
-      provideFreshArtifactStore,
-      Effect.provide(
-        Layer.succeedContext(stack.services).pipe(
-          Layer.provideMerge(Layer.succeed(ConfigProvider, configProvider)),
-        ),
-      ),
-    );
-  }).pipe(
-    Effect.provide(
-      Layer.effect(
-        AuthProviders,
-        Effect.serviceOption(AuthProviders).pipe(Effect.map(Option.getOrElse(() => ({})))),
-      ).pipe(
-        Layer.provideMerge(Layer.succeed(Stage, options.stage)),
-        Layer.provideMerge(Layer.provideMerge(alchemy({ dev: options.dev }), platform)),
-      ),
-    ),
-  );
-
-  const scope = options.scope;
-  return scope === undefined
-    ? Effect.scoped(body)
-    : // The state store closes with this call and releases its lease, so
-      // the next call on the same long-lived scope can take it.
-      Effect.scopedWith((stateScope) =>
-        Scope.provide(body.pipe(Effect.provideService(StateScope, stateScope)), scope),
-      );
-};

@@ -3,9 +3,9 @@ import type { ConfigError } from "effect/Config";
 import type * as Scope from "effect/Scope";
 import type { AlchemyContext } from "./AlchemyContext.ts";
 import * as Apply from "./Apply.ts";
+import { evalStack } from "./EvalStack.ts";
 import * as Plan from "./Plan.ts";
 import type { CompiledStack, StackEffect } from "./Stack.ts";
-import { evalStack } from "./Stack.ts";
 import type { Stage } from "./Stage.ts";
 
 export const destroy = ({
