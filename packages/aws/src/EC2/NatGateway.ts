@@ -86,6 +86,14 @@ export interface NatGatewayProps {
   availabilityZoneAddresses?: NatGatewayAvailabilityZoneAddress[];
 
   /**
+   * How long (in seconds) to let in-flight connections drain before an Elastic
+   * IP removed from `availabilityZoneAddresses` is forcibly released.
+   * Between 1 and 4000. Changing it never replaces the gateway.
+   * @default 350
+   */
+  maxDrainDurationSeconds?: number;
+
+  /**
    * The allocation ID of the Elastic IP address for the gateway.
    * Required for public NAT gateways.
    */
@@ -527,7 +535,14 @@ export const NatGatewayProvider = () =>
 
           // Sync manual-mode zone addresses — observed associations vs desired.
           if (news.availabilityZoneAddresses) {
-            const observed = (gw.NatGatewayAddresses ?? []).filter(
+            // An in-flight association has no AssociationId yet, so it can be
+            // neither diffed nor disassociated — let it settle first.
+            const settled = yield* waitForNatGatewayAddresses(
+              natGatewayId,
+              (a) => a.Status === "associating",
+              session,
+            );
+            const observed = (settled.NatGatewayAddresses ?? []).filter(
               (a) =>
                 a.AllocationId !== undefined &&
                 a.Status !== "disassociating" &&
@@ -550,6 +565,7 @@ export const NatGatewayProvider = () =>
               yield* ec2.disassociateNatGatewayAddress({
                 NatGatewayId: natGatewayId,
                 AssociationIds: stale.map((a) => a.AssociationId!),
+                MaxDrainDurationSeconds: news.maxDrainDurationSeconds,
               });
               // An EIP moving between zones must be released before it can
               // be associated again.
@@ -557,7 +573,11 @@ export const NatGatewayProvider = () =>
                 .map((a) => a.AllocationId!)
                 .filter((allocationId) => desired.some((d) => d.allocationId === allocationId));
               if (moving.length > 0) {
-                yield* waitForNatGatewayAddressesReleased(natGatewayId, moving, session);
+                yield* waitForNatGatewayAddresses(
+                  natGatewayId,
+                  (a) => a.AllocationId !== undefined && moving.includes(a.AllocationId),
+                  session,
+                );
               }
             }
             for (const zone of news.availabilityZoneAddresses) {
@@ -576,6 +596,23 @@ export const NatGatewayProvider = () =>
                   AllocationIds: missing,
                 });
               }
+            }
+            const associated = yield* waitForNatGatewayAddresses(
+              natGatewayId,
+              (a) => a.Status === "associating",
+              session,
+            );
+            const failed = (associated.NatGatewayAddresses ?? []).find(
+              (a) =>
+                a.Status === "failed" &&
+                desired.some((d) => d.allocationId === a.AllocationId && sameZone(a, d.zone)),
+            );
+            if (failed) {
+              return yield* new NatGatewayAddressFailed({
+                natGatewayId,
+                allocationId: failed.AllocationId!,
+                failureMessage: failed.FailureMessage,
+              });
             }
           }
 
@@ -734,37 +771,49 @@ const waitForNatGatewayDeleted = (natGatewayId: string, session: ScopedPlanStatu
     }),
   );
 
-// Retryable error: NAT Gateway addresses are still disassociating
-class NatGatewayAddressesDisassociating extends Data.TaggedError(
-  "NatGatewayAddressesDisassociating",
-)<{
+// Terminal error: an Elastic IP could not be associated with the NAT Gateway
+class NatGatewayAddressFailed extends Data.TaggedError("NatGatewayAddressFailed")<{
+  natGatewayId: string;
+  allocationId: string;
+  failureMessage?: string;
+}> {}
+
+// Retryable error: NAT Gateway addresses are still transitioning
+class NatGatewayAddressesPending extends Data.TaggedError("NatGatewayAddressesPending")<{
   natGatewayId: string;
   allocationIds: string[];
 }> {}
 
 /**
- * Wait until the given Elastic IPs are no longer associated with the NAT Gateway
+ * Wait until no NAT Gateway address matches `pending`, returning the settled gateway
  */
-const waitForNatGatewayAddressesReleased = Effect.fn(
-  function* (natGatewayId: string, allocationIds: string[], session: ScopedPlanStatusSession) {
+const waitForNatGatewayAddresses = Effect.fn(
+  function* (
+    natGatewayId: string,
+    pending: (address: ec2.NatGatewayAddress) => boolean,
+    session: ScopedPlanStatusSession,
+  ) {
     const result = yield* ec2.describeNatGateways({ NatGatewayIds: [natGatewayId] });
-    const pending = (result.NatGateways?.[0]?.NatGatewayAddresses ?? [])
-      .filter((a) => a.AllocationId !== undefined && allocationIds.includes(a.AllocationId))
-      .map((a) => a.AllocationId!);
-    if (pending.length > 0) {
-      return yield* new NatGatewayAddressesDisassociating({
+    const gw = result.NatGateways?.[0];
+    if (!gw) {
+      return yield* new NatGatewayNotFound({ natGatewayId });
+    }
+    const transitioning = (gw.NatGatewayAddresses ?? []).filter(pending);
+    if (transitioning.length > 0) {
+      return yield* new NatGatewayAddressesPending({
         natGatewayId,
-        allocationIds: pending,
+        allocationIds: transitioning.map((a) => a.AllocationId ?? "unknown"),
       });
     }
+    return gw;
   },
-  (effect, _natGatewayId, _allocationIds, session) =>
+  (effect, _natGatewayId, _pending, session) =>
     effect.pipe(
       Effect.retry({
-        while: (e) => e._tag === "NatGatewayAddressesDisassociating",
+        while: (e) => e._tag === "NatGatewayAddressesPending",
         schedule: Schedule.max([Schedule.fixed(5000), Schedule.recurs(90)]).pipe(
           Schedule.tap(({ attempt }) =>
-            session.note(`Waiting for NAT Gateway addresses to disassociate... (${attempt * 5}s)`),
+            session.note(`Waiting for NAT Gateway addresses to settle... (${attempt * 5}s)`),
           ),
         ),
       }),

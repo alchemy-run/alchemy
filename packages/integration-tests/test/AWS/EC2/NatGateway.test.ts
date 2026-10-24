@@ -120,7 +120,7 @@ test.provider.skipIf(!!process.env.FAST)(
       // A regional NAT gateway needs the IGW attached before it is created.
       yield* stack.deploy(network);
 
-      const regional = (manualZones: 1 | 2) =>
+      const regional = (layout: "one-zone" | "two-zones" | "moved") =>
         Effect.gen(function* () {
           const { vpc, igw, eip1, eip2 } = yield* network;
           const autoNat = yield* NatGateway("RegionalAutoNat", {
@@ -130,12 +130,21 @@ test.provider.skipIf(!!process.env.FAST)(
           const manualNat = yield* NatGateway("RegionalManualNat", {
             availabilityMode: "regional",
             vpcId: vpc.vpcId,
-            availabilityZoneAddresses: [
-              { availabilityZone: az1, allocationIds: [eip1.allocationId] },
-              ...(manualZones === 2
-                ? [{ availabilityZone: az2, allocationIds: [eip2.allocationId] }]
-                : []),
-            ],
+            availabilityZoneAddresses:
+              layout === "one-zone"
+                ? [{ availabilityZone: az1, allocationIds: [eip1.allocationId] }]
+                : layout === "two-zones"
+                  ? [
+                      { availabilityZone: az1, allocationIds: [eip1.allocationId] },
+                      { availabilityZone: az2, allocationIds: [eip2.allocationId] },
+                    ]
+                  : [
+                      {
+                        availabilityZone: az1,
+                        allocationIds: [eip1.allocationId, eip2.allocationId],
+                      },
+                    ],
+            maxDrainDurationSeconds: 1,
           });
           return { vpc, igw, eip1, eip2, autoNat, manualNat };
         });
@@ -145,7 +154,7 @@ test.provider.skipIf(!!process.env.FAST)(
           Effect.map((r) => r.NatGateways![0]!),
         );
 
-      const created = yield* stack.deploy(regional(1));
+      const created = yield* stack.deploy(regional("one-zone"));
 
       const auto = yield* describe(created.autoNat.natGatewayId);
       expect(auto.AvailabilityMode).toBe("regional");
@@ -163,7 +172,7 @@ test.provider.skipIf(!!process.env.FAST)(
       ).toBe(az1);
 
       // Adding a zone associates its Elastic IP in place.
-      const updated = yield* stack.deploy(regional(2));
+      const updated = yield* stack.deploy(regional("two-zones"));
       expect(updated.manualNat.natGatewayId).toBe(created.manualNat.natGatewayId);
       const expanded = yield* describe(updated.manualNat.natGatewayId);
       const addresses = (expanded.NatGatewayAddresses ?? []).filter(
@@ -175,6 +184,24 @@ test.provider.skipIf(!!process.env.FAST)(
       expect(
         addresses.find((a) => a.AllocationId === created.eip2.allocationId)?.AvailabilityZone,
       ).toBe(az2);
+      // The deploy waits for the association to settle.
+      expect(addresses.find((a) => a.AllocationId === created.eip2.allocationId)?.Status).toBe(
+        "succeeded",
+      );
+
+      // Moving an Elastic IP to another zone disassociates it, waits for the
+      // (short) drain, then associates it in the new zone — in place.
+      const moved = yield* stack.deploy(regional("moved"));
+      expect(moved.manualNat.natGatewayId).toBe(created.manualNat.natGatewayId);
+      const contracted = yield* describe(moved.manualNat.natGatewayId);
+      const live = (contracted.NatGatewayAddresses ?? []).filter(
+        (a) => a.Status !== "disassociating" && a.Status !== "failed",
+      );
+      expect(
+        live
+          .filter((a) => a.AllocationId === created.eip2.allocationId)
+          .map((a) => a.AvailabilityZone),
+      ).toEqual([az1]);
 
       yield* stack.destroy();
 
