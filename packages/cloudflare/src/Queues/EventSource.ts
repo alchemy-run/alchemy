@@ -36,8 +36,16 @@ export interface MessagesProps {
    * forwarded to Cloudflare.
    */
   retryDelay?: Duration.Input;
-  /** Optional dead-letter queue name. */
-  deadLetterQueue?: string;
+  /**
+   * Queue that receives messages after `maxRetries` failed deliveries.
+   * Pass the Queue resource, or a queue name.
+   *
+   * Cloudflare does not drain or alert on a dead-letter queue. A message
+   * left there expires after the queue's retention period, so call
+   * `consumeQueueMessages` on the dead-letter queue as well to log,
+   * persist, or alert on what arrives.
+   */
+  deadLetterQueue?: string | Queue;
 }
 
 /**
@@ -197,7 +205,10 @@ export const EventSourceLive = Layer.effect(
             queueId: queue.queueId,
             scriptName: host.workerName,
             settings: toConsumerSettings(props),
-            deadLetterQueue: props.deadLetterQueue,
+            deadLetterQueue:
+              typeof props.deadLetterQueue === "string"
+                ? props.deadLetterQueue
+                : props.deadLetterQueue?.queueName,
           }),
         );
       }

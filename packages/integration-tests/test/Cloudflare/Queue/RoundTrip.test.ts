@@ -48,6 +48,10 @@ class CountMismatch extends Data.TaggedError("CountMismatch")<{
  * RPC stub from inside the queue handler works, and the test
  * client can read the resulting DO state.
  *
+ * The poison queue's handler always fails, so its message is
+ * dead-lettered to a queue passed as `deadLetterQueue` and must reach
+ * that queue's own `consumeQueueMessages` handler.
+ *
  * The second queue catches regressions where Worker dispatch stops
  * after the first registered queue listener. The listener generated
  * by `consumeQueueMessages(...)` performs its queue-name check inside
@@ -81,6 +85,7 @@ test.provider.skipIf(!!process.env.FAST)(
       const secondaryName = `roundtrip-secondary-${Math.random().toString(36).slice(2, 8)}`;
       const messages = ["alpha", "beta", "gamma", "delta"];
       const secondaryMessages = ["one", "two"];
+      const deadLetterName = `roundtrip-dead-letter-${Math.random().toString(36).slice(2, 8)}`;
 
       const sendMessage = (pathname: string, counterName: string, text: string) =>
         HttpClient.execute(
@@ -153,11 +158,15 @@ test.provider.skipIf(!!process.env.FAST)(
           }),
         );
 
+      const poisonResponse = yield* sendMessage("/send-poison", deadLetterName, "poison");
+      expect(poisonResponse.status).toBe(202);
+
       // Poll the DO snapshot until each consumer has caught up.
-      const [snapshot, secondarySnapshot] = yield* Effect.all(
+      const [snapshot, secondarySnapshot, deadLetterSnapshot] = yield* Effect.all(
         [
           readSnapshot(name, messages.length),
           readSnapshot(secondaryName, secondaryMessages.length),
+          readSnapshot(deadLetterName, 1),
         ],
         { concurrency: "unbounded" },
       );
@@ -175,6 +184,9 @@ test.provider.skipIf(!!process.env.FAST)(
       expect([...new Set(secondarySnapshot.lastBodies)].sort()).toEqual(
         [...secondaryMessages].sort(),
       );
+      // The poison message failed its handler, was dead-lettered, and
+      // reached the dead-letter queue's own consumer.
+      expect([...new Set(deadLetterSnapshot.lastBodies)]).toEqual(["poison"]);
 
       yield* stack.destroy();
     }).pipe(logLevel),

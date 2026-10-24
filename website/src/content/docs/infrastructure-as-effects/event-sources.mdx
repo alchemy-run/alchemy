@@ -167,12 +167,18 @@ your handler succeeds, retried `maxRetries` times when it fails, then
 dead-lettered:
 
 ```typescript
+const deadLetters = yield* Cloudflare.Queues.Queue("OrdersDeadLetters");
+
 yield* Cloudflare.Queues.consumeQueueMessages<{ text: string }>(
   Orders,
-  { maxRetries: 3, retryDelay: "1 second", deadLetterQueue: "orders-dlq" },
+  { maxRetries: 3, retryDelay: "1 second", deadLetterQueue: deadLetters },
   (stream) => Stream.runForEach(stream, (msg) => Effect.log(msg.body.text)),
 );
 ```
+
+Nothing reads the dead-letter queue unless you consume it, so a failed
+message expires there silently. Subscribe to it the same way
+([example](/cloudflare/messaging/queues#consume-the-dead-letter-queue)).
 
 Call `msg.ack()` or `msg.retry()` inside the handler to decide per
 message.
