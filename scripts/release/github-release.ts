@@ -9,12 +9,10 @@
 // The notes cover the commits since the previous tag. Reads `ALCHEMY_REPO`
 // (`<owner>/<repo>`) for the changelog's links.
 //
-// Usage: bun scripts/release/github-release.ts <tag> <release|beta|alpha|rc>
-// (bun, not node: changelog.ts spawns git with `Bun.spawn`.)
+// Usage: node scripts/release/github-release.ts <tag> <release|beta|alpha|rc>
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { Argument, Command } from "effect/cli";
-import * as Config from "effect/Config";
 import * as Console from "effect/Console";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -22,20 +20,12 @@ import { ChildProcess } from "effect/process";
 import { ChildProcessSpawner } from "effect/process/ChildProcessSpawner";
 import * as Stream from "effect/Stream";
 import { generate } from "./changelog.ts";
+import { repository } from "./config.ts";
 
 export class CommandFailed extends Data.TaggedError("CommandFailed")<{
   readonly message: string;
   readonly command: string;
   readonly exitCode: number;
-}> {}
-
-export class InvalidRepo extends Data.TaggedError("InvalidRepo")<{
-  readonly message: string;
-}> {}
-
-export class ChangelogFailed extends Data.TaggedError("ChangelogFailed")<{
-  readonly message: string;
-  readonly cause: unknown;
 }> {}
 
 /** Runs a command, returning its exit code and captured stdout. */
@@ -75,17 +65,6 @@ const runOrFail = Effect.fn(function* (command: string, args: ReadonlyArray<stri
   }
 });
 
-/** `ALCHEMY_REPO`, as `<owner>/<repo>`. */
-const repository = Effect.gen(function* () {
-  const repo = (yield* Config.String("ALCHEMY_REPO")).trim();
-  if (!/^[\w.-]+\/[\w.-]+$/.test(repo)) {
-    return yield* new InvalidRepo({
-      message: `ALCHEMY_REPO must be <owner>/<repo> (got: ${repo})`,
-    });
-  }
-  return repo;
-});
-
 const command = Command.make(
   "github-release",
   {
@@ -106,12 +85,7 @@ const command = Command.make(
     yield* Console.log(
       `Generating ${channel} release notes for ${tag}${from ? ` from ${from}` : ""}`,
     );
-    const repo = yield* repository;
-    const { md } = yield* Effect.tryPromise({
-      try: () => generate({ from, to: tag, repo }),
-      catch: (cause) =>
-        new ChangelogFailed({ message: `Cannot generate release notes for ${tag}`, cause }),
-    });
+    const { md } = yield* generate({ from, to: tag, repo: yield* repository });
 
     yield* runOrFail("gh", ["release", "create", tag, "--title", tag, "--notes", md, "--latest"]);
   }),

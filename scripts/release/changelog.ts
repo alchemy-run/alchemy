@@ -7,12 +7,18 @@
  * never resolved to logins), and it pins an old changelogen that drags in
  * deprecated `tar@6`. What's left of it is the defaults below.
  *
- * The log is read through a pipe rather than a fixed buffer: `git log …
+ * Runs under node through Effect's `ChildProcessSpawner`. The log is read
+ * through a pipe rather than a fixed buffer: `git log …
  * --name-status` prints every changed path of every commit in the range, so a
  * release spanning one repo-wide refactor overflows `execSync`'s 1 MB default
  * and the release dies at the tagging step having already bumped versions.
  */
 import { parseCommits, type GitCommit, type RawGitCommit } from "changelogen";
+import * as Data from "effect/Data";
+import * as Effect from "effect/Effect";
+import { ChildProcess } from "effect/process";
+import { ChildProcessSpawner } from "effect/process/ChildProcessSpawner";
+import * as Stream from "effect/Stream";
 import { renderMarkdown, type RenderConfig } from "./render.ts";
 
 export interface Commit extends GitCommit {
@@ -43,45 +49,64 @@ const defaults = {
 
 const excludeAuthors = [/\[bot\]/i, /dependabot/i, /\(bot\)/i];
 
-const git = async (args: string[]) => {
-  const proc = Bun.spawn(["git", ...args], { stdout: "pipe", stderr: "pipe" });
-  const [stdout, stderr, exitCode] = await Promise.all([
-    new Response(proc.stdout).text(),
-    new Response(proc.stderr).text(),
-    proc.exited,
-  ]);
-  return { stdout, stderr, exitCode };
-};
+export class GitFailed extends Data.TaggedError("GitFailed")<{
+  readonly message: string;
+  readonly args: ReadonlyArray<string>;
+  readonly exitCode: number;
+}> {}
+
+/** Runs git, collecting stdout and stderr through pipes. */
+const git = Effect.fn(function* (args: ReadonlyArray<string>) {
+  const spawner = yield* ChildProcessSpawner;
+  return yield* Effect.scoped(
+    Effect.gen(function* () {
+      const handle = yield* spawner.spawn(
+        ChildProcess.make("git", [...args], { stdout: "pipe", stderr: "pipe" }),
+      );
+      const [stdout, stderr, exitCode] = yield* Effect.all(
+        [
+          handle.stdout.pipe(Stream.decodeText(), Stream.mkString),
+          handle.stderr.pipe(Stream.decodeText(), Stream.mkString),
+          handle.exitCode,
+        ],
+        { concurrency: "unbounded" },
+      );
+      return { stdout, stderr, exitCode: Number(exitCode) };
+    }),
+  );
+});
 
 /** The tag closest to `to`, excluding a tag on `to` itself. */
-const previousTag = async (to: string) => {
-  const { stdout, exitCode } = await git(["describe", "--tags", "--abbrev=0", `${to}^`]);
+const previousTag = Effect.fn(function* (to: string) {
+  const { stdout, exitCode } = yield* git(["describe", "--tags", "--abbrev=0", `${to}^`]);
   return exitCode === 0 ? stdout.trim() : undefined;
-};
+});
 
 /**
  * Same command and record format as changelogen's `getGitDiff` (the `----`
  * separator and `|`-delimited header are what `parseCommits` expects).
  */
-export const getGitDiff = async (
-  from: string | undefined,
-  to = "HEAD",
-): Promise<RawGitCommit[]> => {
-  const { stdout, stderr, exitCode } = await git([
+export const getGitDiff = Effect.fn(function* (from: string | undefined, to = "HEAD") {
+  const args = [
     "--no-pager",
     "log",
     `${from ? `${from}...` : ""}${to}`,
     "--pretty=----%n%s|%h|%an|%ae%n%b",
     "--name-status",
-  ]);
+  ];
+  const { stdout, stderr, exitCode } = yield* git(args);
   if (exitCode !== 0) {
-    throw new Error(`git log ${from ?? ""}...${to} failed: ${stderr.trim()}`);
+    return yield* new GitFailed({
+      message: `git log ${from ?? ""}...${to} failed: ${stderr.trim()}`,
+      args,
+      exitCode,
+    });
   }
   return stdout
     .trim()
     .split("----\n")
     .splice(1)
-    .map((line) => {
+    .map((line): RawGitCommit => {
       const [firstLine, ..._body] = line.split("\n");
       const [message, shortHash, authorName, authorEmail] = (firstLine ?? "").split("|");
       return {
@@ -91,7 +116,7 @@ export const getGitDiff = async (
         body: _body.join("\n"),
       };
     });
-};
+});
 
 /** Attaches `resolvedAuthors`, keeping the first name seen per email. */
 const resolveAuthors = (commits: GitCommit[]): Commit[] => {
@@ -106,14 +131,15 @@ const resolveAuthors = (commits: GitCommit[]): Commit[] => {
   }));
 };
 
-export const generate = async (options: ChangelogOptions) => {
-  const from = options.from ?? (await previousTag(options.to));
+export const generate = Effect.fn(function* (options: ChangelogOptions) {
+  const from = options.from ?? (yield* previousTag(options.to));
   const config: RenderConfig = {
     ...defaults,
     repo: options.repo,
     from: from ?? "",
     to: options.to,
   };
-  const commits = resolveAuthors(parseCommits(await getGitDiff(from, options.to), config as never));
+  const raw = yield* getGitDiff(from, options.to);
+  const commits = resolveAuthors(parseCommits(raw, config as never));
   return { config, commits, md: renderMarkdown(commits, config) };
-};
+});
