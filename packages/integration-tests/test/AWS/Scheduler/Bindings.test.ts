@@ -3,6 +3,7 @@ import { describe, expect } from "@alchemy.run/test";
 import * as lambda from "@distilled.cloud/aws/lambda";
 import * as scheduler from "@distilled.cloud/aws/scheduler";
 import * as SQS from "@distilled.cloud/aws/sqs";
+import * as Alchemy from "alchemy";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Core from "alchemy/Test/Core";
 import * as Data from "effect/Data";
@@ -10,6 +11,7 @@ import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Schedule from "effect/Schedule";
+import SchedulerEnvFunctionLive, { SchedulerEnvFunction } from "./env-handler";
 import SchedulerTestFunctionLive, { SchedulerTestFunction } from "./handler";
 
 const testOptions = { providers: AWS.providers() };
@@ -25,7 +27,6 @@ const SCHEDULE_PREFIX = "alch-schedtest-";
 const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
-let functionName: string;
 let sinkQueueUrl: string;
 let cronQueueUrl: string;
 
@@ -154,14 +155,12 @@ describe(
         yield* purgeTestSchedules;
 
         yield* Effect.logInfo("Scheduler test setup: deploying fixture");
-        const deployed = yield* sharedStack.deploy(
+        const { functionUrl } = yield* sharedStack.deploy(
           Effect.gen(function* () {
             return yield* SchedulerTestFunction;
           }).pipe(Effect.provide(SchedulerTestFunctionLive)),
         );
 
-        const { functionUrl } = deployed;
-        functionName = deployed.functionName;
         expect(functionUrl).toBeTruthy();
         baseUrl = functionUrl!.replace(/\/+$/, "");
         const readinessUrl = `${baseUrl}/info`;
@@ -202,17 +201,6 @@ describe(
     );
 
     describe("CreateSchedule", () => {
-      // #1842: the binding resolves the AWS environment while the function's
-      // init runs. That resolution reads the deployer's config (profile,
-      // credentials, region) and must not be bound into the function's env.
-      test.provider("does not leak the deployer's config into the function env", (_stack) =>
-        Effect.gen(function* () {
-          const config = yield* lambda.getFunctionConfiguration({ FunctionName: functionName });
-          const keys = Object.keys(config.Environment?.Variables ?? {});
-          expect(keys.filter((key) => /^(AWS_|ALCHEMY_PROFILE)/.test(key))).toEqual([]);
-        }),
-      );
-
       test.provider(
         "mints a one-shot at() schedule whose target fires (iam:PassRole end-to-end)",
         (_stack) =>
@@ -403,5 +391,47 @@ describe(
         { timeout: 120_000 },
       );
     });
+  },
+);
+
+// #1842: `AWS.state()` builds the AWS environment outside the test's config,
+// and the stack's providers reuse it. Its first resolution then runs while the
+// function's init binds CreateSchedule, where every config key read is bound
+// into the function's env — the deployer's profile or credentials included.
+const withState = { providers: AWS.providers(), state: AWS.state() };
+const withStateHarness = Test.make(withState);
+
+const EnvStack = Alchemy.Stack(
+  "SchedulerBindingsEnv",
+  withState,
+  Effect.gen(function* () {
+    const fn = yield* SchedulerEnvFunction;
+    return { functionName: fn.functionName };
+  }).pipe(Effect.provide(SchedulerEnvFunctionLive)),
+);
+
+describe(
+  "Scheduler Bindings with the S3 state store",
+  { tags: ["provider:aws", "provider:aws:lambda", "provider:aws:scheduler", "live"] },
+  () => {
+    // Core.deploy/destroy release the state lease when they finish; the
+    // leading destroy runs in its own hook so the deploy below is the first
+    // to resolve the environment.
+    withStateHarness.beforeAll(Core.destroy(withState, EnvStack), { timeout: 120_000 });
+    withStateHarness.afterAll.skipIf(!!process.env.NO_DESTROY)(Core.destroy(withState, EnvStack), {
+      timeout: 120_000,
+    });
+
+    withStateHarness.test(
+      "resolving the AWS environment in a function's init leaves its env clean",
+      Effect.gen(function* () {
+        const { functionName } = yield* Core.deploy(withState, EnvStack);
+
+        const config = yield* lambda.getFunctionConfiguration({ FunctionName: functionName });
+        const keys = Object.keys(config.Environment?.Variables ?? {});
+        expect(keys.filter((key) => /^(AWS_|ALCHEMY_PROFILE$|CI$)/.test(key))).toEqual([]);
+      }),
+      { timeout: 180_000 },
+    );
   },
 );
