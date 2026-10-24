@@ -3302,36 +3302,6 @@ describe("engine-level adoption", { tags: ["unit", "local"] }, () => {
     );
   }
 
-  // Every node carries its effective adoption policy, so apply can admit an
-  // `Unowned` precreate result without re-deriving it.
-  for (const { global, scoped, adopt: expected } of policies) {
-    test(
-      `every node records the effective adoption policy (global=${global}, scoped=${scoped})`,
-      Effect.gen(function* () {
-        yield* seed({
-          Updated: replaceable("Updated", { props: { string: "a" } }),
-          Unchanged: replaceable("Unchanged", { props: { string: "a" } }),
-          Replaced: replaceable("Replaced"),
-        });
-        const scope = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-          scoped === undefined ? effect : effect.pipe(adopt(scoped));
-        const plan = yield* makeAdoptPlan(
-          Effect.gen(function* () {
-            yield* scope(TestResource("Created", { string: "a" }));
-            yield* scope(TestResource("Updated", { string: "b" }));
-            yield* scope(TestResource("Unchanged", { string: "a" }));
-            yield* scope(TestResource("Replaced", { replaceString: "new" }));
-          }),
-          { adopt: global, readHook: () => Effect.succeed(undefined) },
-        );
-        expect(plan.resources.Created).toMatchObject({ action: "create", adopt: expected });
-        expect(plan.resources.Updated).toMatchObject({ action: "update", adopt: expected });
-        expect(plan.resources.Unchanged).toMatchObject({ action: "noop", adopt: expected });
-        expect(plan.resources.Replaced).toMatchObject({ action: "replace", adopt: expected });
-      }),
-    );
-  }
-
   test(
     "updates and noops never defer admission",
     Effect.gen(function* () {
@@ -3411,6 +3381,14 @@ describe("cyclic delete-first admission", { tags: ["unit", "local"] }, () => {
     { self: string }
   > {}
   const Unread = Resource<Unread>("Test.CyclicDeleteFirstUnread");
+  /** `Cyclic` with `observe`: it checks ownership before precreate. */
+  interface Observed extends Resource<
+    "Test.CyclicDeleteFirstObserved",
+    { name: string },
+    { name: string },
+    { self: string }
+  > {}
+  const Observed = Resource<Observed>("Test.CyclicDeleteFirstObserved");
   class Knobs extends Context.Service<
     Knobs,
     {
@@ -3454,6 +3432,14 @@ describe("cyclic delete-first admission", { tags: ["unit", "local"] }, () => {
       delete: () => Effect.void,
     }),
     Provider.succeed(Unread, { diff, precreate, reconcile, delete: () => Effect.void }),
+    Provider.succeed(Observed, {
+      diff,
+      read: () => Effect.succeed(undefined),
+      observe: () => Effect.succeed(undefined),
+      precreate,
+      reconcile,
+      delete: () => Effect.void,
+    }),
   ).pipe(
     Layer.provideMerge(
       Layer.effect(
@@ -3479,6 +3465,7 @@ describe("cyclic delete-first admission", { tags: ["unit", "local"] }, () => {
       cycle?: boolean;
       resolved?: boolean;
       unread?: boolean;
+      observed?: boolean;
       adopt?: boolean;
     } = {},
   ) =>
@@ -3489,12 +3476,17 @@ describe("cyclic delete-first admission", { tags: ["unit", "local"] }, () => {
         opts.adopt === undefined ? effect : effect.pipe(adopt(opts.adopt));
       const resource = opts.unread
         ? yield* scoped(Unread("Subject", props))
-        : yield* scoped(Cyclic("Subject", props));
+        : opts.observed
+          ? yield* scoped(Observed("Subject", props))
+          : yield* scoped(Cyclic("Subject", props));
       if (opts.cycle ?? true) yield* resource.bind("Self", { self: resource.name });
       return resource;
     });
 
-  const setup = Effect.fn(function* (stack: Test.ScratchStack, opts?: { unread?: boolean }) {
+  const setup = Effect.fn(function* (
+    stack: Test.ScratchStack,
+    opts?: { unread?: boolean; observed?: boolean },
+  ) {
     const knobs = yield* Knobs;
     yield* stack.destroy();
     Object.assign(knobs, { action: "replace", deleteFirst: false, crash: false });
@@ -3586,6 +3578,21 @@ describe("cyclic delete-first admission", { tags: ["unit", "local"] }, () => {
       }),
     );
   }
+
+  test.provider(
+    "plans a provider with `observe`, which checks ownership before the delete",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* setup(stack, { observed: true });
+        const plan = yield* stack.plan(subject("fresh", { observed: true }));
+        expect(plan.resources.Subject).toMatchObject({
+          action: "replace",
+          deleteFirst: true,
+          deferredAdoption: { adopt: false },
+        });
+        yield* stack.destroy();
+      }),
+  );
 
   test.provider("plans a provider without `read`, which has no ownership to check", (stack) =>
     Effect.gen(function* () {

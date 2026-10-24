@@ -1417,8 +1417,8 @@ export const FunctionProvider = () =>
           .getRole({ RoleName: roleName })
           .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)));
         if (role === undefined) {
-          // Engine has cleared us via `read` — foreign-tagged functions are
-          // surfaced as `Unowned` and require `--adopt`. On a race between
+          // Engine has cleared us via `read` or `observe` — foreign-tagged
+          // functions are surfaced as `Unowned` and require `--adopt`. On a race between
           // observe and create, read the role created by the peer reconciler.
           role = yield* iam
             .createRole({
@@ -2394,6 +2394,24 @@ export const FunctionProvider = () =>
             return rows.filter((row): row is Function["Attributes"] => row !== undefined);
           }),
 
+        observe: Effect.fn(function* ({ id, news }) {
+          // Precreate creates — or updates — the function named here. Its
+          // execution role is named from the logical id alone.
+          if (!isResolved(news.functionName)) return undefined;
+          const functionName = yield* createFunctionName(id, news.functionName);
+          const result = yield* Lambda.getFunction({ FunctionName: functionName }).pipe(
+            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          );
+          const functionArn = result?.Configuration?.FunctionArn;
+          if (functionArn === undefined) return undefined;
+          const tags = yield* Lambda.listTags({ Resource: functionArn }).pipe(
+            Effect.map((r) => r.Tags ?? {}),
+            Effect.catchTag("ResourceNotFoundException", () =>
+              Effect.succeed({} as Record<string, string>),
+            ),
+          );
+          return (yield* hasAlchemyTags(id, tags)) ? "owned" : "unowned";
+        }),
         precreate: Effect.fn(function* ({ id, news, session }) {
           yield* validateFunctionPackageProps(id, news);
           if (isFunctionImageProps(news)) {

@@ -291,13 +291,29 @@ export interface ProviderService<
   }): Effect.Effect<Diff | void, any, DiffReq>;
   // dev?:() => Effect.Effect<void, any, DevReq>;
   /**
-   * Publishes provisional attributes so resources in a dependency cycle can
-   * resolve against each other. It runs on raw, possibly unresolved props,
-   * before any ownership `read`. When it finds the resource already exists
-   * and is not owned by this stack/stage/logical-id, it must not write to it
-   * and must return `Unowned(attrs)`; the engine then refuses it unless
-   * adoption is allowed.
+   * Reports who owns the physical resource {@link precreate} would claim,
+   * without writing. A dependency cycle precreates on raw, possibly unresolved
+   * props, before `read` can run, so the engine asks `observe` first and
+   * refuses a foreign resource before `precreate` touches it, unless adoption
+   * is allowed (`--adopt` / `adopt(true)`).
+   *
+   * It receives the same raw props as `precreate` and must derive the same
+   * identity. Return `undefined` when nothing exists there, `"owned"` when it
+   * belongs to this stack/stage/logical-id, and `"unowned"` otherwise.
+   *
+   * Opt-in: implement it whenever `precreate` can write to a resource that
+   * already exists. Without it, such a cycle precreates unchecked.
    */
+  observe?(input: {
+    id: string;
+    /**
+     * Fully-qualified name (namespace path + logical id, see `./FQN.ts`) —
+     * globally unique, so providers can stamp ownership metadata on cloud objects.
+     */
+    fqn: string;
+    news: Props<Res>;
+    instanceId: string;
+  }): Effect.Effect<"owned" | "unowned" | undefined, any, PrecreateReq>;
   precreate?(input: {
     id: string;
     /**

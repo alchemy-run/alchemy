@@ -33,6 +33,7 @@ import * as Output from "./Output.ts";
 import { type ActionApply, type Apply, type Delete, type Plan } from "./Plan.ts";
 import {
   type DeleteInProgress,
+  type ProviderService,
   findProviderByType,
   missingProviderError,
   tryFindProviderByType,
@@ -107,33 +108,6 @@ const track = (
   outputs[fqn] = entry.output;
 };
 
-/**
- * Precreate may find that the resource already exists. Like `read`, it reports
- * a foreign one as `Unowned(attrs)`: refuse it unless adoption is allowed,
- * before its attributes are checkpointed or published to cycle peers.
- */
-const admitPrecreated = (
-  attr: any,
-  node: { adopt?: boolean; resource: { Type: string } },
-  fqn: string,
-  logicalId: string,
-) =>
-  !Unowned.is(attr)
-    ? Effect.succeed(attr)
-    : node.adopt
-      ? Effect.succeed(stripUnowned(attr))
-      : Effect.fail(
-          new OwnedBySomeoneElse({
-            message:
-              `Cannot adopt resource '${fqn}' (${node.resource.Type}): ` +
-              "it exists in the cloud but is not owned by this " +
-              "stack/stage/logical-id. Re-run with `--adopt` (or " +
-              "wrap the effect in `adopt(true)`) to take it over.",
-            resourceType: node.resource.Type,
-            logicalId,
-          }),
-        );
-
 const provideLifecycleScope =
   (resource: ResourceContext["Service"]) =>
   <A, E, R>(effect: Effect.Effect<A, E, R>) =>
@@ -176,6 +150,40 @@ const instrumentLifecycle =
         },
       }),
     );
+
+/**
+ * A dependency cycle precreates on raw props, before `read` can check
+ * ownership. Ask the provider's `observe` who owns the identity precreate
+ * would claim, and refuse a foreign one unless adoption is allowed. A
+ * provider without `observe` precreates unchecked.
+ */
+const observeBeforePrecreate = Effect.fn(function* (
+  node: {
+    provider: { observe?: ProviderService<any>["observe"] };
+    props: any;
+    deferredAdoption?: { adopt: boolean };
+    resource: { Type: string };
+  },
+  fqn: string,
+  logicalId: string,
+  instanceId: string,
+) {
+  if (node.provider.observe === undefined || node.deferredAdoption === undefined) return;
+  const owner = yield* node.provider
+    .observe({ id: logicalId, fqn, instanceId, news: node.props })
+    .pipe(instrumentLifecycle("observe", fqn, node.resource.Type, logicalId, instanceId));
+  if (owner === "unowned" && !node.deferredAdoption.adopt) {
+    return yield* new OwnedBySomeoneElse({
+      message:
+        `Cannot pre-create resource '${fqn}' (${node.resource.Type}): ` +
+        "it exists in the cloud but is not owned by this " +
+        "stack/stage/logical-id. Re-run with `--adopt` (or " +
+        "wrap the effect in `adopt(true)`) to take it over.",
+      resourceType: node.resource.Type,
+      logicalId,
+    });
+  }
+});
 
 export const apply = <P extends Plan>(
   plan: P,
@@ -833,6 +841,7 @@ const executeNode = (
       // Durable Object classes are empty) can serve traffic while the real
       // version propagates.
       if (inCycle && node.provider.precreate && attr === undefined) {
+        yield* observeBeforePrecreate(node, fqn, logicalId, instanceId);
         // Some resources need a placeholder physical resource before their real
         // create can finish. Persist that stub so downstream evaluation can proceed.
         yield* report("pre-creating");
@@ -845,10 +854,7 @@ const executeNode = (
             instanceId,
             bindings: excludeDeletedBindings(node.bindings),
           })
-          .pipe(
-            instrumentLifecycle("precreate", fqn, node.resource.Type, logicalId, instanceId),
-            Effect.flatMap((attr) => admitPrecreated(attr, node, fqn, logicalId)),
-          );
+          .pipe(instrumentLifecycle("precreate", fqn, node.resource.Type, logicalId, instanceId));
         yield* commit<CreatingResourceState>({
           status: "creating",
           fqn,
@@ -1251,6 +1257,12 @@ const executeNode = (
         yield* admit(node.props);
       }
 
+      // A cycle precreates before its props resolve, so `observe` admits the
+      // identity precreate will claim — before delete-first, too.
+      if (!admitted && inCycle) {
+        yield* observeBeforePrecreate(node, fqn, logicalId, instanceId);
+      }
+
       // A cycle must delete before precreate claims the identity. Plan has
       // already refused one whose identity could not be admitted first.
       // Otherwise the previous generation survives until reconcile is
@@ -1278,10 +1290,7 @@ const executeNode = (
             instanceId,
             bindings: excludeDeletedBindings(node.bindings),
           })
-          .pipe(
-            instrumentLifecycle("precreate", fqn, node.resource.Type, logicalId, instanceId),
-            Effect.flatMap((attr) => admitPrecreated(attr, node, fqn, logicalId)),
-          );
+          .pipe(instrumentLifecycle("precreate", fqn, node.resource.Type, logicalId, instanceId));
         yield* commit<ReplacingResourceState>({
           status: "replacing",
           fqn,

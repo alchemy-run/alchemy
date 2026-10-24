@@ -5610,7 +5610,6 @@ describe("deferred adoption", { tags: ["unit", "local"] }, () => {
     {
       ready: boolean;
       foreign: boolean;
-      foreignPrecreate: boolean;
       absent: boolean;
       fail: boolean;
       reads: string[];
@@ -5664,10 +5663,7 @@ describe("deferred adoption", { tags: ["unit", "local"] }, () => {
       (yield* Probe).reads.push(id);
       return Unowned({ identity: "stub", value: "stub" });
     }),
-    precreate: Effect.fn(function* () {
-      const attrs = { identity: "stub", value: "stub" };
-      return (yield* Probe).foreignPrecreate ? Unowned(attrs) : attrs;
-    }),
+    precreate: () => Effect.succeed({ identity: "stub", value: "stub" }),
     reconcile: Effect.fn(function* ({ id, news, olds, output }) {
       const probe = yield* Probe;
       probe.reconciles.push({ id, olds, output });
@@ -5683,7 +5679,6 @@ describe("deferred adoption", { tags: ["unit", "local"] }, () => {
   const makeProbe = (): Probe["Service"] => ({
     ready: false,
     foreign: true,
-    foreignPrecreate: false,
     absent: false,
     fail: false,
     reads: [],
@@ -5754,49 +5749,6 @@ describe("deferred adoption", { tags: ["unit", "local"] }, () => {
           expect(probe.deletes).not.toContain("Child");
         }).pipe(Effect.provideService(AdoptPolicy, enabled === false));
       },
-    );
-  }
-
-  // #2198: a cycle with unresolved props precreates before any ownership read.
-  // A precreate that finds a foreign resource reports it as `Unowned`.
-  const precreatePolicies = [
-    { global: false, scoped: undefined, admits: false },
-    { global: true, scoped: undefined, admits: true },
-    { global: true, scoped: false, admits: false },
-    { global: false, scoped: true, admits: true },
-  ] as const;
-  for (const { global, scoped, admits } of precreatePolicies) {
-    test.provider(
-      `admits an unowned precreate by policy (global ${global}, scoped ${scoped})`,
-      (stack) =>
-        Effect.gen(function* () {
-          const probe = yield* Probe;
-          probe.foreignPrecreate = true;
-          yield* stack.destroy();
-          const app = Effect.gen(function* () {
-            const parent = yield* Singleton("Parent", {});
-            const declaration = Stub("Stub", { parent: parent.identity });
-            const stub = yield* scoped === undefined
-              ? declaration
-              : declaration.pipe(adopt(scoped));
-            yield* stub.bind("Self", { env: { SELF: stub.identity } });
-            return stub;
-          });
-          const result = yield* stack.deploy(app).pipe(Effect.flip, Effect.option);
-          if (admits) {
-            // Adopted: reconcile receives the precreated attrs, stripped of the marker.
-            expect(Option.isNone(result)).toBe(true);
-            expect(probe.reconciles[0]?.output).toEqual({ identity: "stub", value: "stub" });
-            expect(Unowned.is(probe.reconciles[0]?.output)).toBe(false);
-          } else {
-            expect(Option.getOrUndefined(result)).toMatchObject({ _tag: "OwnedBySomeoneElse" });
-            // Refused before the foreign attrs were checkpointed or reconciled.
-            expect(probe.reconciles).toEqual([]);
-            expect((yield* getState("Stub")).attr).toBeUndefined();
-          }
-          yield* stack.destroy();
-          if (!admits) expect(probe.deletes).not.toContain("Stub");
-        }).pipe(Effect.provideService(AdoptPolicy, global)),
     );
   }
 
@@ -9616,8 +9568,6 @@ describe("replacement ownership admission", { tags: ["unit", "local"] }, () => {
       deleteFirst: boolean;
       /** Names whose reconcile succeeds in the cloud, then dies before returning. */
       crash: Set<string>;
-      /** Precreate finds a foreign resource and reports it without writing. */
-      foreignPrecreate: boolean;
     }
   >()("ReplacementAdmissionCloud") {}
   const providers = Provider.succeed(Named, {
@@ -9635,10 +9585,6 @@ describe("replacement ownership admission", { tags: ["unit", "local"] }, () => {
     }),
     precreate: Effect.fn(function* ({ id, news }) {
       const cloud = yield* Cloud;
-      if (cloud.foreignPrecreate) {
-        cloud.events.push("precreate (foreign)");
-        return Unowned({ name: "foreign" });
-      }
       // An unresolved name has no identity to claim yet.
       if (typeof news.name !== "string") {
         cloud.events.push("precreate (unresolved)");
@@ -9671,7 +9617,6 @@ describe("replacement ownership admission", { tags: ["unit", "local"] }, () => {
           outputs: [],
           deleteFirst: false,
           crash: new Set<string>(),
-          foreignPrecreate: false,
         })),
       ),
     ),
@@ -9699,7 +9644,6 @@ describe("replacement ownership admission", { tags: ["unit", "local"] }, () => {
     cloud.owners.clear();
     cloud.crash.clear();
     cloud.deleteFirst = false;
-    cloud.foreignPrecreate = false;
     yield* stack.deploy(resolvesDuringApply("old"));
     cloud.owners.set("target", "SomeoneElse");
     cloud.events.length = 0;
@@ -9975,83 +9919,6 @@ describe("replacement ownership admission", { tags: ["unit", "local"] }, () => {
     );
   }
 
-  // #2198: with an unresolved name, a cyclic replacement precreates before any
-  // ownership read, so precreate itself reports a foreign resource.
-  test.provider("refuses an unowned precreate of a cyclic replacement", (stack) =>
-    Effect.gen(function* () {
-      const cloud = yield* setup(stack);
-      cloud.foreignPrecreate = true;
-      const error = yield* stack.deploy(resolvesDuringApply("fresh", true)).pipe(Effect.flip);
-      expect(error).toMatchObject({ _tag: "OwnedBySomeoneElse" });
-      expect(cloud.events).toEqual(["precreate (foreign)"]);
-      expect(cloud.outputs).toEqual([]);
-      // The foreign attrs were never checkpointed; the old generation survives.
-      const replacing = yield* getState("Subject");
-      expect(replacing).toMatchObject({ status: "replacing", attr: undefined });
-      expect(cloud.owners.get("old")).toBe("Subject");
-      cloud.foreignPrecreate = false;
-      yield* stack.destroy();
-    }),
-  );
-
-  // Delete-first would have to drop the old generation before precreate can
-  // report the foreign target, so the replacement is refused up front.
-  test.provider("a cyclic delete-first refusal keeps the previous generation", (stack) =>
-    Effect.gen(function* () {
-      const cloud = yield* setup(stack);
-      cloud.owners.set("foreign", "SomeoneElse");
-      cloud.deleteFirst = true;
-      cloud.foreignPrecreate = true;
-      const error = yield* stack.deploy(resolvesDuringApply("foreign", true)).pipe(Effect.flip);
-      expect(error).toMatchObject({ _tag: "UnverifiableReplacement" });
-      expect(cloud.events).toEqual([]);
-      expect(cloud.owners.get("old")).toBe("Subject");
-      expect(cloud.owners.get("foreign")).toBe("SomeoneElse");
-      cloud.foreignPrecreate = false;
-      yield* stack.destroy();
-    }),
-  );
-
-  test.provider(
-    "adopt(true) admits an unowned precreate of a cyclic delete-first replacement",
-    (stack) =>
-      Effect.gen(function* () {
-        const cloud = yield* setup(stack);
-        cloud.deleteFirst = true;
-        cloud.foreignPrecreate = true;
-        yield* stack.deploy(resolvesDuringApply("fresh", true).pipe(adopt(true)));
-        expect(cloud.events.slice(0, 3)).toEqual([
-          "delete old",
-          "precreate (foreign)",
-          "reconcile fresh",
-        ]);
-        expect(cloud.outputs).toEqual([{ name: "foreign" }]);
-        cloud.foreignPrecreate = false;
-        yield* stack.destroy();
-      }),
-  );
-
-  test.provider("adopt(true) admits an unowned precreate of a cyclic replacement", (stack) =>
-    Effect.gen(function* () {
-      const cloud = yield* setup(stack);
-      cloud.foreignPrecreate = true;
-      yield* stack.deploy(
-        Effect.gen(function* () {
-          const source = yield* TestResource("Name", { string: "fresh" });
-          const subject = yield* Named("Subject", { name: source.string }).pipe(adopt(true));
-          yield* subject.bind("Self", { self: subject.name });
-          return subject;
-        }),
-      );
-      expect(cloud.events.slice(0, 2)).toEqual(["precreate (foreign)", "reconcile fresh"]);
-      // Reconcile gets the precreated attrs without the `Unowned` marker.
-      expect(cloud.outputs).toEqual([{ name: "foreign" }]);
-      expect(Unowned.is(cloud.outputs[0])).toBe(false);
-      cloud.foreignPrecreate = false;
-      yield* stack.destroy();
-    }),
-  );
-
   test.provider("a resumed replacement with a precreate stub is not probed again", (stack) =>
     Effect.gen(function* () {
       const cloud = yield* setup(stack);
@@ -10068,5 +9935,291 @@ describe("replacement ownership admission", { tags: ["unit", "local"] }, () => {
       expect(cloud.events).toEqual(["reconcile fresh", "delete old"]);
       yield* stack.destroy();
     }),
+  );
+});
+
+// A cycle precreates on unresolved props, before `read` can check ownership.
+// A provider's `observe` reports who owns the identity precreate would claim,
+// and the engine refuses a foreign one before precreate touches it.
+describe("cyclic precreate observation", { tags: ["unit", "local"] }, () => {
+  // `name` is literal, so the identity is known; `tag` resolves during apply,
+  // so the props are not.
+  interface Watched extends Resource<
+    "Test.Watched",
+    { name: string; tag: string },
+    { name: string; tag?: string },
+    { self: string }
+  > {}
+  const Watched = Resource<Watched>("Test.Watched");
+  class Cloud extends Context.Service<
+    Cloud,
+    {
+      owners: Map<string, string>;
+      events: string[];
+      deleteFirst: boolean;
+      /** Names whose reconcile fails after precreate. */
+      crash: Set<string>;
+    }
+  >()("CyclicPrecreateObservationCloud") {}
+  const providers = Provider.succeed(Watched, {
+    diff: Effect.fn(function* ({ olds, news }) {
+      // `tag` may be unresolved, but `name` is always literal.
+      if ("name" in news && news.name === olds.name) return undefined;
+      return { action: "replace" as const, deleteFirst: (yield* Cloud).deleteFirst };
+    }),
+    observe: Effect.fn(function* ({ id, news }) {
+      const cloud = yield* Cloud;
+      cloud.events.push(`observe ${news.name}`);
+      const owner = cloud.owners.get(news.name);
+      return owner === undefined ? undefined : owner === id ? "owned" : "unowned";
+    }),
+    read: Effect.fn(function* ({ id, olds, output }) {
+      const cloud = yield* Cloud;
+      const name = output?.name ?? olds?.name;
+      cloud.events.push(`read ${name}`);
+      const owner = name === undefined ? undefined : cloud.owners.get(name);
+      if (owner === undefined) return undefined;
+      return owner === id ? { name: name! } : Unowned({ name: name! });
+    }),
+    precreate: Effect.fn(function* ({ id, news }) {
+      const cloud = yield* Cloud;
+      cloud.events.push(`precreate ${news.name}`);
+      cloud.owners.set(news.name, id);
+      return { name: news.name };
+    }),
+    reconcile: Effect.fn(function* ({ id, news }) {
+      const cloud = yield* Cloud;
+      cloud.events.push(`reconcile ${news.name}`);
+      cloud.owners.set(news.name, id);
+      if (cloud.crash.has(news.name)) return yield* new ResourceFailure();
+      return { name: news.name, tag: news.tag };
+    }),
+    delete: Effect.fn(function* ({ output }) {
+      const cloud = yield* Cloud;
+      cloud.events.push(`delete ${output.name}`);
+      cloud.owners.delete(output.name);
+    }),
+  }).pipe(
+    Layer.provideMerge(
+      Layer.effect(
+        Cloud,
+        Effect.sync(() => ({
+          owners: new Map<string, string>(),
+          events: [] as string[],
+          deleteFirst: false,
+          crash: new Set<string>(),
+        })),
+      ),
+    ),
+  );
+  const { test } = Test.make({ providers: Layer.mergeAll(providers, TestLayers()) });
+
+  /** `Subject` named `name`, in a cycle, with a `tag` from `Tag`. */
+  const subject = (
+    name: string,
+    opts: { tag?: string; resolved?: boolean; cycle?: boolean; adopt?: boolean } = {},
+  ) =>
+    Effect.gen(function* () {
+      const tag = opts.tag ?? name;
+      const source = yield* TestResource("Tag", { string: tag });
+      const declared = Watched("Subject", { name, tag: opts.resolved ? tag : source.string });
+      const resource = yield* opts.adopt === undefined
+        ? declared
+        : declared.pipe(adopt(opts.adopt));
+      if (opts.cycle ?? true) yield* resource.bind("Self", { self: resource.name });
+      return resource;
+    });
+
+  const reset = Effect.fn(function* (stack: Test.ScratchStack) {
+    const cloud = yield* Cloud;
+    yield* stack.destroy();
+    cloud.owners.clear();
+    cloud.crash.clear();
+    cloud.deleteFirst = false;
+    cloud.events.length = 0;
+    return cloud;
+  });
+
+  /** Deploys `Subject` as "old", then plants a foreign "target". */
+  const deployed = Effect.fn(function* (stack: Test.ScratchStack) {
+    const cloud = yield* reset(stack);
+    yield* stack.deploy(subject("old"));
+    cloud.owners.set("target", "SomeoneElse");
+    cloud.events.length = 0;
+    return cloud;
+  });
+
+  const policies = [
+    { global: undefined, scoped: undefined, admits: false },
+    { global: true, scoped: undefined, admits: true },
+    { global: true, scoped: false, admits: false },
+    { global: false, scoped: true, admits: true },
+  ] as const;
+  const withGlobal =
+    (global: boolean | undefined) =>
+    <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+      global === undefined ? effect : effect.pipe(Effect.provideService(AdoptPolicy, global));
+
+  for (const { global, scoped, admits } of policies) {
+    test.provider(
+      `a cyclic create observes a foreign identity before precreate (global=${global}, scoped=${scoped})`,
+      (stack) =>
+        Effect.gen(function* () {
+          const cloud = yield* reset(stack);
+          cloud.owners.set("target", "SomeoneElse");
+          const result = yield* stack
+            .deploy(subject("target", { adopt: scoped }))
+            .pipe(Effect.flip, Effect.option);
+          if (admits) {
+            expect(Option.isNone(result)).toBe(true);
+            expect(cloud.events.slice(0, 3)).toEqual([
+              "observe target",
+              "precreate target",
+              "reconcile target",
+            ]);
+            expect(cloud.owners.get("target")).toBe("Subject");
+          } else {
+            expect(Option.getOrUndefined(result)).toMatchObject({
+              _tag: "OwnedBySomeoneElse",
+              resourceType: "Test.Watched",
+              logicalId: "Subject",
+            });
+            // Refused before precreate or reconcile touched it.
+            expect(cloud.events).toEqual(["observe target"]);
+            expect(cloud.owners.get("target")).toBe("SomeoneElse");
+            expect((yield* getState("Subject")).attr).toBeUndefined();
+          }
+          yield* stack.destroy();
+        }).pipe(withGlobal(global)),
+    );
+  }
+
+  for (const [label, owner] of [
+    ["an absent", undefined],
+    ["an owned", "Subject"],
+  ] as const) {
+    test.provider(`a cyclic create precreates ${label} identity`, (stack) =>
+      Effect.gen(function* () {
+        const cloud = yield* reset(stack);
+        if (owner) cloud.owners.set("fresh", owner);
+        yield* stack.deploy(subject("fresh"));
+        expect(cloud.events.slice(0, 3)).toEqual([
+          "observe fresh",
+          "precreate fresh",
+          "reconcile fresh",
+        ]);
+        yield* stack.destroy();
+      }),
+    );
+  }
+
+  test.provider("a cyclic create with resolved props is read by plan, not observed", (stack) =>
+    Effect.gen(function* () {
+      const cloud = yield* reset(stack);
+      yield* stack.deploy(subject("fresh", { resolved: true }));
+      expect(cloud.events.slice(0, 3)).toEqual([
+        "read fresh",
+        "precreate fresh",
+        "reconcile fresh",
+      ]);
+      expect(cloud.events).not.toContain("observe fresh");
+      yield* stack.destroy();
+    }),
+  );
+
+  for (const deleteFirst of [false, true]) {
+    test.provider(
+      `a cyclic replacement observes a foreign identity before any mutation (deleteFirst=${deleteFirst})`,
+      (stack) =>
+        Effect.gen(function* () {
+          const cloud = yield* deployed(stack);
+          cloud.deleteFirst = deleteFirst;
+          // `observe` checks ownership before the delete, so plan has no reason to refuse.
+          const plan = yield* stack.plan(subject("target"));
+          expect(plan.resources.Subject).toMatchObject({ action: "replace", deleteFirst });
+          const error = yield* stack.deploy(subject("target")).pipe(Effect.flip);
+          expect(error).toMatchObject({ _tag: "OwnedBySomeoneElse" });
+          expect(cloud.events).toEqual(["observe target"]);
+          expect(cloud.owners.get("old")).toBe("Subject");
+          expect(cloud.owners.get("target")).toBe("SomeoneElse");
+          yield* stack.destroy();
+          expect(cloud.owners.has("old")).toBe(false);
+        }),
+    );
+  }
+
+  test.provider("a cyclic delete-first replacement observes, deletes, then precreates", (stack) =>
+    Effect.gen(function* () {
+      const cloud = yield* deployed(stack);
+      cloud.deleteFirst = true;
+      yield* stack.deploy(subject("fresh"));
+      expect(cloud.events.slice(0, 4)).toEqual([
+        "observe fresh",
+        "delete old",
+        "precreate fresh",
+        "reconcile fresh",
+      ]);
+      yield* stack.destroy();
+    }),
+  );
+
+  test.provider("adopt(true) lets a cyclic delete-first replacement take over", (stack) =>
+    Effect.gen(function* () {
+      const cloud = yield* deployed(stack);
+      cloud.deleteFirst = true;
+      yield* stack.deploy(subject("target", { adopt: true }));
+      expect(cloud.events.slice(0, 4)).toEqual([
+        "observe target",
+        "delete old",
+        "precreate target",
+        "reconcile target",
+      ]);
+      expect(cloud.owners.get("target")).toBe("Subject");
+      yield* stack.destroy();
+    }),
+  );
+
+  test.provider("a cyclic replacement with resolved props is read, not observed", (stack) =>
+    Effect.gen(function* () {
+      const cloud = yield* deployed(stack);
+      yield* stack.deploy(subject("fresh", { resolved: true }));
+      expect(cloud.events.slice(0, 3)).toEqual([
+        "read fresh",
+        "precreate fresh",
+        "reconcile fresh",
+      ]);
+      expect(cloud.events).not.toContain("observe fresh");
+      yield* stack.destroy();
+    }),
+  );
+
+  test.provider("an acyclic replacement is read once its props resolve, not observed", (stack) =>
+    Effect.gen(function* () {
+      const cloud = yield* reset(stack);
+      yield* stack.deploy(subject("old", { cycle: false }));
+      cloud.events.length = 0;
+      yield* stack.deploy(subject("fresh", { cycle: false }));
+      expect(cloud.events).toEqual(["read fresh", "reconcile fresh", "delete old"]);
+      yield* stack.destroy();
+    }),
+  );
+
+  test.provider(
+    "a resumed replacement holding its precreated identity is not observed again",
+    (stack) =>
+      Effect.gen(function* () {
+        const cloud = yield* deployed(stack);
+        cloud.crash.add("fresh");
+        yield* stack
+          .deploy(subject("fresh"))
+          .pipe(Effect.catchTag("ResourceFailure", () => Effect.void));
+        expect(cloud.events).toEqual(["observe fresh", "precreate fresh", "reconcile fresh"]);
+        cloud.crash.clear();
+        cloud.events.length = 0;
+        yield* stack.deploy(subject("fresh", { tag: "again" }));
+        expect(cloud.events).not.toContain("observe fresh");
+        expect(cloud.events).toContain("delete old");
+        yield* stack.destroy();
+      }),
   );
 });
