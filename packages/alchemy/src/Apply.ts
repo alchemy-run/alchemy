@@ -108,6 +108,21 @@ const track = (
   outputs[fqn] = entry.output;
 };
 
+/**
+ * Whether an attr-less checkpoint lost props to `stripUnresolved`. Its stored
+ * props no longer identify the physical resource it was creating (e.g. a
+ * stripped namespace makes a name match a different resource), so recovery
+ * must not look the resource up from them.
+ */
+const propsIncomplete = (value: {
+  attr?: unknown;
+  props?: unknown;
+  propsIncomplete?: true;
+}): true | undefined =>
+  value.attr === undefined && (value.propsIncomplete || !isResolved(value.props))
+    ? true
+    : undefined;
+
 const provideLifecycleScope =
   (resource: ResourceContext["Service"]) =>
   <A, E, R>(effect: Effect.Effect<A, E, R>) =>
@@ -619,6 +634,7 @@ const executeNode = (
         value: {
           ...value,
           adoptionBlocked: value.adoptionBlocked ?? node.adoptionBlocked,
+          propsIncomplete: propsIncomplete(value),
           props: stripUnresolved(value.props),
           bindings: stripUnresolved(value.bindings),
           namespace,
@@ -2021,6 +2037,9 @@ const collectGarbage = Effect.fn(function* (plan: Plan, session: PlanStatusSessi
         const adoptionBlocked = isDeleteNode(node)
           ? node.state.adoptionBlocked
           : generation.adoptionBlocked;
+        const incompleteProps = isDeleteNode(node)
+          ? node.state.propsIncomplete
+          : generation.propsIncomplete;
         // Mutable: an attr-less row (interrupted create) may recover its
         // attributes from `provider.read` below, right before deletion.
         let attr = persistedAttr;
@@ -2174,6 +2193,13 @@ const collectGarbage = Effect.fn(function* (plan: Plan, session: PlanStatusSessi
                     "migrated predecessor. Any interrupted new physical " +
                     "resource must be identified and cleaned up manually.",
                 );
+              } else if (incompleteProps) {
+                yield* scopedSession.note(
+                  "Skipping recovery: unresolved properties were omitted from " +
+                    "this interrupted create's state, so they cannot identify it. " +
+                    "Any interrupted physical resource must be identified and " +
+                    "cleaned up manually.",
+                );
               } else if (provider.read) {
                 const recovered = yield* provider
                   .read({ id: logicalId, fqn, instanceId, olds: props as never, output: undefined })
@@ -2235,6 +2261,7 @@ const collectGarbage = Effect.fn(function* (plan: Plan, session: PlanStatusSessi
                 removalPolicy: node.resource.RemovalPolicy,
                 providerMode,
                 adoptionBlocked,
+                propsIncomplete: incompleteProps,
               });
             }
 
@@ -2305,6 +2332,7 @@ const collectGarbage = Effect.fn(function* (plan: Plan, session: PlanStatusSessi
                   bindings: excludeDeletedBindings(node.bindings),
                   removalPolicy: node.removalPolicy,
                   providerMode: node.providerMode,
+                  propsIncomplete: node.propsIncomplete,
                 });
               }
               yield* scopedSession.note(

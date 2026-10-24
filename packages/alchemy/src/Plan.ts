@@ -1527,7 +1527,16 @@ const makePlan = <A>(
         // `output` is undefined (as it is here), so handing them
         // unresolved exprs crashes. Skip the probe — same behavior as
         // a read that found nothing — and re-drive the create.
-        if (provider.read && !reusesMigratedFqn && isResolved(oldState.props)) {
+        //
+        // A checkpoint whose unresolved props were stripped (`propsIncomplete`)
+        // can't identify the attempt at all: a lookup could match a different
+        // resource. Skip it too and let the diff below decide.
+        if (
+          provider.read &&
+          !reusesMigratedFqn &&
+          !oldState.propsIncomplete &&
+          isResolved(oldState.props)
+        ) {
           const attr = yield* provider
             .read({
               id,

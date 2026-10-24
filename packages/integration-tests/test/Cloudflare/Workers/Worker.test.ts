@@ -1151,6 +1151,67 @@ describe.concurrent(
     const scriptName = (stack: Test.ScratchStack, suffix: string) =>
       `alchemy-cyclic-${suffix}-${stack.stage}`.toLowerCase().replace(/[^a-z0-9-]/g, "-");
 
+    // #2194: an interrupted create stores its props without the ones that were
+    // still unresolved. A namespace stripped that way leaves `{ name }`, which
+    // a recovery lookup resolves to the account-level script of that name.
+    // Destroy must not delete that script: the attempt never targeted it.
+    test.provider(
+      "destroy never recovers an interrupted create from props missing its namespace",
+      (stack) =>
+        Effect.gen(function* () {
+          const { accountId } = yield* yield* CloudflareEnvironment;
+          yield* stack.destroy();
+          const name = scriptName(stack, "provenance");
+          // An account-level script tagged for `Api`, unknown to state.
+          yield* stack.deploy(Cloudflare.Worker("Api", { main, name, workersDev: false }));
+          const restore = yield* forget(stack, "Api");
+          const deployments = () => workers.listScriptDeployments({ accountId, scriptName: name });
+          const before = yield* deployments();
+
+          // `Api` waits on a Worker whose upload fails, so its create stops
+          // with the namespace still unresolved and no attributes recorded.
+          const error = yield* stack
+            .deploy(
+              Effect.gen(function* () {
+                const tenant = yield* Cloudflare.WorkersForPlatforms.DispatchNamespace(
+                  "ProvenanceTenant",
+                  { name: scriptName(stack, "provenance-ns") },
+                );
+                const broken = yield* Cloudflare.Worker("Broken", {
+                  script: "export default {",
+                  workersDev: false,
+                });
+                return yield* Cloudflare.Worker("Api", {
+                  main,
+                  name,
+                  namespace: tenant.name,
+                  env: { BROKEN: broken.workerName },
+                });
+              }),
+            )
+            .pipe(Effect.flip);
+          expect(error).toBeDefined();
+          const checkpoint = yield* Effect.gen(function* () {
+            const state = yield* yield* State;
+            return yield* state.get({ stack: stack.name, stage: stack.stage, fqn: "Api" });
+          }).pipe(Effect.provide(stack.state));
+          expect(checkpoint).toMatchObject({ status: "creating", propsIncomplete: true });
+          if (isResourceState(checkpoint)) {
+            expect(checkpoint.attr).toBeUndefined();
+            expect(checkpoint.props).not.toHaveProperty("namespace");
+          }
+
+          yield* stack.destroy();
+          // The account-level script survived the destroy, untouched.
+          expect(yield* deployments()).toEqual(before);
+
+          yield* restore;
+          yield* stack.destroy();
+          yield* waitForWorkerToBeDeleted(name, accountId);
+        }).pipe(logLevel),
+      { tags: ["live"], timeout: 180_000 },
+    );
+
     test.provider(
       "a cyclic dispatch-namespace Worker refuses a foreign script in its namespace",
       (stack) =>

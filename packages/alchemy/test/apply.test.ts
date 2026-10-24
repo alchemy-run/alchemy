@@ -10271,3 +10271,312 @@ describe("cyclic precreate observation", { tags: ["unit", "local"] }, () => {
     }),
   );
 });
+
+describe("incomplete interrupted-create checkpoints", { tags: ["unit", "local"] }, () => {
+  // A fake cloud keyed by `<namespace>/<name>`; each entry records its owning logical id.
+  interface Scoped extends Resource<
+    "Test.Scoped",
+    { name: string; namespace?: string; version?: number },
+    { key: string },
+    { self: string }
+  > {}
+  const Scoped = Resource<Scoped>("Test.Scoped");
+  class Cloud extends Context.Service<
+    Cloud,
+    {
+      owners: Map<string, string>;
+      events: string[];
+      /** Fail every precreate: the attempt dies before anything reaches state. */
+      interrupt: boolean;
+      /** Keys whose reconcile succeeds in the cloud, then dies before returning. */
+      crash: Set<string>;
+    }
+  >()("IncompleteCheckpointCloud") {}
+  const keyOf = (props: { name?: string; namespace?: unknown }) =>
+    `${typeof props.namespace === "string" ? props.namespace : "account"}/${props.name}`;
+  const providers = Provider.succeed(Scoped, {
+    diff: Effect.fn(function* ({ news, olds }) {
+      if ("version" in news && isResolved(news.version) && news.version !== olds?.version) {
+        return { action: "replace" };
+      }
+    }),
+    read: Effect.fn(function* ({ id, olds, output }) {
+      const cloud = yield* Cloud;
+      const key = output?.key ?? keyOf(olds);
+      cloud.events.push(`read ${key}`);
+      const owner = cloud.owners.get(key);
+      if (owner === undefined) return undefined;
+      return owner === id ? { key } : Unowned({ key });
+    }),
+    precreate: Effect.fn(function* () {
+      const cloud = yield* Cloud;
+      cloud.events.push("precreate");
+      // The interrupted attempt: nothing reaches state after this point.
+      if (cloud.interrupt) return yield* new ResourceFailure();
+      return { key: "pending" };
+    }),
+    reconcile: Effect.fn(function* ({ id, news }) {
+      const cloud = yield* Cloud;
+      const key = keyOf(news);
+      cloud.events.push(`reconcile ${key}`);
+      cloud.owners.set(key, id);
+      if (cloud.crash.has(key)) return yield* new ResourceFailure();
+      return { key };
+    }),
+    delete: Effect.fn(function* ({ output }) {
+      const cloud = yield* Cloud;
+      cloud.events.push(`delete ${output.key}`);
+      cloud.owners.delete(output.key);
+    }),
+  }).pipe(
+    Layer.provideMerge(
+      Layer.effect(
+        Cloud,
+        Effect.sync(() => ({
+          owners: new Map(),
+          events: [],
+          interrupt: false,
+          crash: new Set<string>(),
+        })),
+      ),
+    ),
+  );
+  const { test } = Test.make({ providers: Layer.mergeAll(providers, TestLayers()) });
+
+  /** `Subject` lives in a namespace that only resolves during apply. */
+  const scoped = (
+    cycle: boolean,
+    { tenant = "tenant", version }: { tenant?: string; version?: number } = {},
+  ) =>
+    Effect.gen(function* () {
+      const namespace = yield* TestResource("Tenant", { string: tenant });
+      const subject = yield* Scoped("Subject", {
+        name: "api",
+        namespace: namespace.string,
+        version,
+      });
+      if (cycle) yield* subject.bind("Self", { self: subject.key });
+      return subject;
+    });
+
+  const reset = Effect.fn(function* (stack: Test.ScratchStack) {
+    const cloud = yield* Cloud;
+    yield* stack.destroy();
+    cloud.owners.clear();
+    cloud.crash.clear();
+    cloud.interrupt = false;
+    // A same-name resource branded for `Subject` at account level: a lookup by
+    // props stripped of their namespace (`{ name: "api" }`) finds it.
+    cloud.owners.set("account/api", "Subject");
+    cloud.events.length = 0;
+    return cloud;
+  });
+
+  const expectIncomplete = Effect.fn(function* () {
+    const checkpoint = yield* getState("Subject");
+    expect(checkpoint.status).toBe("creating");
+    expect(checkpoint.attr).toBeUndefined();
+    expect(checkpoint.props).toEqual({ name: "api" });
+    expect(checkpoint.propsIncomplete).toBe(true);
+  });
+
+  /** Interrupts a cyclic create of `Subject` before its namespace resolves. */
+  const interrupt = Effect.fn(function* (stack: Test.ScratchStack) {
+    const cloud = yield* reset(stack);
+    cloud.interrupt = true;
+    yield* stack.deploy(scoped(true)).pipe(Effect.catchTag("ResourceFailure", () => Effect.void));
+    cloud.interrupt = false;
+    yield* expectIncomplete();
+    cloud.events.length = 0;
+    return cloud;
+  });
+
+  test.provider("destroy never looks up the resource from stripped props", (stack) =>
+    Effect.gen(function* () {
+      const cloud = yield* interrupt(stack);
+      yield* stack.destroy();
+      expect(cloud.events).toEqual([]);
+      expect(cloud.owners.get("account/api")).toBe("Subject");
+      expect(yield* getState("Subject")).toBeUndefined();
+    }),
+  );
+
+  test.provider("a destroy that dies after its deleting checkpoint keeps the marker", (stack) =>
+    Effect.gen(function* () {
+      const cloud = yield* interrupt(stack);
+      const plan = yield* stack.plan(Effect.void);
+      const state = yield* yield* State;
+      const exit = yield* apply(plan).pipe(
+        Effect.provideService(
+          State,
+          Effect.succeed({
+            ...state,
+            delete: (request) =>
+              request.fqn === "Subject"
+                ? Effect.fail(new StateStoreError({ message: "Row delete failed" }))
+                : state.delete(request),
+          }),
+        ),
+        Effect.exit,
+      );
+      assert(Exit.isFailure(exit));
+      const deleting = yield* getState("Subject");
+      expect(deleting.status).toBe("deleting");
+      expect(deleting.propsIncomplete).toBe(true);
+      yield* stack.destroy();
+      expect(cloud.events).toEqual([]);
+      expect(cloud.owners.get("account/api")).toBe("Subject");
+      expect(yield* getState("Subject")).toBeUndefined();
+    }),
+  );
+
+  test.provider("an acyclic create stopped by a failed upstream is marked too", (stack) =>
+    Effect.gen(function* () {
+      const cloud = yield* reset(stack);
+      // `Tenant` dies after creating its namespace, so `Subject` never resolves.
+      cloud.crash.add("account/tenant");
+      yield* stack
+        .deploy(
+          Effect.gen(function* () {
+            const tenant = yield* Scoped("Tenant", { name: "tenant" });
+            return yield* Scoped("Subject", { name: "api", namespace: tenant.key });
+          }),
+        )
+        .pipe(Effect.catchTag("ResourceFailure", () => Effect.void));
+      expect(cloud.events).toEqual(["read account/tenant", "reconcile account/tenant"]);
+      yield* expectIncomplete();
+      cloud.events.length = 0;
+      yield* stack.destroy();
+      // `Tenant`'s complete checkpoint is recovered; `Subject` is not looked up.
+      expect(cloud.events).toEqual(["read account/tenant", "delete account/tenant"]);
+      expect(cloud.owners.get("account/api")).toBe("Subject");
+      expect(yield* getState("Subject")).toBeUndefined();
+    }),
+  );
+
+  test.provider("a checkpoint with resolved props keeps recovery by lookup (control)", (stack) =>
+    Effect.gen(function* () {
+      const cloud = yield* reset(stack);
+      yield* stack.deploy(TestResource("Tenant", { string: "tenant" }));
+      cloud.crash.add("tenant/api");
+      cloud.events.length = 0;
+      // `Tenant` already exists, so `Subject`'s props resolve at plan time.
+      yield* stack
+        .deploy(scoped(false))
+        .pipe(Effect.catchTag("ResourceFailure", () => Effect.void));
+      expect(cloud.events).toEqual(["read tenant/api", "reconcile tenant/api"]);
+      const checkpoint = yield* getState("Subject");
+      expect(checkpoint.status).toBe("creating");
+      expect(checkpoint.attr).toBeUndefined();
+      expect(checkpoint.props).toEqual({ name: "api", namespace: "tenant" });
+      expect(checkpoint.propsIncomplete).toBeUndefined();
+      cloud.events.length = 0;
+      yield* stack.destroy();
+      expect(cloud.events).toEqual(["read tenant/api", "delete tenant/api"]);
+      expect(cloud.owners.get("account/api")).toBe("Subject");
+    }),
+  );
+
+  test.provider("a retry admits the resolved identity, not the stripped one", (stack) =>
+    Effect.gen(function* () {
+      const cloud = yield* interrupt(stack);
+      const plan = yield* stack.plan(scoped(false));
+      expect(plan.resources.Subject?.action).toBe("create");
+      expect(cloud.events).toEqual([]);
+      yield* stack.deploy(scoped(false));
+      expect(cloud.events).toEqual(["read tenant/api", "reconcile tenant/api"]);
+      const created = yield* getState("Subject");
+      expect(created.status).toBe("created");
+      expect(created.propsIncomplete).toBeUndefined();
+      expect(cloud.owners.get("account/api")).toBe("Subject");
+      yield* stack.destroy();
+      expect(cloud.owners.has("tenant/api")).toBe(false);
+      expect(cloud.owners.get("account/api")).toBe("Subject");
+    }),
+  );
+
+  test.provider("a retry that resolves its props and dies again clears the marker", (stack) =>
+    Effect.gen(function* () {
+      const cloud = yield* interrupt(stack);
+      cloud.crash.add("tenant/api");
+      yield* stack
+        .deploy(scoped(false))
+        .pipe(Effect.catchTag("ResourceFailure", () => Effect.void));
+      expect(cloud.events).toEqual(["read tenant/api", "reconcile tenant/api"]);
+      const checkpoint = yield* getState("Subject");
+      expect(checkpoint.status).toBe("creating");
+      expect(checkpoint.props).toEqual({ name: "api", namespace: "tenant" });
+      expect(checkpoint.propsIncomplete).toBeUndefined();
+      cloud.events.length = 0;
+      // The complete checkpoint identifies the attempt, so destroy recovers it.
+      yield* stack.destroy();
+      expect(cloud.events).toEqual(["read tenant/api", "delete tenant/api"]);
+      expect(cloud.owners.get("account/api")).toBe("Subject");
+    }),
+  );
+
+  test.provider("replacing an incomplete checkpoint never looks up the old generation", (stack) =>
+    Effect.gen(function* () {
+      const cloud = yield* interrupt(stack);
+      const plan = yield* stack.plan(scoped(false, { version: 2 }));
+      expect(plan.resources.Subject?.action).toBe("replace");
+      yield* stack.deploy(scoped(false, { version: 2 }));
+      // Admission probes the resolved replacement; garbage collection drops
+      // the attr-less old generation without a lookup from stripped props.
+      expect(cloud.events).toEqual(["read tenant/api", "reconcile tenant/api"]);
+      const created = yield* getState("Subject");
+      expect(created.status).toBe("created");
+      expect("old" in created).toBe(false);
+      expect(cloud.owners.get("account/api")).toBe("Subject");
+      yield* stack.destroy();
+    }),
+  );
+
+  test.provider("an interrupted replacement keeps the old generation's marker", (stack) =>
+    Effect.gen(function* () {
+      const cloud = yield* interrupt(stack);
+      cloud.interrupt = true;
+      yield* stack
+        .deploy(scoped(true, { version: 2 }))
+        .pipe(Effect.catchTag("ResourceFailure", () => Effect.void));
+      cloud.interrupt = false;
+      const replacing = yield* getState("Subject");
+      assert(replacing.status === "replacing");
+      expect(replacing.old).toMatchObject({ status: "creating", propsIncomplete: true });
+      cloud.events.length = 0;
+      yield* stack.destroy();
+      // The new generation's props resolved at plan time, so it is looked up;
+      // the stripped old generation is not.
+      expect(cloud.events).toEqual(["read tenant/api"]);
+      expect(cloud.owners.get("account/api")).toBe("Subject");
+      expect(yield* getState("Subject")).toBeUndefined();
+    }),
+  );
+
+  test.provider("destroy keeps the marker when an interrupted replacement collapses", (stack) =>
+    Effect.gen(function* () {
+      const cloud = yield* reset(stack);
+      yield* stack.deploy(scoped(true));
+      expect(cloud.owners.get("tenant/api")).toBe("Subject");
+      // Updating `Tenant` leaves the namespace unresolved while `Subject` is
+      // replaced, so the replacement's own checkpoint is stripped.
+      cloud.interrupt = true;
+      yield* stack
+        .deploy(scoped(true, { tenant: "tenant-2", version: 2 }))
+        .pipe(Effect.catchTag("ResourceFailure", () => Effect.void));
+      cloud.interrupt = false;
+      const replacing = yield* getState("Subject");
+      expect(replacing.status).toBe("replacing");
+      expect(replacing.attr).toBeUndefined();
+      expect(replacing.props).toEqual({ name: "api", version: 2 });
+      expect(replacing.propsIncomplete).toBe(true);
+      cloud.events.length = 0;
+      // Draining the old generation collapses the row to `creating`; the
+      // marker must survive so the final delete skips the lookup.
+      yield* stack.destroy();
+      expect(cloud.events).toEqual(["delete tenant/api"]);
+      expect(cloud.owners.get("account/api")).toBe("Subject");
+      expect(yield* getState("Subject")).toBeUndefined();
+    }),
+  );
+});
