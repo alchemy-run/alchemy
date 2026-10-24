@@ -1151,6 +1151,29 @@ const ALCHEMY_MODE_DATA = ALCHEMY_MODES.map((m) => {
                                             >
                                                 drag me to the cloud!
                                             </text>
+                                            {/* A cursor that acts out the drag on Lambda, on a loop,
+                                                until the reader moves something. */}
+                                            {mode0 && (
+                                                <g
+                                                    style={`transform: translate(${mode0.slots[2]!.x}px, ${mode0.slots[2]!.y}px)`}
+                                                >
+                                                    <g class="dg-hint__demo">
+                                                        <rect
+                                                            class="dg-hint__ghost"
+                                                            x={-mode0.slots[2]!.w / 2}
+                                                            y="-15"
+                                                            width={mode0.slots[2]!.w}
+                                                            height="30"
+                                                            rx="8"
+                                                        />
+                                                        <path
+                                                            class="dg-hint__cursor"
+                                                            transform="translate(2 -2)"
+                                                            d="M0 0 L0 17 L4.6 12.8 L7.6 19.6 L10.4 18.4 L7.4 11.6 L13 11.6 Z"
+                                                        />
+                                                    </g>
+                                                </g>
+                                            )}
                                         </g>
                                     )}
                                 </svg>
@@ -2126,6 +2149,77 @@ const ALCHEMY_MODE_DATA = ALCHEMY_MODES.map((m) => {
     .dg-hint text {
         font: 600 19px var(--alc-font-hand);
         fill: var(--alc-accent-deep);
+    }
+    /* The cursor presses on Lambda, pulls a ghost of it down into the
+       cloud lane, lets go, and repeats. */
+    .dg-hint__demo {
+        animation: dg-hint-drag 3.2s ease-in-out 1s infinite both;
+    }
+    .dg-hint__ghost {
+        fill: color-mix(in srgb, var(--alc-accent) 14%, transparent);
+        stroke: var(--alc-accent);
+        stroke-width: 1.5;
+        stroke-dasharray: 4 3;
+        animation: dg-hint-ghost 3.2s ease-in-out 1s infinite both;
+    }
+    .dg-hint__cursor {
+        fill: var(--alc-fg-1);
+        stroke: var(--alc-bg);
+        stroke-width: 1.4;
+        stroke-linejoin: round;
+    }
+    .dg-hint.is-hidden .dg-hint__demo,
+    .dg-hint.is-hidden .dg-hint__ghost {
+        animation: none;
+    }
+    @keyframes dg-hint-drag {
+        0% {
+            opacity: 0;
+            transform: translate(14px, 10px);
+        }
+        12% {
+            opacity: 1;
+            transform: translate(0, 0) scale(1);
+        }
+        20% {
+            transform: translate(0, 0) scale(0.88);
+        }
+        58% {
+            opacity: 1;
+            transform: translate(0, 70px) scale(0.88);
+        }
+        66% {
+            opacity: 1;
+            transform: translate(0, 70px) scale(1);
+        }
+        80%,
+        100% {
+            opacity: 0;
+            transform: translate(0, 70px) scale(1);
+        }
+    }
+    @keyframes dg-hint-ghost {
+        0%,
+        18% {
+            opacity: 0;
+        }
+        24%,
+        62% {
+            opacity: 1;
+        }
+        72%,
+        100% {
+            opacity: 0;
+        }
+    }
+    @media (prefers-reduced-motion: reduce) {
+        .dg-hint__demo,
+        .dg-hint__ghost {
+            animation: none;
+        }
+        .dg-hint__ghost {
+            opacity: 0;
+        }
     }
     .dg-hint__arrow,
     .dg-hint__head {
