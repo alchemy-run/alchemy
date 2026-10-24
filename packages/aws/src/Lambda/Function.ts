@@ -1201,8 +1201,8 @@ export const Function: Platform<
       serve: (handler: HttpEffect) =>
         ctx.listen(
           // @ts-ignore
-          Effect.sync(() =>
-            makeFunctionHttpHandler(handler, { responseStream: isResponseStreaming() }),
+          Effect.map(isResponseStreaming, (responseStream) =>
+            makeFunctionHttpHandler(handler, { responseStream }),
           ),
         ),
       listen: ((handler: FunctionListener | Effect.Effect<FunctionListener>) =>
@@ -1289,7 +1289,7 @@ export const Function: Platform<
             throw new Error("No event handler found");
           };
           // `invokeMode: "RESPONSE_STREAM"` needs a streaming handler.
-          return isResponseStreaming() ? streamifyHandler(dispatch) : dispatch;
+          return (yield* isResponseStreaming) ? streamifyHandler(dispatch) : dispatch;
         }),
       })),
     };

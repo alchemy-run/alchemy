@@ -10,6 +10,7 @@ import type {
   LambdaFunctionURLEvent,
   LambdaFunctionURLResult,
 } from "aws-lambda";
+import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as HttpEffect from "effect/http/HttpEffect";
 import * as HttpMiddleware from "effect/http/HttpMiddleware";
@@ -424,8 +425,16 @@ interface AwsLambdaGlobal {
 
 const awslambda = () => (globalThis as unknown as { awslambda?: AwsLambdaGlobal }).awslambda;
 
-export const isResponseStreaming = () =>
-  process.env[RESPONSE_STREAM_ENV] === "true" && awslambda() !== undefined;
+/**
+ * Whether this sandbox serves a `RESPONSE_STREAM` Function URL. Dies on a
+ * malformed flag: the deploy writes it, so a bad value is a deploy bug, not
+ * something a handler can recover from.
+ */
+export const isResponseStreaming: Effect.Effect<boolean> = Config.Boolean(RESPONSE_STREAM_ENV).pipe(
+  Config.withDefault(false),
+  Effect.map((streaming) => streaming && awslambda() !== undefined),
+  Effect.orDie,
+);
 
 /** A Function URL response whose body is still being produced. */
 interface FunctionURLStream {
