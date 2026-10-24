@@ -4,7 +4,7 @@
  * Compile-checked against the real types; run against a fake stub.
  */
 import * as Git from "@alchemy.run/git";
-import { describe, expect, it } from "alchemy-test";
+import { describe, expect, it } from "@alchemy.run/test";
 import { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Effect from "effect/Effect";
 import * as HttpApi from "effect/http-api/HttpApi";

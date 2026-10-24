@@ -394,7 +394,7 @@ const bind = <Self, Rpcs extends Rpc.Any>(
  * stack once for the file; each test yields the deploy handle for its
  * URL and calls procedures directly.
  * ```typescript
- * import { expect } from "alchemy-test";
+ * import { expect } from "@alchemy.run/test";
  * import * as Cloudflare from "@alchemy.run/cloudflare";
  * import * as Test from "alchemy/Test/Alchemy";
  * import * as Effect from "effect/Effect";

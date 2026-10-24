@@ -1,6 +1,6 @@
 import * as AWS from "@alchemy.run/aws";
+import { expect } from "@alchemy.run/test";
 import * as agw2 from "@distilled.cloud/aws/apigatewayv2";
-import { expect } from "alchemy-test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 

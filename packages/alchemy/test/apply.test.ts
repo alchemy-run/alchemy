@@ -1,4 +1,4 @@
-import { assert, describe, expect } from "alchemy-test";
+import { assert, describe, expect } from "@alchemy.run/test";
 import { Data, Layer } from "effect";
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";

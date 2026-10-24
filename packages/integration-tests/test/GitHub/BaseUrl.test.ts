@@ -6,7 +6,7 @@ import {
 } from "@alchemy.run/github/BaseUrl";
 import { GitHubCredentials, fromToken } from "@alchemy.run/github/Credentials";
 import { gitHubBaseUrlChanged, octokitFor } from "@alchemy.run/github/Octokit";
-import { describe, expect, test } from "alchemy-test";
+import { describe, expect, test } from "@alchemy.run/test";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";

@@ -1,8 +1,8 @@
 import * as AWS from "@alchemy.run/aws";
 import { flociServices } from "@alchemy.run/aws/Local/FlociServices";
+import { assert, describe, expect } from "@alchemy.run/test";
 import * as cloudfront from "@distilled.cloud/aws/cloudfront";
 import * as s3 from "@distilled.cloud/aws/s3";
-import { assert, describe, expect } from "alchemy-test";
 import * as Output from "alchemy/Output";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Data from "effect/Data";

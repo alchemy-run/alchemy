@@ -19,7 +19,7 @@ import {
   optInTagsOf,
   timeoutOf,
   type TestOptions,
-} from "alchemy-test";
+} from "@alchemy.run/test";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Scope from "effect/Scope";

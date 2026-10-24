@@ -1,6 +1,6 @@
 import * as Docker from "@alchemy.run/docker";
 import { DockerEnvironment } from "@alchemy.run/docker/Docker";
-import { describe, expect } from "alchemy-test";
+import { describe, expect } from "@alchemy.run/test";
 import { inMemoryState, State } from "alchemy/State";
 import * as Test from "alchemy/Test/Alchemy";
 import * as ConfigProvider from "effect/ConfigProvider";

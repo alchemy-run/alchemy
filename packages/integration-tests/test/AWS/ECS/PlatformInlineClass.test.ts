@@ -1,6 +1,6 @@
 import * as AWS from "@alchemy.run/aws";
 import { createContainerRuntimeContext } from "@alchemy.run/aws/ECS/Task";
-import { expect } from "alchemy-test";
+import { expect } from "@alchemy.run/test";
 import { isResolved } from "alchemy/Diff";
 import * as Plan from "alchemy/Plan";
 import * as Provider from "alchemy/Provider";

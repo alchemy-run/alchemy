@@ -98,7 +98,7 @@ catalog:
   "@octokit/webhooks": "^14.2.0"
   "@opennextjs/aws": "4.1.9"
   "@opennextjs/cloudflare": "1.20.1"
-  "@opentui/core": "latest"
+  "@opentui/core": "^0.6.6"
   "@oxc-project/types": "^0.153.0"
   "@playwright/test": "^1.64.0"
   "@prisma/orm-family-sql": "^8.0.0-rc.11"
