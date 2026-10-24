@@ -51,7 +51,7 @@ const story = Story.make(Bank, {
 });
 ```
 
-Two things stay under your control. The clock only moves when the story moves it, so deadlines and daily limits are testable. And every call to an [external system](/domain/external-system) waits until the story answers it, so you decide what the outside world says.
+Two things stay under your control. The clock only moves when the story moves it, so deadlines and daily limits are testable. And every [external system](/domain/external-system) the model calls goes in `stub`: each call waits until the story answers it, so you decide what the outside world says. Leaving one out is a type error.
 
 ## A passing story accounts for everything
 

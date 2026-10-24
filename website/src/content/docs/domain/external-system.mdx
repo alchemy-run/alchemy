@@ -45,6 +45,22 @@ export class Payments extends Domain.ExternalSystem("Payments", {
 }) {}
 ```
 
+## Declare its errors
+
+When the vendor can refuse, declare the error with `error:`. The call's Effect then fails with that type, so a policy handles it like any typed error.
+
+```typescript
+class RefundDeclined extends Domain.Rejection("RefundDeclined", { reason: Schema.String }) {}
+
+export class Payments extends Domain.ExternalSystem("Payments", {
+  refund: {
+    args: { settlementId: Schema.String, amount: Cents },
+    success: { refundId: Schema.String },
+    error: RefundDeclined,
+  },
+}) {}
+```
+
 ## Implement it with a Layer
 
 An adapter is a Layer that implements every call. Swap it for another vendor, or a fake, without touching the model.
@@ -167,7 +183,7 @@ export const StripeSettlements = Effect.gen(function* () {
 
 ## Test external system calls
 
-In a story, an external system call waits until you resolve it. `expectCall` checks what was asked, and `resolve` answers it. With several calls waiting, name each one; see [Answer several calls](/domain/testing-models#answer-several-calls).
+In a story, an external system call waits until you answer it. `expectCall` checks what was asked, and `resolve` answers it. `fail` answers with the operation's declared error instead; see [Fail a call](/domain/testing-models#fail-a-call). With several calls waiting, name each one; see [Answer several calls](/domain/testing-models#answer-several-calls).
 
 ```typescript
 // packages/domain/test/settlements.test.ts

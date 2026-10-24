@@ -767,10 +767,10 @@ const make =
 
 /**
  * Given / when / then specifications of a domain model, run against the real
- * model in memory: policies run for real, external system calls wait until you resolve
- * them, and a clock you control stamps commands and fires scheduled ones. A
- * story fails on any rejection, external system call or saga defect it
- * doesn't account for.
+ * model in memory: policies run for real, every external system is stubbed so
+ * its calls wait until you answer them, and a clock you control stamps commands
+ * and fires scheduled ones. A story fails on any rejection, external system
+ * call or saga defect it doesn't account for.
  *
  * ### Writing a story
  * **Example:** A withdrawal and an overdraft

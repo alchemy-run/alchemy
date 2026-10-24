@@ -7,7 +7,7 @@ Your model is tested with [stories](/domain/story): given some history, when a c
 
 ## Create a story runner
 
-Give `Story.make` your model, its policies' Layer, and the external systems its policies call.
+Give `Story.make` your model, its policies' Layer, and every external system its policies and sagas call, in `stub`. Leaving one out is a type error, so the story answers every outside call.
 
 ```typescript
 // packages/domain/test/withdrawals.test.ts
@@ -132,21 +132,7 @@ When several waiting calls match, `expectCall` names the earliest one made. A `r
 
 ## Fail a call
 
-An operation can declare the error its vendor answers with when it refuses:
-
-```typescript
-class RefundDeclined extends Domain.Rejection("RefundDeclined", { reason: Schema.String }) {}
-
-export class Payments extends Domain.ExternalSystem("Payments", {
-  refund: {
-    args: { settlementId: Schema.String, amount: Cents },
-    success: { refundId: Schema.String },
-    error: RefundDeclined,
-  },
-}) {}
-```
-
-`Story.fail` answers a waiting call with that error, so a story can test the branch where the vendor says no. It finds the call the way `resolve` does, and only the operation's declared error type-checks:
+An operation can declare the error its vendor answers with when it refuses ([Declare its errors](/domain/external-system#declare-its-errors)). `Story.fail` answers a waiting call with that error, so a story can test the branch where the vendor says no. It finds the call the way `resolve` does, and only the operation's declared error type-checks:
 
 ```typescript
 Story.expectCall(Payments.refund, { settlementId: "st_1" }),
@@ -165,7 +151,7 @@ A story's clock starts at `2026-01-01T00:00:00Z`, and `Story.clock` moves it to 
 
 ## Trust a passing story
 
-A story fails if a command is rejected and no `rejected` step checks it, or if an external system call is left waiting at the end. A passing story has accounted for every outcome.
+A story fails if a command is rejected and no `rejected` step checks it, or if an external system call is left waiting at the end. It doesn't compile if an external system the model calls is missing from `stub`. A passing story has accounted for every outcome.
 
 :::note
 Test what clients see through an Api in [Testing an Api](/domain/testing-apis).
