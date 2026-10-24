@@ -256,25 +256,15 @@ export const StackName = Stack.use((stack) => Effect.succeed(stack.name));
 
 export interface MakeStackProps<ROut = never> {
   name: string;
-  providers: Layer.Layer<ROut, never, StackServices>;
-  state: Layer.Layer<State, never, StackServices>;
+  /** Required; {@link make} dies with setup guidance when it is missing. */
+  providers?: Layer.Layer<ROut, never, StackServices>;
+  /** Required; {@link make} dies with setup guidance when it is missing. */
+  state?: Layer.Layer<State, never, StackServices>;
   /** Opt in to secret providers. When omitted, existing configuration is preserved. */
   secrets?: StackSecrets;
   /** @internal */
   stack?: StackSpec;
 }
-
-/**
- * Whether {@link make} runs the stack's program. A destroy sets this to
- * `false`: it builds the providers and state store but plans from state alone,
- * since every row records the provider mode that deletes it. Skipping the
- * program keeps destroy from calling cloud APIs that declarations make while
- * they are declared, such as `AWS.EC2.Network` reading availability zones.
- * @default true
- */
-export const EvaluateProgram = Context.Reference<boolean>("alchemy/Stack/EvaluateProgram", {
-  defaultValue: () => true,
-});
 
 /**
  * The scope a stack's state store is built into when it must close sooner
@@ -314,12 +304,12 @@ export const make =
             ),
           );
         }
+        const state = options.state;
         return options.providers.pipe(
           Layer.provideMerge(
             Option.match(stateScope, {
-              onNone: () => options.state,
-              onSome: (stateScope) =>
-                Layer.effectContext(Layer.buildWithScope(options.state, stateScope)),
+              onNone: () => state,
+              onSome: (stateScope) => Layer.effectContext(Layer.buildWithScope(state, stateScope)),
             }),
           ),
           Layer.provideMerge(stackConfigLayer(options.secrets)),
@@ -344,16 +334,7 @@ export const make =
         );
       }),
       Effect.flatMap((context) =>
-        Effect.all([
-          EvaluateProgram.pipe(
-            Effect.flatMap((evaluate) =>
-              // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- a destroy plan never reads the output
-              evaluate ? effect : (Effect.undefined as Effect.Effect<A>),
-            ),
-          ),
-          Stack,
-          Effect.context<ROut | StackServices>(),
-        ]).pipe(
+        Effect.all([effect, Stack, Effect.context<ROut | StackServices>()]).pipe(
           Effect.map(([output, stack, services]): CompiledStack<A, ROut | StackServices> => ({
             ...stack,
             output,
@@ -363,6 +344,27 @@ export const make =
         ),
       ),
     );
+
+/** The configuration a stack definition carries: everything but its program. */
+export interface StackDefinition<ROut = never> {
+  readonly stackName: string;
+  readonly providers?: Layer.Layer<ROut, never, StackServices>;
+  readonly state?: Layer.Layer<State, never, StackServices>;
+  readonly secrets?: StackSecrets;
+}
+
+/**
+ * Build a stack's providers and state store without running its program.
+ * Destroy needs nothing else: it plans from state alone, and every row records
+ * the provider mode that deletes it.
+ */
+export const withoutProgram = <ROut>(definition: StackDefinition<ROut>) =>
+  make({
+    name: definition.stackName,
+    providers: definition.providers,
+    state: definition.state,
+    secrets: definition.secrets,
+  })(Effect.void);
 
 export const CurrentStack = Effect.serviceOption(Stack)
 

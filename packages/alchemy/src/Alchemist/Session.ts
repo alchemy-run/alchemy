@@ -38,12 +38,7 @@ export const PLACEHOLDER_STAGE = "placeholder";
  * The default export of an `alchemy.run.ts` entrypoint: the stack effect
  * `Alchemy.Stack(...)` returns, carrying the metadata the factory attaches.
  */
-export type StackModule = ReturnType<ReturnType<typeof Stack.make>> & {
-  readonly stackName: string;
-  readonly providers: Layer.Layer<never> | undefined;
-  readonly state: Layer.Layer<never> | undefined;
-  readonly secrets: Stack.StackSecrets | undefined;
-};
+export type StackModule = ReturnType<ReturnType<typeof Stack.make>> & Stack.StackDefinition;
 
 export interface StackModuleLoader {
   readonly import: (url: string) => Promise<{ readonly default?: unknown }>;
@@ -100,7 +95,7 @@ export interface OpenOptions {
   readonly adopt?: boolean;
   /** Upgrade an out-of-date state store without prompting. */
   readonly updateStateStore?: boolean;
-  /** A destroy skips the stack program and plans from state alone. */
+  /** A destroy builds the stack's providers and state without running its program. */
   readonly operation?: "deploy" | "destroy";
 }
 
@@ -261,9 +256,12 @@ const openUncached = Effect.fn("openStackSessionUncached")(function* (
     shared,
   );
   const sessionContext = yield* Layer.build(services);
-  const stack = yield* Effect.provide(stackEffect, sessionContext).pipe(
-    Effect.provideService(Stack.EvaluateProgram, options.operation !== "destroy"),
-  );
+  const compile: Effect.Effect<
+    Stack.CompiledStack,
+    Effect.Error<StackModule>,
+    Effect.Services<StackModule>
+  > = options.operation === "destroy" ? Stack.withoutProgram(stackEffect) : stackEffect;
+  const stack = yield* Effect.provide(compile, sessionContext);
   return {
     stack,
     /**
