@@ -145,7 +145,7 @@ export const KafkaEventSource = Layer.effect(
             yield* Mapping(
               `AWS.Lambda.EventSourceMapping(${host.LogicalId}, ${cluster.LogicalId})`,
               {
-                functionName: host.functionName,
+                functionName: Lambda.qualifiedNameOf(host),
                 eventSourceArn: cluster.clusterArn,
                 topics: props.topics,
                 amazonManagedKafkaEventSourceConfig: props.consumerGroupId
