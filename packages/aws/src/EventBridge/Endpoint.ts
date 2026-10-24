@@ -278,16 +278,6 @@ export const EndpointProvider = () =>
           ),
         );
 
-      /**
-       * A freshly created replication role takes a few seconds to become
-       * assumable by EventBridge (IAM propagation).
-       */
-      const retryRolePropagation = Effect.retry({
-        while: (e: { readonly _tag: string }): boolean => e._tag === "EndpointRoleNotAssumable",
-        schedule: Schedule.spaced("3 seconds"),
-        times: 15,
-      });
-
       return {
         stables: ["endpointName", "endpointArn", "endpointId", "endpointUrl"],
         diff: Effect.fn(function* ({ id, news, olds }) {
@@ -347,7 +337,13 @@ export const EndpointProvider = () =>
             // Ensure — create the endpoint; tolerate an AlreadyExists race
             // with a peer reconciler and converge via the sync below.
             yield* eventbridge.createEndpoint({ Name: name, ...desired }).pipe(
-              retryRolePropagation,
+              Effect.retry({
+                // A freshly created replication role takes a few seconds to
+                // become assumable by EventBridge (IAM propagation).
+                while: (e): boolean => e._tag === "EndpointRoleNotAssumable",
+                schedule: Schedule.spaced("3 seconds"),
+                times: 15,
+              }),
               Effect.catchTag("ResourceAlreadyExistsException", () => Effect.void),
             );
           }
@@ -369,7 +365,13 @@ export const EndpointProvider = () =>
               .join(",") !== [...news.eventBuses].sort().join(",");
           if (drifted) {
             yield* eventbridge.updateEndpoint({ Name: name, ...desired }).pipe(
-              retryRolePropagation,
+              Effect.retry({
+                // A freshly created replication role takes a few seconds to
+                // become assumable by EventBridge (IAM propagation).
+                while: (e): boolean => e._tag === "EndpointRoleNotAssumable",
+                schedule: Schedule.spaced("3 seconds"),
+                times: 15,
+              }),
               Effect.retry({
                 while: (e): boolean => e._tag === "ConcurrentModificationException",
                 schedule: Schedule.spaced("3 seconds"),
