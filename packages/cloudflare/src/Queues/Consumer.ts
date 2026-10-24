@@ -136,7 +136,7 @@ export type Consumer = Resource<
  * });
  * ```
  *
- * ### Dead-lettering failed messages
+ * ### Dead-Lettering Failed Messages
  * **Example:** Consume the dead-letter queue
  * ```typescript
  * const dlq = yield* Cloudflare.Queues.Queue("MyDeadLetterQueue");
@@ -152,6 +152,29 @@ export type Consumer = Resource<
  * yield* Cloudflare.Queues.Consumer("MyDeadLetterConsumer", {
  *   queueId: dlq.queueId,
  *   scriptName: worker.workerName,
+ * });
+ * ```
+ *
+ * **Example:** Dead-letter to a queue in another stack
+ * ```typescript
+ * const dlq = yield* Cloudflare.Queues.Queue.ref("DeadLetters", {
+ *   stack: "shared",
+ *   stage: "production",
+ * });
+ *
+ * yield* Cloudflare.Queues.Consumer("MyConsumer", {
+ *   queueId: queue.queueId,
+ *   scriptName: worker.workerName,
+ *   deadLetterQueue: dlq.queueName,
+ * });
+ * ```
+ *
+ * **Example:** Dead-letter to a queue by name
+ * ```typescript
+ * yield* Cloudflare.Queues.Consumer("MyConsumer", {
+ *   queueId: queue.queueId,
+ *   scriptName: worker.workerName,
+ *   deadLetterQueue: "orders-dead-letters",
  * });
  * ```
  *
