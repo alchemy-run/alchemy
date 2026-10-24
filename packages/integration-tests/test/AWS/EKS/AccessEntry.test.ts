@@ -1,6 +1,9 @@
 import * as AWS from "@alchemy.run/aws";
-import { AccessEntry } from "@alchemy.run/aws/EKS";
+import { Network } from "@alchemy.run/aws/EC2/Network";
+import { AccessEntry, Cluster } from "@alchemy.run/aws/EKS";
+import { Role } from "@alchemy.run/aws/IAM";
 import { expect } from "@alchemy.run/test";
+import * as eks from "@distilled.cloud/aws/eks";
 import * as iam from "@distilled.cloud/aws/iam";
 import * as Provider from "alchemy/Provider";
 import * as Test from "alchemy/Test/Alchemy";
@@ -105,5 +108,145 @@ test.provider.skipIf(!clusterName)(
   {
     tags: ["provider:aws", "provider:aws:eks", "provider:aws:iam", "live"],
     timeout: 240_000,
+  },
+);
+
+const viewPolicyArn = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSViewPolicy";
+const editPolicyArn = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSEditPolicy";
+
+// Regression for #2192: EKS reports a cluster scope as
+// `{ type: "cluster", namespaces: [] }`, which never matched the desired
+// `{ type: "cluster" }`, so every reconcile re-associated and then
+// disassociated the policy — leaving the principal with no access. A scope
+// change took the same associate-then-disassociate path. Provisions its own
+// Auto Mode cluster (~10 min create, ~10 min delete), so it skips under
+// `--fast`.
+test.provider.skipIf(!!process.env.FAST)(
+  "reconcile keeps unchanged policies and updates scopes in place",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const deployEntry = (props: {
+        tag: string;
+        accessPolicies: { policyArn: string; accessScope: eks.AccessScope }[];
+      }) =>
+        stack.deploy(
+          Effect.gen(function* () {
+            const network = yield* Network("AccessEntryNetwork", {
+              cidrBlock: "10.85.0.0/16",
+              availabilityZones: 2,
+            });
+            const cluster = yield* Cluster("AccessEntryCluster", {
+              compute: "auto",
+              resourcesVpcConfig: {
+                subnetIds: network.publicSubnetIds,
+                endpointPublicAccess: true,
+              },
+            });
+            const principal = yield* Role("AccessEntryPrincipal", {
+              assumeRolePolicyDocument: {
+                Version: "2012-10-17",
+                Statement: [
+                  {
+                    Effect: "Allow",
+                    Principal: { Service: "ec2.amazonaws.com" },
+                    Action: "sts:AssumeRole",
+                  },
+                ],
+              },
+            });
+            return yield* AccessEntry("PolicyAccessEntry", {
+              clusterName: cluster.clusterName,
+              principalArn: principal.roleArn,
+              accessPolicies: props.accessPolicies,
+              tags: { revision: props.tag },
+            });
+          }),
+        );
+
+      const associated = (entry: AccessEntry["Attributes"]) =>
+        eks
+          .listAssociatedAccessPolicies({
+            clusterName: entry.clusterName,
+            principalArn: entry.principalArn,
+          })
+          .pipe(
+            Effect.map((response) =>
+              Object.fromEntries(
+                (response.associatedAccessPolicies ?? []).map((policy) => [
+                  policy.policyArn!,
+                  {
+                    type: policy.accessScope?.type,
+                    namespaces: [...(policy.accessScope?.namespaces ?? [])].sort(),
+                  },
+                ]),
+              ),
+            ),
+          );
+
+      const created = yield* deployEntry({
+        tag: "1",
+        accessPolicies: [
+          { policyArn: viewPolicyArn, accessScope: { type: "cluster" } },
+          { policyArn: editPolicyArn, accessScope: { type: "namespace", namespaces: ["a"] } },
+        ],
+      });
+      expect(yield* associated(created)).toEqual({
+        [viewPolicyArn]: { type: "cluster", namespaces: [] },
+        [editPolicyArn]: { type: "namespace", namespaces: ["a"] },
+      });
+
+      // A tag change reconciles the entry with unchanged policies — both must
+      // survive.
+      const retagged = yield* deployEntry({
+        tag: "2",
+        accessPolicies: [
+          { policyArn: viewPolicyArn, accessScope: { type: "cluster" } },
+          { policyArn: editPolicyArn, accessScope: { type: "namespace", namespaces: ["a"] } },
+        ],
+      });
+      expect(yield* associated(retagged)).toEqual({
+        [viewPolicyArn]: { type: "cluster", namespaces: [] },
+        [editPolicyArn]: { type: "namespace", namespaces: ["a"] },
+      });
+
+      // A scope change updates the association in place.
+      const rescoped = yield* deployEntry({
+        tag: "2",
+        accessPolicies: [
+          { policyArn: viewPolicyArn, accessScope: { type: "cluster" } },
+          {
+            policyArn: editPolicyArn,
+            accessScope: { type: "namespace", namespaces: ["b", "a"] },
+          },
+        ],
+      });
+      expect(yield* associated(rescoped)).toEqual({
+        [viewPolicyArn]: { type: "cluster", namespaces: [] },
+        [editPolicyArn]: { type: "namespace", namespaces: ["a", "b"] },
+      });
+
+      // Removing a policy disassociates only that policy.
+      const trimmed = yield* deployEntry({
+        tag: "2",
+        accessPolicies: [{ policyArn: viewPolicyArn, accessScope: { type: "cluster" } }],
+      });
+      expect(yield* associated(trimmed)).toEqual({
+        [viewPolicyArn]: { type: "cluster", namespaces: [] },
+      });
+
+      yield* stack.destroy();
+
+      const gone = yield* eks.describeCluster({ name: trimmed.clusterName }).pipe(
+        Effect.map(() => false),
+        Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(true)),
+      );
+      expect(gone).toBe(true);
+    }),
+  {
+    tags: ["provider:aws", "provider:aws:eks", "provider:aws:ec2", "provider:aws:iam", "live"],
+    // Auto Mode cluster create (~10–18 min) + four reconciles + delete (~10 min).
+    timeout: 2_700_000,
   },
 );
