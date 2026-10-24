@@ -92,12 +92,13 @@ is the thread's identity, so guard it:
   branch exists from an earlier run, reuse its worktree via
   `{ type: "existing_worktree", worktreePath, branch }`, or pick a new name —
   never launch a `worktree` strategy onto an existing branch.
-- **Launch at most 3 at a time.** Ten parallel checkouts of this repo take
-  long enough that T3 reports `git worktree add failed` after ~55s even though
-  git goes on to create the branch and worktree. Wait until the batch leaves
-  `preparing` (`t3_thread_list`) before launching the next.
-- **When preparation fails,** never retry that thread: its retry runs
-  `git worktree add -b` again and fails with `branch_already_exists`. Instead:
+- **Launch in small batches** (about 3) and wait until each batch leaves
+  `preparing` (`t3_thread_list`) before the next, so a failure is easy to
+  spot and recover before more pile up.
+- **When preparation fails,** read the error first (`t3_thread_read`,
+  `view: "activity"`) and fix its cause. Then never retry that thread: the
+  failed attempt has usually already created the branch, so the retry's
+  `git worktree add -b` fails with `branch_already_exists`. Instead:
   1. Look for the worktree git made anyway (`git worktree list --porcelain`).
   2. If it exists and is clean, launch a new thread on it with
      `existing_worktree`; otherwise delete the branch (only if
