@@ -12,16 +12,60 @@ next:
 import DeployTerminal from "../../components/marketing-islands/DeployTerminal.tsx";
 import ProviderIcons from "../../components/ProviderIcons.astro";
 
-Alchemy is a TypeScript framework for building applications on the
-cloud. You write your app's infrastructure and the code that runs on it
-as one program, and Alchemy deploys it.
+Alchemy is a TypeScript framework for building cloud applications as
+one program. Your infrastructure and the code that runs on it are
+written together, type-checked together, and deployed together.
 
-## Most cloud apps are two programs
+Here is an R2 Bucket and a Worker that serves files from it:
 
-A cloud app is usually split in two. One program creates the
-infrastructure, in a tool like Terraform, Pulumi, or the CDK. The other
-is the code that runs on it. Here is an R2 Bucket and a Worker that
-serves files from it, written that way:
+```typescript
+// src/api.ts
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+
+export const Uploads = Cloudflare.R2.Bucket("Uploads");
+
+export default Cloudflare.Worker(
+  "Api",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const bucket = yield* Cloudflare.R2.ReadWriteBucket(Uploads);
+
+    return {
+      fetch: Effect.gen(function* () {
+        const obj = yield* bucket.get("hello.txt");
+        return obj
+          ? HttpServerResponse.text(yield* obj.text())
+          : HttpServerResponse.text("Not found", { status: 404 });
+      }),
+    };
+  }).pipe(Effect.provide(Cloudflare.R2.ReadWriteBucketBinding)),
+);
+```
+
+The Bucket is declared next to the Worker that uses it, and the Worker
+asks for it in its own code. `Cloudflare.R2.ReadWriteBucket(Uploads)`
+does two jobs. When you deploy, it gives the Worker access to the
+Bucket. When the Worker runs, it returns a typed client, so
+`bucket.get` is checked like any other function call.
+
+On AWS the same kind of line writes the IAM policy and the environment
+variable for you:
+
+```typescript
+const getItem = yield* AWS.DynamoDB.GetItem(Jobs);
+// → { Action: ["dynamodb:GetItem"], Resource: [Jobs.tableArn] }
+// → Jobs_tableName=Jobs-a1b2c3
+```
+
+## Compared to two programs
+
+Other tools split this app in two. One program creates the
+infrastructure, in Terraform, Pulumi, or the CDK. A second program is
+the code that runs on it, and it reaches the Bucket through an
+environment variable. Here is the same app split that way, with Alchemy
+as the infrastructure half:
 
 ```typescript
 // alchemy.run.ts
@@ -57,55 +101,9 @@ does with it. Every feature you build crosses that line. A new upload
 route needs a Bucket, permission to use it, and the code that calls it,
 in two places that have to agree.
 
-Alchemy deploys this shape too, but it doesn't have to be split.
-
-## Alchemy makes it one program
-
-Here is the same app as one program:
-
-```typescript
-// src/api.ts
-import * as Cloudflare from "@alchemy.run/cloudflare";
-import * as Effect from "effect/Effect";
-import * as HttpServerResponse from "effect/http/HttpServerResponse";
-
-export const Uploads = Cloudflare.R2.Bucket("Uploads");
-
-export default Cloudflare.Worker(
-  "Api",
-  { main: import.meta.url },
-  Effect.gen(function* () {
-    const bucket = yield* Cloudflare.R2.ReadWriteBucket(Uploads);
-
-    return {
-      fetch: Effect.gen(function* () {
-        const obj = yield* bucket.get("hello.txt");
-        return obj
-          ? HttpServerResponse.text(yield* obj.text())
-          : HttpServerResponse.text("Not found", { status: 404 });
-      }),
-    };
-  }).pipe(Effect.provide(Cloudflare.R2.ReadWriteBucketBinding)),
-);
-```
-
-The Worker asks for the Bucket in its own code.
-`Cloudflare.R2.ReadWriteBucket(Uploads)` does two jobs. When you
-deploy, it gives the Worker access to the Bucket. When the Worker runs,
-it returns a typed client, so `bucket.get` is checked like any other
-function call.
-
-On AWS the same kind of line writes the IAM policy and the environment
-variable for you:
-
-```typescript
-const getItem = yield* AWS.DynamoDB.GetItem(Jobs);
-// → { Action: ["dynamodb:GetItem"], Resource: [Jobs.tableArn] }
-// → Jobs_tableName=Jobs-a1b2c3
-```
-
-There is no name to keep in sync, no policy to write, and no client to
-set up.
+Alchemy deploys this shape too, so existing handlers work as they are.
+In one program, there is no name to keep in sync, no policy to write,
+and no client to set up.
 
 ## Infrastructure as Effects
 
