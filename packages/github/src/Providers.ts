@@ -11,6 +11,7 @@ import { Environment, EnvironmentProvider } from "./Environment.ts";
 import { Issue, IssueProvider } from "./Issue.ts";
 import { Label, LabelProvider } from "./Label.ts";
 import { Milestone, MilestoneProvider } from "./Milestone.ts";
+import { PersonalAccessToken, PersonalAccessTokenProvider } from "./PersonalAccessToken.ts";
 import { PullRequest, PullRequestProvider } from "./PullRequest.ts";
 import { Release, ReleaseProvider } from "./Release.ts";
 import { Repository, RepositoryProvider } from "./Repository.ts";
@@ -55,6 +56,7 @@ export const providers = (options?: ProvidersOptions) =>
       Label,
       Milestone,
       Issue,
+      PersonalAccessToken,
       PullRequest,
       Release,
       Repository,
@@ -75,6 +77,7 @@ export const providers = (options?: ProvidersOptions) =>
         LabelProvider(),
         MilestoneProvider(),
         IssueProvider(),
+        PersonalAccessTokenProvider(),
         PullRequestProvider(),
         ReleaseProvider(),
         RepositoryProvider(),

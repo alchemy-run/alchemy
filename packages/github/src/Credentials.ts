@@ -39,7 +39,10 @@ export interface GitHubCredentialsService {
 export class GitHubCredentials extends Context.Service<
   GitHubCredentials,
   Effect.Effect<GitHubCredentialsService>
->()("GitHub::Credentials") {}
+>()("GitHub::Credentials") {
+  // Lets stack programs require it, e.g. an Action using a `GitHub.*Local` binding.
+  declare readonly kind: "Credentials";
+}
 
 const make = (token: Redacted.Redacted<string>, baseUrl?: string): GitHubCredentialsService => ({
   token,
