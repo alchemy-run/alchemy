@@ -2519,18 +2519,26 @@ lifecycle(7, process.env.RDS_TEST_LIFECYCLE)(
         );
 
       const created = yield* deployInstance("ResetIamPass1", false);
-      const updated = yield* deployInstance("ResetIamPass2", true);
-      expect(updated.dbInstanceArn).toBe(created.dbInstanceArn);
+      // The race is a few seconds wide, so give it several chances: each
+      // round resets the password and flips IAM authentication together.
+      const rounds = [
+        { password: "ResetIamPass2", iam: true },
+        { password: "ResetIamPass3", iam: false },
+        { password: "ResetIamPass4", iam: true },
+      ];
+      for (const { password, iam } of rounds) {
+        const updated = yield* deployInstance(password, iam);
+        expect(updated.dbInstanceArn).toBe(created.dbInstanceArn);
+        const instance = (yield* rds.describeDBInstances({
+          DBInstanceIdentifier: updated.dbInstanceIdentifier,
+        })).DBInstances?.[0];
+        expect(instance?.IAMDatabaseAuthenticationEnabled).toBe(iam);
+      }
 
-      const instance = (yield* rds.describeDBInstances({
-        DBInstanceIdentifier: updated.dbInstanceIdentifier,
-      })).DBInstances?.[0];
-      expect(instance?.IAMDatabaseAuthenticationEnabled).toBe(true);
-
-      // The password reset really applied, so the IAM modify followed it.
+      // Every password reset really applied, so each IAM modify followed one.
       const resets = yield* rds
         .describeEvents({
-          SourceIdentifier: updated.dbInstanceIdentifier,
+          SourceIdentifier: created.dbInstanceIdentifier,
           SourceType: "db-instance",
           StartTime: startedAt,
         })
@@ -2545,11 +2553,11 @@ lifecycle(7, process.env.RDS_TEST_LIFECYCLE)(
               Schedule.exponential("5 seconds"),
               Schedule.spaced("1 minute"),
             ]),
-            until: (found) => found.length > 0,
+            until: (found) => found.length >= rounds.length,
             times: 10,
           }),
         );
-      expect(resets).toHaveLength(1);
+      expect(resets).toHaveLength(rounds.length);
 
       yield* stack.destroy();
     }),
