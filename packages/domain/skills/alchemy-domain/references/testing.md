@@ -58,7 +58,7 @@ The steps:
 
 ```ts
 Story.call(FraudCheck.score({ accountId: a1.id })),  // a matching call is waiting (partial args)
-Story.resolve(FraudCheck.score, { risk: 0.95 }),           // answers the only waiting call to score
+Story.succeed(FraudCheck.score, { risk: 0.95 }),           // answers the only waiting call to score
 ```
 
 When several calls are waiting, tag each one as you expect it, and answer it by tag. A tag names the earliest matching call, in the order calls were made:
@@ -66,13 +66,13 @@ When several calls are waiting, tag each one as you expect it, and answer it by 
 ```ts
 Story.call("a-1", FraudCheck.score({ accountId: a1.id })),
 Story.call("a-2", FraudCheck.score({ accountId: a2.id })),
-Story.resolve("a-2", FraudCheck.score, { risk: 0.1 }),
-Story.resolve("a-1", FraudCheck.score, { risk: 0.95 }),
+Story.succeed("a-2", FraudCheck.score, { risk: 0.1 }),
+Story.succeed("a-1", FraudCheck.score, { risk: 0.95 }),
 ```
 
-Every call needs a `call` step before it's answered; each one matches a single call, earliest first. An untagged `resolve` with several calls waiting fails the story, and so does a call left unanswered at the end.
+Every call needs a `call` step before it's answered; each one matches a single call, earliest first. An untagged `succeed` with several calls waiting fails the story, and so does a call left unanswered at the end.
 
-`fail` answers a waiting call with the operation's declared `error:`, to test the branch where the vendor refuses. `die` answers it with a defect, as when the transport breaks. Both find the call the way `resolve` does, untagged or by tag, and only a declared error type-checks:
+`fail` answers a waiting call with the operation's declared `error:`, to test the branch where the vendor refuses. `die` answers it with a defect, as when the transport breaks. Both find the call the way `succeed` does, untagged or by tag, and only a declared error type-checks:
 
 ```ts
 Story.call(Payments.refund({ settlementId: "st_1" })),
@@ -83,7 +83,7 @@ Story.die("r-2", Payments.refund, new Error("socket closed")),
 
 ### Real calls
 
-A system left out of `stub` is called for real through its adapter Layer, which you provide to the story (its type requires it). The story records each call: a `call` step checks what it was sent and must come first, and `returned` / `failed` / `died` check how it ended, found like `resolve`. A real call no step asserts fails the story, and the story waits for real calls to finish before each step.
+A system left out of `stub` is called for real through its adapter Layer, which you provide to the story (its type requires it). The story records each call: a `call` step checks what it was sent and must come first, and `returned` / `failed` / `died` check how it ended, found like `succeed`. A real call no step asserts fails the story, and the story waits for real calls to finish before each step.
 
 ```ts
 const story = Story.make(Bank, { layer: BankHandlers, stub: [FraudCheck] });   // Payments runs for real

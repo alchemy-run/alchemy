@@ -111,7 +111,7 @@ it.effect("a risky withdrawal freezes the account", () =>
     Story.when(account, new WithdrawMoney({ amount: 60_000 })),
     Story.then(account, new MoneyWithdrawn({ amount: 60_000, balanceAfter: 30_000 })),
     Story.call(FraudCheck.score({ accountId: account.id, amount: 60_000 })),
-    Story.resolve(FraudCheck.score, { risk: 0.95 }),
+    Story.succeed(FraudCheck.score, { risk: 0.95 }),
     Story.then(account, new AccountFrozen({ reason: "fraud risk 0.95", by: system("FraudReview") })),
   ),
 );
@@ -119,20 +119,20 @@ it.effect("a risky withdrawal freezes the account", () =>
 
 ## Answer several calls
 
-`resolve` answers the only call waiting on an operation. When several are waiting, name each one as you expect it, and answer it by name:
+`succeed` answers the only call waiting on an operation. When several are waiting, name each one as you expect it, and answer it by name:
 
 ```typescript
 Story.call("a-1", FraudCheck.score({ accountId: a1.id })),
 Story.call("a-2", FraudCheck.score({ accountId: a2.id })),
-Story.resolve("a-2", FraudCheck.score, { risk: 0.1 }),
-Story.resolve("a-1", FraudCheck.score, { risk: 0.95 }),
+Story.succeed("a-2", FraudCheck.score, { risk: 0.1 }),
+Story.succeed("a-1", FraudCheck.score, { risk: 0.95 }),
 ```
 
-Every call needs a `call` step before it's answered, so a story always checks what was sent. Each `call` step matches one call, the earliest made. A `resolve` without a name fails if more than one call is waiting, so a story never answers the wrong one.
+Every call needs a `call` step before it's answered, so a story always checks what was sent. Each `call` step matches one call, the earliest made. A `succeed` without a name fails if more than one call is waiting, so a story never answers the wrong one.
 
 ## Fail a call
 
-An operation can declare the error its vendor answers with when it refuses ([Declare its errors](/domain/external-system#declare-its-errors)). `Story.fail` answers a waiting call with that error, so a story can test the branch where the vendor says no. It finds the call the way `resolve` does, and only the operation's declared error type-checks:
+An operation can declare the error its vendor answers with when it refuses ([Declare its errors](/domain/external-system#declare-its-errors)). `Story.fail` answers a waiting call with that error, so a story can test the branch where the vendor says no. It finds the call the way `succeed` does, and only the operation's declared error type-checks:
 
 ```typescript
 Story.call(Payments.refund({ settlementId: "st_1" })),

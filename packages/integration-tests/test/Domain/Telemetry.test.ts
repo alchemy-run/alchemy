@@ -300,7 +300,7 @@ describe("Domain telemetry", () => {
         Story.given(alice, new Opened({ balance: 100 })),
         Story.when(alice, new Debit({ amount: 40, note: Redacted.make("rent") })),
         Story.call(Scorer.score({ wallet: "alice" })),
-        Story.resolve(Scorer.score, { risk: 0.9 }),
+        Story.succeed(Scorer.score, { risk: 0.9 }),
         Story.then(ledger, new Audited({ wallet: "alice" })),
         Story.saga(Review, "alice", { _tag: "Completed", result: undefined }),
       ).pipe(Effect.withTracer(tracer));
@@ -334,7 +334,7 @@ describe("Domain telemetry", () => {
         Story.given(alice, new Opened({ balance: 100 })),
         Story.when(alice, new Debit({ amount: 40, note: Redacted.make("rent") })),
         Story.call(Scorer.score({ wallet: "alice" })),
-        Story.resolve(Scorer.score, { risk: 0.1 }),
+        Story.succeed(Scorer.score, { risk: 0.1 }),
       ).pipe(Effect.withTracer(tracer));
 
       const debit = one("Domain.decide Wallet.Debit");
