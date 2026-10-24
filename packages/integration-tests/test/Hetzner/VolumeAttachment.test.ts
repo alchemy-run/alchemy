@@ -100,6 +100,6 @@ test.provider.skipIf(!hasHetznerCreds)(
       "live",
     ],
     timeout: 180_000,
-    exclusive: true,
+    exclusive: "hetzner",
   },
 );

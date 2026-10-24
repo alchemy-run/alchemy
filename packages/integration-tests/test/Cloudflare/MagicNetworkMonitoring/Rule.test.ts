@@ -90,7 +90,7 @@ describe.sequential(
 
           yield* stack.destroy();
         }).pipe(logLevel),
-      { exclusive: true },
+      { exclusive: "cloudflare:mnm" },
     );
   },
 );
