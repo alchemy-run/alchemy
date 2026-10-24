@@ -2,6 +2,7 @@ import * as Domain from "@alchemy.run/domain";
 import { InMemory } from "@alchemy.run/domain/InMemory";
 import { Story } from "@alchemy.run/domain/Story";
 import { describe, expect, it } from "alchemy-test";
+import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as Headers from "effect/http/Headers";
@@ -189,8 +190,14 @@ const CapWhenOverdrawnLive = CapWhenOverdrawn.toLayer(
   }),
 );
 
+class ApprovalUnavailable extends Domain.Rejection("ApprovalUnavailable") {}
+
 class Approval extends Domain.ExternalSystem("Approval", {
-  check: { args: { total: Schema.Number }, success: { ok: Schema.Boolean } },
+  check: {
+    args: { total: Schema.Number },
+    success: { ok: Schema.Boolean },
+    error: ApprovalUnavailable,
+  },
 }) {}
 
 class CapWhenLarge extends Domain.Policy("CapWhenLarge", { from: Counter, on: [Incremented] }) {}
@@ -200,7 +207,11 @@ const CapWhenLargeLive = CapWhenLarge.toLayer(
     const counters = yield* Counter;
     return Effect.fn(function* ({ source, event }) {
       if (event.total < 15) return;
-      const { ok } = yield* approval.check({ total: event.total });
+      // Without an answer, the counter stays uncapped.
+      const ok = yield* approval.check({ total: event.total }).pipe(
+        Effect.map(({ ok }) => ok),
+        Effect.catchTag("ApprovalUnavailable", () => Effect.succeed(false)),
+      );
       if (ok) yield* counters.send(source, new Cap());
     });
   }),
@@ -290,6 +301,33 @@ describe("Domain Story", () => {
       Story.resolve("c2", Approval.check, { ok: true }),
       Story.then(c1, new Incremented({ by: 6, total: 16 })),
       Story.then(c2, new Incremented({ by: 6, total: 16 }), new Capped()),
+    ),
+  );
+
+  it.effect("fails a pending call with the operation's declared error", () =>
+    story(
+      Story.given(c1, new Incremented({ by: 10, total: 10 })),
+      Story.when(c1, new Increment({ by: 6 })),
+      Story.expectCall(Approval.check, { total: 16 }),
+      Story.fail(Approval.check, new ApprovalUnavailable()),
+      Story.then(c1, new Incremented({ by: 6, total: 16 })),
+      Story.state(c1, (s) => expect(s.capped).toBe(false)),
+    ),
+  );
+
+  it.effect("a pending call that dies fails the policy", () =>
+    story(
+      Story.given(c1, new Incremented({ by: 10, total: 10 })),
+      Story.when(c1, new Increment({ by: 6 })),
+      Story.expectCall("c1", Approval.check, { total: 16 }),
+      Story.die("c1", Approval.check, new Error("socket closed")),
+    ).pipe(
+      Effect.flip,
+      Effect.map((failure) =>
+        expect(String((failure as any).message)).toMatch(
+          /a policy or projection failed: .*socket closed/,
+        ),
+      ),
     ),
   );
 
@@ -505,7 +543,7 @@ describe("Domain Story", () => {
       Story.then(c1, new Capped()),
       Story.clock("2026-01-01T00:59:00Z"),
       Story.then(c1),
-      Story.clock("2026-01-01T01:00:00Z"),
+      Story.clock(DateTime.makeUnsafe("2026-01-01T01:00:00Z")),
       Story.then(c1, new Reminded()),
     ),
   );

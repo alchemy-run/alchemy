@@ -3,6 +3,7 @@ import * as Data from "effect/Data";
 import * as DateTime from "effect/DateTime";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
@@ -77,9 +78,9 @@ export type Step =
       readonly _tag: "Resolve";
       readonly tag: string | undefined;
       readonly op: ExternalSystem.Op;
-      readonly value: unknown;
+      readonly exit: Exit.Exit<unknown, unknown>;
     }
-  | { readonly _tag: "Clock"; readonly at: string | number }
+  | { readonly _tag: "Clock"; readonly at: string | number | DateTime.DateTime }
   | {
       readonly _tag: "Signal";
       readonly saga: Saga.Any;
@@ -197,6 +198,12 @@ const expectCall: {
     ? { _tag: "ExpectCall", tag: a[0], op: a[1], args: a[2] }
     : { _tag: "ExpectCall", tag: undefined, op: a[0], args: a[1] };
 
+/** Answer a pending call with an exit; the tag, when given, comes first. */
+const answer = (a: ReadonlyArray<any>, exit: (value: any) => Exit.Exit<unknown, unknown>): Step =>
+  typeof a[0] === "string"
+    ? { _tag: "Resolve", tag: a[0], op: a[1], exit: exit(a[2]) }
+    : { _tag: "Resolve", tag: undefined, op: a[0], exit: exit(a[1]) };
+
 /**
  * Answer an external system call. With a tag first, answers the call
  * `expectCall` tagged; without one, answers the only pending call to the
@@ -205,13 +212,28 @@ const expectCall: {
 const resolve: {
   <Success>(op: ExternalSystem.Op<any, Success>, value: Success): Step;
   <Success>(tag: string, op: ExternalSystem.Op<any, Success>, value: Success): Step;
-} = (...a: ReadonlyArray<any>): Step =>
-  typeof a[0] === "string"
-    ? { _tag: "Resolve", tag: a[0], op: a[1], value: a[2] }
-    : { _tag: "Resolve", tag: undefined, op: a[0], value: a[1] };
+} = (...a: ReadonlyArray<any>): Step => answer(a, Exit.succeed);
+
+/**
+ * Fail an external system call with one of the operation's declared errors,
+ * as when the vendor refuses. Finds the call the same way `resolve` does.
+ */
+const fail: {
+  <Error>(op: ExternalSystem.Op<any, any, Error>, error: NoInfer<Error>): Step;
+  <Error>(tag: string, op: ExternalSystem.Op<any, any, Error>, error: NoInfer<Error>): Step;
+} = (...a: ReadonlyArray<any>): Step => answer(a, Exit.fail);
+
+/**
+ * Fail an external system call with a defect, as when the transport breaks.
+ * Finds the call the same way `resolve` does.
+ */
+const die: {
+  (op: ExternalSystem.Op, defect: unknown): Step;
+  (tag: string, op: ExternalSystem.Op, defect: unknown): Step;
+} = (...a: ReadonlyArray<any>): Step => answer(a, Exit.die);
 
 /** Move the clock: later commands are stamped with it, and scheduled commands now due fire. */
-const clock = (at: string | number): Step => ({ _tag: "Clock", at });
+const clock = (at: string | number | DateTime.DateTime): Step => ({ _tag: "Clock", at });
 
 type SagaClientOf<S> = S extends Context.Key<any, infer C> ? C : never;
 type SagaKeyOf<S> =
@@ -297,7 +319,7 @@ interface PendingCall {
   readonly system: string;
   readonly op: string;
   readonly args: unknown;
-  readonly deferred: Deferred.Deferred<unknown>;
+  readonly deferred: Deferred.Deferred<unknown, unknown>;
   /** The name `expectCall` gave it, if any. */
   tag: string | undefined;
 }
@@ -369,7 +391,7 @@ const make =
                 (args: unknown) =>
                   platform.control.suspended(
                     Effect.gen(function* () {
-                      const deferred = yield* Deferred.make<unknown>();
+                      const deferred = yield* Deferred.make<unknown, unknown>();
                       calls.push({
                         system: system.systemName,
                         op,
@@ -445,7 +467,12 @@ const make =
           }
           switch (s._tag) {
             case "Clock": {
-              clockState.now = typeof s.at === "number" ? s.at : Date.parse(s.at);
+              clockState.now =
+                typeof s.at === "number"
+                  ? s.at
+                  : typeof s.at === "string"
+                    ? Date.parse(s.at)
+                    : DateTime.toEpochMillis(s.at);
               // Scheduled commands that are now due fire, and their policies run.
               yield* settle(step);
               break;
@@ -680,7 +707,7 @@ const make =
                 call = pending[0];
               }
               calls.splice(calls.indexOf(call!), 1);
-              yield* Deferred.succeed(call!.deferred, s.value);
+              yield* Deferred.done(call!.deferred, s.exit);
               yield* settle(step);
               break;
             }
@@ -764,6 +791,14 @@ const make =
  * Story.resolve("a-1", FraudCheck.score, { risk: 0.95 }),
  * ```
  *
+ * **Example:** Fail a call with the operation's declared error, or a defect
+ * ```typescript
+ * Story.expectCall(LockVendor.deleteCode, { codeId: "pc_1" }),
+ * Story.fail(LockVendor.deleteCode, new LockVendorRefused({ reason: "gateway-lost" })),
+ * Story.expectCall(LockVendor.deleteCode, { codeId: "pc_2" }),
+ * Story.die(LockVendor.deleteCode, new Error("socket closed")),
+ * ```
+ *
  * ### Sagas
  * **Example:** Check where a saga run is, and send it a signal
  * ```typescript
@@ -790,6 +825,8 @@ export const Story = {
   streamed,
   expectCall,
   resolve,
+  fail,
+  die,
   clock,
   provide,
   signal,

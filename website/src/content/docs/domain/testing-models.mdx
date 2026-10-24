@@ -130,9 +130,38 @@ Story.resolve("a-1", FraudCheck.score, { risk: 0.95 }),
 
 When several waiting calls match, `expectCall` names the earliest one made. A `resolve` without a name fails if more than one call is waiting, so a story never answers the wrong one.
 
+## Fail a call
+
+An operation can declare the error its vendor answers with when it refuses:
+
+```typescript
+class RefundDeclined extends Domain.Rejection("RefundDeclined", { reason: Schema.String }) {}
+
+export class Payments extends Domain.ExternalSystem("Payments", {
+  refund: {
+    args: { settlementId: Schema.String, amount: Cents },
+    success: { refundId: Schema.String },
+    error: RefundDeclined,
+  },
+}) {}
+```
+
+`Story.fail` answers a waiting call with that error, so a story can test the branch where the vendor says no. It finds the call the way `resolve` does, and only the operation's declared error type-checks:
+
+```typescript
+Story.expectCall(Payments.refund, { settlementId: "st_1" }),
+Story.fail(Payments.refund, new RefundDeclined({ reason: "card-closed" })),
+```
+
+`Story.die` fails a call with a defect instead, as when the connection to the vendor breaks:
+
+```typescript
+Story.die(Payments.refund, new Error("socket closed")),
+```
+
 ## Move the clock
 
-A story's clock starts at `2026-01-01T00:00:00Z`, and `Story.clock` moves it. Commands are stamped with it, so time-based rules like a daily limit are easy to test, and scheduled commands fire when it passes their time. See [Deadlines](/domain/deadlines).
+A story's clock starts at `2026-01-01T00:00:00Z`, and `Story.clock` moves it to an ISO string, epoch milliseconds or a `DateTime`. Commands are stamped with it, so time-based rules like a daily limit are easy to test, and scheduled commands fire when it passes their time. See [Deadlines](/domain/deadlines).
 
 ## Trust a passing story
 

@@ -65,14 +65,15 @@ export type Shape<Ops extends Record<string, OpSpec>> = {
 };
 
 /**
- * A reference to one external system operation, used by stories (`expectCall`, `resolve`).
+ * A reference to one external system operation, used by stories (`expectCall`, `resolve`, `fail`).
  */
-export interface Op<Args = unknown, Success = unknown> {
+export interface Op<Args = unknown, Success = unknown, Error = unknown> {
   readonly kind: "ExternalSystemOp";
   readonly system: string;
   readonly op: string;
   readonly "~args"?: Args;
   readonly "~success"?: Success;
+  readonly "~error"?: Error;
 }
 
 /**
@@ -178,7 +179,7 @@ export type ExternalSystemClass<
   /** Implement the external system with an Effect that builds its service. */
   toLayer<E, R>(build: Effect.Effect<Shape<Ops>, E, R>): Layer.Layer<ExternalSystemKey<Name>, E, R>;
 } & {
-  readonly [K in keyof Ops]: Op<ArgsOf<Ops[K]>, SuccessOf<Ops[K]>>;
+  readonly [K in keyof Ops]: Op<ArgsOf<Ops[K]>, SuccessOf<Ops[K]>, ErrorOf<Ops[K]>>;
 };
 
 /** @internal */
