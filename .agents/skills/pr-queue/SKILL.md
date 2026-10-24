@@ -53,79 +53,25 @@ Keep the shortlist as a status table with a thread link per row
 (`[title](t3-thread://v1/<threadId>)`) and a status (`todo` / `ready → merge?` /
 `close?` / `merged` / `closed` / `parked`), and re-print it whenever it changes.
 
-## 2. Write one brief per item
+## 2. Launch one thread per item
 
-A thread knows only its first message. Write each brief to
-`/tmp/pr-queue/brief-<N>.md` and launch the thread with a one-line message
-pointing at it (`cat /tmp/pr-queue/brief-<N>.md` and follow it). The brief
-carries:
+Write each brief to `/tmp/pr-queue/brief-<N>.md` and launch it with
+`t3_thread_launch` in its own worktree
+(`{ type: "worktree", baseRef: "main", branch, startFromOrigin: true }`),
+about 3 at a time. A PR's brief starts with `/audit <N>`; an issue's says to
+fix it per [audit/procedure.md](../audit/procedure.md) and open a PR ending in
+`Fixes #<N>`. Every brief adds: `pnpm install` first, no subagents, one live
+suite at a time with `--concurrency 8`, `link_pull_request` on every PR, and
+for features, post the proposed API and wait before building.
 
-- **The item:** number, title, URL. For a PR, the message starts with
-  `/audit <N>` and the thread runs `gh pr checkout <N>` in its worktree. For an
-  issue, the thread checks whether main or an existing PR already covers it
-  (close with a citation if so), otherwise fixes it on its branch and opens a
-  PR ending in `Fixes #<N>`.
-- **Setup:** `git submodule update --init -- submodules/distilled` and
-  `pnpm install` in the fresh worktree. Never `git stash`.
-- **The standards:** [audit/procedure.md](../audit/procedure.md) §3–§7 —
-  regression test in the existing suite, end to end, proven to fail on main;
-  JSDoc; DX-snippet PR description via `--body-file`.
-- **Shared-machine limits:** no subagents or workflows; one live suite at a
-  time with `--concurrency 8`; no `tsrs -b` except once at the end if types
-  changed. Auth failing within ~100ms means expired AWS SSO — stop and say so.
-- **Linking:** call `link_pull_request` for every PR it opens or works on.
-- **Design-heavy items** (features, new APIs): post the proposed user-facing
-  API as whole runnable snippets in the thread and wait for an answer before
-  building.
-- **The final reply:** PR link, tests run with pass/fail and whether the new
-  case fails on main, design questions, merge-or-close recommendation.
+If a launch fails in preparation, don't retry it (the branch already exists):
+launch a new thread on that worktree with `existing_worktree` and archive the
+failed one.
 
-## 3. Launch threads without branch clashes
+## 3. Coordinate
 
-Launch with `t3_thread_launch` and
-`workspaceStrategy: { type: "worktree", baseRef: "main", branch, startFromOrigin: true }`
-(`fix/<area>-issue-<N>` for issues, `audit/pr-<N>` for PRs). The branch name
-is the thread's identity, so guard it:
-
-- **Check before launching.** `git rev-parse --verify --quiet refs/heads/<branch>`
-  and `git worktree list --porcelain | grep "refs/heads/<branch>$"`. If the
-  branch exists from an earlier run, reuse its worktree via
-  `{ type: "existing_worktree", worktreePath, branch }`, or pick a new name —
-  never launch a `worktree` strategy onto an existing branch.
-- **Launch in small batches** (about 3) and wait until each batch leaves
-  `preparing` (`t3_thread_list`) before the next. Every new worktree runs the
-  `post-checkout` hook `scripts/bootstrap-distilled.mjs`, which adds a
-  distilled worktree and rewrites `config.worktree` for every registered
-  distilled checkout in the shared `.git/modules/distilled`. Parallel hooks
-  collide on those lock files (`could not lock config file …
-  config.worktree: File exists`); git exits non-zero, and T3 reports a bare
-  `git worktree add failed` even though the alchemy worktree and branch exist.
-  A lock left behind by a collision then fails every later launch.
-- **When preparation fails,** never retry that thread: the branch already
-  exists, so the retry fails with `branch_already_exists`. Instead:
-  1. Look for stale locks: `find .git/modules/distilled -name '*.lock'`
-     (from the main checkout). Remove one only if no `git` process holds it
-     (`pgrep -fl git`) and it isn't fresh.
-  2. Finish the hook's job in the worktree git made:
-     `node scripts/bootstrap-distilled.mjs 0000000000000000000000000000000000000000 $(git rev-parse HEAD) 1`
-     and confirm `submodules/distilled/.git` exists.
-  3. Launch a new thread on it with `existing_worktree`.
-  4. Archive the failed thread immediately (`t3_thread_organize`,
-     `action: "archive"`), so no thread is left claiming a branch another
-     thread owns.
-
-## 4. Coordinate
-
-- Don't do an item's work in this thread. Read a thread's result with
-  `t3_thread_read` when it completes, update the status table, and relay its
-  recommendation in the [audit/procedure.md §7](../audit/procedure.md#7-report-and-ask)
-  shape, one PR per message, ending with the PR's full URL.
-- Answer a thread's design question by sending it the user's decision with
-  `t3_thread_send`.
-- On "merged", verify with `gh pr view <n> --json state`; tell the threads
-  whose PRs touch the same files to re-merge main.
-- On "close" or "park", update the table and tell the thread. Close only on
-  explicit instruction, with a comment crediting the author and naming what
-  supersedes it.
-- On "enqueue more", re-run the §1 search, skip items already queued or
-  excluded, and launch the next batch per §3.
+Don't do an item's work here. When a thread finishes, read it, update the
+table, and relay its recommendation per
+[audit/procedure.md §7](../audit/procedure.md#7-report-and-ask). Pass the
+user's answers to threads with `t3_thread_send`. On "enqueue more", re-run the
+§1 search and launch the next batch.
