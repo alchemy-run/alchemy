@@ -71,7 +71,10 @@ export interface AccountDnsZoneDefaults {
    */
   multiProvider?: boolean;
   /**
-   * Default nameserver assignment for new zones.
+   * Default nameserver assignment for new zones. Set
+   * `type: "cloudflare.advanced"` to default new zones to Foundation DNS
+   * Advanced Nameservers (this replaces the removed `foundationDns`
+   * boolean, which Cloudflare rejects from 2026-11-23).
    * @default { type: "cloudflare.standard" }
    */
   nameservers?: AccountDnsNameservers;
@@ -216,6 +219,14 @@ export type AccountDnsSettings = Resource<
  * ```typescript
  * yield* Cloudflare.DNS.AccountDnsSettings("DnsSettings", {
  *   zoneDefaults: { multiProvider: true },
+ * });
+ * ```
+ *
+ * **Example:** Default new zones to Advanced Nameservers
+ * ```typescript
+ * // Paid add-on. Replaces the removed `zoneDefaults.foundationDns: true`.
+ * yield* Cloudflare.DNS.AccountDnsSettings("DnsSettings", {
+ *   zoneDefaults: { nameservers: { type: "cloudflare.advanced" } },
  * });
  * ```
  *

@@ -93,7 +93,11 @@ export interface ZoneDnsSettingsProps {
    */
   multiProvider?: boolean;
   /**
-   * Nameservers through which the zone should be available.
+   * Nameservers through which the zone should be available. Set
+   * `type: "cloudflare.advanced"` to enable Foundation DNS Advanced
+   * Nameservers (this replaces the removed `foundationDns` boolean,
+   * which Cloudflare rejects from 2026-11-23); set
+   * `type: "cloudflare.standard"` to turn them off.
    *
    * Mutable — patched in place.
    *
@@ -239,6 +243,16 @@ export type ZoneDnsSettings = Resource<
  * yield* Cloudflare.DNS.ZoneDnsSettings("DnsSettings", {
  *   zoneId: zone.zoneId,
  *   multiProvider: true,
+ * });
+ * ```
+ *
+ * ### Advanced Nameservers
+ * **Example:** Serve the zone from Foundation DNS Advanced Nameservers
+ * ```typescript
+ * // Paid add-on. Replaces the removed `foundationDns: true`.
+ * yield* Cloudflare.DNS.ZoneDnsSettings("DnsSettings", {
+ *   zoneId: zone.zoneId,
+ *   nameservers: { type: "cloudflare.advanced" },
  * });
  * ```
  *
