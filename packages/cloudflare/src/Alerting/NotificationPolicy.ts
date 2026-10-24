@@ -11,10 +11,14 @@ import {
   findPolicyByName,
   narrowPolicy,
   type ObservedPolicy,
+  boundMechanisms,
+  type NotificationPolicyBinding,
   observePolicy,
   type PolicyBody,
   policyEqualsObserved,
 } from "./internal.ts";
+
+export type { NotificationPolicyBinding } from "./internal.ts";
 
 const TypeId = "Cloudflare.Alerting.NotificationPolicy" as const;
 type TypeId = typeof TypeId;
@@ -77,10 +81,11 @@ export interface NotificationPolicyProps {
    */
   alertInterval?: string;
   /**
-   * Destinations notified when the policy fires. At least one mechanism
-   * is required.
+   * Destinations notified when the policy fires. At least one destination is
+   * required, either declared here or bound by a runtime that consumes the
+   * policy's notifications (`Cloudflare.Alerting.consumeNotifications`).
    */
-  mechanisms: NotificationPolicyMechanisms;
+  mechanisms?: NotificationPolicyMechanisms;
   /**
    * Optional filters restricting which events trigger the policy. Some
    * alert types require specific filters (`FiltersRequired`).
@@ -109,7 +114,7 @@ export type NotificationPolicy = Resource<
   TypeId,
   NotificationPolicyProps,
   NotificationPolicyAttributes,
-  never,
+  NotificationPolicyBinding,
   Providers
 >;
 
@@ -162,6 +167,21 @@ export type NotificationPolicy = Resource<
  *     newHealth: ["Unhealthy"],
  *   },
  * });
+ * ```
+ *
+ * ### Handling notifications in code
+ * **Example:** Run an Effect for each notification
+ * `consumeNotifications` adds a webhook destination at the consuming
+ * runtime, so the policy needs no `mechanisms`.
+ * ```typescript
+ * const policy = yield* Cloudflare.Alerting.NotificationPolicy("SslAlerts", {
+ *   alertType: "universal_ssl_event_type",
+ * });
+ *
+ * // in a Worker's Construction phase, with NotificationEventSourceLive provided
+ * yield* Cloudflare.Alerting.consumeNotifications(policy, (notification) =>
+ *   Effect.log(notification.text),
+ * );
  * ```
  *
  * ### SQL custom alerts <!-- api-prose -->
@@ -252,10 +272,10 @@ export const NotificationPolicyProvider = () =>
       return undefined;
     }),
 
-    reconcile: Effect.fn(function* ({ id, news, output }) {
+    reconcile: Effect.fn(function* ({ id, news, output, bindings }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const name = yield* createPolicyName(id, news.name);
-      const desired = buildPolicyBody(name, news);
+      const desired = buildPolicyBody(name, news, bindings);
 
       // 1. Observe — by cached id first, then by deterministic name.
       let observed: ObservedPolicy | undefined;
@@ -321,15 +341,19 @@ const toPolicyAttributes = (
   modified: observed.modified,
 });
 
-const buildPolicyBody = (name: string, news: NotificationPolicyProps): PolicyBody => ({
+const buildPolicyBody = (
+  name: string,
+  news: NotificationPolicyProps,
+  bindings: ReadonlyArray<{ data: NotificationPolicyBinding }>,
+): PolicyBody => ({
   name,
   alertType: news.alertType,
   enabled: news.enabled ?? true,
   description: news.description,
   alertInterval: news.alertInterval,
   // `Input<string>` ids are resolved to concrete strings by the engine
-  // before reconcile runs.
-  mechanisms: news.mechanisms as PolicyBody["mechanisms"],
+  // before reconcile runs; bound webhooks extend the declared ones.
+  mechanisms: boundMechanisms(news.mechanisms, bindings),
   filters: news.filters,
 });
 
