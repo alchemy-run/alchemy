@@ -796,7 +796,7 @@ const findWorkerId = (accountId: string, scriptName: string) =>
     }),
   );
 
-const putWorkerScript = (params: {
+export const putWorkerScript = (params: {
   accountId: string;
   scriptName: string;
   dispatchNamespace: string | undefined;
@@ -5411,7 +5411,8 @@ export const LiveWorkerProvider = () =>
     }),
   );
 
-const contentTypeForModule = (filePath: string) => {
+/** @internal Upload content type of a bundled module, by path. */
+export const contentTypeForModule = (filePath: string) => {
   // Vendored Python packages upload as opaque data, mirroring Wrangler's
   // vendored-module rules — with one exception: the `workers-runtime-sdk`
   // JS shims under `python_modules/workers/` must be ES modules so the
