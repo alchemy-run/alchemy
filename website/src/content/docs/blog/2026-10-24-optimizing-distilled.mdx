@@ -20,10 +20,14 @@ bundles distilled.
 
 That puts distilled's size in every deploy and every bundle, and until
 recently it was heavy: one API call bundled to 57 KB, and importing all
-of AWS took 227 MB of memory. This is how we cut both by pointing an
-agent at a benchmark.
+of AWS took 227 MB of memory.
 
-<VendorGrid />
+So we hillclimbed it. We built a benchmark for every SDK, put it on a
+dashboard, and pointed an agent at it with one job: make every number
+go down. It ran the benchmark after every change, kept what helped and
+dropped what didn't. Over 123 commits and 84 benchmark runs, 38 of
+them experiments, a single call's bundle shrank by a third and
+importing all of AWS went from 227 MB to 13.9 MB.
 
 <StatGrid
   title="Distilled today vs distilled before this work"
@@ -36,13 +40,16 @@ agent at a benchmark.
 />
 
 These are medians over 98 "programs": one credentials layer plus one
-operation, for every SDK and every wire protocol it uses.
+operation, for every SDK and every wire protocol it uses. Here is how
+that compares with the official SDKs today:
+
+<VendorGrid />
 
 ## How we kept score
 
 We can't make AWS or Cloudflare faster, only the SDK in front of them,
 so real API calls would only add noise. Effect helps here: every
-Distilled request goes through the `HttpClient` service, so the
+distilled request goes through the `HttpClient` service, so the
 benchmark swaps in a fake one that answers instantly:
 
 ```ts
@@ -71,8 +78,8 @@ provider and runs live tests. On our machines memory runs out before
 CPU does, so halving the heap lets us run about twice as many agents.
 
 Every run lands on a dashboard that lives in the distilled repo, one
-dot per commit. The benchmarks now
-run on every distilled PR too, so a regression shows up before it
+dot per commit, so each chart reads like a loss curve. The benchmarks
+now run on every distilled PR too, so a regression shows up before it
 merges.
 
 The whole project came down to one dashboard and one chat thread. With
