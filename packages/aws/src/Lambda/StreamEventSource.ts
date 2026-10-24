@@ -58,7 +58,7 @@ export const StreamEventSource = Layer.effect(
             yield* Mapping(
               `AWS.Lambda.EventSourceMapping(${host.LogicalId}, ${stream.LogicalId})`,
               {
-                functionName: host.functionName,
+                functionName: Lambda.qualifiedNameOf(host),
                 eventSourceArn: stream.streamArn,
                 batchSize: props.batchSize,
                 maximumBatchingWindow: props.maximumBatchingWindow,

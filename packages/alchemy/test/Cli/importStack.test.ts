@@ -18,7 +18,7 @@ import {
 } from "@/Alchemist/Session.ts";
 import * as CliKit from "@/Cli/CliKit/index.ts";
 import { Secrets, Stack, inMemoryState } from "@/index.ts";
-import { evalStack } from "../../src/Stack";
+import { evalStack } from "../../src/EvalStack";
 import * as TestCore from "../../src/Test/Core";
 import { TestLayers } from "../test.resources";
 

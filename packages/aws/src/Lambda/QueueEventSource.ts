@@ -52,7 +52,7 @@ export const QueueEventSource = Layer.effect(
             });
 
             yield* Mapping(`${queue.LogicalId}-EventSource`, {
-              functionName: host.functionName,
+              functionName: Lambda.qualifiedNameOf(host),
               eventSourceArn: queue.queueArn,
               batchSize: props.batchSize,
               maximumBatchingWindow: props.maximumBatchingWindow,

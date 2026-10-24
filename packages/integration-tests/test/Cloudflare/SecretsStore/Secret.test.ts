@@ -2,9 +2,12 @@ import * as Cloudflare from "@alchemy.run/cloudflare";
 import { expect } from "@alchemy.run/test";
 import * as Provider from "alchemy/Provider";
 import * as Test from "alchemy/Test/Alchemy";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
 import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
+import * as Schedule from "effect/Schedule";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -41,6 +44,68 @@ test.provider(
       yield* stack.destroy();
     }).pipe(logLevel),
   { tags: ["provider:cloudflare", "provider:cloudflare:secretsstore", "live"] },
+);
+
+class UnexpectedSecretValue extends Data.TaggedError("UnexpectedSecretValue")<{
+  status: number;
+  value: string | undefined;
+}> {}
+
+// Reads the secret back through a deployed Worker binding (the Secrets Store
+// API never returns values). Fresh workers.dev URLs and freshly patched
+// secrets take a moment to propagate, so retry until the expected value shows.
+const readSecretValue = (url: string, expected: string) =>
+  Effect.gen(function* () {
+    const client = yield* HttpClient.HttpClient;
+    const res = yield* client.get(url);
+    const value = res.status === 200 ? ((yield* res.json) as { value: string }).value : undefined;
+    if (value !== expected) {
+      return yield* Effect.fail(new UnexpectedSecretValue({ status: res.status, value }));
+    }
+    return value;
+  }).pipe(
+    Effect.retry({
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.spaced("5 seconds")]),
+      times: 20,
+    }),
+  );
+
+// #2441: changing only `value` updates the secret in place — same secret id,
+// and a Worker bound to it reads the new value.
+test.provider(
+  "changing value updates the secret in place",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const deploy = (value: string) =>
+        stack.deploy(
+          Effect.gen(function* () {
+            const store = yield* Cloudflare.SecretsStore.Store("UpdateSecretStore");
+            const secret = yield* Cloudflare.SecretsStore.Secret("UpdateSecret", {
+              store,
+              value: Redacted.make(value),
+            });
+            const worker = yield* Cloudflare.Worker("UpdateSecretWorker", {
+              main: new URL("./fixtures/value-worker.ts", import.meta.url).pathname,
+              workersDev: { enabled: true, previewsEnabled: false },
+              env: { MY_SECRET: secret },
+            });
+            return { secret, worker };
+          }),
+        );
+
+      const v1 = yield* deploy("sk-update-v1");
+      expect(yield* readSecretValue(v1.worker.url!, "sk-update-v1")).toBe("sk-update-v1");
+
+      const v2 = yield* deploy("sk-update-v2");
+      expect(v2.secret.secretId).toBe(v1.secret.secretId);
+      expect(v2.secret.secretName).toBe(v1.secret.secretName);
+      expect(yield* readSecretValue(v2.worker.url!, "sk-update-v2")).toBe("sk-update-v2");
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { timeout: 300_000, tags: ["provider:cloudflare", "provider:cloudflare:secretsstore", "live"] },
 );
 
 // #995: an interrupted first deploy can persist `creating` props whose parent

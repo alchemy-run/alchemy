@@ -1,5 +1,8 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
+import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
 import { expect } from "@alchemy.run/test";
+import * as workers from "@distilled.cloud/cloudflare/workers";
+import * as Drift from "alchemy/Drift";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -281,5 +284,46 @@ test.provider.skipIf(!!process.env.FAST)(
   {
     tags: ["provider:cloudflare", "provider:cloudflare:kv", "provider:cloudflare:worker", "live"],
     timeout: 300_000,
+  },
+);
+
+// #1536: drift recreates a deleted Worker without its bindings, then
+// attaches them — the native KV binding works again afterwards.
+test.provider(
+  "drift repair recreates a deleted worker and restores its KV binding",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      yield* stack.destroy();
+
+      const out = yield* stack.deploy(
+        Effect.gen(function* () {
+          const worker = yield* ReadWriteBindingWorker;
+          return { url: worker.url, workerName: worker.workerName };
+        }),
+      );
+      const base = out.url as string;
+      expect((yield* put(base, "drift-key", "before")).status).toBe(200);
+
+      yield* workers.deleteScript({ accountId, scriptName: out.workerName, force: true });
+
+      const target = { name: stack.name, stage: stack.stage };
+      const detected = yield* Drift.detect(target).pipe(Effect.provide(stack.state));
+      expect(detected.resources.KVReadWriteBindingWorker?.action).toBe("missing");
+      expect(detected.resources.KVBindingTestNamespace?.action).toBe("unchanged");
+
+      const repaired = yield* Drift.repair(target).pipe(Effect.provide(stack.state));
+      expect(repaired.resources.KVReadWriteBindingWorker?.action).toBe("recreated");
+
+      // the recreated worker reads the value written before the delete
+      expect(yield* expectValue(base, "drift-key", "before")).toBe("before");
+      expect((yield* put(base, "drift-key", "after")).status).toBe(200);
+      expect(yield* expectValue(base, "drift-key", "after")).toBe("after");
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:kv", "provider:cloudflare:worker", "live"],
+    timeout: 240_000,
   },
 );

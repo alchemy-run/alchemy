@@ -180,6 +180,63 @@ describe.sequential(
       { timeout: 300_000 },
     );
 
+    // Regression for #1982: Cloudflare stops accepting/returning
+    // `foundation_dns` on 2026-11-23. Advanced Nameservers are expressed via
+    // `nameservers.type`, and the resource never sends or snapshots the
+    // removed boolean. The nameserver type is pinned to its observed value —
+    // flipping the standing test zone's nameservers would break delegation.
+    test.provider(
+      "manages nameservers.type without foundationDns (#1982)",
+      (stack) =>
+        Effect.gen(function* () {
+          const zoneId = yield* resolveZoneId;
+
+          yield* stack.destroy();
+          yield* normalizeBaseline(zoneId);
+          const baseline = yield* getSettings(zoneId);
+
+          const settings = yield* stack.deploy(
+            Effect.gen(function* () {
+              return yield* Cloudflare.DNS.ZoneDnsSettings("DnsSettings", {
+                zoneId,
+                nameservers: { type: baseline.nameservers.type },
+                flattenAllCnames: true,
+              });
+            }),
+          );
+
+          expect(settings.nameservers.type).toEqual(baseline.nameservers.type);
+          expect(settings.flattenAllCnames).toEqual(true);
+          expect(settings.managedKeys).toContain("nameservers");
+          expect(settings.managedKeys).not.toContain("foundationDns");
+          expect("foundationDns" in settings).toBe(false);
+          expect("foundationDns" in settings.initialSettings).toBe(false);
+
+          const live = yield* getSettings(zoneId);
+          expect(live.nameservers.type).toEqual(baseline.nameservers.type);
+          expect(live.flattenAllCnames).toEqual(true);
+
+          // A redeploy with nothing changed converges without a PATCH.
+          const redeployed = yield* stack.deploy(
+            Effect.gen(function* () {
+              return yield* Cloudflare.DNS.ZoneDnsSettings("DnsSettings", {
+                zoneId,
+                nameservers: { type: baseline.nameservers.type },
+                flattenAllCnames: true,
+              });
+            }),
+          );
+          expect(redeployed.flattenAllCnames).toEqual(true);
+
+          yield* stack.destroy();
+
+          const restored = yield* getSettings(zoneId);
+          expect(restored.flattenAllCnames).toEqual(BASELINE_FLATTEN_ALL_CNAMES);
+          expect(restored.nameservers.type).toEqual(baseline.nameservers.type);
+        }).pipe(logLevel),
+      { timeout: 300_000 },
+    );
+
     // Canonical `list()` test (zone-scoped singleton): there is no account-wide
     // API for this per-zone settings object, so `list()` enumerates every zone
     // via `listAllZones` and reads the singleton in each. Assert the result is

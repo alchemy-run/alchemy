@@ -221,9 +221,8 @@ daemon. No registry.
 Changed code is a new Railway build and an in-place update.
 Unchanged code is a no-op.
 
-`build.install: ["pg"]` ships `pg` unbundled. Rolldown's CJS interop
-turns `pg.Client` into a namespace (`The superclass is not a
-constructor`) if you bundle it.
+`build.install` ships packages unbundled, installed with npm inside
+the image. Use it for native addons such as `sharp`.
 
 ```typescript
 export default class Api extends Railway.Service<Api>()(
@@ -231,7 +230,7 @@ export default class Api extends Railway.Service<Api>()(
   {
     project: Site,
     main: import.meta.url,
-    build: { install: ["pg"] },
+    build: { install: ["sharp"] },
   },
   Effect.gen(function* () {
     return {

@@ -92,7 +92,7 @@ export const TableEventSource = Layer.effect(
             });
 
             yield* Mapping(`AWS.Lambda.EventSourceMapping(${host.LogicalId}, ${table.LogicalId})`, {
-              functionName: host.functionName,
+              functionName: Lambda.qualifiedNameOf(host),
               eventSourceArn: latestStreamArn,
               batchSize: props.batchSize,
               maximumBatchingWindow: props.maximumBatchingWindow,

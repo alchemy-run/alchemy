@@ -120,7 +120,7 @@ export const RestApiEventSource = Layer.effect(
                 // URI. Region is derived from the function ARN so the
                 // binding needs no ambient environment.
                 uri: Output.map(
-                  host.functionArn,
+                  Lambda.qualifiedArnOf(host),
                   (arn: string) =>
                     `arn:aws:apigateway:${arn.split(":")[3]}:lambda:path/2015-03-31/functions/${arn}/invocations`,
                 ),
@@ -136,7 +136,7 @@ export const RestApiEventSource = Layer.effect(
 
             yield* Permission(`${api.LogicalId}-${key}-Permission`, {
               action: "lambda:InvokeFunction",
-              functionName: host.functionName,
+              functionName: Lambda.qualifiedNameOf(host),
               principal: "apigateway.amazonaws.com",
               sourceArn: Output.map(
                 Output.all(host.functionArn, api.restApiId),

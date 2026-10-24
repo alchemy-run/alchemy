@@ -175,7 +175,8 @@ describe("AWS.Website.Router local", { tags: ["provider:aws", "provider:aws:webs
             const router = yield* AWS.Website.Router("InlineRouter", {
               routes: {
                 // An Output url, as in the Router JSDoc (`api.functionUrl`).
-                "/api/*": { url: Output.interpolate`${origin.url}`, origin: { protocol: "http" } },
+                // An `http://` url stays on http without an `origin` override.
+                "/api/*": { url: Output.interpolate`${origin.url}` },
                 "/assets/*": { bucket },
               },
             });

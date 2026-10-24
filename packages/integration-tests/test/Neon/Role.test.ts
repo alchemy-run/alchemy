@@ -5,54 +5,38 @@ import { providers } from "@alchemy.run/neon/Providers";
 import { Role } from "@alchemy.run/neon/Role";
 import { describe, expect } from "@alchemy.run/test";
 import { createProjectBranchRole, getProjectBranchRole } from "@distilled.cloud/neon";
+import * as PgClient from "@effect/sql-pg/PgClient";
 import { adopt, OwnedBySomeoneElse } from "alchemy/AdoptPolicy";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Result from "effect/Result";
-import { Client } from "pg";
 
 const { test } = Test.make({ providers: providers() });
 
 const tags = ["provider:neon", "provider:neon:role", "live"];
 
-const toError = (message: string) => (cause: unknown) =>
-  cause instanceof Error ? cause : new Error(`${message}: ${String(cause)}`);
-
 /** Log in as the role and return `current_user`. */
-const currentUser = Effect.fn(function* (
-  origin: PostgresOrigin,
-  user: string,
-  password: Redacted.Redacted<string>,
-) {
-  const client = yield* Effect.sync(
-    () =>
-      new Client({
-        host: origin.host,
-        port: origin.port,
-        database: origin.database,
-        user,
-        password: Redacted.value(password),
-        ssl: true,
-      }),
-  );
-  yield* Effect.tryPromise({
-    try: () => client.connect(),
-    catch: toError(`Failed to connect as ${user}`),
-  });
-  return yield* Effect.tryPromise({
-    try: () => client.query<{ user: string }>("select current_user as user"),
-    catch: toError(`Failed to query as ${user}`),
-  }).pipe(
-    Effect.map((result) => result.rows[0]?.user),
-    Effect.ensuring(
-      Effect.tryPromise({
-        try: () => client.end(),
-        catch: toError("Failed to close client"),
-      }).pipe(Effect.catch(() => Effect.void)),
+const currentUser = Effect.fn(
+  function* (_origin: PostgresOrigin, _user: string, _password: Redacted.Redacted<string>) {
+    const sql = yield* PgClient.PgClient;
+    const rows = yield* sql<{ user: string }>`select current_user as user`;
+    return rows[0]?.user;
+  },
+  (effect, origin, user, password) =>
+    effect.pipe(
+      Effect.provide(
+        PgClient.layer({
+          host: origin.host,
+          port: origin.port,
+          database: origin.database,
+          username: user,
+          password,
+          ssl: true,
+        }),
+      ),
     ),
-  );
-});
+);
 
 const roleExists = (scope: { projectId: string; branchId: string }, roleName: string) =>
   getProjectBranchRole({
