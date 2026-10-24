@@ -183,7 +183,7 @@ export const StripeSettlements = Effect.gen(function* () {
 
 ## Test external system calls
 
-In a story, an external system call waits until you answer it. `expectCall` checks what was asked, and must come first; `resolve` answers it. `fail` answers with the operation's declared error instead; see [Fail a call](/domain/testing-models#fail-a-call). With several calls waiting, name each one; see [Answer several calls](/domain/testing-models#answer-several-calls).
+In a story, an external system call waits until you answer it. `Story.call` checks what was asked, and must come first; `succeed` answers it. `fail` answers with the operation's declared error instead; see [Fail a call](/domain/testing-models#fail-a-call). With several calls waiting, name each one; see [Answer several calls](/domain/testing-models#answer-several-calls).
 
 ```typescript
 // packages/domain/test/settlements.test.ts
@@ -215,8 +215,8 @@ it.effect("money that settles on a closed account is refunded", () =>
     ),
     Story.when(account, new RecordSettlement({ settlementId: "st_1", amount: 500 })),
     Story.then(account, new SettlementOnClosedAccount({ settlementId: "st_1", amount: 500 })),
-    Story.expectCall(Payments.refund, { settlementId: "st_1", amount: 500 }),
-    Story.resolve(Payments.refund, { refundId: "re_1" }),
+    Story.call(Payments.refund, { settlementId: "st_1", amount: 500 }),
+    Story.succeed(Payments.refund, { refundId: "re_1" }),
   ),
 );
 ```
