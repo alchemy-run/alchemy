@@ -105,7 +105,7 @@ export type Step =
       readonly events: ReadonlyArray<{ readonly _tag: string }>;
     }
   | {
-      readonly _tag: "ExpectCall";
+      readonly _tag: "Call";
       readonly tag: string | undefined;
       readonly op: ExternalSystem.Op;
       readonly args: unknown;
@@ -231,18 +231,20 @@ const streamed = <S extends DomainStream.Any>(
 });
 
 /**
- * An external system call was made with these (partial) arguments. Every
- * call needs one: a stubbed call before it's answered, a real call before
- * it's asserted. Each call is matched once, earliest first. With a tag first,
- * the tag names that call, so a later step can answer or assert exactly it.
+ * A call to an external system was made with these (partial) arguments:
+ * `Story.call(Payments.refund({ settlementId: "st_1" }))`. Every call needs
+ * one: a stubbed call before it's answered, a real call before it's asserted.
+ * Each call is matched once, earliest first. With a tag first, the tag names
+ * that call, so a later step can answer or assert exactly it.
  */
-const expectCall: {
-  <Args>(op: ExternalSystem.Op<Args, any>, args: Partial<Args>): Step;
-  <Args>(tag: string, op: ExternalSystem.Op<Args, any>, args: Partial<Args>): Step;
-} = (...a: ReadonlyArray<any>): Step =>
-  typeof a[0] === "string"
-    ? { _tag: "ExpectCall", tag: a[0], op: a[1], args: a[2] }
-    : { _tag: "ExpectCall", tag: undefined, op: a[0], args: a[1] };
+const callStep: {
+  (call: ExternalSystem.Call): Step;
+  (tag: string, call: ExternalSystem.Call): Step;
+} = (...a: ReadonlyArray<any>): Step => {
+  const [tag, call]: [string | undefined, ExternalSystem.Call] =
+    typeof a[0] === "string" ? [a[0], a[1]] : [undefined, a[0]];
+  return { _tag: "Call", tag, op: call.op, args: call.args };
+};
 
 /** Answer a pending call with an exit; the tag, when given, comes first. */
 const answer = (a: ReadonlyArray<any>, exit: (value: any) => Exit.Exit<unknown, unknown>): Step =>
@@ -251,8 +253,8 @@ const answer = (a: ReadonlyArray<any>, exit: (value: any) => Exit.Exit<unknown, 
     : { _tag: "Resolve", tag: undefined, op: a[0], exit: exit(a[1]) };
 
 /**
- * Answer an external system call an `expectCall` has checked. With a tag
- * first, answers the call `expectCall` tagged; without one, answers the only
+ * Answer an external system call a `call` step has checked. With a tag
+ * first, answers the call a `call` step tagged; without one, answers the only
  * pending call to the operation, and fails if several are pending.
  */
 const resolve: {
@@ -287,7 +289,7 @@ const outcome = (a: ReadonlyArray<any>, expected: (value: any) => any): Step =>
 /**
  * A real call to an external system that is not stubbed returned this value.
  * Finds the call the way `resolve` does: by tag, or the only unasserted call
- * to the operation. Every real call needs an `expectCall`, then one of
+ * to the operation. Every real call needs a `call` step, then one of
  * `returned`, `failed` or `died`.
  */
 const returned: {
@@ -438,7 +440,7 @@ const describeStep = (s: Step): string => {
       return `${s.view.viewName}(${s.key.id})${typeof s.expected === "function" ? "" : `: ${summarizeAll(s.expected as ReadonlyArray<unknown>)}`}`;
     case "Streamed":
       return `${s.stream.streamName}/${s.key.id}: ${summarizeAll(s.events)}`;
-    case "ExpectCall":
+    case "Call":
       return `${callName(s.tag, s.op)} ${summarize(s.args)}`;
     case "Resolve":
       return `${callName(s.tag, s.op)} → ${
@@ -546,9 +548,9 @@ interface PendingCall {
   readonly op: string;
   readonly args: unknown;
   readonly deferred: Deferred.Deferred<unknown, unknown>;
-  /** The name `expectCall` gave it, if any. */
+  /** The name its `call` step gave it, if any. */
   tag: string | undefined;
-  /** Whether `expectCall` checked its arguments. */
+  /** Whether a `call` step checked its arguments. */
   expected: boolean;
 }
 
@@ -559,9 +561,9 @@ interface ObservedCall {
   /** How the call ended; undefined while it runs. */
   exit: Exit.Exit<unknown, unknown> | undefined;
   readonly done: Deferred.Deferred<void>;
-  /** The name `expectCall` gave it, if any. */
+  /** The name its `call` step gave it, if any. */
   tag: string | undefined;
-  /** Whether `expectCall` matched it. */
+  /** Whether a `call` step matched it. */
   expected: boolean;
 }
 
@@ -959,7 +961,7 @@ const make =
               cursors.set(id, from + expected.length);
               break;
             }
-            case "ExpectCall": {
+            case "Call": {
               const name = `${s.op.system}.${s.op.op}`;
               if (s.tag !== undefined && observed.some((c) => c.tag === s.tag)) {
                 return yield* fail(`"${s.tag}" already names a call`);
@@ -1050,14 +1052,14 @@ const make =
                 if (pending.length === 0) return yield* fail(`no pending call to ${name}`);
                 if (pending.length > 1) {
                   return yield* fail(
-                    `${pending.length} pending calls to ${name}; name each with expectCall("<tag>", ...) and resolve it by tag`,
+                    `${pending.length} pending calls to ${name}; name each with call("<tag>", ...) and resolve it by tag`,
                   );
                 }
                 call = pending[0];
               }
               if (!call!.expected) {
                 return yield* fail(
-                  `${name}(${show(call!.args)}) is answered before an expectCall checks its arguments`,
+                  `${name}(${show(call!.args)}) is answered before a call step checks its arguments`,
                 );
               }
               calls.splice(calls.indexOf(call!), 1);
@@ -1086,14 +1088,14 @@ const make =
                 if (made.length === 0) return yield* fail(`no unasserted call to ${name}`);
                 if (made.length > 1) {
                   return yield* fail(
-                    `${made.length} unasserted calls to ${name}; name each with expectCall("<tag>", ...) and assert it by tag`,
+                    `${made.length} unasserted calls to ${name}; name each with call("<tag>", ...) and assert it by tag`,
                   );
                 }
                 call = made[0]!;
               }
               if (!call.expected) {
                 return yield* fail(
-                  `${name}(${show(call.args)}) is asserted before an expectCall checks its arguments`,
+                  `${name}(${show(call.args)}) is asserted before a call step checks its arguments`,
                 );
               }
               const actual = exitJson(call.exit!);
@@ -1222,15 +1224,15 @@ const make =
  * ### External systems and the clock
  * **Example:** Answer an external system call, then move the clock
  * ```typescript
- * Story.expectCall(FraudCheck.score, { accountId: account.id, amount: 60_000 }),
+ * Story.call(FraudCheck.score({ accountId: account.id, amount: 60_000 })),
  * Story.resolve(FraudCheck.score, { risk: 0.95 }),
  * Story.clock("2026-01-02T09:00:00Z"),
  * ```
  *
  * **Example:** Name calls when several are waiting
  * ```typescript
- * Story.expectCall("a-1", FraudCheck.score, { accountId: a1.id }),
- * Story.expectCall("a-2", FraudCheck.score, { accountId: a2.id }),
+ * Story.call("a-1", FraudCheck.score({ accountId: a1.id })),
+ * Story.call("a-2", FraudCheck.score({ accountId: a2.id })),
  * Story.resolve("a-2", FraudCheck.score, { risk: 0.1 }),
  * Story.resolve("a-1", FraudCheck.score, { risk: 0.95 }),
  * ```
@@ -1241,16 +1243,16 @@ const make =
  *
  * story(
  *   Story.when(account, new RecordSettlement({ settlementId: "st_1", amount: 500 })),
- *   Story.expectCall(Payments.refund, { settlementId: "st_1", amount: 500 }),
+ *   Story.call(Payments.refund({ settlementId: "st_1", amount: 500 })),
  *   Story.returned(Payments.refund, { refundId: "re_st_1" }),
  * ).pipe(Effect.provide(StripePayments));
  * ```
  *
  * **Example:** Fail a call with the operation's declared error, or a defect
  * ```typescript
- * Story.expectCall(LockVendor.deleteCode, { codeId: "pc_1" }),
+ * Story.call(LockVendor.deleteCode({ codeId: "pc_1" })),
  * Story.fail(LockVendor.deleteCode, new LockVendorRefused({ reason: "gateway-lost" })),
- * Story.expectCall(LockVendor.deleteCode, { codeId: "pc_2" }),
+ * Story.call(LockVendor.deleteCode({ codeId: "pc_2" })),
  * Story.die(LockVendor.deleteCode, new Error("socket closed")),
  * ```
  *
@@ -1278,7 +1280,7 @@ export const Story = {
   view,
   emitted,
   streamed,
-  expectCall,
+  call: callStep,
   resolve,
   fail,
   die,
