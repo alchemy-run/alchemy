@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
  * API mapping per hostname, and alias records through the DNS host named
  * by `domain.dns`.
  *
- * The HTTPS-serving suites are gated behind AWS_TEST_SLOW=1 (ACM issuance
+ * The HTTPS-serving suites are skipped under --fast (ACM issuance
  * plus API Gateway domain activation take minutes — speed doctrine). The
  * invalid-domain and no-domain regressions are cheap and ungated.
  */
@@ -190,7 +190,7 @@ const liveTags = [
   "live",
 ];
 
-describe.skipIf(!process.env.AWS_TEST_SLOW || !!process.env.FAST)(
+describe.skipIf(!!process.env.FAST)(
   "AWS.Lambda.Function domain (live, slow)",
   { tags: liveTags },
   () => {

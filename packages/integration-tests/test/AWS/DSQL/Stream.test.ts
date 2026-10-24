@@ -1,7 +1,7 @@
 import * as AWS from "@alchemy.run/aws";
 import { Stream } from "@alchemy.run/aws/DSQL";
-import * as dsql from "@distilled.cloud/aws/dsql";
 import { expect } from "@alchemy.run/test";
+import * as dsql from "@distilled.cloud/aws/dsql";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";

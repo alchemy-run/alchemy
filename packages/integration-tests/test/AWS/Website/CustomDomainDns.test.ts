@@ -13,7 +13,7 @@ import { fileURLToPath } from "node:url";
  * - `Hetzner.DNS.Adapter({ zone })` on a subdomain delegated from the
  *   Cloudflare test zone to Hetzner's nameservers.
  *
- * Gated on AWS_TEST_SLOW=1: every test deploys (and deletes) a CloudFront
+ * Skipped under --fast: every test deploys (and deletes) a CloudFront
  * distribution and waits for ACM issuance — minutes each (speed doctrine).
  * The tests run concurrently.
  */
@@ -179,7 +179,7 @@ const expectRecordsGone = (zoneId: string, names: readonly string[], type: "CNAM
     ),
   );
 
-describe.skipIf(!process.env.AWS_TEST_SLOW || !!process.env.FAST)(
+describe.skipIf(!!process.env.FAST)(
   "AWS.Website custom domain DNS (live)",
   {
     concurrent: true,

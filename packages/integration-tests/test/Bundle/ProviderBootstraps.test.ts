@@ -1,5 +1,5 @@
-import * as NodeServices from "@effect/platform-node/NodeServices";
 import { expect, layer } from "@alchemy.run/test";
+import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as Bundle from "alchemy/Bundle/Bundle";
 import * as Effect from "effect/Effect";
 import {

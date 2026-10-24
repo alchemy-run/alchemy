@@ -7,7 +7,7 @@ import { resolve4, resolveNs, Resolver } from "node:dns/promises";
  * - the Route 53 default (no `dns`) on a Route 53 zone publicly delegated
  *   from the standing Cloudflare test zone — alias `A` + `AAAA` records.
  *
- * Gated behind AWS_TEST_SLOW=1: an ALB, ACM issuance and a Fargate task
+ * Skipped under --fast: an ALB, ACM issuance and a Fargate task
  * take minutes. Both tests share one ECS cluster (deployed once per file)
  * and the default VPC's per-AZ subnets.
  */
@@ -219,7 +219,7 @@ const ClusterStack = Alchemy.Stack(
   }),
 );
 
-describe.skipIf(!process.env.AWS_TEST_SLOW || !!process.env.FAST)(
+describe.skipIf(!!process.env.FAST)(
   "AWS.ECS.Service custom domain DNS (live)",
   {
     tags: [

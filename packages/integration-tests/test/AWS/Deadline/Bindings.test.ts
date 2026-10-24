@@ -1,8 +1,8 @@
 import * as AWS from "@alchemy.run/aws";
 import { reapFarmChildren } from "@alchemy.run/aws/Deadline/internal";
+import { describe, expect } from "@alchemy.run/test";
 import * as deadline from "@distilled.cloud/aws/deadline";
 import * as eventbridge from "@distilled.cloud/aws/eventbridge";
-import { describe, expect } from "@alchemy.run/test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Core from "alchemy/Test/Core";
 import * as Data from "effect/Data";

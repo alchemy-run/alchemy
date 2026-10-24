@@ -1,11 +1,11 @@
 import * as Stripe from "@alchemy.run/stripe";
 import { isMissingStripeResource } from "@alchemy.run/stripe/missing";
+import { expect } from "@alchemy.run/test";
 import {
   GetIssuingPersonalizationDesigns,
   GetIssuingPersonalizationDesign,
   GetIssuingPhysicalBundles,
 } from "@distilled.cloud/stripe/stripe";
-import { expect } from "@alchemy.run/test";
 import * as Provider from "alchemy/Provider";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";

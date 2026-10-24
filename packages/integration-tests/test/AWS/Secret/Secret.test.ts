@@ -1,6 +1,6 @@
 import * as AWS from "@alchemy.run/aws";
-import * as Alchemy from "alchemy";
 import { expect } from "@alchemy.run/test";
+import * as Alchemy from "alchemy";
 import * as State from "alchemy/State";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";

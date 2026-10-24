@@ -1,6 +1,6 @@
 import * as GCP from "@alchemy.run/gcp";
-import * as networkconnectivity from "@distilled.cloud/gcp/networkconnectivity_v1";
 import { expect } from "@alchemy.run/test";
+import * as networkconnectivity from "@distilled.cloud/gcp/networkconnectivity_v1";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";

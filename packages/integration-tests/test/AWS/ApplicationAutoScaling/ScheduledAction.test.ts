@@ -1,8 +1,8 @@
 import * as AWS from "@alchemy.run/aws";
 import { ScalableTarget, ScheduledAction } from "@alchemy.run/aws/ApplicationAutoScaling";
 import { Table } from "@alchemy.run/aws/DynamoDB";
-import * as aas from "@distilled.cloud/aws/application-auto-scaling";
 import { expect } from "@alchemy.run/test";
+import * as aas from "@distilled.cloud/aws/application-auto-scaling";
 import * as Output from "alchemy/Output";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";

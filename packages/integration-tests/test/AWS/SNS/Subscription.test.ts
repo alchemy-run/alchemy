@@ -1,7 +1,7 @@
 import * as AWS from "@alchemy.run/aws";
 import { Subscription } from "@alchemy.run/aws/SNS";
-import * as SNS from "@distilled.cloud/aws/sns";
 import { expect } from "@alchemy.run/test";
+import * as SNS from "@distilled.cloud/aws/sns";
 import * as Provider from "alchemy/Provider";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Data from "effect/Data";

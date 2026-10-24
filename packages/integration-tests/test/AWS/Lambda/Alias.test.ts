@@ -1,7 +1,7 @@
 import { fileURLToPath } from "node:url";
 import * as AWS from "@alchemy.run/aws";
-import * as Lambda from "@distilled.cloud/aws/lambda";
 import { expect } from "@alchemy.run/test";
+import * as Lambda from "@distilled.cloud/aws/lambda";
 import * as Provider from "alchemy/Provider";
 import { isResourceState, State, type ResourceState } from "alchemy/State";
 import * as Test from "alchemy/Test/Alchemy";

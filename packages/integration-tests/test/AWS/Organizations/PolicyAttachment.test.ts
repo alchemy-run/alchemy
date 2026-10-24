@@ -1,7 +1,7 @@
 import * as AWS from "@alchemy.run/aws";
 import { Policy, PolicyAttachment, Root, RootPolicyType } from "@alchemy.run/aws/Organizations";
-import * as organizations from "@distilled.cloud/aws/organizations";
 import { expect } from "@alchemy.run/test";
+import * as organizations from "@distilled.cloud/aws/organizations";
 import * as Provider from "alchemy/Provider";
 import { isResourceState, State, type ResourceState } from "alchemy/State";
 import * as Effect from "effect/Effect";

@@ -21,11 +21,11 @@
   },
   "devDependencies": {
     "@alchemy.run/frontend-frameworks": "workspace:*",
+    "@alchemy.run/test": "workspace:*",
     "@distilled.cloud/aws": "workspace:*",
     "@effect/platform-node": "catalog:",
     "@tailwindcss/vite": "catalog:",
     "@types/node": "catalog:node24",
-    "@alchemy.run/test": "workspace:*",
     "nitropack": "catalog:",
     "nuxt": "catalog:",
     "tailwindcss": "catalog:",

@@ -1,7 +1,7 @@
 import * as AWS from "@alchemy.run/aws";
 import { Application } from "@alchemy.run/aws/AppIntegrations";
-import * as appintegrations from "@distilled.cloud/aws/appintegrations";
 import { expect } from "@alchemy.run/test";
+import * as appintegrations from "@distilled.cloud/aws/appintegrations";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";

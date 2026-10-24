@@ -1,7 +1,7 @@
 import * as AWS from "@alchemy.run/aws";
 import { Resource as CloudControlResource } from "@alchemy.run/aws/CloudControl";
-import * as CloudControl from "@distilled.cloud/aws/cloudcontrol";
 import { expect } from "@alchemy.run/test";
+import * as CloudControl from "@distilled.cloud/aws/cloudcontrol";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";

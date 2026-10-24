@@ -1,7 +1,7 @@
 import * as GCP from "@alchemy.run/gcp";
 import { GcpEnvironment } from "@alchemy.run/gcp/Environment";
-import * as orgpolicy from "@distilled.cloud/gcp/orgpolicy_v2";
 import { expect } from "@alchemy.run/test";
+import * as orgpolicy from "@distilled.cloud/gcp/orgpolicy_v2";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";

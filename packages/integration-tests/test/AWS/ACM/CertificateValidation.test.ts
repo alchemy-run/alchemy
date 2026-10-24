@@ -7,7 +7,7 @@
  *   zone.
  * - The Route 53 default: `Certificate({ hostedZoneId })` validates inline.
  *
- * Gated behind AWS_TEST_SLOW=1: ACM issuance takes minutes.
+ * Skipped under --fast: ACM issuance takes minutes.
  */
 import * as AWS from "@alchemy.run/aws";
 import * as Cloudflare from "@alchemy.run/cloudflare";
@@ -43,7 +43,7 @@ const R53_ZONE = `acm-dns-r53.${zoneName}`;
 /** Validated inline by the Route 53 default path. */
 const INLINE_DOMAIN = `inline.${R53_ZONE}`;
 
-const skipSlow = !process.env.AWS_TEST_SLOW || !!process.env.FAST;
+const skipSlow = !!process.env.FAST;
 
 const tags = [
   "provider:aws",
