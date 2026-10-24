@@ -64,8 +64,10 @@ export interface EndpointProps {
   /**
    * ARN of the IAM role EventBridge assumes to replicate events. It must
    * trust `events.amazonaws.com`, allow `events:PutEvents` on both buses, and
-   * let EventBridge manage its replication rules (`GlobalEndpointManagedRule-*`)
-   * and pass the role back to itself (see the `Endpoint` examples).
+   * let EventBridge manage its replication rule on each bus
+   * (`rule/<bus>/GlobalEndpointManagedRule-*`) and pass the role to that rule's
+   * target (`iam:PassRole` on the role, for `events.amazonaws.com`). See the
+   * `Endpoint` examples for a least-privilege policy.
    * Required when `replication` is enabled.
    */
   roleArn?: string;
@@ -112,6 +114,8 @@ export class EndpointFailed extends Data.TaggedError("EndpointFailed")<{
  * });
  *
  * const replication = yield* AWS.IAM.Role("ReplicationRole", {
+ *   // `iam:PassRole` below is scoped to roles on this path.
+ *   path: "/eventbridge-replication/",
  *   assumeRolePolicyDocument: {
  *     Version: "2012-10-17",
  *     Statement: [
@@ -140,13 +144,17 @@ export class EndpointFailed extends Data.TaggedError("EndpointFailed")<{
  *             "events:DeleteRule",
  *             "events:RemoveTargets",
  *           ],
- *           Resource: "arn:aws:events:*:*:rule/orders/GlobalEndpointManagedRule-*",
+ *           Resource: [
+ *             "arn:aws:events:us-east-1:123456789012:rule/orders/GlobalEndpointManagedRule-*",
+ *             "arn:aws:events:us-east-2:123456789012:rule/orders/GlobalEndpointManagedRule-*",
+ *           ],
  *         },
+ *         // ...and passes this role to those rules' targets.
  *         {
  *           Effect: "Allow",
  *           Action: "iam:PassRole",
- *           Resource: "*",
- *           Condition: { StringLike: { "iam:PassedToService": "events.amazonaws.com" } },
+ *           Resource: "arn:aws:iam::123456789012:role/eventbridge-replication/*",
+ *           Condition: { StringEquals: { "iam:PassedToService": "events.amazonaws.com" } },
  *         },
  *       ],
  *     },

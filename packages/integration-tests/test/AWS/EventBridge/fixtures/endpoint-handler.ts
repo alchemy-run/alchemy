@@ -1,9 +1,20 @@
 import * as AWS from "@alchemy.run/aws";
+import * as Output from "alchemy/Output";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Layer from "effect/Layer";
+
+/** The rules EventBridge manages on a global endpoint's bus, from the bus ARN. */
+const managedRuleArnOf = (eventBusArn: string) =>
+  `${eventBusArn.replace(":event-bus/", ":rule/")}/GlobalEndpointManagedRule-*`;
+
+const REPLICATION_PATH = "/eventbridge-replication/";
+
+/** Roles on the replication path in the bus's account, from the bus ARN. */
+const replicationRolesOf = (eventBusArn: string) =>
+  `arn:aws:iam::${eventBusArn.split(":")[4]}:role${REPLICATION_PATH}*`;
 
 /** The failover region: any region other than the stack's. */
 export const secondaryRegionOf = (region: string) =>
@@ -53,6 +64,7 @@ export const EndpointInfraLive = (options: EndpointInfraOptions) =>
         childHealthChecks: [],
       });
       const role = yield* AWS.IAM.Role("ReplicationRole", {
+        path: REPLICATION_PATH,
         assumeRolePolicyDocument: {
           Version: "2012-10-17",
           Statement: [
@@ -81,13 +93,18 @@ export const EndpointInfraLive = (options: EndpointInfraOptions) =>
                   "events:DeleteRule",
                   "events:RemoveTargets",
                 ],
-                Resource: ["arn:aws:events:*:*:rule/*/GlobalEndpointManagedRule-*"],
+                Resource: [primary.eventBusArn, secondary.eventBusArn].map((arn) =>
+                  arn.pipe(Output.map(managedRuleArnOf)),
+                ),
               },
+              // EventBridge passes this role to its managed rules' targets;
+              // only roles on the replication path can be passed, and only
+              // to EventBridge.
               {
                 Effect: "Allow",
                 Action: ["iam:PassRole"],
-                Resource: ["*"],
-                Condition: { StringLike: { "iam:PassedToService": "events.amazonaws.com" } },
+                Resource: [primary.eventBusArn.pipe(Output.map(replicationRolesOf))],
+                Condition: { StringEquals: { "iam:PassedToService": "events.amazonaws.com" } },
               },
             ],
           },
