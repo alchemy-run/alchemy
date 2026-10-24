@@ -93,17 +93,24 @@ is the thread's identity, so guard it:
   `{ type: "existing_worktree", worktreePath, branch }`, or pick a new name —
   never launch a `worktree` strategy onto an existing branch.
 - **Launch in small batches** (about 3) and wait until each batch leaves
-  `preparing` (`t3_thread_list`) before the next, so a failure is easy to
-  spot and recover before more pile up.
-- **When preparation fails,** read the error first (`t3_thread_read`,
-  `view: "activity"`) and fix its cause. Then never retry that thread: the
-  failed attempt has usually already created the branch, so the retry's
-  `git worktree add -b` fails with `branch_already_exists`. Instead:
-  1. Look for the worktree git made anyway (`git worktree list --porcelain`).
-  2. If it exists and is clean, launch a new thread on it with
-     `existing_worktree`; otherwise delete the branch (only if
-     `git rev-list --count origin/main..<branch>` is 0) and launch fresh.
-  3. Archive the failed thread immediately (`t3_thread_organize`,
+  `preparing` (`t3_thread_list`) before the next. Every new worktree runs the
+  `post-checkout` hook `scripts/bootstrap-distilled.mjs`, which adds a
+  distilled worktree and rewrites `config.worktree` for every registered
+  distilled checkout in the shared `.git/modules/distilled`. Parallel hooks
+  collide on those lock files (`could not lock config file …
+  config.worktree: File exists`); git exits non-zero, and T3 reports a bare
+  `git worktree add failed` even though the alchemy worktree and branch exist.
+  A lock left behind by a collision then fails every later launch.
+- **When preparation fails,** never retry that thread: the branch already
+  exists, so the retry fails with `branch_already_exists`. Instead:
+  1. Look for stale locks: `find .git/modules/distilled -name '*.lock'`
+     (from the main checkout). Remove one only if no `git` process holds it
+     (`pgrep -fl git`) and it isn't fresh.
+  2. Finish the hook's job in the worktree git made:
+     `node scripts/bootstrap-distilled.mjs 0000000000000000000000000000000000000000 $(git rev-parse HEAD) 1`
+     and confirm `submodules/distilled/.git` exists.
+  3. Launch a new thread on it with `existing_worktree`.
+  4. Archive the failed thread immediately (`t3_thread_organize`,
      `action: "archive"`), so no thread is left claiming a branch another
      thread owns.
 
