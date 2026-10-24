@@ -3,12 +3,14 @@ import type { CloudflareResolvedCredentials } from "@alchemy.run/cloudflare/Auth
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
 import { LocalRuntimeState } from "@alchemy.run/cloudflare/LocalRuntime";
 import { describe, expect, it } from "@alchemy.run/test";
+import * as AwsClient from "@distilled.cloud/aws4signer/AwsClient";
 import { apiTokenCredentials, Credentials } from "@distilled.cloud/cloudflare/Credentials";
 import * as r2 from "@distilled.cloud/cloudflare/r2";
 import { NodeServices } from "@effect/platform-node";
 import { AlchemyContext } from "alchemy/AlchemyContext";
 import { ArtifactStore, createArtifactStore } from "alchemy/Artifacts";
 import * as Drift from "alchemy/Drift";
+import * as Output from "alchemy/Output";
 import { Provider } from "alchemy/Provider";
 import * as RemovalPolicy from "alchemy/RemovalPolicy";
 import { ResourceContext } from "alchemy/ResourceContext";
@@ -16,6 +18,7 @@ import { Stack, type StackSpec } from "alchemy/Stack";
 import { Stage } from "alchemy/Stage";
 import { type ResourceState, State } from "alchemy/State";
 import * as Test from "alchemy/Test/Alchemy";
+import { sha256 } from "alchemy/Util/sha256";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
@@ -190,6 +193,57 @@ test.provider(
       yield* waitForBucketToBeDeleted(bucket.bucketName, accountId);
     }).pipe(logLevel),
   { tags: ["provider:cloudflare", "provider:cloudflare:r2", "live"] },
+);
+
+// An incomplete multipart upload holds a bucket just like an object does,
+// but the object listing never shows it: `forceDestroy` must abort it
+// over R2's S3 API. See https://github.com/alchemy-run/alchemy/issues/2478.
+test.provider(
+  "destroying a bucket with forceDestroy aborts its incomplete multipart uploads",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+
+      yield* stack.destroy();
+
+      const { bucket, token } = yield* stack.deploy(
+        Effect.gen(function* () {
+          const bucket = yield* Cloudflare.R2.Bucket("BucketWithUploads", { forceDestroy: true });
+          // S3 API credentials for the test's own out-of-band upload.
+          const token = yield* Cloudflare.ApiToken.AccountApiToken("BucketWithUploadsToken", {
+            policies: [
+              {
+                effect: "allow",
+                permissionGroups: ["Workers R2 Storage Bucket Item Write"],
+                resources: bucket.bucketName.pipe(
+                  Output.map((name) => ({
+                    [`com.cloudflare.edge.r2.bucket.${accountId}_default_${name}`]: "*",
+                  })),
+                ),
+              },
+            ],
+          });
+          return { bucket, token };
+        }),
+      );
+
+      yield* createMultipartUpload({
+        accountId,
+        bucketName: bucket.bucketName,
+        key: "large/entry.bin",
+        accessKeyId: token.tokenId,
+        secretAccessKey: yield* sha256(Redacted.value(token.value)),
+      });
+
+      // The upload is invisible to the object listing.
+      const keys = yield* listKeysWhenReady(accountId, bucket.bucketName, 0);
+      expect(keys).toEqual([]);
+
+      yield* stack.destroy();
+
+      yield* waitForBucketToBeDeleted(bucket.bucketName, accountId);
+    }).pipe(logLevel),
+  { tags: ["provider:cloudflare", "provider:cloudflare:r2", "live"], timeout: 180_000 },
 );
 
 // Without `forceDestroy`, R2's own refusal to delete a non-empty bucket is
@@ -1206,6 +1260,42 @@ const listKeysWhenReady = Effect.fn(function* (
 });
 
 class ListLagError extends Data.TaggedError("ListLagError") {}
+
+/**
+ * Start (and never complete) a multipart upload over R2's S3 API. A fresh
+ * API token takes a few seconds to be accepted there, so 401/403 is retried.
+ */
+const createMultipartUpload = Effect.fn(function* (options: {
+  accountId: string;
+  bucketName: string;
+  key: string;
+  accessKeyId: string;
+  secretAccessKey: string;
+}) {
+  const client = yield* AwsClient.make({
+    credentials: {
+      accessKeyId: options.accessKeyId,
+      secretAccessKey: Redacted.make(options.secretAccessKey),
+    },
+    service: "s3",
+    region: "auto",
+  });
+  const url = `https://${options.accountId}.r2.cloudflarestorage.com/${options.bucketName}/${options.key}?uploads`;
+  const body = yield* client.post(url).pipe(
+    Effect.flatMap((res) =>
+      res.status === 200 ? res.text : Effect.fail(new S3RequestFailed({ status: res.status })),
+    ),
+    Effect.retry({
+      while: (e) => e._tag === "S3RequestFailed" && (e.status === 401 || e.status === 403),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(8)]),
+    }),
+  );
+  const uploadId = /<UploadId>([^<]+)<\/UploadId>/.exec(body)?.[1];
+  expect(uploadId).toBeDefined();
+  return uploadId!;
+});
+
+class S3RequestFailed extends Data.TaggedError("S3RequestFailed")<{ status: number }> {}
 
 const stateOf = Effect.fn(function* (
   stack: { name: string; stage: string; state: Layer.Layer<State> },
