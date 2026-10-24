@@ -1670,10 +1670,13 @@ export const DBInstanceProvider = () =>
       // a modify, so `waitForInstance` may return before the previous change
       // starts and the next modify reaches a busy instance. Wait it out and
       // resend.
-      const modifyInstance = Effect.fn(function* (request: rds.ModifyDBInstanceMessage) {
+      const modifyInstance = Effect.fn(function* (
+        instanceId: string,
+        request: rds.ModifyDBInstanceMessage,
+      ) {
         return yield* rds.modifyDBInstance(request).pipe(
           Effect.catchTag("InvalidDBInstanceStateFault", (error) =>
-            waitForInstance(request.DBInstanceIdentifier).pipe(Effect.andThen(Effect.fail(error))),
+            waitForInstance(instanceId).pipe(Effect.andThen(Effect.fail(error))),
           ),
           Effect.retry({
             while: (error) => error._tag === "InvalidDBInstanceStateFault",
@@ -2202,7 +2205,7 @@ export const DBInstanceProvider = () =>
               coreDirty = true;
             }
             if (coreDirty) {
-              yield* modifyInstance(core);
+              yield* modifyInstance(identifier, core);
               observed = yield* waitForInstance(identifier);
               if (
                 core.DBParameterGroupName !== undefined ||
@@ -2226,7 +2229,7 @@ export const DBInstanceProvider = () =>
           }
           desiredStorage = yield* resolveStorage(news, observed.AllocatedStorage);
           if (desiredStorage && !storageConverged(observed, desiredStorage)) {
-            yield* modifyInstance({
+            yield* modifyInstance(identifier, {
               DBInstanceIdentifier: identifier,
               ...desiredStorage.request,
               MaxAllocatedStorage:
@@ -2251,7 +2254,7 @@ export const DBInstanceProvider = () =>
               });
             }
             // AWS disables autoscaling when the ceiling equals live allocation.
-            yield* modifyInstance({
+            yield* modifyInstance(identifier, {
               DBInstanceIdentifier: identifier,
               MaxAllocatedStorage: ceiling,
               ApplyImmediately: true,
@@ -2273,7 +2276,7 @@ export const DBInstanceProvider = () =>
                 });
               }
               // Port changes restart immediately without applying unrelated pending settings.
-              yield* modifyInstance({
+              yield* modifyInstance(identifier, {
                 DBInstanceIdentifier: identifier,
                 DBPortNumber: port,
                 ApplyImmediately: false,
@@ -2293,7 +2296,7 @@ export const DBInstanceProvider = () =>
               });
             }
             if (parameterChanged || securityChanged) {
-              yield* modifyInstance({
+              yield* modifyInstance(identifier, {
                 DBInstanceIdentifier: identifier,
                 DBParameterGroupName: parameterChanged
                   ? associations.dbParameterGroupName
@@ -2313,7 +2316,7 @@ export const DBInstanceProvider = () =>
           if (iamChanged || networkChanged) {
             // IAM and network changes honor maintenance scheduling. AWS cannot
             // selectively apply one queued change without applying the rest.
-            yield* modifyInstance({
+            yield* modifyInstance(identifier, {
               DBInstanceIdentifier: identifier,
               EnableIAMDatabaseAuthentication:
                 iamChanged && iamPending !== security.iamAuthentication
@@ -2335,7 +2338,7 @@ export const DBInstanceProvider = () =>
           if (publicChanged || protectionChanged || logDelta) {
             // These fields apply immediately even with false; leave unrelated
             // maintenance-window changes queued rather than flushing them.
-            yield* modifyInstance({
+            yield* modifyInstance(identifier, {
               DBInstanceIdentifier: identifier,
               PubliclyAccessible: publicChanged ? security.publiclyAccessible : undefined,
               DeletionProtection: protectionChanged ? security.deletionProtection : undefined,
