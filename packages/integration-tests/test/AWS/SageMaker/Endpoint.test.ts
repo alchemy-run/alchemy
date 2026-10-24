@@ -1,8 +1,8 @@
 import * as AWS from "@alchemy.run/aws";
 import { Role } from "@alchemy.run/aws/IAM/Role";
 import { Endpoint, EndpointConfig, Model } from "@alchemy.run/aws/SageMaker";
+import { expect } from "@alchemy.run/test";
 import * as sagemaker from "@distilled.cloud/aws/sagemaker";
-import { expect } from "alchemy-test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 

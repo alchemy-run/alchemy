@@ -1,4 +1,4 @@
-import { describe, expect, it } from "alchemy-test";
+import { describe, expect, it } from "@alchemy.run/test";
 import { CallbackError, type Callback, type CallbackOptions } from "alchemy/Callback";
 import { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Cause from "effect/Cause";

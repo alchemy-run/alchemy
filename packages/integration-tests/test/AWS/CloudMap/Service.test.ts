@@ -1,7 +1,7 @@
 import * as AWS from "@alchemy.run/aws";
 import { PrivateDnsNamespace, Service } from "@alchemy.run/aws/CloudMap";
+import { expect } from "@alchemy.run/test";
 import * as sd from "@distilled.cloud/aws/servicediscovery";
-import { expect } from "alchemy-test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";

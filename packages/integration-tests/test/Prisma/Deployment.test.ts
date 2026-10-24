@@ -16,7 +16,7 @@ import {
   uploadArtifact,
   validateDeploymentArtifactBytes,
 } from "@alchemy.run/prisma/Deployment";
-import { describe, expect, it } from "alchemy-test";
+import { describe, expect, it } from "@alchemy.run/test";
 import { AlchemyContext } from "alchemy/AlchemyContext";
 import * as Output from "alchemy/Output";
 import * as Provider from "alchemy/Provider";

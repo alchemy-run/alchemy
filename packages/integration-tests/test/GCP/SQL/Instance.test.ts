@@ -1,7 +1,7 @@
 import * as GCP from "@alchemy.run/gcp";
 import { GcpEnvironment } from "@alchemy.run/gcp/Environment";
+import { expect } from "@alchemy.run/test";
 import * as sqladmin from "@distilled.cloud/gcp/sqladmin_v1";
-import { expect } from "alchemy-test";
 import { DestroyError } from "alchemy/Apply";
 import type { StackServices } from "alchemy/Stack";
 import * as Test from "alchemy/Test/Alchemy";

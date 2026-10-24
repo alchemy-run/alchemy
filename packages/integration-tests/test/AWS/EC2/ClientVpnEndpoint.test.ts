@@ -5,9 +5,9 @@ import {
   type ClientVpnEndpointProps,
 } from "@alchemy.run/aws/EC2/ClientVpnEndpoint";
 import { LogGroup, LogStream } from "@alchemy.run/aws/Logs";
+import { describe, expect } from "@alchemy.run/test";
 import * as ec2 from "@distilled.cloud/aws/ec2";
 import * as Alchemy from "alchemy";
-import { describe, expect } from "alchemy-test";
 import * as Provider from "alchemy/Provider";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";

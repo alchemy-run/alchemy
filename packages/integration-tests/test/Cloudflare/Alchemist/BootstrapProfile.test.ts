@@ -1,5 +1,5 @@
 import { stateStoreScope } from "@alchemy.run/cloudflare/Alchemist/StateStore";
-import { expect, it } from "alchemy-test";
+import { expect, it } from "@alchemy.run/test";
 import { providerContext } from "alchemy/Alchemist/routes/state";
 import { AlchemyContext } from "alchemy/AlchemyContext";
 import { ArtifactStore, createArtifactStore } from "alchemy/Artifacts";

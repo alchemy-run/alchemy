@@ -19,7 +19,7 @@ import {
 } from "@alchemy.run/git/Protocol/ObjectCodec";
 import { packHeader } from "@alchemy.run/git/Protocol/PackWriter";
 import * as Zlib from "@alchemy.run/git/Protocol/Zlib";
-import { describe, expect, test } from "alchemy-test";
+import { describe, expect, test } from "@alchemy.run/test";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { concat } from "../harness/pack.ts";

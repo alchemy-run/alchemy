@@ -1,7 +1,7 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
+import { expect, it } from "@alchemy.run/test";
 import { Credentials, apiTokenCredentials } from "@distilled.cloud/cloudflare/Credentials";
 import * as secretsStore from "@distilled.cloud/cloudflare/secrets-store";
-import { expect, it } from "alchemy-test";
 import * as Provider from "alchemy/Provider";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";

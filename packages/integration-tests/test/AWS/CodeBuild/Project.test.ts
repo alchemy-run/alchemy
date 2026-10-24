@@ -1,9 +1,9 @@
 import * as AWS from "@alchemy.run/aws";
 import { Project } from "@alchemy.run/aws/CodeBuild/Project";
 import { normalizePolicyDocument, type PolicyDocument } from "@alchemy.run/aws/IAM/Policy";
+import { expect } from "@alchemy.run/test";
 import * as codebuild from "@distilled.cloud/aws/codebuild";
 import * as sts from "@distilled.cloud/aws/sts";
-import { expect } from "alchemy-test";
 import * as Provider from "alchemy/Provider";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Data from "effect/Data";
