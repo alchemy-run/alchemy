@@ -51,6 +51,22 @@ export class OwnedBySomeoneElse extends Data.TaggedError("OwnedBySomeoneElse")<{
 }> {}
 
 /**
+ * Engine-raised failure produced when a delete-first replacement in a
+ * dependency cycle must delete its previous generation before its new
+ * identity is known: precreate runs on unresolved props, so ownership cannot
+ * be checked first. Refusing up front keeps the previous generation; re-run
+ * with `--adopt` (or `adopt(true)`) to accept whatever the identity resolves to.
+ */
+export class UnverifiableReplacement extends Data.TaggedError("UnverifiableReplacement")<{
+  /** A human-readable description of why the replacement was refused. */
+  message: string;
+  /** The Resource Type (e.g. `AWS.Lambda.Function`). */
+  resourceType?: string;
+  /** The logical ID of the refused resource. */
+  logicalId?: string;
+}> {}
+
+/**
  * Private symbol used to brand attribute objects returned by `read` as
  * "exists in cloud, but not owned by this stack/stage/logical-id".
  *
