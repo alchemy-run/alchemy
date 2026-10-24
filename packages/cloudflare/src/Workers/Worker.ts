@@ -2,6 +2,7 @@ import type * as cf from "@cloudflare/workers-types";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import { type MemoOptions } from "alchemy/Command/Memo";
 import type { Dependencies } from "alchemy/Dependencies";
+import type { DnsConfig } from "alchemy/DNS/Adapter";
 import type { InputProps } from "alchemy/Input";
 import type { Named, Tag } from "alchemy/Named";
 import type * as Output from "alchemy/Output";
@@ -45,7 +46,8 @@ import type { WorkerBuildOptions } from "./Sources/Rolldown.ts";
 import type { WorkerAccessConfig, WorkerAccessIdentity } from "./WorkerAccess.ts";
 import { bindWorkerAsyncBindings } from "./WorkerAsyncBindings.ts";
 import type { WorkerBinding, WorkerBindingResource, WorkerBindings } from "./WorkerBinding.ts";
-import { WorkerEnvironment, WorkerExecutionContext, WorkerTypeId } from "./WorkerRuntime.ts";
+import { transformWorkerDomainProps } from "./WorkerDomainDns.ts";
+import { WorkerEnvironment, WorkerTypeId } from "./WorkerRuntime.ts";
 import {
   makeWorkerRuntimeContext,
   type WorkerExport,
@@ -53,6 +55,7 @@ import {
 } from "./WorkerRuntimeContext.ts";
 
 export * from "./WorkerRuntime.ts";
+export { WorkerDomainDnsError } from "./WorkerDomainDns.ts";
 
 export const isWorker = <T>(value: T): value is T & Worker => isResourceOfType(value, WorkerTypeId);
 
@@ -106,7 +109,6 @@ export type WorkerServices =
   | Worker
   | WebhookHost
   | Request
-  | WorkerExecutionContext
   | WorkerEnvironment
   | CloudflareEnvironment
   | Container.Application<any>
@@ -249,6 +251,36 @@ export interface WorkerDomainConfig {
    * @default false
    */
   previews?: boolean;
+  /**
+   * The DNS host that publishes this domain's records. Omit it (or pass
+   * `Cloudflare.DNS.Adapter()`) for hostnames in a Cloudflare zone of the
+   * account: they attach as native custom domains, exactly as without
+   * `dns`.
+   *
+   * Any other adapter (`AWS.Route53.Adapter()`, `Hetzner.DNS.Adapter()`)
+   * serves the hostnames through
+   * [Cloudflare for SaaS](https://developers.cloudflare.com/cloudflare-for-platforms/cloudflare-for-saas/start/advanced-settings/worker-as-origin/):
+   * {@link name} and each alias become a
+   * `Cloudflare.CustomHostname.CustomHostname` on the SaaS zone
+   * ({@link zoneId} / {@link zone} / {@link zoneName}, required), the
+   * DNS host publishes their ownership and certificate-validation TXT
+   * records plus a `CNAME` to {@link cnameTarget}, and the Worker gets a
+   * `<hostname>/*` route on the SaaS zone instead of a custom domain.
+   * {@link redirects} and {@link previews} are not supported on this path,
+   * and the Worker's `url` stays its `workers.dev` URL. Declare the SaaS
+   * zone's `Cloudflare.CustomHostname.FallbackOrigin` once yourself —
+   * several Workers can share one SaaS zone.
+   *
+   * See [DNS Adapters](/infrastructure-as-code/dns-adapters).
+   */
+  dns?: DnsConfig;
+  /**
+   * Hostname in the SaaS zone that custom hostnames CNAME to, typically
+   * the zone's fallback origin (`FallbackOrigin`'s `origin`). Required
+   * when {@link dns} names a DNS host other than Cloudflare; unused
+   * otherwise.
+   */
+  cnameTarget?: string;
 }
 
 export interface WorkerRouteConfig {
@@ -790,6 +822,11 @@ export interface WorkerProps<
    * In Effect-native Workers you can alternatively `yield*` a
    * `Config` in the Init phase to register the binding implicitly;
    * `env` is the only option for async (non-Effect) Workers.
+   *
+   * Alchemy also binds its runtime variables to every Worker:
+   * `ALCHEMY_PHASE`, `ALCHEMY_WORKER_NAME`, `ALCHEMY_STACK_NAME`,
+   * `ALCHEMY_STAGE` and `ALCHEMY_CLOUDFLARE_ACCOUNT_ID`. They appear in
+   * `env` and, when `process.env` is populated, in `process.env`.
    */
   env?: Bindings;
   /**
@@ -1057,9 +1094,18 @@ export interface WorkerSourceDescriptor {
 
 export interface ViteOptions {
   /**
+   * Framework-specific build metadata interpreted after Vite completes.
+   * Set by `Website.Foldkit` to derive asset routing from its manifest.
+   * @internal
+   */
+  framework?: "foldkit";
+
+  /**
    * Overrides the module that becomes the deployed Worker entry, forwarded
    * to the Cloudflare Vite plugin's `main` option. Relative paths resolve
-   * from the Vite root (`rootDir`).
+   * from the Vite root (`rootDir`). A package export
+   * (`"my-package/worker"`) or a virtual module id (`"virtual:entry"`)
+   * resolves through Vite.
    *
    * By default the entry environment's own entry (the server bundle the
    * framework produces) is deployed. Point `main` at a custom module when
@@ -1253,10 +1299,11 @@ export type Worker<Bindings = any> = Resource<
      */
     previewDoClasses?: string[] | undefined;
     /**
-     * The id of the version uploaded by the most recent deploy. Only set
-     * when versioning is in play: always for a version worker
-     * (`version.parent`), and for a self-owned Worker when a gradual
-     * rollout (`version.traffic` < 100) deployed via the versions API.
+     * The id of the version uploaded by the most recent deploy. Set for
+     * every Worker outside a dispatch namespace: a full deploy records the
+     * version serving 100% of traffic, a gradual rollout
+     * (`version.traffic` < 100) and a version worker (`version.parent`)
+     * record the version they uploaded.
      */
     versionId?: string | undefined;
     /**
@@ -1268,10 +1315,11 @@ export type Worker<Bindings = any> = Resource<
      */
     versionAlias?: string | undefined;
     /**
-     * The id of the deployment created by the most recent deploy, when the
-     * deploy created one through the deployments API (a version with
-     * `traffic > 0`). Preview-only versions (`traffic: 0`) have no
-     * deployment.
+     * The id of the deployment created by the most recent deploy. A full
+     * deploy records the active deployment; a version with `traffic > 0`
+     * records the deployment it created through the deployments API.
+     * Preview-only versions (`traffic: 0`) and Workers in a dispatch
+     * namespace have no deployment.
      */
     deploymentId?: string | undefined;
     /**
@@ -2018,6 +2066,36 @@ export const isSelf = (value: unknown): value is Self =>
  * });
  * ```
  *
+ * **Example:** Route 53 domain through Cloudflare for SaaS
+ * ```typescript
+ * // Once per SaaS zone (a Cloudflare zone with Cloudflare for SaaS
+ * // enabled): an originless proxied record as the fallback origin.
+ * const origin = yield* Cloudflare.DNS.Record("SaasOrigin", {
+ *   zoneId: "<SAAS_ZONE_ID>",
+ *   name: "customers.my-saas.com",
+ *   type: "AAAA",
+ *   content: "100::",
+ *   proxied: true,
+ * });
+ * const fallback = yield* Cloudflare.CustomHostname.FallbackOrigin(
+ *   "SaasFallback",
+ *   { zoneId: "<SAAS_ZONE_ID>", origin: origin.name },
+ * );
+ *
+ * // app.example.com's DNS lives in Route 53: Route 53 gets the
+ * // verification TXT records and a CNAME to the fallback origin, and the
+ * // Worker serves `app.example.com/*` on the SaaS zone.
+ * const worker = yield* Cloudflare.Worker("Api", {
+ *   main: "./src/api.ts",
+ *   domain: {
+ *     name: "app.example.com",
+ *     zoneId: "<SAAS_ZONE_ID>",
+ *     cnameTarget: fallback.origin,
+ *     dns: AWS.Route53.Adapter({ hostedZoneId: "Z1234567890" }),
+ *   },
+ * });
+ * ```
+ *
  * ### Worker Previews
  * The `preview` prop maps Cloudflare's
  * [Worker Previews](https://developers.cloudflare.com/workers/previews/) —
@@ -2352,11 +2430,10 @@ export const isSelf = (value: unknown): value is Self =>
  * until they settle. Streaming responses transfer the scope to the stream,
  * so those finalizers run when the stream completes instead.
  *
- * For ad-hoc background work, `WorkerExecutionContext.waitUntil(effect)`
- * forks an Effect with the caller's full context and keeps the invocation
- * alive until it settles. The context can be yielded once in the
- * constructor and used from any handler; its methods are `RuntimeContext`-
- * colored, so they can only run inside a handler.
+ * For ad-hoc background work, `Cloudflare.waitUntil(effect)` forks an
+ * Effect with the caller's full context and keeps the invocation alive
+ * until it settles. It is `RuntimeContext`-colored, so it can only run
+ * inside a handler.
  *
  * The constructor is evaluated once per isolate: the bridge builds the
  * Worker's layer stack on the first event and every later event reuses the
@@ -2382,13 +2459,10 @@ export const isSelf = (value: unknown): value is Self =>
  *
  * **Example:** Background work with waitUntil
  * ```typescript
- * // Construction
- * const exec = yield* Cloudflare.WorkerExecutionContext;
- *
  * return {
  *   fetch: Effect.gen(function* () {
  *     // respond now; the audit write completes in the background
- *     yield* exec.waitUntil(writeAuditLog(event));
+ *     yield* Cloudflare.waitUntil(writeAuditLog(event));
  *     return HttpServerResponse.text("accepted", { status: 202 });
  *   }),
  * };
@@ -2725,11 +2799,16 @@ export const Worker: ResourceClassLike<Worker> &
   WorkerTypeId,
   {
     // WorkerAsyncBindings imports isWorker; defer access until module initialization completes.
-    onCreate: (resource, props) => bindWorkerAsyncBindings(resource as Worker, props),
+    // `props` is `undefined` for a bare tag whose `.make` Layer has not built yet.
+    onCreate: (resource, props) => bindWorkerAsyncBindings(resource as Worker, props ?? {}),
     createRuntimeContext: (id) => makeWorkerRuntimeContext(id),
-    transformProps: (_id, props) =>
-      Effect.sync(() =>
-        globalThis.__ALCHEMY_RUNTIME__ || typeof props.main !== "string"
+    // Normalize `main` relative to the cwd, then let `domain.dns` naming a
+    // non-Cloudflare DNS host compose Cloudflare for SaaS custom hostnames +
+    // records and rewrite `domain` into routes.
+    transformProps: (id, props) =>
+      transformWorkerDomainProps(
+        id,
+        globalThis.__ALCHEMY_RUNTIME__ || typeof props?.main !== "string"
           ? props
           : { ...props, main: relativeWorkerMain(props.main, process.cwd()) },
       ),

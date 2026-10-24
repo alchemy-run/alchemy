@@ -1,7 +1,7 @@
 import * as AWS from "@alchemy.run/aws";
 import { DBParameterGroup } from "@alchemy.run/aws/RDS/DBParameterGroup";
+import { expect } from "@alchemy.run/test";
 import * as rds from "@distilled.cloud/aws/rds";
-import { expect } from "alchemy-test";
 import * as Drift from "alchemy/Drift";
 import * as Provider from "alchemy/Provider";
 import * as Test from "alchemy/Test/Alchemy";

@@ -1,8 +1,8 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
 import { WorkerVersionConfigError } from "@alchemy.run/cloudflare/Workers/WorkerProvider";
+import { describe, expect } from "@alchemy.run/test";
 import * as workers from "@distilled.cloud/cloudflare/workers";
-import { describe, expect } from "alchemy-test";
 import { State } from "alchemy/State";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
@@ -69,6 +69,10 @@ describe.concurrent(
               );
               expect(deployment?.versions).toHaveLength(1);
               expect(deployment?.versions[0].percentage).toEqual(100);
+              expect(worker.deploymentId).toBeDefined();
+              expect(worker.versionId).toBeDefined();
+              expect(worker.deploymentId).toEqual(deployment?.id);
+              expect(worker.versionId).toEqual(deployment?.versions[0].versionId);
               expect(version.annotations?.workersTag).toEqual(tag);
               expect(version.annotations?.workersMessage).toEqual(message);
             }

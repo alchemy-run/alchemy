@@ -1,6 +1,6 @@
 import * as AWS from "@alchemy.run/aws";
 import * as Kubernetes from "@alchemy.run/kubernetes";
-import { describe, expect } from "alchemy-test";
+import { describe, expect } from "@alchemy.run/test";
 import * as Provider from "alchemy/Provider";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Core from "alchemy/Test/Core";

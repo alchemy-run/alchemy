@@ -32,9 +32,11 @@
  *   old one until the next source edit.
  */
 
+import * as ecs from "@distilled.cloud/aws/ecs";
 import { deepEqual } from "alchemy/Diff";
 import { registerRpcErrorClasses } from "alchemy/Local/RpcSerialization";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { ImageSourceLike } from "../ECR/ImageSource.ts";
 import { flociProvidersUrl, makeDevWatchProvider } from "../Local/DevWatchProvider.ts";
@@ -132,6 +134,37 @@ export const FlociServiceProvider = () =>
           return { action: "replace" as const, deleteFirst: true };
         }
         return undefined;
+      }),
+    // The live update waits for the service to stabilize on its new
+    // revision, but floci swaps the revision in place and keeps the old
+    // tasks running, so (with a fixed host port) the new task can never
+    // start and the wait times out. While the reconcile waits, stop the
+    // old-revision tasks as soon as the service points at the new one.
+    whileReconciling: ({ previous }) =>
+      Effect.gen(function* () {
+        if (
+          previous?.taskFamily === undefined ||
+          previous.taskDefinitionArn === undefined ||
+          previous.clusterArn === undefined
+        ) {
+          return;
+        }
+        const family = previous.taskFamily;
+        let rolled = previous.taskDefinitionArn;
+        yield* Effect.gen(function* () {
+          const described = yield* ecs.describeServices({
+            cluster: previous.clusterArn,
+            services: [previous.serviceName],
+          });
+          const current = described.services?.[0]?.taskDefinition;
+          if (current === undefined || current === rolled) return;
+          yield* restartFamilyTasks({
+            family,
+            nextTaskDefinitionArn: current,
+            serviceManaged: true,
+          });
+          rolled = current;
+        }).pipe(Effect.repeat(Schedule.spaced("2 seconds")));
       }),
     // Fires on every reconcile — watcher-triggered AND engine-driven
     // (prop changes never produce a file event, so rolling only from the

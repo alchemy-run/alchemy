@@ -1,7 +1,7 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
+import { expect } from "@alchemy.run/test";
 import * as aisearch from "@distilled.cloud/cloudflare/aisearch";
-import { expect } from "alchemy-test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
@@ -42,7 +42,7 @@ const _envSame: _EnvSearch extends _EnvInstance ? true : never = true;
 void _envSame;
 
 const getInstance = (accountId: string, id: string, namespace = "default") =>
-  aisearch.readNamespaceInstance({ accountId, name: namespace, id }).pipe(
+  aisearch.readNamespaceInstance({ accountId, namespace, id }).pipe(
     Effect.retry({
       while: (e) => e._tag === "Forbidden",
       schedule: Schedule.exponential("500 millis"),

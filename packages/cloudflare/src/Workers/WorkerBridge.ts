@@ -4,6 +4,7 @@ import { makeEntrypointLayer, reifyBoundConfigProvider } from "alchemy/Runtime";
 import { RuntimeContext } from "alchemy/RuntimeContext";
 import { Self } from "alchemy/Self";
 import { StackContext } from "alchemy/StackContext";
+import { Stage } from "alchemy/Stage";
 import { buildEventTelemetry } from "alchemy/TelemetryRuntime";
 import type { DurableObject, WorkerEntrypoint } from "cloudflare:workers";
 import * as Cause from "effect/Cause";
@@ -33,7 +34,6 @@ import {
   ExportedHandlerMethods,
   WorkerEnvironment,
   WorkerExecutionContext,
-  deferredExecutionContext,
   fromExecutionContext,
 } from "./WorkerRuntime.ts";
 import type { WorkerRuntimeContext } from "./WorkerRuntimeContext.ts";
@@ -77,12 +77,11 @@ export const makeWorkerBridge = (
           const [eff, services] = makeEffect(built);
           return eff.pipe(
             // Per-event services take precedence over the captured services
-            // and the built isolate context: the isolate context carries the
-            // *deferred* WorkerExecutionContext (yieldable in the top-level
-            // closure), which must be shadowed by the real per-event one
-            // here, and the fresh request `Scope` so `Effect.addFinalizer`
-            // in a handler attaches to the request scope (closed into
-            // `ctx.waitUntil` below).
+            // and the built isolate context: the real per-event
+            // WorkerExecutionContext (init only ever sees the reference's
+            // deferred default), and the fresh request `Scope` so
+            // `Effect.addFinalizer` in a handler attaches to the request
+            // scope (closed into `ctx.waitUntil` below).
             Effect.provide(
               Layer.mergeAll(
                 Layer.succeed(WorkerExecutionContext, fromExecutionContext(ctx, env)),
@@ -264,6 +263,7 @@ const getSharedBuild = (entrypoint: any, stack: { name: string; stage: string })
               actions: {},
             }),
           ),
+          Layer.provideMerge(Layer.succeed(Stage, stack.stage)),
           Layer.provideMerge(platform),
           Layer.provideMerge(
             Layer.succeed(
@@ -282,11 +282,6 @@ const getSharedBuild = (entrypoint: any, stack: { name: string; stage: string })
             ),
           ),
           Layer.provideMerge(Layer.succeed(WorkerEnvironment, env)),
-          // Init-phase ExecutionContext: yieldable from the Worker's
-          // top-level closure (and Layers); its RuntimeContext-colored
-          // methods defer to the real per-event context provided by
-          // `processEvent`.
-          Layer.provideMerge(Layer.succeed(WorkerExecutionContext, deferredExecutionContext)),
           Layer.provideMerge(
             Layer.succeed(
               CloudflareEnvironment,

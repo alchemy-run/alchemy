@@ -1,8 +1,8 @@
 import * as AWS from "@alchemy.run/aws";
+import { describe, expect } from "@alchemy.run/test";
 import * as logs from "@distilled.cloud/aws/cloudwatch-logs";
 import * as eventbridge from "@distilled.cloud/aws/eventbridge";
 import * as im from "@distilled.cloud/aws/internetmonitor";
-import { describe, expect } from "alchemy-test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Core from "alchemy/Test/Core";
 import * as Data from "effect/Data";

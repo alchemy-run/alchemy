@@ -1,8 +1,8 @@
 import * as AWS from "@alchemy.run/aws";
 import { Role } from "@alchemy.run/aws/IAM/Role";
 import { Crl, Profile, TrustAnchor } from "@alchemy.run/aws/RolesAnywhere";
+import { expect } from "@alchemy.run/test";
 import * as rolesanywhere from "@distilled.cloud/aws/rolesanywhere";
-import { expect } from "alchemy-test";
 import * as Test from "alchemy/Test/Alchemy";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";

@@ -1228,7 +1228,14 @@ export const LiveContainerProvider = () =>
           const hasUnresolvedAttachment =
             !hasDurableObjects &&
             newBindings.some((binding) => binding.data.durableObjects !== undefined);
-          const hadDurableObjects = (yield* getDurableObjects(oldBindings)) !== undefined;
+          // An adopted application whose first reconcile failed has its
+          // attachment in `output` but no bindings recorded yet. The observed
+          // attachment may only prevent a replace, never cause one: a replace
+          // of a named application re-adopts it by name and the old
+          // generation's delete then removes it. Reconcile detaches in place.
+          const hadDurableObjects =
+            (yield* getDurableObjects(oldBindings)) !== undefined ||
+            (hasDurableObjects && output?.durableObjects !== undefined);
           if (!hasUnresolvedAttachment && hasDurableObjects !== hadDurableObjects) {
             return { action: "replace" } as const;
           }
@@ -1256,6 +1263,16 @@ export const LiveContainerProvider = () =>
               application.accountId !== output.accountId)
           ) {
             return { action: "replace" } as const;
+          }
+
+          // Observed attached, desired detached, and no recorded attachment to
+          // replace on: reconcile detaches in place under a new applicationId.
+          if (
+            application?.durableObjects?.namespaceId &&
+            !hasDurableObjects &&
+            !hasUnresolvedAttachment
+          ) {
+            return { action: "update", stables: ["accountId"] } as const;
           }
 
           const { imageHash, dev } = yield* computeImage(
@@ -1388,7 +1405,11 @@ export const LiveContainerProvider = () =>
             (hasUnresolvedAttachment && recordedDurableObjects?.namespaceId
               ? recordedDurableObjects
               : undefined);
-          if (hasUnresolvedAttachment && durableObjectsForRecovery === undefined) {
+          // An observed detached application being re-attached reconciles
+          // unattached, like precreate: the Worker publishes the namespace in
+          // the same apply and the convergence pass attaches it. A missing
+          // application is never created without its attachment.
+          if (hasUnresolvedAttachment && durableObjectsForRecovery === undefined && !existing) {
             return yield* Effect.fail(
               new Error(
                 `Container application "${name}" has an unresolved Durable Object namespace and no recorded attachment. Reconcile its Worker first.`,
@@ -1717,23 +1738,31 @@ const toAttributes = (
     | Containers.UpdateContainerApplicationResponse
     | Containers.GetContainerApplicationResponse
     | Containers.ListContainerApplicationsResponse[number],
-): ContainerApplication["Attributes"] => ({
-  applicationId: application.id,
-  applicationName: application.name,
-  accountId: application.accountId,
-  schedulingPolicy: application.schedulingPolicy,
-  instances: application.instances ?? undefined,
-  maxInstances: application.maxInstances ?? undefined,
-  constraints: normalizeNulls(
-    application.constraints as ContainerApplication.Constraints | undefined,
-  ),
-  affinities: normalizeNulls(application.affinities as ContainerApplication.Affinities | undefined),
-  configuration: normalizeNulls(
-    application.configuration,
-  ) as Partial<ContainerApplication.Configuration>,
-  observability: normalizeNulls(application.observability ?? undefined),
-  durableObjects: normalizeNulls(application.durableObjects) as { namespaceId: string } | undefined,
-  createdAt: application.createdAt,
-  version: application.version ?? undefined,
-  dev: undefined,
-});
+): ContainerApplication["Attributes"] => {
+  // Durable Object applications have no scaling, affinities or versions.
+  const scheduled = "version" in application ? application : undefined;
+  return {
+    applicationId: application.id,
+    applicationName: application.name,
+    accountId: application.accountId,
+    schedulingPolicy: application.schedulingPolicy,
+    instances: scheduled?.instances ?? undefined,
+    maxInstances: scheduled?.maxInstances ?? undefined,
+    constraints: normalizeNulls(
+      application.constraints as ContainerApplication.Constraints | undefined,
+    ),
+    affinities: normalizeNulls(
+      scheduled?.affinities as ContainerApplication.Affinities | undefined,
+    ),
+    configuration: normalizeNulls(
+      application.configuration,
+    ) as Partial<ContainerApplication.Configuration>,
+    observability: normalizeNulls(application.observability ?? undefined),
+    durableObjects: normalizeNulls(application.durableObjects) as
+      | { namespaceId: string }
+      | undefined,
+    createdAt: application.createdAt,
+    version: scheduled?.version ?? undefined,
+    dev: undefined,
+  };
+};

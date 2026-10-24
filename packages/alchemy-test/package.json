@@ -1,12 +1,34 @@
 {
-  "name": "alchemy-test",
-  "version": "0.0.0",
-  "private": true,
-  "description": "Minimal Effect-native, vitest-compatible test harness and single-process runner for alchemy",
+  "name": "@alchemy.run/test",
+  "version": "2.0.0-beta.84",
+  "description": "Minimal Effect-native, vitest-compatible test harness and single-process runner for Bun.",
+  "keywords": [
+    "alchemy",
+    "bun",
+    "effect",
+    "test",
+    "test-runner",
+    "vitest"
+  ],
+  "homepage": "https://alchemy.run",
+  "bugs": {
+    "url": "https://github.com/alchemy-run/alchemy/issues"
+  },
   "license": "Apache-2.0",
+  "author": "Sam Goodwin <sam@alchemy.run>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/alchemy-run/alchemy.git",
+    "directory": "packages/alchemy-test"
+  },
   "bin": {
     "alchemy-test": "./bin/alchemy-test.ts"
   },
+  "files": [
+    "bin",
+    "lib",
+    "src"
+  ],
   "type": "module",
   "sideEffects": false,
   "exports": {
@@ -24,7 +46,24 @@
       "types": "./lib/*.d.ts",
       "bun": "./src/*.ts",
       "import": "./src/*.ts"
-    }
+    },
+    "./package.json": "./package.json"
+  },
+  "publishConfig": {
+    "exports": {
+      ".": {
+        "types": "./lib/index.d.ts",
+        "bun": "./src/index.ts",
+        "default": "./lib/index.js"
+      },
+      "./*": {
+        "types": "./lib/*.d.ts",
+        "bun": "./src/*.ts",
+        "default": "./lib/*.js"
+      },
+      "./package.json": "./package.json"
+    },
+    "access": "public"
   },
   "scripts": {
     "build": "pnpm -r --filter \"{.}...\" run build:package",
@@ -32,11 +71,17 @@
   },
   "dependencies": {
     "@effect/platform-bun": "catalog:",
-    "@opentui/core": "catalog:",
-    "effect": "catalog:"
+    "@opentui/core": "catalog:"
   },
   "devDependencies": {
     "@types/bun": "catalog:",
+    "effect": "catalog:",
     "typescript": "catalog:"
+  },
+  "peerDependencies": {
+    "effect": "catalog:"
+  },
+  "engines": {
+    "bun": ">=1.3"
   }
 }

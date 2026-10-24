@@ -1,7 +1,7 @@
 import * as AWS from "@alchemy.run/aws";
 import { Assessment, Control, Framework } from "@alchemy.run/aws/AuditManager";
+import { describe, expect } from "@alchemy.run/test";
 import * as auditmanager from "@distilled.cloud/aws/auditmanager";
-import { describe, expect } from "alchemy-test";
 import * as Output from "alchemy/Output";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";

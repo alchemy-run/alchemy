@@ -1,5 +1,5 @@
-import { splitSqlStatements } from "@alchemy.run/sql/SqlFile";
-import { describe, expect, test } from "alchemy-test";
+import { splitSqliteStatements, splitSqlStatements } from "@alchemy.run/sql/SqlFile";
+import { describe, expect, test } from "@alchemy.run/test";
 
 describe("SqlFile", { tags: ["unit", "local"] }, () => {
   describe("splitSqlStatements", () => {
@@ -45,6 +45,48 @@ describe("SqlFile", { tags: ["unit", "local"] }, () => {
     test("drops empty segments and keeps sql without markers intact", () => {
       expect(splitSqlStatements("--> statement-breakpoint\n")).toEqual([]);
       expect(splitSqlStatements("SELECT 1;")).toEqual(["SELECT 1;"]);
+    });
+  });
+
+  describe("splitSqliteStatements", () => {
+    test("splits on semicolons and drops the terminators", () => {
+      expect(
+        splitSqliteStatements("CREATE TABLE t (id INTEGER);\nINSERT INTO t VALUES (1);\n"),
+      ).toEqual(["CREATE TABLE t (id INTEGER)", "INSERT INTO t VALUES (1)"]);
+    });
+
+    test("keeps a final statement without a semicolon", () => {
+      expect(splitSqliteStatements("SELECT 1; SELECT 2")).toEqual(["SELECT 1", "SELECT 2"]);
+    });
+
+    test("ignores semicolons inside strings, quoted identifiers, and comments", () => {
+      const sql = [
+        "INSERT INTO t VALUES ('a;b', 'it''s; fine');",
+        'CREATE TABLE "x;y" (`a;` TEXT, [b;] TEXT);',
+        "-- a comment; not a statement",
+        "/* block; comment */ SELECT 1;",
+      ].join("\n");
+      expect(splitSqliteStatements(sql)).toEqual([
+        "INSERT INTO t VALUES ('a;b', 'it''s; fine')",
+        'CREATE TABLE "x;y" (`a;` TEXT, [b;] TEXT)',
+        "-- a comment; not a statement\n/* block; comment */ SELECT 1",
+      ]);
+    });
+
+    test("keeps a trigger body as one statement", () => {
+      const trigger = [
+        "CREATE TEMP TRIGGER log_insert AFTER INSERT ON t",
+        "BEGIN",
+        "  INSERT INTO log VALUES (new.id);",
+        "  UPDATE counts SET n = n + 1;",
+        "END",
+      ].join("\n");
+      expect(splitSqliteStatements(`${trigger};\nSELECT 1;`)).toEqual([trigger, "SELECT 1"]);
+    });
+
+    test("drops comment-only and empty segments", () => {
+      expect(splitSqliteStatements(";;\n-- only a comment\n")).toEqual([]);
+      expect(splitSqliteStatements("")).toEqual([]);
     });
   });
 });

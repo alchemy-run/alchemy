@@ -1,8 +1,8 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
+import { expect } from "@alchemy.run/test";
 import * as d1 from "@distilled.cloud/cloudflare/d1";
 import * as Alchemy from "alchemy";
-import { expect } from "alchemy-test";
 import { Action } from "alchemy/Action";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Data from "effect/Data";
@@ -225,9 +225,17 @@ test.provider(
       // Add a second migration — the redeploy applies ONLY the new file
       // (0001's seed row would fail a re-run with a duplicate table error,
       // so a passing redeploy also proves idempotency).
+      // ~180 KB of small statements: over SQLite's statement length limit
+      // as a whole, so the migration must not run as one statement.
       yield* fs.writeFileString(
         path.join(migrationsDir, "0002_posts.sql"),
-        "CREATE TABLE posts (id INTEGER PRIMARY KEY, title TEXT NOT NULL);",
+        [
+          "CREATE TABLE posts (id INTEGER PRIMARY KEY, title TEXT NOT NULL);",
+          ...Array.from(
+            { length: 150 },
+            (_, i) => `INSERT INTO posts (title) VALUES ('post-${i}-${"x".repeat(1200)}');`,
+          ),
+        ].join("\n"),
       );
 
       const v2 = yield* stack.deploy(deploy);
@@ -280,6 +288,12 @@ test.provider(
         [
           "CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT NOT NULL);",
           "INSERT INTO users (name) VALUES ('imported');",
+          // ~180 KB of small statements: over SQLite's statement length
+          // limit as a whole, so the file must not run as one statement.
+          ...Array.from(
+            { length: 150 },
+            (_, i) => `INSERT INTO users (name) VALUES ('bulk-${i}-${"x".repeat(1200)}');`,
+          ),
         ].join("\n"),
       );
 
@@ -304,7 +318,8 @@ test.provider(
       const users = (yield* getJsonReady(`${deployed.worker.url}/users`)) as {
         users: string[];
       };
-      expect(users.users).toEqual(["imported"]);
+      expect(users.users).toHaveLength(151);
+      expect(users.users).toContain("imported");
 
       yield* stack.destroy();
     }).pipe(logLevel),

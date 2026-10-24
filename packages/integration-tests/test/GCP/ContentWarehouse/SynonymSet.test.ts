@@ -1,7 +1,7 @@
 import * as GCP from "@alchemy.run/gcp";
 import { GcpEnvironment } from "@alchemy.run/gcp/Environment";
+import { expect } from "@alchemy.run/test";
 import * as cw from "@distilled.cloud/gcp/contentwarehouse_v1";
-import { expect } from "alchemy-test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
@@ -30,7 +30,10 @@ const waitUntilGone = (name: string) =>
     }),
   );
 
-test.provider.skipIf(runLifecycle)(
+// Skipped: the Content Warehouse endpoint answers every request with an HTML
+// 502 after ~20s (Document AI Warehouse is being retired), so the
+// ServiceDisabled probe can't complete.
+test.provider.skip(
   "getProjectsLocationsSynonymSets without Document AI Warehouse enabled fails with ServiceDisabled",
   (stack) =>
     Effect.gen(function* () {

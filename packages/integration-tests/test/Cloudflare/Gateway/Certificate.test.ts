@@ -1,8 +1,8 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
 import type { CertificateAttributes } from "@alchemy.run/cloudflare/Gateway/Certificate";
+import { expect } from "@alchemy.run/test";
 import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
-import { expect } from "alchemy-test";
 import * as Provider from "alchemy/Provider";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Cause from "effect/Cause";

@@ -10,8 +10,8 @@ import {
 } from "@alchemy.run/aws/CloudFront";
 import type { PolicyStatement } from "@alchemy.run/aws/IAM/Policy";
 import { Bucket } from "@alchemy.run/aws/S3";
+import { describe, expect } from "@alchemy.run/test";
 import * as cloudfront from "@distilled.cloud/aws/cloudfront";
-import { describe, expect } from "alchemy-test";
 import * as Output from "alchemy/Output";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";

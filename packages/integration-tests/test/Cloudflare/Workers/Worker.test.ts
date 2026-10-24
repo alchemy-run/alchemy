@@ -2,8 +2,8 @@ import { pathToFileURL } from "node:url";
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
 import * as R2 from "@alchemy.run/cloudflare/R2";
+import { describe, expect } from "@alchemy.run/test";
 import * as workers from "@distilled.cloud/cloudflare/workers";
-import { describe, expect } from "alchemy-test";
 import { adopt } from "alchemy/AdoptPolicy";
 import { AlchemyContext } from "alchemy/AlchemyContext";
 import * as Command from "alchemy/Command";
@@ -246,6 +246,40 @@ describe.concurrent(
 
           yield* stack.destroy();
           yield* waitForWorkerToBeDeleted(candidate.workerName, accountId);
+        }).pipe(logLevel),
+      { tags: ["live"], timeout: 120_000 },
+    );
+
+    test.provider(
+      "a full deploy reads back its deployment and does not drift",
+      (stack) =>
+        Effect.gen(function* () {
+          const { accountId } = yield* yield* CloudflareEnvironment;
+
+          yield* stack.destroy();
+
+          const worker = yield* stack.deploy(
+            Cloudflare.Worker("DeploymentWorker", {
+              script: `export default { fetch() { return new Response("ok"); } };`,
+              workersDev: false,
+            }),
+          );
+          const { deployments } = yield* workers.listScriptDeployments({
+            accountId,
+            scriptName: worker.workerName,
+          });
+          expect(worker.deploymentId).toEqual(deployments[0]?.id);
+
+          // `read` must return the recorded deployment, or every deployed
+          // Worker compares unequal to state and reads as drifted.
+          const detected = yield* Drift.detect(stack).pipe(Effect.provide(stack.state));
+          expect(detected.resources.DeploymentWorker?.action).toBe("unchanged");
+          expect(detected.resources.DeploymentWorker?.attr.deploymentId).toEqual(
+            worker.deploymentId,
+          );
+
+          yield* stack.destroy();
+          yield* waitForWorkerToBeDeleted(worker.workerName, accountId);
         }).pipe(logLevel),
       { tags: ["live"], timeout: 120_000 },
     );
@@ -678,6 +712,67 @@ describe.concurrent(
     // "the user created/deployed this worker before, but this state store has
     // never seen it" (e.g. CLI-driven first deploy on a fresh machine, or a
     // state-store reset).
+
+    test.provider(
+      "refuses a foreign replacement without changing either Worker",
+      (stack) =>
+        Effect.gen(function* () {
+          const { accountId } = yield* yield* CloudflareEnvironment;
+          yield* stack.destroy();
+          const initial = yield* stack.deploy(
+            Effect.gen(function* () {
+              const owner = yield* Cloudflare.Worker("ReplacementOwner", {
+                main,
+                workersDev: false,
+              });
+              const replacement = yield* Cloudflare.Worker("ReplacementTarget", {
+                main,
+                workersDev: false,
+              });
+              return { owner, replacement };
+            }),
+          );
+          const snapshot = Effect.all(
+            [initial.owner, initial.replacement].map((worker) =>
+              Effect.all({
+                settings: workers.getScriptScriptAndVersionSetting({
+                  accountId,
+                  scriptName: worker.workerName,
+                }),
+                deployments: workers.listScriptDeployments({
+                  accountId,
+                  scriptName: worker.workerName,
+                }),
+              }),
+            ),
+          );
+          const before = yield* snapshot;
+          const refused = yield* stack
+            .deploy(
+              Effect.gen(function* () {
+                yield* Cloudflare.Worker("ReplacementOwner", { main, workersDev: false });
+                return yield* Cloudflare.Worker("ReplacementTarget", {
+                  main,
+                  workersDev: false,
+                  name: initial.owner.workerName,
+                });
+              }),
+            )
+            .pipe(Effect.flip);
+          expect(refused._tag).toEqual("OwnedBySomeoneElse");
+          const after = yield* snapshot;
+          expect(after).toEqual(before);
+          // Destroy deletes ReplacementTarget's original generation and never
+          // touches ReplacementOwner's script through the refused replacement.
+          yield* stack.destroy();
+          yield* Effect.all(
+            [initial.owner, initial.replacement].map((worker) =>
+              waitForWorkerToBeDeleted(worker.workerName, accountId),
+            ),
+          );
+        }).pipe(logLevel),
+      { tags: ["live"], timeout: 120000 },
+    );
 
     test.provider(
       "owned worker (matching alchemy tags) is silently adopted without --adopt",

@@ -1,12 +1,12 @@
 import * as Railway from "@alchemy.run/railway";
 import { projectBuckets } from "@alchemy.run/railway/GraphQL";
+import { expect } from "@alchemy.run/test";
 import { fromCredentials } from "@distilled.cloud/aws/Credentials";
 import * as AwsEndpoint from "@distilled.cloud/aws/Endpoint";
 import type { RegionName } from "@distilled.cloud/aws/Region";
 import * as S3 from "@distilled.cloud/aws/s3";
 import { Query } from "@distilled.cloud/core/query";
 import { Railway as RailwayApi } from "@distilled.cloud/railway";
-import { expect } from "alchemy-test";
 import * as Provider from "alchemy/Provider";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
@@ -88,7 +88,12 @@ const waitUntilBucketGone = (environmentId: string, projectId: string, bucketId:
   );
 
 const withBucketS3 = <A, E, R>(
-  creds: { accessKeyId: string; secretAccessKey: string; endpoint: string; region: string },
+  creds: {
+    accessKeyId: string;
+    secretAccessKey: Redacted.Redacted<string>;
+    endpoint: string;
+    region: string;
+  },
   operation: Effect.Effect<A, E, R>,
 ) =>
   operation.pipe(
@@ -97,7 +102,7 @@ const withBucketS3 = <A, E, R>(
         fromCredentials(
           {
             accessKeyId: Redacted.make(creds.accessKeyId),
-            secretAccessKey: Redacted.make(creds.secretAccessKey),
+            secretAccessKey: creds.secretAccessKey,
           },
           creds.region as RegionName,
         ),
@@ -160,7 +165,7 @@ test.provider(
       expect(creds.bucketName.length).toBeGreaterThan(0);
       expect(creds.endpoint.length).toBeGreaterThan(0);
       expect(creds.accessKeyId.length).toBeGreaterThan(0);
-      expect(creds.secretAccessKey.length).toBeGreaterThan(0);
+      expect(Redacted.value(creds.secretAccessKey).length).toBeGreaterThan(0);
 
       yield* withBucketS3(
         creds,

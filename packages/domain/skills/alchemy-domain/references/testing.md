@@ -20,10 +20,11 @@ import { CurrentActor } from "../src/CurrentActor.context.ts";
 import { CustomerId } from "../src/Customer/Customer.id.ts";
 import { FraudCheck } from "../src/Fraud/FraudCheck.external.ts";
 import { MemoryLedgerStore } from "../src/Ledger/LedgerStore.ts";
+import { Payments } from "../src/Settlement/Payments.external.ts";
 
 const story = Story.make(Bank, {
   layer: BankHandlers.pipe(Layer.provide(MemoryLedgerStore)),  // required when the model has handlers
-  externalSystems: [FraudCheck],                                // replaced by ones the story controls
+  stub: [FraudCheck, Payments],                                 // faked: the story answers each call
 });
 const a1 = Account.ref("a-1");
 
@@ -51,25 +52,48 @@ The steps:
 - `state(ref, partial | fn)` asserts aggregate state.
 - `view(View, ref, partial | fn | Story.none)` asserts view state. `emitted(View, ref, [...])` asserts a view's emitted events, and `streamed(Stream, ref, ...)` a stream's entries.
 - `provide(Service, value)` stands in for middleware on the commands that follow.
-- `clock("2026-01-02T09:00:00Z")` moves time: commands are stamped with it, and scheduled commands and saga sleeps that are now due fire.
+- `clock("2026-01-02T09:00:00Z")` moves time: commands are stamped with it, and scheduled commands and saga sleeps that are now due fire. It also takes epoch milliseconds or a `DateTime`.
 
 ### External system calls
 
 ```ts
-Story.expectCall(FraudCheck.score, { accountId: a1.id }),  // a matching call is waiting (partial args)
-Story.resolve(FraudCheck.score, { risk: 0.95 }),           // answers the only waiting call to score
+Story.call(FraudCheck.score, { accountId: a1.id }),  // a matching call is waiting (partial args)
+Story.succeed(FraudCheck.score, { risk: 0.95 }),           // answers the only waiting call to score
 ```
 
 When several calls are waiting, tag each one as you expect it, and answer it by tag. A tag names the earliest matching call, in the order calls were made:
 
 ```ts
-Story.expectCall("a-1", FraudCheck.score, { accountId: a1.id }),
-Story.expectCall("a-2", FraudCheck.score, { accountId: a2.id }),
-Story.resolve("a-2", FraudCheck.score, { risk: 0.1 }),
-Story.resolve("a-1", FraudCheck.score, { risk: 0.95 }),
+Story.call("a-1", FraudCheck.score, { accountId: a1.id }),
+Story.call("a-2", FraudCheck.score, { accountId: a2.id }),
+Story.succeed("a-2", FraudCheck.score, { risk: 0.1 }),
+Story.succeed("a-1", FraudCheck.score, { risk: 0.95 }),
 ```
 
-An untagged `resolve` with several calls waiting fails the story, and so does a call left unanswered at the end.
+Every call needs a `call` step before it's answered; each one matches a single call, earliest first. An untagged `succeed` with several calls waiting fails the story, and so does a call left unanswered at the end.
+
+`fail` answers a waiting call with the operation's declared `error:`, to test the branch where the vendor refuses. `die` answers it with a defect, as when the transport breaks. Both find the call the way `succeed` does, untagged or by tag, and only a declared error type-checks:
+
+```ts
+Story.call(Payments.refund, { settlementId: "st_1" }),
+Story.fail(Payments.refund, new RefundDeclined({ reason: "card-closed" })),
+Story.call("r-2", Payments.refund, { settlementId: "st_2" }),
+Story.die("r-2", Payments.refund, new Error("socket closed")),
+```
+
+### Real calls
+
+A system left out of `stub` is called for real through its adapter Layer, which you provide to the story (its type requires it). The story records each call: a `call` step checks what it was sent and must come first, and `returned` / `failed` / `died` check how it ended, found like `succeed`. A real call no step asserts fails the story, and the story waits for real calls to finish before each step.
+
+```ts
+const story = Story.make(Bank, { layer: BankHandlers, stub: [FraudCheck] });   // Payments runs for real
+
+story(
+  Story.when(account, new RecordSettlement({ settlementId: "st_1", amount: 500 })),
+  Story.call(Payments.refund, { settlementId: "st_1", amount: 500 }),
+  Story.returned(Payments.refund, { refundId: "re_st_1" }),
+).pipe(Effect.provide(StripePayments));
+```
 
 ### Sagas
 
@@ -86,7 +110,7 @@ The statuses are `NotStarted`, `Running`, `Completed`, `Rejected`, `Interrupted`
 
 ### What to cover
 
-For every command, cover the happy path, each rejection, and each authorization case (owner, other customer, agent). For every policy, cover the reaction, and the reaction when its command is rejected. For every saga, cover completion, each failure with its compensation, and each wait (signal, timeout via `clock`). For every view, check its state after the events it folds.
+For every command, cover the happy path, each rejection, and each authorization case (owner, other customer, agent). For every policy, cover the reaction, the reaction when its command is rejected, and the reaction when an external call fails with its declared error. For every saga, cover completion, each failure with its compensation, and each wait (signal, timeout via `clock`). For every view, check its state after the events it folds.
 
 ## Api tests: the client's view
 

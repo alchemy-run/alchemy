@@ -106,15 +106,16 @@ import * as Effect from "effect/Effect";
 
 export default class Worker extends AWS.Lambda.Function<Worker>()(
   "JobsWorker",
-  { main: import.meta.url },
+  { main: import.meta.url, functionUrl: false },
   Effect.gen(function* () {
     return {};
   }),
 ) {}
 ```
 
-This consumer doesn't need a Function URL — its only entrypoint
-is the SQS message poller AWS will configure for it.
+`functionUrl: false` turns off the public Function URL every Lambda
+gets by default. This consumer's only entrypoint is the SQS message
+poller AWS will configure for it.
 
 ## Share the queue between two functions
 
@@ -153,7 +154,7 @@ import * as Effect from "effect/Effect";
 
 export default class Worker extends AWS.Lambda.Function<Worker>()(
   "JobsWorker",
-  { main: import.meta.url },
+  { main: import.meta.url, functionUrl: false },
   Effect.gen(function* () {
 +    const queue = yield* Jobs;
     return {};
@@ -179,7 +180,7 @@ import { Jobs } from "./queue.ts";
 
 export default class Worker extends AWS.Lambda.Function<Worker>()(
   "JobsWorker",
-  { main: import.meta.url },
+  { main: import.meta.url, functionUrl: false },
   Effect.gen(function* () {
     const queue = yield* Jobs;
 +

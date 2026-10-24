@@ -1,6 +1,6 @@
 {
   "name": "@alchemy.run/cloudflare",
-  "version": "2.0.0-beta.83",
+  "version": "2.0.0-beta.84",
   "description": "Cloudflare Workers, Durable Objects, storage, networking and the Cloudflare state store for Alchemy.",
   "keywords": [
     "alchemy",
@@ -767,14 +767,15 @@
   },
   "scripts": {
     "build": "pnpm -r --filter \"{.}...\" run build:package",
-    "build:package": "node scripts/build.ts"
+    "build:package": "node scripts/build.ts",
+    "sync:permission-groups": "bun scripts/sync-permission-groups.ts"
   },
   "dependencies": {
     "@alchemy.run/acme": "workspace:*",
     "@alchemy.run/cloudflare-runtime": "workspace:*",
     "@alchemy.run/docker": "workspace:*",
     "@alchemy.run/sql": "workspace:*",
-    "@distilled.cloud/aws": "workspace:*",
+    "@distilled.cloud/aws4signer": "workspace:*",
     "@distilled.cloud/cloudflare": "workspace:*",
     "@distilled.cloud/core": "workspace:*",
     "@distilled.cloud/iceberg": "workspace:*",

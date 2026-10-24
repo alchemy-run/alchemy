@@ -2,9 +2,9 @@ import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare";
 import { findZoneByName } from "@alchemy.run/cloudflare/Zone";
 import * as Neon from "@alchemy.run/neon";
+import { assert, expect } from "@alchemy.run/test";
 import * as hyperdrive from "@distilled.cloud/cloudflare/hyperdrive";
 import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
-import { assert, expect } from "alchemy-test";
 import * as Provider from "alchemy/Provider";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Data from "effect/Data";
@@ -25,6 +25,7 @@ import {
   AccessOriginConnection,
   AccessOriginRoute,
 } from "./fixtures/access-origin.ts";
+import { ISRG_ROOT_X1 } from "./fixtures/ca.ts";
 import { outOfBandConfig } from "./fixtures/lookup-config.ts";
 import HyperdriveLookupEffectWorker from "./fixtures/lookup-effect-worker.ts";
 import { lookupConfigName } from "./fixtures/lookup.ts";
@@ -127,6 +128,134 @@ test.provider(
       "provider:neon:project",
       "live",
     ],
+  },
+);
+
+test.provider(
+  "renaming replaces the config while the origin is unresolved",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const stage = stack.stage.toLowerCase().replace(/[^a-z0-9-]/g, "-");
+      const nameV1 = `alchemy-test-hd-rename-a-${stage}`;
+      const nameV2 = `alchemy-test-hd-rename-b-${stage}`;
+
+      yield* stack.destroy();
+
+      const v1 = yield* stack.deploy(
+        Effect.gen(function* () {
+          const project = yield* Neon.Project("RenameProjectA");
+          return yield* Cloudflare.Hyperdrive.Connection("RenamedHyperdrive", {
+            name: nameV1,
+            origin: project.origin,
+          });
+        }),
+      );
+      expect(v1.name).toEqual(nameV1);
+
+      // The new project is created in the same deploy, so the origin is an
+      // unresolved output at plan time. The rename must still replace.
+      const program = Effect.gen(function* () {
+        yield* Neon.Project("RenameProjectA");
+        const project = yield* Neon.Project("RenameProjectB");
+        return yield* Cloudflare.Hyperdrive.Connection("RenamedHyperdrive", {
+          name: nameV2,
+          origin: project.origin,
+        });
+      });
+      const plan = yield* stack.plan(program);
+      expect(plan.resources.RenamedHyperdrive!.action).toEqual("replace");
+
+      const v2 = yield* stack.deploy(program);
+      expect(v2.name).toEqual(nameV2);
+      expect(v2.hyperdriveId).not.toEqual(v1.hyperdriveId);
+
+      const actual = yield* hyperdrive.getConfig({ accountId, hyperdriveId: v2.hyperdriveId });
+      expect(actual.name).toEqual(nameV2);
+      yield* waitForConfigToBeDeleted(v1.hyperdriveId, accountId);
+
+      yield* stack.destroy();
+
+      yield* waitForConfigToBeDeleted(v2.hyperdriveId, accountId);
+    }).pipe(logLevel),
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:hyperdrive",
+      "provider:neon",
+      "provider:neon:project",
+      "live",
+    ],
+    timeout: 240_000,
+  },
+);
+
+test.provider(
+  "dropping a CA pin replaces the config",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+
+      yield* stack.destroy();
+
+      const pinnedProgram = Effect.gen(function* () {
+        const project = yield* Neon.Project("PinnedProject");
+        const ca = yield* Cloudflare.MtlsCertificate.MtlsCertificate("PinnedCa", {
+          ca: true,
+          certificates: ISRG_ROOT_X1,
+        });
+        const hd = yield* Cloudflare.Hyperdrive.Connection("PinnedHyperdrive", {
+          origin: project.origin,
+          mtls: { caCertificateId: ca.mtlsCertificateId, sslmode: "verify-ca" },
+        });
+        return { ca, hd };
+      });
+      const pinned = yield* stack.deploy(pinnedProgram);
+
+      const before = yield* hyperdrive.getConfig({
+        accountId,
+        hyperdriveId: pinned.hd.hyperdriveId,
+      });
+      expect(before.mtls?.caCertificateId).toEqual(pinned.ca.mtlsCertificateId);
+
+      // Keep the CA deployed so the replacement doesn't also remove a
+      // dependency in the same step.
+      const unpinnedProgram = Effect.gen(function* () {
+        const project = yield* Neon.Project("PinnedProject");
+        yield* Cloudflare.MtlsCertificate.MtlsCertificate("PinnedCa", {
+          ca: true,
+          certificates: ISRG_ROOT_X1,
+        });
+        return yield* Cloudflare.Hyperdrive.Connection("PinnedHyperdrive", {
+          origin: project.origin,
+          mtls: { sslmode: "require" },
+        });
+      });
+      const plan = yield* stack.plan(unpinnedProgram);
+      expect(plan.resources.PinnedHyperdrive!.action).toEqual("replace");
+
+      const unpinned = yield* stack.deploy(unpinnedProgram);
+      expect(unpinned.hyperdriveId).not.toEqual(pinned.hd.hyperdriveId);
+
+      const after = yield* hyperdrive.getConfig({ accountId, hyperdriveId: unpinned.hyperdriveId });
+      expect(after.mtls?.caCertificateId ?? undefined).toBeUndefined();
+      expect(after.mtls?.sslmode).toEqual("require");
+      yield* waitForConfigToBeDeleted(pinned.hd.hyperdriveId, accountId);
+
+      yield* stack.destroy();
+
+      yield* waitForConfigToBeDeleted(unpinned.hyperdriveId, accountId);
+    }).pipe(logLevel),
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:hyperdrive",
+      "provider:cloudflare:mtlscertificate",
+      "provider:neon",
+      "provider:neon:project",
+      "live",
+    ],
+    timeout: 240_000,
   },
 );
 

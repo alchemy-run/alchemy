@@ -1,6 +1,6 @@
 import { providers } from "@alchemy.run/neon/Providers";
 import { stageWebsiteArtifact } from "@alchemy.run/neon/Website/Artifact";
-import { describe, expect } from "alchemy-test";
+import { describe, expect } from "@alchemy.run/test";
 import * as Command from "alchemy/Command";
 import * as Test from "alchemy/Test/Alchemy";
 import { Server } from "alchemy/Website/Server";
@@ -27,7 +27,7 @@ describe.sequential(
             yield* stack.destroy();
             const path = yield* Path.Path;
             const root = yield* exampleRoot(slug);
-            const framework = slug === "foldkit" ? "vite" : slug;
+            const framework = slug;
             const target = `@alchemy.run/frontend-frameworks/${framework}/neon`;
             const build = yield* stack.deploy(
               Effect.gen(function* () {

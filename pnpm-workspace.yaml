@@ -8,6 +8,13 @@ allowBuilds:
   "@parcel/watcher": true
   core-js: false
   es5-ext: false
+  # Prisma 7 (prisma playground fixture): `generate` needs no downloaded engines.
+  "@prisma/engines": false
+  prisma: false
+  # Flue's model clients: postinstall banners and version checks only.
+  "@google/genai": false
+  core-js-pure: false
+  protobufjs: false
   esbuild: true
   sharp: true
   vue-demi: false
@@ -63,17 +70,18 @@ catalog:
   "@cloudflare/unenv-preset": "^2.16.2"
   "@cloudflare/vitest-plugin": "^1.4.0"
   "@cloudflare/workers-types": "5.20261012.1"
-  "@effect/atom-react": "^4.0.4"
-  "@effect/platform-bun": "^4.0.0"
-  "@effect/platform-node": "^4.0.0"
-  "@effect/sql-d1": "^4.0.4"
-  "@effect/sql-libsql": "^4.0.0"
-  "@effect/sql-mysql2": "^4.0.0"
-  "@effect/sql-pg": "^4.0.0"
-  "@effect/sql-sqlite-do": "^4.0.4"
+  "@effect/atom-react": "^4.0.5"
+  "@effect/platform-bun": "^4.0.5"
+  "@effect/platform-node": "^4.0.5"
+  "@effect/sql-d1": "^4.0.5"
+  "@effect/sql-libsql": "^4.0.5"
+  "@effect/sql-mysql2": "^4.0.5"
+  "@effect/sql-pg": "^4.0.5"
+  "@effect/sql-sqlite-do": "^4.0.5"
   "@effect/tsgo": "^0.51.1"
-  "@effect/vitest": "^4.0.0"
-  "@foldkit/vite-plugin": "^0.26.0"
+  "@effect/vitest": "^4.0.5"
+  "@foldkit/ui": "^0.167.0"
+  "@foldkit/vite-plugin": "^0.27.0"
   "@fontsource-variable/caveat": "^5.3.0"
   "@fontsource-variable/inter": "^5.3.0"
   "@fontsource-variable/jetbrains-mono": "^5.3.0"
@@ -90,12 +98,38 @@ catalog:
   "@octokit/webhooks": "^14.2.0"
   "@opennextjs/aws": "4.1.9"
   "@opennextjs/cloudflare": "1.20.1"
-  "@opentui/core": "latest"
+  "@opentui/core": "^0.6.6"
   "@oxc-project/types": "^0.153.0"
   "@playwright/test": "^1.64.0"
   "@prisma/orm-family-sql": "^8.0.0-rc.11"
   "@prisma/orm-postgres": "^8.0.0-rc.11"
+  partyserver: "^0.5.10"
+  cross-fetch: "^4.0.0"
+  # Kept in the C3 React Router template's Vite config, which alchemy neutralizes.
+  "@cloudflare/vite-plugin": "^1.64.0"
+  "@flue/runtime": "^2.3.0"
+  "@flue/sdk": "^2.3.0"
+  "@flue/vite": "^2.3.0"
+  # examples/cloudflare-agents; the MCP SDK is an exact peer of `agents`.
+  agents: "^0.29.0"
+  "@modelcontextprotocol/sdk": "1.32.1"
+  # `agents/vite` compiles decorators with these, resolved from the project.
+  "@babel/plugin-proposal-decorators": "^8.0.2"
+  "@rolldown/plugin-babel": "^0.2.3"
+  # create-cloudflare's RedwoodSDK template.
+  rwsdk: "1.7.4"
+  # create-cloudflare's Vike template.
+  vike: "^0.4.268"
+  vike-react: "^0.6.29"
+  "@vitejs/plugin-basic-ssl": "^2.3.0"
+  debug: "^4.4.1"
   prisma: "^8.0.0-rc.15"
+  # `@cloudflare/vite-plugin`'s prisma playground (Prisma 7 + D1 adapter).
+  prisma7: "npm:prisma@7.10.1"
+  # Prisma 7 brings pglite 0.4; drizzle-orm's pglite peer must match packages/drizzle's.
+  "@electric-sql/pglite": "0.3.15"
+  "@prisma/client": "7.10.1"
+  "@prisma/adapter-d1": "7.10.1"
   arktype: "2.2.8"
   "@prisma/dev": "^0.20.0"
   "@puppeteer/browsers": "^3.2.4"
@@ -155,11 +189,11 @@ catalog:
   dotenv: "^17.4.2"
   drizzle-kit: "1.0.0-rc.5-ab785fc"
   drizzle-orm: "1.0.0-rc.5-ab785fc"
-  effect: "^4.0.0"
+  effect: "^4.0.5"
   esbuild: "^0.28.1"
   fflate: "^0.8.3"
   fast-xml-parser: "^5.11.2"
-  foldkit: "^0.165.0"
+  foldkit: "^0.167.0"
   heap-js: "^2.5.0"
   hono: "^4.12.14"
   http-cache-semantics: "^4.3.0"
@@ -209,9 +243,9 @@ catalog:
   termcut: "1.4.4"
   toucan-js: "4.1.1"
   tsdown: "^0.22.4"
+  tsrs: "0.18.0-ts7.1.0-dev.20260929"
   tsx: "^4.23.15"
   typescript: "^7.0.2"
-  typescript-api: "npm:typescript@7.1.0-dev.20260905.1"
   unenv: "^2.0.0-rc.24"
   uuid: "^14.0.3"
   vinext: "^1.0.1"
@@ -220,7 +254,7 @@ catalog:
   vite-plugin-vue-devtools: "^8.1.1"
   vitest: "^5.0.4"
   vocs: "2.8.2"
-  vue: "beta"
+  vue: "^3.5.44"
   vue-router: "^5.4.0"
   vue-tsc: "^3.3.13"
   waku: "1.0.0-beta.7"
@@ -265,8 +299,10 @@ catalogs:
 overrides:
   "@cloudflare/workers-types": 5.20261012.1
   workerd: 1.20261012.1
-  effect: 4.0.4
-  "@effect/platform-browser": 4.0.4
+  effect: 4.0.5
+  "@effect/platform-browser": 4.0.5
+  "@effect/sql-d1": 4.0.5
+  "@effect/sql-sqlite-do": 4.0.5
   drizzle-kit: 1.0.0-rc.5-ab785fc
   drizzle-orm: 1.0.0-rc.5-ab785fc
   # Keep drizzle-orm's optional peer graph identical across workspace
@@ -278,24 +314,12 @@ overrides:
 patchedDependencies:
   "@astrojs/starlight@0.42.0": patches/@astrojs%2Fstarlight@0.42.0.patch
   starlight-blog@0.29.0: patches/starlight-blog@0.29.0.patch
-  typescript@7.1.0-dev.20260905.1: patches/typescript@7.1.0-dev.20260905.1.patch
 
 minimumReleaseAgeExclude:
-  - typescript@7.1.0-dev.20260905.1 || 7.1.0-dev.20260923.1
+  - typescript@7.1.0-dev.20260923.1
   - "@alchemy.run/sigil@0.1.0-alpha.1"
-  - "@effect/atom-react@4.0.4"
-  - "@effect/platform-bun@4.0.4"
-  - "@effect/platform-node-shared@4.0.4"
-  - "@effect/platform-node@4.0.4"
-  - "@effect/sql-d1@4.0.4"
-  - "@effect/sql-libsql@4.0.4"
-  - "@effect/sql-mysql2@4.0.4"
-  - "@effect/sql-pg@4.0.4"
-  - "@effect/sql-sqlite-do@4.0.4"
-  - "@effect/vitest@4.0.4"
-  - "@foldkit/vite-plugin@0.26.0"
-  - effect@4.0.4
-  - foldkit@0.165.0
+  - "@foldkit/vite-plugin@0.27.0"
+  - foldkit@0.167.0
   - "@solidjs/start@2.0.6"
   - "@cloudflare/workers-types@5.20261012.1"
   - "@cloudflare/workerd-darwin-64@1.20261012.1"
@@ -304,18 +328,17 @@ minimumReleaseAgeExclude:
   - "@cloudflare/workerd-linux-arm64@1.20261012.1"
   - "@cloudflare/workerd-windows-64@1.20261012.1"
   - workerd@1.20261012.1
-  - "@typescript/typescript-darwin-arm64@7.1.0-dev.20260905.1 || 7.1.0-dev.20260923.1"
-  - "@typescript/typescript-darwin-x64@7.1.0-dev.20260905.1 || 7.1.0-dev.20260923.1"
-  - "@typescript/typescript-linux-arm64@7.1.0-dev.20260905.1 || 7.1.0-dev.20260923.1"
-  - "@typescript/typescript-linux-arm@7.1.0-dev.20260905.1 || 7.1.0-dev.20260923.1"
-  - "@typescript/typescript-linux-x64@7.1.0-dev.20260905.1 || 7.1.0-dev.20260923.1"
-  - "@typescript/typescript-win32-arm64@7.1.0-dev.20260905.1 || 7.1.0-dev.20260923.1"
-  - "@typescript/typescript-win32-x64@7.1.0-dev.20260905.1 || 7.1.0-dev.20260923.1"
+  - "@typescript/typescript-darwin-arm64@7.1.0-dev.20260923.1"
+  - "@typescript/typescript-darwin-x64@7.1.0-dev.20260923.1"
+  - "@typescript/typescript-linux-arm64@7.1.0-dev.20260923.1"
+  - "@typescript/typescript-linux-arm@7.1.0-dev.20260923.1"
+  - "@typescript/typescript-linux-x64@7.1.0-dev.20260923.1"
+  - "@typescript/typescript-win32-arm64@7.1.0-dev.20260923.1"
+  - "@typescript/typescript-win32-x64@7.1.0-dev.20260923.1"
   - "@neon/config-runtime@1.6.1"
   - "@neon/config@1.7.1"
   - neon@4.21.1
   - neonctl@4.21.1
-  - "@effect/platform-browser@4.0.4"
   - vitest@5.0.4
   - "@vitest/expect@5.0.4"
   - "@vitest/runner@5.0.4"
@@ -327,3 +350,4 @@ minimumReleaseAgeExclude:
   - "@cloudflare/vitest-plugin@1.4.0"
   - miniflare@5.20260930.0-alpha
   - wrangler@4.145.0
+  - "@foldkit/ui@0.167.0"

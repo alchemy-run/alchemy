@@ -1,9 +1,9 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
 import { isLocalId } from "@alchemy.run/cloudflare/LocalRuntime";
+import { describe, expect } from "@alchemy.run/test";
 import * as kv from "@distilled.cloud/cloudflare/kv";
 import * as Alchemy from "alchemy";
-import { describe, expect } from "alchemy-test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -149,6 +149,13 @@ describe.concurrent(
           yield* expectUrlContains(`${site.url!}/static.txt`, "astro-static-asset", {
             timeout: "60 seconds",
             label: "astro dev static asset",
+          });
+
+          // The same `public/` file read by a server route through the
+          // Worker's `ASSETS` binding.
+          yield* expectUrlContains(`${site.url!}/api/asset`, "astro-static-asset", {
+            timeout: "60 seconds",
+            label: "astro dev ASSETS binding",
           });
 
           // ── sessions round-trip against the LOCAL simulator ────────────────

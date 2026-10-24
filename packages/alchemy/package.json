@@ -1,6 +1,6 @@
 {
   "name": "alchemy",
-  "version": "2.0.0-beta.83",
+  "version": "2.0.0-beta.84",
   "description": "Infrastructure as Effects for TypeScript.",
   "keywords": [
     "alchemy",
@@ -40,6 +40,7 @@
     "./Bundle": "./src/Bundle/index.ts",
     "./Cli": "./src/Cli/index.ts",
     "./Cli/CliKit": "./src/Cli/CliKit/index.ts",
+    "./DNS": "./src/DNS/index.ts",
     "./Runtime/Bootstrap": "./src/Runtime/Bootstrap.ts",
     "./Runtime/ManagedHttpShutdown": "./src/Runtime/ManagedHttpShutdown.ts",
     "./Secrets": "./src/Secrets/index.ts",
@@ -89,6 +90,11 @@
         "types": "./lib/Cli/CliKit/index.d.ts",
         "bun": "./src/Cli/CliKit/index.ts",
         "default": "./lib/Cli/CliKit/index.js"
+      },
+      "./DNS": {
+        "types": "./lib/DNS/index.d.ts",
+        "bun": "./src/DNS/index.ts",
+        "default": "./lib/DNS/index.js"
       },
       "./Runtime/Bootstrap": {
         "types": "./src/Runtime/Bootstrap.ts",
@@ -141,6 +147,7 @@
   },
   "devDependencies": {
     "@alchemy.run/frontend-frameworks": "workspace:*",
+    "@alchemy.run/test": "workspace:*",
     "@effect/platform-bun": "catalog:",
     "@effect/platform-node": "catalog:",
     "@effect/vitest": "catalog:",
@@ -151,7 +158,6 @@
     "@types/react": "catalog:",
     "@types/ws": "catalog:",
     "@vitejs/plugin-rsc": "catalog:",
-    "alchemy-test": "workspace:*",
     "astro": "catalog:",
     "drizzle-orm": "catalog:",
     "effect": "catalog:",
@@ -163,7 +169,6 @@
     "solid-js": "catalog:",
     "tsx": "catalog:",
     "typescript": "catalog:",
-    "typescript-api": "catalog:",
     "uuid": "catalog:",
     "vitest": "catalog:",
     "wrangler": "catalog:",

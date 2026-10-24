@@ -17,7 +17,7 @@ import {
   type ParseResult,
   type Reply,
 } from "@alchemy.run/redis/Resp";
-import { describe, expect, test } from "alchemy-test";
+import { describe, expect, test } from "@alchemy.run/test";
 
 const utf8 = new TextEncoder();
 const bytes = (value: string): Uint8Array => utf8.encode(value);

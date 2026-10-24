@@ -41,7 +41,7 @@ import type { PlatformError } from "effect/PlatformError";
 import * as Redacted from "effect/Redacted";
 import type * as Scope from "effect/Scope";
 import { glob } from "tinyglobby";
-import { runBuildChild } from "../core/BuildChild.ts";
+import { resolveBuildEnv, runBuildChild } from "../core/BuildChild.ts";
 import { makeCloudflareTarget } from "./cloudflare.ts";
 import {
   make as makeSvelteKit,
@@ -154,6 +154,7 @@ type SourceServices = FileSystem.FileSystem | Path.Path;
 /** Mirror of alchemy's `SourceProvider` (structural). */
 export interface SourceProvider {
   readonly ownsAssets: boolean;
+  readonly devAssetsBinding?: boolean;
   readonly build: (
     ctx: SourceContext,
   ) => Effect.Effect<SourceBuildOutput, SourceError, SourceServices>;
@@ -574,11 +575,14 @@ export const makeSvelteKitSource = (options: SvelteKitSourceOptions): SourceProv
   });
   return {
     ownsAssets: true,
+    // The dev platform proxy serves kit's static directory to `ASSETS`.
+    devAssetsBinding: true,
     build: Effect.fnUntraced(function* (ctx) {
       const output = yield* runBuildChild({
         module: import.meta.url,
         rootDir,
         framework: "sveltekit",
+        env: resolveBuildEnv(ctx.env),
         config: {
           rootDir,
           compatibilityDate: ctx.compatibility.date,

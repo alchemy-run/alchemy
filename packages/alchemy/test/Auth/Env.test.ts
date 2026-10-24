@@ -1,4 +1,4 @@
-import { expect, it } from "alchemy-test";
+import { expect, it } from "@alchemy.run/test";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";

@@ -1,6 +1,6 @@
 import * as GitHub from "@alchemy.run/github";
 import { Octokit } from "@alchemy.run/github/Octokit";
-import { expect } from "alchemy-test";
+import { expect } from "@alchemy.run/test";
 import * as Output from "alchemy/Output";
 import * as Provider from "alchemy/Provider";
 import { destroy } from "alchemy/RemovalPolicy";
@@ -119,6 +119,42 @@ test.provider(
       });
       expect(recovered?.url).toEqual(created.url);
       expect(recovered?.enforceAdmins).toBe(true);
+
+      // Both props are set. GitHub rejects a body that sends `contexts` and
+      // `checks` together, so this update must send `checks` alone. The
+      // read-back still fills `contexts` from the stored checks.
+      const withChecks = yield* stack.deploy(
+        Effect.gen(function* () {
+          const repository = yield* hostRepository;
+
+          return yield* GitHub.BranchProtection("Protection", {
+            owner,
+            repository: repoName(repository),
+            branch: repository.defaultBranch,
+            requiredStatusChecks: {
+              strict: false,
+              contexts: ["ci"],
+              checks: [{ context: "Verify" }, { context: "API tests" }],
+            },
+            requiredPullRequestReviews: {
+              requiredApprovingReviewCount: 1,
+              dismissStaleReviews: true,
+            },
+            enforceAdmins: true,
+            requiredLinearHistory: true,
+            requiredConversationResolution: true,
+          }).pipe(destroy());
+        }),
+      );
+
+      expect(withChecks.url).toEqual(created.url);
+      const afterChecks = yield* getProtection(created.branch);
+      const storedChecks = ["Verify", "API tests"];
+      expect(afterChecks?.required_status_checks?.strict).toBe(false);
+      expect(afterChecks?.required_status_checks?.contexts).toEqual(storedChecks);
+      expect(afterChecks?.required_status_checks?.checks?.map((check) => check.context)).toEqual(
+        storedChecks,
+      );
 
       // Update — drop reviews and status checks, relax admin enforcement,
       // allow force pushes, and require signed commits (the aspect that lives

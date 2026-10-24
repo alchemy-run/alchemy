@@ -1,5 +1,5 @@
 import * as Docker from "@alchemy.run/docker";
-import { describe, expect } from "alchemy-test";
+import { describe, expect } from "@alchemy.run/test";
 import { adopt, OwnedBySomeoneElse } from "alchemy/AdoptPolicy";
 import { inMemoryState } from "alchemy/State";
 import * as Test from "alchemy/Test/Alchemy";

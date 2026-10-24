@@ -3,7 +3,7 @@ import {
   isTransientBootstrapWriteError,
   isTransientEdgeSessionError,
 } from "@alchemy.run/cloudflare/StateStore/State";
-import { describe, expect, it } from "alchemy-test";
+import { describe, expect, it } from "@alchemy.run/test";
 import { makeHttpStateStore } from "alchemy/State/HttpStateStore";
 import type { StateStoreError } from "alchemy/State/State";
 import * as Effect from "effect/Effect";

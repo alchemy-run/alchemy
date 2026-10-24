@@ -1,7 +1,8 @@
 import * as GitHub from "@alchemy.run/github";
 import { GitHubCredentials } from "@alchemy.run/github/Credentials";
 import { Octokit } from "@alchemy.run/github/Octokit";
-import { expect } from "alchemy-test";
+import { expect } from "@alchemy.run/test";
+import { adopt, OwnedBySomeoneElse } from "alchemy/AdoptPolicy";
 import * as Output from "alchemy/Output";
 import * as Provider from "alchemy/Provider";
 import { destroy } from "alchemy/RemovalPolicy";
@@ -20,6 +21,7 @@ const fixtureNames = [
   "alchemy-pr-1570-ruleset-list",
   "alchemy-pr-1570-ruleset-replace-a",
   "alchemy-pr-1570-ruleset-replace-b",
+  "alchemy-pr-1570-ruleset-adopt",
 ];
 
 // Retain public fixtures: the gh token lacks delete_repo, and private rulesets are plan-gated.
@@ -85,7 +87,10 @@ test.provider(
           nonFastForward: true,
           deletion: true,
           update: true,
-          pullRequest: {},
+          pullRequest: {
+            allowedMergeMethods: ["squash"],
+            requireExtraApprovalForUnattributedChanges: false,
+          },
           requiredStatusChecks: { checks: [{ context: "ci/test" }] },
         },
       });
@@ -101,10 +106,39 @@ test.provider(
         "required_status_checks",
         "update",
       ]);
+      expect(
+        fetched?.rules?.find((rule) => rule.type === "pull_request")?.parameters,
+      ).toMatchObject({
+        allowed_merge_methods: ["squash"],
+        require_extra_approval_for_unattributed_changes: false,
+      });
       expect(fetched?.bypass_actors).toEqual([
         { actor_type: "RepositoryRole", actor_id: 5, bypass_mode: "always" },
       ]);
       expect(created.createdAt).toBe(fetched?.created_at);
+
+      // Dropping both props resets them to GitHub's defaults: every merge
+      // method is allowed again and the extra approval is required again.
+      const relaxed = yield* deploy({
+        name: "main protection",
+        conditions: { include: ["refs/heads/main"] },
+        bypassActors: [{ actorType: "RepositoryRole", actorId: 5 }],
+        rules: {
+          nonFastForward: true,
+          deletion: true,
+          update: true,
+          pullRequest: {},
+          requiredStatusChecks: { checks: [{ context: "ci/test" }] },
+        },
+      });
+      expect(relaxed.rulesetId).toBe(created.rulesetId);
+      const afterRelax = yield* getRuleset(repo, created.rulesetId);
+      expect(
+        afterRelax?.rules?.find((rule) => rule.type === "pull_request")?.parameters,
+      ).toMatchObject({
+        allowed_merge_methods: ["merge", "squash", "rebase"],
+        require_extra_approval_for_unattributed_changes: true,
+      });
 
       const updated = yield* deploy({
         name: "updated main protection",
@@ -138,6 +172,68 @@ test.provider(
       // Delete the ruleset while its repository is still managed, then release the fixture.
       yield* stack.deploy(repository(repo));
       expect(yield* getRuleset(repo, created.rulesetId)).toBeUndefined();
+      expect(yield* getRulesets(repo)).toEqual([]);
+      yield* stack.destroy();
+    }),
+  { tags: ["provider:github", "provider:github:repository", "provider:github:ruleset", "live"] },
+);
+
+test.provider(
+  "adopts an existing ruleset by name",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const repo = fixtureNames[4]!;
+      yield* stack.deploy(repository(repo));
+      const octokit = yield* Octokit;
+      const existing = yield* Effect.tryPromise(() =>
+        octokit.rest.repos.createRepoRuleset({
+          owner,
+          repo,
+          name: "adopted protection",
+          target: "tag",
+          enforcement: "active",
+          rules: [{ type: "deletion" }],
+        }),
+      );
+      yield* Effect.addFinalizer(() =>
+        Effect.tryPromise(() =>
+          octokit.rest.repos.deleteRepoRuleset({ owner, repo, ruleset_id: existing.data.id }),
+        ).pipe(Effect.ignore),
+      );
+
+      const deploy = (enabled: boolean) =>
+        stack.deploy(
+          Effect.gen(function* () {
+            const fixture = yield* repository(repo);
+            return yield* GitHub.Ruleset("AdoptedRuleset", {
+              owner,
+              repository: repoName(fixture),
+              name: "adopted protection",
+              conditions: { include: ["~DEFAULT_BRANCH"] },
+              rules: { deletion: true, nonFastForward: true },
+            }).pipe(adopt(enabled), destroy());
+          }),
+        );
+
+      const refused = yield* deploy(false).pipe(Effect.flip);
+      expect(refused).toBeInstanceOf(OwnedBySomeoneElse);
+
+      const adopted = yield* deploy(true);
+      expect(adopted.rulesetId).toBe(existing.data.id);
+      const observed = yield* getRuleset(repo, existing.data.id);
+      expect(observed?.target).toBe("branch");
+      expect(observed?.conditions?.ref_name).toEqual({
+        include: ["~DEFAULT_BRANCH"],
+        exclude: [],
+      });
+      expect(observed?.rules?.map((rule) => rule.type).sort()).toEqual([
+        "deletion",
+        "non_fast_forward",
+      ]);
+      expect((yield* getRulesets(repo)).map((ruleset) => ruleset.id)).toEqual([existing.data.id]);
+
+      yield* stack.deploy(repository(repo));
       expect(yield* getRulesets(repo)).toEqual([]);
       yield* stack.destroy();
     }),

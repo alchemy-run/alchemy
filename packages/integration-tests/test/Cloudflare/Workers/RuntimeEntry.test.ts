@@ -8,8 +8,8 @@ import {
 } from "@alchemy.run/cloudflare/Workers/Sources/Rolldown";
 import * as WorkerRuntime from "@alchemy.run/cloudflare/Workers/WorkerRuntime";
 import * as WorkflowRuntime from "@alchemy.run/cloudflare/Workflows/WorkflowRuntime";
+import { describe, expect, layer } from "@alchemy.run/test";
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { describe, expect, layer } from "alchemy-test";
 import { virtualEntryPlugin } from "alchemy/Bundle/Bundle";
 import { Stack } from "alchemy/Stack";
 import { StackContext } from "alchemy/StackContext";
@@ -220,6 +220,56 @@ layer(NodeServices.layer)("@alchemy.run/cloudflare/Bridge (runtime-only entry)",
     { tags: ["unit", "provider:cloudflare", "provider:cloudflare:worker", "local"] },
   );
 
+  for (const fixture of ["barrel-worker.ts", "bindings-worker.ts"]) {
+    it.effect(
+      `keeps the Cloudflare API client out of a bundled Worker (${fixture})`,
+      () =>
+        Effect.gen(function* () {
+          const path = yield* Path.Path;
+          const packagesDir = yield* path.fromFileUrl(new URL("../../../../", import.meta.url));
+          const rendered: string[] = [];
+          yield* (yield* WorkerBundle).build({
+            id: "runtime-entry",
+            main: path.join(
+              packagesDir,
+              "integration-tests/test/Cloudflare/Workers/fixtures/runtime-entry",
+              fixture,
+            ),
+            compatibility: { date: "2025-04-01", flags: ["nodejs_compat"] },
+            entry: { kind: "effect", exports: {} },
+            stack: { name: "runtime-entry", stage: "test" },
+            extraOptions: {
+              input: {
+                plugins: {
+                  name: "collect-rendered-modules",
+                  generateBundle: (_options, bundle) => {
+                    rendered.push(
+                      ...Object.values(bundle)
+                        .flatMap((chunk) =>
+                          chunk.type === "chunk" ? Object.entries(chunk.modules) : [],
+                        )
+                        .filter(([, module]) => module.renderedLength > 0)
+                        .map(([id]) => id.replaceAll("\\", "/")),
+                    );
+                  },
+                },
+              },
+            },
+          });
+          expect(rendered.some((id) => id.endsWith("cloudflare/src/Workers/WorkerBridge.ts"))).toBe(
+            true,
+          );
+          // Deploy-only provider helpers (e.g. `findQueueByName`) reach the
+          // distilled client. `purePlugin` prunes them behind async bindings;
+          // the runtime defines alone suffice for the hello-world (#2371).
+          expect(
+            rendered.filter((id) => /@distilled\.cloud|submodules\/distilled\//.test(id)),
+          ).toEqual([]);
+        }),
+      { tags: ["unit", "provider:cloudflare", "provider:cloudflare:worker", "local"] },
+    );
+  }
+
   it.effect(
     "the @alchemy.run/cloudflare namespace does pull that tooling",
     () =>
@@ -299,7 +349,7 @@ for (const dev of [false, true]) {
               retryDelay: "3 seconds",
             });
             expect(response.status).toBe(200);
-            expect(yield* response.text).toBe("runtime-entry:ok");
+            expect(yield* response.text).toBe(`runtime-entry:${stack.stage}`);
             yield* stack.destroy();
           }),
         { tags: [...(dev ? ["local"] : ["live"])] },

@@ -1,5 +1,5 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
-import { expect } from "alchemy-test";
+import { expect } from "@alchemy.run/test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -22,6 +22,7 @@ const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Deb
 
 const queueFixtureDir = pathe.resolve(import.meta.dirname, "vite-queue-fixture");
 const cronFixtureDir = pathe.resolve(import.meta.dirname, "vite-cron-fixture");
+const tailFixtureDir = pathe.resolve(import.meta.dirname, "vite-tail-fixture");
 // Keep the temp clone under the workspace so Vite can express the project
 // root relative to cwd (see the note on `tempRoot` in Vite.test.ts).
 const tempRoot = pathe.resolve(import.meta.dirname, "../../../.tmp");
@@ -178,6 +179,70 @@ test.provider(
     }).pipe(logLevel),
   {
     tags: ["provider:cloudflare", "provider:cloudflare:website", "local"],
+    timeout: 240_000,
+  },
+);
+
+/** Regression test for tail consumers dropped by the Vite child path (#2231). */
+test.provider(
+  "Vite dev: tail and streaming tail consumers receive the site's events",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const rootDir = yield* cloneFixture(tailFixtureDir, {
+        prefix: "alchemy-vite-tail-",
+        tempRoot,
+        entries: fixtureEntries,
+      });
+
+      const { site, consumer } = yield* stack.deploy(
+        Effect.gen(function* () {
+          const events = yield* Cloudflare.KV.Namespace("ViteTailEvents");
+          const consumer = yield* Cloudflare.Worker("ViteTailConsumer", {
+            main: pathe.resolve(import.meta.dirname, "fixtures/tail-consumer.ts"),
+            env: { EVENTS: events },
+            dev: { port: 0 },
+          });
+          const site = yield* Cloudflare.Website.Vite("ViteTailSite", {
+            rootDir,
+            main: "worker.ts",
+            workersDev: true,
+            compatibility: { date: "2024-09-23" },
+            memo: { include: fixtureEntries },
+            assets: { runWorkerFirst: true },
+            dev: { port: 0 },
+            tailConsumers: [consumer],
+            streamingTailConsumers: [consumer],
+          });
+          return { site, consumer };
+        }),
+      );
+
+      // Each poll drives the site again: the consumer may register with the
+      // dev registry after the site's first requests.
+      const client = yield* HttpClient.HttpClient;
+      const recorded = yield* Effect.gen(function* () {
+        yield* client.get(`${site.url}/api/log`).pipe(Effect.flatMap((res) => res.text));
+        const res = yield* client.get(`${consumer.url}/events`);
+        return (yield* res.json) as { tail: string[]; stream: string[] };
+      }).pipe(
+        Effect.orDie,
+        Effect.repeat({
+          schedule: Schedule.spaced("1 second"),
+          until: ({ tail, stream }) =>
+            tail.some((batch) => batch.includes("vite-tail-marker")) &&
+            stream.some((session) => session.includes("vite-tail-marker")),
+          times: 30,
+        }),
+      );
+      expect(recorded.tail.some((batch) => batch.includes("vite-tail-marker"))).toBe(true);
+      expect(recorded.stream.some((session) => session.includes("vite-tail-marker"))).toBe(true);
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:kv", "provider:cloudflare:website", "local"],
     timeout: 240_000,
   },
 );

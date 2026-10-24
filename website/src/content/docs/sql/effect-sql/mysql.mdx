@@ -5,11 +5,11 @@ description: SQL.MySQL turns a connection string into an @effect/sql-mysql2 clie
 
 import PackageManagers from "../../../../components/PackageManagers.astro";
 
-export const deps = `@effect/sql-mysql2 mysql2`;
+export const deps = `@alchemy.run/sql @effect/sql-mysql2`;
 
 `SQL.MySQL` provides tagged-template queries over a MySQL connection. Queries are Effects with typed `SqlError` failures, interruption, and tracing.
 
-Install the optional MySQL driver:
+Install `@alchemy.run/sql` and the Effect MySQL client:
 
 <PackageManagers add={deps} />
 
@@ -45,7 +45,7 @@ const workersDefaults = {
 };
 ```
 
-These defaults avoid Hyperdrive's unsupported prepared-statement protocol and Workers' prohibition on eval-based row parsers. Direct connections from Node or Bun retain prepared statements and mysql2's normal parsers by default. See [Hyperdrive](/cloudflare/data/hyperdrive#use-effect-sql) for Worker connection setup.
+These defaults avoid Hyperdrive's unsupported prepared-statement protocol and Workers' prohibition on eval-based row parsers. Direct connections from Node or Bun retain prepared statements and mysql2's normal parsers by default. See [Hyperdrive](/cloudflare/data/hyperdrive#bind-hyperdrive-to-your-worker) for Worker connection setup.
 
 ## Override driver options
 

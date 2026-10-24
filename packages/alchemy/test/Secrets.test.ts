@@ -1,4 +1,4 @@
-import { describe, expect, it } from "alchemy-test";
+import { describe, expect, it } from "@alchemy.run/test";
 import * as Config from "effect/Config";
 import type { ConfigError } from "effect/Config";
 import * as ConfigProvider from "effect/ConfigProvider";
