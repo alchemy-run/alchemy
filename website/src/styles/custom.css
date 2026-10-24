@@ -218,6 +218,33 @@ h1.hero-title,
   color: var(--alc-fg-1);
 }
 
+/* ── Blog posts: make sections and subsections clearly different ──
+   h2 opens a section: larger serif, a rule above, room to breathe.
+   h3 is a subsection: smaller sans. The paragraph right under an h2 is
+   the section's intro, set a little larger. */
+body:has(.sl-blog-metadata) .sl-markdown-content .sl-heading-wrapper.level-h2 {
+  margin-top: 4.5rem;
+  padding-top: 1.75rem;
+  border-top: 1px solid var(--alc-hairline-2);
+}
+body:has(.sl-blog-metadata) .sl-markdown-content h2 {
+  font-size: 2.4rem;
+  line-height: 1.15;
+}
+body:has(.sl-blog-metadata) .sl-markdown-content .sl-heading-wrapper.level-h3 {
+  margin-top: 2.5rem;
+}
+body:has(.sl-blog-metadata) .sl-markdown-content h3 {
+  font-size: 1.3rem;
+  line-height: 1.3;
+}
+body:has(.sl-blog-metadata) .sl-markdown-content .sl-heading-wrapper.level-h2 + p {
+  margin-top: 0.75rem;
+  font-size: 1.12rem;
+  line-height: 1.65;
+  color: var(--alc-fg-2);
+}
+
 /* ── Hero "Effects" italic-serif accent ── deep moss, the design-system
    "alc-text-accent" treatment used in the Claude landing variants. */
 .text-gradient {
