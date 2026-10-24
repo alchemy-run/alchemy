@@ -1,10 +1,15 @@
 import * as path from "node:path";
 import { makeFunctionBundler } from "@alchemy.run/aws/Lambda/FunctionBundle";
+import {
+  buildMicrovmDockerfile,
+  bundleMicrovmProgram,
+} from "@alchemy.run/aws/Lambda/MicrovmBundle";
 import { getCompatibility } from "@alchemy.run/cloudflare/Workers/Compatibility";
 import { WorkerBundle } from "@alchemy.run/cloudflare/Workers/Sources/Rolldown";
 import { expect, layer } from "@alchemy.run/test";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as Bundle from "alchemy/Bundle/Bundle";
+import { Stack } from "alchemy/Stack";
 import * as Effect from "effect/Effect";
 import type * as rolldown from "rolldown";
 
@@ -87,6 +92,26 @@ const bundleWorker = (main: string) =>
     return stats();
   });
 
+const bundleMicrovm = (main: string) =>
+  Effect.gen(function* () {
+    const { plugin, stats } = measure();
+    const { files } = yield* bundleMicrovmProgram({
+      main,
+      runtime: "node",
+      port: 8080,
+      build: { input: { plugins: [plugin] } },
+    }).pipe(
+      Effect.provideService(Stack, {
+        name: "BundleCanary",
+        stage: "test",
+        resources: {},
+        bindings: {},
+        actions: {},
+      }),
+    );
+    return { stats: stats(), files: files.map((file) => file.path) };
+  });
+
 interface Budget {
   /** Most modules Rolldown may parse for this runtime. */
   readonly parsed: number;
@@ -94,6 +119,8 @@ interface Budget {
   readonly bytes: number;
   /** The provider services whose code ships in the bundle — no others. */
   readonly services: ReadonlyArray<string>;
+  /** Modules this runtime must not ship, on top of {@link DEPLOY_ONLY}. */
+  readonly forbidden?: ReadonlyArray<RegExp>;
 }
 
 const report = (label: string, stats: BundleStats, pkg: "aws" | "cloudflare") =>
@@ -103,12 +130,11 @@ const report = (label: string, stats: BundleStats, pkg: "aws" | "cloudflare") =>
 
 /**
  * Deploy-time code that must never ship in a runtime: the bundler, the CLI's
- * platform layer (Bun's platform and `ws` came with it), and profile and
- * credential stores.
+ * platform layer (Bun's platform came with it), and profile and credential
+ * stores.
  */
 const DEPLOY_ONLY = [
   /[\\/](rolldown|@rolldown)[\\/]/,
-  /[\\/]node_modules[\\/](\.pnpm[\\/][^\\/]+[\\/]node_modules[\\/])?ws[\\/]/,
   /[\\/]@effect[\\/]platform-bun[\\/]/,
   /[\\/]alchemy[\\/]src[\\/](Auth|Cli|Bundle)[\\/]/,
   /[\\/]alchemy[\\/]src[\\/](EvalStack|Deploy|Destroy|Plan|Apply)\.ts$/,
@@ -118,7 +144,8 @@ const expectWithinBudget = (stats: BundleStats, pkg: "aws" | "cloudflare", budge
   expect(stats.parsed.length).toBeLessThanOrEqual(budget.parsed);
   expect(stats.bytes).toBeLessThanOrEqual(budget.bytes);
   expect(servicesOf(stats.bundled, pkg)).toEqual(budget.services);
-  expect(stats.bundled.filter((id) => DEPLOY_ONLY.some((re) => re.test(id)))).toEqual([]);
+  const forbidden = [...DEPLOY_ONLY, ...(budget.forbidden ?? [])];
+  expect(stats.bundled.filter((id) => forbidden.some((re) => re.test(id)))).toEqual([]);
 };
 
 /**
@@ -139,6 +166,14 @@ const AWS_LAMBDA: Budget = {
   parsed: 1_000,
   bytes: 640_000,
   services: ["Bootstrap", "Lambda", "S3"],
+  // No HTTP server in an event Lambda, so nothing needs WebSocket upgrades.
+  // (`ws` shipped here through the CLI's platform layer.)
+  forbidden: [/[\\/]node_modules[\\/](\.pnpm[\\/][^\\/]+[\\/]node_modules[\\/])?ws[\\/]/],
+};
+const AWS_MICROVM: Budget = {
+  parsed: 1_000,
+  bytes: 640_000,
+  services: ["Bootstrap", "Lambda"],
 };
 const CLOUDFLARE_WORKER: Budget = {
   parsed: 1_500,
@@ -158,6 +193,24 @@ layer(NodeServices.layer)("bundle canary", (it) => {
         expectWithinBudget(namespace, "aws", AWS_LAMBDA);
         expectWithinBudget(subpath, "aws", AWS_LAMBDA);
         expectSameCost(namespace, subpath);
+      }),
+    { tags: ["unit", "local"], timeout: 120_000 },
+  );
+
+  it.effect(
+    "AWS MicroVM program on Node",
+    () =>
+      Effect.gen(function* () {
+        const { stats, files } = yield* bundleMicrovm(fixture("aws-microvm.ts"));
+        yield* report("MicroVM import * as AWS", stats, "aws");
+        expectWithinBudget(stats, "aws", AWS_MICROVM);
+        // Node maps minified stack traces back through the shipped map.
+        expect(files).toContain("index.mjs.map");
+        const dockerfile = buildMicrovmDockerfile(undefined, "node", 8080, { sourceMaps: true });
+        expect(dockerfile).toContain("COPY *.map /app/");
+        expect(dockerfile).toContain(
+          'ENTRYPOINT ["node", "--enable-source-maps", "/app/index.mjs"]',
+        );
       }),
     { tags: ["unit", "local"], timeout: 120_000 },
   );
