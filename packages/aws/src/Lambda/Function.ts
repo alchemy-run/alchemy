@@ -43,7 +43,6 @@ import { AWSEnvironment } from "../Environment.ts";
 import * as IAM from "../IAM/index.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
 import { syncLogGroupRetention, type LogRetentionConfig } from "../Logs/LogRetention.ts";
-import { tailLogGroup } from "../Logs/LogTail.ts";
 import type { Providers } from "../Providers.ts";
 import { syncEventInvokeConfig, type EventInvokeConfig } from "./EventInvokeConfig.ts";
 import { makeFunctionBundler } from "./FunctionBundle.ts";
@@ -2720,7 +2719,42 @@ export const FunctionProvider = () =>
 
           return null as any;
         }),
-        tail: ({ output }) => tailLogGroup(`/aws/lambda/${output.functionName}`),
+        tail: ({ output }) => {
+          const runTailSession = Effect.gen(function* () {
+            const { accountId, region } = yield* AWSEnvironment.current;
+
+            const logGroupArn = `arn:aws:logs:${region}:${accountId}:log-group:/aws/lambda/${output.functionName}`;
+            const response = yield* logs.startLiveTail({
+              logGroupIdentifiers: [logGroupArn],
+            });
+
+            if (!response.responseStream) {
+              return Stream.empty as Stream.Stream<LogLine>;
+            }
+
+            return response.responseStream.pipe(
+              Stream.flatMap((event) => {
+                if ("sessionUpdate" in event && event.sessionUpdate) {
+                  const lines: LogLine[] = (event.sessionUpdate.sessionResults ?? []).flatMap(
+                    (result) => {
+                      if (!result.message) return [];
+                      return [
+                        {
+                          timestamp: new Date(result.timestamp ?? Date.now()),
+                          message: result.message.trimEnd(),
+                        },
+                      ];
+                    },
+                  );
+                  return Stream.fromIterable(lines);
+                }
+                return Stream.empty;
+              }),
+            );
+          });
+
+          return Stream.unwrap(runTailSession).pipe(Stream.retry(Schedule.spaced("1 second")));
+        },
         logs: ({ output, options }: { output: Function["Attributes"]; options: LogsInput }) =>
           logs
             .filterLogEvents({
