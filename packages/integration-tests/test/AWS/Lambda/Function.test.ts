@@ -688,6 +688,58 @@ test.provider(
   { tags: ["provider:aws", "provider:aws:lambda", "live"], timeout: 240_000 },
 );
 
+// `read` reports a function whose ownership tags were stripped as `Unowned`;
+// drift repairs it anyway (state records it as ours). Repair must restore the
+// configuration and the tags, not refuse on the missing tags.
+test.provider(
+  "drift repairs a function whose ownership tags were stripped",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const fn = yield* stack.deploy(
+        AWS.Lambda.Function("DriftTagsFn", {
+          main: timeoutHandlerPath,
+          handler: "handler",
+          isExternal: true,
+          functionUrl: false,
+          memorySize: 128,
+          timeout: Duration.seconds(3),
+        }),
+      );
+      const before = yield* Lambda.getFunction({ FunctionName: fn.functionName });
+      const ownership = Object.keys(before.Tags ?? {}).filter((key) => key.startsWith("alchemy::"));
+      expect(ownership.length).toBeGreaterThan(0);
+
+      yield* Lambda.untagResource({ Resource: fn.functionArn, TagKeys: ownership });
+      yield* Lambda.updateFunctionConfiguration({
+        FunctionName: fn.functionName,
+        MemorySize: 256,
+      }).pipe(
+        Effect.retry({
+          while: (e) => e._tag === "ResourceConflictException",
+          schedule: Schedule.exponential(500),
+          times: 8,
+        }),
+      );
+      yield* waitForConfiguration(fn.functionName, { memorySize: 256, timeout: 3 });
+
+      const target = { name: stack.name, stage: stack.stage };
+      const detected = yield* Drift.detect(target).pipe(Effect.provide(stack.state));
+      expect(detected.resources.DriftTagsFn?.action).toBe("drifted");
+
+      const repaired = yield* Drift.repair(target).pipe(Effect.provide(stack.state));
+      expect(repaired.resources.DriftTagsFn?.action).toBe("repaired");
+      yield* waitForConfiguration(fn.functionName, { memorySize: 128, timeout: 3 });
+      const after = yield* Lambda.getFunction({ FunctionName: fn.functionName });
+      for (const key of ownership) expect(after.Tags?.[key]).toBe(before.Tags?.[key]);
+
+      yield* stack.destroy();
+      yield* assertFunctionDeleted(fn.functionName);
+    }).pipe(Effect.onError(() => stack.destroy().pipe(Effect.ignore))),
+  { tags: ["provider:aws", "provider:aws:lambda", "live"], timeout: 240_000 },
+);
+
 // #1536: drift recreates a deleted function without its bindings, then
 // attaches them — the environment and IAM statements come back.
 test.provider(
