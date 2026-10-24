@@ -9,7 +9,7 @@ import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import { resolvePolicies } from "../ApiToken/Common.ts";
 import type { Bucket } from "./Bucket.ts";
-import { s3CredentialsPolicy } from "./S3CredentialsBinding.ts";
+import { liveEndpoint, s3CredentialsPolicy } from "./S3CredentialsBinding.ts";
 
 /** A request to R2's S3 API answered with an unexpected status. */
 export class R2S3RequestFailed extends Data.TaggedError("R2S3RequestFailed")<{
@@ -27,11 +27,6 @@ export interface BucketRef {
   bucketName: string;
   jurisdiction: Bucket.Jurisdiction;
 }
-
-const s3Endpoint = ({ accountId, jurisdiction }: BucketRef) =>
-  jurisdiction === "default"
-    ? `https://${accountId}.r2.cloudflarestorage.com`
-    : `https://${accountId}.${jurisdiction}.r2.cloudflarestorage.com`;
 
 /**
  * An S3 client for one bucket, signed with credentials derived from a
@@ -68,9 +63,7 @@ export const makeBucketS3Client = Effect.fn(function* (bucket: BucketRef) {
       ),
   );
   if (!token.id || !token.value) {
-    return yield* Effect.die(
-      new Error("Cloudflare did not return the temporary R2 token's id and value."),
-    );
+    return yield* Effect.die("Cloudflare did not return the temporary R2 token's id and value.");
   }
   const secretAccessKey = yield* sha256(token.value);
   const client = yield* AwsClient.make({
@@ -81,7 +74,10 @@ export const makeBucketS3Client = Effect.fn(function* (bucket: BucketRef) {
     service: "s3",
     region: "auto",
   });
-  return { client, endpoint: `${s3Endpoint(bucket)}/${encodeURIComponent(bucket.bucketName)}` };
+  return {
+    client,
+    endpoint: `${liveEndpoint(bucket.accountId, bucket.jurisdiction)}/${encodeURIComponent(bucket.bucketName)}`,
+  };
 });
 
 type BucketS3Client = { client: HttpClient.HttpClient; endpoint: string };

@@ -266,6 +266,14 @@ export type BucketProps = {
    * to `true` for buckets whose contents are disposable (caches, previews,
    * test fixtures).
    *
+   * Incomplete multipart uploads also keep R2 from deleting a bucket, and
+   * only R2's S3 API can see them. When R2 still refuses after the objects
+   * are deleted, alchemy mints a temporary API token scoped to the bucket,
+   * aborts the uploads over the S3 API, and deletes the token. That needs
+   * permission to create account API tokens. If the bucket still can't be
+   * deleted, destroy fails with `BucketNotEmptyAfterForceDestroy`, whose
+   * message says why.
+   *
    * `alchemy unsafe nuke` empties buckets regardless, since it is an
    * explicitly operator-confirmed account teardown.
    *
@@ -588,7 +596,8 @@ export type Bucket = Resource<
  * does not bypass that refusal: destroying a non-empty bucket fails with
  * `BucketNotEmpty` and both the bucket and its objects survive. Opt into
  * emptying the bucket first with `forceDestroy` for buckets whose contents
- * are disposable.
+ * are disposable. `forceDestroy` also aborts the bucket's incomplete
+ * multipart uploads.
  *
  * **Example:** Empty the bucket on destroy
  * ```typescript
