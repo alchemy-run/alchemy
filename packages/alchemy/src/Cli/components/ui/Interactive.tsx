@@ -13,7 +13,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "@alchemy.run/sigil
 import type { JSX, ReactNode } from "react";
 import { copyToClipboard } from "../../../Util/Terminal.ts";
 import { theme } from "../../../Util/Theme.ts";
-import type { AwaitExternalOptions, Choice, CycleChoice } from "../types.ts";
+import type { Choice, CycleChoice } from "../types.ts";
 import { useCliEnvironment, useGlyphs, useKeyGlyphs } from "./Environment.tsx";
 import { KeyBar, Spinner } from "./Feedback.tsx";
 import { Box, overflowListWindow } from "./Layout.tsx";
@@ -393,7 +393,7 @@ export function TextField({
   active,
   ariaLabel,
 }: TextFieldProps) {
-  // Prompts are serialized by the CliKit runtime, so an enabled field owns
+  // Prompts are serialized by the Sigil renderer, so an enabled field owns
   // the input stream outright — no Sigil focus negotiation. (Coupling this to
   // useFocus({autoFocus}) silently disabled the field whenever any other
   // focusable was already mounted.)
@@ -593,7 +593,20 @@ export const useCycleNavigation = (stateCounts: ReadonlyArray<number>) => {
   return { cursor, indices, move, setCursor, cycle } as const;
 };
 
-export interface ExternalWaitProps extends AwaitExternalOptions {
+export interface BrowserLoginWaitProps {
+  readonly message: string;
+  readonly waitingLabel: string;
+  readonly url: string;
+  /** Short code the user confirms on the login page. */
+  readonly code?: string;
+  readonly openFailed?: boolean;
+  /** Open the login URL again from the waiting screen. */
+  readonly onOpen?: () => Promise<void>;
+  /** Allow Enter to switch to manual code entry. */
+  readonly allowManualInput: boolean;
+  readonly inputLabel?: string;
+  readonly placeholder?: string;
+  readonly validate?: (value: string) => string | Error | undefined;
   readonly onSubmit: (value: string) => void;
   readonly onCancel: () => void;
 }
@@ -741,21 +754,21 @@ export function ChoiceGroup<Value>({
   );
 }
 
-/** Browser/OAuth waiting screen with URL controls and manual-entry fallback. */
-export function ExternalWait({
+/** Browser login waiting screen with URL controls and manual-entry fallback. */
+export function BrowserLoginWait({
   message,
   waitingLabel,
   url,
   code,
   openFailed = false,
   onOpen,
-  allowManualInput = true,
+  allowManualInput,
   inputLabel,
   placeholder,
   validate,
   onSubmit,
   onCancel,
-}: ExternalWaitProps) {
+}: BrowserLoginWaitProps) {
   const { stdout } = useStdout();
   const glyphs = useGlyphs();
   const keyGlyphs = useKeyGlyphs();
@@ -787,7 +800,7 @@ export function ExternalWait({
     else if (shortcut === "o" && onOpen !== undefined) {
       setBrowserFailed(false);
       void onOpen().catch(() => setBrowserFailed(true));
-    } else if (shortcut === "c" && url !== undefined) {
+    } else if (shortcut === "c") {
       copyToClipboard(url, stdout ?? process.stdout);
       setCopied(true);
       clearTimeout(copiedTimer.current);
@@ -831,12 +844,8 @@ export function ExternalWait({
       message={message}
       keys={[
         ...(allowManualInput ? ([[keyGlyphs.enter, "enter code manually"]] as const) : []),
-        ...(url === undefined
-          ? []
-          : ([
-              ...(onOpen === undefined ? [] : ([["o", "open browser"]] as const)),
-              ["c", copied ? `${glyphs.success} copied` : "copy URL"],
-            ] as const)),
+        ...(onOpen === undefined ? [] : ([["o", "open browser"]] as const)),
+        ["c", copied ? `${glyphs.success} copied` : "copy URL"],
         [keyGlyphs.escape, "cancel"],
       ]}
     >
@@ -855,7 +864,7 @@ export function ExternalWait({
             {glyphs.warning} Could not open the browser. Copy and open the URL manually.
           </Text>
         ) : null}
-        {url === undefined ? null : <Link href={url}>{url}</Link>}
+        <Link href={url}>{url}</Link>
       </Box>
     </PromptFrame>
   );

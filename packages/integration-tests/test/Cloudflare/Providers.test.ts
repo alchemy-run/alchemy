@@ -6,7 +6,7 @@ import * as NodeServices from "@effect/platform-node/NodeServices";
 import { AlchemyContext } from "alchemy/AlchemyContext";
 import { ArtifactStore, createArtifactStore } from "alchemy/Artifacts";
 import { AuthProviders } from "alchemy/Auth/AuthProvider";
-import * as CliKit from "alchemy/Cli/CliKit";
+import * as Interaction from "alchemy/Interaction";
 import { Stack } from "alchemy/Stack";
 import { Stage } from "alchemy/Stage";
 import * as ConfigProvider from "effect/ConfigProvider";
@@ -55,7 +55,7 @@ it.live(
           FetchHttpClient.layer,
         ),
       ),
-      Effect.provide(CliKit.layer({ input: false })),
+      Effect.provide(Interaction.layerNonInteractive()),
     ),
   { tags: ["unit", "provider:cloudflare", "local"] },
 );
@@ -96,7 +96,7 @@ it.live(
           FetchHttpClient.layer,
         ),
       ),
-      Effect.provide(CliKit.layer({ input: false })),
+      Effect.provide(Interaction.layerNonInteractive()),
     ),
   { tags: ["unit", "provider:cloudflare", "local"] },
 );

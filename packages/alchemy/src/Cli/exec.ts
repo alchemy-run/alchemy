@@ -19,13 +19,13 @@ import { AlchemyContextLive } from "../AlchemyContext.ts";
 import { ArtifactStore, createArtifactStore } from "../Artifacts.ts";
 import { CredentialsStoreLive } from "../Auth/Credentials.ts";
 import { ProfileStoreLive } from "../Auth/Profile.ts";
+import * as Interaction from "../Interaction.ts";
 import { makeDevLogOpener } from "../Local/DevLog.ts";
 import * as RpcProviderProxy from "../Local/RpcProviderProxy.ts";
 import { forwardSidecarLogs } from "../Local/RpcSpawner.ts";
 import { TelemetryLive } from "../Telemetry/Layer.ts";
 import { initialCwd } from "../Util/Node.ts";
 import { PlatformServices } from "../Util/PlatformServices.ts";
-import * as CliKit from "./CliKit/index.ts";
 import { handleCliErrors, installShutdownFeedback } from "./commands/errors.ts";
 import { renderApply, renderPlanning } from "./commands/render.ts";
 import { stackOutputsView } from "./components/view/StackOutputs.tsx";
@@ -37,7 +37,7 @@ import { selectCliServices } from "./selectCli.ts";
 // and other non-interactive terminals still select the append-only renderer.
 // `ALCHEMY_TUI` remains the explicit override in either direction.
 const services = Layer.mergeAll(
-  Layer.provideMerge(Layer.mergeAll(selectCliServices(), CliKit.CliKitInteraction), CliKit.layer()),
+  Layer.provideMerge(selectCliServices(), Interaction.layer()),
   RpcProviderProxy.fromEnv(),
   Layer.succeed(ArtifactStore, createArtifactStore()),
   // Dev runs live in this exec child, not the `alchemy` CLI process, so
@@ -102,7 +102,7 @@ const runDev = Effect.fn(function* (options: DevOptions) {
         ),
       );
   if (result !== undefined && once) {
-    const kit = yield* CliKit.CliKit;
+    const kit = yield* Interaction.Interaction;
     yield* kit.output.print(stackOutputsView(result));
   }
   return once ? undefined : yield* Effect.never;

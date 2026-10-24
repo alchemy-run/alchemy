@@ -36,14 +36,19 @@ export const getEnvRedactedRequired = (key: string) =>
     Effect.mapError((cause) => AuthError.make({ message: `Missing required env: ${key}`, cause })),
   );
 
-export const mapPromptCancellation = <A, R>(
-  self: Effect.Effect<A, Interaction.InteractionError, R>,
-) =>
+/** Turn a cancelled or unavailable prompt into an `AuthError`; other errors pass through. */
+export const mapPromptCancellation = <A, E, R>(self: Effect.Effect<A, E, R>) =>
   self.pipe(
-    Effect.mapError((cause) =>
-      AuthError.make({
-        message: cause._tag === "TerminalCancelled" ? "User cancelled prompt" : cause.message,
-        cause,
-      }),
+    Effect.catchIf(
+      (cause): cause is Extract<E, Interaction.InteractionError> =>
+        cause instanceof Interaction.TerminalCancelled ||
+        cause instanceof Interaction.NonInteractiveTerminal,
+      (cause) =>
+        Effect.fail(
+          AuthError.make({
+            message: cause._tag === "TerminalCancelled" ? "User cancelled prompt" : cause.message,
+            cause,
+          }),
+        ),
     ),
   );

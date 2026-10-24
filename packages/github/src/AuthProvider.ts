@@ -147,11 +147,10 @@ export const makeGitHubAuth = (authOptions?: GitHubAuthOptions) =>
   AuthProviderLayer<GitHubAuthConfig, GitHubResolvedCredentials>()(
     GITHUB_AUTH_PROVIDER_NAME,
     Effect.gen(function* () {
-      // Deferred accessors, NOT `yield* Interaction.Interaction`: resolving the service
+      // Prompts use the top-level `Interaction.*` forms, NOT `yield* Interaction.Interaction`: resolving the service
       // at impl build would put the terminal in the registration layer's
       // requirements, and child processes (which only ever call `read`) build
       // this layer with no interaction services at all.
-      const interaction = Interaction.accessors;
       const cp = yield* ChildProcessSpawner;
 
       // Hard-coded host from `providers({ baseUrl })`, resolved once at layer
@@ -217,39 +216,35 @@ export const makeGitHubAuth = (authOptions?: GitHubAuthOptions) =>
         );
 
       const loginStored = Effect.fn(function* (baseUrl?: string) {
-        const token = yield* interaction.prompt
-          .password({
-            message: "GitHub Personal Access Token",
-            description: "Requires `repo` scope and `workflow` for GitHub Actions.",
-            validate: (v) => (v.length === 0 ? "Required" : undefined),
-          })
-          .pipe(mapPromptCancellation);
-        yield* interaction.output.success("GitHub: credentials saved.");
+        const token = yield* Interaction.password({
+          message: "GitHub Personal Access Token",
+          description: "Requires `repo` scope and `workflow` for GitHub Actions.",
+          validate: (v) => (v.length === 0 ? "Required" : undefined),
+        }).pipe(mapPromptCancellation);
+        yield* Interaction.success("GitHub: credentials saved.");
         return { method: "stored" as const, token, baseUrl };
       });
 
       // Optional GitHub Enterprise host. Blank means github.com; anything else
       // is normalized into the REST API base URL (GHES gets `/api/v3`
       // appended, data-residency hosts get the `api.` prefix).
-      const promptBaseUrl = interaction.prompt
-        .text({
-          message: "GitHub host",
-          description:
-            "Leave blank for github.com; use a hostname such as github.example.com for GitHub Enterprise.",
-          placeholder: "github.com",
-          defaultValue: "",
-        })
-        .pipe(
-          mapPromptCancellation,
-          Effect.flatMap((input) => {
-            const trimmed = (input ?? "").trim();
-            return trimmed === "" ? Effect.succeed(undefined) : normalizeGitHubBaseUrl(trimmed);
-          }),
-        );
+      const promptBaseUrl = Interaction.text({
+        message: "GitHub host",
+        description:
+          "Leave blank for github.com; use a hostname such as github.example.com for GitHub Enterprise.",
+        placeholder: "github.com",
+        defaultValue: "",
+      }).pipe(
+        mapPromptCancellation,
+        Effect.flatMap((input) => {
+          const trimmed = (input ?? "").trim();
+          return trimmed === "" ? Effect.succeed(undefined) : normalizeGitHubBaseUrl(trimmed);
+        }),
+      );
 
       const configureInteractive = (_profileName: string) =>
         Effect.gen(function* () {
-          const method = yield* interaction.prompt.select({
+          const method = yield* Interaction.select({
             message: "GitHub authentication method",
             options,
           });
@@ -353,9 +348,7 @@ export const makeGitHubAuth = (authOptions?: GitHubAuthOptions) =>
               Effect.flatMap((baseUrl) =>
                 ghCliToken(baseUrl !== undefined ? githubHostname(baseUrl) : undefined),
               ),
-              Effect.tap(() =>
-                interaction.output.success("GitHub: gh CLI authentication available."),
-              ),
+              Effect.tap(() => Interaction.success("GitHub: gh CLI authentication available.")),
               Effect.map((token) => ({ ...c, token })),
             ),
           ),
@@ -428,7 +421,7 @@ export const makeGitHubAuth = (authOptions?: GitHubAuthOptions) =>
                         ? yield* normalizeGitHubBaseUrl(storedValueText(values.baseUrl) ?? "")
                         : undefined;
                   const token = Redacted.value(storedSecret(values.token) ?? Redacted.make(""));
-                  yield* interaction.output.success("GitHub: credentials saved.");
+                  yield* Interaction.success("GitHub: credentials saved.");
                   return { method: "stored" as const, token, baseUrl };
                 }),
               ),

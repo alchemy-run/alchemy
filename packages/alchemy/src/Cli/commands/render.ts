@@ -4,9 +4,9 @@ import * as Exit from "effect/Exit";
 import * as Option from "effect/Option";
 import * as Scope from "effect/Scope";
 import { Progress } from "../../Alchemist/Progress.ts";
+import { Interaction } from "../../Interaction.ts";
 import type { Plan } from "../../Plan.ts";
 import * as Report from "../../Report.ts";
-import { CliKit } from "../CliKit/CliKit.ts";
 import { isPromptCancellation } from "./errors.ts";
 
 export const renderPlanning =
@@ -26,7 +26,7 @@ export const renderPlanning =
         options.stage,
         `${options.operation} · ${options.stage}`,
       );
-      const interactive = (yield* CliKit).terminal.input;
+      const interactive = (yield* Interaction).terminal.input;
       const inFlight = new Set<string>();
       let done = 0;
       let total = 0;
