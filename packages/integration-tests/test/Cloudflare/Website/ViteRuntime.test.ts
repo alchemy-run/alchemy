@@ -74,6 +74,10 @@ const customBuildAppFixtureDir = pathe.resolve(
 const configChangesFixtureDir = pathe.resolve(import.meta.dirname, "vite-config-changes-fixture");
 const hotChannelFixtureDir = pathe.resolve(import.meta.dirname, "vite-hot-channel-fixture");
 const bundledDevFixtureDir = pathe.resolve(import.meta.dirname, "vite-bundled-dev-fixture");
+const pluginWebSocketFixtureDir = pathe.resolve(
+  import.meta.dirname,
+  "vite-plugin-websocket-fixture",
+);
 
 type Mode = "live" | "dev";
 
@@ -508,6 +512,62 @@ describe.concurrent(
             "__worker-module-event-data-received__",
             "__worker-request-event-data-received__",
           ]);
+        }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.ignore)), logLevel),
+      { tags: ["provider:cloudflare:worker", "local"], timeout: 180_000 },
+    );
+
+    // A Vite plugin's own dev WebSocket (dev only): the Worker doesn't route
+    // the path, so its 404 must not reach a socket the plugin accepted (#2191).
+    devTest.provider(
+      "Vite runtime: a plugin's own WebSocket stays open (dev)",
+      (stack) =>
+        Effect.gen(function* () {
+          yield* stack.destroy();
+          const rootDir = yield* cloneFixture(pluginWebSocketFixtureDir, {
+            prefix: "alchemy-vite-plugin-websocket-",
+            tempRoot,
+            entries: ["package.json", "vite.config.ts", "src"],
+          });
+          const site = yield* stack.deploy(
+            Cloudflare.Website.Vite("VitePluginWebSocket", {
+              rootDir,
+              main: "./src/index.ts",
+              workersDev: true,
+              compatibility: { date: "2026-03-17" },
+              memo: { include: ["**/*"] },
+              dev: { port: 0 },
+            }),
+          );
+          const url = site.url!.replace(/\/$/, "").replace(/^http/, "ws");
+          const events = yield* Effect.tryPromise(
+            () =>
+              new Promise<Array<string>>((resolve, reject) => {
+                const socket = new WebSocket(`${url}/__echo`);
+                const events: Array<string> = [];
+                const timer = setTimeout(() => reject(new Error(`echo: ${events}`)), 30_000);
+                const done = () => {
+                  clearTimeout(timer);
+                  resolve([...events]);
+                };
+                socket.addEventListener("open", () => {
+                  events.push("open");
+                  socket.send("hi");
+                });
+                socket.addEventListener("message", (event) => {
+                  events.push(String(event.data));
+                  // Stay open long enough for a late close to show up.
+                  setTimeout(() => {
+                    done();
+                    socket.close();
+                  }, 500);
+                });
+                socket.addEventListener("close", (event) => {
+                  events.push(`close ${event.code}`);
+                  done();
+                });
+              }),
+          );
+          expect(events).toEqual(["open", "echo hi"]);
         }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.ignore)), logLevel),
       { tags: ["provider:cloudflare:worker", "local"], timeout: 180_000 },
     );

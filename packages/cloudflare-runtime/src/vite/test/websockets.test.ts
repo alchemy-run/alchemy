@@ -369,8 +369,8 @@ describe("handleWebSocket", () => {
           events.push(data.toString());
           // Stay open long enough for a late close to show up.
           setTimeout(() => {
+            resolve([...events]);
             client.close();
-            resolve(events);
           }, 200);
         });
         client.on("close", (code) => {
