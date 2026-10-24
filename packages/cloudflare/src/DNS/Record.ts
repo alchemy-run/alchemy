@@ -322,13 +322,24 @@ export const RecordProvider = () =>
       //    Ownership has already been verified upstream — `read` reports
       //    existing records as `Unowned` and the engine gates takeover
       //    behind the adopt policy before reconcile ever runs.
+      //    Adoption already arrives with `output` set, so a scan hit here
+      //    is a leftover or a sibling: only an exact match is this record.
+      //    A lone non-matching NS/TXT/A/... is a sibling of a multi-value
+      //    set (e.g. four NS records created together) and must not be
+      //    overwritten. A CNAME is exclusive at its name, so any hit is it.
       let foundByScan = false;
       if (!observed) {
-        const existing = yield* findByNameType(zoneId, news.name, news.type, {
-          content: body.content,
-          data: body.data,
-          priority: news.priority,
-        });
+        const existing = yield* findByNameType(
+          zoneId,
+          news.name,
+          news.type,
+          {
+            content: body.content,
+            data: body.data,
+            priority: news.priority,
+          },
+          { exact: news.type !== "CNAME" },
+        );
         if (existing) {
           foundByScan = true;
           observed = existing;
@@ -522,7 +533,13 @@ export class AmbiguousDnsRecordError extends Data.TaggedError("AmbiguousDnsRecor
 //   - exactly one exact match -> that record
 //   - no exact match          -> `undefined` (a new sibling record is created)
 //   - several exact matches   -> fail with an actionable error
-const findByNameType = (zoneId: string, name: string, type: RecordType, match: RecordMatch) =>
+const findByNameType = (
+  zoneId: string,
+  name: string,
+  type: RecordType,
+  match: RecordMatch,
+  options?: { readonly exact?: boolean },
+) =>
   listExactByNameType(zoneId, name, type).pipe(
     Effect.flatMap((found) => {
       if (found.length > 0) return Effect.succeed(found);
@@ -539,7 +556,7 @@ const findByNameType = (zoneId: string, name: string, type: RecordType, match: R
     Effect.flatMap(
       Effect.fn(function* (candidates) {
         if (candidates.length === 0) return undefined;
-        if (candidates.length === 1) return candidates[0];
+        if (candidates.length === 1 && !options?.exact) return candidates[0];
         const narrowed = candidates.filter(
           (r) =>
             (match.content === undefined || r.content === match.content) &&

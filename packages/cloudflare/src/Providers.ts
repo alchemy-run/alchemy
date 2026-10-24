@@ -227,6 +227,8 @@ export const providers = () =>
       Dns.Dnssec,
       Dns.Firewall,
       Dns.Record,
+      Dns.RecordList,
+      Dns.Records,
       Dns.View,
       Dns.ZoneDnsSettings,
       Dns.ZoneTransferAcl,
@@ -490,6 +492,8 @@ export const providers = () =>
           Dns.DnssecProvider(),
           Dns.FirewallProvider(),
           Dns.RecordProvider(),
+          Dns.RecordListProvider(),
+          Dns.RecordsProvider(),
           Dns.ViewProvider(),
           Dns.ZoneDnsSettingsProvider(),
           Dns.ZoneTransferAclProvider(),
@@ -670,6 +674,8 @@ export const providers = () =>
         Command.providers(),
         KeyPairProvider(),
         RandomProvider(),
+        // `domain.dns: Cloudflare.DNS.Adapter()` on any platform's custom domain.
+        Dns.AdapterLive,
       ),
     ),
     // Plan-executable data-source capabilities (`Binding.Service.execute`).
