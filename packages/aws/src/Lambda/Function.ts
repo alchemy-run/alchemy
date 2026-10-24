@@ -194,8 +194,13 @@ export interface FunctionUrlConfig {
 export interface FunctionCommonProps extends PlatformProps {
   /**
    * Whether to create a Lambda function URL, or its configuration.
-   * `functionUrl: true` creates a public Function URL with `authType: "NONE"`.
-   * Set `functionUrl: false` to disable the Function URL.
+   *
+   * Omitting it creates a **public, unauthenticated** Function URL: the same
+   * as `functionUrl: true`, which sets `authType: "NONE"` and grants
+   * `lambda:InvokeFunctionUrl` and `lambda:InvokeFunction` (via the URL) to
+   * `Principal: "*"`.
+   * Set `functionUrl: false` for Functions that only consume events, or
+   * `{ authType: "AWS_IAM" }` to require SigV4-signed requests.
    * @default true
    */
   functionUrl?: boolean | FunctionUrlConfig;
@@ -813,12 +818,25 @@ export const normalizeFunctionUrl = (
  * ) {}
  * ```
  *
- * ### Configuration
- * **Example:** Function with URL
+ * ### Function URL access
+ * Every Function gets a public, unauthenticated Function URL unless you
+ * opt out. `functionUrl` has three access choices: `false` (no URL),
+ * `true` (public, the default), and `{ authType: "AWS_IAM" }` (signed
+ * requests only).
+ *
+ * **Example:** Public Function URL
  * ```typescript
  * const func = yield* AWS.Lambda.Function("ApiFunction", {
  *   main: "./src/handler.ts",
  *   functionUrl: true,
+ * });
+ * ```
+ *
+ * **Example:** Event consumer without a Function URL
+ * ```typescript
+ * const func = yield* AWS.Lambda.Function("JobsWorker", {
+ *   main: "./src/worker.ts",
+ *   functionUrl: false,
  * });
  * ```
  *
@@ -832,6 +850,7 @@ export const normalizeFunctionUrl = (
  * });
  * ```
  *
+ * ### Configuration
  * **Example:** Function in a VPC
  * ```typescript
  * const func = yield* AWS.Lambda.Function("VpcFunction", {
