@@ -59,13 +59,12 @@ const getItem = yield* AWS.DynamoDB.GetItem(Jobs);
 // → Jobs_tableName=Jobs-a1b2c3
 ```
 
-## Compared to two programs
+## More than Infrastructure as Code
 
-Other tools split this app in two. One program creates the
-infrastructure, in Terraform, Pulumi, or the CDK. A second program is
-the code that runs on it, and it reaches the Bucket through an
-environment variable. Here is the same app split that way, with Alchemy
-as the infrastructure half:
+Infrastructure as Code tools like Terraform, Pulumi, and the CDK only
+cover the first half of that file: the Bucket and the Worker. The
+Worker's code is a separate program that finds the Bucket through an
+environment variable. Alchemy can be used that way too:
 
 ```typescript
 // alchemy.run.ts
@@ -101,9 +100,9 @@ does with it. Every feature you build crosses that line. A new upload
 route needs a Bucket, permission to use it, and the code that calls it,
 in two places that have to agree.
 
-Alchemy deploys this shape too, so existing handlers work as they are.
-In one program, there is no name to keep in sync, no policy to write,
-and no client to set up.
+Alchemy is built on Infrastructure as Code, but it doesn't stop there.
+When the code that runs is part of the same program, there is no name
+to keep in sync, no policy to write, and no client to set up.
 
 ## Infrastructure as Effects
 
