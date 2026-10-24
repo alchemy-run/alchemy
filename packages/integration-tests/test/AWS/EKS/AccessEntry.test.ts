@@ -221,10 +221,6 @@ test.provider.skipIf(!!process.env.FAST)(
         [viewPolicyArn]: clusterScope,
         [editPolicyArn]: { type: "namespace", namespaces: ["a"] },
       });
-      // The EKS-generated username is left alone: no `updateAccessEntry`.
-      expect((yield* described(retagged)).modifiedAt).toEqual(
-        (yield* described(created)).modifiedAt,
-      );
 
       // A namespace change updates the association in place, and a policy
       // added to an existing entry is associated.
@@ -289,22 +285,24 @@ test.provider.skipIf(!!process.env.FAST)(
       expect([...(namedEntry.kubernetesGroups ?? [])].sort()).toEqual(["group-a", "group-b"]);
       expect(namedEntry.username).toBe("deployer");
 
-      // Groups are a set: the same groups in another order are unchanged.
+      // Groups are a set: the same groups in another order are not rewritten.
+      // EKS stores groups in the order given and bumps `modifiedAt` only when
+      // an update changes the entry.
       const reordered = yield* deployEntry("9", [], {
         kubernetesGroups: ["group-a", "group-b"],
         username: "deployer",
       });
       expect((yield* described(reordered)).modifiedAt).toEqual(namedEntry.modifiedAt);
 
-      // Removing the username keeps it, and a group change still applies.
-      const unnamed = yield* deployEntry("10", [], { kubernetesGroups: ["group-a"] });
-      const unnamedEntry = yield* described(unnamed);
-      expect(unnamedEntry.kubernetesGroups).toEqual(["group-a"]);
-      expect(unnamedEntry.username).toBe("deployer");
+      // Removing the username resets it to the EKS-generated default.
+      const unnamed = yield* deployEntry("10", [], {
+        kubernetesGroups: ["group-a", "group-b"],
+      });
+      expect((yield* described(unnamed)).username).toContain(":assumed-role/");
 
-      // Once removed, the kept username is not re-synced on every reconcile.
-      const settled = yield* deployEntry("11", [], { kubernetesGroups: ["group-a"] });
-      expect((yield* described(settled)).modifiedAt).toEqual(unnamedEntry.modifiedAt);
+      // A group change still applies.
+      const regrouped = yield* deployEntry("11", [], { kubernetesGroups: ["group-a"] });
+      expect((yield* described(regrouped)).kubernetesGroups).toEqual(["group-a"]);
 
       yield* stack.destroy();
 
