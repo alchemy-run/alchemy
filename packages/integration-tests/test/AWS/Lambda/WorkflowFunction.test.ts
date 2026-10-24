@@ -31,6 +31,7 @@ describe(
   { tags: ["provider:aws", "provider:aws:lambda", "live"] },
   () => {
     let functionName: string;
+    let aliasVersion: string;
     let url: string;
 
     beforeAll(
@@ -40,10 +41,15 @@ describe(
           Effect.gen(function* () {
             const host = yield* TestWorkflows;
             const caller = yield* WorkflowCaller;
-            return { functionName: host.functionName, url: caller.functionUrl };
+            return {
+              functionName: host.functionName,
+              version: host.version,
+              url: caller.functionUrl,
+            };
           }).pipe(Effect.provide(Layer.mergeAll(HostLive, CallerLive))),
         );
         functionName = outputs.functionName;
+        aliasVersion = outputs.version!;
         url = outputs.url!.replace(/\/$/, "");
         // A fresh Function URL can take a while to start serving.
         yield* request(`${url}/ready`).pipe(
@@ -132,6 +138,26 @@ describe(
             result: "hello sam",
           });
           expect(yield* stepsOf("Greet", run.executionId)).toEqual(["greet", "log"]);
+        }),
+      { timeout: 120_000 },
+    );
+
+    test.provider(
+      "starts runs on the host's alias",
+      (_stack) =>
+        Effect.gen(function* () {
+          const id = yield* freshId("alias");
+          const run = yield* start("Greet", id);
+          expect(yield* awaitResult(run.status)).toEqual({
+            _tag: "Completed",
+            result: "hello world",
+          });
+          const [execution] = yield* executionsOf("Greet", run.executionId);
+          const { Version } = yield* Lambda.getDurableExecution({
+            DurableExecutionArn: execution!.DurableExecutionArn,
+          });
+          // The version the alias serves, not `$LATEST`.
+          expect(Version).toBe(aliasVersion);
         }),
       { timeout: 120_000 },
     );

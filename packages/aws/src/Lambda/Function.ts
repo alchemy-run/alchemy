@@ -223,7 +223,8 @@ export interface FunctionCommonProps extends PlatformProps {
    * code and configuration are unchanged) and points the alias at it. The
    * function URL, event-source mappings, invoke permissions, API Gateway
    * integrations, the custom `domain`, and the function-level
-   * `eventInvokeConfig` all target the alias instead of `$LATEST`, so rolling
+   * `eventInvokeConfig`, and the durable executions a `DurableFunction` or
+   * `WorkflowFunction` starts all target the alias instead of `$LATEST`, so rolling
    * back is a single `UpdateAlias` call to a previous version. Published
    * versions are retained.
    *
