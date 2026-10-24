@@ -9798,8 +9798,11 @@ describe("incomplete interrupted-create checkpoints", { tags: ["unit", "local"] 
       const plan = yield* stack.plan(scoped(false, { version: 2 }));
       expect(plan.resources.Subject?.action).toBe("replace");
       yield* stack.deploy(scoped(false, { version: 2 }));
-      // Garbage collection drops the attr-less old generation without a lookup.
-      expect(cloud.events).toEqual(["reconcile tenant/api"]);
+      // Admission may probe the resolved replacement. Recovery must not probe the stripped predecessor.
+      expect([
+        ["reconcile tenant/api"],
+        ["read tenant/api", "reconcile tenant/api"],
+      ]).toContainEqual(cloud.events);
       const created = yield* getState("Subject");
       expect(created.status).toBe("created");
       expect("old" in created).toBe(false);
