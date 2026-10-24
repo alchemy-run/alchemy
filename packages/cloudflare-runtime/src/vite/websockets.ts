@@ -28,6 +28,29 @@ export function handleWebSocket(
     socket.on("close", () => sockets.delete(socket));
   };
 
+  // An `async` listener (Vite's `server.proxy` awaiting its `bypass`, a
+  // plugin authenticating first) may take an upgrade only after the Worker
+  // has answered it, without touching the socket before. `emit` is wrapped to
+  // keep the promises the other listeners return for each socket, and the
+  // Worker's answer waits for them to settle.
+  const pending = new WeakMap<Duplex, Promise<unknown>>();
+  const emit = httpServer.emit;
+  const emitUpgrade = function (
+    this: vite.HttpServer,
+    event: string | symbol,
+    ...args: Array<any>
+  ) {
+    if (event !== "upgrade") return emit.call(this, event, ...args);
+    const settling: Array<PromiseLike<unknown>> = [];
+    for (const listener of this.rawListeners("upgrade")) {
+      const result: unknown = listener.apply(this, args);
+      if (isPromiseLike(result)) settling.push(result);
+    }
+    if (settling.length > 0) pending.set(args[1] as Duplex, Promise.allSettled(settling));
+    return true;
+  } as typeof emit;
+  httpServer.emit = emitUpgrade;
+
   const onUpgrade = (request: IncomingMessage, socket: Duplex, head: Buffer) => {
     // Unhandled socket errors crash Node.
     socket.on("error", () => socket.destroy());
@@ -59,9 +82,6 @@ export function handleWebSocket(
     track(socket);
     track(upstream);
     socket.on("close", () => upstream.destroy());
-    upstream.on("close", () => {
-      if (sockets.has(socket)) socket.destroy();
-    });
 
     // Other plugins serve their own WebSockets on the dev server (a DevTools
     // relay, `server.proxy` with `ws: true`), and every `upgrade` listener sees
@@ -72,21 +92,58 @@ export function handleWebSocket(
     // dropped rather than written over the other listener's handshake.
     const before = socketActivity(socket);
     const claimed = () => isClaimed(socket, before);
-    // Leaves a socket another listener claimed to that listener.
-    const release = () => {
-      sockets.delete(socket);
-      upstream.destroy();
-    };
-    upstream.on("error", () => {
-      upstream.destroy();
-      if (!claimed()) socket.destroy();
-    });
-    upstream.once("connect", () => {
-      if (socket.destroyed) {
+
+    // The Worker's answer is buffered until it is known who answers the
+    // client: an asynchronous listener may claim the socket while the request
+    // is in flight, or may still be deciding when the Worker answers.
+    const answer: Array<Buffer> = [];
+    const buffer = (chunk: Buffer) => answer.push(chunk);
+    let relaying = false;
+    const relay = () => {
+      upstream.off("data", buffer);
+      if (claimed()) {
+        // Leaves the socket to the listener that claimed it.
+        sockets.delete(socket);
         upstream.destroy();
         return;
       }
-      if (claimed()) return release();
+      if (upstream.destroyed) {
+        // The Worker closed: relay its whole (buffered) answer, or reset the
+        // client if it never answered.
+        if (answer.length === 0) {
+          socket.destroy();
+          return;
+        }
+        for (const chunk of answer) socket.write(chunk);
+        socket.end();
+        return;
+      }
+      relaying = true;
+      for (const chunk of answer) socket.write(chunk);
+      // oxlint-disable-next-line effecttsgo/unnecessary-pipe-chain -- Node stream piping (socket -> upstream -> socket), not Effect pipe
+      socket.pipe(upstream).pipe(socket);
+    };
+    let decided = false;
+    const decide = () => {
+      if (decided) return;
+      decided = true;
+      const settled = pending.get(socket);
+      if (settled === undefined) return relay();
+      void settled.then(relay);
+    };
+    upstream.on("data", buffer);
+    upstream.once("data", decide);
+    upstream.on("error", () => upstream.destroy());
+    upstream.on("close", () => {
+      if (relaying) socket.destroy();
+      else decide();
+    });
+    upstream.once("connect", () => {
+      if (socket.destroyed || claimed()) {
+        sockets.delete(socket);
+        upstream.destroy();
+        return;
+      }
       const lines = [`${request.method ?? "GET"} ${target.pathname}${target.search} HTTP/1.1`];
       for (const [name, value] of Object.entries(
         proxyRequestHeaders(request, url, proxySharedSecret),
@@ -100,20 +157,12 @@ export function handleWebSocket(
       if (head.length > 0) {
         upstream.write(head);
       }
-      // The Worker's first bytes decide who answers the client: an
-      // asynchronous listener may have claimed the socket while the request
-      // was in flight.
-      upstream.once("data", (chunk: Buffer) => {
-        if (claimed()) return release();
-        socket.write(chunk);
-        // oxlint-disable-next-line effecttsgo/unnecessary-pipe-chain -- Node stream piping (socket -> upstream -> socket), not Effect pipe
-        socket.pipe(upstream).pipe(socket);
-      });
     });
   };
 
   httpServer.prependListener("upgrade", onUpgrade);
   return () => {
+    if (httpServer.emit === emitUpgrade) httpServer.emit = emit;
     httpServer.off("upgrade", onUpgrade);
     for (const socket of sockets) {
       socket.destroy();
@@ -121,6 +170,12 @@ export function handleWebSocket(
     sockets.clear();
   };
 }
+
+const isPromiseLike = (value: unknown): value is PromiseLike<unknown> =>
+  typeof value === "object" &&
+  value !== null &&
+  "then" in value &&
+  typeof value.then === "function";
 
 interface SocketActivity {
   readonly written: number;

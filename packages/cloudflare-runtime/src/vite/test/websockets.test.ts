@@ -318,6 +318,24 @@ describe("handleWebSocket", () => {
     expect(received.endsWith("Forbidden")).toBe(true);
   });
 
+  test("forwards an upgrade an async listener declines", async () => {
+    harness.upstreamWss.on("connection", (ws) => ws.send("ack"));
+    // Like Vite's `server.proxy`, which awaits a `bypass` before it decides.
+    harness.clientServer.on("upgrade", async () => {
+      await new Promise((resolve) => setTimeout(resolve, 200));
+    });
+
+    const client = new WebSocket(`ws://127.0.0.1:${harness.clientPort}/ws`);
+    const message = await new Promise<string>((resolve, reject) => {
+      client.on("message", (data) => {
+        resolve(data.toString());
+        client.close();
+      });
+      client.on("error", reject);
+    });
+    expect(message).toBe("ack");
+  });
+
   // https://github.com/alchemy-run/alchemy/issues/2191
   describe("leaves an upgrade another plugin accepts to that plugin", () => {
     const refuseUpgrades = () => {
@@ -338,7 +356,10 @@ describe("handleWebSocket", () => {
     };
 
     // A plugin's own dev WebSocket, like `@foldkit/vite-plugin`'s relay.
-    const echoPlugin = (server: NodeHttp.Server, options: { verifyDelay?: number } = {}) => {
+    const echoPlugin = (
+      server: NodeHttp.Server,
+      options: { verifyDelay?: number; listenerDelay?: number } = {},
+    ) => {
       const wss = new WebSocketServer({
         noServer: true,
         ...(options.verifyDelay !== undefined
@@ -348,8 +369,11 @@ describe("handleWebSocket", () => {
             }
           : {}),
       });
-      server.on("upgrade", (request, socket, head) => {
+      server.on("upgrade", async (request, socket, head) => {
         if (request.url !== "/__echo") return;
+        if (options.listenerDelay !== undefined) {
+          await new Promise((resolve) => setTimeout(resolve, options.listenerDelay));
+        }
         wss.handleUpgrade(request, socket, head, (ws) => {
           ws.on("message", (data) => ws.send(`echo ${data}`));
         });
@@ -406,6 +430,13 @@ describe("handleWebSocket", () => {
     test("a plugin that accepts after the Worker has answered", async () => {
       refuseUpgrades();
       const wss = echoPlugin(harness.clientServer, { verifyDelay: 200 });
+      expect(await echo(harness.clientPort)).toEqual(["open", "echo hi"]);
+      wss.close();
+    });
+
+    test("a plugin that awaits before it touches the socket", async () => {
+      refuseUpgrades();
+      const wss = echoPlugin(harness.clientServer, { listenerDelay: 200 });
       expect(await echo(harness.clientPort)).toEqual(["open", "echo hi"]);
       wss.close();
     });
