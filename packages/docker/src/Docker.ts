@@ -606,12 +606,24 @@ const makeDocker = (options: DockerOptions) =>
         }),
       );
 
+    // Merge `credentials` into the ambient auth config: the process's
+    // DOCKER_AUTH_CONFIG, overlaid by one provided through DockerEnvironment
+    // (as `run` layers DockerEnvironment over the process environment).
+    // Merging, not replacing, keeps the user's own registry logins.
     const registryEnvironment = Effect.fn("registryEnvironment")(
       (credentials: RegistryCredentials) =>
-        Config.Redacted("DOCKER_AUTH_CONFIG").pipe(
-          Config.withDefault(Redacted.make("{}")),
-          Effect.map((value) => Redacted.value(value) || "{}"),
-          Effect.flatMap(decodeRegistryAuthConfig),
+        Effect.gen(function* () {
+          const value = yield* Config.Redacted("DOCKER_AUTH_CONFIG").pipe(
+            Config.withDefault(Redacted.make("{}")),
+          );
+          const base = yield* decodeRegistryAuthConfig(Redacted.value(value) || "{}");
+          const ambient = yield* DockerEnvironment;
+          const overlay =
+            ambient.DOCKER_AUTH_CONFIG === undefined
+              ? undefined
+              : yield* decodeRegistryAuthConfig(ambient.DOCKER_AUTH_CONFIG || "{}");
+          return { auths: { ...base.auths, ...overlay?.auths } };
+        }).pipe(
           // Schema diagnostics may include credential input. Do not retain them.
           Effect.mapError(() =>
             systemError({

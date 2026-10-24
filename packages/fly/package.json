@@ -52,6 +52,7 @@
         "worker": "./src/Website/index.ts",
         "default": "./lib/Website/index.js"
       },
+      "./internal/*": null,
       "./*": {
         "types": "./lib/*.d.ts",
         "bun": "./src/*.ts",
