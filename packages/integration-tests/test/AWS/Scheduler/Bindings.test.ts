@@ -1,7 +1,7 @@
 import * as AWS from "@alchemy.run/aws";
+import { describe, expect } from "@alchemy.run/test";
 import * as scheduler from "@distilled.cloud/aws/scheduler";
 import * as SQS from "@distilled.cloud/aws/sqs";
-import { describe, expect } from "@alchemy.run/test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Core from "alchemy/Test/Core";
 import * as Data from "effect/Data";

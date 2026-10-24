@@ -1,7 +1,7 @@
 import * as AWS from "@alchemy.run/aws";
 import { Index, View } from "@alchemy.run/aws/ResourceExplorer";
-import * as re2 from "@distilled.cloud/aws/resource-explorer-2";
 import { describe, expect } from "@alchemy.run/test";
+import * as re2 from "@distilled.cloud/aws/resource-explorer-2";
 import * as Provider from "alchemy/Provider";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";

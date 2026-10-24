@@ -1,7 +1,7 @@
 import * as AWS from "@alchemy.run/aws";
 import { encodeDurableEnvelope } from "@alchemy.run/aws/Lambda/DurableBridge";
-import * as Lambda from "@distilled.cloud/aws/lambda";
 import { describe, expect } from "@alchemy.run/test";
+import * as Lambda from "@distilled.cloud/aws/lambda";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Core from "alchemy/Test/Core";
 import * as Effect from "effect/Effect";

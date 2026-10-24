@@ -1,7 +1,7 @@
 import * as AWS from "@alchemy.run/aws";
 import { Terminology } from "@alchemy.run/aws/Translate/Terminology";
-import * as translate from "@distilled.cloud/aws/translate";
 import { expect } from "@alchemy.run/test";
+import * as translate from "@distilled.cloud/aws/translate";
 import * as Provider from "alchemy/Provider";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";

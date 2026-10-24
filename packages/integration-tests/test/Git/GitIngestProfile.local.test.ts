@@ -1,5 +1,6 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { GitApi } from "@alchemy.run/git/Api";
+import { expect } from "@alchemy.run/test";
 /**
  * Push-ingest profile against the LOCAL workerd (no cloud deploy): pushes
  * the repository at `GIT_PROFILE_REPO` and prints the server's per-phase
@@ -13,7 +14,6 @@ import { GitApi } from "@alchemy.run/git/Api";
  * and rewrites ~/.alchemy/profiles.json.
  */
 import * as Alchemy from "alchemy";
-import { expect } from "@alchemy.run/test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";

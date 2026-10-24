@@ -1,6 +1,6 @@
 import * as GCP from "@alchemy.run/gcp";
-import * as reviews from "@distilled.cloud/gcp/merchantapi_reviews_v1beta";
 import { expect } from "@alchemy.run/test";
+import * as reviews from "@distilled.cloud/gcp/merchantapi_reviews_v1beta";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";

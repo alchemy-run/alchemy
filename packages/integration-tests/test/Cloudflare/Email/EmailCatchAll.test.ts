@@ -1,8 +1,8 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
 import { findZoneByName } from "@alchemy.run/cloudflare/Zone/lookup";
-import * as emailRouting from "@distilled.cloud/cloudflare/email-routing";
 import { describe, expect } from "@alchemy.run/test";
+import * as emailRouting from "@distilled.cloud/cloudflare/email-routing";
 import * as Provider from "alchemy/Provider";
 import { isResourceState, State, type ResourceState } from "alchemy/State";
 import * as Test from "alchemy/Test/Alchemy";

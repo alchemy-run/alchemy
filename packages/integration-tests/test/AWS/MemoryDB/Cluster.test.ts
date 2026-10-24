@@ -1,8 +1,8 @@
 import * as AWS from "@alchemy.run/aws";
 import { ACL, Cluster, SubnetGroup, User } from "@alchemy.run/aws/MemoryDB";
+import { expect } from "@alchemy.run/test";
 import * as EC2 from "@distilled.cloud/aws/ec2";
 import * as memorydb from "@distilled.cloud/aws/memorydb";
-import { expect } from "@alchemy.run/test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";

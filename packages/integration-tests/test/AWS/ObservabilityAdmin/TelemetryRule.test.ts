@@ -1,7 +1,7 @@
 import * as AWS from "@alchemy.run/aws";
 import { TelemetryRule } from "@alchemy.run/aws/ObservabilityAdmin";
-import * as obs from "@distilled.cloud/aws/observabilityadmin";
 import { describe, expect } from "@alchemy.run/test";
+import * as obs from "@distilled.cloud/aws/observabilityadmin";
 import * as Test from "alchemy/Test/Alchemy";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";

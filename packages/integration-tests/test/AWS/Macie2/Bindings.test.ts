@@ -1,6 +1,6 @@
 import * as AWS from "@alchemy.run/aws";
-import * as macie2 from "@distilled.cloud/aws/macie2";
 import { describe, expect } from "@alchemy.run/test";
+import * as macie2 from "@distilled.cloud/aws/macie2";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Core from "alchemy/Test/Core";
 import * as Data from "effect/Data";

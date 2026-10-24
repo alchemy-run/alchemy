@@ -5,8 +5,8 @@ import {
   VpcAssociationAuthorization,
   ZoneVpcAssociation,
 } from "@alchemy.run/aws/Route53";
-import * as route53 from "@distilled.cloud/aws/route-53";
 import { expect } from "@alchemy.run/test";
+import * as route53 from "@distilled.cloud/aws/route-53";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";

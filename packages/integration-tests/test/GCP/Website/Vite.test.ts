@@ -1,6 +1,6 @@
 import * as GCP from "@alchemy.run/gcp";
-import * as cloudrun from "@distilled.cloud/gcp/run_v2";
 import { expect } from "@alchemy.run/test";
+import * as cloudrun from "@distilled.cloud/gcp/run_v2";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";

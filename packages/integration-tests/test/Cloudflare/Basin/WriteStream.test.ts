@@ -1,7 +1,7 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
-import * as pipelines from "@distilled.cloud/cloudflare/pipelines";
 import { expect } from "@alchemy.run/test";
+import * as pipelines from "@distilled.cloud/cloudflare/pipelines";
 import { Action } from "alchemy/Action";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Data from "effect/Data";

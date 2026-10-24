@@ -1,7 +1,7 @@
 import * as AWS from "@alchemy.run/aws";
 import { FargateProfile } from "@alchemy.run/aws/EKS";
-import * as eks from "@distilled.cloud/aws/eks";
 import { expect } from "@alchemy.run/test";
+import * as eks from "@distilled.cloud/aws/eks";
 import * as Provider from "alchemy/Provider";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";

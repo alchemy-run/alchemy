@@ -1,8 +1,8 @@
 import * as AWS from "@alchemy.run/aws";
 import { Role } from "@alchemy.run/aws/IAM/Role";
 import { Channel, Input, InputSecurityGroup } from "@alchemy.run/aws/MediaLive";
-import * as medialive from "@distilled.cloud/aws/medialive";
 import { expect } from "@alchemy.run/test";
+import * as medialive from "@distilled.cloud/aws/medialive";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";

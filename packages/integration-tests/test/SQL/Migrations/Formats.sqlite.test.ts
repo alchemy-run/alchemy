@@ -5,8 +5,8 @@ import {
   readDrizzleDirRecords,
   readFlatRecords,
 } from "@alchemy.run/sql/Migrations";
-import * as NodeServices from "@effect/platform-node/NodeServices";
 import { expect, layer } from "@alchemy.run/test";
+import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 import { makeSqliteExecutor, tableNames } from "./sqlite-executor.ts";

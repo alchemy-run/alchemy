@@ -1,7 +1,7 @@
 import * as AWS from "@alchemy.run/aws";
+import { expect } from "@alchemy.run/test";
 import * as appsync from "@distilled.cloud/aws/appsync";
 import * as iam from "@distilled.cloud/aws/iam";
-import { expect } from "@alchemy.run/test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 

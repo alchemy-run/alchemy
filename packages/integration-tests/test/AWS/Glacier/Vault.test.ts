@@ -1,8 +1,8 @@
 import * as AWS from "@alchemy.run/aws";
 import { Vault } from "@alchemy.run/aws/Glacier";
 import { Topic } from "@alchemy.run/aws/SNS";
-import * as glacier from "@distilled.cloud/aws/glacier";
 import { expect } from "@alchemy.run/test";
+import * as glacier from "@distilled.cloud/aws/glacier";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";

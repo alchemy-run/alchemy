@@ -1,6 +1,6 @@
 import * as zlib from "node:zlib";
-import * as NodeServices from "@effect/platform-node/NodeServices";
 import { describe, expect, it } from "@alchemy.run/test";
+import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";

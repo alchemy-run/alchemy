@@ -4,8 +4,8 @@ import {
   ClientVpnTargetNetworkAssociation,
   type ClientVpnTargetNetworkAssociationProps,
 } from "@alchemy.run/aws/EC2/ClientVpnTargetNetworkAssociation";
-import * as Alchemy from "alchemy";
 import { describe, expect } from "@alchemy.run/test";
+import * as Alchemy from "alchemy";
 import * as Provider from "alchemy/Provider";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";

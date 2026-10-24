@@ -5,9 +5,9 @@ import {
   Permission,
 } from "@alchemy.run/aws/ACMPCA";
 import { AWSEnvironment } from "@alchemy.run/aws/Environment";
+import { expect } from "@alchemy.run/test";
 import * as acmpca from "@distilled.cloud/aws/acm-pca";
 import * as ram from "@distilled.cloud/aws/ram";
-import { expect } from "@alchemy.run/test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";

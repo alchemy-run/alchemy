@@ -1,7 +1,7 @@
 import * as AWS from "@alchemy.run/aws";
 import { Permission } from "@alchemy.run/aws/RAM";
-import * as ram from "@distilled.cloud/aws/ram";
 import { expect } from "@alchemy.run/test";
+import * as ram from "@distilled.cloud/aws/ram";
 import * as Provider from "alchemy/Provider";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Data from "effect/Data";

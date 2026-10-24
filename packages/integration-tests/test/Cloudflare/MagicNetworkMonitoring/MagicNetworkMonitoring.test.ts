@@ -1,7 +1,7 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
-import * as mnm from "@distilled.cloud/cloudflare/magic-network-monitoring";
 import { describe, expect } from "@alchemy.run/test";
+import * as mnm from "@distilled.cloud/cloudflare/magic-network-monitoring";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
