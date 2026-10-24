@@ -2,6 +2,7 @@ import * as AWS from "@alchemy.run/aws";
 import { EventBus } from "@alchemy.run/aws/EventBridge/EventBus";
 import { expect } from "@alchemy.run/test";
 import * as eventbridge from "@distilled.cloud/aws/eventbridge";
+import { Region } from "@distilled.cloud/aws/Region";
 import * as Provider from "alchemy/Provider";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
@@ -51,6 +52,40 @@ test.provider(
       yield* stack.destroy();
 
       yield* assertBusGone("alchemy-test-eventbus-list");
+    }),
+  {
+    tags: ["provider:aws", "provider:aws:eventbridge", "live"],
+    timeout: 120_000,
+  },
+);
+
+const describeBusIn = (name: string, region: string) =>
+  eventbridge.describeEventBus({ Name: name }).pipe(
+    Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+    Effect.provideService(Region, Effect.succeed(region)),
+  );
+
+test.provider(
+  "region places the bus in another region and changing it replaces the bus",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const home = yield* yield* Region;
+      const other = home === "us-east-1" ? "us-east-2" : "us-east-1";
+
+      const remote = yield* stack.deploy(EventBus("RegionalBus", { region: other }));
+      expect(remote.eventBusArn).toContain(`:events:${other}:`);
+      expect((yield* describeBusIn(remote.eventBusName, other))?.Arn).toBe(remote.eventBusArn);
+      expect(yield* describeBusIn(remote.eventBusName, home)).toBeUndefined();
+
+      // Moving the bus back to the stack's region replaces it.
+      const local = yield* stack.deploy(EventBus("RegionalBus", {}));
+      expect(local.eventBusArn).toContain(`:events:${home}:`);
+      expect((yield* describeBusIn(local.eventBusName, home))?.Arn).toBe(local.eventBusArn);
+      expect(yield* describeBusIn(remote.eventBusName, other)).toBeUndefined();
+
+      yield* stack.destroy();
+      expect(yield* describeBusIn(local.eventBusName, home)).toBeUndefined();
     }),
   {
     tags: ["provider:aws", "provider:aws:eventbridge", "live"],
