@@ -318,6 +318,99 @@ describe("handleWebSocket", () => {
     expect(received.endsWith("Forbidden")).toBe(true);
   });
 
+  // https://github.com/alchemy-run/alchemy/issues/2191
+  describe("leaves an upgrade another plugin accepts to that plugin", () => {
+    const refuseUpgrades = () => {
+      // workerd answers an upgrade on a path the Worker doesn't route with
+      // plain HTTP.
+      harness.upstreamServer.removeAllListeners("upgrade");
+      harness.upstreamServer.on("upgrade", (_request, socket) => {
+        socket.end(
+          [
+            "HTTP/1.1 404 Not Found",
+            "content-length: 9",
+            "connection: close",
+            "",
+            "Not Found",
+          ].join("\r\n"),
+        );
+      });
+    };
+
+    // A plugin's own dev WebSocket, like `@foldkit/vite-plugin`'s relay.
+    const echoPlugin = (server: NodeHttp.Server, options: { verifyDelay?: number } = {}) => {
+      const wss = new WebSocketServer({
+        noServer: true,
+        ...(options.verifyDelay !== undefined
+          ? {
+              verifyClient: (_info: unknown, done: (result: boolean) => void) =>
+                setTimeout(() => done(true), options.verifyDelay),
+            }
+          : {}),
+      });
+      server.on("upgrade", (request, socket, head) => {
+        if (request.url !== "/__echo") return;
+        wss.handleUpgrade(request, socket, head, (ws) => {
+          ws.on("message", (data) => ws.send(`echo ${data}`));
+        });
+      });
+      return wss;
+    };
+
+    const echo = (port: number) =>
+      new Promise<Array<string>>((resolve, reject) => {
+        const client = new WebSocket(`ws://127.0.0.1:${port}/__echo`);
+        const events: Array<string> = [];
+        client.on("open", () => {
+          events.push("open");
+          client.send("hi");
+        });
+        client.on("message", (data) => {
+          events.push(data.toString());
+          // Stay open long enough for a late close to show up.
+          setTimeout(() => {
+            client.close();
+            resolve(events);
+          }, 200);
+        });
+        client.on("close", (code) => {
+          events.push(`close ${code}`);
+          resolve(events);
+        });
+        client.on("error", reject);
+      });
+
+    test("a plugin registered after the proxy", async () => {
+      refuseUpgrades();
+      const wss = echoPlugin(harness.clientServer);
+      expect(await echo(harness.clientPort)).toEqual(["open", "echo hi"]);
+      wss.close();
+    });
+
+    test("a plugin registered before the proxy", async () => {
+      refuseUpgrades();
+      const server = NodeHttp.createServer();
+      const wss = echoPlugin(server);
+      const remove = handleWebSocket(
+        server,
+        `http://127.0.0.1:${harness.upstreamPort}`,
+        "websocket-secret",
+      );
+      const port = await listen(server);
+      expect(await echo(port)).toEqual(["open", "echo hi"]);
+      remove();
+      wss.close();
+      await close(server);
+    });
+
+    test("a plugin that accepts after the Worker has answered", async () => {
+      refuseUpgrades();
+      const wss = echoPlugin(harness.clientServer, { verifyDelay: 200 });
+      expect(await echo(harness.clientPort)).toEqual(["open", "echo hi"]);
+      wss.close();
+    });
+  });
+
   test("returns a cleanup function that removes the upgrade listener", async () => {
     const server = NodeHttp.createServer();
     await listen(server);
