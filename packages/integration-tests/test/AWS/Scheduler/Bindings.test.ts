@@ -422,15 +422,16 @@ describe(
       timeout: 120_000,
     });
 
-    withStateHarness.test(
+    withStateHarness.test.provider(
       "resolving the AWS environment in a function's init leaves its env clean",
-      Effect.gen(function* () {
-        const { functionName } = yield* Core.deploy(withState, EnvStack);
+      (_stack) =>
+        Effect.gen(function* () {
+          const { functionName } = yield* Core.deploy(withState, EnvStack);
 
-        const config = yield* lambda.getFunctionConfiguration({ FunctionName: functionName });
-        const keys = Object.keys(config.Environment?.Variables ?? {});
-        expect(keys.filter((key) => /^(AWS_|ALCHEMY_PROFILE$|CI$)/.test(key))).toEqual([]);
-      }),
+          const config = yield* lambda.getFunctionConfiguration({ FunctionName: functionName });
+          const keys = Object.keys(config.Environment?.Variables ?? {});
+          expect(keys.filter((key) => /^(AWS_|ALCHEMY_PROFILE$|CI$)/.test(key))).toEqual([]);
+        }),
       { timeout: 180_000 },
     );
   },
