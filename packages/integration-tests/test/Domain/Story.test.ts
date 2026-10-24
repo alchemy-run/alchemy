@@ -238,6 +238,12 @@ const story = Story.make(Counters, {
   layer: Layer.mergeAll(CapWhenLargeLive, CapWhenOverdrawnLive, RemindWhenCappedLive),
   stub: [Approval],
 });
+// Every external system the policies call must be stubbed.
+// @ts-expect-error Approval is not stubbed
+Story.make(Counters, {
+  layer: Layer.mergeAll(CapWhenLargeLive, CapWhenOverdrawnLive, RemindWhenCappedLive),
+});
+
 const c1 = Counter.ref("c-1");
 const c2 = Counter.ref("c-2");
 const m1 = Move.ref("m-1");

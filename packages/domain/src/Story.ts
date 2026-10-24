@@ -329,17 +329,29 @@ interface StoryOptions<Policies, LE, LR, Systems> {
   /** The policies' and projections' Layers. Required when the model has either. */
   readonly layer?: Layer.Layer<Policies, LE, LR>;
   /**
-   * External systems to stub. Each call to one waits until the story answers
-   * it with `resolve`, `fail` or `die`. Systems not listed run for real, from
-   * the Layers you provide.
+   * Every external system the policies and sagas call. Each call waits until
+   * the story answers it with `resolve`, `fail` or `die`. Leaving one out is a
+   * type error: a story models every outside call.
    */
   readonly stub?: ReadonlyArray<Systems>;
 }
 
+/** Names of the external systems the Layers need that `stub` leaves out. */
+type Unstubbed<LR, Systems extends ExternalSystem.Any> = SystemName<
+  Exclude<LR, ExternalSystem.Identifier<Systems>>
+>;
+type SystemName<K> = K extends ExternalSystem.ExternalSystemKey<infer N> ? N : never;
+
+/** Required, and unsatisfiable, while an external system is not stubbed. */
+type StubAll<LR, Systems extends ExternalSystem.Any> = [Unstubbed<LR, Systems>] extends [never]
+  ? unknown
+  : { readonly "~add these to stub": Unstubbed<LR, Systems> };
+
 /**
  * Create a story runner for a Domain. A story is a sequence of steps run
- * against an in-memory host: policies run for real, external system calls suspend until
- * `resolve`, and nothing outside the Domain is executed.
+ * against an in-memory host: policies run for real, every external system is
+ * stubbed so its calls suspend until the story answers them, and nothing
+ * outside the Domain is executed.
  *
  * **Example:** A story
  * ```typescript
@@ -371,7 +383,11 @@ const make =
     domain: Model.ModelClass<Name, Provided, Policies>,
     ...[options = {}]: [Policies] extends [never]
       ? [options?: StoryOptions<Policies, LE, LR, Systems>]
-      : [options: StoryOptions<Policies, LE, LR, Systems> & { readonly layer: unknown }]
+      : [
+          options: StoryOptions<Policies, LE, LR, Systems> & {
+            readonly layer: unknown;
+          } & StubAll<LR, Systems>,
+        ]
   ) =>
   (
     ...steps: ReadonlyArray<Step>

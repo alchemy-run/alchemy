@@ -20,10 +20,11 @@ import { CurrentActor } from "../src/CurrentActor.context.ts";
 import { CustomerId } from "../src/Customer/Customer.id.ts";
 import { FraudCheck } from "../src/Fraud/FraudCheck.external.ts";
 import { MemoryLedgerStore } from "../src/Ledger/LedgerStore.ts";
+import { Payments } from "../src/Settlement/Payments.external.ts";
 
 const story = Story.make(Bank, {
   layer: BankHandlers.pipe(Layer.provide(MemoryLedgerStore)),  // required when the model has handlers
-  stub: [FraudCheck],                                           // stubbed: the story answers each call
+  stub: [FraudCheck, Payments],                                 // every external system; the story answers each call
 });
 const a1 = Account.ref("a-1");
 
@@ -69,7 +70,7 @@ Story.resolve("a-2", FraudCheck.score, { risk: 0.1 }),
 Story.resolve("a-1", FraudCheck.score, { risk: 0.95 }),
 ```
 
-An untagged `resolve` with several calls waiting fails the story, and so does a call left unanswered at the end.
+An untagged `resolve` with several calls waiting fails the story, and so does a call left unanswered at the end. Leaving an external system the handlers call out of `stub` is a type error.
 
 `fail` answers a waiting call with the operation's declared `error:`, to test the branch where the vendor refuses. `die` answers it with a defect, as when the transport breaks. Both find the call the way `resolve` does, untagged or by tag, and only a declared error type-checks:
 
