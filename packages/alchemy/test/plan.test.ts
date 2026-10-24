@@ -1,6 +1,7 @@
 import { describe, expect } from "@alchemy.run/test";
 import * as Cause from "effect/Cause";
 import * as Config from "effect/Config";
+import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
@@ -10,7 +11,7 @@ import * as Redacted from "effect/Redacted";
 import { Action } from "@/Action";
 import { adopt, AdoptPolicy, Unowned } from "@/AdoptPolicy";
 import { AuthProviders } from "@/Auth/AuthProvider.ts";
-import { dedupeBindings } from "@/Diff";
+import { dedupeBindings, isResolved } from "@/Diff";
 import type { Input, InputProps } from "@/Input";
 import * as Namespace from "@/Namespace.ts";
 import * as Output from "@/Output";
@@ -48,6 +49,7 @@ import {
   OverrideStablesResource,
   ProbeBinding,
   Queue,
+  ResourceFailure,
   StaticStablesResource,
   TestLayers,
   TestResource,
@@ -3386,6 +3388,247 @@ describe("engine-level adoption", { tags: ["unit", "local"] }, () => {
         adoptionBlocked: "migrated-fqn",
       });
       expect((plan.resources.R as any).deferredAdoption).toBeUndefined();
+    }),
+  );
+});
+
+// A delete-first replacement in a cycle deletes its previous generation before
+// precreate. While its identity is unresolved, ownership cannot be checked
+// first, so plan refuses it unless adoption is allowed.
+describe("cyclic delete-first admission", { tags: ["unit", "local"] }, () => {
+  interface Cyclic extends Resource<
+    "Test.CyclicDeleteFirst",
+    { name: string },
+    { name: string },
+    { self: string }
+  > {}
+  const Cyclic = Resource<Cyclic>("Test.CyclicDeleteFirst");
+  /** `Cyclic` without `read`: it has no ownership to check. */
+  interface Unread extends Resource<
+    "Test.CyclicDeleteFirstUnread",
+    { name: string },
+    { name: string },
+    { self: string }
+  > {}
+  const Unread = Resource<Unread>("Test.CyclicDeleteFirstUnread");
+  class Knobs extends Context.Service<
+    Knobs,
+    {
+      /** The diff's action for a changed name. */
+      action: "replace" | "update";
+      deleteFirst: boolean;
+      /** Reconcile fails after precreate, leaving a `replacing` row with attrs. */
+      crash: boolean;
+      reads: string[];
+    }
+  >()("CyclicDeleteFirstKnobs") {}
+  const diff = Effect.fn(function* ({
+    olds,
+    news,
+  }: {
+    olds: { name: string };
+    news: Input<{ name: string }>;
+  }) {
+    if (isResolved(news) && olds.name === news.name) return undefined;
+    const knobs = yield* Knobs;
+    return knobs.action === "update"
+      ? ({ action: "update" } as const)
+      : ({ action: "replace", deleteFirst: knobs.deleteFirst } as const);
+  });
+  const precreate = Effect.fn(function* ({ news }: { news: InputProps<{ name: string }> }) {
+    return { name: typeof news.name === "string" ? news.name : "pending" };
+  });
+  const reconcile = Effect.fn(function* ({ news }: { news: { name: string } }) {
+    if ((yield* Knobs).crash) return yield* new ResourceFailure();
+    return { name: news.name };
+  });
+  const providers = Layer.mergeAll(
+    Provider.succeed(Cyclic, {
+      diff,
+      read: Effect.fn(function* ({ olds }) {
+        (yield* Knobs).reads.push(String(olds?.name));
+        return undefined;
+      }),
+      precreate,
+      reconcile,
+      delete: () => Effect.void,
+    }),
+    Provider.succeed(Unread, { diff, precreate, reconcile, delete: () => Effect.void }),
+  ).pipe(
+    Layer.provideMerge(
+      Layer.effect(
+        Knobs,
+        Effect.sync(() => ({
+          action: "replace" as const,
+          deleteFirst: false,
+          crash: false,
+          reads: [] as string[],
+        })),
+      ),
+    ),
+  );
+  const { test } = Test.make({
+    providers: Layer.mergeAll(providers, TestLayers()),
+    state: freshState,
+  });
+
+  /** `Subject`'s name comes from `Name`, which is updated in the same deploy. */
+  const subject = (
+    name: string,
+    opts: {
+      cycle?: boolean;
+      resolved?: boolean;
+      unread?: boolean;
+      adopt?: boolean;
+    } = {},
+  ) =>
+    Effect.gen(function* () {
+      const source = yield* TestResource("Name", { string: name });
+      const props = { name: opts.resolved ? name : source.string };
+      const scoped = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+        opts.adopt === undefined ? effect : effect.pipe(adopt(opts.adopt));
+      const resource = opts.unread
+        ? yield* scoped(Unread("Subject", props))
+        : yield* scoped(Cyclic("Subject", props));
+      if (opts.cycle ?? true) yield* resource.bind("Self", { self: resource.name });
+      return resource;
+    });
+
+  const setup = Effect.fn(function* (stack: Test.ScratchStack, opts?: { unread?: boolean }) {
+    const knobs = yield* Knobs;
+    yield* stack.destroy();
+    Object.assign(knobs, { action: "replace", deleteFirst: false, crash: false });
+    yield* stack.deploy(subject("old", opts));
+    knobs.deleteFirst = true;
+    knobs.reads.length = 0;
+    return knobs;
+  });
+
+  const refusing = [
+    { global: undefined, scoped: undefined },
+    { global: true, scoped: false },
+  ] as const;
+  for (const { global, scoped } of refusing) {
+    test.provider(
+      `refuses an unresolved cyclic delete-first replacement (global=${global}, scoped=${scoped})`,
+      (stack) =>
+        Effect.gen(function* () {
+          const knobs = yield* setup(stack);
+          const error = yield* stack
+            .plan(subject("fresh", { adopt: scoped }))
+            .pipe(
+              global === undefined
+                ? (effect) => effect
+                : Effect.provideService(AdoptPolicy, global),
+              Effect.flip,
+            );
+          expect(error).toMatchObject({
+            _tag: "UnverifiableReplacement",
+            resourceType: "Test.CyclicDeleteFirst",
+            logicalId: "Subject",
+          });
+          expect(knobs.reads).toEqual([]);
+          yield* stack.destroy();
+        }),
+    );
+  }
+
+  const admitting = [
+    { global: true, scoped: undefined },
+    { global: false, scoped: true },
+  ] as const;
+  for (const { global, scoped } of admitting) {
+    test.provider(
+      `adoption lets an unresolved cyclic delete-first replacement through (global=${global}, scoped=${scoped})`,
+      (stack) =>
+        Effect.gen(function* () {
+          yield* setup(stack);
+          const plan = yield* stack
+            .plan(subject("fresh", { adopt: scoped }))
+            .pipe(Effect.provideService(AdoptPolicy, global));
+          expect(plan.resources.Subject).toMatchObject({
+            action: "replace",
+            deleteFirst: true,
+            deferredAdoption: { adopt: true },
+          });
+          yield* stack.destroy();
+        }),
+    );
+  }
+
+  const unaffected = [
+    {
+      label: "a create-first replacement",
+      prepare: (knobs: Knobs["Service"]) => (knobs.deleteFirst = false),
+      program: subject("fresh"),
+      deleteFirst: false,
+    },
+    {
+      label: "a resolved name, admitted in apply before the delete",
+      prepare: () => {},
+      program: subject("fresh", { resolved: true }),
+      deleteFirst: true,
+    },
+    {
+      label: "a replacement outside a cycle, which deletes after its upstreams resolve",
+      prepare: () => {},
+      program: subject("fresh", { cycle: false }),
+      deleteFirst: true,
+    },
+  ];
+  for (const { label, prepare, program, deleteFirst } of unaffected) {
+    test.provider(`plans ${label}`, (stack) =>
+      Effect.gen(function* () {
+        prepare(yield* setup(stack));
+        const plan = yield* stack.plan(program);
+        expect(plan.resources.Subject).toMatchObject({ action: "replace", deleteFirst });
+        yield* stack.destroy();
+      }),
+    );
+  }
+
+  test.provider("plans a provider without `read`, which has no ownership to check", (stack) =>
+    Effect.gen(function* () {
+      yield* setup(stack, { unread: true });
+      const plan = yield* stack.plan(subject("fresh", { unread: true }));
+      expect(plan.resources.Subject).toMatchObject({ action: "replace", deleteFirst: true });
+      expect((plan.resources.Subject as any).deferredAdoption).toBeUndefined();
+      yield* stack.destroy();
+    }),
+  );
+
+  /** Leaves `Subject` mid-replacement, holding its precreated identity. */
+  const interrupted = Effect.fn(function* (stack: Test.ScratchStack) {
+    const knobs = yield* setup(stack);
+    knobs.crash = true;
+    yield* stack
+      .deploy(subject("fresh").pipe(adopt(true)))
+      .pipe(Effect.catchTag("ResourceFailure", () => Effect.void));
+    knobs.crash = false;
+    return knobs;
+  });
+
+  test.provider("resumes a replacement that already holds its precreated identity", (stack) =>
+    Effect.gen(function* () {
+      const knobs = yield* interrupted(stack);
+      knobs.action = "update";
+      // `Name` changes again, so the identity is unresolved at plan time.
+      const plan = yield* stack.plan(subject("again"));
+      expect(plan.resources.Subject).toMatchObject({
+        action: "replace",
+        state: { status: "replacing", attr: { name: "pending" } },
+      });
+      expect((plan.resources.Subject as any).restart).toBeUndefined();
+      yield* stack.destroy();
+    }),
+  );
+
+  test.provider("refuses restarting a replacement onto an unresolved identity", (stack) =>
+    Effect.gen(function* () {
+      yield* interrupted(stack);
+      const error = yield* stack.plan(subject("again")).pipe(Effect.flip);
+      expect(error).toMatchObject({ _tag: "UnverifiableReplacement" });
+      yield* stack.destroy();
     }),
   );
 });
