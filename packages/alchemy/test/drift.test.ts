@@ -627,6 +627,31 @@ describe("plan", { tags: ["unit", "local"] }, () => {
     }).pipe(withCloud(cloud));
   });
 
+  test.provider("a deleted chain plans every member as a create, carrying its edges", (stack) => {
+    const cloud = makeTestCloud();
+    return Effect.gen(function* () {
+      yield* stack.deploy(
+        Effect.gen(function* () {
+          const topic = yield* DriftResource("Topic", {});
+          yield* DriftResource("Subscription", { dependsOn: [topic.id] });
+        }),
+      );
+      cloud.resources.delete("Topic");
+      cloud.resources.delete("Subscription");
+
+      const stk = yield* Stack;
+      const { plan } = yield* Drift.plan({ name: stk.name, stage: stk.stage });
+
+      expect(plan.resources.Topic).toMatchObject({
+        action: "create",
+        drift: { missing: true },
+        downstream: ["Subscription"],
+      });
+      expect(plan.resources.Subscription).toMatchObject({ action: "create", downstream: [] });
+      expect(reconcileCalls(cloud)).toEqual([]);
+    }).pipe(withCloud(cloud));
+  });
+
   test.provider("reports each observed resource through the ambient Progress reporter", (stack) => {
     const cloud = makeTestCloud();
     return Effect.gen(function* () {
