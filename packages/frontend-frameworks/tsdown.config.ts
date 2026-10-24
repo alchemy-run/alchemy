@@ -28,6 +28,7 @@ export default defineConfig([
       "astro/cloudflare": "src/astro/cloudflare.ts",
       "astro/entrypoints/aws-server": "src/astro/entrypoints/aws-server.ts",
       "astro/entrypoints/node-server": "src/astro/entrypoints/node-server.ts",
+      "astro/config": "src/astro/config.ts",
       "astro/source": "src/astro/source.ts",
       "astro/runtime/entrypoints/server": "src/astro/runtime/entrypoints/server.ts",
       "astro/runtime/entrypoints/image-passthrough-endpoint":
