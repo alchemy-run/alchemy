@@ -24,6 +24,7 @@ import * as Stream from "effect/Stream";
 import { Assets, ensureLambdaWebCodeAccess } from "../Assets.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { PolicyDocument, PolicyStatement } from "../IAM/Policy.ts";
+import { tailLogGroup } from "../Logs/LogTail.ts";
 import type { Providers } from "../Providers.ts";
 import type { FunctionBuildOptions, FunctionZipProps } from "./Function.ts";
 import { makeFunctionBundler, type FunctionBundleOptions } from "./FunctionBundle.ts";
@@ -1399,38 +1400,7 @@ export const WebFunctionProvider = () =>
               .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void)),
           );
         }),
-        tail: ({ output }) => {
-          const session = Effect.gen(function* () {
-            const { accountId, region } = yield* AWSEnvironment.current;
-            const response = yield* logs.startLiveTail({
-              logGroupIdentifiers: [
-                `arn:aws:logs:${region}:${accountId}:log-group:${logGroupNames(output.functionName)[0]}`,
-              ],
-            });
-            if (!response.responseStream) {
-              return Stream.empty as Stream.Stream<LogLine>;
-            }
-            return response.responseStream.pipe(
-              Stream.flatMap((event) =>
-                "sessionUpdate" in event && event.sessionUpdate
-                  ? Stream.fromIterable(
-                      (event.sessionUpdate.sessionResults ?? []).flatMap((result): LogLine[] =>
-                        result.message
-                          ? [
-                              {
-                                timestamp: new Date(result.timestamp ?? Date.now()),
-                                message: result.message.trimEnd(),
-                              },
-                            ]
-                          : [],
-                      ),
-                    )
-                  : Stream.empty,
-              ),
-            );
-          });
-          return Stream.unwrap(session).pipe(Stream.retry(Schedule.spaced("1 second")));
-        },
+        tail: ({ output }) => tailLogGroup(logGroupNames(output.functionName)[0]!),
         logs: ({ output, options }: { output: WebFunction["Attributes"]; options: LogsInput }) =>
           logs
             .filterLogEvents({

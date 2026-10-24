@@ -36,20 +36,28 @@ import { Credentials } from "@distilled.cloud/aws/Credentials";
 import * as Lambda from "@distilled.cloud/aws/lambda";
 import type { RegionName } from "@distilled.cloud/aws/Region";
 import * as SQS from "@distilled.cloud/aws/sqs";
+import * as Alchemist from "alchemy/Alchemist";
 import * as Test from "alchemy/Test/Alchemy";
+import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
 import * as FileSystem from "effect/FileSystem";
 import * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
 import { dockerAvailable, FLOCI_ENDPOINT, rawS3GetObject } from "../Local/fixtures/raw.ts";
 
 const { test } = Test.make({ providers: AWS.providers(), dev: true });
 
 const devFixtureDir = fileURLToPath(new URL("../Lambda/fixtures/floci-dev", import.meta.url));
+const tailEntrypoint = fileURLToPath(
+  new URL("../Lambda/fixtures/floci-tail/alchemy.run.ts", import.meta.url),
+);
 const esmHandlerPath = fileURLToPath(
   new URL("../Lambda/fixtures/floci-esm/handler.mjs", import.meta.url),
 );
@@ -411,5 +419,49 @@ test.provider.skipIf(!dockerAvailable)(
 
       yield* stack.destroy();
     }),
+  { tags: ["provider:aws", "provider:aws:lambda", "local"], timeout: 300_000 },
+);
+
+// Regression #1651: floci rejects StartLiveTail as UnsupportedOperation, and
+// `alchemy logs --tail` retried it forever without printing a line. The tail
+// now falls back to polling FilterLogEvents.
+test.skipIf(!dockerAvailable)(
+  "alchemy logs --tail streams a dev Function's logs from floci",
+  Effect.gen(function* () {
+    const client = yield* HttpClient.HttpClient;
+    const target = { entrypoint: tailEntrypoint, stage: "floci-tail" };
+    const run = (operation: "deploy" | "destroy") =>
+      Alchemist.Stack.plan({ operation, target, dev: true }).pipe(
+        Effect.flatMap(Alchemist.Stack.apply),
+      );
+
+    yield* run("destroy");
+    yield* Effect.addFinalizer(() => run("destroy").pipe(Effect.ignore));
+    const { functionUrl } = (yield* run("deploy")) as { functionUrl: string };
+    expect(functionUrl).toContain("localhost:4566");
+
+    // `alchemy logs --tail --resource TailFn`, collected until the marker.
+    const tailed = yield* Alchemist.Logs.tail({ target, resources: ["TailFn"] }).pipe(
+      Stream.filter((entry) => entry.message.includes("tail-marker:after-tail-start")),
+      Stream.runHead,
+      Effect.timeout("90 seconds"),
+      Effect.forkScoped,
+    );
+
+    // Keep invoking until the tail delivers: the first calls can land before
+    // the tail session starts or while the runtime image cold-starts.
+    yield* client
+      .get(`${functionUrl}?marker=after-tail-start`)
+      .pipe(Effect.ignore, Effect.repeat(Schedule.spaced("2 seconds")), Effect.forkScoped);
+
+    const line = yield* Fiber.join(tailed);
+    expect(Option.getOrUndefined(line)?.resource.logicalId).toBe("TailFn");
+  }).pipe(
+    Effect.provide(Alchemist.layer()),
+    Effect.scoped,
+    // A clean context, like the CLI process: the file's RPC sidecar would
+    // otherwise host the provider instead of `alchemy logs` itself.
+    Effect.updateContext(() => Context.empty()),
+  ),
   { tags: ["provider:aws", "provider:aws:lambda", "local"], timeout: 300_000 },
 );
