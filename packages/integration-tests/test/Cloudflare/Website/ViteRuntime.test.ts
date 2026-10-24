@@ -517,7 +517,8 @@ describe.concurrent(
     );
 
     // A Vite plugin's own dev WebSocket (dev only): the Worker doesn't route
-    // the path, so its 404 must not reach a socket the plugin accepted (#2191).
+    // the path, so its 404 must not reach a socket the plugin accepts, at once
+    // or only after an `await` (#2191).
     devTest.provider(
       "Vite runtime: a plugin's own WebSocket stays open (dev)",
       (stack) =>
@@ -539,35 +540,37 @@ describe.concurrent(
             }),
           );
           const url = site.url!.replace(/\/$/, "").replace(/^http/, "ws");
-          const events = yield* Effect.tryPromise(
-            () =>
-              new Promise<Array<string>>((resolve, reject) => {
-                const socket = new WebSocket(`${url}/__echo`);
-                const events: Array<string> = [];
-                const timer = setTimeout(() => reject(new Error(`echo: ${events}`)), 30_000);
-                const done = () => {
-                  clearTimeout(timer);
-                  resolve([...events]);
-                };
-                socket.addEventListener("open", () => {
-                  events.push("open");
-                  socket.send("hi");
-                });
-                socket.addEventListener("message", (event) => {
-                  events.push(String(event.data));
-                  // Stay open long enough for a late close to show up.
-                  setTimeout(() => {
+          const echo = (path: string) =>
+            Effect.tryPromise(
+              () =>
+                new Promise<Array<string>>((resolve, reject) => {
+                  const socket = new WebSocket(`${url}${path}`);
+                  const events: Array<string> = [];
+                  const timer = setTimeout(() => reject(new Error(`echo: ${events}`)), 30_000);
+                  const done = () => {
+                    clearTimeout(timer);
+                    resolve([...events]);
+                  };
+                  socket.addEventListener("open", () => {
+                    events.push("open");
+                    socket.send("hi");
+                  });
+                  socket.addEventListener("message", (event) => {
+                    events.push(String(event.data));
+                    // Stay open long enough for a late close to show up.
+                    setTimeout(() => {
+                      done();
+                      socket.close();
+                    }, 500);
+                  });
+                  socket.addEventListener("close", (event) => {
+                    events.push(`close ${event.code}`);
                     done();
-                    socket.close();
-                  }, 500);
-                });
-                socket.addEventListener("close", (event) => {
-                  events.push(`close ${event.code}`);
-                  done();
-                });
-              }),
-          );
-          expect(events).toEqual(["open", "echo hi"]);
+                  });
+                }),
+            );
+          expect(yield* echo("/__echo")).toEqual(["open", "echo hi"]);
+          expect(yield* echo("/__echo-async")).toEqual(["open", "echo hi"]);
         }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.ignore)), logLevel),
       { tags: ["provider:cloudflare:worker", "local"], timeout: 180_000 },
     );
