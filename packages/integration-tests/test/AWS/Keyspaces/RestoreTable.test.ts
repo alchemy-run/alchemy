@@ -1,6 +1,6 @@
 import * as AWS from "@alchemy.run/aws";
+import { describe, expect } from "@alchemy.run/test";
 import * as keyspaces from "@distilled.cloud/aws/keyspaces";
-import { describe, expect } from "alchemy-test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
@@ -16,14 +16,15 @@ const RESTORED_TABLE = "orders_restored";
 
 // The restored table is created out-of-band by the Lambda (RestoreTable
 // provisions a brand-new table), so the test owns its cleanup. A table that
-// is still RESTORING rejects delete with ConflictException; retry bounded.
+// is still RESTORING rejects delete with ConflictException, and a restore can
+// stay RESTORING for 10+ minutes; retry bounded (~12 min).
 const deleteRestoredTable = keyspaces
   .deleteTable({ keyspaceName: RESTORE_KS, tableName: RESTORED_TABLE })
   .pipe(
     Effect.catchTag("ResourceNotFoundException", () => Effect.void),
     Effect.retry({
       while: (e): boolean => e._tag === "ConflictException",
-      schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(36)]),
+      schedule: Schedule.max([Schedule.fixed("6 seconds"), Schedule.recurs(120)]),
     }),
     // Wait (bounded) until it is actually gone so the keyspace can be
     // destroyed without a ConflictException.
@@ -32,7 +33,7 @@ const deleteRestoredTable = keyspaces
         Effect.flatMap(() => Effect.fail(new Error(`'${RESTORED_TABLE}' still deleting`))),
         Effect.catchTag("ResourceNotFoundException", () => Effect.void),
         Effect.retry({
-          schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(20)]),
+          schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(36)]),
         }),
       ),
     ),
@@ -106,7 +107,7 @@ describe(
           yield* deleteRestoredTable;
           yield* stack.destroy();
         }).pipe(Effect.ensuring(Effect.ignore(deleteRestoredTable))),
-      { tags: ["provider:aws:lambda"], timeout: 900_000 },
+      { tags: ["provider:aws:lambda"], timeout: 1_500_000 },
     );
   },
 );

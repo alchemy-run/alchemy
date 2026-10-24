@@ -51,13 +51,12 @@ export const startViteChild = (
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
     const runner = resolveRunner("ViteChildRunner");
     const isBun = typeof globalThis.Bun !== "undefined";
-    // A source provider can pin the dev child to node (e.g. `next dev`
-    // cold-starts broken under bun). Honored only when node is installed;
-    // otherwise fall back to the engine's own runtime.
-    const nodeExecPath =
-      isBun && config.source?.descriptor.runtime === "node"
-        ? (globalThis.Bun.which("node") ?? undefined)
-        : undefined;
+    // The dev server runs on node, as `@cloudflare/vite-plugin`'s does,
+    // whenever node is installed; otherwise on the engine's own runtime.
+    // Bun 1.3's `node:http` drops all but the last of repeated response
+    // headers and never delivers bytes written to an upgraded socket, so a
+    // Vite dev server on it loses `server.headers` arrays and WebSockets.
+    const nodeExecPath = isBun ? (globalThis.Bun.which("node") ?? undefined) : undefined;
     // Redacted values can't cross the process boundary — the config is
     // plain data once unwrapped. bun's `v8.serialize` output is not
     // readable by real V8 (and vice versa), so a cross-runtime spawn
@@ -120,7 +119,15 @@ export const startViteChild = (
     );
 
     const ready = yield* Deferred.make<URL>();
-    yield* child.stdout.pipe(
+    // The last output lines explain a child that dies before it is ready
+    // (an entry that can't be resolved, a broken Vite config).
+    const outputTail: Array<string> = [];
+    const recordOutput = (stream: "stdout" | "stderr", line: string) =>
+      Effect.sync(() => {
+        outputTail.push(line);
+        if (outputTail.length > STARTUP_ERROR_TAIL) outputTail.shift();
+      }).pipe(Effect.andThen(onOutput(stream, line)));
+    const stdout = yield* child.stdout.pipe(
       Stream.decodeText,
       Stream.splitLines,
       Stream.runForEach((line) => {
@@ -130,14 +137,14 @@ export const startViteChild = (
           const value = line.slice(start + VITE_CHILD_READY_PREFIX.length, end);
           return Deferred.succeed(ready, new URL(value));
         }
-        return onOutput("stdout", line);
+        return recordOutput("stdout", line);
       }),
       Effect.forkScoped,
     );
-    yield* child.stderr.pipe(
+    const stderr = yield* child.stderr.pipe(
       Stream.decodeText,
       Stream.splitLines,
-      Stream.runForEach((line) => onOutput("stderr", line)),
+      Stream.runForEach((line) => recordOutput("stderr", line)),
       Effect.forkScoped,
     );
 
@@ -145,13 +152,25 @@ export const startViteChild = (
     const url = yield* Effect.raceAllFirst([
       Deferred.await(ready),
       exitCode.pipe(
+        Effect.tap(() =>
+          Fiber.joinAll([stdout, stderr]).pipe(Effect.timeout("1 second"), Effect.ignore),
+        ),
         Effect.flatMap((exitCode) =>
-          Effect.die(new Error(`Vite child exited with code ${exitCode} before becoming ready`)),
+          Effect.die(
+            new Error(
+              [`Vite child exited with code ${exitCode} before becoming ready`, ...outputTail].join(
+                "\n",
+              ),
+            ),
+          ),
         ),
       ),
     ]);
     return { url, pid: child.pid, exitCode } satisfies ViteChildHandle;
   });
+
+/** Number of trailing output lines echoed into a failed dev start's error. */
+const STARTUP_ERROR_TAIL = 50;
 
 /** Number of trailing stderr lines echoed into a failed build's error. */
 const BUILD_ERROR_TAIL = 200;

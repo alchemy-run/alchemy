@@ -1,4 +1,4 @@
-import { describe, expect, it } from "alchemy-test";
+import { describe, expect, it } from "@alchemy.run/test";
 import { hasRoute, mostSpecific, type Route } from "@/Egress/Route.ts";
 
 const route = (host: string, id: string, paths?: ReadonlyArray<string>): Route => ({

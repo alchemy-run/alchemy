@@ -3,7 +3,7 @@ import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
-import { RemoteContainerObject } from "./object.ts";
+import { CappedContainerObject, RemoteContainerObject } from "./object.ts";
 
 // Report failures in the response body, so a test that times out waiting
 // for the container shows why instead of a bare 500.
@@ -18,6 +18,7 @@ export default class RemoteContainerWorker extends Cloudflare.Worker<RemoteConta
   },
   Effect.gen(function* () {
     const objects = yield* RemoteContainerObject;
+    const capped = yield* CappedContainerObject;
 
     return {
       fetch: Effect.gen(function* () {
@@ -27,6 +28,11 @@ export default class RemoteContainerWorker extends Cloudflare.Worker<RemoteConta
         if (url.pathname === "/hello") {
           const text = yield* objects.getByName("default").hello();
           return HttpServerResponse.text(text);
+        }
+
+        if (url.pathname === "/capped") {
+          const name = url.searchParams.get("name") ?? "default";
+          return yield* HttpServerResponse.json(yield* capped.getByName(name).start());
         }
 
         if (url.pathname.startsWith("/passthrough")) {

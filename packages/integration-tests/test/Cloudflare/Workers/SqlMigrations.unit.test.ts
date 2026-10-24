@@ -20,8 +20,8 @@ import {
   type MigrationHistoryConflictError,
 } from "@alchemy.run/sql/Migrations/Format";
 import { readMigrationRecords } from "@alchemy.run/sql/Migrations/Records";
+import { expect, layer } from "@alchemy.run/test";
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { expect, layer } from "alchemy-test";
 import { purePlugin } from "alchemy/Bundle/PurePlugin";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import { sha256 } from "alchemy/Util/sha256";
@@ -383,11 +383,13 @@ layer(NodeServices.layer)("Cloudflare.SqlMigrations construction", (it) => {
         const imports = chunks.flatMap((chunk) => [...chunk.imports, ...chunk.dynamicImports]);
 
         expect(chunks.flatMap((chunk) => chunk.exports)).toContain("applySqlMigrations");
-        expect(modules.some((id) => id.endsWith("/SQL/Migrations/AlchemyFormat.ts"))).toBe(true);
-        expect(modules.some((id) => id.endsWith("/SQL/Migrations/Convert.ts"))).toBe(true);
-        expect(modules.some((id) => id.endsWith("/SQL/Migrations/Utils.ts"))).toBe(true);
+        expect(modules.some((id) => id.endsWith("/sql/src/Migrations/AlchemyFormat.ts"))).toBe(
+          true,
+        );
+        expect(modules.some((id) => id.endsWith("/sql/src/Migrations/Convert.ts"))).toBe(true);
+        expect(modules.some((id) => id.endsWith("/sql/src/Migrations/Utils.ts"))).toBe(true);
         const forbidden =
-          /(?:SQL\/Migrations\/(?:Records|Registry|Detect)\.ts|SQL\/SqlFile\.ts|node:(?:crypto|fs)|effect\/(?:FileSystem|Path))/;
+          /(?:sql(?:\/src)?\/(?:Migrations\/(?:Records|Registry|Detect)|SqlFile)(?:\.ts)?$|node:(?:crypto|fs)|effect\/(?:FileSystem|Path))/;
         expect(modules.filter((id) => forbidden.test(id))).toEqual([]);
         expect(imports.filter((id) => forbidden.test(id))).toEqual([]);
         expect(code).not.toContain("node:crypto");
@@ -431,7 +433,7 @@ layer(NodeServices.layer)("Cloudflare.SqlMigrations construction", (it) => {
         expect(modules.some((id) => id.endsWith("/Workers/SqlMigrations.ts"))).toBe(true);
         expect(modules.some((id) => id.endsWith("/Workers/SqlMigrationsApply.ts"))).toBe(true);
         const forbidden =
-          /(?:SQL\/Migrations\/(?:Records|Registry|Detect)\.ts|SQL\/SqlFile\.ts|node:(?:crypto|fs)|effect\/(?:FileSystem|Path)|@effect\/platform-(?:node|bun))/;
+          /(?:sql(?:\/src)?\/(?:Migrations\/(?:Records|Registry|Detect)|SqlFile)(?:\.ts)?$|node:(?:crypto|fs)|effect\/(?:FileSystem|Path)|@effect\/platform-(?:node|bun))/;
         expect(modules.filter((id) => forbidden.test(id))).toEqual([]);
         expect(imports.filter((id) => forbidden.test(id))).toEqual([]);
         expect(code).not.toContain("readMigrationRecords");

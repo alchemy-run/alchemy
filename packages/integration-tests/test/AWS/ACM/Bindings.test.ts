@@ -1,7 +1,7 @@
 import * as AWS from "@alchemy.run/aws";
+import { describe, expect } from "@alchemy.run/test";
 import * as acm from "@distilled.cloud/aws/acm";
 import { Region as AwsRegion } from "@distilled.cloud/aws/Region";
-import { describe, expect } from "alchemy-test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Core from "alchemy/Test/Core";
 import * as Data from "effect/Data";

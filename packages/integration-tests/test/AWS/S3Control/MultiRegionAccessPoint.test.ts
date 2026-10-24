@@ -1,9 +1,9 @@
 import * as AWS from "@alchemy.run/aws";
 import { Bucket } from "@alchemy.run/aws/S3";
 import { MultiRegionAccessPoint } from "@alchemy.run/aws/S3Control";
+import { expect } from "@alchemy.run/test";
 import { Region } from "@distilled.cloud/aws/Region";
 import * as s3control from "@distilled.cloud/aws/s3-control";
-import { expect } from "alchemy-test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 

@@ -1,6 +1,6 @@
 import * as AWS from "@alchemy.run/aws";
 import { runsAsRole } from "@alchemy.run/aws/AWSBindings";
-import { describe, expect, it } from "alchemy-test";
+import { describe, expect, it } from "@alchemy.run/test";
 import type { ResourceLike } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 

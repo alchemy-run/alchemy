@@ -1,7 +1,7 @@
 import * as GCP from "@alchemy.run/gcp";
 import { GcpEnvironment } from "@alchemy.run/gcp/Environment";
+import { expect } from "@alchemy.run/test";
 import * as firebase from "@distilled.cloud/gcp/firebase_v1beta1";
-import { expect } from "alchemy-test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
@@ -28,16 +28,19 @@ const waitUntilGone = (name: string) =>
     }),
   );
 
+// App ids are globally unique, so the `projects/-` wildcard resolves the app
+// without the project: Firebase answers a missing id there with the typed 403.
+// Under `projects/{project}` a project without Firebase (the testing project)
+// answers every app lookup with a generic 400 INVALID_ARGUMENT instead.
 test.provider(
   "getProjectsAndroidApps on a missing app fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {
-      const { project } = yield* GcpEnvironment.current;
       yield* stack.destroy();
 
       const error = yield* Effect.flip(
         firebase.getProjectsAndroidApps({
-          name: `projects/${project}/androidApps/1:1:android:missing`,
+          name: "projects/-/androidApps/1:1:android:missing",
         }),
       );
       expect(error._tag).toEqual("AndroidAppNotFound");

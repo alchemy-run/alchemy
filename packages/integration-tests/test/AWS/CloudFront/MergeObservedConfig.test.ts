@@ -1,6 +1,6 @@
 import { mergeWithObservedConfig } from "@alchemy.run/aws/CloudFront/Distribution";
+import { describe, expect, test } from "@alchemy.run/test";
 import type * as cloudfront from "@distilled.cloud/aws/cloudfront";
-import { describe, expect, test } from "alchemy-test";
 
 /**
  * A live distribution config as returned by `GetDistributionConfig` for a
@@ -254,6 +254,37 @@ describe(
         Id: "brand-new",
         DomainName: "new.example.com",
       });
+    });
+
+    // A site switching between a server and S3 keeps the origin id but
+    // changes its kind. The old kind's config and OAC must not carry over
+    // (CloudFront rejects both kinds at once); shared members still fill.
+    test("an origin that changes kind keeps only the members both kinds share", () => {
+      const custom = mergeWithObservedConfig(
+        {
+          ...desired,
+          Origins: {
+            Quantity: 1,
+            Items: [
+              {
+                Id: "s3",
+                DomainName: "server.example.com",
+                CustomOriginConfig: {
+                  HTTPPort: 80,
+                  HTTPSPort: 443,
+                  OriginProtocolPolicy: "https-only",
+                },
+              } as cloudfront.Origin,
+            ],
+          },
+        },
+        observed,
+      ).Origins?.Items?.[0];
+      expect(custom?.S3OriginConfig).toBeUndefined();
+      expect(custom?.OriginAccessControlId).toBeUndefined();
+      expect(custom?.CustomOriginConfig?.OriginProtocolPolicy).toBe("https-only");
+      expect(custom?.CustomHeaders).toEqual({ Quantity: 0 });
+      expect(custom?.ConnectionAttempts).toBe(3);
     });
   },
 );

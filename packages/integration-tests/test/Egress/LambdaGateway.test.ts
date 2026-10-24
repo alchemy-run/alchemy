@@ -1,4 +1,4 @@
-import { describe, expect } from "alchemy-test";
+import { describe, expect } from "@alchemy.run/test";
 import { type Granted, MINT_INVOKE } from "alchemy/Egress/Gateway";
 import { makeLocalCa } from "alchemy/Egress/LocalCa";
 import { serveEgressProxy, writeTrustBundle } from "alchemy/Egress/Proxy";

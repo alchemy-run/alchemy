@@ -1,9 +1,9 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
 import { isLocalId } from "@alchemy.run/cloudflare/LocalRuntime";
+import { describe, expect } from "@alchemy.run/test";
 import * as kv from "@distilled.cloud/cloudflare/kv";
 import * as Alchemy from "alchemy";
-import { describe, expect } from "alchemy-test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -90,6 +90,11 @@ describe.concurrent(
           yield* expectUrlContains(`${site.url!}/api/hello`, "api-route-ok", {
             timeout: "60 seconds",
             label: "nuxt dev API route",
+          });
+          // A `public/` file read by a server route through the `ASSETS` binding.
+          yield* expectUrlContains(`${site.url!}/api/asset`, "User-agent", {
+            timeout: "60 seconds",
+            label: "nuxt dev ASSETS binding",
           });
 
           // KV binding round-trip against the local simulator, through the

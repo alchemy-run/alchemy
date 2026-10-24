@@ -1,5 +1,5 @@
 import * as OpenAI from "@alchemy.run/openai";
-import { describe, expect } from "alchemy-test";
+import { describe, expect } from "@alchemy.run/test";
 import * as Test from "alchemy/Test/Alchemy";
 import { AiError, LanguageModel, Tool, Toolkit } from "effect/ai";
 import * as Effect from "effect/Effect";

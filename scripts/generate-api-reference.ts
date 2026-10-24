@@ -1,7 +1,7 @@
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
-import * as ts from "typescript-api/unstable/ast";
-import type { Node, SourceFile } from "typescript-api/unstable/ast";
+import * as ts from "tsrs/unstable/ast";
+import type { Node, SourceFile } from "tsrs/unstable/ast";
 import {
   docCommentLines,
   jsdocCopyId,
@@ -890,7 +890,8 @@ function renderResource(doc: PageDoc, resolve: LinkResolver): string {
 /** Change this grouping to experiment with larger or smaller reference pages. */
 function referenceLocation(outputRelative: string, product: string) {
   const parts = normalizeSlashes(outputRelative).replace(/\.md$/, "").split("/");
-  // Flat providers declare service-sized pages with @product instead of folders.
+  // Flat providers declare service-sized pages with @product instead of
+  // folders; a resource without one gets its own page.
   const group =
     parts.length > 2
       ? parts.slice(0, 2)
@@ -903,11 +904,12 @@ function referenceLocation(outputRelative: string, product: string) {
               .replace(/[^a-z0-9]+/g, "-")
               .replace(/^-|-$/g, ""),
           ]
-        : [parts[0], "reference"];
+        : parts;
   const title = parts.slice(parts.length > 2 ? 2 : 1).join("-");
   return {
     outputRelative: `${group.join("/")}.md`,
-    title: parts.length > 2 ? group.join(".") : product ? `${parts[0]}.${product}` : parts[0],
+    title:
+      parts.length > 2 ? group.join(".") : product ? `${parts[0]}.${product}` : parts.join("."),
     resourceTitle: title,
     link: `/providers/${group.join("/").toLowerCase()}#${title.toLowerCase()}`,
   };
@@ -974,7 +976,7 @@ function orderedKeys(keys: string[], order: string[]): string[] {
 /** The sidebar lists documents; resource anchors live in the page's TOC. */
 function buildServiceItems(pages: PageEntry[]): SidebarItem[] {
   return pages
-    .map((page) => ({ label: page.product || page.service || page.provider, link: page.link }))
+    .map((page) => ({ label: page.product || page.service || page.resource, link: page.link }))
     .sort(byLabel);
 }
 
@@ -1144,7 +1146,8 @@ async function main() {
         throw new Error(`Duplicate reference anchor: ${location.link}`);
       }
       anchors.add(location.link);
-      redirects[oldLink] = location.link;
+      // A resource whose page kept its old URL needs no redirect.
+      if (oldLink !== location.link.split("#")[0]) redirects[oldLink] = location.link;
       pageEntries.push({
         provider: segments[0] ?? "",
         service: segments.length > 2 ? segments[1] : "",

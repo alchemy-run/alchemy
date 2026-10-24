@@ -2,10 +2,10 @@ import * as Cloudflare from "@alchemy.run/cloudflare";
 import type { CloudflareResolvedCredentials } from "@alchemy.run/cloudflare/Auth/AuthConfig";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
 import { LocalRuntimeState } from "@alchemy.run/cloudflare/LocalRuntime";
+import { describe, expect, it } from "@alchemy.run/test";
 import { apiTokenCredentials, Credentials } from "@distilled.cloud/cloudflare/Credentials";
 import * as r2 from "@distilled.cloud/cloudflare/r2";
 import { NodeServices } from "@effect/platform-node";
-import { describe, expect, it } from "alchemy-test";
 import { AlchemyContext } from "alchemy/AlchemyContext";
 import { ArtifactStore, createArtifactStore } from "alchemy/Artifacts";
 import * as Drift from "alchemy/Drift";
@@ -859,6 +859,115 @@ test.provider(
 );
 
 test.provider(
+  "local uploads are enabled and disabled in place",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+
+      yield* stack.destroy();
+
+      const initial = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.R2.Bucket("LocalUploadsBucket", { forceDestroy: true });
+        }),
+      );
+      expect(initial.localUploads).toBeUndefined();
+
+      const enabled = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.R2.Bucket("LocalUploadsBucket", {
+            forceDestroy: true,
+            localUploads: true,
+          });
+        }),
+      );
+      expect(enabled.bucketName).toEqual(initial.bucketName);
+      expect(enabled.localUploads).toEqual(true);
+      const observedEnabled = yield* r2.getBucketLocalUploads({
+        accountId,
+        bucketName: initial.bucketName,
+      });
+      expect(observedEnabled.enabled).toEqual(true);
+
+      const disabled = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.R2.Bucket("LocalUploadsBucket", {
+            forceDestroy: true,
+            localUploads: false,
+          });
+        }),
+      );
+      expect(disabled.bucketName).toEqual(initial.bucketName);
+      expect(disabled.localUploads).toEqual(false);
+      const observedDisabled = yield* r2.getBucketLocalUploads({
+        accountId,
+        bucketName: initial.bucketName,
+      });
+      expect(observedDisabled.enabled).toEqual(false);
+
+      // Re-enable, then drop the prop: a declared-then-removed setting is disabled.
+      yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.R2.Bucket("LocalUploadsBucket", {
+            forceDestroy: true,
+            localUploads: true,
+          });
+        }),
+      );
+      const removed = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.R2.Bucket("LocalUploadsBucket", { forceDestroy: true });
+        }),
+      );
+      expect(removed.bucketName).toEqual(initial.bucketName);
+      const observedRemoved = yield* r2.getBucketLocalUploads({
+        accountId,
+        bucketName: initial.bucketName,
+      });
+      expect(observedRemoved.enabled).toEqual(false);
+
+      yield* stack.destroy();
+      yield* waitForBucketToBeDeleted(initial.bucketName, accountId);
+    }).pipe(logLevel),
+  { tags: ["provider:cloudflare", "provider:cloudflare:r2", "live"] },
+);
+
+test.provider(
+  "local uploads are refused on a jurisdiction-restricted bucket",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+
+      yield* stack.destroy();
+
+      const name = `alchemy-eu-local-uploads-${stack.stage}`
+        .toLowerCase()
+        .replace(/[^a-z0-9-]/g, "-");
+      const refused = yield* stack
+        .deploy(
+          Effect.gen(function* () {
+            return yield* Cloudflare.R2.Bucket("EuLocalUploadsBucket", {
+              name,
+              jurisdiction: "eu",
+              localUploads: true,
+            });
+          }),
+        )
+        .pipe(Effect.flip);
+      expect(refused._tag).toEqual("LocalUploadsUnsupported");
+
+      // Refused before create: no EU bucket was left behind.
+      const missing = yield* r2
+        .getBucket({ accountId, bucketName: name, jurisdiction: "eu" })
+        .pipe(Effect.flip);
+      expect(missing._tag).toEqual("NoSuchBucket");
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { tags: ["provider:cloudflare", "provider:cloudflare:r2", "live"] },
+);
+
+test.provider(
   "managed r2.dev domain is enabled and disabled",
   (stack) =>
     Effect.gen(function* () {
@@ -1235,6 +1344,7 @@ const stubbedOutput = {
   lifecycleRules: [],
   cors: [],
   locks: undefined,
+  localUploads: undefined,
   publicDomain: undefined,
 };
 

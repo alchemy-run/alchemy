@@ -1,5 +1,6 @@
 import * as Docker from "@alchemy.run/docker";
-import { describe, expect } from "alchemy-test";
+import { DockerEnvironment } from "@alchemy.run/docker/Docker";
+import { describe, expect } from "@alchemy.run/test";
 import { inMemoryState, State } from "alchemy/State";
 import * as Test from "alchemy/Test/Alchemy";
 import * as ConfigProvider from "effect/ConfigProvider";
@@ -36,6 +37,55 @@ describe(
         yield* stack.deploy(base);
         const plan = yield* stack.plan(changed);
         expect(plan.resources["context-image"]).toMatchObject({ action: "update" });
+      }),
+    );
+
+    test.provider("plans an image whose context is missing from the local docker", (stack) =>
+      Effect.gen(function* () {
+        const docker = yield* Docker.Docker;
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const root = yield* fs.makeTempDirectoryScoped({
+          prefix: "alchemy-docker-missing-context-",
+        });
+        yield* fs.writeFileString(
+          path.join(root, "Dockerfile"),
+          "FROM scratch\nLABEL alchemy.test=missing-context\n",
+        );
+
+        const endpoint = (yield* docker.run([
+          "context",
+          "inspect",
+          "--format",
+          "{{.Endpoints.docker.Host}}",
+        ])).stdout.trim();
+
+        const program = Effect.gen(function* () {
+          const context = yield* Docker.Context("machine-local-context", {
+            docker: `host=${endpoint}`,
+          });
+          const image = yield* Docker.Image("machine-local-image", {
+            tag: "latest",
+            context,
+            build: { context: root },
+          });
+          return { context, image };
+        });
+
+        yield* stack.destroy();
+        const first = yield* stack.deploy(program);
+        yield* docker.context.remove(first.context.name, true);
+
+        const plan = yield* stack.plan(program);
+        expect(plan.resources["machine-local-context"]).toMatchObject({ action: "update" });
+        expect(plan.resources["machine-local-image"]).toMatchObject({ action: "update" });
+
+        const second = yield* stack.deploy(program);
+        expect(second.image.imageRef).toBe(first.image.imageRef);
+        const live = yield* docker.context.inspect(first.context.name);
+        expect(live.Name).toBe(first.context.name);
+
+        yield* stack.destroy();
       }),
     );
 
@@ -328,6 +378,47 @@ describe(
             ),
           );
         expect(image.repoDigest).toContain(`${b.host}/two-registries-app@sha256:`);
+      }),
+    );
+
+    test.provider("merges a DockerEnvironment auth config with the process one", (stack) =>
+      Effect.gen(function* () {
+        // Base A behind the user's own DOCKER_AUTH_CONFIG, base C behind one a
+        // provider passes through DockerEnvironment, push to B's `registry`.
+        const a = yield* authenticatedRegistry();
+        const b = yield* authenticatedRegistry();
+        const c = yield* authenticatedRegistry();
+        const baseA = yield* publishPrivateBase(a.host, a.credentials, "base-a");
+        const baseC = yield* publishPrivateBase(c.host, c.credentials, "base-c");
+        const auth = yield* Effect.sync(() =>
+          Buffer.from("alchemy:alchemy-test-password").toString("base64"),
+        );
+        const root = yield* dockerfileContext(
+          `FROM ${baseA} AS a\nFROM ${baseC}\nCOPY --from=a /bin/busybox /from-a\n`,
+        );
+
+        const image = yield* stack
+          .deploy(
+            Docker.Image("merged-auth-app", {
+              name: `${b.host}/merged-auth-app`,
+              tag: "v1",
+              registry: b.credentials,
+              build: { context: root },
+            }),
+          )
+          .pipe(
+            Effect.provideService(DockerEnvironment, {
+              DOCKER_AUTH_CONFIG: JSON.stringify({ auths: { [c.host]: { auth } } }),
+            }),
+            Effect.provide(
+              ConfigProvider.layer(
+                ConfigProvider.fromUnknown({
+                  DOCKER_AUTH_CONFIG: JSON.stringify({ auths: { [a.host]: { auth } } }),
+                }),
+              ),
+            ),
+          );
+        expect(image.repoDigest).toContain(`${b.host}/merged-auth-app@sha256:`);
       }),
     );
 

@@ -1,7 +1,7 @@
 import * as AWS from "@alchemy.run/aws";
 import { executionNameOf } from "@alchemy.run/aws/Lambda/WorkflowFunction";
+import { describe, expect } from "@alchemy.run/test";
 import * as Lambda from "@distilled.cloud/aws/lambda";
-import { describe, expect } from "alchemy-test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Core from "alchemy/Test/Core";
 import type { Status } from "alchemy/Workflows";
@@ -233,7 +233,15 @@ describe(
           expect(yield* awaitResult(run.status)).toEqual({ _tag: "Interrupted" });
           expect(yield* stepsOf("Approve", run.executionId)).toEqual(["requested"]);
           // Woken through its callback and finished by itself, not stopped.
-          const [execution] = yield* executionsOf("Approve", run.executionId);
+          // The result is recorded before the durable execution settles, so
+          // poll until it leaves RUNNING.
+          const [execution] = yield* executionsOf("Approve", run.executionId).pipe(
+            Effect.repeat({
+              schedule: Schedule.spaced("2 seconds"),
+              until: ([first]) => first?.Status !== "RUNNING",
+              times: 20,
+            }),
+          );
           expect(execution!.Status).toBe("SUCCEEDED");
         }),
       { timeout: 180_000 },

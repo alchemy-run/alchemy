@@ -1,8 +1,8 @@
 import * as AWS from "@alchemy.run/aws";
 import { AWSEnvironment } from "@alchemy.run/aws/Environment";
 import { DedicatedIpPool } from "@alchemy.run/aws/SES";
+import { expect } from "@alchemy.run/test";
 import * as sesv2 from "@distilled.cloud/aws/sesv2";
-import { expect } from "alchemy-test";
 import { adopt, OwnedBySomeoneElse } from "alchemy/AdoptPolicy";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Data from "effect/Data";

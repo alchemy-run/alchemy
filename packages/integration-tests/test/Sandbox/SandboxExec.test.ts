@@ -1,6 +1,6 @@
 import type { SandboxExecOptions } from "@alchemy.run/sandbox/Sandbox";
 import { execOverSocket } from "@alchemy.run/sandbox/SandboxExec";
-import { describe, expect, layer } from "alchemy-test";
+import { describe, expect, layer } from "@alchemy.run/test";
 import { serveEgressControl } from "alchemy/Egress/Proxy";
 import type { Route } from "alchemy/Egress/Route";
 import { serveExec } from "alchemy/Runtime/ExecServer";

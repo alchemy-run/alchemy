@@ -4,6 +4,7 @@ import { makeEntrypointLayer, reifyBoundConfigProvider } from "alchemy/Runtime";
 import { RuntimeContext } from "alchemy/RuntimeContext";
 import { Self } from "alchemy/Self";
 import { StackContext } from "alchemy/StackContext";
+import { Stage } from "alchemy/Stage";
 import { buildEventTelemetry } from "alchemy/TelemetryRuntime";
 import type { DurableObject, WorkerEntrypoint } from "cloudflare:workers";
 import * as Cause from "effect/Cause";
@@ -265,6 +266,7 @@ const getSharedBuild = (entrypoint: any, stack: { name: string; stage: string })
               actions: {},
             }),
           ),
+          Layer.provideMerge(Layer.succeed(Stage, stack.stage)),
           Layer.provideMerge(platform),
           Layer.provideMerge(
             Layer.succeed(

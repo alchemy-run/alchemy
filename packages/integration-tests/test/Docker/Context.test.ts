@@ -1,5 +1,5 @@
 import * as Docker from "@alchemy.run/docker";
-import { describe, expect } from "alchemy-test";
+import { describe, expect } from "@alchemy.run/test";
 import * as Provider from "alchemy/Provider";
 import { inMemoryState } from "alchemy/State";
 import * as Test from "alchemy/Test/Alchemy";
@@ -156,6 +156,30 @@ describe(
         expect(second.name).toBe(first.name);
         expect(second.description).toBe("v2");
         expect(extractDockerHost(second.docker)).toBe("unix:///var/run/docker.sock");
+      }),
+    );
+
+    test.provider("re-creates a context removed from the local docker", (stack) =>
+      Effect.gen(function* () {
+        const docker = yield* Docker.Docker;
+        const context = Docker.Context("machine-local-context", {
+          description: "lives on one machine",
+          docker: "host=unix:///var/run/docker.sock",
+        });
+
+        yield* stack.destroy();
+        const created = yield* stack.deploy(context);
+        yield* docker.context.remove(created.name, true);
+
+        const plan = yield* stack.plan(context);
+        expect(plan.resources["machine-local-context"]).toMatchObject({ action: "update" });
+
+        yield* stack.deploy(context);
+        const live = yield* docker.context.inspect(created.name);
+        expect(live.Name).toBe(created.name);
+        expect(live.Metadata?.Description).toBe("lives on one machine");
+
+        yield* stack.destroy();
       }),
     );
 

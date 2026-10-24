@@ -1,6 +1,6 @@
 import * as Anthropic from "@alchemy.run/anthropic";
+import { describe, expect } from "@alchemy.run/test";
 import * as SDK from "@distilled.cloud/anthropic";
-import { describe, expect } from "alchemy-test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";

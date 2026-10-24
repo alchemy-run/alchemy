@@ -1,9 +1,9 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
 import { isLocalId } from "@alchemy.run/cloudflare/LocalRuntime";
+import { describe, expect } from "@alchemy.run/test";
 import * as kv from "@distilled.cloud/cloudflare/kv";
 import * as Alchemy from "alchemy";
-import { describe, expect } from "alchemy-test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -137,6 +137,11 @@ describe.concurrent(
           yield* expectUrlContains(`${site.url!}/hello.txt`, "hello from public/", {
             timeout: "60 seconds",
             label: "waku dev static asset",
+          });
+          // The same file read by a server route through the `ASSETS` binding.
+          yield* expectUrlContains(`${site.url!}/asset`, "hello from public/", {
+            timeout: "60 seconds",
+            label: "waku ASSETS binding",
           });
 
           // The KV binding round-trips through the `/api/kv` route against the

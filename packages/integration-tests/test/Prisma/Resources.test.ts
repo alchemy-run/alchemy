@@ -26,7 +26,7 @@ import {
   SourceRepositoryProvider,
 } from "@alchemy.run/prisma/SourceRepository";
 import type { Database as ApiDatabase } from "@alchemy.run/prisma/Types";
-import { describe, expect, it } from "alchemy-test";
+import { describe, expect, it } from "@alchemy.run/test";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { AlchemyContext } from "alchemy/AlchemyContext";
 import * as Output from "alchemy/Output";

@@ -173,8 +173,13 @@ export interface ContainerClient {
   destroy(error?: unknown): Effect.Effect<void, ContainerError, RuntimeContext>;
   /** Signal the container's main process. */
   signal(signo: number): Effect.Effect<void, ContainerError, RuntimeContext>;
-  /** Wait for the container to exit, preserving failures in the Effect error channel. */
-  monitor(): Effect.Effect<void, ContainerError, RuntimeContext>;
+  /**
+   * Wait for the container to exit, preserving failures in the Effect error channel.
+   * Cloudflare often reports a failed start here rather than from `start`, so a start
+   * it had no instance for fails with `NoContainerInstanceError` and a rate-limited one
+   * with `ContainerRateLimitedError`, as `start` does.
+   */
+  monitor(): Effect.Effect<void, ContainerStartError, RuntimeContext>;
   /** Running image and labels, or null when stopped. */
   inspect(): Effect.Effect<ContainerInfo | null, ContainerError, RuntimeContext>;
   /** A port inside the container whose requests wait until it accepts connections. */
@@ -243,10 +248,12 @@ const REQUEST_RETRIES = 3;
 
 // Native classifies the same message phrases via `isErrorOfType`.
 const errorText = (e: unknown) => (e instanceof Error ? e.message : String(e)).toLowerCase();
+// Native does not match the second phrase: Cloudflare sends it when the
+// application is at its `max_instances` cap.
 const isNoInstanceError = (e: unknown) =>
   errorText(e).includes(
     "there is no container instance that can be provided to this durable object",
-  );
+  ) || errorText(e).includes("maximum number of running container instances exceeded");
 const isRateLimitedError = (e: unknown) =>
   errorText(e).includes("you are requesting too many containers per second");
 
@@ -653,7 +660,10 @@ export const fromContainer = (
     setEgress,
     destroy,
     signal: (signo) => call((container) => container.signal(signo)),
-    monitor: () => callAsync((container) => container.monitor()),
+    monitor: () =>
+      Effect.flatMap(attached, (container) =>
+        Effect.tryPromise({ try: () => container.monitor(), catch: classifyStartError }),
+      ),
     inspect: () => callAsync((container) => container.inspect()),
     getTcpPort,
     exec: (cmd, options) =>

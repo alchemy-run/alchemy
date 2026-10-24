@@ -1,5 +1,5 @@
 import * as Anthropic from "@alchemy.run/anthropic";
-import { describe, expect, it } from "alchemy-test";
+import { describe, expect, it } from "@alchemy.run/test";
 import { AiError, LanguageModel, Tool, Toolkit } from "effect/ai";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";

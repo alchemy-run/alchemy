@@ -11,9 +11,8 @@
  *
  *   - `blog` — dark variant inspired by Bun's release-note cards. Title
  *     anchored top-left, dense multi-line description filling the body,
- *     publish date + yantra mark in the footer. Designed to look full
- *     and editorial; relies on posts having a meaty `description`/
- *     `excerpt` in frontmatter.
+ *     publish date + yantra mark in the footer. The description is
+ *     clamped to three lines so long excerpts can't push into the footer.
  *
  * Title and description are rendered verbatim from the source page's
  * frontmatter. Fonts come from npm bundles, with variable Source Serif for
@@ -347,6 +346,9 @@ function BlogCard({ title, description, date }: OgCardProps): any {
             lineHeight: 1.5,
             color: COLORS.darkFg2,
             maxWidth: 1040,
+            lineClamp: 3,
+            textOverflow: "ellipsis",
+            overflow: "hidden",
           }}
         >
           {description}

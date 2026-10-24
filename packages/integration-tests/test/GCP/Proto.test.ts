@@ -1,5 +1,5 @@
 import { matchesDesired } from "@alchemy.run/gcp/Proto";
-import { describe, expect, test } from "alchemy-test";
+import { describe, expect, test } from "@alchemy.run/test";
 
 describe("matchesDesired", () => {
   test(

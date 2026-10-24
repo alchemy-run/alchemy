@@ -1,5 +1,5 @@
 import * as Railway from "@alchemy.run/railway";
-import { describe, expect } from "alchemy-test";
+import { describe, expect } from "@alchemy.run/test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as pathe from "pathe";
@@ -16,8 +16,7 @@ describe(
   "Railway.Website.Foldkit local",
   { tags: ["provider:railway", "provider:railway:website", "local"] },
   () => {
-    // foldkit@0.148.2 requires SchemaTransformation.transformOrFail, absent in Effect rc.115.
-    test.provider.skip(
+    test.provider(
       "dev runs the framework server with no cloud resources",
       (stack) =>
         Effect.gen(function* () {

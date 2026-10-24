@@ -40,7 +40,7 @@ import type { PlatformError } from "effect/PlatformError";
 import * as Redacted from "effect/Redacted";
 import type * as Scope from "effect/Scope";
 import { glob } from "tinyglobby";
-import { runBuildChild } from "../core/BuildChild.ts";
+import { resolveBuildEnv, runBuildChild } from "../core/BuildChild.ts";
 import { makeCloudflareTarget } from "./cloudflare.ts";
 import { make as makeNuxt, type NuxtOptions } from "./Nuxt.ts";
 
@@ -148,6 +148,7 @@ type SourceServices = FileSystem.FileSystem | Path.Path;
 /** Mirror of alchemy's `SourceProvider` (structural). */
 export interface SourceProvider {
   readonly ownsAssets: boolean;
+  readonly devAssetsBinding?: boolean;
   readonly build: (
     ctx: SourceContext,
   ) => Effect.Effect<SourceBuildOutput, SourceError, SourceServices>;
@@ -561,11 +562,14 @@ export const makeNuxtSource = (options: NuxtSourceOptions): SourceProvider => {
   });
   return {
     ownsAssets: true,
+    // The dev platform proxy serves the public directory to `ASSETS`.
+    devAssetsBinding: true,
     build: Effect.fnUntraced(function* (ctx) {
       const output = yield* runBuildChild({
         module: import.meta.url,
         rootDir,
         framework: "nuxt",
+        env: resolveBuildEnv(ctx.env),
         config: {
           rootDir,
           compatibilityDate: ctx.compatibility.date,

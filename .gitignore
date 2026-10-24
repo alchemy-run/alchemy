@@ -105,3 +105,8 @@ examples/cloudflare-worker/src/scratch.ts
 
 # Rust
 /target
+
+# Scoped copies of the Neon website examples made by test/Neon/Website (exampleRoot)
+examples/neon-website-*-*/
+!examples/neon-website-react-router/
+!examples/neon-website-tanstack-start/

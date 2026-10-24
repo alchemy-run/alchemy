@@ -5,7 +5,7 @@ import zlib from "node:zlib";
  * length prefix, so the consumed-input count is as important as the output.
  */
 import { inflateEntry } from "@alchemy.run/git/Protocol/Zlib";
-import { describe, expect, test } from "alchemy-test";
+import { describe, expect, test } from "@alchemy.run/test";
 import * as Effect from "effect/Effect";
 
 const content = (n: number, seed: number) => {

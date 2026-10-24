@@ -1,6 +1,6 @@
 import type { SessionEvent, SessionEventInput } from "@alchemy.run/ai/Session";
 import { emptyTranscript, reduceTranscript } from "@alchemy.run/ai/Transcript";
-import { describe, expect, test } from "alchemy-test";
+import { describe, expect, test } from "@alchemy.run/test";
 
 let cursor = 0;
 const stamp = (events: ReadonlyArray<SessionEventInput>): SessionEvent[] =>

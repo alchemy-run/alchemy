@@ -25,7 +25,7 @@ import { spawnSync } from "node:child_process";
  * Requires Docker (floci runs as a container); skipped when unavailable.
  */
 import * as AWS from "@alchemy.run/aws";
-import { describe, expect } from "alchemy-test";
+import { describe, expect } from "@alchemy.run/test";
 import * as Command from "alchemy/Command";
 import * as Output from "alchemy/Output";
 import { Stack } from "alchemy/Stack";
@@ -82,6 +82,19 @@ const rawEcs = (action: string, body: Record<string, unknown>) =>
     contentType: "application/x-amz-json-1.1",
     body,
   });
+
+/**
+ * The task definition revision is no longer ACTIVE. ECS keeps a deleted
+ * revision describable (`INACTIVE` / `DELETE_IN_PROGRESS`); an emulator that
+ * forgets it answers `ClientException` (400) instead.
+ */
+const expectDefinitionGone = Effect.fn(function* (taskDefinitionArn: string) {
+  const response = yield* rawEcs("DescribeTaskDefinition", { taskDefinition: taskDefinitionArn });
+  if (response.status === 400) return;
+  expect(response.status).toBe(200);
+  const body = (yield* response.json) as { taskDefinition?: { status?: string } };
+  expect(["INACTIVE", "DELETE_IN_PROGRESS"]).toContain(body.taskDefinition?.status);
+});
 
 /** Names of the docker containers currently running on the host daemon. */
 const runningContainerNames = Effect.sync(
@@ -225,10 +238,7 @@ const assertFamilyTornDown = Effect.fn(function* (options: {
   const active = (clusters.clusters ?? []).filter((cluster) => cluster.status !== "INACTIVE");
   expect(active).toEqual([]);
 
-  const definition = yield* rawEcs("DescribeTaskDefinition", {
-    taskDefinition: options.taskDefinitionArn,
-  });
-  expect(definition.status).toBe(400); // ClientException: unable to describe
+  yield* expectDefinitionGone(options.taskDefinitionArn);
 });
 
 /** Post-destroy: task container gone, cluster gone, task definition gone. */
@@ -255,10 +265,7 @@ const assertTornDown = Effect.fn(function* (options: {
   expect(active).toEqual([]);
 
   // The task definition revision is gone.
-  const definition = yield* rawEcs("DescribeTaskDefinition", {
-    taskDefinition: options.taskDefinitionArn,
-  });
-  expect(definition.status).toBe(400); // ClientException: unable to describe
+  yield* expectDefinitionGone(options.taskDefinitionArn);
 });
 
 // Sequential on purpose: each test runs a `docker buildx build`, and

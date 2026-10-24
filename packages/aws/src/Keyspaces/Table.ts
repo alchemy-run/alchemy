@@ -559,8 +559,9 @@ export const TableProvider = () =>
                 ? Effect.void
                 : Effect.fail(new Error(`Table '${tableName}' still deleting`)),
             ),
+            // Point-in-time-recovery tables take minutes to finish deleting.
             Effect.retry({
-              schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(20)]),
+              schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(36)]),
             }),
             Effect.ignore,
           );

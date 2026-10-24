@@ -110,6 +110,32 @@ export interface Any {
   readonly definitions: Kernel.Definitions;
 }
 
+type ProvidedBy<
+  A extends ReadonlyArray<Aggregate.Any>,
+  V extends ReadonlyArray<View.Any>,
+  J extends ReadonlyArray<Projection.Any>,
+  S extends ReadonlyArray<DomainStream.Any>,
+  G extends ReadonlyArray<Saga.Any>,
+> =
+  | Identifier<A[number]>
+  | Identifier<V[number]>
+  | Identifier<S[number]>
+  | Saga.Identifier<G[number]>
+  | Projection.ProgressIdentifier<J[number]>;
+
+/** How a model's `layer` hosts it: tuning that doesn't change what the model means. */
+export interface LayerOptions {
+  /** What the hosted model records in traces. See {@link Telemetry.Options}. */
+  readonly telemetry?: Telemetry.Options;
+}
+
+/** Every implementation a model's `layer` requires: its policies, projections and sagas. */
+type HandledBy<
+  P extends ReadonlyArray<Policy.Any>,
+  J extends ReadonlyArray<Projection.Any>,
+  G extends ReadonlyArray<Saga.Any>,
+> = Identifier<P[number]> | Identifier<J[number]> | Saga.ImplementationIdentifier<G[number]>;
+
 /**
  * The aggregates, views and policies you host together. `layer(policies)`
  * builds them all on the Platform you provide, and provides each aggregate
@@ -138,32 +164,6 @@ export interface Any {
  *
  * @primitive
  */
-type ProvidedBy<
-  A extends ReadonlyArray<Aggregate.Any>,
-  V extends ReadonlyArray<View.Any>,
-  J extends ReadonlyArray<Projection.Any>,
-  S extends ReadonlyArray<DomainStream.Any>,
-  G extends ReadonlyArray<Saga.Any>,
-> =
-  | Identifier<A[number]>
-  | Identifier<V[number]>
-  | Identifier<S[number]>
-  | Saga.Identifier<G[number]>
-  | Projection.ProgressIdentifier<J[number]>;
-
-/** How a model's `layer` hosts it: tuning that doesn't change what the model means. */
-export interface LayerOptions {
-  /** What the hosted model records in traces. See {@link Telemetry.Options}. */
-  readonly telemetry?: Telemetry.Options;
-}
-
-/** Every implementation a model's `layer` requires: its policies, projections and sagas. */
-type HandledBy<
-  P extends ReadonlyArray<Policy.Any>,
-  J extends ReadonlyArray<Projection.Any>,
-  G extends ReadonlyArray<Saga.Any>,
-> = Identifier<P[number]> | Identifier<J[number]> | Saga.ImplementationIdentifier<G[number]>;
-
 export const make = <
   const Name extends string,
   const A extends ReadonlyArray<Aggregate.Any>,

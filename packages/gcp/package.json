@@ -1,6 +1,6 @@
 {
   "name": "@alchemy.run/gcp",
-  "version": "2.0.0-beta.83",
+  "version": "2.0.0-beta.84",
   "description": "Google Cloud resources, Cloud Run, Cloud Functions and GKE for Alchemy.",
   "keywords": [
     "alchemy",
@@ -172,6 +172,7 @@
     "./Spanner": "./src/Spanner/index.ts",
     "./Speech": "./src/Speech/index.ts",
     "./SQL": "./src/SQL/index.ts",
+    "./StateStore": "./src/StateStore/index.ts",
     "./Storage": "./src/Storage/index.ts",
     "./StorageTransfer": "./src/StorageTransfer/index.ts",
     "./TPU": "./src/TPU/index.ts",
@@ -917,6 +918,11 @@
         "types": "./lib/SQL/index.d.ts",
         "bun": "./src/SQL/index.ts",
         "default": "./lib/SQL/index.js"
+      },
+      "./StateStore": {
+        "types": "./lib/StateStore/index.d.ts",
+        "bun": "./src/StateStore/index.ts",
+        "default": "./lib/StateStore/index.js"
       },
       "./Storage": {
         "types": "./lib/Storage/index.d.ts",

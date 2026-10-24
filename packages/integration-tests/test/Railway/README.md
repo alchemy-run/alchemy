@@ -80,7 +80,7 @@ regression covers this without opening a network connection.
 bun test submodules/distilled/packages/core/src/graphql.test.ts \
   submodules/distilled/packages/core/src/codegen/graphql-client.test.ts \
   submodules/distilled/packages/railway/test/graphql.test.ts
-pnpm exec tsc -b
+pnpm exec tsrs -b
 timeout -k 5 240 pnpm test test/SQL/PostgresTls.test.ts --profile testing
 timeout -k 5 60 pnpm test test/Railway/GraphQL.local.test.ts --retry 0 --sequential
 pnpm docs:gen

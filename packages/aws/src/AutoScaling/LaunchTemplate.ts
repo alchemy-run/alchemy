@@ -20,6 +20,7 @@ import {
   createEc2HostRuntimeContext,
   createEc2HostedSupport,
   type Ec2HostRuntimeContext,
+  type InstanceMetadataOptions,
 } from "../EC2/hosted.ts";
 import type { SecurityGroupId } from "../EC2/SecurityGroup.ts";
 import type { AccountID } from "../Environment.ts";
@@ -79,6 +80,12 @@ export interface LaunchTemplateProps extends PlatformProps {
    * Whether to associate a public IPv4 address on launch.
    */
   associatePublicIpAddress?: boolean;
+  /**
+   * Instance Metadata Service (IMDS) options for launched instances, e.g.
+   * requiring IMDSv2 and limiting the hop count. Changes publish a new
+   * template version. Unset fields keep the AMI / account defaults.
+   */
+  metadataOptions?: InstanceMetadataOptions;
   /**
    * User-defined tags to apply to the launch template and launched instances.
    */
@@ -360,6 +367,7 @@ export const LaunchTemplateProvider = () =>
               keyName: news.keyName,
               securityGroupIds: news.securityGroupIds as string[] | undefined,
               associatePublicIpAddress: news.associatePublicIpAddress,
+              metadataOptions: news.metadataOptions,
               tags: news.tags,
               spot: news.spot,
               nestedVirtualization: news.nestedVirtualization,
@@ -511,6 +519,7 @@ export const LaunchTemplateProvider = () =>
                   keyName: news.keyName,
                   securityGroupIds: news.securityGroupIds as string[] | undefined,
                   associatePublicIpAddress: news.associatePublicIpAddress,
+                  metadataOptions: news.metadataOptions,
                   tags: desiredTags,
                   spot: news.spot,
                   nestedVirtualization: news.nestedVirtualization,

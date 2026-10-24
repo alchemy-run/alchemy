@@ -1,6 +1,6 @@
 import * as Hetzner from "@alchemy.run/hetzner";
+import { describe, expect } from "@alchemy.run/test";
 import * as servers from "@distilled.cloud/hetzner/servers";
-import { expect } from "alchemy-test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
@@ -8,6 +8,12 @@ import * as Schedule from "effect/Schedule";
 import * as pathe from "pathe";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
 import { expectUrlContains } from "../../Cloudflare/Utils/Http.ts";
+import {
+  foldkitFixture,
+  foldkitMemo,
+  verifyFoldkitBrowser,
+  verifyFoldkitRendering,
+} from "../../Website/Foldkit.ts";
 
 const { test } = Test.make({ providers: Hetzner.providers() });
 
@@ -83,5 +89,40 @@ test.provider.skipIf(!hasHetznerCreds)(
   {
     tags: ["provider:hetzner", "provider:hetzner:service", "provider:hetzner:website", "live"],
     timeout: 180000,
+  },
+);
+
+describe.sequential(
+  "Hetzner Foldkit rendering modes",
+  { tags: ["provider:hetzner", "provider:hetzner:website", "live"] },
+  () => {
+    for (const mode of ["ssg", "ssr", "hybrid"] as const) {
+      test.provider.skipIf(!!process.env.FAST || !hasHetznerCreds)(
+        `${mode}: renders every route and cleans up`,
+        (stack) =>
+          Effect.gen(function* () {
+            yield* stack.destroy();
+            const rootDir = yield* foldkitFixture(mode);
+
+            const site = yield* stack.deploy(
+              Hetzner.Website.Foldkit("Web", {
+                rootDir,
+                memo: foldkitMemo,
+              }),
+            );
+            expect(site.url).toBeDefined();
+            expect(site.server).toBeDefined();
+            const serverId = site.server!.serverId;
+            yield* servers.getServer({ id: serverId });
+            yield* verifyFoldkitRendering(site.url!, mode);
+            yield* verifyFoldkitBrowser(site.url!, mode);
+            yield* stack.destroy();
+            expect(yield* waitUntilGone(serverId)).toEqual("gone");
+          }),
+        {
+          timeout: 180_000,
+        },
+      );
+    }
   },
 );

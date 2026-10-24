@@ -3,7 +3,7 @@ import {
   containerEnvPreamble,
   withImageLayers,
 } from "@alchemy.run/cloudflare/Containers/ContainerBundle";
-import { describe, expect, test } from "alchemy-test";
+import { describe, expect, test } from "@alchemy.run/test";
 import { dedupeImageLayers, renderImageLayers } from "alchemy/Image/Layer";
 import * as Effect from "effect/Effect";
 

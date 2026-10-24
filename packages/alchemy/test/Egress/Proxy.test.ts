@@ -1,7 +1,7 @@
 import { X509Certificate } from "node:crypto";
 import * as net from "node:net";
 import * as tls from "node:tls";
-import { describe, expect, layer } from "alchemy-test";
+import { describe, expect, layer } from "@alchemy.run/test";
 import * as Context from "effect/Context";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";

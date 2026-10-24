@@ -126,13 +126,42 @@ export const fromWebSocket = (ws: RawWebSocket): WebSocket => ({
 //   const WebSocketPair: new () => [cf.WebSocket, cf.WebSocket];
 // }
 
-export const upgrade = Effect.fn(function* () {
+export interface UpgradeOptions {
+  /**
+   * Hibernation tags for the accepted socket. Look up every socket with a tag
+   * via `state.getWebSockets(tag)` and read a socket's tags with
+   * `state.getTags(socket.ws)`; both work after the Durable Object wakes from
+   * hibernation, so group membership needs no in-memory state.
+   *
+   * Cloudflare allows at most 10 tags per WebSocket, each at most 256
+   * characters.
+   */
+  readonly tags?: ReadonlyArray<string>;
+}
+
+/**
+ * Accept a hibernatable WebSocket in a Durable Object's `fetch` handler.
+ * Returns the `101 Switching Protocols` response to return from `fetch`, and
+ * the server-side socket.
+ *
+ * @example
+ * ```ts
+ * const [response, socket] = yield* Cloudflare.upgrade({
+ *   tags: [`user:${userId}`, "role:admin"],
+ * });
+ * // Later, even after hibernation:
+ * for (const peer of yield* state.getWebSockets("role:admin")) {
+ *   yield* peer.send("hello admins");
+ * }
+ * ```
+ */
+export const upgrade = Effect.fn(function* (options?: UpgradeOptions) {
   const _Response = Response as any as typeof cf.Response;
   const ctx = yield* DurableObjectState;
   // @ts-expect-error
   const [client, server] = new WebSocketPair();
   const serverSocket = fromWebSocket(server);
-  yield* ctx.acceptWebSocket(serverSocket);
+  yield* ctx.acceptWebSocket(serverSocket, options?.tags ? [...options.tags] : undefined);
   const rawResponse = new _Response(null, {
     status: 101,
     webSocket: client,

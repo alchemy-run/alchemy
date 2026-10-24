@@ -1,5 +1,5 @@
 import { routesForScope } from "@alchemy.run/github/Egress";
-import { describe, expect, it } from "alchemy-test";
+import { describe, expect, it } from "@alchemy.run/test";
 import type { EgressRef, MintedGrant } from "alchemy/Egress/Kind";
 import { routesFor, routesOverlap } from "alchemy/Egress/Route";
 import * as Effect from "effect/Effect";

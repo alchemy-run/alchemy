@@ -1,6 +1,6 @@
 {
   "name": "@alchemy.run/aws",
-  "version": "2.0.0-beta.83",
+  "version": "2.0.0-beta.84",
   "description": "AWS resources, Lambda, ECS, EC2 and EKS for Alchemy.",
   "keywords": [
     "alchemy",

@@ -1,7 +1,7 @@
 import * as GCP from "@alchemy.run/gcp";
 import { GcpEnvironment } from "@alchemy.run/gcp/Environment";
+import { expect } from "@alchemy.run/test";
 import * as storage from "@distilled.cloud/gcp/storage_v1";
-import { expect } from "alchemy-test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
@@ -9,6 +9,16 @@ import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 
 const { test } = Test.make({ providers: GCP.providers() });
+
+// A just-created HMAC key can read back as 404 "Access ID not found" briefly.
+const getKey = (projectId: string, accessId: string) =>
+  storage.getProjectsHmacKeys({ projectId, accessId }).pipe(
+    Effect.retry({
+      while: (error) => error._tag === "NotFound",
+      schedule: Schedule.spaced("1 second"),
+      times: 10,
+    }),
+  );
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
@@ -52,10 +62,7 @@ test.provider(
       expect(created.projectId).toEqual(expect.any(String));
       expect(Redacted.isRedacted(created.secret)).toEqual(true);
 
-      const fetched = yield* storage.getProjectsHmacKeys({
-        projectId: created.projectId,
-        accessId: created.accessId,
-      });
+      const fetched = yield* getKey(created.projectId, created.accessId);
       expect(fetched.accessId).toEqual(created.accessId);
       expect(fetched.state).toEqual("ACTIVE");
       expect(fetched.serviceAccountEmail).toEqual(serviceAccountEmail);
@@ -73,10 +80,7 @@ test.provider(
       expect(updated.state).toEqual("INACTIVE");
       expect(Redacted.isRedacted(updated.secret)).toEqual(true);
 
-      const refetched = yield* storage.getProjectsHmacKeys({
-        projectId: updated.projectId,
-        accessId: updated.accessId,
-      });
+      const refetched = yield* getKey(updated.projectId, updated.accessId);
       expect(refetched.accessId).toEqual(created.accessId);
       expect(refetched.state).toEqual("INACTIVE");
 

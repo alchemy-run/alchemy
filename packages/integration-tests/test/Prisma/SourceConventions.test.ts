@@ -1,10 +1,11 @@
+import { describe, expect, it } from "@alchemy.run/test";
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { describe, expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
-import * as ts from "typescript-api/unstable/ast";
-import { API } from "typescript-api/unstable/async";
+import * as ts from "tsrs/unstable/ast";
+import { API } from "tsrs/unstable/async";
+import { createFileSystemLayer } from "tsrs/unstable/fs";
 
 const forbiddenPatterns = [
   {
@@ -84,15 +85,16 @@ const prismaSourceProject = Effect.gen(function* () {
     compilerOptions: { noResolve: true, noLib: true, types: [] },
   });
   const api = yield* Effect.acquireRelease(
-    Effect.sync(
-      () => new API({ fs: { readFile: (file) => (file === configPath ? config : undefined) } }),
-    ),
+    Effect.sync(() => new API()),
     (api) => Effect.promise(() => api.close()),
   );
   const snapshot = yield* Effect.tryPromise(() =>
-    api.updateSnapshot({ openProjects: [configPath] }),
+    api.createSnapshot({
+      openProjects: [configPath],
+      fileSystem: createFileSystemLayer([[configPath, config]]),
+    }),
   );
-  const project = snapshot.getProject(configPath);
+  const project = snapshot.getConfiguredProject(configPath);
   if (!project) throw new Error(`Missing project ${configPath}`);
   return project.program;
 });

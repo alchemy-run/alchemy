@@ -1,6 +1,6 @@
 import { fileURLToPath } from "node:url";
+import { expect, it } from "@alchemy.run/test";
 import * as BunServices from "@effect/platform-bun/BunServices";
-import { expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as Schema from "effect/Schema";

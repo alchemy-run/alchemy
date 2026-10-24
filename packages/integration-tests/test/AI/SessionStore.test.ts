@@ -1,5 +1,5 @@
 import { MemorySessionStore, SessionStore } from "@alchemy.run/ai/SessionStore";
-import { describe, expect, test } from "alchemy-test";
+import { describe, expect, test } from "@alchemy.run/test";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as Stream from "effect/Stream";

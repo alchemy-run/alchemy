@@ -1,7 +1,7 @@
 import * as AWS from "@alchemy.run/aws";
 import { EventSourceMapping } from "@alchemy.run/aws/Lambda";
+import { expect } from "@alchemy.run/test";
 import * as Lambda from "@distilled.cloud/aws/lambda";
-import { expect } from "alchemy-test";
 import * as Provider from "alchemy/Provider";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";

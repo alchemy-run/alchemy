@@ -1,6 +1,6 @@
 {
   "name": "alchemy",
-  "version": "2.0.0-beta.83",
+  "version": "2.0.0-beta.84",
   "description": "Infrastructure as Effects for TypeScript.",
   "keywords": [
     "alchemy",
@@ -155,6 +155,7 @@
   },
   "devDependencies": {
     "@alchemy.run/frontend-frameworks": "workspace:*",
+    "@alchemy.run/test": "workspace:*",
     "@effect/platform-bun": "catalog:",
     "@effect/platform-node": "catalog:",
     "@effect/vitest": "catalog:",
@@ -165,7 +166,6 @@
     "@types/react": "catalog:",
     "@types/ws": "catalog:",
     "@vitejs/plugin-rsc": "catalog:",
-    "alchemy-test": "workspace:*",
     "astro": "catalog:",
     "drizzle-orm": "catalog:",
     "effect": "catalog:",
@@ -177,7 +177,6 @@
     "solid-js": "catalog:",
     "tsx": "catalog:",
     "typescript": "catalog:",
-    "typescript-api": "catalog:",
     "uuid": "catalog:",
     "vitest": "catalog:",
     "wrangler": "catalog:",

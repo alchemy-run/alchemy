@@ -1,7 +1,7 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
+import { expect } from "@alchemy.run/test";
 import * as aisearch from "@distilled.cloud/cloudflare/aisearch";
-import { expect } from "alchemy-test";
 import * as Provider from "alchemy/Provider";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
@@ -20,7 +20,7 @@ const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Deb
 // own out-of-band verification calls. Instances are namespace-scoped, so
 // verify through the namespace-scoped read (defaulting to `default`).
 const getInstance = (accountId: string, id: string, namespace = "default") =>
-  aisearch.readNamespaceInstance({ accountId, name: namespace, id }).pipe(
+  aisearch.readNamespaceInstance({ accountId, namespace, id }).pipe(
     Effect.retry({
       while: (e) => e._tag === "Forbidden",
       schedule: Schedule.exponential("500 millis"),
@@ -222,7 +222,7 @@ test.provider(
       yield* aisearch
         .deleteNamespaceInstance({
           accountId,
-          name: "default",
+          namespace: "default",
           id: initial.instance.instanceId,
         })
         .pipe(

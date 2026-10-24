@@ -1,5 +1,5 @@
 import { fileURLToPath } from "node:url";
-import { assert, describe, expect, it } from "alchemy-test";
+import { assert, describe, expect, it } from "@alchemy.run/test";
 import { newWebSocketRpcSession, type RpcStub } from "capnweb";
 import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";

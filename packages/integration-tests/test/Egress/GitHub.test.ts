@@ -1,5 +1,5 @@
 import * as GitHub from "@alchemy.run/github";
-import { describe, expect, it } from "alchemy-test";
+import { describe, expect, it } from "@alchemy.run/test";
 import type { EgressRequest } from "alchemy/Egress/Kind";
 import { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Effect from "effect/Effect";

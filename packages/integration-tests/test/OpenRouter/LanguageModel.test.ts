@@ -1,5 +1,5 @@
 import * as OpenRouter from "@alchemy.run/openrouter";
-import { describe, expect } from "alchemy-test";
+import { describe, expect } from "@alchemy.run/test";
 import * as Test from "alchemy/Test/Alchemy";
 import { LanguageModel, Tool, Toolkit } from "effect/ai";
 import * as Effect from "effect/Effect";

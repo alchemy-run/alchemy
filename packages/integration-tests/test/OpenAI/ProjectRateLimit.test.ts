@@ -1,6 +1,6 @@
 import * as OpenAI from "@alchemy.run/openai";
+import { describe, expect } from "@alchemy.run/test";
 import * as SDK from "@distilled.cloud/openai";
-import { describe, expect } from "alchemy-test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";

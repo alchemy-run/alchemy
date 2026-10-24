@@ -9,7 +9,7 @@ import { serveHarnessHttp } from "@alchemy.run/ai/HarnessServer";
 import { emptyUsage, type Capabilities } from "@alchemy.run/ai/Session";
 import { MemorySessionStore } from "@alchemy.run/ai/SessionStore";
 import { toHttpClient } from "@alchemy.run/cloudflare/Fetcher";
-import { describe, expect, test } from "alchemy-test";
+import { describe, expect, test } from "@alchemy.run/test";
 import { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";

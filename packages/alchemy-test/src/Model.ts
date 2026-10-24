@@ -29,15 +29,18 @@ export type TestBody = () => Effect.Effect<unknown, unknown, never>;
 /** A hook body. Same contract as {@link TestBody}. */
 export type HookBody = () => Effect.Effect<unknown, unknown, never>;
 
+/** `true` for the whole-process lock, or a label naming a narrower lock. */
+export type Exclusive = boolean | string;
+
 export interface Hook {
   readonly body: HookBody;
   readonly timeout?: number | undefined;
   /**
-   * Take the whole-process write lock for this hook. Use for beforeAll
-   * deploys / afterAll destroys that consume a scarce cloud quota so they
-   * never overlap exclusive tests.
+   * `true` takes the whole-process write lock for this hook. A label (e.g.
+   * `"hetzner"`) only serializes the hook with tests and hooks holding the
+   * same label — use it for deploys that consume a scarce cloud quota.
    */
-  readonly exclusive?: boolean;
+  readonly exclusive?: Exclusive;
 }
 
 export interface TestCase {
@@ -51,12 +54,15 @@ export interface TestCase {
   /** Invert the result: the test passes only if the body fails. */
   readonly fails?: boolean;
   /**
-   * Run this test with the whole-process write lock: no other test in the
-   * run executes concurrently with it. Required for tests that mutate
+   * `true` runs this test with the whole-process write lock: no other test
+   * in the run executes concurrently with it. Required for tests that mutate
    * process-global state (e.g. `process.env.PATH`) — the runner executes
    * everything in ONE bun process, so such mutations are visible everywhere.
+   *
+   * A label (e.g. `"hetzner"`) only serializes the test with others holding
+   * the same label — use it for a shared cloud quota, not global state.
    */
-  readonly exclusive?: boolean;
+  readonly exclusive?: Exclusive;
   /** Override the run-wide retry budget for this test. */
   readonly retry?: number | undefined;
   readonly timeout?: number | undefined;

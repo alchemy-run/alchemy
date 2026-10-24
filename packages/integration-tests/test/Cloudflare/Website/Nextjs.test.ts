@@ -1,6 +1,6 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
-import { describe, expect } from "alchemy-test";
+import { describe, expect } from "@alchemy.run/test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -11,7 +11,7 @@ import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as pathe from "pathe";
 import { cloneFixture } from "../Utils/Fixture.ts";
-import { expectUrlContains } from "../Utils/Http.ts";
+import { expectClientChunkContains, expectUrlContains } from "../Utils/Http.ts";
 import { expectWorkerExists, waitForWorkerToBeDeleted } from "../Utils/Worker.ts";
 import { buildCommand as nativeBuildCommand } from "./fixtures/nextjs-app/open-next.native.config.ts";
 import { prepareNextjsFixture } from "./TypeScriptCompat.ts";
@@ -110,7 +110,11 @@ describe.concurrent(
                 return yield* Cloudflare.Website.Nextjs("NextjsSite", {
                   ...nextjsProps(rootDir),
                   openNext: buildCommand === undefined ? undefined : { buildCommand },
-                  env: { TEST_TEXT: bindingMarker, FIXTURE_KV: kv },
+                  env: {
+                    TEST_TEXT: bindingMarker,
+                    FIXTURE_KV: kv,
+                    NEXT_PUBLIC_SITE_MARKER: "NEXTJS_PUBLIC_ENV_MARKER",
+                  },
                 });
               }),
             );
@@ -128,6 +132,18 @@ describe.concurrent(
             timeout: "120 seconds",
             label: "nextjs SSR home page",
           });
+
+          // A declared public env value is inlined into the deployed client
+          // bundle at build time.
+          yield* expectClientChunkContains(
+            site1.url!,
+            path.join(rootDir, ".open-next", "assets"),
+            "NEXTJS_PUBLIC_ENV_MARKER",
+            {
+              timeout: "60 seconds",
+              label: "nextjs public env",
+            },
+          );
 
           // API route handler — the middleware matcher covers /api/*, so the
           // pass-through header also proves middleware executes on deploy.

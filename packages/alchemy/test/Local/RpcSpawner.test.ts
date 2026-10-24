@@ -1,4 +1,4 @@
-import { describe, expect, it } from "alchemy-test";
+import { describe, expect, it } from "@alchemy.run/test";
 import { newWebSocketRpcSession, type RpcStub } from "capnweb";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -29,6 +29,7 @@ import {
   pgidOf,
   pidListeningOn,
 } from "./fixtures/process-effect.ts";
+import type { EchoClient } from "./fixtures/rpc-echo.ts";
 
 const FIXTURE_TS_URL = new URL("./fixtures/rpc-server-entry.ts", import.meta.url).toString();
 const FIXTURE_B_TS_URL = new URL("./fixtures/rpc-server-entry-b.ts", import.meta.url).toString();
@@ -67,6 +68,45 @@ describe(
           expect(result).toBe("echo:hello");
         }).pipe(Effect.provide(services)),
       { timeout: 60_000 },
+    );
+
+    it.live(
+      "omitEnv withholds matching env vars from the sidecar",
+      () =>
+        Effect.acquireUseRelease(
+          Effect.sync(() => {
+            process.env.ALCHEMY_TEST_OMITTED_SECRET = "omitted";
+            process.env.ALCHEMY_TEST_KEPT_VALUE = "kept";
+          }),
+          () =>
+            Effect.gen(function* () {
+              const url = yield* RpcSpawner.useSync((spawner) => spawner.url);
+              const wsUrl = yield* post(url, samplePayload(FIXTURE_TS_URL));
+              const env = yield* sidecarEnv(wsUrl, [
+                "ALCHEMY_TEST_OMITTED_SECRET",
+                "ALCHEMY_TEST_KEPT_VALUE",
+              ]);
+              expect(env).toEqual([undefined, "kept"]);
+            }).pipe(
+              Effect.provide(
+                Layer.provideMerge(
+                  layerServer({
+                    profile: undefined,
+                    envFile: undefined,
+                    omitEnv: ["ALCHEMY_TEST_OMITTED_"],
+                  }),
+                  Layer.merge(PlatformServices, FetchHttpClient.layer),
+                ),
+              ),
+            ),
+          () =>
+            Effect.sync(() => {
+              delete process.env.ALCHEMY_TEST_OMITTED_SECRET;
+              delete process.env.ALCHEMY_TEST_KEPT_VALUE;
+            }),
+        ),
+      // sets process-global env vars the sidecar inherits at spawn
+      { timeout: 60_000, exclusive: true },
     );
 
     it.live(
@@ -286,6 +326,19 @@ const post = (url: string, body: unknown): Effect.Effect<string, Error, HttpClie
   );
 
 const echoWebSocket = (rpcUrl: string, msg: string): Effect.Effect<string, Error> =>
+  withEchoHandlers(rpcUrl, (handlers) => handlers.echo(msg));
+
+/** Read env vars as the sidecar process sees them. */
+const sidecarEnv = (
+  rpcUrl: string,
+  keys: ReadonlyArray<string>,
+): Effect.Effect<Array<string | undefined>, Error> =>
+  withEchoHandlers(rpcUrl, (handlers) => Effect.forEach(keys, handlers.env));
+
+const withEchoHandlers = <A>(
+  rpcUrl: string,
+  use: (handlers: Pick<EchoClient, "echo" | "env">) => Effect.Effect<A>,
+): Effect.Effect<A, Error> =>
   Effect.gen(function* () {
     yield* openWebSocket(new URL("/parent", rpcUrl));
     // Sessions carry their stack environment (real clients — the
@@ -304,9 +357,7 @@ const echoWebSocket = (rpcUrl: string, msg: string): Effect.Effect<string, Error
       // instantiation depth (TS2589/TS2321).
       const stub = newWebSocketRpcSession(sessionUrl.toString()) as unknown as RpcStub<RpcProxyApi>;
       const provider = await stub.getProvider("Test.Echo", FIXTURE_TS_URL);
-      const handlers = unwrapRpcHandlers(provider as any) as {
-        echo: (m: string) => Effect.Effect<string>;
-      };
-      return await Effect.runPromise(handlers.echo(msg));
+      const handlers = unwrapRpcHandlers(provider as any) as Pick<EchoClient, "echo" | "env">;
+      return await Effect.runPromise(use(handlers));
     });
   }).pipe(Effect.scoped);
