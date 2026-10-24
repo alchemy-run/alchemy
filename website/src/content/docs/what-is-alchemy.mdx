@@ -1,6 +1,6 @@
 ---
 title: What is Alchemy?
-description: Alchemy is a TypeScript framework for building cloud applications. Your infrastructure and the code that runs on it are one type-safe Effect program, and one command deploys it.
+description: Alchemy is a TypeScript framework for building cloud applications with Effects and Layers. Your infrastructure and the code that runs on it are written, type-checked, and deployed together.
 prev:
   link: /getting-started
   label: Getting started
@@ -12,9 +12,10 @@ next:
 import DeployTerminal from "../../components/marketing-islands/DeployTerminal.tsx";
 import ProviderIcons from "../../components/ProviderIcons.astro";
 
-Alchemy is a TypeScript framework for building cloud applications as
-one program. Your infrastructure and the code that runs on it are
-written together, type-checked together, and deployed together.
+Alchemy is a TypeScript framework for building cloud applications
+with [Effects](https://effect.website) and Layers. Your infrastructure
+and the code that runs on it are written together, type-checked
+together, and deployed together.
 
 Here is an R2 Bucket and a Worker that serves files from it:
 
@@ -101,14 +102,15 @@ route needs a Bucket, permission to use it, and the code that calls it,
 in two places that have to agree.
 
 Alchemy is built on Infrastructure as Code, but it doesn't stop there.
-When the code that runs is part of the same program, there is no name
-to keep in sync, no policy to write, and no client to set up.
+When the Worker's code is an Effect that asks for the Bucket itself,
+there is no name to keep in sync, no policy to write, and no client to
+set up.
 
 ## Infrastructure as Effects
 
-We call this **Infrastructure as Effects**. Your app is an
-[Effect](https://effect.website) program, and the infrastructure it
-needs is part of that program. Its types record the resources it uses
+We call this **Infrastructure as Effects**. Your app is built from
+Effects and Layers, and the infrastructure it needs is part of them.
+Their types record the resources it uses
 and the access it needs, so a missing piece is a compile error, not a
 failed deploy.
 
@@ -204,8 +206,8 @@ providers: Layer.mergeAll(Cloudflare.providers(), AWS.providers()),
 
 ## Your services own their infrastructure
 
-Because infrastructure lives in the same program as your code, a
-service can create what it needs. Here is a `JobService` that stores
+Because infrastructure is created inside Effects, a service's Layer
+can create what it needs. Here is a `JobService` that stores
 jobs in a KV Namespace:
 
 ```typescript
@@ -233,8 +235,7 @@ Effect.gen(function* () {
 ```
 
 This is why Alchemy reaches past infrastructure into your application.
-Things you would normally run as separate systems become Layers in the
-same program. A durable workflow is plain `effect/workflow` code, and
+Things you would normally run as separate systems become Layers. A durable workflow is plain `effect/workflow` code, and
 the Layer you provide picks where it runs:
 
 ```diff lang="typescript"
@@ -252,8 +253,8 @@ The same idea runs through the rest of the docs.
 [Domain](/domain) models your business as commands, events, and views
 and runs them on Durable Objects.
 [Telemetry](/infrastructure-as-effects/telemetry) traces every request,
-and its dashboards and alerts are resources in the same program.
-[Tests](/testing) deploy the program to a stage of its own, run
+and its dashboards and alerts are resources you deploy with it.
+[Tests](/testing) deploy your app to a stage of its own, run
 against it, and tear it down.
 
 ## Where next
