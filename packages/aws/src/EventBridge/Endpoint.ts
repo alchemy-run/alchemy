@@ -265,18 +265,77 @@ export const EndpointProvider = () =>
             until: (r): boolean => r.State !== "CREATING" && r.State !== "UPDATING",
             times: 30,
           }),
-          Effect.flatMap((r) =>
-            r.State === "CREATE_FAILED" || r.State === "UPDATE_FAILED"
-              ? Effect.fail(
-                  new EndpointFailed({
-                    endpointName: name,
-                    state: r.State,
-                    reason: r.StateReason,
-                  }),
-                )
-              : Effect.succeed(r),
-          ),
         );
+
+      const failed = (name: string, r: eventbridge.DescribeEndpointResponse) =>
+        new EndpointFailed({ endpointName: name, state: r.State ?? "", reason: r.StateReason });
+
+      /** Delete the endpoint and wait until it is gone. */
+      const removeEndpoint = Effect.fn(function* (name: string) {
+        yield* eventbridge.deleteEndpoint({ Name: name }).pipe(
+          // An endpoint that is still CREATING/UPDATING rejects the delete.
+          Effect.retry({
+            while: (e): boolean => e._tag === "ConcurrentModificationException",
+            schedule: Schedule.spaced("3 seconds"),
+            times: 10,
+          }),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+        );
+        // Wait out DELETING so the same name can be recreated right away and
+        // the buses it routes to can be deleted.
+        yield* describe(name).pipe(
+          Effect.repeat({
+            schedule: Schedule.spaced("3 seconds"),
+            until: (r): boolean => r === undefined,
+            times: 30,
+          }),
+        );
+      });
+
+      const createEndpoint = Effect.fn(function* (
+        name: string,
+        desired: Omit<eventbridge.CreateEndpointRequest, "Name">,
+      ) {
+        // Tolerate an AlreadyExists race with a peer reconciler; the settled
+        // state is observed below either way.
+        yield* eventbridge.createEndpoint({ Name: name, ...desired }).pipe(
+          Effect.retry({
+            // A freshly created replication role takes a few seconds to
+            // become assumable by EventBridge (IAM propagation).
+            while: (e): boolean => e._tag === "EndpointRoleNotAssumable",
+            schedule: Schedule.spaced("3 seconds"),
+            times: 15,
+          }),
+          Effect.catchTag("ResourceAlreadyExistsException", () => Effect.void),
+        );
+        const settled = yield* awaitSettled(name);
+        if (settled.State === "CREATE_FAILED") {
+          yield* removeEndpoint(name);
+          return yield* failed(name, settled);
+        }
+        return settled;
+      });
+
+      const updateEndpoint = Effect.fn(function* (
+        name: string,
+        desired: Omit<eventbridge.UpdateEndpointRequest, "Name">,
+      ) {
+        yield* eventbridge.updateEndpoint({ Name: name, ...desired }).pipe(
+          Effect.retry({
+            while: (e): boolean => e._tag === "EndpointRoleNotAssumable",
+            schedule: Schedule.spaced("3 seconds"),
+            times: 15,
+          }),
+          Effect.retry({
+            while: (e): boolean => e._tag === "ConcurrentModificationException",
+            schedule: Schedule.spaced("3 seconds"),
+            times: 10,
+          }),
+        );
+        const settled = yield* awaitSettled(name);
+        if (settled.State === "UPDATE_FAILED") return yield* failed(name, settled);
+        return settled;
+      });
 
       return {
         stables: ["endpointName", "endpointArn", "endpointId", "endpointUrl"],
@@ -329,29 +388,38 @@ export const EndpointProvider = () =>
             RoleArn: news.roleArn,
           } satisfies Omit<eventbridge.UpdateEndpointRequest, "Name">;
 
-          // Observe — live cloud state is authoritative; a vanished endpoint
-          // falls through to create.
+          // Observe — live cloud state is authoritative. A vanished endpoint
+          // falls through to create, and so does one a previous run left in
+          // CREATE_FAILED (it can never become ACTIVE).
           let observed = yield* describe(name);
+          if (observed?.Arn) {
+            observed = yield* awaitSettled(name);
+            if (observed.State === "CREATE_FAILED") {
+              yield* removeEndpoint(name);
+              observed = undefined;
+            }
+          }
 
+          // Ensure — create the endpoint and wait for it to settle. The
+          // replication role is checked again after the endpoint is accepted:
+          // while its policy is still propagating, the endpoint ends in
+          // CREATE_FAILED ("does not grant EventBridge the PutRule
+          // permission"), so a failed create is removed and retried.
           if (!observed?.Arn) {
-            // Ensure — create the endpoint; tolerate an AlreadyExists race
-            // with a peer reconciler and converge via the sync below.
-            yield* eventbridge.createEndpoint({ Name: name, ...desired }).pipe(
+            observed = yield* createEndpoint(name, desired).pipe(
               Effect.retry({
-                // A freshly created replication role takes a few seconds to
-                // become assumable by EventBridge (IAM propagation).
-                while: (e): boolean => e._tag === "EndpointRoleNotAssumable",
-                schedule: Schedule.spaced("3 seconds"),
-                times: 15,
+                while: (e): boolean => e._tag === "EndpointFailed",
+                schedule: Schedule.spaced("10 seconds"),
+                times: 3,
               }),
-              Effect.catchTag("ResourceAlreadyExistsException", () => Effect.void),
             );
           }
-          observed = yield* awaitSettled(name);
 
           // Sync — diff the observed configuration against the desired one
-          // and update only when something differs.
+          // and update only when something differs (or the last update
+          // failed).
           const drifted =
+            observed.State === "UPDATE_FAILED" ||
             (observed.Description ?? "") !== (desired.Description ?? "") ||
             observed.RoutingConfig?.FailoverConfig?.Primary?.HealthCheck !==
               desired.RoutingConfig.FailoverConfig.Primary.HealthCheck ||
@@ -364,21 +432,14 @@ export const EndpointProvider = () =>
               .sort()
               .join(",") !== [...news.eventBuses].sort().join(",");
           if (drifted) {
-            yield* eventbridge.updateEndpoint({ Name: name, ...desired }).pipe(
+            // Same propagation race as create, ending in UPDATE_FAILED.
+            observed = yield* updateEndpoint(name, desired).pipe(
               Effect.retry({
-                // A freshly created replication role takes a few seconds to
-                // become assumable by EventBridge (IAM propagation).
-                while: (e): boolean => e._tag === "EndpointRoleNotAssumable",
-                schedule: Schedule.spaced("3 seconds"),
-                times: 15,
-              }),
-              Effect.retry({
-                while: (e): boolean => e._tag === "ConcurrentModificationException",
-                schedule: Schedule.spaced("3 seconds"),
-                times: 10,
+                while: (e): boolean => e._tag === "EndpointFailed",
+                schedule: Schedule.spaced("10 seconds"),
+                times: 3,
               }),
             );
-            observed = yield* awaitSettled(name);
           }
 
           const attrs = toAttrs(observed);
@@ -386,25 +447,7 @@ export const EndpointProvider = () =>
           return attrs;
         }),
         delete: Effect.fn(function* ({ output }) {
-          const name = output.endpointName;
-          yield* eventbridge.deleteEndpoint({ Name: name }).pipe(
-            // An endpoint that is still CREATING/UPDATING rejects the delete.
-            Effect.retry({
-              while: (e): boolean => e._tag === "ConcurrentModificationException",
-              schedule: Schedule.spaced("3 seconds"),
-              times: 10,
-            }),
-            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-          );
-          // Wait out DELETING so the same name can be recreated right away and
-          // the buses it routes to can be deleted.
-          yield* describe(name).pipe(
-            Effect.repeat({
-              schedule: Schedule.spaced("3 seconds"),
-              until: (r): boolean => r === undefined,
-              times: 30,
-            }),
-          );
+          yield* removeEndpoint(output.endpointName);
         }),
       };
     }),
