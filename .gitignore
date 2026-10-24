@@ -96,6 +96,7 @@ examples/cloudflare-worker/src/scratch.ts
 !packages/hetzner/src/globals.d.ts
 !packages/neon/src/globals.d.ts
 !packages/railway/src/globals.d.ts
+!packages/azure/src/globals.d.ts
 
 # pkg pack output (CI artifact hand-off)
 .pkg

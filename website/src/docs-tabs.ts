@@ -71,6 +71,7 @@ export const DOCS_TABS: DocsTab[] = [
   ]),
   hub("AWS", "aws", "Clouds", "lambda · ECS · S3 · DynamoDB", ["/providers/aws"]),
   hub("GCP", "gcp", "Clouds", "cloud run · storage · pub/sub", ["/providers/gcp"]),
+  hub("Azure", "azure", "Clouds", "storage · app service · front door", ["/providers/azure"]),
   hub("Hetzner", "hetzner", "Clouds", "servers · networks · volumes", ["/providers/hetzner"]),
   hub("Fly", "fly", "Clouds", "apps · machines · volumes", ["/providers/fly"]),
   hub("Railway", "railway", "Clouds", "services · environments · volumes", ["/providers/railway"]),

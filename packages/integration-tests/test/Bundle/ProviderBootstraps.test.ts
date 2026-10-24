@@ -18,6 +18,7 @@ const bareImports = (result: Bundle.BundleOutput) =>
 
 /** Each provider package's generated-entry bootstrap, and the package that ships it. */
 const BOOTSTRAPS = [
+  ["@alchemy.run/azure", "@alchemy.run/azure/Bootstrap/Functions"],
   ["@alchemy.run/fly", "@alchemy.run/fly/Bootstrap"],
   ["@alchemy.run/hetzner", "@alchemy.run/hetzner/Bootstrap"],
   ["@alchemy.run/prisma", "@alchemy.run/prisma/Bootstrap"],

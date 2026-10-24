@@ -367,6 +367,16 @@ credential/profile or from a layer the user provides (the AWS
 env vars exist only for CI credentials and for values the runtime platform
 itself sets.
 
+A container scope that every resource sits in (an Azure resource group,
+a project a stack creates) is stack context too, never a prop users repeat
+on every resource. Default it to one container per stack and stage
+(`<stack>-<stage>`), created on first use and deleted on destroy only when
+it is empty and owned. Let a layer replace it (`Azure.resourceGroup(...)`,
+like `AWS.Region(...)`), and keep the per-resource prop optional for the
+odd resource that lives elsewhere. Azure first shipped `resourceGroup:
+string` as required on 1,126 resources; the fix was one codemod
+(`packages/azure/src/StackResourceGroup.ts`).
+
 If `providers()` wires hundreds of resources, memoize it
 (`let cached; export const providers = () => (cached ??= make())`) and keep
 nested `Layer.mergeAll` groups of about 90; an unmemoized collection

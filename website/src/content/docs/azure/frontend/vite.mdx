@@ -1,0 +1,48 @@
+---
+title: Vite
+description: "Deploy a Vite SPA to the static website endpoint of an Azure Storage account with Azure.Website.Vite — no Docker, and Vite's own dev server under alchemy dev."
+sidebar:
+  order: 2
+---
+
+`Azure.Website.Vite` deploys a [Vite](https://vite.dev) project to the
+static website endpoint of an Azure Storage account. It runs `vite build`
+and uploads the output to the account's `$web` container. No Docker image
+and no server are involved.
+
+## Install
+
+```sh
+bun add -d @alchemy.run/frontend-frameworks
+```
+
+## Deploy
+
+```typescript
+import * as Alchemy from "alchemy";
+import * as Azure from "@alchemy.run/azure";
+import * as Effect from "effect/Effect";
+
+export default Alchemy.Stack(
+  "MyApp",
+  { providers: Azure.providers(), state: Alchemy.localState() },
+  Effect.gen(function* () {
+    const web = yield* Azure.Website.Vite("Web", { location: "eastus" });
+    return { url: web.url };
+  }),
+);
+```
+
+Unknown paths return `index.html` (SPA) with a `404` status. Add
+`frontDoor: true` to answer them with `200` through Azure Front Door. Use
+`assets: { notFoundHandling: "404-page" }` for multi-page sites.
+
+## Share infrastructure
+
+```typescript
+const storageAccount = yield* Azure.Storage.StorageAccount("Files");
+const web = yield* Azure.Website.Vite("Web", { storageAccount });
+```
+
+See the [`azure-website-vite`](https://github.com/alchemy-run/alchemy/tree/main/examples/azure-website-vite)
+example.

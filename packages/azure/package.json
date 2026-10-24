@@ -1,0 +1,1046 @@
+{
+  "name": "@alchemy.run/azure",
+  "version": "2.0.0-beta.83",
+  "description": "Azure resources, Container Apps, Functions and websites for Alchemy.",
+  "keywords": [
+    "alchemy",
+    "azure",
+    "effect",
+    "infrastructure-as-code",
+    "microsoft-azure"
+  ],
+  "homepage": "https://alchemy.run",
+  "bugs": {
+    "url": "https://github.com/alchemy-run/alchemy/issues"
+  },
+  "license": "Apache-2.0",
+  "author": "Sam Goodwin <sam@alchemy.run>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/alchemy-run/alchemy.git",
+    "directory": "packages/azure"
+  },
+  "files": [
+    "lib",
+    "src"
+  ],
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": "./src/index.ts",
+    "./Bootstrap/*": "./src/Bootstrap/*.ts",
+    "./Advisor": "./src/Advisor/index.ts",
+    "./AnalysisServices": "./src/AnalysisServices/index.ts",
+    "./ApiCenter": "./src/ApiCenter/index.ts",
+    "./ApiManagement": "./src/ApiManagement/index.ts",
+    "./AppConfiguration": "./src/AppConfiguration/index.ts",
+    "./ApplicationInsights": "./src/ApplicationInsights/index.ts",
+    "./ArcData": "./src/ArcData/index.ts",
+    "./Attestation": "./src/Attestation/index.ts",
+    "./Authorization": "./src/Authorization/index.ts",
+    "./Automanage": "./src/Automanage/index.ts",
+    "./Automation": "./src/Automation/index.ts",
+    "./AzureActiveDirectory": "./src/AzureActiveDirectory/index.ts",
+    "./AzureFleet": "./src/AzureFleet/index.ts",
+    "./AzureStackHCI": "./src/AzureStackHCI/index.ts",
+    "./Batch": "./src/Batch/index.ts",
+    "./BotService": "./src/BotService/index.ts",
+    "./Cdn": "./src/Cdn/index.ts",
+    "./CertificateRegistration": "./src/CertificateRegistration/index.ts",
+    "./Chaos": "./src/Chaos/index.ts",
+    "./CodeSigning": "./src/CodeSigning/index.ts",
+    "./CognitiveServices": "./src/CognitiveServices/index.ts",
+    "./Communication": "./src/Communication/index.ts",
+    "./Compute": "./src/Compute/index.ts",
+    "./ConfidentialLedger": "./src/ConfidentialLedger/index.ts",
+    "./Confluent": "./src/Confluent/index.ts",
+    "./ConnectedCache": "./src/ConnectedCache/index.ts",
+    "./Consumption": "./src/Consumption/index.ts",
+    "./ContainerApps": "./src/ContainerApps/index.ts",
+    "./ContainerInstance": "./src/ContainerInstance/index.ts",
+    "./ContainerRegistry": "./src/ContainerRegistry/index.ts",
+    "./ContainerService": "./src/ContainerService/index.ts",
+    "./CosmosDB": "./src/CosmosDB/index.ts",
+    "./CosmosDBPostgreSQL": "./src/CosmosDBPostgreSQL/index.ts",
+    "./CostManagement": "./src/CostManagement/index.ts",
+    "./Dashboard": "./src/Dashboard/index.ts",
+    "./DatabaseWatcher": "./src/DatabaseWatcher/index.ts",
+    "./Databricks": "./src/Databricks/index.ts",
+    "./Datadog": "./src/Datadog/index.ts",
+    "./DataFactory": "./src/DataFactory/index.ts",
+    "./DataMigration": "./src/DataMigration/index.ts",
+    "./DataProtection": "./src/DataProtection/index.ts",
+    "./DataReplication": "./src/DataReplication/index.ts",
+    "./DataShare": "./src/DataShare/index.ts",
+    "./DataTransfer": "./src/DataTransfer/index.ts",
+    "./DesktopVirtualization": "./src/DesktopVirtualization/index.ts",
+    "./DevCenter": "./src/DevCenter/index.ts",
+    "./DevHub": "./src/DevHub/index.ts",
+    "./DeviceRegistry": "./src/DeviceRegistry/index.ts",
+    "./DeviceUpdate": "./src/DeviceUpdate/index.ts",
+    "./DevOpsInfrastructure": "./src/DevOpsInfrastructure/index.ts",
+    "./DevTestLabs": "./src/DevTestLabs/index.ts",
+    "./DigitalTwins": "./src/DigitalTwins/index.ts",
+    "./Discovery": "./src/Discovery/index.ts",
+    "./Dns": "./src/Dns/index.ts",
+    "./DnsResolver": "./src/DnsResolver/index.ts",
+    "./DomainRegistration": "./src/DomainRegistration/index.ts",
+    "./DomainServices": "./src/DomainServices/index.ts",
+    "./DurableTask": "./src/DurableTask/index.ts",
+    "./Edge": "./src/Edge/index.ts",
+    "./Elastic": "./src/Elastic/index.ts",
+    "./ElasticSan": "./src/ElasticSan/index.ts",
+    "./EventGrid": "./src/EventGrid/index.ts",
+    "./EventHub": "./src/EventHub/index.ts",
+    "./ExtendedLocation": "./src/ExtendedLocation/index.ts",
+    "./Fabric": "./src/Fabric/index.ts",
+    "./FileShares": "./src/FileShares/index.ts",
+    "./FirmwareAnalysis": "./src/FirmwareAnalysis/index.ts",
+    "./FluidRelay": "./src/FluidRelay/index.ts",
+    "./FrontDoor": "./src/FrontDoor/index.ts",
+    "./Functions": "./src/Functions/index.ts",
+    "./Grafana": "./src/Grafana/index.ts",
+    "./GuestConfiguration": "./src/GuestConfiguration/index.ts",
+    "./HardwareSecurityModules": "./src/HardwareSecurityModules/index.ts",
+    "./HDInsight": "./src/HDInsight/index.ts",
+    "./HealthBot": "./src/HealthBot/index.ts",
+    "./HealthcareApis": "./src/HealthcareApis/index.ts",
+    "./HealthDataAIServices": "./src/HealthDataAIServices/index.ts",
+    "./HybridCompute": "./src/HybridCompute/index.ts",
+    "./HybridConnectivity": "./src/HybridConnectivity/index.ts",
+    "./HybridContainerService": "./src/HybridContainerService/index.ts",
+    "./HybridKubernetes": "./src/HybridKubernetes/index.ts",
+    "./HybridNetwork": "./src/HybridNetwork/index.ts",
+    "./ImageBuilder": "./src/ImageBuilder/index.ts",
+    "./IoT": "./src/IoT/index.ts",
+    "./IoTHub": "./src/IoTHub/index.ts",
+    "./IoTOperations": "./src/IoTOperations/index.ts",
+    "./KeyVault": "./src/KeyVault/index.ts",
+    "./KubernetesConfiguration": "./src/KubernetesConfiguration/index.ts",
+    "./KubernetesRuntime": "./src/KubernetesRuntime/index.ts",
+    "./Kusto": "./src/Kusto/index.ts",
+    "./Lighthouse": "./src/Lighthouse/index.ts",
+    "./LoadTesting": "./src/LoadTesting/index.ts",
+    "./LogAnalytics": "./src/LogAnalytics/index.ts",
+    "./Logic": "./src/Logic/index.ts",
+    "./MachineLearning": "./src/MachineLearning/index.ts",
+    "./Maintenance": "./src/Maintenance/index.ts",
+    "./ManagedApplications": "./src/ManagedApplications/index.ts",
+    "./ManagedIdentity": "./src/ManagedIdentity/index.ts",
+    "./ManagedNetworkFabric": "./src/ManagedNetworkFabric/index.ts",
+    "./Management": "./src/Management/index.ts",
+    "./ManufacturingPlatform": "./src/ManufacturingPlatform/index.ts",
+    "./Maps": "./src/Maps/index.ts",
+    "./Migrate": "./src/Migrate/index.ts",
+    "./Monitor": "./src/Monitor/index.ts",
+    "./MySQL": "./src/MySQL/index.ts",
+    "./NetApp": "./src/NetApp/index.ts",
+    "./Network": "./src/Network/index.ts",
+    "./NetworkCloud": "./src/NetworkCloud/index.ts",
+    "./NetworkFunction": "./src/NetworkFunction/index.ts",
+    "./NotificationHubs": "./src/NotificationHubs/index.ts",
+    "./Peering": "./src/Peering/index.ts",
+    "./PlanetaryComputer": "./src/PlanetaryComputer/index.ts",
+    "./Policy": "./src/Policy/index.ts",
+    "./PolicyInsights": "./src/PolicyInsights/index.ts",
+    "./Portal": "./src/Portal/index.ts",
+    "./PostgreSQL": "./src/PostgreSQL/index.ts",
+    "./PowerBI": "./src/PowerBI/index.ts",
+    "./PrivateDns": "./src/PrivateDns/index.ts",
+    "./RecoveryServices": "./src/RecoveryServices/index.ts",
+    "./RedHatOpenShift": "./src/RedHatOpenShift/index.ts",
+    "./Redis": "./src/Redis/index.ts",
+    "./Relationships": "./src/Relationships/index.ts",
+    "./Relay": "./src/Relay/index.ts",
+    "./ResourceConnector": "./src/ResourceConnector/index.ts",
+    "./ResourceGraph": "./src/ResourceGraph/index.ts",
+    "./ResourceMover": "./src/ResourceMover/index.ts",
+    "./Resources": "./src/Resources/index.ts",
+    "./ScVmm": "./src/ScVmm/index.ts",
+    "./Search": "./src/Search/index.ts",
+    "./Security": "./src/Security/index.ts",
+    "./SecurityInsights": "./src/SecurityInsights/index.ts",
+    "./SerialConsole": "./src/SerialConsole/index.ts",
+    "./ServiceBus": "./src/ServiceBus/index.ts",
+    "./ServiceConnector": "./src/ServiceConnector/index.ts",
+    "./ServiceFabric": "./src/ServiceFabric/index.ts",
+    "./ServiceFabricClassic": "./src/ServiceFabricClassic/index.ts",
+    "./ServiceNetworking": "./src/ServiceNetworking/index.ts",
+    "./SignalR": "./src/SignalR/index.ts",
+    "./SiteRecovery": "./src/SiteRecovery/index.ts",
+    "./Sql": "./src/Sql/index.ts",
+    "./SqlVirtualMachine": "./src/SqlVirtualMachine/index.ts",
+    "./StandbyPool": "./src/StandbyPool/index.ts",
+    "./Storage": "./src/Storage/index.ts",
+    "./StorageActions": "./src/StorageActions/index.ts",
+    "./StorageCache": "./src/StorageCache/index.ts",
+    "./StorageDiscovery": "./src/StorageDiscovery/index.ts",
+    "./StorageMover": "./src/StorageMover/index.ts",
+    "./StorageSync": "./src/StorageSync/index.ts",
+    "./StreamAnalytics": "./src/StreamAnalytics/index.ts",
+    "./Synapse": "./src/Synapse/index.ts",
+    "./TrafficManager": "./src/TrafficManager/index.ts",
+    "./VideoIndexer": "./src/VideoIndexer/index.ts",
+    "./VirtualEnclaves": "./src/VirtualEnclaves/index.ts",
+    "./VMware": "./src/VMware/index.ts",
+    "./Web": "./src/Web/index.ts",
+    "./WebPubSub": "./src/WebPubSub/index.ts",
+    "./Website": "./src/Website/index.ts",
+    "./WeightsAndBiases": "./src/WeightsAndBiases/index.ts",
+    "./Workloads": "./src/Workloads/index.ts",
+    "./*": "./src/*.ts",
+    "./package.json": "./package.json"
+  },
+  "publishConfig": {
+    "exports": {
+      ".": {
+        "types": "./lib/index.d.ts",
+        "bun": "./src/index.ts",
+        "default": "./lib/index.js"
+      },
+      "./Bootstrap/*": {
+        "types": "./src/Bootstrap/*.ts",
+        "bun": "./src/Bootstrap/*.ts",
+        "default": "./src/Bootstrap/*.ts"
+      },
+      "./Advisor": {
+        "types": "./lib/Advisor/index.d.ts",
+        "bun": "./src/Advisor/index.ts",
+        "default": "./lib/Advisor/index.js"
+      },
+      "./AnalysisServices": {
+        "types": "./lib/AnalysisServices/index.d.ts",
+        "bun": "./src/AnalysisServices/index.ts",
+        "default": "./lib/AnalysisServices/index.js"
+      },
+      "./ApiCenter": {
+        "types": "./lib/ApiCenter/index.d.ts",
+        "bun": "./src/ApiCenter/index.ts",
+        "default": "./lib/ApiCenter/index.js"
+      },
+      "./ApiManagement": {
+        "types": "./lib/ApiManagement/index.d.ts",
+        "bun": "./src/ApiManagement/index.ts",
+        "default": "./lib/ApiManagement/index.js"
+      },
+      "./AppConfiguration": {
+        "types": "./lib/AppConfiguration/index.d.ts",
+        "bun": "./src/AppConfiguration/index.ts",
+        "default": "./lib/AppConfiguration/index.js"
+      },
+      "./ApplicationInsights": {
+        "types": "./lib/ApplicationInsights/index.d.ts",
+        "bun": "./src/ApplicationInsights/index.ts",
+        "default": "./lib/ApplicationInsights/index.js"
+      },
+      "./ArcData": {
+        "types": "./lib/ArcData/index.d.ts",
+        "bun": "./src/ArcData/index.ts",
+        "default": "./lib/ArcData/index.js"
+      },
+      "./Attestation": {
+        "types": "./lib/Attestation/index.d.ts",
+        "bun": "./src/Attestation/index.ts",
+        "default": "./lib/Attestation/index.js"
+      },
+      "./Authorization": {
+        "types": "./lib/Authorization/index.d.ts",
+        "bun": "./src/Authorization/index.ts",
+        "default": "./lib/Authorization/index.js"
+      },
+      "./Automanage": {
+        "types": "./lib/Automanage/index.d.ts",
+        "bun": "./src/Automanage/index.ts",
+        "default": "./lib/Automanage/index.js"
+      },
+      "./Automation": {
+        "types": "./lib/Automation/index.d.ts",
+        "bun": "./src/Automation/index.ts",
+        "default": "./lib/Automation/index.js"
+      },
+      "./AzureActiveDirectory": {
+        "types": "./lib/AzureActiveDirectory/index.d.ts",
+        "bun": "./src/AzureActiveDirectory/index.ts",
+        "default": "./lib/AzureActiveDirectory/index.js"
+      },
+      "./AzureFleet": {
+        "types": "./lib/AzureFleet/index.d.ts",
+        "bun": "./src/AzureFleet/index.ts",
+        "default": "./lib/AzureFleet/index.js"
+      },
+      "./AzureStackHCI": {
+        "types": "./lib/AzureStackHCI/index.d.ts",
+        "bun": "./src/AzureStackHCI/index.ts",
+        "default": "./lib/AzureStackHCI/index.js"
+      },
+      "./Batch": {
+        "types": "./lib/Batch/index.d.ts",
+        "bun": "./src/Batch/index.ts",
+        "default": "./lib/Batch/index.js"
+      },
+      "./BotService": {
+        "types": "./lib/BotService/index.d.ts",
+        "bun": "./src/BotService/index.ts",
+        "default": "./lib/BotService/index.js"
+      },
+      "./Cdn": {
+        "types": "./lib/Cdn/index.d.ts",
+        "bun": "./src/Cdn/index.ts",
+        "default": "./lib/Cdn/index.js"
+      },
+      "./CertificateRegistration": {
+        "types": "./lib/CertificateRegistration/index.d.ts",
+        "bun": "./src/CertificateRegistration/index.ts",
+        "default": "./lib/CertificateRegistration/index.js"
+      },
+      "./Chaos": {
+        "types": "./lib/Chaos/index.d.ts",
+        "bun": "./src/Chaos/index.ts",
+        "default": "./lib/Chaos/index.js"
+      },
+      "./CodeSigning": {
+        "types": "./lib/CodeSigning/index.d.ts",
+        "bun": "./src/CodeSigning/index.ts",
+        "default": "./lib/CodeSigning/index.js"
+      },
+      "./CognitiveServices": {
+        "types": "./lib/CognitiveServices/index.d.ts",
+        "bun": "./src/CognitiveServices/index.ts",
+        "default": "./lib/CognitiveServices/index.js"
+      },
+      "./Communication": {
+        "types": "./lib/Communication/index.d.ts",
+        "bun": "./src/Communication/index.ts",
+        "default": "./lib/Communication/index.js"
+      },
+      "./Compute": {
+        "types": "./lib/Compute/index.d.ts",
+        "bun": "./src/Compute/index.ts",
+        "default": "./lib/Compute/index.js"
+      },
+      "./ConfidentialLedger": {
+        "types": "./lib/ConfidentialLedger/index.d.ts",
+        "bun": "./src/ConfidentialLedger/index.ts",
+        "default": "./lib/ConfidentialLedger/index.js"
+      },
+      "./Confluent": {
+        "types": "./lib/Confluent/index.d.ts",
+        "bun": "./src/Confluent/index.ts",
+        "default": "./lib/Confluent/index.js"
+      },
+      "./ConnectedCache": {
+        "types": "./lib/ConnectedCache/index.d.ts",
+        "bun": "./src/ConnectedCache/index.ts",
+        "default": "./lib/ConnectedCache/index.js"
+      },
+      "./Consumption": {
+        "types": "./lib/Consumption/index.d.ts",
+        "bun": "./src/Consumption/index.ts",
+        "default": "./lib/Consumption/index.js"
+      },
+      "./ContainerApps": {
+        "types": "./lib/ContainerApps/index.d.ts",
+        "bun": "./src/ContainerApps/index.ts",
+        "default": "./lib/ContainerApps/index.js"
+      },
+      "./ContainerInstance": {
+        "types": "./lib/ContainerInstance/index.d.ts",
+        "bun": "./src/ContainerInstance/index.ts",
+        "default": "./lib/ContainerInstance/index.js"
+      },
+      "./ContainerRegistry": {
+        "types": "./lib/ContainerRegistry/index.d.ts",
+        "bun": "./src/ContainerRegistry/index.ts",
+        "default": "./lib/ContainerRegistry/index.js"
+      },
+      "./ContainerService": {
+        "types": "./lib/ContainerService/index.d.ts",
+        "bun": "./src/ContainerService/index.ts",
+        "default": "./lib/ContainerService/index.js"
+      },
+      "./CosmosDB": {
+        "types": "./lib/CosmosDB/index.d.ts",
+        "bun": "./src/CosmosDB/index.ts",
+        "default": "./lib/CosmosDB/index.js"
+      },
+      "./CosmosDBPostgreSQL": {
+        "types": "./lib/CosmosDBPostgreSQL/index.d.ts",
+        "bun": "./src/CosmosDBPostgreSQL/index.ts",
+        "default": "./lib/CosmosDBPostgreSQL/index.js"
+      },
+      "./CostManagement": {
+        "types": "./lib/CostManagement/index.d.ts",
+        "bun": "./src/CostManagement/index.ts",
+        "default": "./lib/CostManagement/index.js"
+      },
+      "./Dashboard": {
+        "types": "./lib/Dashboard/index.d.ts",
+        "bun": "./src/Dashboard/index.ts",
+        "default": "./lib/Dashboard/index.js"
+      },
+      "./DatabaseWatcher": {
+        "types": "./lib/DatabaseWatcher/index.d.ts",
+        "bun": "./src/DatabaseWatcher/index.ts",
+        "default": "./lib/DatabaseWatcher/index.js"
+      },
+      "./Databricks": {
+        "types": "./lib/Databricks/index.d.ts",
+        "bun": "./src/Databricks/index.ts",
+        "default": "./lib/Databricks/index.js"
+      },
+      "./Datadog": {
+        "types": "./lib/Datadog/index.d.ts",
+        "bun": "./src/Datadog/index.ts",
+        "default": "./lib/Datadog/index.js"
+      },
+      "./DataFactory": {
+        "types": "./lib/DataFactory/index.d.ts",
+        "bun": "./src/DataFactory/index.ts",
+        "default": "./lib/DataFactory/index.js"
+      },
+      "./DataMigration": {
+        "types": "./lib/DataMigration/index.d.ts",
+        "bun": "./src/DataMigration/index.ts",
+        "default": "./lib/DataMigration/index.js"
+      },
+      "./DataProtection": {
+        "types": "./lib/DataProtection/index.d.ts",
+        "bun": "./src/DataProtection/index.ts",
+        "default": "./lib/DataProtection/index.js"
+      },
+      "./DataReplication": {
+        "types": "./lib/DataReplication/index.d.ts",
+        "bun": "./src/DataReplication/index.ts",
+        "default": "./lib/DataReplication/index.js"
+      },
+      "./DataShare": {
+        "types": "./lib/DataShare/index.d.ts",
+        "bun": "./src/DataShare/index.ts",
+        "default": "./lib/DataShare/index.js"
+      },
+      "./DataTransfer": {
+        "types": "./lib/DataTransfer/index.d.ts",
+        "bun": "./src/DataTransfer/index.ts",
+        "default": "./lib/DataTransfer/index.js"
+      },
+      "./DesktopVirtualization": {
+        "types": "./lib/DesktopVirtualization/index.d.ts",
+        "bun": "./src/DesktopVirtualization/index.ts",
+        "default": "./lib/DesktopVirtualization/index.js"
+      },
+      "./DevCenter": {
+        "types": "./lib/DevCenter/index.d.ts",
+        "bun": "./src/DevCenter/index.ts",
+        "default": "./lib/DevCenter/index.js"
+      },
+      "./DevHub": {
+        "types": "./lib/DevHub/index.d.ts",
+        "bun": "./src/DevHub/index.ts",
+        "default": "./lib/DevHub/index.js"
+      },
+      "./DeviceRegistry": {
+        "types": "./lib/DeviceRegistry/index.d.ts",
+        "bun": "./src/DeviceRegistry/index.ts",
+        "default": "./lib/DeviceRegistry/index.js"
+      },
+      "./DeviceUpdate": {
+        "types": "./lib/DeviceUpdate/index.d.ts",
+        "bun": "./src/DeviceUpdate/index.ts",
+        "default": "./lib/DeviceUpdate/index.js"
+      },
+      "./DevOpsInfrastructure": {
+        "types": "./lib/DevOpsInfrastructure/index.d.ts",
+        "bun": "./src/DevOpsInfrastructure/index.ts",
+        "default": "./lib/DevOpsInfrastructure/index.js"
+      },
+      "./DevTestLabs": {
+        "types": "./lib/DevTestLabs/index.d.ts",
+        "bun": "./src/DevTestLabs/index.ts",
+        "default": "./lib/DevTestLabs/index.js"
+      },
+      "./DigitalTwins": {
+        "types": "./lib/DigitalTwins/index.d.ts",
+        "bun": "./src/DigitalTwins/index.ts",
+        "default": "./lib/DigitalTwins/index.js"
+      },
+      "./Discovery": {
+        "types": "./lib/Discovery/index.d.ts",
+        "bun": "./src/Discovery/index.ts",
+        "default": "./lib/Discovery/index.js"
+      },
+      "./Dns": {
+        "types": "./lib/Dns/index.d.ts",
+        "bun": "./src/Dns/index.ts",
+        "default": "./lib/Dns/index.js"
+      },
+      "./DnsResolver": {
+        "types": "./lib/DnsResolver/index.d.ts",
+        "bun": "./src/DnsResolver/index.ts",
+        "default": "./lib/DnsResolver/index.js"
+      },
+      "./DomainRegistration": {
+        "types": "./lib/DomainRegistration/index.d.ts",
+        "bun": "./src/DomainRegistration/index.ts",
+        "default": "./lib/DomainRegistration/index.js"
+      },
+      "./DomainServices": {
+        "types": "./lib/DomainServices/index.d.ts",
+        "bun": "./src/DomainServices/index.ts",
+        "default": "./lib/DomainServices/index.js"
+      },
+      "./DurableTask": {
+        "types": "./lib/DurableTask/index.d.ts",
+        "bun": "./src/DurableTask/index.ts",
+        "default": "./lib/DurableTask/index.js"
+      },
+      "./Edge": {
+        "types": "./lib/Edge/index.d.ts",
+        "bun": "./src/Edge/index.ts",
+        "default": "./lib/Edge/index.js"
+      },
+      "./Elastic": {
+        "types": "./lib/Elastic/index.d.ts",
+        "bun": "./src/Elastic/index.ts",
+        "default": "./lib/Elastic/index.js"
+      },
+      "./ElasticSan": {
+        "types": "./lib/ElasticSan/index.d.ts",
+        "bun": "./src/ElasticSan/index.ts",
+        "default": "./lib/ElasticSan/index.js"
+      },
+      "./EventGrid": {
+        "types": "./lib/EventGrid/index.d.ts",
+        "bun": "./src/EventGrid/index.ts",
+        "default": "./lib/EventGrid/index.js"
+      },
+      "./EventHub": {
+        "types": "./lib/EventHub/index.d.ts",
+        "bun": "./src/EventHub/index.ts",
+        "default": "./lib/EventHub/index.js"
+      },
+      "./ExtendedLocation": {
+        "types": "./lib/ExtendedLocation/index.d.ts",
+        "bun": "./src/ExtendedLocation/index.ts",
+        "default": "./lib/ExtendedLocation/index.js"
+      },
+      "./Fabric": {
+        "types": "./lib/Fabric/index.d.ts",
+        "bun": "./src/Fabric/index.ts",
+        "default": "./lib/Fabric/index.js"
+      },
+      "./FileShares": {
+        "types": "./lib/FileShares/index.d.ts",
+        "bun": "./src/FileShares/index.ts",
+        "default": "./lib/FileShares/index.js"
+      },
+      "./FirmwareAnalysis": {
+        "types": "./lib/FirmwareAnalysis/index.d.ts",
+        "bun": "./src/FirmwareAnalysis/index.ts",
+        "default": "./lib/FirmwareAnalysis/index.js"
+      },
+      "./FluidRelay": {
+        "types": "./lib/FluidRelay/index.d.ts",
+        "bun": "./src/FluidRelay/index.ts",
+        "default": "./lib/FluidRelay/index.js"
+      },
+      "./FrontDoor": {
+        "types": "./lib/FrontDoor/index.d.ts",
+        "bun": "./src/FrontDoor/index.ts",
+        "default": "./lib/FrontDoor/index.js"
+      },
+      "./Functions": {
+        "types": "./lib/Functions/index.d.ts",
+        "bun": "./src/Functions/index.ts",
+        "default": "./lib/Functions/index.js"
+      },
+      "./Grafana": {
+        "types": "./lib/Grafana/index.d.ts",
+        "bun": "./src/Grafana/index.ts",
+        "default": "./lib/Grafana/index.js"
+      },
+      "./GuestConfiguration": {
+        "types": "./lib/GuestConfiguration/index.d.ts",
+        "bun": "./src/GuestConfiguration/index.ts",
+        "default": "./lib/GuestConfiguration/index.js"
+      },
+      "./HardwareSecurityModules": {
+        "types": "./lib/HardwareSecurityModules/index.d.ts",
+        "bun": "./src/HardwareSecurityModules/index.ts",
+        "default": "./lib/HardwareSecurityModules/index.js"
+      },
+      "./HDInsight": {
+        "types": "./lib/HDInsight/index.d.ts",
+        "bun": "./src/HDInsight/index.ts",
+        "default": "./lib/HDInsight/index.js"
+      },
+      "./HealthBot": {
+        "types": "./lib/HealthBot/index.d.ts",
+        "bun": "./src/HealthBot/index.ts",
+        "default": "./lib/HealthBot/index.js"
+      },
+      "./HealthcareApis": {
+        "types": "./lib/HealthcareApis/index.d.ts",
+        "bun": "./src/HealthcareApis/index.ts",
+        "default": "./lib/HealthcareApis/index.js"
+      },
+      "./HealthDataAIServices": {
+        "types": "./lib/HealthDataAIServices/index.d.ts",
+        "bun": "./src/HealthDataAIServices/index.ts",
+        "default": "./lib/HealthDataAIServices/index.js"
+      },
+      "./HybridCompute": {
+        "types": "./lib/HybridCompute/index.d.ts",
+        "bun": "./src/HybridCompute/index.ts",
+        "default": "./lib/HybridCompute/index.js"
+      },
+      "./HybridConnectivity": {
+        "types": "./lib/HybridConnectivity/index.d.ts",
+        "bun": "./src/HybridConnectivity/index.ts",
+        "default": "./lib/HybridConnectivity/index.js"
+      },
+      "./HybridContainerService": {
+        "types": "./lib/HybridContainerService/index.d.ts",
+        "bun": "./src/HybridContainerService/index.ts",
+        "default": "./lib/HybridContainerService/index.js"
+      },
+      "./HybridKubernetes": {
+        "types": "./lib/HybridKubernetes/index.d.ts",
+        "bun": "./src/HybridKubernetes/index.ts",
+        "default": "./lib/HybridKubernetes/index.js"
+      },
+      "./HybridNetwork": {
+        "types": "./lib/HybridNetwork/index.d.ts",
+        "bun": "./src/HybridNetwork/index.ts",
+        "default": "./lib/HybridNetwork/index.js"
+      },
+      "./ImageBuilder": {
+        "types": "./lib/ImageBuilder/index.d.ts",
+        "bun": "./src/ImageBuilder/index.ts",
+        "default": "./lib/ImageBuilder/index.js"
+      },
+      "./IoT": {
+        "types": "./lib/IoT/index.d.ts",
+        "bun": "./src/IoT/index.ts",
+        "default": "./lib/IoT/index.js"
+      },
+      "./IoTHub": {
+        "types": "./lib/IoTHub/index.d.ts",
+        "bun": "./src/IoTHub/index.ts",
+        "default": "./lib/IoTHub/index.js"
+      },
+      "./IoTOperations": {
+        "types": "./lib/IoTOperations/index.d.ts",
+        "bun": "./src/IoTOperations/index.ts",
+        "default": "./lib/IoTOperations/index.js"
+      },
+      "./KeyVault": {
+        "types": "./lib/KeyVault/index.d.ts",
+        "bun": "./src/KeyVault/index.ts",
+        "default": "./lib/KeyVault/index.js"
+      },
+      "./KubernetesConfiguration": {
+        "types": "./lib/KubernetesConfiguration/index.d.ts",
+        "bun": "./src/KubernetesConfiguration/index.ts",
+        "default": "./lib/KubernetesConfiguration/index.js"
+      },
+      "./KubernetesRuntime": {
+        "types": "./lib/KubernetesRuntime/index.d.ts",
+        "bun": "./src/KubernetesRuntime/index.ts",
+        "default": "./lib/KubernetesRuntime/index.js"
+      },
+      "./Kusto": {
+        "types": "./lib/Kusto/index.d.ts",
+        "bun": "./src/Kusto/index.ts",
+        "default": "./lib/Kusto/index.js"
+      },
+      "./Lighthouse": {
+        "types": "./lib/Lighthouse/index.d.ts",
+        "bun": "./src/Lighthouse/index.ts",
+        "default": "./lib/Lighthouse/index.js"
+      },
+      "./LoadTesting": {
+        "types": "./lib/LoadTesting/index.d.ts",
+        "bun": "./src/LoadTesting/index.ts",
+        "default": "./lib/LoadTesting/index.js"
+      },
+      "./LogAnalytics": {
+        "types": "./lib/LogAnalytics/index.d.ts",
+        "bun": "./src/LogAnalytics/index.ts",
+        "default": "./lib/LogAnalytics/index.js"
+      },
+      "./Logic": {
+        "types": "./lib/Logic/index.d.ts",
+        "bun": "./src/Logic/index.ts",
+        "default": "./lib/Logic/index.js"
+      },
+      "./MachineLearning": {
+        "types": "./lib/MachineLearning/index.d.ts",
+        "bun": "./src/MachineLearning/index.ts",
+        "default": "./lib/MachineLearning/index.js"
+      },
+      "./Maintenance": {
+        "types": "./lib/Maintenance/index.d.ts",
+        "bun": "./src/Maintenance/index.ts",
+        "default": "./lib/Maintenance/index.js"
+      },
+      "./ManagedApplications": {
+        "types": "./lib/ManagedApplications/index.d.ts",
+        "bun": "./src/ManagedApplications/index.ts",
+        "default": "./lib/ManagedApplications/index.js"
+      },
+      "./ManagedIdentity": {
+        "types": "./lib/ManagedIdentity/index.d.ts",
+        "bun": "./src/ManagedIdentity/index.ts",
+        "default": "./lib/ManagedIdentity/index.js"
+      },
+      "./ManagedNetworkFabric": {
+        "types": "./lib/ManagedNetworkFabric/index.d.ts",
+        "bun": "./src/ManagedNetworkFabric/index.ts",
+        "default": "./lib/ManagedNetworkFabric/index.js"
+      },
+      "./Management": {
+        "types": "./lib/Management/index.d.ts",
+        "bun": "./src/Management/index.ts",
+        "default": "./lib/Management/index.js"
+      },
+      "./ManufacturingPlatform": {
+        "types": "./lib/ManufacturingPlatform/index.d.ts",
+        "bun": "./src/ManufacturingPlatform/index.ts",
+        "default": "./lib/ManufacturingPlatform/index.js"
+      },
+      "./Maps": {
+        "types": "./lib/Maps/index.d.ts",
+        "bun": "./src/Maps/index.ts",
+        "default": "./lib/Maps/index.js"
+      },
+      "./Migrate": {
+        "types": "./lib/Migrate/index.d.ts",
+        "bun": "./src/Migrate/index.ts",
+        "default": "./lib/Migrate/index.js"
+      },
+      "./Monitor": {
+        "types": "./lib/Monitor/index.d.ts",
+        "bun": "./src/Monitor/index.ts",
+        "default": "./lib/Monitor/index.js"
+      },
+      "./MySQL": {
+        "types": "./lib/MySQL/index.d.ts",
+        "bun": "./src/MySQL/index.ts",
+        "default": "./lib/MySQL/index.js"
+      },
+      "./NetApp": {
+        "types": "./lib/NetApp/index.d.ts",
+        "bun": "./src/NetApp/index.ts",
+        "default": "./lib/NetApp/index.js"
+      },
+      "./Network": {
+        "types": "./lib/Network/index.d.ts",
+        "bun": "./src/Network/index.ts",
+        "default": "./lib/Network/index.js"
+      },
+      "./NetworkCloud": {
+        "types": "./lib/NetworkCloud/index.d.ts",
+        "bun": "./src/NetworkCloud/index.ts",
+        "default": "./lib/NetworkCloud/index.js"
+      },
+      "./NetworkFunction": {
+        "types": "./lib/NetworkFunction/index.d.ts",
+        "bun": "./src/NetworkFunction/index.ts",
+        "default": "./lib/NetworkFunction/index.js"
+      },
+      "./NotificationHubs": {
+        "types": "./lib/NotificationHubs/index.d.ts",
+        "bun": "./src/NotificationHubs/index.ts",
+        "default": "./lib/NotificationHubs/index.js"
+      },
+      "./Peering": {
+        "types": "./lib/Peering/index.d.ts",
+        "bun": "./src/Peering/index.ts",
+        "default": "./lib/Peering/index.js"
+      },
+      "./PlanetaryComputer": {
+        "types": "./lib/PlanetaryComputer/index.d.ts",
+        "bun": "./src/PlanetaryComputer/index.ts",
+        "default": "./lib/PlanetaryComputer/index.js"
+      },
+      "./Policy": {
+        "types": "./lib/Policy/index.d.ts",
+        "bun": "./src/Policy/index.ts",
+        "default": "./lib/Policy/index.js"
+      },
+      "./PolicyInsights": {
+        "types": "./lib/PolicyInsights/index.d.ts",
+        "bun": "./src/PolicyInsights/index.ts",
+        "default": "./lib/PolicyInsights/index.js"
+      },
+      "./Portal": {
+        "types": "./lib/Portal/index.d.ts",
+        "bun": "./src/Portal/index.ts",
+        "default": "./lib/Portal/index.js"
+      },
+      "./PostgreSQL": {
+        "types": "./lib/PostgreSQL/index.d.ts",
+        "bun": "./src/PostgreSQL/index.ts",
+        "default": "./lib/PostgreSQL/index.js"
+      },
+      "./PowerBI": {
+        "types": "./lib/PowerBI/index.d.ts",
+        "bun": "./src/PowerBI/index.ts",
+        "default": "./lib/PowerBI/index.js"
+      },
+      "./PrivateDns": {
+        "types": "./lib/PrivateDns/index.d.ts",
+        "bun": "./src/PrivateDns/index.ts",
+        "default": "./lib/PrivateDns/index.js"
+      },
+      "./RecoveryServices": {
+        "types": "./lib/RecoveryServices/index.d.ts",
+        "bun": "./src/RecoveryServices/index.ts",
+        "default": "./lib/RecoveryServices/index.js"
+      },
+      "./RedHatOpenShift": {
+        "types": "./lib/RedHatOpenShift/index.d.ts",
+        "bun": "./src/RedHatOpenShift/index.ts",
+        "default": "./lib/RedHatOpenShift/index.js"
+      },
+      "./Redis": {
+        "types": "./lib/Redis/index.d.ts",
+        "bun": "./src/Redis/index.ts",
+        "default": "./lib/Redis/index.js"
+      },
+      "./Relationships": {
+        "types": "./lib/Relationships/index.d.ts",
+        "bun": "./src/Relationships/index.ts",
+        "default": "./lib/Relationships/index.js"
+      },
+      "./Relay": {
+        "types": "./lib/Relay/index.d.ts",
+        "bun": "./src/Relay/index.ts",
+        "default": "./lib/Relay/index.js"
+      },
+      "./ResourceConnector": {
+        "types": "./lib/ResourceConnector/index.d.ts",
+        "bun": "./src/ResourceConnector/index.ts",
+        "default": "./lib/ResourceConnector/index.js"
+      },
+      "./ResourceGraph": {
+        "types": "./lib/ResourceGraph/index.d.ts",
+        "bun": "./src/ResourceGraph/index.ts",
+        "default": "./lib/ResourceGraph/index.js"
+      },
+      "./ResourceMover": {
+        "types": "./lib/ResourceMover/index.d.ts",
+        "bun": "./src/ResourceMover/index.ts",
+        "default": "./lib/ResourceMover/index.js"
+      },
+      "./Resources": {
+        "types": "./lib/Resources/index.d.ts",
+        "bun": "./src/Resources/index.ts",
+        "default": "./lib/Resources/index.js"
+      },
+      "./ScVmm": {
+        "types": "./lib/ScVmm/index.d.ts",
+        "bun": "./src/ScVmm/index.ts",
+        "default": "./lib/ScVmm/index.js"
+      },
+      "./Search": {
+        "types": "./lib/Search/index.d.ts",
+        "bun": "./src/Search/index.ts",
+        "default": "./lib/Search/index.js"
+      },
+      "./Security": {
+        "types": "./lib/Security/index.d.ts",
+        "bun": "./src/Security/index.ts",
+        "default": "./lib/Security/index.js"
+      },
+      "./SecurityInsights": {
+        "types": "./lib/SecurityInsights/index.d.ts",
+        "bun": "./src/SecurityInsights/index.ts",
+        "default": "./lib/SecurityInsights/index.js"
+      },
+      "./SerialConsole": {
+        "types": "./lib/SerialConsole/index.d.ts",
+        "bun": "./src/SerialConsole/index.ts",
+        "default": "./lib/SerialConsole/index.js"
+      },
+      "./ServiceBus": {
+        "types": "./lib/ServiceBus/index.d.ts",
+        "bun": "./src/ServiceBus/index.ts",
+        "default": "./lib/ServiceBus/index.js"
+      },
+      "./ServiceConnector": {
+        "types": "./lib/ServiceConnector/index.d.ts",
+        "bun": "./src/ServiceConnector/index.ts",
+        "default": "./lib/ServiceConnector/index.js"
+      },
+      "./ServiceFabric": {
+        "types": "./lib/ServiceFabric/index.d.ts",
+        "bun": "./src/ServiceFabric/index.ts",
+        "default": "./lib/ServiceFabric/index.js"
+      },
+      "./ServiceFabricClassic": {
+        "types": "./lib/ServiceFabricClassic/index.d.ts",
+        "bun": "./src/ServiceFabricClassic/index.ts",
+        "default": "./lib/ServiceFabricClassic/index.js"
+      },
+      "./ServiceNetworking": {
+        "types": "./lib/ServiceNetworking/index.d.ts",
+        "bun": "./src/ServiceNetworking/index.ts",
+        "default": "./lib/ServiceNetworking/index.js"
+      },
+      "./SignalR": {
+        "types": "./lib/SignalR/index.d.ts",
+        "bun": "./src/SignalR/index.ts",
+        "default": "./lib/SignalR/index.js"
+      },
+      "./SiteRecovery": {
+        "types": "./lib/SiteRecovery/index.d.ts",
+        "bun": "./src/SiteRecovery/index.ts",
+        "default": "./lib/SiteRecovery/index.js"
+      },
+      "./Sql": {
+        "types": "./lib/Sql/index.d.ts",
+        "bun": "./src/Sql/index.ts",
+        "default": "./lib/Sql/index.js"
+      },
+      "./SqlVirtualMachine": {
+        "types": "./lib/SqlVirtualMachine/index.d.ts",
+        "bun": "./src/SqlVirtualMachine/index.ts",
+        "default": "./lib/SqlVirtualMachine/index.js"
+      },
+      "./StandbyPool": {
+        "types": "./lib/StandbyPool/index.d.ts",
+        "bun": "./src/StandbyPool/index.ts",
+        "default": "./lib/StandbyPool/index.js"
+      },
+      "./Storage": {
+        "types": "./lib/Storage/index.d.ts",
+        "bun": "./src/Storage/index.ts",
+        "default": "./lib/Storage/index.js"
+      },
+      "./StorageActions": {
+        "types": "./lib/StorageActions/index.d.ts",
+        "bun": "./src/StorageActions/index.ts",
+        "default": "./lib/StorageActions/index.js"
+      },
+      "./StorageCache": {
+        "types": "./lib/StorageCache/index.d.ts",
+        "bun": "./src/StorageCache/index.ts",
+        "default": "./lib/StorageCache/index.js"
+      },
+      "./StorageDiscovery": {
+        "types": "./lib/StorageDiscovery/index.d.ts",
+        "bun": "./src/StorageDiscovery/index.ts",
+        "default": "./lib/StorageDiscovery/index.js"
+      },
+      "./StorageMover": {
+        "types": "./lib/StorageMover/index.d.ts",
+        "bun": "./src/StorageMover/index.ts",
+        "default": "./lib/StorageMover/index.js"
+      },
+      "./StorageSync": {
+        "types": "./lib/StorageSync/index.d.ts",
+        "bun": "./src/StorageSync/index.ts",
+        "default": "./lib/StorageSync/index.js"
+      },
+      "./StreamAnalytics": {
+        "types": "./lib/StreamAnalytics/index.d.ts",
+        "bun": "./src/StreamAnalytics/index.ts",
+        "default": "./lib/StreamAnalytics/index.js"
+      },
+      "./Synapse": {
+        "types": "./lib/Synapse/index.d.ts",
+        "bun": "./src/Synapse/index.ts",
+        "default": "./lib/Synapse/index.js"
+      },
+      "./TrafficManager": {
+        "types": "./lib/TrafficManager/index.d.ts",
+        "bun": "./src/TrafficManager/index.ts",
+        "default": "./lib/TrafficManager/index.js"
+      },
+      "./VideoIndexer": {
+        "types": "./lib/VideoIndexer/index.d.ts",
+        "bun": "./src/VideoIndexer/index.ts",
+        "default": "./lib/VideoIndexer/index.js"
+      },
+      "./VirtualEnclaves": {
+        "types": "./lib/VirtualEnclaves/index.d.ts",
+        "bun": "./src/VirtualEnclaves/index.ts",
+        "default": "./lib/VirtualEnclaves/index.js"
+      },
+      "./VMware": {
+        "types": "./lib/VMware/index.d.ts",
+        "bun": "./src/VMware/index.ts",
+        "default": "./lib/VMware/index.js"
+      },
+      "./Web": {
+        "types": "./lib/Web/index.d.ts",
+        "bun": "./src/Web/index.ts",
+        "default": "./lib/Web/index.js"
+      },
+      "./WebPubSub": {
+        "types": "./lib/WebPubSub/index.d.ts",
+        "bun": "./src/WebPubSub/index.ts",
+        "default": "./lib/WebPubSub/index.js"
+      },
+      "./Website": {
+        "types": "./lib/Website/index.d.ts",
+        "bun": "./src/Website/index.ts",
+        "default": "./lib/Website/index.js"
+      },
+      "./WeightsAndBiases": {
+        "types": "./lib/WeightsAndBiases/index.d.ts",
+        "bun": "./src/WeightsAndBiases/index.ts",
+        "default": "./lib/WeightsAndBiases/index.js"
+      },
+      "./Workloads": {
+        "types": "./lib/Workloads/index.d.ts",
+        "bun": "./src/Workloads/index.ts",
+        "default": "./lib/Workloads/index.js"
+      },
+      "./*/internal": null,
+      "./*": {
+        "types": "./lib/*.d.ts",
+        "bun": "./src/*.ts",
+        "default": "./lib/*.js"
+      },
+      "./package.json": "./package.json"
+    }
+  },
+  "scripts": {
+    "build": "pnpm -r --filter \"{.}...\" run build:package",
+    "build:package": "node scripts/build.ts"
+  },
+  "dependencies": {
+    "@distilled.cloud/azure": "workspace:*",
+    "@distilled.cloud/core": "workspace:*"
+  },
+  "devDependencies": {
+    "@effect/platform-bun": "catalog:",
+    "@effect/platform-node": "catalog:",
+    "@types/bun": "catalog:",
+    "@types/node": "catalog:",
+    "alchemy": "workspace:*",
+    "effect": "catalog:",
+    "typescript": "catalog:"
+  },
+  "peerDependencies": {
+    "@effect/platform-bun": "catalog:",
+    "@effect/platform-node": "catalog:",
+    "alchemy": "workspace:*",
+    "effect": "catalog:"
+  },
+  "peerDependenciesMeta": {
+    "@effect/platform-bun": {
+      "optional": true
+    },
+    "@effect/platform-node": {
+      "optional": true
+    }
+  },
+  "alchemy": {
+    "contributes": [
+      "@alchemy.run/azure/Contributions"
+    ]
+  }
+}

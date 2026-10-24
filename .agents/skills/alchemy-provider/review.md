@@ -122,6 +122,7 @@ reason the platform forces. References:
 | Runtime coloring | read each runtime callable | requires `RuntimeContext`; no `WorkerEnvironment`-style leaks |
 | Event sources | compare with AWS `SQS.QueueEventSource` / Cloudflare cron | contract in the source service, per-host implementation layers |
 | User-facing config | read setup docs and examples | region/account from profile or a `<P>.Region("...")` layer, matching `AWS.Region`; no new env vars |
+| Container scope is ambient | type-check `<P>.<Service>.<Resource>("id")` for a resource whose only required prop is its container (resource group, project) | compiles; the resource lands in the stack's `<stack>-<stage>` container, and a layer overrides it |
 
 ## 6. Websites
 
