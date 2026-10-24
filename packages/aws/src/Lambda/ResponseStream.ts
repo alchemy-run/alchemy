@@ -37,7 +37,7 @@ export interface AwsLambdaGlobal {
 }
 
 export const awslambdaGlobal = (): AwsLambdaGlobal | undefined =>
-  (globalThis as { awslambda?: AwsLambdaGlobal }).awslambda;
+  (globalThis as unknown as { awslambda?: AwsLambdaGlobal }).awslambda;
 
 /**
  * The response stream of the current invocation of a streaming Function.

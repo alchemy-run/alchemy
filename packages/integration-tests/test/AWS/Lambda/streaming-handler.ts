@@ -1,4 +1,5 @@
 import * as Lambda from "@alchemy.run/aws/Lambda";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Stream from "effect/Stream";
@@ -9,7 +10,7 @@ export default StreamingFunction.make(
   {
     main: import.meta.url,
     functionUrl: { invokeMode: "RESPONSE_STREAM" },
-    timeout: "30 seconds",
+    timeout: Duration.seconds(30),
   },
   Effect.gen(function* () {
     return {

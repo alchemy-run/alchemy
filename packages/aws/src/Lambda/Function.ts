@@ -1295,7 +1295,9 @@ export const Function: Platform<
             Config.withDefault(false),
           );
           if (!streaming || awslambda === undefined) {
-            return dispatch;
+            // Exactly two parameters: Node 24 rejects a handler declaring a
+            // third (`callback`) parameter.
+            return (event: any, context: lambda.Context) => dispatch(event, context);
           }
           // `invokeMode: "RESPONSE_STREAM"`: Lambda passes a response stream
           // instead of reading the return value. HTTP responses are piped
