@@ -23,7 +23,7 @@ import { MemoryLedgerStore } from "../src/Ledger/LedgerStore.ts";
 
 const story = Story.make(Bank, {
   layer: BankHandlers.pipe(Layer.provide(MemoryLedgerStore)),  // required when the model has handlers
-  externalSystems: [FraudCheck],                                // replaced by ones the story controls
+  stub: [FraudCheck],                                           // stubbed: the story answers each call
 });
 const a1 = Account.ref("a-1");
 

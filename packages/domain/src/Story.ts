@@ -328,8 +328,12 @@ interface PendingCall {
 interface StoryOptions<Policies, LE, LR, Systems> {
   /** The policies' and projections' Layers. Required when the model has either. */
   readonly layer?: Layer.Layer<Policies, LE, LR>;
-  /** External systems the policies call. Each is replaced by a scripted implementation. */
-  readonly externalSystems?: ReadonlyArray<Systems>;
+  /**
+   * External systems to stub. Each call to one waits until the story answers
+   * it with `resolve`, `fail` or `die`. Systems not listed run for real, from
+   * the Layers you provide.
+   */
+  readonly stub?: ReadonlyArray<Systems>;
 }
 
 /**
@@ -341,7 +345,7 @@ interface StoryOptions<Policies, LE, LR, Systems> {
  * ```typescript
  * const story = Story.make(Bank, {
  *   layer: BankPolicies,
- *   externalSystems: [FraudCheck, Payments],
+ *   stub: [FraudCheck, Payments],
  * });
  *
  * it.effect("withdraw replies with the new balance", () =>
@@ -380,7 +384,7 @@ const make =
       const clockState = { now: Date.parse("2026-01-01T00:00:00.000Z") };
       const platform = InMemory.make({ manual: true, now: () => clockState.now });
       const calls: Array<PendingCall> = [];
-      const systemLayers = (options.externalSystems ?? []).map((system) =>
+      const systemLayers = (options.stub ?? []).map((system) =>
         Layer.succeed(
           system as Context.Key<unknown, unknown>,
           ExternalSystem.observeOps(
@@ -736,7 +740,7 @@ const make =
         }
       });
 
-      // `hosted` satisfies the Domain, the platform and the scripted Ports; what
+      // `hosted` satisfies the Domain, the platform and the stubbed external systems; what
       // remains is whatever the policy Layers need from outside (`LR`'s rest).
       return yield* run.pipe(Effect.provide(hosted));
     }) as Effect.Effect<

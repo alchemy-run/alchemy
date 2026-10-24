@@ -186,7 +186,7 @@ import { Payments } from "../src/Settlement/Payments.external.ts";
 
 const story = Story.make(Bank, {
   layer: BankHandlers.pipe(Layer.provide(MemoryLedgerStore)),
-  externalSystems: [FraudCheck, Payments],
+  stub: [FraudCheck, Payments],
 });
 const account = Account.ref("a-1");
 
@@ -205,7 +205,7 @@ it.effect("money that settles on a closed account is refunded", () =>
 );
 ```
 
-`Story.make` replaces every external system you list with one you control. A story fails if a call is left unresolved, so every outside call is accounted for.
+`stub` lists the external systems the story answers itself; any system you leave out runs for real, from the Layer you provide. A story fails if a stubbed call is left unresolved, so every outside call is accounted for.
 
 :::note
 See how a policy uses one in [Policy](/domain/policy#call-an-external-system).

@@ -236,7 +236,7 @@ class Counters extends Domain.Model("Counters", {
 
 const story = Story.make(Counters, {
   layer: Layer.mergeAll(CapWhenLargeLive, CapWhenOverdrawnLive, RemindWhenCappedLive),
-  externalSystems: [Approval],
+  stub: [Approval],
 });
 const c1 = Counter.ref("c-1");
 const c2 = Counter.ref("c-2");

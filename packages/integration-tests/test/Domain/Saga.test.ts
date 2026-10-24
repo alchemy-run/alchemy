@@ -299,7 +299,7 @@ class Checks extends Domain.Model("Checks", {
 
 const checks = Story.make(Checks, {
   layer: Layer.mergeAll(StartChecksLive, ScreenLive, ExplodeLive),
-  externalSystems: [Sanctions],
+  stub: [Sanctions],
 });
 
 describe("Domain.Saga", () => {
