@@ -1032,6 +1032,38 @@ for (const scoped of [undefined, false]) {
   );
 }
 
+// Outside a cycle `read` refuses the foreign function at plan time; with
+// adoption, reconcile updates it from the adopted attributes. That update must
+// not re-check the tags the engine already admitted, and re-brands it.
+test.provider(
+  "adopt(true) takes over a foreign function outside a cycle",
+  (stack) =>
+    Effect.gen(function* () {
+      const { original, restore } = yield* plantForeignFunction(stack);
+      const adopted = yield* stack.deploy(
+        AWS.Lambda.Function("AdoptedFn", {
+          main: asyncHandlerPath,
+          functionName: original.functionName,
+          functionUrl: false,
+        }).pipe(adopt(true)),
+      );
+      expect(adopted.functionName).toBe(original.functionName);
+      const { Tags } = yield* Lambda.getFunction({ FunctionName: original.functionName });
+      expect(Tags?.["alchemy::id"]).toBe("AdoptedFn");
+      yield* stack.destroy();
+      yield* assertFunctionDeleted(original.functionName);
+      yield* assertRoleDeleted(adopted.roleName);
+      // The taken-over function's previous execution role is still `CyclicOriginal`'s.
+      yield* restore;
+      yield* stack.destroy();
+      yield* assertRoleDeleted(original.roleName);
+    }).pipe(Effect.onError(() => stack.destroy().pipe(Effect.ignore))),
+  {
+    tags: ["provider:aws", "provider:aws:iam", "provider:aws:lambda", "live"],
+    timeout: 180_000,
+  },
+);
+
 test.provider(
   "a cyclic precreate takes over a foreign function with adopt(true)",
   (stack) =>
