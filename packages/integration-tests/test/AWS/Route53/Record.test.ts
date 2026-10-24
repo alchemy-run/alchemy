@@ -503,3 +503,61 @@ test.provider(
     }),
   { tags: ["provider:aws", "provider:aws:route53", "live"], timeout: 240_000 },
 );
+
+// Regression test for https://github.com/alchemy-run/alchemy/issues/1672.
+//
+// Swapping the names of two identical records (a site's domain and its
+// redirect alias the same target) replaces both. Each replacement's UPSERT
+// takes over the record set the other one's old generation still points at,
+// so the old generations' DELETEs used to remove both live records.
+test.provider(
+  "swapping the names of two records keeps both records (#1672)",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const zoneName = `swap-${stack.stage.toLowerCase().replace(/[^a-z0-9-]/g, "-")}.alchemy-route53-test.com`;
+      const apex = `${zoneName}.`;
+      const www = `www.${zoneName}.`;
+
+      const deployRecords = (first: string, second: string) =>
+        stack.deploy(
+          Effect.gen(function* () {
+            const zone = yield* HostedZone("SwapZone", { name: zoneName });
+            yield* Record("SwapRecord1", {
+              hostedZoneId: zone.id,
+              name: first,
+              type: "TXT",
+              ttl: "60 seconds",
+              records: ['"site"'],
+            });
+            yield* Record("SwapRecord2", {
+              hostedZoneId: zone.id,
+              name: second,
+              type: "TXT",
+              ttl: "60 seconds",
+              records: ['"site"'],
+            });
+            return zone;
+          }),
+        );
+
+      yield* deployRecords(www, apex);
+      const zone = yield* deployRecords(apex, www);
+
+      const live = yield* route53.listResourceRecordSets({
+        HostedZoneId: normalizeId(zone.id),
+      });
+      const names = (live.ResourceRecordSets ?? [])
+        .filter((set) => set.Type === "TXT")
+        .map((set) => set.Name)
+        .sort();
+      expect(names).toEqual([apex, www].sort());
+
+      // The zone has no `forceDestroy`, so destroy only succeeds when both
+      // records were deleted.
+      yield* stack.destroy();
+      const zoneGone = yield* route53.getHostedZone({ Id: normalizeId(zone.id) }).pipe(Effect.flip);
+      expect(zoneGone._tag).toBe("NoSuchHostedZone");
+    }),
+  { tags: ["provider:aws", "provider:aws:route53", "live"], timeout: 240_000 },
+);
