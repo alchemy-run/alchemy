@@ -101,7 +101,7 @@ export type Shape<Ops extends Record<string, OpSpec>> = {
 
 /**
  * A reference to one external system operation, used by stories. Pass it to
- * `resolve`, `fail` or `returned`; call it to describe a call for `Story.call`.
+ * `succeed`, `fail` or `returned`; call it to describe a call for `Story.call`.
  */
 export interface Op<Args = any, Success = any, Error = any> {
   /** Describe a call with these (partial) arguments, for `Story.call`. Nothing runs. */

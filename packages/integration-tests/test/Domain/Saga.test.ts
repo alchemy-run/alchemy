@@ -342,12 +342,12 @@ describe("Domain.Saga", () => {
     ),
   );
 
-  it.effect("a step's external system call waits until the story resolves it", () =>
+  it.effect("a step's external system call waits until the story answers it", () =>
     checks(
       Story.when(transfer, request(40)),
       Story.saga(Screen, "t-1", { _tag: "Running" }),
       Story.call(Sanctions.check({ wallet: "alice" })),
-      Story.resolve(Sanctions.check, { clear: false }),
+      Story.succeed(Sanctions.check, { clear: false }),
       Story.saga(Screen, "t-1", { _tag: "Rejected", rejection: new Flagged() }),
     ),
   );

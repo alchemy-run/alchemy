@@ -111,7 +111,7 @@ export type Step =
       readonly args: unknown;
     }
   | {
-      readonly _tag: "Resolve";
+      readonly _tag: "Answer";
       readonly tag: string | undefined;
       readonly op: ExternalSystem.Op;
       readonly exit: Exit.Exit<unknown, unknown>;
@@ -249,22 +249,22 @@ const callStep: {
 /** Answer a pending call with an exit; the tag, when given, comes first. */
 const answer = (a: ReadonlyArray<any>, exit: (value: any) => Exit.Exit<unknown, unknown>): Step =>
   typeof a[0] === "string"
-    ? { _tag: "Resolve", tag: a[0], op: a[1], exit: exit(a[2]) }
-    : { _tag: "Resolve", tag: undefined, op: a[0], exit: exit(a[1]) };
+    ? { _tag: "Answer", tag: a[0], op: a[1], exit: exit(a[2]) }
+    : { _tag: "Answer", tag: undefined, op: a[0], exit: exit(a[1]) };
 
 /**
  * Answer an external system call a `call` step has checked. With a tag
  * first, answers the call a `call` step tagged; without one, answers the only
  * pending call to the operation, and fails if several are pending.
  */
-const resolve: {
+const succeed: {
   <Success>(op: ExternalSystem.Op<any, Success>, value: Success): Step;
   <Success>(tag: string, op: ExternalSystem.Op<any, Success>, value: Success): Step;
 } = (...a: ReadonlyArray<any>): Step => answer(a, Exit.succeed);
 
 /**
  * Fail an external system call with one of the operation's declared errors,
- * as when the vendor refuses. Finds the call the same way `resolve` does.
+ * as when the vendor refuses. Finds the call the same way `succeed` does.
  */
 const fail: {
   <Error>(op: ExternalSystem.Op<any, any, Error>, error: NoInfer<Error>): Step;
@@ -273,7 +273,7 @@ const fail: {
 
 /**
  * Fail an external system call with a defect, as when the transport breaks.
- * Finds the call the same way `resolve` does.
+ * Finds the call the same way `succeed` does.
  */
 const die: {
   (op: ExternalSystem.Op, defect: unknown): Step;
@@ -288,7 +288,7 @@ const outcome = (a: ReadonlyArray<any>, expected: (value: any) => any): Step =>
 
 /**
  * A real call to an external system that is not stubbed returned this value.
- * Finds the call the way `resolve` does: by tag, or the only unasserted call
+ * Finds the call the way `succeed` does: by tag, or the only unasserted call
  * to the operation. Every real call needs a `call` step, then one of
  * `returned`, `failed` or `died`.
  */
@@ -442,7 +442,7 @@ const describeStep = (s: Step): string => {
       return `${s.stream.streamName}/${s.key.id}: ${summarizeAll(s.events)}`;
     case "Call":
       return `${callName(s.tag, s.op)} ${summarize(s.args)}`;
-    case "Resolve":
+    case "Answer":
       return `${callName(s.tag, s.op)} → ${
         Exit.isSuccess(s.exit)
           ? summarize(s.exit.value)
@@ -573,7 +573,7 @@ interface StoryOptions<Policies, LE, LR, Systems> {
   readonly layer?: Layer.Layer<Policies, LE, LR>;
   /**
    * External systems to fake. Each call to one waits until the story answers it
-   * with `resolve`, `fail` or `die`. Systems not listed are called for real,
+   * with `succeed`, `fail` or `die`. Systems not listed are called for real,
    * through the Layers you provide to the story, and the story asserts what
    * each call returned with `returned`, `failed` or `died`.
    */
@@ -1026,7 +1026,7 @@ const make =
                 assertedDeaths.add(`${s.saga.sagaName}/${run.executionId}`);
               break;
             }
-            case "Resolve": {
+            case "Answer": {
               const name = `${s.op.system}.${s.op.op}`;
               if (!stubbed.has(s.op.system)) {
                 return yield* fail(
@@ -1052,7 +1052,7 @@ const make =
                 if (pending.length === 0) return yield* fail(`no pending call to ${name}`);
                 if (pending.length > 1) {
                   return yield* fail(
-                    `${pending.length} pending calls to ${name}; name each with call("<tag>", ...) and resolve it by tag`,
+                    `${pending.length} pending calls to ${name}; name each with call("<tag>", ...) and answer it by tag`,
                   );
                 }
                 call = pending[0];
@@ -1071,7 +1071,7 @@ const make =
               const name = `${s.op.system}.${s.op.op}`;
               if (stubbed.has(s.op.system)) {
                 return yield* fail(
-                  `${s.op.system} is stubbed; answer its calls with resolve, fail or die`,
+                  `${s.op.system} is stubbed; answer its calls with succeed, fail or die`,
                 );
               }
               let call: ObservedCall | undefined;
@@ -1138,7 +1138,7 @@ const make =
           return yield* new StepFailed({
             step: steps.length,
             atEnd: true,
-            message: `unresolved external system calls at the end of the story: ${show(calls.map((c) => `${c.system}.${c.op}(${show(c.args)})`))}`,
+            message: `unanswered external system calls at the end of the story: ${show(calls.map((c) => `${c.system}.${c.op}(${show(c.args)})`))}`,
           });
         }
       });
@@ -1225,7 +1225,7 @@ const make =
  * **Example:** Answer an external system call, then move the clock
  * ```typescript
  * Story.call(FraudCheck.score({ accountId: account.id, amount: 60_000 })),
- * Story.resolve(FraudCheck.score, { risk: 0.95 }),
+ * Story.succeed(FraudCheck.score, { risk: 0.95 }),
  * Story.clock("2026-01-02T09:00:00Z"),
  * ```
  *
@@ -1233,8 +1233,8 @@ const make =
  * ```typescript
  * Story.call("a-1", FraudCheck.score({ accountId: a1.id })),
  * Story.call("a-2", FraudCheck.score({ accountId: a2.id })),
- * Story.resolve("a-2", FraudCheck.score, { risk: 0.1 }),
- * Story.resolve("a-1", FraudCheck.score, { risk: 0.95 }),
+ * Story.succeed("a-2", FraudCheck.score, { risk: 0.1 }),
+ * Story.succeed("a-1", FraudCheck.score, { risk: 0.95 }),
  * ```
  *
  * **Example:** Assert a real call to a system that is not stubbed
@@ -1281,7 +1281,7 @@ export const Story = {
   emitted,
   streamed,
   call: callStep,
-  resolve,
+  succeed,
   fail,
   die,
   returned,
