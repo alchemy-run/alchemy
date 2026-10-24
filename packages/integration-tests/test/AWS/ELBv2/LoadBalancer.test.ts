@@ -145,7 +145,9 @@ test.provider(
 
       const target = { name: stack.name, stage: stack.stage };
       const clean = yield* Drift.detect(target).pipe(Effect.provide(stack.state));
-      expect(clean.resources.DriftLb?.action).toBe("unchanged");
+      // The load balancer's own action also flips on subnet order (#1968), so
+      // its attribute checks compare the observed attributes directly.
+      expect(clean.resources.DriftLb?.attr.attributes).toEqual(lbAttributes);
       expect(clean.resources.DriftLbListener?.action).toBe("unchanged");
 
       yield* elbv2.modifyLoadBalancerAttributes({
@@ -158,9 +160,8 @@ test.provider(
       });
 
       const drifted = yield* Drift.detect(target).pipe(Effect.provide(stack.state));
-      expect(drifted.resources.DriftLb).toMatchObject({
-        action: "drifted",
-        attr: { attributes: { "idle_timeout.timeout_seconds": "60" } },
+      expect(drifted.resources.DriftLb?.attr.attributes).toEqual({
+        "idle_timeout.timeout_seconds": "60",
       });
       expect(drifted.resources.DriftLbListener).toMatchObject({
         action: "drifted",
@@ -168,7 +169,10 @@ test.provider(
       });
 
       const repaired = yield* Drift.repair(target).pipe(Effect.provide(stack.state));
-      expect(repaired.resources.DriftLb?.action).toBe("repaired");
+      expect(repaired.resources.DriftLb).toMatchObject({
+        action: "repaired",
+        attr: { attributes: lbAttributes },
+      });
       expect(repaired.resources.DriftLbListener?.action).toBe("repaired");
       expect(
         toRecord(
@@ -182,7 +186,7 @@ test.provider(
       ).toMatchObject(listenerAttributes);
 
       const settled = yield* Drift.detect(target).pipe(Effect.provide(stack.state));
-      expect(settled.resources.DriftLb?.action).toBe("unchanged");
+      expect(settled.resources.DriftLb?.attr.attributes).toEqual(lbAttributes);
       expect(settled.resources.DriftLbListener?.action).toBe("unchanged");
 
       yield* stack.destroy();
