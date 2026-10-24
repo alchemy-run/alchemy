@@ -22,7 +22,6 @@
     "@remotion/player": "catalog:",
     "@remotion/renderer": "catalog:",
     "diff": "catalog:",
-    "pg": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:",
     "remotion": "catalog:",

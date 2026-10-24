@@ -21,7 +21,7 @@ export default class PostgresFn extends Function<PostgresFn>()(
     project: Site,
     environment: Partition,
     main: import.meta.url,
-    build: { install: ["pg", "drizzle-orm"] },
+    build: { install: ["drizzle-orm"] },
   },
   Effect.gen(function* () {
     const conn = yield* ConnectPostgres(Db);
