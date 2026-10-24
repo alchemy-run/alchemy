@@ -51,7 +51,7 @@ The steps:
 - `state(ref, partial | fn)` asserts aggregate state.
 - `view(View, ref, partial | fn | Story.none)` asserts view state. `emitted(View, ref, [...])` asserts a view's emitted events, and `streamed(Stream, ref, ...)` a stream's entries.
 - `provide(Service, value)` stands in for middleware on the commands that follow.
-- `clock("2026-01-02T09:00:00Z")` moves time: commands are stamped with it, and scheduled commands and saga sleeps that are now due fire.
+- `clock("2026-01-02T09:00:00Z")` moves time: commands are stamped with it, and scheduled commands and saga sleeps that are now due fire. It also takes epoch milliseconds or a `DateTime`.
 
 ### External system calls
 
@@ -71,6 +71,14 @@ Story.resolve("a-1", FraudCheck.score, { risk: 0.95 }),
 
 An untagged `resolve` with several calls waiting fails the story, and so does a call left unanswered at the end.
 
+`fail` answers a waiting call with the operation's declared `error:`, to test the branch where the vendor refuses. `die` answers it with a defect, as when the transport breaks. Both find the call the way `resolve` does, untagged or by tag, and only a declared error type-checks:
+
+```ts
+Story.expectCall(Payments.refund, { settlementId: "st_1" }),
+Story.fail(Payments.refund, new RefundDeclined({ reason: "card-closed" })),
+Story.die("r-2", Payments.refund, new Error("socket closed")),
+```
+
 ### Sagas
 
 Test what a saga does: the events its steps record on aggregates, and how the run ended. Don't test its internal steps.
@@ -86,7 +94,7 @@ The statuses are `NotStarted`, `Running`, `Completed`, `Rejected`, `Interrupted`
 
 ### What to cover
 
-For every command, cover the happy path, each rejection, and each authorization case (owner, other customer, agent). For every policy, cover the reaction, and the reaction when its command is rejected. For every saga, cover completion, each failure with its compensation, and each wait (signal, timeout via `clock`). For every view, check its state after the events it folds.
+For every command, cover the happy path, each rejection, and each authorization case (owner, other customer, agent). For every policy, cover the reaction, the reaction when its command is rejected, and the reaction when an external call fails with its declared error. For every saga, cover completion, each failure with its compensation, and each wait (signal, timeout via `clock`). For every view, check its state after the events it folds.
 
 ## Api tests: the client's view
 
