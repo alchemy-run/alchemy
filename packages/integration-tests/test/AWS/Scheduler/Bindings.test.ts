@@ -1,5 +1,6 @@
 import * as AWS from "@alchemy.run/aws";
 import { describe, expect } from "@alchemy.run/test";
+import * as lambda from "@distilled.cloud/aws/lambda";
 import * as scheduler from "@distilled.cloud/aws/scheduler";
 import * as SQS from "@distilled.cloud/aws/sqs";
 import * as Test from "alchemy/Test/Alchemy";
@@ -24,6 +25,7 @@ const SCHEDULE_PREFIX = "alch-schedtest-";
 const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
+let functionName: string;
 let sinkQueueUrl: string;
 let cronQueueUrl: string;
 
@@ -152,12 +154,14 @@ describe(
         yield* purgeTestSchedules;
 
         yield* Effect.logInfo("Scheduler test setup: deploying fixture");
-        const { functionUrl } = yield* sharedStack.deploy(
+        const deployed = yield* sharedStack.deploy(
           Effect.gen(function* () {
             return yield* SchedulerTestFunction;
           }).pipe(Effect.provide(SchedulerTestFunctionLive)),
         );
 
+        const { functionUrl } = deployed;
+        functionName = deployed.functionName;
         expect(functionUrl).toBeTruthy();
         baseUrl = functionUrl!.replace(/\/+$/, "");
         const readinessUrl = `${baseUrl}/info`;
@@ -198,6 +202,17 @@ describe(
     );
 
     describe("CreateSchedule", () => {
+      // #1842: the binding resolves the AWS environment while the function's
+      // init runs. That resolution reads the deployer's config (profile,
+      // credentials, region) and must not be bound into the function's env.
+      test.provider("does not leak the deployer's config into the function env", (_stack) =>
+        Effect.gen(function* () {
+          const config = yield* lambda.getFunctionConfiguration({ FunctionName: functionName });
+          const keys = Object.keys(config.Environment?.Variables ?? {});
+          expect(keys.filter((key) => /^(AWS_|ALCHEMY_PROFILE)/.test(key))).toEqual([]);
+        }),
+      );
+
       test.provider(
         "mints a one-shot at() schedule whose target fires (iam:PassRole end-to-end)",
         (_stack) =>
