@@ -234,9 +234,11 @@ export interface Stream extends Resource<
  * yield* Kinesis.consumeStreamRecords(
  *   stream,
  *   {},
- *   Effect.fn(function* (record) {
- *     const data = new TextDecoder().decode(record.data);
- *     yield* Effect.log(`Received: ${data}`);
+ *   Effect.fn(function* (event) {
+ *     for (const record of event.Records) {
+ *       const data = Buffer.from(record.kinesis.data, "base64").toString("utf8");
+ *       yield* Effect.log(`Received: ${data}`);
+ *     }
  *   }),
  * );
  * ```

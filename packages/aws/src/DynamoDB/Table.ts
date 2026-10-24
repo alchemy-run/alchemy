@@ -443,8 +443,10 @@ export interface Table extends Resource<
  * yield* DynamoDB.consumeTableChanges(
  *   table,
  *   { streamViewType: "NEW_AND_OLD_IMAGES" },
- *   Effect.fn(function* (record) {
- *     yield* Effect.log(`${record.eventName}: ${JSON.stringify(record.dynamodb)}`);
+ *   Effect.fn(function* (event) {
+ *     for (const record of event.Records) {
+ *       yield* Effect.log(`${record.eventName}: ${JSON.stringify(record.dynamodb)}`);
+ *     }
  *   }),
  * );
  * ```

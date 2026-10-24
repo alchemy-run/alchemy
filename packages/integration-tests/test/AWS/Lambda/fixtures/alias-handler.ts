@@ -2,7 +2,6 @@ import * as Lambda from "@alchemy.run/aws/Lambda";
 import * as SQS from "@alchemy.run/aws/SQS";
 import * as Effect from "effect/Effect";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
-import * as Stream from "effect/Stream";
 
 // Host Function for the `alias` test: a function URL plus an SQS event
 // source, so the test can check both follow the alias. `fetch` echoes the
@@ -19,7 +18,7 @@ export const aliasFunction = (alias: string | undefined) =>
     Effect.gen(function* () {
       const queue = yield* SQS.Queue("AliasQueue");
 
-      yield* SQS.consumeQueueMessages(queue, (stream) => stream.pipe(Stream.runDrain));
+      yield* SQS.consumeQueueMessages(queue, () => Effect.void);
 
       return {
         fetch: Effect.gen(function* () {
