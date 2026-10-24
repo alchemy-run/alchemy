@@ -925,6 +925,10 @@ export interface TestCloudService {
     id: string;
     bindings?: string[];
   }[];
+  /** Creates per id; a recreated resource gets a fresh `arn`. */
+  readonly generations: Map<string, number>;
+  /** Runs inside every `read`, before the cloud is observed. */
+  onRead?: (id: string) => Effect.Effect<void>;
 }
 
 export class TestCloud extends Context.Service<TestCloud, TestCloudService>()("TestCloud") {}
@@ -933,6 +937,7 @@ export const makeTestCloud = (): TestCloudService => ({
   resources: new Map(),
   unowned: new Set(),
   calls: [],
+  generations: new Map(),
 });
 
 export type DriftResourceProps = {
@@ -944,6 +949,8 @@ export type DriftResourceProps = {
    * subscription's topic).
    */
   dependsOn?: string[];
+  /** Echoed into the `ref` attribute — e.g. an upstream's `arn`. */
+  ref?: string;
 };
 
 export interface DriftResource extends Resource<
@@ -954,6 +961,12 @@ export interface DriftResource extends Resource<
     value: string;
     tags: Record<string, string>;
     env: Record<string, string>;
+    /**
+     * `id#generation` — changes when the resource is recreated, like an
+     * AWS-assigned ARN. Only set with a TestCloud in context.
+     */
+    arn?: string;
+    ref?: string;
   },
   {
     env?: Record<string, string>;
@@ -983,6 +996,7 @@ export const driftResourceProvider = () =>
           // TestResource: read reflects the persisted output back.
           if (!cloud) return output;
           cloud.calls.push({ op: "read", id });
+          if (cloud.onRead) yield* cloud.onRead(id);
           const live = cloud.resources.get(id);
           if (live === undefined) return undefined;
           const attrs = copy(live);
@@ -992,7 +1006,16 @@ export const driftResourceProvider = () =>
         precreate: Effect.fn(function* ({ id, news = {} }) {
           const cloud = yield* cloudOf;
           cloud?.calls.push({ op: "precreate", id });
-          const attrs = { id, value: news.value ?? id, tags: news.tags ?? {}, env: {} };
+          if (cloud && !cloud.resources.has(id)) {
+            cloud.generations.set(id, (cloud.generations.get(id) ?? 0) + 1);
+          }
+          const attrs = {
+            id,
+            value: news.value ?? id,
+            tags: news.tags ?? {},
+            ...(cloud ? { arn: `${id}#${cloud.generations.get(id)}` } : {}),
+            env: {},
+          };
           cloud?.resources.set(id, copy(attrs));
           return attrs;
         }),
@@ -1021,10 +1044,16 @@ export const driftResourceProvider = () =>
           } else if (hooks?.update) {
             yield* hooks.update(id, { string: news.value });
           }
+          const live = cloud?.resources.get(id);
+          if (cloud && live === undefined) {
+            cloud.generations.set(id, (cloud.generations.get(id) ?? 0) + 1);
+          }
           const attrs = {
             id,
             value: news.value ?? id,
             tags: news.tags ?? {},
+            ...(cloud ? { arn: `${id}#${cloud.generations.get(id)}` } : {}),
+            ...(news.ref !== undefined ? { ref: news.ref } : {}),
             env: Object.assign(
               {},
               ...bindings.map((binding: any) => binding.env ?? binding.data?.env ?? {}),
@@ -1189,7 +1218,14 @@ const modalVariant = (mode: ProviderMode) =>
       modalBuilds.push({ stack: yield* modalStackName, mode });
       return {
         list: () => Effect.succeed([]),
-        read: Effect.fn(function* ({ output }) {
+        read: Effect.fn(function* ({ id, output }) {
+          // With a TestCloud in context (drift tests), observe it so rows
+          // can be deleted out of band.
+          const cloud = Option.getOrUndefined(yield* Effect.serviceOption(TestCloud));
+          if (cloud) {
+            cloud.calls.push({ op: "read", id });
+            return cloud.resources.get(id) as typeof output;
+          }
           // Echo persisted attrs (the TestResource default): no cloud to
           // observe, and a cold-start probe (output undefined) finds nothing.
           return output;
@@ -1230,12 +1266,16 @@ const modalVariant = (mode: ProviderMode) =>
             op: "reconcile",
             id,
           });
-          return {
+          const attrs = {
             value: (news as ModalResourceProps).value ?? id,
             runtime: mode,
             instance: mode === "local" ? `${LOCAL_ID_PREFIX}${id}` : id,
             ...(mode === "local" ? { url: "http://localhost:1337" } : {}),
           };
+          Option.getOrUndefined(yield* Effect.serviceOption(TestCloud))?.resources.set(id, {
+            ...attrs,
+          });
+          return attrs;
         }),
         delete: Effect.fn(function* ({ id }) {
           const hooks = Option.getOrUndefined(yield* Effect.serviceOption(TestResourceHooks));

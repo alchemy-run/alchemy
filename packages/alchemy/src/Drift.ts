@@ -216,13 +216,41 @@ const runDrift = (
         return yield* skip(`provider '${resourceType}' does not implement read`);
       }
 
-      const commit = (value: Omit<ResourceState, "namespace">) =>
-        state.set({
+      // Persist a repaired row. Everything but the status, attributes and
+      // bindings carries over from the persisted row — notably the
+      // `providerMode` stamp, without which a repaired local row would be
+      // treated as live.
+      const commit = (
+        status: "created" | "updated",
+        attr: ResourceState["attr"],
+        bindings: ResourceState["bindings"],
+      ) => {
+        const row = {
+          kind: old.kind,
+          namespace,
+          fqn,
+          logicalId,
+          instanceId,
+          resourceType,
+          props: old.props!,
+          attr: attr!,
+          providerVersion: provider.version ?? 0,
+          bindings,
+          downstream: old.downstream,
+          removalPolicy: old.removalPolicy,
+          providerMode: old.providerMode,
+          adoptionBlocked: old.adoptionBlocked,
+        };
+        return state.set({
           stack: stackName,
           stage,
           fqn,
-          value: { ...value, namespace } as ResourceState,
+          value:
+            status === "created"
+              ? ({ ...row, status } satisfies CreatedResourceState)
+              : ({ ...row, status } satisfies UpdatedResourceState),
         });
+      };
 
       // Paired with the resource-planned completion so renderers can show
       // which rows' cloud reads are actually in flight (the slowest part of
@@ -302,19 +330,7 @@ const runDrift = (
           bindings: [] as never,
         })
         .pipe(instrumentLifecycle("create", fqn, resourceType, logicalId, instanceId));
-      yield* commit({
-        status: "created",
-        fqn,
-        logicalId,
-        instanceId,
-        resourceType,
-        props: old.props!,
-        attr,
-        providerVersion: provider.version ?? 0,
-        bindings: [],
-        downstream: old.downstream,
-        removalPolicy: old.removalPolicy,
-      } satisfies Omit<CreatedResourceState, "namespace">);
+      yield* commit("created", attr, []);
       if (bindings.length === 0) {
         yield* report("created");
         return { done: result({ action: "recreated", attr }) };
@@ -354,23 +370,7 @@ const runDrift = (
             instanceId,
           ),
         );
-      const row = {
-        fqn,
-        logicalId,
-        instanceId,
-        resourceType,
-        props: old.props!,
-        attr,
-        providerVersion: provider.version ?? 0,
-        bindings: old.bindings,
-        downstream: old.downstream,
-        removalPolicy: old.removalPolicy,
-      };
-      yield* commit(
-        recreated
-          ? ({ ...row, status: "created" } satisfies Omit<CreatedResourceState, "namespace">)
-          : ({ ...row, status: "updated" } satisfies Omit<UpdatedResourceState, "namespace">),
-      );
+      yield* commit(recreated ? "created" : "updated", attr, old.bindings);
       yield* report(recreated ? "created" : "updated");
       return result({ action: recreated ? "recreated" : "repaired", attr });
     });
@@ -443,41 +443,68 @@ const runDrift = (
       { concurrency: "unbounded" },
     );
 
-    // Run `run` over `nodes`, each node after its upstreams (per the
-    // persisted `downstream` edges) have settled. Edges inside a cycle (only
-    // possible through merged historical edges) are dropped.
+    const pending = observed.filter(isPendingRepair);
+
+    // Upstreams per the persisted `downstream` edges, among the resources
+    // being repaired (an unchanged or skipped upstream never blocks). Edges
+    // inside a cycle — only possible through merged historical edges — are
+    // dropped.
+    const upstream: Record<string, string[]> = Object.fromEntries(
+      pending.map((node) => [node.fqn, [] as string[]]),
+    );
+    for (const node of pending) {
+      for (const down of node.old.downstream ?? []) {
+        if (down !== node.fqn) upstream[down]?.push(node.fqn);
+      }
+    }
+    const cyclic = findCycleMembers(upstream);
+    const upstreamOf = (fqn: string) =>
+      upstream[fqn]!.filter((up) => !(cyclic.has(up) && cyclic.has(fqn)));
+
+    // Resources whose repair failed, or was skipped because an upstream's
+    // did. Like Apply, a dependent never runs against a failed upstream.
+    const failed = new Set<string>();
+
+    // Run `run` over `nodes`, each node after its upstreams in `nodes` have
+    // settled. Upstreams outside `nodes` settled in an earlier phase.
     const inDependencyOrder = Effect.fn(function* <N extends PendingRepair, A>(
       nodes: ReadonlyArray<N>,
       run: (node: N) => Effect.Effect<A, unknown>,
     ) {
-      const upstream: Record<string, string[]> = Object.fromEntries(
-        nodes.map((node) => [node.fqn, [] as string[]]),
-      );
-      for (const node of nodes) {
-        for (const down of node.old.downstream ?? []) {
-          if (down !== node.fqn) upstream[down]?.push(node.fqn);
-        }
-      }
-      const cyclic = findCycleMembers(upstream);
       const settled = new Map<string, Deferred.Deferred<void>>();
       for (const node of nodes) settled.set(node.fqn, yield* Deferred.make<void>());
       return yield* Effect.all(
         nodes.map((node) =>
-          Effect.all(
-            upstream[node.fqn]!.filter((up) => !(cyclic.has(up) && cyclic.has(node.fqn))).map(
-              (up) => Deferred.await(settled.get(up)!),
-            ),
-          ).pipe(
-            Effect.andThen(run(node)),
-            Effect.catchCause(recordFailure(node.fqn)),
-            Effect.ensuring(Deferred.succeed(settled.get(node.fqn)!, undefined)),
-          ),
+          Effect.gen(function* () {
+            const ups = upstreamOf(node.fqn);
+            yield* Effect.all(
+              ups.flatMap((up) => {
+                const deferred = settled.get(up);
+                return deferred ? [Deferred.await(deferred)] : [];
+              }),
+            );
+            const blocked = ups.filter((up) => failed.has(up));
+            if (blocked.length > 0) {
+              failed.add(node.fqn);
+              yield* node.scopedSession.note(
+                `not repaired: upstream ${blocked.map((up) => `'${up}'`).join(", ")} failed`,
+              );
+              yield* node.report("skipped");
+              return undefined;
+            }
+            return yield* run(node).pipe(
+              Effect.catchCause((cause) =>
+                Effect.sync(() => failed.add(node.fqn)).pipe(
+                  Effect.andThen(recordFailure(node.fqn)(cause)),
+                ),
+              ),
+            );
+          }).pipe(Effect.ensuring(Deferred.succeed(settled.get(node.fqn)!, undefined))),
         ),
         { concurrency: "unbounded" },
       );
     });
 
-    const pending = observed.filter(isPendingRepair);
     const recreated = yield* inDependencyOrder(
       pending.filter((node) => node.live === undefined),
       recreate,
