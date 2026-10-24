@@ -1,6 +1,6 @@
 import * as AWS from "@alchemy.run/aws";
-import * as eventbridge from "@distilled.cloud/aws/eventbridge";
 import { describe, expect } from "@alchemy.run/test";
+import * as eventbridge from "@distilled.cloud/aws/eventbridge";
 import * as Output from "alchemy/Output";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Core from "alchemy/Test/Core";

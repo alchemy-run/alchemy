@@ -1,7 +1,7 @@
 import * as AWS from "@alchemy.run/aws";
 import { Group, GroupMembership, User } from "@alchemy.run/aws/IAM";
-import * as IAM from "@distilled.cloud/aws/iam";
 import { expect } from "@alchemy.run/test";
+import * as IAM from "@distilled.cloud/aws/iam";
 import * as Provider from "alchemy/Provider";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";

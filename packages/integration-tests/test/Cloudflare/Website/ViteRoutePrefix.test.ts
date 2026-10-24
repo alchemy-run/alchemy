@@ -16,9 +16,9 @@ import * as Cloudflare from "@alchemy.run/cloudflare";
  */
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
 import { findZoneByName } from "@alchemy.run/cloudflare/Zone/lookup";
+import { describe, expect } from "@alchemy.run/test";
 import * as dns from "@distilled.cloud/cloudflare/dns";
 import * as workers from "@distilled.cloud/cloudflare/workers";
-import { describe, expect } from "@alchemy.run/test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";

@@ -1,6 +1,6 @@
 import * as AWS from "@alchemy.run/aws";
-import * as Kinesis from "@distilled.cloud/aws/kinesis";
 import { describe, expect } from "@alchemy.run/test";
+import * as Kinesis from "@distilled.cloud/aws/kinesis";
 import * as Provider from "alchemy/Provider";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";

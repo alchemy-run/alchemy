@@ -1,7 +1,7 @@
 import * as AWS from "@alchemy.run/aws";
 import { OpenIDConnectProvider } from "@alchemy.run/aws/IAM";
-import * as IAM from "@distilled.cloud/aws/iam";
 import { describe, expect } from "@alchemy.run/test";
+import * as IAM from "@distilled.cloud/aws/iam";
 import * as Provider from "alchemy/Provider";
 import { isResourceState, State, type ResourceState } from "alchemy/State";
 import * as Test from "alchemy/Test/Alchemy";

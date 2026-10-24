@@ -1,9 +1,9 @@
 import * as AWS from "@alchemy.run/aws";
+import { expect } from "@alchemy.run/test";
 import * as appflow from "@distilled.cloud/aws/appflow";
 import * as eventbridge from "@distilled.cloud/aws/eventbridge";
 import * as s3 from "@distilled.cloud/aws/s3";
 import * as sqs from "@distilled.cloud/aws/sqs";
-import { expect } from "@alchemy.run/test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";

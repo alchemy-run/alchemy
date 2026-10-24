@@ -1,8 +1,8 @@
 import * as AWS from "@alchemy.run/aws";
 import { LogGroup } from "@alchemy.run/aws/Logs";
 import { AccessLogSubscription, ServiceNetwork } from "@alchemy.run/aws/VpcLattice";
-import * as vpclattice from "@distilled.cloud/aws/vpc-lattice";
 import { expect } from "@alchemy.run/test";
+import * as vpclattice from "@distilled.cloud/aws/vpc-lattice";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 

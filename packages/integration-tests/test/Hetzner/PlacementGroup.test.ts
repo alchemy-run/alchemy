@@ -1,6 +1,6 @@
 import * as Hetzner from "@alchemy.run/hetzner";
-import * as placementGroups from "@distilled.cloud/hetzner/placement_groups";
 import { expect } from "@alchemy.run/test";
+import * as placementGroups from "@distilled.cloud/hetzner/placement_groups";
 import * as Provider from "alchemy/Provider";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";

@@ -1,7 +1,7 @@
 import * as AWS from "@alchemy.run/aws";
 import { Rule } from "@alchemy.run/aws/EventBridge/Rule";
-import * as eventbridge from "@distilled.cloud/aws/eventbridge";
 import { expect } from "@alchemy.run/test";
+import * as eventbridge from "@distilled.cloud/aws/eventbridge";
 import * as Provider from "alchemy/Provider";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";

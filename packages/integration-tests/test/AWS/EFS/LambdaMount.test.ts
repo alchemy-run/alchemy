@@ -1,8 +1,8 @@
 import { fileURLToPath } from "node:url";
 import * as AWS from "@alchemy.run/aws";
+import { describe, expect } from "@alchemy.run/test";
 import * as EC2 from "@distilled.cloud/aws/ec2";
 import * as efs from "@distilled.cloud/aws/efs";
-import { describe, expect } from "@alchemy.run/test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Core from "alchemy/Test/Core";
 import * as Duration from "effect/Duration";

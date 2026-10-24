@@ -1,6 +1,6 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
-import * as Alchemy from "alchemy";
 import { describe, expect } from "@alchemy.run/test";
+import * as Alchemy from "alchemy";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Data from "effect/Data";
 import * as Deferred from "effect/Deferred";

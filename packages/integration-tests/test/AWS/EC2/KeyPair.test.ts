@@ -1,7 +1,7 @@
 import * as AWS from "@alchemy.run/aws";
 import { KeyPair } from "@alchemy.run/aws/EC2/KeyPair";
-import * as ec2 from "@distilled.cloud/aws/ec2";
 import { expect } from "@alchemy.run/test";
+import * as ec2 from "@distilled.cloud/aws/ec2";
 import * as Provider from "alchemy/Provider";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";

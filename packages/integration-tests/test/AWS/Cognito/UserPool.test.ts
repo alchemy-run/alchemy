@@ -1,8 +1,8 @@
 import { fileURLToPath } from "node:url";
 import * as AWS from "@alchemy.run/aws";
 import { UserPool } from "@alchemy.run/aws/Cognito";
-import * as cip from "@distilled.cloud/aws/cognito-identity-provider";
 import { expect } from "@alchemy.run/test";
+import * as cip from "@distilled.cloud/aws/cognito-identity-provider";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Cause from "effect/Cause";
 import * as Data from "effect/Data";

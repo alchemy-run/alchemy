@@ -1,7 +1,7 @@
 import * as AWS from "@alchemy.run/aws";
 import { AccountSettings } from "@alchemy.run/aws/SES";
-import * as sesv2 from "@distilled.cloud/aws/sesv2";
 import { expect } from "@alchemy.run/test";
+import * as sesv2 from "@distilled.cloud/aws/sesv2";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 

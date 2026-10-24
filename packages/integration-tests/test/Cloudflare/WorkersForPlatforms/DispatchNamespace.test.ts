@@ -1,7 +1,7 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
-import * as wfp from "@distilled.cloud/cloudflare/workers-for-platforms";
 import { expect } from "@alchemy.run/test";
+import * as wfp from "@distilled.cloud/cloudflare/workers-for-platforms";
 import * as Provider from "alchemy/Provider";
 import * as Test from "alchemy/Test/Alchemy";
 import { poll } from "alchemy/Util/poll";

@@ -1,7 +1,7 @@
 import * as AWS from "@alchemy.run/aws";
 import { AWSEnvironment } from "@alchemy.run/aws/Environment";
-import * as mwaa from "@distilled.cloud/aws/mwaa";
 import { expect } from "@alchemy.run/test";
+import * as mwaa from "@distilled.cloud/aws/mwaa";
 import * as Output from "alchemy/Output";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";

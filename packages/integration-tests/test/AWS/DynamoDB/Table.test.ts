@@ -1,9 +1,9 @@
 import * as AWS from "@alchemy.run/aws";
 import { Table } from "@alchemy.run/aws/DynamoDB";
 import { Stream as KinesisStream } from "@alchemy.run/aws/Kinesis";
+import { describe, expect } from "@alchemy.run/test";
 import * as CloudWatch from "@distilled.cloud/aws/cloudwatch";
 import * as DynamoDB from "@distilled.cloud/aws/dynamodb";
-import { describe, expect } from "@alchemy.run/test";
 import { adopt } from "alchemy/AdoptPolicy";
 import * as Provider from "alchemy/Provider";
 import { isResourceState, State, type ResourceState } from "alchemy/State";

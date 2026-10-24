@@ -1,7 +1,7 @@
 import * as Fly from "@alchemy.run/fly";
+import { expect } from "@alchemy.run/test";
 import * as machines from "@distilled.cloud/fly-io/machines";
 import * as Alchemy from "alchemy";
-import { expect } from "@alchemy.run/test";
 import { Stack as StackService } from "alchemy/Stack";
 import { Stage } from "alchemy/Stage";
 import * as Test from "alchemy/Test/Alchemy";

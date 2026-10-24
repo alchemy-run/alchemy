@@ -1,7 +1,7 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
-import * as aiGateway from "@distilled.cloud/cloudflare/ai-gateway";
 import { describe, expect } from "@alchemy.run/test";
+import * as aiGateway from "@distilled.cloud/cloudflare/ai-gateway";
 import * as Provider from "alchemy/Provider";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Data from "effect/Data";

@@ -1,7 +1,7 @@
 import * as AWS from "@alchemy.run/aws";
 import { TargetGroup } from "@alchemy.run/aws/ELBv2";
-import * as elbv2 from "@distilled.cloud/aws/elastic-load-balancing-v2";
 import { expect } from "@alchemy.run/test";
+import * as elbv2 from "@distilled.cloud/aws/elastic-load-balancing-v2";
 import * as Provider from "alchemy/Provider";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";

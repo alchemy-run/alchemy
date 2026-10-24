@@ -1,7 +1,7 @@
 import * as AWS from "@alchemy.run/aws";
 import { ConfigurationSet } from "@alchemy.run/aws/PinpointSMSVoiceV2";
-import * as smsvoice from "@distilled.cloud/aws/pinpoint-sms-voice-v2";
 import { expect } from "@alchemy.run/test";
+import * as smsvoice from "@distilled.cloud/aws/pinpoint-sms-voice-v2";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";

@@ -1,7 +1,7 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
-import * as addressing from "@distilled.cloud/cloudflare/addressing";
 import { expect } from "@alchemy.run/test";
+import * as addressing from "@distilled.cloud/cloudflare/addressing";
 import * as Provider from "alchemy/Provider";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";

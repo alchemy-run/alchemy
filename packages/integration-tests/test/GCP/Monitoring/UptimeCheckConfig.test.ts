@@ -1,6 +1,6 @@
 import * as GCP from "@alchemy.run/gcp";
-import * as monitoring from "@distilled.cloud/gcp/monitoring_v3";
 import { expect } from "@alchemy.run/test";
+import * as monitoring from "@distilled.cloud/gcp/monitoring_v3";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";

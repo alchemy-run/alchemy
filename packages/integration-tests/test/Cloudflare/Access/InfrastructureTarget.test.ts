@@ -1,7 +1,7 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
-import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
 import { expect } from "@alchemy.run/test";
+import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
 import { adopt, OwnedBySomeoneElse } from "alchemy/AdoptPolicy";
 import * as Provider from "alchemy/Provider";
 import { isResourceState, State, type ResourceState } from "alchemy/State";

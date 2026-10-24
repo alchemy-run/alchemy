@@ -1,7 +1,7 @@
 import * as Os from "node:os";
 import * as Cloudflare from "@alchemy.run/cloudflare";
-import * as Alchemy from "alchemy";
 import { expect } from "@alchemy.run/test";
+import * as Alchemy from "alchemy";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";

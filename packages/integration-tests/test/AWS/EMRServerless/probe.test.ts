@@ -1,6 +1,6 @@
 import * as AWS from "@alchemy.run/aws";
-import * as emr from "@distilled.cloud/aws/emr-serverless";
 import { expect } from "@alchemy.run/test";
+import * as emr from "@distilled.cloud/aws/emr-serverless";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 

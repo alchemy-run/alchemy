@@ -1,7 +1,7 @@
 import * as GCP from "@alchemy.run/gcp";
 import { GcpEnvironment } from "@alchemy.run/gcp/Environment";
-import * as apim from "@distilled.cloud/gcp/apim_v1alpha";
 import { expect } from "@alchemy.run/test";
+import * as apim from "@distilled.cloud/gcp/apim_v1alpha";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";

@@ -1,7 +1,7 @@
 import * as AWS from "@alchemy.run/aws";
 import * as Location from "@alchemy.run/aws/Location";
-import * as location from "@distilled.cloud/aws/location";
 import { describe, expect } from "@alchemy.run/test";
+import * as location from "@distilled.cloud/aws/location";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";

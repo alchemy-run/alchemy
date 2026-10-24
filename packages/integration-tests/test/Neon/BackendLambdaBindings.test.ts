@@ -1,7 +1,7 @@
 import * as AWS from "@alchemy.run/aws";
 import * as Neon from "@alchemy.run/neon";
-import * as SDK from "@distilled.cloud/neon";
 import { expect } from "@alchemy.run/test";
+import * as SDK from "@distilled.cloud/neon";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";

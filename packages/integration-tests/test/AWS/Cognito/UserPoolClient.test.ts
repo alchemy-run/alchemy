@@ -1,7 +1,7 @@
 import * as AWS from "@alchemy.run/aws";
 import { UserPool, UserPoolClient } from "@alchemy.run/aws/Cognito";
-import * as cip from "@distilled.cloud/aws/cognito-identity-provider";
 import { expect } from "@alchemy.run/test";
+import * as cip from "@distilled.cloud/aws/cognito-identity-provider";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 

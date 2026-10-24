@@ -1,9 +1,9 @@
 import * as AWS from "@alchemy.run/aws";
 import { NotificationChannel } from "@alchemy.run/aws/DevOpsGuru/NotificationChannel";
 import { Topic } from "@alchemy.run/aws/SNS/Topic";
+import { expect } from "@alchemy.run/test";
 import * as devopsguru from "@distilled.cloud/aws/devops-guru";
 import * as SNS from "@distilled.cloud/aws/sns";
-import { expect } from "@alchemy.run/test";
 import * as Provider from "alchemy/Provider";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Data from "effect/Data";

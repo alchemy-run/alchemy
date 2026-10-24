@@ -1,7 +1,7 @@
 import * as AWS from "@alchemy.run/aws";
 import { Pipeline } from "@alchemy.run/aws/CodePipeline/Pipeline";
-import * as codepipeline from "@distilled.cloud/aws/codepipeline";
 import { expect } from "@alchemy.run/test";
+import * as codepipeline from "@distilled.cloud/aws/codepipeline";
 import * as Output from "alchemy/Output";
 import * as Provider from "alchemy/Provider";
 import * as Test from "alchemy/Test/Alchemy";

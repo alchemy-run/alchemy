@@ -8,6 +8,7 @@ import {
   utf8Decode,
   utf8Encode,
 } from "@alchemy.run/git/Protocol/ObjectCodec";
+import { expect } from "@alchemy.run/test";
 /**
  * THE PRIMARY SUITE — full local dev-mode coverage of git-service.
  *
@@ -29,7 +30,6 @@ import {
  *      and the wire auth matrix.
  */
 import * as Alchemy from "alchemy";
-import { expect } from "@alchemy.run/test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";

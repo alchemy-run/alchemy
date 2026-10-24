@@ -1,7 +1,7 @@
 import * as AWS from "@alchemy.run/aws";
+import { describe, expect } from "@alchemy.run/test";
 import * as athena from "@distilled.cloud/aws/athena";
 import * as glue from "@distilled.cloud/aws/glue";
-import { describe, expect } from "@alchemy.run/test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Core from "alchemy/Test/Core";
 import * as Data from "effect/Data";
