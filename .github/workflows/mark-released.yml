@@ -1,0 +1,61 @@
+name: Mark Released
+
+# Comments the release tag on every PR in a release and on the issues those
+# PRs closed. Runs after the Release workflow succeeds; dispatch it by hand
+# with a tag to backfill an older release.
+on:
+  workflow_run:
+    workflows: [Release]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to mark, e.g. v2.0.0-beta.84. Defaults to the latest release.
+        required: false
+        type: string
+
+concurrency:
+  group: mark-released
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
+env:
+  ALCHEMY_REPO: alchemy-run/alchemy
+
+jobs:
+  mark:
+    name: Mark released PRs and issues
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Checkout distilled
+        run: git submodule update --init --depth=1 --checkout -- submodules/distilled
+
+      - name: Setup pnpm, Node.js, Bun
+        uses: pnpm/setup@703c52620218391530e48b9e8870d5c0082e1b9b # v2.1.0
+        with:
+          cache: true
+          install: false
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      # A `tag`-channel release creates no GitHub release, so this resolves to
+      # the previous release, whose threads are already marked and skipped.
+      - name: Mark released PRs and issues
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          tag="${TAG:-$(gh release view --repo "$ALCHEMY_REPO" --json tagName --jq .tagName)}"
+          bun scripts/release/mark-released.ts "$tag"
