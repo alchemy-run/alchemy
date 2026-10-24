@@ -1,7 +1,7 @@
 import { providers } from "@alchemy.run/neon/Providers";
 import { WebsiteArtifact } from "@alchemy.run/neon/Website/Artifact";
 import { deployWebsite } from "@alchemy.run/neon/Website/FrameworkSite";
-import { expect } from "alchemy-test";
+import { expect } from "@alchemy.run/test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";

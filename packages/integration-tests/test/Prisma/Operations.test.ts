@@ -1,6 +1,6 @@
 import { PrismaClient, type PrismaManagementClient } from "@alchemy.run/prisma/Client";
 import * as Prisma from "@alchemy.run/prisma/Operations";
-import { describe, expect, it } from "alchemy-test";
+import { describe, expect, it } from "@alchemy.run/test";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { Credentials } from "../../../prisma/src/internal/Credentials.ts";

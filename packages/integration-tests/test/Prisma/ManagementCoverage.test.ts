@@ -1,6 +1,6 @@
 import * as Prisma from "@alchemy.run/prisma";
 import type { PrismaManagementClient } from "@alchemy.run/prisma/Client";
-import { describe, expect, it } from "alchemy-test";
+import { describe, expect, it } from "@alchemy.run/test";
 import {
   managementApiContract,
   productionManagementApiRoutes,

@@ -47,7 +47,7 @@ import BankWorker from "./src/BankWorker.ts";
 
 export default Alchemy.Stack(
   "Bank",
-  { providers: Cloudflare.providers(), state: Alchemy.localState() },
+  { providers: Cloudflare.providers(), state: Cloudflare.state() },
   Effect.gen(function* () {
     const bank = yield* BankWorker;
     return { url: bank.url.as<string>() };

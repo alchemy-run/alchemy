@@ -6,7 +6,7 @@ import {
   REGISTRY_CONTAINERD_PATCH,
 } from "@alchemy.run/kubernetes/internal/kind";
 import { imagePlatformOf } from "@alchemy.run/kubernetes/internal/workload";
-import { describe, expect } from "alchemy-test";
+import { describe, expect } from "@alchemy.run/test";
 import * as Provider from "alchemy/Provider";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Core from "alchemy/Test/Core";

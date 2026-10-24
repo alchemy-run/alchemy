@@ -23,6 +23,7 @@
   },
   "devDependencies": {
     "@alchemy.run/cloudflare": "workspace:*",
+    "@alchemy.run/test": "workspace:*",
     "@babel/plugin-proposal-decorators": "catalog:",
     "@cloudflare/vite-plugin": "catalog:",
     "@cloudflare/workers-types": "catalog:",
@@ -33,7 +34,6 @@
     "@types/react-dom": "catalog:",
     "@vitejs/plugin-react": "catalog:",
     "alchemy": "workspace:*",
-    "alchemy-test": "workspace:*",
     "effect": "catalog:",
     "tailwindcss": "catalog:",
     "typescript": "catalog:",

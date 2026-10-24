@@ -3,7 +3,7 @@ import {
   readTimeoutMargin,
   toTimeoutMarginMillis,
 } from "@alchemy.run/aws/Lambda/InvocationDeadline";
-import { describe, expect, it } from "alchemy-test";
+import { describe, expect, it } from "@alchemy.run/test";
 import * as Duration from "effect/Duration";
 
 describe(

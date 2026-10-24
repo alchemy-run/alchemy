@@ -1,7 +1,7 @@
 import * as AWS from "@alchemy.run/aws";
 import { PublicKey } from "@alchemy.run/aws/CloudFront";
+import { describe, expect } from "@alchemy.run/test";
 import * as cloudfront from "@distilled.cloud/aws/cloudfront";
-import { describe, expect } from "alchemy-test";
 import * as Provider from "alchemy/Provider";
 import { isResourceState, State, type ResourceState } from "alchemy/State";
 import * as Test from "alchemy/Test/Alchemy";

@@ -1,8 +1,8 @@
 import * as AWS from "@alchemy.run/aws";
 import type { PolicyDocument } from "@alchemy.run/aws/IAM/Policy";
 import { ResourcePolicy } from "@alchemy.run/aws/Logs/ResourcePolicy";
+import { expect } from "@alchemy.run/test";
 import * as logs from "@distilled.cloud/aws/cloudwatch-logs";
-import { expect } from "alchemy-test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";

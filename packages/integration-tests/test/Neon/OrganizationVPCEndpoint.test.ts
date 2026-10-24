@@ -3,8 +3,8 @@ import {
   validateOrganizationVPCEndpoint,
 } from "@alchemy.run/neon/OrganizationVPCEndpoint";
 import { providers } from "@alchemy.run/neon/Providers";
+import { expect } from "@alchemy.run/test";
 import * as SDK from "@distilled.cloud/neon";
-import { expect } from "alchemy-test";
 import { adopt } from "alchemy/AdoptPolicy";
 import * as Output from "alchemy/Output";
 import * as Test from "alchemy/Test/Alchemy";
@@ -171,7 +171,7 @@ test.provider.skipIf(!enabled || disposable)(
   {
     tags: ["provider:neon", "provider:neon:organizationvpcendpoint", "live"],
     timeout: 120_000,
-    exclusive: true,
+    exclusive: "neon:governance",
   },
 );
 
@@ -208,6 +208,6 @@ test.provider.skipIf(!enabled || !disposable)(
   {
     tags: ["provider:neon", "provider:neon:organizationvpcendpoint", "live"],
     timeout: 120_000,
-    exclusive: true,
+    exclusive: "neon:governance",
   },
 );
