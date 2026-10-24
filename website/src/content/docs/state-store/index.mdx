@@ -167,7 +167,7 @@ Alchemy.Stack(
 );
 ```
 
-It is imported from `@alchemy.run/sql/PostgresState` rather than the `State` barrel because it depends on the optional `pg` driver, which must stay out of bundled worker code. Install `pg` and `@effect/sql-pg` to use it.
+It is imported from `@alchemy.run/sql/PostgresState` rather than the `State` barrel because it depends on the optional `@effect/sql-pg` driver, which must stay out of bundled worker code. Install `@effect/sql-pg` to use it.
 
 ## State and lifecycle
 
