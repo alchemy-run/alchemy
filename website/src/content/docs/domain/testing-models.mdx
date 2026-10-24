@@ -7,7 +7,7 @@ Your model is tested with [stories](/domain/story): given some history, when a c
 
 ## Create a story runner
 
-Give `Story.make` your model, its policies' Layer, and every external system its policies and sagas call, in `stub`. Leaving one out is a type error, so the story answers every outside call.
+Give `Story.make` your model, its policies' Layer, and the external systems to fake, in `stub`. The story answers their calls itself. Any other external system the model calls runs for real, from a Layer you provide.
 
 ```typescript
 // packages/domain/test/withdrawals.test.ts
@@ -145,13 +145,34 @@ Story.fail(Payments.refund, new RefundDeclined({ reason: "card-closed" })),
 Story.die(Payments.refund, new Error("socket closed")),
 ```
 
+## Assert real calls
+
+An external system you don't stub is called for real, through its adapter. Provide the adapter's Layer to the story; the story's type requires it.
+
+```typescript
+const story = Story.make(Bank, {
+  layer: BankHandlers.pipe(Layer.provide(MemoryLedgerStore)),
+  stub: [FraudCheck],
+});
+
+it.effect("refunds through the real payments adapter", () =>
+  story(
+    Story.when(account, new RecordSettlement({ settlementId: "st_1", amount: 500 })),
+    Story.expectCall(Payments.refund, { settlementId: "st_1", amount: 500 }),
+    Story.returned(Payments.refund, { refundId: "re_st_1" }),
+  ).pipe(Effect.provide(StripePayments)),
+);
+```
+
+The story records every real call. `expectCall` checks what a call was sent, and `returned` checks what it returned. `failed` checks a declared error instead, and `died` a defect. They find the call the way `resolve` does, and a story fails if no step asserts how a real call ended. The story waits for real calls to finish before each step.
+
 ## Move the clock
 
 A story's clock starts at `2026-01-01T00:00:00Z`, and `Story.clock` moves it to an ISO string, epoch milliseconds or a `DateTime`. Commands are stamped with it, so time-based rules like a daily limit are easy to test, and scheduled commands fire when it passes their time. See [Deadlines](/domain/deadlines).
 
 ## Trust a passing story
 
-A story fails if a command is rejected and no `rejected` step checks it, or if an external system call is left waiting at the end. It doesn't compile if an external system the model calls is missing from `stub`. A passing story has accounted for every outcome.
+A story fails if a command is rejected and no `rejected` step checks it, if a stubbed call is left waiting at the end, or if no step asserts how a real call ended. A passing story has accounted for every outcome.
 
 :::note
 Test what clients see through an Api in [Testing an Api](/domain/testing-apis).

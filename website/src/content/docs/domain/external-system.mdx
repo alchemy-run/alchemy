@@ -221,7 +221,7 @@ it.effect("money that settles on a closed account is refunded", () =>
 );
 ```
 
-`stub` lists every external system the policies and sagas call, and the story answers each call itself. Leaving one out is a type error, and a story fails if a call is left unresolved, so every outside call is accounted for.
+`stub` lists the external systems the story fakes: it answers each of their calls itself. A system you leave out is called for real through the Layer you provide, and the story asserts what each call was sent and returned; see [Assert real calls](/domain/testing-models#assert-real-calls). A story fails if any call is left unanswered or unasserted, so every outside call is accounted for.
 
 :::note
 See how a policy uses one in [Policy](/domain/policy#call-an-external-system).

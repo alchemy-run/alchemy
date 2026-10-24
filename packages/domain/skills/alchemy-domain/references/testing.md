@@ -24,7 +24,7 @@ import { Payments } from "../src/Settlement/Payments.external.ts";
 
 const story = Story.make(Bank, {
   layer: BankHandlers.pipe(Layer.provide(MemoryLedgerStore)),  // required when the model has handlers
-  stub: [FraudCheck, Payments],                                 // every external system; the story answers each call
+  stub: [FraudCheck, Payments],                                 // faked: the story answers each call
 });
 const a1 = Account.ref("a-1");
 
@@ -70,7 +70,7 @@ Story.resolve("a-2", FraudCheck.score, { risk: 0.1 }),
 Story.resolve("a-1", FraudCheck.score, { risk: 0.95 }),
 ```
 
-An untagged `resolve` with several calls waiting fails the story, and so does a call left unanswered at the end. Leaving an external system the handlers call out of `stub` is a type error.
+An untagged `resolve` with several calls waiting fails the story, and so does a call left unanswered at the end.
 
 `fail` answers a waiting call with the operation's declared `error:`, to test the branch where the vendor refuses. `die` answers it with a defect, as when the transport breaks. Both find the call the way `resolve` does, untagged or by tag, and only a declared error type-checks:
 
@@ -78,6 +78,20 @@ An untagged `resolve` with several calls waiting fails the story, and so does a 
 Story.expectCall(Payments.refund, { settlementId: "st_1" }),
 Story.fail(Payments.refund, new RefundDeclined({ reason: "card-closed" })),
 Story.die("r-2", Payments.refund, new Error("socket closed")),
+```
+
+### Real calls
+
+A system left out of `stub` is called for real through its adapter Layer, which you provide to the story (its type requires it). The story records each call: `expectCall` checks what it was sent, and `returned` / `failed` / `died` check how it ended, found like `resolve`. A real call no step asserts fails the story, and the story waits for real calls to finish before each step.
+
+```ts
+const story = Story.make(Bank, { layer: BankHandlers, stub: [FraudCheck] });   // Payments runs for real
+
+story(
+  Story.when(account, new RecordSettlement({ settlementId: "st_1", amount: 500 })),
+  Story.expectCall(Payments.refund, { settlementId: "st_1", amount: 500 }),
+  Story.returned(Payments.refund, { refundId: "re_st_1" }),
+).pipe(Effect.provide(StripePayments));
 ```
 
 ### Sagas

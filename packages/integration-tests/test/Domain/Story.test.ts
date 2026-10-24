@@ -1,6 +1,6 @@
 import * as Domain from "@alchemy.run/domain";
 import { InMemory } from "@alchemy.run/domain/InMemory";
-import { Story } from "@alchemy.run/domain/Story";
+import { type Step, Story } from "@alchemy.run/domain/Story";
 import { describe, expect, it } from "alchemy-test";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
@@ -238,11 +238,30 @@ const story = Story.make(Counters, {
   layer: Layer.mergeAll(CapWhenLargeLive, CapWhenOverdrawnLive, RemindWhenCappedLive),
   stub: [Approval],
 });
-// Every external system the policies call must be stubbed.
-// @ts-expect-error Approval is not stubbed
-Story.make(Counters, {
+
+// Approval called for real, through an adapter: 20 and over is unavailable,
+// 17 breaks the connection, 19 answers slowly, and even totals are approved.
+const ApprovalAdapter = Approval.toLayer(
+  Effect.succeed({
+    check: ({ total }) =>
+      total >= 20
+        ? Effect.fail(new ApprovalUnavailable())
+        : total === 17
+          ? Effect.die(new Error("socket closed"))
+          : Effect.succeed({ ok: total % 2 === 0 }).pipe(
+              Effect.delay(total === 19 ? "50 millis" : "0 millis"),
+            ),
+  }),
+);
+const unstubbed = Story.make(Counters, {
   layer: Layer.mergeAll(CapWhenLargeLive, CapWhenOverdrawnLive, RemindWhenCappedLive),
 });
+const real = (...steps: ReadonlyArray<Step>) =>
+  unstubbed(...steps).pipe(Effect.provide(ApprovalAdapter));
+
+// A system that is not stubbed must be provided as a Layer.
+// @ts-expect-error Approval is not provided
+export const unprovided: Effect.Effect<void, unknown, never> = unstubbed();
 
 const c1 = Counter.ref("c-1");
 const c2 = Counter.ref("c-2");
@@ -332,6 +351,81 @@ describe("Domain Story", () => {
       Effect.map((failure) =>
         expect(String((failure as any).message)).toMatch(
           /a policy or projection failed: .*socket closed/,
+        ),
+      ),
+    ),
+  );
+
+  it.effect("asserts what a real call was sent and returned", () =>
+    real(
+      Story.given(c1, new Incremented({ by: 10, total: 10 })),
+      Story.when(c1, new Increment({ by: 6 })),
+      Story.expectCall(Approval.check, { total: 16 }),
+      Story.returned(Approval.check, { ok: true }),
+      Story.then(c1, new Incremented({ by: 6, total: 16 }), new Capped()),
+    ),
+  );
+
+  it.effect("asserts a real call's declared error", () =>
+    real(
+      Story.given(c1, new Incremented({ by: 10, total: 10 })),
+      Story.when(c1, new Increment({ by: 10 })),
+      Story.expectCall(Approval.check, { total: 20 }),
+      Story.failed(Approval.check, new ApprovalUnavailable()),
+      Story.then(c1, new Incremented({ by: 10, total: 20 })),
+    ),
+  );
+
+  it.effect("asserts that a real call died", () =>
+    real(
+      Story.given(c1, new Incremented({ by: 10, total: 10 })),
+      Story.when(c1, new Increment({ by: 7 })),
+      Story.expectCall("c1", Approval.check, { total: 17 }),
+      Story.died("c1", Approval.check),
+    ).pipe(
+      Effect.flip,
+      // The policy did not handle the defect, so the story still fails on it.
+      Effect.map((failure) =>
+        expect(String((failure as any).message)).toMatch(/a policy or projection failed/),
+      ),
+    ),
+  );
+
+  it.live("waits for a slow real call", () =>
+    real(
+      Story.given(c1, new Incremented({ by: 10, total: 10 })),
+      Story.when(c1, new Increment({ by: 9 })),
+      Story.expectCall(Approval.check, { total: 19 }),
+      Story.returned(Approval.check, { ok: false }),
+      Story.then(c1, new Incremented({ by: 9, total: 19 })),
+    ),
+  );
+
+  it.effect("a real call returning something else fails", () =>
+    real(
+      Story.given(c1, new Incremented({ by: 10, total: 10 })),
+      Story.when(c1, new Increment({ by: 6 })),
+      Story.returned(Approval.check, { ok: false }),
+    ).pipe(
+      Effect.flip,
+      Effect.map((failure) =>
+        expect(String((failure as any).message)).toContain(
+          'expected {"_tag":"Success","value":{"ok":false}}',
+        ),
+      ),
+    ),
+  );
+
+  it.effect("a real call no step asserts fails the story", () =>
+    real(
+      Story.given(c1, new Incremented({ by: 10, total: 10 })),
+      Story.when(c1, new Increment({ by: 6 })),
+      Story.expectCall(Approval.check, { total: 16 }),
+    ).pipe(
+      Effect.flip,
+      Effect.map((failure) =>
+        expect(String((failure as any).message)).toContain(
+          "real external system calls no step asserts",
         ),
       ),
     ),

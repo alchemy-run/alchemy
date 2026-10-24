@@ -223,7 +223,7 @@ export const SiftFraudCheck = FraudCheck.toLayer(
 );
 ```
 
-Use it with `const fraud = yield* FraudCheck` in a policy or saga `toLayer`, then call `fraud.score({...})`. Declare typed errors per operation with `error:`. A story stubs every external system the model calls (`Story.make(..., { stub: [...] })`, a type error if one is missing) and answers each call; see [testing.md](testing.md).
+Use it with `const fraud = yield* FraudCheck` in a policy or saga `toLayer`, then call `fraud.score({...})`. Declare typed errors per operation with `error:`. In a story, systems in `stub` are faked and the story answers their calls; the others run for real from a Layer you provide, and the story asserts what each call sent and returned. See [testing.md](testing.md).
 
 ## Projection and its port
 

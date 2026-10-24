@@ -1,3 +1,4 @@
+import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as DateTime from "effect/DateTime";
@@ -79,6 +80,15 @@ export type Step =
       readonly tag: string | undefined;
       readonly op: ExternalSystem.Op;
       readonly exit: Exit.Exit<unknown, unknown>;
+    }
+  | {
+      readonly _tag: "Returned";
+      readonly tag: string | undefined;
+      readonly op: ExternalSystem.Op;
+      readonly expected:
+        | { readonly _tag: "Success"; readonly value: unknown }
+        | { readonly _tag: "Failure"; readonly error: unknown }
+        | { readonly _tag: "Died" };
     }
   | { readonly _tag: "Clock"; readonly at: string | number | DateTime.DateTime }
   | {
@@ -232,6 +242,37 @@ const die: {
   (tag: string, op: ExternalSystem.Op, defect: unknown): Step;
 } = (...a: ReadonlyArray<any>): Step => answer(a, Exit.die);
 
+/** Assert how a real call to a system that is not stubbed ended; the tag, when given, comes first. */
+const outcome = (a: ReadonlyArray<any>, expected: (value: any) => any): Step =>
+  typeof a[0] === "string"
+    ? { _tag: "Returned", tag: a[0], op: a[1], expected: expected(a[2]) }
+    : { _tag: "Returned", tag: undefined, op: a[0], expected: expected(a[1]) };
+
+/**
+ * A real call to an external system that is not stubbed returned this value.
+ * Finds the call the way `resolve` does: by tag, or the only unasserted call
+ * to the operation. Every real call needs one of `returned`, `failed` or `died`.
+ */
+const returned: {
+  <Success>(op: ExternalSystem.Op<any, Success>, value: Success): Step;
+  <Success>(tag: string, op: ExternalSystem.Op<any, Success>, value: Success): Step;
+} = (...a: ReadonlyArray<any>): Step => outcome(a, (value) => ({ _tag: "Success", value }));
+
+/** A real call to an external system that is not stubbed failed with this declared error. */
+const failed: {
+  <Error>(op: ExternalSystem.Op<any, any, Error>, error: NoInfer<Error>): Step;
+  <Error>(tag: string, op: ExternalSystem.Op<any, any, Error>, error: NoInfer<Error>): Step;
+} = (...a: ReadonlyArray<any>): Step => outcome(a, (error) => ({ _tag: "Failure", error }));
+
+/** A real call to an external system that is not stubbed died with a defect. */
+const died: {
+  (op: ExternalSystem.Op): Step;
+  (tag: string, op: ExternalSystem.Op): Step;
+} = (...a: ReadonlyArray<any>): Step =>
+  typeof a[0] === "string"
+    ? { _tag: "Returned", tag: a[0], op: a[1], expected: { _tag: "Died" } }
+    : { _tag: "Returned", tag: undefined, op: a[0], expected: { _tag: "Died" } };
+
 /** Move the clock: later commands are stamped with it, and scheduled commands now due fire. */
 const clock = (at: string | number | DateTime.DateTime): Step => ({ _tag: "Clock", at });
 
@@ -305,6 +346,31 @@ const encodeInstance = (value: { readonly _tag: string }): unknown => {
 
 const equal = (a: unknown, b: unknown) => show(a) === show(b);
 
+/** A tagged error by its encoded fields; anything else as it is. */
+const errorJson = (error: unknown): unknown => {
+  if (error !== null && typeof error === "object" && "_tag" in error) {
+    try {
+      return encodeInstance(error as { readonly _tag: string });
+    } catch {
+      return normalize(error);
+    }
+  }
+  return normalize(error);
+};
+
+const exitJson = (
+  exit: Exit.Exit<unknown, unknown>,
+):
+  | { readonly _tag: "Success"; readonly value: unknown }
+  | { readonly _tag: "Failure"; readonly error: unknown }
+  | { readonly _tag: "Died"; readonly defect: string } => {
+  if (Exit.isSuccess(exit)) return { _tag: "Success", value: normalize(exit.value) };
+  const error = Cause.findErrorOption(exit.cause);
+  return Option.isSome(error)
+    ? { _tag: "Failure", error: errorJson(error.value) }
+    : { _tag: "Died", defect: String(Cause.squash(exit.cause)) };
+};
+
 const partial = (expected: unknown, actual: unknown): boolean => {
   const e = normalize(expected);
   const a = normalize(actual);
@@ -324,34 +390,37 @@ interface PendingCall {
   tag: string | undefined;
 }
 
+interface ObservedCall {
+  readonly system: string;
+  readonly op: string;
+  readonly args: unknown;
+  /** How the call ended; undefined while it runs. */
+  exit: Exit.Exit<unknown, unknown> | undefined;
+  readonly done: Deferred.Deferred<void>;
+  /** The name `expectCall` gave it, if any. */
+  tag: string | undefined;
+  /** Whether `expectCall` matched it. */
+  expected: boolean;
+}
+
 /** Options for {@link make}. */
 interface StoryOptions<Policies, LE, LR, Systems> {
   /** The policies' and projections' Layers. Required when the model has either. */
   readonly layer?: Layer.Layer<Policies, LE, LR>;
   /**
-   * Every external system the policies and sagas call. Each call waits until
-   * the story answers it with `resolve`, `fail` or `die`. Leaving one out is a
-   * type error: a story models every outside call.
+   * External systems to fake. Each call to one waits until the story answers it
+   * with `resolve`, `fail` or `die`. Systems not listed are called for real,
+   * through the Layers you provide to the story, and the story asserts what
+   * each call returned with `returned`, `failed` or `died`.
    */
   readonly stub?: ReadonlyArray<Systems>;
 }
 
-/** Names of the external systems the Layers need that `stub` leaves out. */
-type Unstubbed<LR, Systems extends ExternalSystem.Any> = SystemName<
-  Exclude<LR, ExternalSystem.Identifier<Systems>>
->;
-type SystemName<K> = K extends ExternalSystem.ExternalSystemKey<infer N> ? N : never;
-
-/** Required, and unsatisfiable, while an external system is not stubbed. */
-type StubAll<LR, Systems extends ExternalSystem.Any> = [Unstubbed<LR, Systems>] extends [never]
-  ? unknown
-  : { readonly "~add these to stub": Unstubbed<LR, Systems> };
-
 /**
  * Create a story runner for a Domain. A story is a sequence of steps run
- * against an in-memory host: policies run for real, every external system is
- * stubbed so its calls suspend until the story answers them, and nothing
- * outside the Domain is executed.
+ * against an in-memory host: policies run for real, calls to stubbed external
+ * systems suspend until the story answers them, and calls to the others run
+ * through the Layers you provide while the story records them.
  *
  * **Example:** A story
  * ```typescript
@@ -383,11 +452,7 @@ const make =
     domain: Model.ModelClass<Name, Provided, Policies>,
     ...[options = {}]: [Policies] extends [never]
       ? [options?: StoryOptions<Policies, LE, LR, Systems>]
-      : [
-          options: StoryOptions<Policies, LE, LR, Systems> & {
-            readonly layer: unknown;
-          } & StubAll<LR, Systems>,
-        ]
+      : [options: StoryOptions<Policies, LE, LR, Systems> & { readonly layer: unknown }]
   ) =>
   (
     ...steps: ReadonlyArray<Step>
@@ -400,6 +465,31 @@ const make =
       const clockState = { now: Date.parse("2026-01-01T00:00:00.000Z") };
       const platform = InMemory.make({ manual: true, now: () => clockState.now });
       const calls: Array<PendingCall> = [];
+      const observed: Array<ObservedCall> = [];
+      const stubbed = new Set((options.stub ?? []).map((system) => system.systemName));
+      const recorder: ExternalSystem.CallRecorder = {
+        record: (system, op, args, call) =>
+          Effect.gen(function* () {
+            const entry: ObservedCall = {
+              system,
+              op,
+              args,
+              exit: undefined,
+              done: yield* Deferred.make<void>(),
+              tag: undefined,
+              expected: false,
+            };
+            observed.push(entry);
+            return yield* call.pipe(
+              Effect.onExit((exit) =>
+                Effect.suspend(() => {
+                  entry.exit = exit;
+                  return Deferred.succeed(entry.done, undefined);
+                }),
+              ),
+            );
+          }),
+      };
       const systemLayers = (options.stub ?? []).map((system) =>
         Layer.succeed(
           system as Context.Key<unknown, unknown>,
@@ -453,6 +543,10 @@ const make =
         const settle = (step: number) =>
           Effect.gen(function* () {
             for (let i = 0; i < 10_000; i++) {
+              // Real calls take real time: wait for them instead of spinning.
+              for (const call of observed) {
+                if (call.exit === undefined) yield* Deferred.await(call.done);
+              }
               yield* platform.control.drain;
               yield* Effect.yieldNow;
               if (yield* platform.control.idle) {
@@ -654,6 +748,22 @@ const make =
             }
             case "ExpectCall": {
               const name = `${s.op.system}.${s.op.op}`;
+              if (s.tag !== undefined && observed.some((c) => c.tag === s.tag)) {
+                return yield* fail(`"${s.tag}" already names a call`);
+              }
+              if (!stubbed.has(s.op.system)) {
+                const made = observed.filter((c) => c.system === s.op.system && c.op === s.op.op);
+                // Each real call is matched once, in the order calls were made.
+                const match = made.find((c) => !c.expected && partial(s.args, c.args));
+                if (!match) {
+                  return yield* fail(
+                    `no unmatched call to ${name} matches ${show(s.args)}; made: ${show(made.map((c) => c.args))}`,
+                  );
+                }
+                match.expected = true;
+                match.tag = s.tag;
+                break;
+              }
               const pending = calls.filter((c) => c.system === s.op.system && c.op === s.op.op);
               // Calls are kept in the order they were made: a tag names the earliest match.
               const match = pending.find((c) => c.tag === undefined && partial(s.args, c.args));
@@ -702,6 +812,11 @@ const make =
             }
             case "Resolve": {
               const name = `${s.op.system}.${s.op.op}`;
+              if (!stubbed.has(s.op.system)) {
+                return yield* fail(
+                  `${s.op.system} is not stubbed, so its calls run for real; assert how one ended with returned, failed or died`,
+                );
+              }
               let call: PendingCall | undefined;
               if (s.tag !== undefined) {
                 call = calls.find((c) => c.tag === s.tag);
@@ -731,6 +846,48 @@ const make =
               yield* settle(step);
               break;
             }
+            case "Returned": {
+              const name = `${s.op.system}.${s.op.op}`;
+              if (stubbed.has(s.op.system)) {
+                return yield* fail(
+                  `${s.op.system} is stubbed; answer its calls with resolve, fail or die`,
+                );
+              }
+              let call: ObservedCall | undefined;
+              if (s.tag !== undefined) {
+                call = observed.find((c) => c.tag === s.tag);
+                if (!call) return yield* fail(`no call is named "${s.tag}"`);
+                if (call.system !== s.op.system || call.op !== s.op.op) {
+                  return yield* fail(
+                    `"${s.tag}" names a call to ${call.system}.${call.op}, not ${name}`,
+                  );
+                }
+              } else {
+                const made = observed.filter((c) => c.system === s.op.system && c.op === s.op.op);
+                if (made.length === 0) return yield* fail(`no unasserted call to ${name}`);
+                if (made.length > 1) {
+                  return yield* fail(
+                    `${made.length} unasserted calls to ${name}; name each with expectCall("<tag>", ...) and assert it by tag`,
+                  );
+                }
+                call = made[0]!;
+              }
+              const actual = exitJson(call.exit!);
+              const expected =
+                s.expected._tag === "Success"
+                  ? { _tag: "Success", value: normalize(s.expected.value) }
+                  : s.expected._tag === "Failure"
+                    ? { _tag: "Failure", error: errorJson(s.expected.error) }
+                    : { _tag: "Died" };
+              const compared = actual._tag === "Died" ? { _tag: "Died" } : actual;
+              if (!equal(expected, compared)) {
+                return yield* fail(
+                  `${name}(${show(call.args)})\n  expected ${show(expected)}\n  actual   ${show(actual)}`,
+                );
+              }
+              observed.splice(observed.indexOf(call), 1);
+              break;
+            }
           }
         }
         if (unassertedRejection) {
@@ -748,6 +905,12 @@ const make =
             message: `saga ${death.saga} run ${death.executionId} died with ${String(death.defect)}, which no step asserts`,
           });
         }
+        if (observed.length > 0) {
+          return yield* new StoryFailure({
+            step: steps.length,
+            message: `real external system calls no step asserts (use returned, failed or died): ${show(observed.map((c) => `${c.system}.${c.op}(${show(c.args)})`))}`,
+          });
+        }
         if (calls.length > 0) {
           return yield* new StoryFailure({
             step: steps.length,
@@ -758,7 +921,11 @@ const make =
 
       // `hosted` satisfies the Domain, the platform and the stubbed external systems; what
       // remains is whatever the policy Layers need from outside (`LR`'s rest).
-      return yield* run.pipe(Effect.provide(hosted));
+      return yield* run.pipe(
+        Effect.provide(
+          Layer.mergeAll(hosted, Layer.succeed(ExternalSystem.CallRecorder, recorder)),
+        ),
+      );
     }) as Effect.Effect<
       void,
       StoryFailure | LE,
@@ -767,10 +934,11 @@ const make =
 
 /**
  * Given / when / then specifications of a domain model, run against the real
- * model in memory: policies run for real, every external system is stubbed so
- * its calls wait until you answer them, and a clock you control stamps commands
- * and fires scheduled ones. A story fails on any rejection, external system
- * call or saga defect it doesn't account for.
+ * model in memory: policies run for real, calls to stubbed external systems
+ * wait until you answer them, calls to the others run through their adapters
+ * while the story records them, and a clock you control stamps commands and
+ * fires scheduled ones. A story fails on any rejection, external system call
+ * or saga defect it doesn't account for.
  *
  * ### Writing a story
  * **Example:** A withdrawal and an overdraft
@@ -811,6 +979,17 @@ const make =
  * Story.resolve("a-1", FraudCheck.score, { risk: 0.95 }),
  * ```
  *
+ * **Example:** Assert a real call to a system that is not stubbed
+ * ```typescript
+ * const story = Story.make(Bank, { layer: BankHandlers, stub: [FraudCheck] });
+ *
+ * story(
+ *   Story.when(account, new RecordSettlement({ settlementId: "st_1", amount: 500 })),
+ *   Story.expectCall(Payments.refund, { settlementId: "st_1", amount: 500 }),
+ *   Story.returned(Payments.refund, { refundId: "re_st_1" }),
+ * ).pipe(Effect.provide(StripePayments));
+ * ```
+ *
  * **Example:** Fail a call with the operation's declared error, or a defect
  * ```typescript
  * Story.expectCall(LockVendor.deleteCode, { codeId: "pc_1" }),
@@ -847,6 +1026,9 @@ export const Story = {
   resolve,
   fail,
   die,
+  returned,
+  failed,
+  died,
   clock,
   provide,
   signal,

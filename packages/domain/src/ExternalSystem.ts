@@ -39,6 +39,41 @@ export const observeOps = (
   );
 
 /**
+ * Sees every call to an implemented external system. A story provides one, so
+ * it can assert what each real call was sent and what it returned.
+ *
+ * @internal
+ */
+export interface CallRecorder {
+  readonly record: (
+    system: string,
+    op: string,
+    args: unknown,
+    call: Effect.Effect<unknown, unknown, unknown>,
+  ) => Effect.Effect<unknown, unknown, unknown>;
+}
+
+/** @internal */
+export const CallRecorder = Context.Reference<CallRecorder | undefined>(
+  "alchemy/Domain/ExternalSystem/CallRecorder",
+  { defaultValue: () => undefined },
+);
+
+const recordOps = (
+  system: string,
+  impl: Readonly<Record<string, OpImpl>>,
+): Record<string, OpImpl> =>
+  Object.fromEntries(
+    Object.entries(impl).map(([op, call]) => [
+      op,
+      Effect.fn(function* (args: unknown) {
+        const recorder = yield* CallRecorder;
+        return yield* recorder ? recorder.record(system, op, args, call(args)) : call(args);
+      }),
+    ]),
+  );
+
+/**
  * One operation of an external system: its arguments, success value and business errors.
  */
 export interface OpSpec {
@@ -150,7 +185,10 @@ export const make = <const Name extends string, const Ops extends Record<string,
     ): Layer.Layer<ExternalSystemKey<Name>, E, R> {
       return Layer.effect(
         Tag,
-        Effect.map(build, (impl) => observeOps(name, impl as Record<string, OpImpl>) as never),
+        Effect.map(
+          build,
+          (impl) => observeOps(name, recordOps(name, impl as Record<string, OpImpl>)) as never,
+        ),
       );
     }
   };
