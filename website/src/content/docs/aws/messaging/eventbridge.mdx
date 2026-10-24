@@ -83,9 +83,9 @@ the binding over the EventBridge API.
 
 ## Consume events in a Lambda
 
-`consumeBusEvents` is the consumer-side mirror of
-`SQS.consumeQueueMessages`: pass the bus, an event pattern, and a
-handler that receives matching events as a typed `Stream`:
+`consumeBusEvents` subscribes a Lambda to a bus: pass the bus, an
+event pattern, and a handler that receives matching events as a typed
+`Stream`:
 
 ```typescript
 // src/worker.ts

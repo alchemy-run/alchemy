@@ -1091,20 +1091,25 @@ export const normalizeFunctionUrl = (
  *
  * **Example:** Process SQS messages
  * ```typescript
- * yield* SQS.consumeQueueMessages(queue,
- *   Effect.fn(function* (message) {
- *     yield* Effect.log(`Received: ${message.body}`);
+ * yield* SQS.consumeQueueMessages(
+ *   queue,
+ *   Effect.fn(function* (event) {
+ *     for (const message of event.Records) {
+ *       yield* Effect.log(`Received: ${message.body}`);
+ *     }
  *   }),
  * );
  * ```
  *
  * **Example:** Process DynamoDB stream changes
  * ```typescript
- * yield* AWS.DynamoDB.consumeTableChanges(table, {
- *   StreamViewType: "NEW_AND_OLD_IMAGES",
- * },
- *   Effect.fn(function* (record) {
- *     yield* Effect.log(`Change: ${record.eventName}`);
+ * yield* AWS.DynamoDB.consumeTableChanges(
+ *   table,
+ *   { streamViewType: "NEW_AND_OLD_IMAGES" },
+ *   Effect.fn(function* (event) {
+ *     for (const record of event.Records) {
+ *       yield* Effect.log(`Change: ${record.eventName}`);
+ *     }
  *   }),
  * );
  * ```
