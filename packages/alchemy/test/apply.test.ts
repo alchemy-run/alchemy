@@ -9992,6 +9992,43 @@ describe("replacement ownership admission", { tags: ["unit", "local"] }, () => {
     }),
   );
 
+  // Delete-first would have to drop the old generation before precreate can
+  // report the foreign target, so the replacement is refused up front.
+  test.provider("a cyclic delete-first refusal keeps the previous generation", (stack) =>
+    Effect.gen(function* () {
+      const cloud = yield* setup(stack);
+      cloud.owners.set("foreign", "SomeoneElse");
+      cloud.deleteFirst = true;
+      cloud.foreignPrecreate = true;
+      const error = yield* stack.deploy(resolvesDuringApply("foreign", true)).pipe(Effect.flip);
+      expect(error).toMatchObject({ _tag: "UnverifiableReplacement" });
+      expect(cloud.events).toEqual([]);
+      expect(cloud.owners.get("old")).toBe("Subject");
+      expect(cloud.owners.get("foreign")).toBe("SomeoneElse");
+      cloud.foreignPrecreate = false;
+      yield* stack.destroy();
+    }),
+  );
+
+  test.provider(
+    "adopt(true) admits an unowned precreate of a cyclic delete-first replacement",
+    (stack) =>
+      Effect.gen(function* () {
+        const cloud = yield* setup(stack);
+        cloud.deleteFirst = true;
+        cloud.foreignPrecreate = true;
+        yield* stack.deploy(resolvesDuringApply("fresh", true).pipe(adopt(true)));
+        expect(cloud.events.slice(0, 3)).toEqual([
+          "delete old",
+          "precreate (foreign)",
+          "reconcile fresh",
+        ]);
+        expect(cloud.outputs).toEqual([{ name: "foreign" }]);
+        cloud.foreignPrecreate = false;
+        yield* stack.destroy();
+      }),
+  );
+
   test.provider("adopt(true) admits an unowned precreate of a cyclic replacement", (stack) =>
     Effect.gen(function* () {
       const cloud = yield* setup(stack);
