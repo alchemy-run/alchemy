@@ -9818,23 +9818,102 @@ describe("replacement ownership admission", { tags: ["unit", "local"] }, () => {
     }),
   );
 
-  for (const deleteFirst of [false, true]) {
-    test.provider(
-      `a cyclic replacement with an unresolved name is left to precreate (deleteFirst=${deleteFirst})`,
-      (stack) =>
-        Effect.gen(function* () {
-          const cloud = yield* setup(stack);
-          cloud.deleteFirst = deleteFirst;
-          yield* stack.deploy(resolvesDuringApply("fresh", true));
-          // Delete-first must free the old identity before precreate claims
-          // one. The final reconcile rebinds `Self` from the stub's name.
-          expect(cloud.events).toEqual(
-            deleteFirst
-              ? ["delete old", "precreate (unresolved)", "reconcile fresh", "reconcile fresh"]
-              : ["precreate (unresolved)", "reconcile fresh", "delete old", "reconcile fresh"],
-          );
-          yield* stack.destroy();
-        }),
+  test.provider("a cyclic replacement with an unresolved name is left to precreate", (stack) =>
+    Effect.gen(function* () {
+      const cloud = yield* setup(stack);
+      yield* stack.deploy(resolvesDuringApply("fresh", true));
+      // The final reconcile rebinds `Self` from the stub's name.
+      expect(cloud.events).toEqual([
+        "precreate (unresolved)",
+        "reconcile fresh",
+        "delete old",
+        "reconcile fresh",
+      ]);
+      yield* stack.destroy();
+    }),
+  );
+
+  test.provider(
+    "refuses a cyclic delete-first replacement whose name is not resolved yet",
+    (stack) =>
+      Effect.gen(function* () {
+        const cloud = yield* setup(stack);
+        cloud.deleteFirst = true;
+        const error = yield* stack.deploy(resolvesDuringApply("fresh", true)).pipe(Effect.flip);
+        expect(error).toMatchObject({
+          _tag: "UnverifiableReplacement",
+          resourceType: "Test.Named",
+          logicalId: "Subject",
+        });
+        // Refused before delete-first or precreate touched anything.
+        expect(cloud.events).toEqual([]);
+        expect(cloud.owners.get("old")).toBe("Subject");
+        const state = yield* getState("Subject");
+        expect(state).toMatchObject({ status: "replacing", old: { attr: { name: "old" } } });
+        expect(state.attr).toBeUndefined();
+        yield* stack.destroy();
+        expect(cloud.owners.has("old")).toBe(false);
+      }),
+  );
+
+  test.provider(
+    "a cyclic delete-first replacement with a resolved name is admitted first",
+    (stack) =>
+      Effect.gen(function* () {
+        const cloud = yield* setup(stack);
+        cloud.deleteFirst = true;
+        yield* stack.deploy(named({ name: "fresh" }, true));
+        // The resolved name is checked before delete-first, so nothing is refused.
+        expect(cloud.events).toEqual([
+          "read fresh",
+          "delete old",
+          "precreate fresh",
+          "reconcile fresh",
+        ]);
+        yield* stack.destroy();
+      }),
+  );
+
+  test.provider("adopt(false) on the resource refuses despite global adoption", (stack) =>
+    Effect.gen(function* () {
+      const cloud = yield* setup(stack);
+      cloud.deleteFirst = true;
+      const error = yield* stack
+        .deploy(resolvesDuringApply("fresh", true).pipe(adopt(false)))
+        .pipe(Effect.flip);
+      expect(error).toMatchObject({ _tag: "UnverifiableReplacement" });
+      expect(cloud.owners.get("old")).toBe("Subject");
+      yield* stack.destroy();
+    }).pipe(Effect.provideService(AdoptPolicy, true)),
+  );
+
+  const unverifiedAdoption = [
+    [
+      "global adoption",
+      (effect: Effect.Effect<any, any, any>) =>
+        effect.pipe(Effect.provideService(AdoptPolicy, true)),
+    ],
+    ["adopt(true)", (effect: Effect.Effect<any, any, any>) => effect.pipe(adopt(true))],
+  ] as const;
+  for (const [label, allow] of unverifiedAdoption) {
+    test.provider(`${label} lets a cyclic delete-first replacement run unverified`, (stack) =>
+      Effect.gen(function* () {
+        const cloud = yield* setup(stack);
+        cloud.deleteFirst = true;
+        yield* stack.deploy(allow(resolvesDuringApply("fresh", true)));
+        // Delete-first frees the old identity before precreate claims one.
+        expect(cloud.events).toEqual([
+          "delete old",
+          "precreate (unresolved)",
+          "reconcile fresh",
+          "reconcile fresh",
+        ]);
+        // The rebind leaves a plain row: nothing of `old` remains to collect.
+        const state = yield* getState("Subject");
+        expect(state).toMatchObject({ status: "updated", attr: { name: "fresh" } });
+        expect("old" in state).toBe(false);
+        yield* stack.destroy();
+      }),
     );
   }
 
