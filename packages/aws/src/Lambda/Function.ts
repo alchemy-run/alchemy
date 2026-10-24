@@ -187,7 +187,9 @@ export interface FunctionUrlConfig {
    */
   cors?: Lambda.Cors;
   /**
-   * Invocation mode for the function URL.
+   * Invocation mode for the function URL. `RESPONSE_STREAM` streams an
+   * Effect handler's `HttpServerResponse` body to the client as it is
+   * produced; `BUFFERED` returns it once complete (up to 6 MB).
    * @default "BUFFERED"
    */
   invokeMode?: Lambda.InvokeMode;
@@ -850,6 +852,39 @@ export const normalizeFunctionUrl = (
  *     authType: "AWS_IAM",
  *   },
  * });
+ * ```
+ *
+ * ### Streaming responses
+ * Set the Function URL's `invokeMode` to `"RESPONSE_STREAM"` and a streamed
+ * `HttpServerResponse` reaches the client chunk by chunk instead of being
+ * buffered. Use it for server-sent events, LLM tokens, progressive HTML, and
+ * responses over the 6 MB buffered limit (streams go up to 20 MB).
+ *
+ * **Example:** Server-sent events
+ * ```typescript
+ * // src/events.ts
+ * import * as AWS from "@alchemy.run/aws";
+ * import * as Effect from "effect/Effect";
+ * import * as HttpServerResponse from "effect/http/HttpServerResponse";
+ * import * as Stream from "effect/Stream";
+ *
+ * export default class Events extends AWS.Lambda.Function<Events>()(
+ *   "Events",
+ *   { main: import.meta.url, functionUrl: { invokeMode: "RESPONSE_STREAM" } },
+ *   Effect.gen(function* () {
+ *     return {
+ *       fetch: Effect.succeed(
+ *         HttpServerResponse.stream(
+ *           Stream.make("data: one\n\n", "data: two\n\n").pipe(
+ *             Stream.tap(() => Effect.sleep("1 second")),
+ *             Stream.encodeText,
+ *           ),
+ *           { contentType: "text/event-stream" },
+ *         ),
+ *       ),
+ *     };
+ *   }),
+ * ) {}
  * ```
  *
  * ### Configuration
