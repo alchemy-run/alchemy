@@ -9845,12 +9845,14 @@ describe("replacement ownership admission", { tags: ["unit", "local"] }, () => {
           resourceType: "Test.Named",
           logicalId: "Subject",
         });
-        // Refused before delete-first or precreate touched anything.
+        // Plan refused it, so apply never started: not even `Name` changed.
         expect(cloud.events).toEqual([]);
         expect(cloud.owners.get("old")).toBe("Subject");
-        const state = yield* getState("Subject");
-        expect(state).toMatchObject({ status: "replacing", old: { attr: { name: "old" } } });
-        expect(state.attr).toBeUndefined();
+        expect(yield* getState("Subject")).toMatchObject({
+          status: "created",
+          attr: { name: "old" },
+        });
+        expect(yield* getState("Name")).toMatchObject({ attr: { string: "old" } });
         yield* stack.destroy();
         expect(cloud.owners.has("old")).toBe(false);
       }),

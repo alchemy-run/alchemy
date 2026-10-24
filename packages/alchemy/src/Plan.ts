@@ -10,7 +10,13 @@ import * as Option from "effect/Option";
 import * as Ref from "effect/Ref";
 import { asEffect } from ".//Util/types.ts";
 import { isAction, type ActionLike } from "./Action.ts";
-import { AdoptPolicy, OwnedBySomeoneElse, stripUnowned, Unowned } from "./AdoptPolicy.ts";
+import {
+  AdoptPolicy,
+  OwnedBySomeoneElse,
+  stripUnowned,
+  Unowned,
+  UnverifiableReplacement,
+} from "./AdoptPolicy.ts";
 import { AlchemyContext } from "./AlchemyContext.ts";
 import {
   Artifacts,
@@ -2038,6 +2044,33 @@ const makePlan = <A>(
             }),
           );
         }
+      }
+    }
+
+    // A delete-first replacement in a cycle deletes its previous generation
+    // before precreate, which runs on unresolved props. While its identity is
+    // unresolved, ownership cannot be checked before that delete, so refuse
+    // it here — before apply touches anything — unless adoption is allowed.
+    for (const [fqn, node] of Object.entries(resourceGraph)) {
+      if (
+        node.action === "replace" &&
+        node.deleteFirst &&
+        cycleMembers.has(fqn) &&
+        node.deferredAdoption?.adopt === false &&
+        !isResolved(node.props) &&
+        // A resumed replacement already holds its precreated identity.
+        !(node.state.status === "replacing" && !node.restart && node.state.attr !== undefined)
+      ) {
+        return yield* new UnverifiableReplacement({
+          message:
+            `Cannot replace resource '${fqn}' (${node.resource.Type}): ` +
+            "it must be deleted before its replacement is pre-created, but " +
+            "the replacement's identity depends on outputs that are not " +
+            "resolved yet, so its ownership cannot be checked first. Re-run " +
+            "with `--adopt` (or wrap the effect in `adopt(true)`) to replace it anyway.",
+          resourceType: node.resource.Type,
+          logicalId: node.resource.LogicalId,
+        });
       }
     }
 
