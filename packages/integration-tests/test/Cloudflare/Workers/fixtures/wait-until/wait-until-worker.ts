@@ -110,17 +110,15 @@ export default class WaitUntilWorker extends Cloudflare.Worker<WaitUntilWorker>(
     );
 
     // HttpApi routes built once, in init (#2173): `HttpApiBuilder.group`
-    // captures the init context (holding the deferred execution context) and
-    // re-provides it over each handler, so `waitUntil` must still reach the
-    // live per-event context.
+    // captures the init context and re-provides it over each handler, so
+    // `waitUntil` must still reach the live per-event context.
     const api = yield* HttpRouter.toHttpEffect(
       HttpApiBuilder.layer(BackgroundApi).pipe(
         Layer.provide(
           HttpApiBuilder.group(BackgroundApi, "Background", (handlers) =>
             handlers.handle("bg", () =>
               Effect.gen(function* () {
-                const exec = yield* Cloudflare.WorkerExecutionContext;
-                yield* exec.waitUntil(
+                yield* Cloudflare.waitUntil(
                   Effect.sleep("100 millis").pipe(
                     Effect.andThen(
                       journals.getByName("default").record("from-http-api-wait-until"),

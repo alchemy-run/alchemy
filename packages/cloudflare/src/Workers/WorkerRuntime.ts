@@ -293,6 +293,24 @@ const liveExecutionContext = WorkerExecutionContext.pipe(
   ),
 );
 
+/**
+ * Run an Effect in the background without blocking the response, keeping the
+ * Worker alive until it settles. Shorthand for
+ * `(yield* WorkerExecutionContext).waitUntil(effect)`.
+ *
+ * @example
+ * ```typescript
+ * fetch: Effect.gen(function* () {
+ *   yield* Cloudflare.waitUntil(writeAuditLog(event));
+ *   return HttpServerResponse.text("accepted", { status: 202 });
+ * }),
+ * ```
+ */
+export const waitUntil = <A, E, R>(
+  effect: Effect.Effect<A, E, R>,
+): Effect.Effect<void, never, R | RuntimeContext> =>
+  WorkerExecutionContext.pipe(Effect.flatMap((ctx) => ctx.waitUntil(effect)));
+
 export type WorkerEvent = Exclude<
   {
     [type in keyof cf.ExportedHandler]: {
