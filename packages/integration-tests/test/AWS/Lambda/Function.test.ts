@@ -4,8 +4,10 @@ import { expect } from "@alchemy.run/test";
 import * as Logs from "@distilled.cloud/aws/cloudwatch-logs";
 import * as iam from "@distilled.cloud/aws/iam";
 import * as Lambda from "@distilled.cloud/aws/lambda";
+import { adopt } from "alchemy/AdoptPolicy";
 import * as Drift from "alchemy/Drift";
 import * as Provider from "alchemy/Provider";
+import { State } from "alchemy/State";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -842,6 +844,100 @@ const invokeHttpFunction = Effect.fn(function* (functionName: string, path = "/"
   expect(body.statusCode).toBe(200);
   return body.body as string;
 });
+
+// A cycle precreates on unresolved props, before `read` can check ownership.
+// `observe` must refuse a foreign function at the precreate identity before
+// precreate's create-or-update overwrites it. The queue URL keeps the props
+// unresolved; the self-binding puts the function in a cycle.
+const cyclicFunction = (functionName: string, scoped?: boolean) =>
+  Effect.gen(function* () {
+    const queue = yield* AWS.SQS.Queue("CyclicQueue");
+    const declaration = AWS.Lambda.Function("CyclicDifferent", {
+      main: asyncHandlerPath,
+      functionName,
+      functionUrl: false,
+      env: { QUEUE_URL: queue.queueUrl },
+    });
+    const fn = yield* scoped === undefined ? declaration : declaration.pipe(adopt(scoped));
+    yield* fn.bind`Self`({ env: { SELF_NAME: fn.functionName } });
+    return fn;
+  });
+
+/**
+ * Deploys `CyclicOriginal`, then forgets it, leaving a function owned by
+ * another logical id. Returns a step that remembers it again, so destroy
+ * removes it — and its execution role — through normal stack cleanup.
+ */
+const plantForeignFunction = Effect.fn(function* (stack: Test.ScratchStack) {
+  yield* stack.destroy();
+  const original = yield* stack.deploy(
+    AWS.Lambda.Function("CyclicOriginal", { main: asyncHandlerPath, functionUrl: false }),
+  );
+  const key = { stack: stack.name, stage: stack.stage, fqn: "CyclicOriginal" };
+  const row = yield* Effect.gen(function* () {
+    const state = yield* yield* State;
+    const value = yield* state.get(key);
+    yield* state.delete(key);
+    return value!;
+  }).pipe(Effect.provide(stack.state));
+  const restore = Effect.gen(function* () {
+    const state = yield* yield* State;
+    yield* state.set({ ...key, value: row });
+  }).pipe(Effect.provide(stack.state));
+  return { original, restore };
+});
+
+for (const scoped of [undefined, false]) {
+  test.provider(
+    `a cyclic precreate refuses a foreign function (scoped adoption ${scoped})`,
+    (stack) =>
+      Effect.gen(function* () {
+        const { original, restore } = yield* plantForeignFunction(stack);
+        const before = yield* Lambda.getFunction({ FunctionName: original.functionName });
+        const program = cyclicFunction(original.functionName, scoped);
+        expect((yield* stack.plan(program)).resources.CyclicDifferent?.action).toBe("create");
+        const error = yield* stack.deploy(program).pipe(Effect.flip);
+        expect(error).toMatchObject({ _tag: "OwnedBySomeoneElse", logicalId: "CyclicDifferent" });
+        // Neither the function's code nor its configuration changed.
+        const after = yield* Lambda.getFunction({ FunctionName: original.functionName });
+        expect(after.Configuration?.CodeSha256).toBe(before.Configuration?.CodeSha256);
+        expect(after.Configuration?.LastModified).toBe(before.Configuration?.LastModified);
+        expect(after.Tags).toEqual(before.Tags);
+        yield* stack.destroy();
+        yield* restore;
+        yield* stack.destroy();
+        yield* assertFunctionDeleted(original.functionName);
+        yield* assertRoleDeleted(original.roleName);
+      }).pipe(Effect.onError(() => stack.destroy().pipe(Effect.ignore))),
+    {
+      tags: ["provider:aws", "provider:aws:iam", "provider:aws:lambda", "live"],
+      timeout: 180_000,
+    },
+  );
+}
+
+test.provider(
+  "a cyclic precreate takes over a foreign function with adopt(true)",
+  (stack) =>
+    Effect.gen(function* () {
+      const { original, restore } = yield* plantForeignFunction(stack);
+      const adopted = yield* stack.deploy(cyclicFunction(original.functionName, true));
+      expect(adopted.functionName).toBe(original.functionName);
+      const { Tags } = yield* Lambda.getFunction({ FunctionName: original.functionName });
+      expect(Tags?.["alchemy::id"]).toBe("CyclicDifferent");
+      yield* stack.destroy();
+      yield* assertFunctionDeleted(original.functionName);
+      yield* assertRoleDeleted(adopted.roleName);
+      // The taken-over function's previous execution role is still `CyclicOriginal`'s.
+      yield* restore;
+      yield* stack.destroy();
+      yield* assertRoleDeleted(original.roleName);
+    }).pipe(Effect.onError(() => stack.destroy().pipe(Effect.ignore))),
+  {
+    tags: ["provider:aws", "provider:aws:iam", "provider:aws:lambda", "live"],
+    timeout: 180_000,
+  },
+);
 
 // Out-of-band proof that the trailing destroy actually removed the function
 // from the cloud (bounded retry to ride out delete propagation).

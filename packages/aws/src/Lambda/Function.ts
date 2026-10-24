@@ -1906,6 +1906,66 @@ export const FunctionProvider = () =>
           FileSystemConfigs: fileSystemConfigs,
         };
 
+        // Update an existing function in place. Only an engine-admitted
+        // function reaches this directly — see `preferUpdate`.
+        // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- erases SDK error/requirement unions; the services are ambient in the lifecycle op
+        const update = Effect.gen(function* () {
+          yield* Effect.logDebug(`updating function code ${id}`);
+          yield* Lambda.updateFunctionCode({
+            FunctionName: createFunctionRequest.FunctionName,
+            Architectures: createFunctionRequest.Architectures,
+            ...codeLocation,
+          }).pipe(
+            Effect.tapError((e) =>
+              isRolePropagationError(e) ? noteCreateDependencyWait() : Effect.void,
+            ),
+            Effect.retry({
+              while: (e) => e._tag === "ResourceConflictException" || isRolePropagationError(e),
+              schedule: Schedule.exponential(100),
+            }),
+          );
+          yield* Effect.logDebug(`updated function code ${id}`);
+          const configured = yield* Lambda.updateFunctionConfiguration({
+            FunctionName: createFunctionRequest.FunctionName,
+            DeadLetterConfig: createFunctionRequest.DeadLetterConfig,
+            Description: createFunctionRequest.Description,
+            Environment: createFunctionRequest.Environment,
+            EphemeralStorage: createFunctionRequest.EphemeralStorage,
+            FileSystemConfigs: createFunctionRequest.FileSystemConfigs,
+            Handler: createFunctionRequest.Handler,
+            ImageConfig: imageConfigForUpdate(news),
+            KMSKeyArn: createFunctionRequest.KMSKeyArn,
+            Layers: createFunctionRequest.Layers,
+            LoggingConfig: createFunctionRequest.LoggingConfig,
+            MemorySize: createFunctionRequest.MemorySize,
+            // RevisionId: "???"
+            Role: createFunctionRequest.Role,
+            Runtime: createFunctionRequest.Runtime,
+            SnapStart: createFunctionRequest.SnapStart,
+            Timeout: createFunctionRequest.Timeout,
+            TracingConfig: createFunctionRequest.TracingConfig,
+            VpcConfig: createFunctionRequest.VpcConfig,
+            DurableConfig: createFunctionRequest.DurableConfig,
+          }).pipe(
+            Effect.tapError((e) =>
+              isRolePropagationError(e) ? noteCreateDependencyWait() : Effect.void,
+            ),
+            Effect.retry({
+              while: (e) => e._tag === "ResourceConflictException" || isRolePropagationError(e),
+              schedule: Schedule.exponential(100),
+            }),
+          );
+          yield* Effect.logDebug(`updated function configuration ${id}`);
+          // An adopted function still carries its previous owner's tags.
+          // Brand it from the observed tags, keeping any added out-of-band.
+          if (configured.FunctionArn !== undefined) {
+            const observed = yield* Lambda.listTags({ Resource: configured.FunctionArn });
+            if (!hasTags(tags, observed.Tags ?? {})) {
+              yield* Lambda.tagResource({ Resource: configured.FunctionArn, Tags: tags });
+            }
+          }
+        }) as Effect.Effect<any, any, Credentials | Region | HttpClient>;
+
         // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- erases SDK error/requirement unions; the services are ambient in the lifecycle op
         const getAndUpdate = Lambda.getFunction({
           FunctionName: functionName,
@@ -1930,56 +1990,7 @@ export const FunctionProvider = () =>
               // TODO(sam): add custom
               new Error("Function tags do not match expected values"),
           ),
-          Effect.flatMap(() =>
-            Effect.gen(function* () {
-              yield* Effect.logDebug(`updating function code ${id}`);
-              yield* Lambda.updateFunctionCode({
-                FunctionName: createFunctionRequest.FunctionName,
-                Architectures: createFunctionRequest.Architectures,
-                ...codeLocation,
-              }).pipe(
-                Effect.tapError((e) =>
-                  isRolePropagationError(e) ? noteCreateDependencyWait() : Effect.void,
-                ),
-                Effect.retry({
-                  while: (e) => e._tag === "ResourceConflictException" || isRolePropagationError(e),
-                  schedule: Schedule.exponential(100),
-                }),
-              );
-              yield* Effect.logDebug(`updated function code ${id}`);
-              yield* Lambda.updateFunctionConfiguration({
-                FunctionName: createFunctionRequest.FunctionName,
-                DeadLetterConfig: createFunctionRequest.DeadLetterConfig,
-                Description: createFunctionRequest.Description,
-                Environment: createFunctionRequest.Environment,
-                EphemeralStorage: createFunctionRequest.EphemeralStorage,
-                FileSystemConfigs: createFunctionRequest.FileSystemConfigs,
-                Handler: createFunctionRequest.Handler,
-                ImageConfig: imageConfigForUpdate(news),
-                KMSKeyArn: createFunctionRequest.KMSKeyArn,
-                Layers: createFunctionRequest.Layers,
-                LoggingConfig: createFunctionRequest.LoggingConfig,
-                MemorySize: createFunctionRequest.MemorySize,
-                // RevisionId: "???"
-                Role: createFunctionRequest.Role,
-                Runtime: createFunctionRequest.Runtime,
-                SnapStart: createFunctionRequest.SnapStart,
-                Timeout: createFunctionRequest.Timeout,
-                TracingConfig: createFunctionRequest.TracingConfig,
-                VpcConfig: createFunctionRequest.VpcConfig,
-                DurableConfig: createFunctionRequest.DurableConfig,
-              }).pipe(
-                Effect.tapError((e) =>
-                  isRolePropagationError(e) ? noteCreateDependencyWait() : Effect.void,
-                ),
-                Effect.retry({
-                  while: (e) => e._tag === "ResourceConflictException" || isRolePropagationError(e),
-                  schedule: Schedule.exponential(100),
-                }),
-              );
-              yield* Effect.logDebug(`updated function configuration ${id}`);
-            }),
-          ),
+          Effect.flatMap(() => update),
         ) as Effect.Effect<any, any, Credentials | Region | HttpClient>;
 
         // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- erases SDK error/requirement unions; the services are ambient in the lifecycle op
@@ -1995,7 +2006,9 @@ export const FunctionProvider = () =>
         ) as Effect.Effect<any, any, Credentials | Region | HttpClient>;
 
         if (preferUpdate) {
-          yield* getAndUpdate.pipe(
+          // The engine has admitted this function (`read`/`observe`, or
+          // `--adopt`), so a foreign tag set is no reason to refuse.
+          yield* update.pipe(
             Effect.catchTags({
               ResourceNotFoundException: () => create,
             }),
@@ -2447,6 +2460,8 @@ export const FunctionProvider = () =>
             functionName,
             env: alchemyEnv,
             session,
+            // `observe` (or `read`) has already admitted an existing function.
+            preferUpdate: true,
           });
 
           return {
