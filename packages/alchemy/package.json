@@ -40,6 +40,7 @@
     "./Bundle": "./src/Bundle/index.ts",
     "./Cli": "./src/Cli/index.ts",
     "./Cli/CliKit": "./src/Cli/CliKit/index.ts",
+    "./DNS": "./src/DNS/index.ts",
     "./Runtime/Bootstrap": "./src/Runtime/Bootstrap.ts",
     "./Runtime/ManagedHttpShutdown": "./src/Runtime/ManagedHttpShutdown.ts",
     "./Secrets": "./src/Secrets/index.ts",
@@ -89,6 +90,11 @@
         "types": "./lib/Cli/CliKit/index.d.ts",
         "bun": "./src/Cli/CliKit/index.ts",
         "default": "./lib/Cli/CliKit/index.js"
+      },
+      "./DNS": {
+        "types": "./lib/DNS/index.d.ts",
+        "bun": "./src/DNS/index.ts",
+        "default": "./lib/DNS/index.js"
       },
       "./Runtime/Bootstrap": {
         "types": "./src/Runtime/Bootstrap.ts",
