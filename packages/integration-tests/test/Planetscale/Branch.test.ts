@@ -1,7 +1,7 @@
 import * as Planetscale from "@alchemy.run/planetscale";
 import { hashMigrations } from "@alchemy.run/sql/SqlFile";
-import * as ps from "@distilled.cloud/planetscale";
 import { describe, expect } from "@alchemy.run/test";
+import * as ps from "@distilled.cloud/planetscale";
 import { adopt } from "alchemy/AdoptPolicy";
 import * as Drift from "alchemy/Drift";
 import * as Provider from "alchemy/Provider";

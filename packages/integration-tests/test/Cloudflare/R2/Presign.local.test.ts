@@ -1,7 +1,7 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
-import * as r2 from "@distilled.cloud/cloudflare/r2";
 import { expect } from "@alchemy.run/test";
+import * as r2 from "@distilled.cloud/cloudflare/r2";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";

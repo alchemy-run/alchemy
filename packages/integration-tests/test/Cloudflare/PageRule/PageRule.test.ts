@@ -1,8 +1,8 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
 import { findZoneByName } from "@alchemy.run/cloudflare/Zone/lookup";
-import * as pageRules from "@distilled.cloud/cloudflare/page-rules";
 import { expect } from "@alchemy.run/test";
+import * as pageRules from "@distilled.cloud/cloudflare/page-rules";
 import { adopt, OwnedBySomeoneElse } from "alchemy/AdoptPolicy";
 import * as Provider from "alchemy/Provider";
 import * as Test from "alchemy/Test/Alchemy";

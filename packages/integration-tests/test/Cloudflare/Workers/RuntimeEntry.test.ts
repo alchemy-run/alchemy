@@ -8,8 +8,8 @@ import {
 } from "@alchemy.run/cloudflare/Workers/Sources/Rolldown";
 import * as WorkerRuntime from "@alchemy.run/cloudflare/Workers/WorkerRuntime";
 import * as WorkflowRuntime from "@alchemy.run/cloudflare/Workflows/WorkflowRuntime";
-import * as NodeServices from "@effect/platform-node/NodeServices";
 import { describe, expect, layer } from "@alchemy.run/test";
+import * as NodeServices from "@effect/platform-node/NodeServices";
 import { virtualEntryPlugin } from "alchemy/Bundle/Bundle";
 import { Stack } from "alchemy/Stack";
 import { StackContext } from "alchemy/StackContext";

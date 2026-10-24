@@ -1,9 +1,9 @@
 import * as AWS from "@alchemy.run/aws";
 import { ConditionalForwarder, Directory, EventTopic } from "@alchemy.run/aws/DirectoryService";
 import { Topic } from "@alchemy.run/aws/SNS";
+import { expect } from "@alchemy.run/test";
 import * as ds from "@distilled.cloud/aws/directory-service";
 import * as EC2 from "@distilled.cloud/aws/ec2";
-import { expect } from "@alchemy.run/test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";

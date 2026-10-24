@@ -1,8 +1,8 @@
 import * as AWS from "@alchemy.run/aws";
 import { Bucket } from "@alchemy.run/aws/S3";
 import { AssetDeployment } from "@alchemy.run/aws/Website/AssetDeployment";
-import * as s3 from "@distilled.cloud/aws/s3";
 import { expect } from "@alchemy.run/test";
+import * as s3 from "@distilled.cloud/aws/s3";
 import * as Provider from "alchemy/Provider";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Data from "effect/Data";

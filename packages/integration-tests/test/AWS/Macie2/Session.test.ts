@@ -1,7 +1,7 @@
 import * as AWS from "@alchemy.run/aws";
 import { Session } from "@alchemy.run/aws/Macie2/Session";
-import * as macie2 from "@distilled.cloud/aws/macie2";
 import { expect } from "@alchemy.run/test";
+import * as macie2 from "@distilled.cloud/aws/macie2";
 import * as Provider from "alchemy/Provider";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";

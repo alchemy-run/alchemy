@@ -1,10 +1,10 @@
 import * as AWS from "@alchemy.run/aws";
 import { Cluster } from "@alchemy.run/aws/ECS/Cluster";
 import { Service } from "@alchemy.run/aws/ECS/Service";
+import { expect } from "@alchemy.run/test";
 import * as ec2 from "@distilled.cloud/aws/ec2";
 import * as ecs from "@distilled.cloud/aws/ecs";
 import * as elbv2 from "@distilled.cloud/aws/elastic-load-balancing-v2";
-import { expect } from "@alchemy.run/test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";

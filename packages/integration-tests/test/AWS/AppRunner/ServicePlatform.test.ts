@@ -1,8 +1,8 @@
 import * as AWS from "@alchemy.run/aws";
+import { expect } from "@alchemy.run/test";
 import * as apprunner from "@distilled.cloud/aws/apprunner";
 import * as ecr from "@distilled.cloud/aws/ecr";
 import * as iam from "@distilled.cloud/aws/iam";
-import { expect } from "@alchemy.run/test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";

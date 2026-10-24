@@ -1,8 +1,8 @@
 import * as GCP from "@alchemy.run/gcp";
 import { GcpEnvironment } from "@alchemy.run/gcp/Environment";
+import { expect } from "@alchemy.run/test";
 import { Credentials } from "@distilled.cloud/gcp/Credentials";
 import * as networkservices from "@distilled.cloud/gcp/networkservices_v1";
-import { expect } from "@alchemy.run/test";
 import * as Output from "alchemy/Output";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";

@@ -1,7 +1,7 @@
 import * as AWS from "@alchemy.run/aws";
 import { Namespace, Table, TableBucket } from "@alchemy.run/aws/S3Tables";
-import * as s3tables from "@distilled.cloud/aws/s3tables";
 import { expect } from "@alchemy.run/test";
+import * as s3tables from "@distilled.cloud/aws/s3tables";
 import * as Provider from "alchemy/Provider";
 import type { ScopedPlanStatusSession } from "alchemy/Report";
 import * as Test from "alchemy/Test/Alchemy";

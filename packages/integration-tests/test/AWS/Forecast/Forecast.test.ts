@@ -1,8 +1,8 @@
 import * as AWS from "@alchemy.run/aws";
 import { Dataset, DatasetGroup } from "@alchemy.run/aws/Forecast";
 import { toTagRecord } from "@alchemy.run/aws/Forecast/internal";
-import * as forecast from "@distilled.cloud/aws/forecast";
 import { expect } from "@alchemy.run/test";
+import * as forecast from "@distilled.cloud/aws/forecast";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";

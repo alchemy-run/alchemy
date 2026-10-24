@@ -1,8 +1,8 @@
 import * as AWS from "@alchemy.run/aws";
 import { VpcLink } from "@alchemy.run/aws/ApiGatewayV2";
+import { expect } from "@alchemy.run/test";
 import * as agw2 from "@distilled.cloud/aws/apigatewayv2";
 import * as EC2 from "@distilled.cloud/aws/ec2";
-import { expect } from "@alchemy.run/test";
 import * as Provider from "alchemy/Provider";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";

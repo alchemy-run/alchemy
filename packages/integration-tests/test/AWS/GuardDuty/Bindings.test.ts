@@ -1,6 +1,6 @@
 import * as AWS from "@alchemy.run/aws";
-import * as guardduty from "@distilled.cloud/aws/guardduty";
 import { describe, expect } from "@alchemy.run/test";
+import * as guardduty from "@distilled.cloud/aws/guardduty";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Core from "alchemy/Test/Core";
 import * as Data from "effect/Data";

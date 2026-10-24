@@ -1,8 +1,8 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
 import { findZoneByName } from "@alchemy.run/cloudflare/Zone/lookup";
-import * as dns from "@distilled.cloud/cloudflare/dns";
 import { expect } from "@alchemy.run/test";
+import * as dns from "@distilled.cloud/cloudflare/dns";
 import { Action } from "alchemy/Action";
 import { adopt } from "alchemy/AdoptPolicy";
 import * as Test from "alchemy/Test/Alchemy";

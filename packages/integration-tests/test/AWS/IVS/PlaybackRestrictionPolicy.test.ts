@@ -1,8 +1,8 @@
 import * as AWS from "@alchemy.run/aws";
 import { PlaybackRestrictionPolicy } from "@alchemy.run/aws/IVS";
+import { expect } from "@alchemy.run/test";
 import * as ivs from "@distilled.cloud/aws/ivs";
 import * as sts from "@distilled.cloud/aws/sts";
-import { expect } from "@alchemy.run/test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";

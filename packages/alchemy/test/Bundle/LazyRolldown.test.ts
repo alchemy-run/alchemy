@@ -1,6 +1,6 @@
 import { fileURLToPath } from "node:url";
-import * as NodeServices from "@effect/platform-node/NodeServices";
 import { describe, expect, it } from "@alchemy.run/test";
+import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as Effect from "effect/Effect";
 import { ChildProcess } from "effect/process";
 import { exec } from "@/Util/exec.ts";

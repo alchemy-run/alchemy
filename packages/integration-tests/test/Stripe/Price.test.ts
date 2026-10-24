@@ -1,7 +1,7 @@
 import * as Stripe from "@alchemy.run/stripe";
 import { isMissingStripeResource } from "@alchemy.run/stripe/missing";
-import { GetPrice, CreateProduct, UpdateProduct } from "@distilled.cloud/stripe/stripe";
 import { expect } from "@alchemy.run/test";
+import { GetPrice, CreateProduct, UpdateProduct } from "@distilled.cloud/stripe/stripe";
 import * as Provider from "alchemy/Provider";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";

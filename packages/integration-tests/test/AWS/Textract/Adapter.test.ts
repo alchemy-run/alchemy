@@ -1,7 +1,7 @@
 import * as AWS from "@alchemy.run/aws";
 import { Adapter } from "@alchemy.run/aws/Textract/Adapter";
-import * as textract from "@distilled.cloud/aws/textract";
 import { expect } from "@alchemy.run/test";
+import * as textract from "@distilled.cloud/aws/textract";
 import * as Provider from "alchemy/Provider";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";

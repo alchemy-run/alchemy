@@ -1,7 +1,7 @@
 import * as AWS from "@alchemy.run/aws";
 import { Host } from "@alchemy.run/aws/CodeConnections/Host";
-import * as codeconnections from "@distilled.cloud/aws/codeconnections";
 import { expect } from "@alchemy.run/test";
+import * as codeconnections from "@distilled.cloud/aws/codeconnections";
 import * as Provider from "alchemy/Provider";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
