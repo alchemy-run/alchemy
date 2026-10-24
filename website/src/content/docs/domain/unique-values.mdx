@@ -137,7 +137,7 @@ import { Payments } from "../src/Settlement/Payments.external.ts";
 
 const story = Story.make(Bank, {
   layer: BankHandlers.pipe(Layer.provide(MemoryLedgerStore)),
-  externalSystems: [FraudCheck, Payments],
+  stub: [FraudCheck, Payments],
 });
 const sam = Username.make("sam");
 const samsClaim = UsernameClaim.ref("sam");
