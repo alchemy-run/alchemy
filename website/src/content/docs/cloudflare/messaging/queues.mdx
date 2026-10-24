@@ -188,7 +188,9 @@ Effect.gen(function* () {
 });
 ```
 
-One Worker can consume both queues. Replace the log with whatever should
+`deadLetterQueue` also takes a queue from another stack,
+`yield* Cloudflare.Queues.Queue.ref("DeadLetters", { stack: "shared" })`,
+or a queue name as a string. One Worker can consume both queues. Replace the log with whatever should
 happen to a failed message: persist it for replay, page someone, or send
 it back to the source queue after a fix.
 

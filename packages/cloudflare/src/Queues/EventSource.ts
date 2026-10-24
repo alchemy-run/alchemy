@@ -38,7 +38,7 @@ export interface MessagesProps {
   retryDelay?: Duration.Input;
   /**
    * Queue that receives messages after `maxRetries` failed deliveries.
-   * Pass the Queue resource, or a queue name.
+   * Pass the Queue resource, a `Queue.ref(...)` to one, or a queue name.
    *
    * Cloudflare does not drain or alert on a dead-letter queue. A message
    * left there expires after the queue's retention period, so call

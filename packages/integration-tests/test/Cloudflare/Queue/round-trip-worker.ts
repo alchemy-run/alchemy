@@ -1,5 +1,4 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
-import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
@@ -48,15 +47,6 @@ export class Counter extends Cloudflare.DurableObject<Counter>()(
  */
 export const RoundTripQueue = Cloudflare.Queues.Queue("RoundTripQueue");
 export const SecondaryRoundTripQueue = Cloudflare.Queues.Queue("SecondaryRoundTripQueue");
-
-/**
- * Every message sent here fails its handler, exhausts `maxRetries`, and is
- * dead-lettered to `RoundTripDeadLetterQueue`, whose consumer records it.
- */
-export const PoisonRoundTripQueue = Cloudflare.Queues.Queue("PoisonRoundTripQueue");
-export const RoundTripDeadLetterQueue = Cloudflare.Queues.Queue("RoundTripDeadLetterQueue");
-
-class PoisonMessage extends Data.TaggedError("PoisonMessage")<{ text: string }> {}
 
 interface QueueMessageBody {
   name: string;
@@ -112,32 +102,6 @@ export default class QueueWorker extends Cloudflare.Worker<QueueWorker>()(
         Stream.runForEach(stream, (msg) => counters.getByName(msg.body.name).record(msg.body.text)),
     );
 
-    // The poison queue's handler always fails, so after `maxRetries`
-    // Cloudflare moves each message to the dead-letter queue. The
-    // dead-letter queue has its own consumer, which records the message.
-    const poisonQueueResource = yield* PoisonRoundTripQueue;
-    const poisonQueue = yield* Cloudflare.Queues.WriteQueue(poisonQueueResource);
-    const deadLetterQueueResource = yield* RoundTripDeadLetterQueue;
-
-    yield* Cloudflare.Queues.consumeQueueMessages<QueueMessageBody>(
-      poisonQueueResource,
-      {
-        batchSize: 1,
-        maxRetries: 1,
-        retryDelay: 0,
-        deadLetterQueue: deadLetterQueueResource,
-      },
-      (stream) =>
-        Stream.runForEach(stream, (msg) => Effect.fail(new PoisonMessage({ text: msg.body.text }))),
-    );
-
-    yield* Cloudflare.Queues.consumeQueueMessages<QueueMessageBody>(
-      deadLetterQueueResource,
-      { batchSize: 1 },
-      (stream) =>
-        Stream.runForEach(stream, (msg) => counters.getByName(msg.body.name).record(msg.body.text)),
-    );
-
     return {
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;
@@ -154,13 +118,6 @@ export default class QueueWorker extends Cloudflare.Worker<QueueWorker>()(
           const name = url.searchParams.get("name") ?? "default";
           const text = yield* request.text;
           yield* secondaryQueue.send({ name, text }).pipe(Effect.orDie);
-          return yield* HttpServerResponse.json({ sent: { name, text } }, { status: 202 });
-        }
-
-        if (request.method === "POST" && url.pathname === "/send-poison") {
-          const name = url.searchParams.get("name") ?? "default";
-          const text = yield* request.text;
-          yield* poisonQueue.send({ name, text }).pipe(Effect.orDie);
           return yield* HttpServerResponse.json({ sent: { name, text } }, { status: 202 });
         }
 
