@@ -1,4 +1,4 @@
-import { describe, expect } from "alchemy-test";
+import { describe, expect } from "@alchemy.run/test";
 import * as Effect from "effect/Effect";
 import { State } from "@/State";
 import * as Test from "@/Test/Alchemy";

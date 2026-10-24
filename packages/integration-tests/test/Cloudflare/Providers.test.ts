@@ -1,8 +1,8 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
 import { Credentials } from "@alchemy.run/cloudflare/Credentials";
+import { expect, it } from "@alchemy.run/test";
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { expect, it } from "alchemy-test";
 import { AlchemyContext } from "alchemy/AlchemyContext";
 import { ArtifactStore, createArtifactStore } from "alchemy/Artifacts";
 import { AuthProviders } from "alchemy/Auth/AuthProvider";

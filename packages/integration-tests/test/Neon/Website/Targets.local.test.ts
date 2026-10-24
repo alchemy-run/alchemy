@@ -1,5 +1,5 @@
 import { providers } from "@alchemy.run/neon/Providers";
-import { expect } from "alchemy-test";
+import { expect } from "@alchemy.run/test";
 import * as Test from "alchemy/Test/Alchemy";
 import { Server } from "alchemy/Website/Server";
 import * as Effect from "effect/Effect";

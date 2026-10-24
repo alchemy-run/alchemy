@@ -1,7 +1,7 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
+import { expect } from "@alchemy.run/test";
 import * as workers from "@distilled.cloud/cloudflare/workers";
-import { expect } from "alchemy-test";
 import { adopt } from "alchemy/AdoptPolicy";
 import type * as Plan from "alchemy/Plan";
 import * as Provider from "alchemy/Provider";

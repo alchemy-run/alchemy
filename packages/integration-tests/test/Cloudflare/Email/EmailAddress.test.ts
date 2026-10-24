@@ -1,5 +1,5 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
-import { expect } from "alchemy-test";
+import { expect } from "@alchemy.run/test";
 import * as Provider from "alchemy/Provider";
 import * as RemovalPolicy from "alchemy/RemovalPolicy";
 import * as Test from "alchemy/Test/Alchemy";

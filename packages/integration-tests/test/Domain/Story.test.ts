@@ -1,12 +1,14 @@
 import * as Domain from "@alchemy.run/domain";
 import { InMemory } from "@alchemy.run/domain/InMemory";
-import { Story } from "@alchemy.run/domain/Story";
-import { describe, expect, it } from "alchemy-test";
+import { type Step, Story } from "@alchemy.run/domain/Story";
+import { describe, expect, it } from "@alchemy.run/test";
+import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as Headers from "effect/http/Headers";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as Redacted from "effect/Redacted";
 import * as RpcMiddleware from "effect/rpc/RpcMiddleware";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
@@ -189,8 +191,14 @@ const CapWhenOverdrawnLive = CapWhenOverdrawn.toLayer(
   }),
 );
 
+class ApprovalUnavailable extends Domain.Rejection("ApprovalUnavailable") {}
+
 class Approval extends Domain.ExternalSystem("Approval", {
-  check: { args: { total: Schema.Number }, success: { ok: Schema.Boolean } },
+  check: {
+    args: { total: Schema.Number },
+    success: { ok: Schema.Boolean },
+    error: ApprovalUnavailable,
+  },
 }) {}
 
 class CapWhenLarge extends Domain.Policy("CapWhenLarge", { from: Counter, on: [Incremented] }) {}
@@ -200,7 +208,11 @@ const CapWhenLargeLive = CapWhenLarge.toLayer(
     const counters = yield* Counter;
     return Effect.fn(function* ({ source, event }) {
       if (event.total < 15) return;
-      const { ok } = yield* approval.check({ total: event.total });
+      // Without an answer, the counter stays uncapped.
+      const ok = yield* approval.check({ total: event.total }).pipe(
+        Effect.map(({ ok }) => ok),
+        Effect.catchTag("ApprovalUnavailable", () => Effect.succeed(false)),
+      );
       if (ok) yield* counters.send(source, new Cap());
     });
   }),
@@ -225,8 +237,33 @@ class Counters extends Domain.Model("Counters", {
 
 const story = Story.make(Counters, {
   layer: Layer.mergeAll(CapWhenLargeLive, CapWhenOverdrawnLive, RemindWhenCappedLive),
-  externalSystems: [Approval],
+  stub: [Approval],
 });
+
+// Approval called for real, through an adapter: 20 and over is unavailable,
+// 17 breaks the connection, 19 answers slowly, and even totals are approved.
+const ApprovalAdapter = Approval.toLayer(
+  Effect.succeed({
+    check: ({ total }) =>
+      total >= 20
+        ? Effect.fail(new ApprovalUnavailable())
+        : total === 17
+          ? Effect.die(new Error("socket closed"))
+          : Effect.succeed({ ok: total % 2 === 0 }).pipe(
+              Effect.delay(total === 19 ? "50 millis" : "0 millis"),
+            ),
+  }),
+);
+const unstubbed = Story.make(Counters, {
+  layer: Layer.mergeAll(CapWhenLargeLive, CapWhenOverdrawnLive, RemindWhenCappedLive),
+});
+const real = (...steps: ReadonlyArray<Step>) =>
+  unstubbed(...steps).pipe(Effect.provide(ApprovalAdapter));
+
+// A system that is not stubbed must be provided as a Layer.
+// @ts-expect-error Approval is not provided
+export const unprovided: Effect.Effect<void, unknown, never> = unstubbed();
+
 const c1 = Counter.ref("c-1");
 const c2 = Counter.ref("c-2");
 const m1 = Move.ref("m-1");
@@ -251,13 +288,13 @@ describe("Domain Story", () => {
     ),
   );
 
-  it.effect("suspends a policy on an external system call until it is resolved", () =>
+  it.effect("suspends a policy on an external system call until it is answered", () =>
     story(
       Story.given(c1, new Incremented({ by: 10, total: 10 })),
       Story.when(c1, new Increment({ by: 6 })),
-      Story.expectCall(Approval.check, { total: 16 }),
+      Story.call(Approval.check, { total: 16 }),
       Story.then(c1, new Incremented({ by: 6, total: 16 })),
-      Story.resolve(Approval.check, { ok: true }),
+      Story.succeed(Approval.check, { ok: true }),
       Story.then(c1, new Capped()),
       Story.state(c1, (s) => expect(s.capped).toBe(true)),
     ),
@@ -269,10 +306,10 @@ describe("Domain Story", () => {
       Story.given(c2, new Incremented({ by: 10, total: 10 })),
       Story.when(c1, new Increment({ by: 6 })),
       Story.when(c2, new Increment({ by: 10 })),
-      Story.expectCall("c1", Approval.check, { total: 16 }),
-      Story.expectCall("c2", Approval.check, { total: 20 }),
-      Story.resolve("c2", Approval.check, { ok: false }),
-      Story.resolve("c1", Approval.check, { ok: true }),
+      Story.call("c1", Approval.check, { total: 16 }),
+      Story.call("c2", Approval.check, { total: 20 }),
+      Story.succeed("c2", Approval.check, { ok: false }),
+      Story.succeed("c1", Approval.check, { ok: true }),
       Story.then(c1, new Incremented({ by: 6, total: 16 }), new Capped()),
       Story.then(c2, new Incremented({ by: 10, total: 20 })),
     ),
@@ -284,22 +321,155 @@ describe("Domain Story", () => {
       Story.given(c2, new Incremented({ by: 10, total: 10 })),
       Story.when(c1, new Increment({ by: 6 })),
       Story.when(c2, new Increment({ by: 6 })),
-      Story.expectCall("c1", Approval.check, { total: 16 }),
-      Story.expectCall("c2", Approval.check, { total: 16 }),
-      Story.resolve("c1", Approval.check, { ok: false }),
-      Story.resolve("c2", Approval.check, { ok: true }),
+      Story.call("c1", Approval.check, { total: 16 }),
+      Story.call("c2", Approval.check, { total: 16 }),
+      Story.succeed("c1", Approval.check, { ok: false }),
+      Story.succeed("c2", Approval.check, { ok: true }),
       Story.then(c1, new Incremented({ by: 6, total: 16 })),
       Story.then(c2, new Incremented({ by: 6, total: 16 }), new Capped()),
     ),
   );
 
-  it.effect("an untagged resolve with several pending calls fails", () =>
+  it.effect("fails a pending call with the operation's declared error", () =>
+    story(
+      Story.given(c1, new Incremented({ by: 10, total: 10 })),
+      Story.when(c1, new Increment({ by: 6 })),
+      Story.call(Approval.check, { total: 16 }),
+      Story.fail(Approval.check, new ApprovalUnavailable()),
+      Story.then(c1, new Incremented({ by: 6, total: 16 })),
+      Story.state(c1, (s) => expect(s.capped).toBe(false)),
+    ),
+  );
+
+  it.effect("a pending call that dies fails the policy", () =>
+    story(
+      Story.given(c1, new Incremented({ by: 10, total: 10 })),
+      Story.when(c1, new Increment({ by: 6 })),
+      Story.call("c1", Approval.check, { total: 16 }),
+      Story.die("c1", Approval.check, new Error("socket closed")),
+    ).pipe(
+      Effect.flip,
+      Effect.map((failure) =>
+        expect(String((failure as any).message)).toMatch(
+          /a policy or projection failed: .*socket closed/,
+        ),
+      ),
+    ),
+  );
+
+  it.effect("asserts what a real call was sent and returned", () =>
+    real(
+      Story.given(c1, new Incremented({ by: 10, total: 10 })),
+      Story.when(c1, new Increment({ by: 6 })),
+      Story.call(Approval.check, { total: 16 }),
+      Story.returned(Approval.check, { ok: true }),
+      Story.then(c1, new Incremented({ by: 6, total: 16 }), new Capped()),
+    ),
+  );
+
+  it.effect("asserts a real call's declared error", () =>
+    real(
+      Story.given(c1, new Incremented({ by: 10, total: 10 })),
+      Story.when(c1, new Increment({ by: 10 })),
+      Story.call(Approval.check, { total: 20 }),
+      Story.failed(Approval.check, new ApprovalUnavailable()),
+      Story.then(c1, new Incremented({ by: 10, total: 20 })),
+    ),
+  );
+
+  it.effect("asserts that a real call died", () =>
+    real(
+      Story.given(c1, new Incremented({ by: 10, total: 10 })),
+      Story.when(c1, new Increment({ by: 7 })),
+      Story.call("c1", Approval.check, { total: 17 }),
+      Story.died("c1", Approval.check),
+    ).pipe(
+      Effect.flip,
+      // The policy did not handle the defect, so the story still fails on it.
+      Effect.map((failure) =>
+        expect(String((failure as any).message)).toMatch(/a policy or projection failed/),
+      ),
+    ),
+  );
+
+  it.live("waits for a slow real call", () =>
+    real(
+      Story.given(c1, new Incremented({ by: 10, total: 10 })),
+      Story.when(c1, new Increment({ by: 9 })),
+      Story.call(Approval.check, { total: 19 }),
+      Story.returned(Approval.check, { ok: false }),
+      Story.then(c1, new Incremented({ by: 9, total: 19 })),
+    ),
+  );
+
+  it.effect("a real call returning something else fails", () =>
+    real(
+      Story.given(c1, new Incremented({ by: 10, total: 10 })),
+      Story.when(c1, new Increment({ by: 6 })),
+      Story.call(Approval.check, { total: 16 }),
+      Story.returned(Approval.check, { ok: false }),
+    ).pipe(
+      Effect.flip,
+      Effect.map((failure) =>
+        expect(String((failure as any).message)).toContain(
+          'expected {"_tag":"Success","value":{"ok":false}}',
+        ),
+      ),
+    ),
+  );
+
+  it.effect("a real call no step asserts fails the story", () =>
+    real(
+      Story.given(c1, new Incremented({ by: 10, total: 10 })),
+      Story.when(c1, new Increment({ by: 6 })),
+      Story.call(Approval.check, { total: 16 }),
+    ).pipe(
+      Effect.flip,
+      Effect.map((failure) =>
+        expect(String((failure as any).message)).toContain(
+          "real external system calls no step asserts",
+        ),
+      ),
+    ),
+  );
+
+  it.effect("answering a call no call step checked fails", () =>
+    story(
+      Story.given(c1, new Incremented({ by: 10, total: 10 })),
+      Story.when(c1, new Increment({ by: 6 })),
+      Story.succeed(Approval.check, { ok: true }),
+    ).pipe(
+      Effect.flip,
+      Effect.map((failure) =>
+        expect(String((failure as any).message)).toContain(
+          'Approval.check({"total":16}) is answered before a call step checks its arguments',
+        ),
+      ),
+    ),
+  );
+
+  it.effect("asserting a real call no call step checked fails", () =>
+    real(
+      Story.given(c1, new Incremented({ by: 10, total: 10 })),
+      Story.when(c1, new Increment({ by: 6 })),
+      Story.returned(Approval.check, { ok: true }),
+    ).pipe(
+      Effect.flip,
+      Effect.map((failure) =>
+        expect(String((failure as any).message)).toContain(
+          'Approval.check({"total":16}) is asserted before a call step checks its arguments',
+        ),
+      ),
+    ),
+  );
+
+  it.effect("an untagged succeed with several pending calls fails", () =>
     story(
       Story.given(c1, new Incremented({ by: 10, total: 10 })),
       Story.given(c2, new Incremented({ by: 10, total: 10 })),
       Story.when(c1, new Increment({ by: 6 })),
       Story.when(c2, new Increment({ by: 6 })),
-      Story.resolve(Approval.check, { ok: true }),
+      Story.succeed(Approval.check, { ok: true }),
     ).pipe(
       Effect.flip,
       Effect.map((failure) =>
@@ -308,12 +478,12 @@ describe("Domain Story", () => {
     ),
   );
 
-  it.effect("resolving a tag no call has fails", () =>
+  it.effect("answering a tag no call has fails", () =>
     story(
       Story.given(c1, new Incremented({ by: 10, total: 10 })),
       Story.when(c1, new Increment({ by: 6 })),
-      Story.expectCall("c1", Approval.check, { total: 16 }),
-      Story.resolve("c3", Approval.check, { ok: true }),
+      Story.call("c1", Approval.check, { total: 16 }),
+      Story.succeed("c3", Approval.check, { ok: true }),
     ).pipe(
       Effect.flip,
       Effect.map((failure) =>
@@ -331,14 +501,14 @@ describe("Domain Story", () => {
     ),
   );
 
-  it.effect("fails on an unresolved external system call", () =>
+  it.effect("fails on an unanswered external system call", () =>
     story(
       Story.given(c1, new Incremented({ by: 10, total: 10 })),
       Story.when(c1, new Increment({ by: 9 })),
     ).pipe(
       Effect.flip,
       Effect.map((failure) =>
-        expect(String((failure as any).message)).toContain("unresolved external system calls"),
+        expect(String((failure as any).message)).toContain("unanswered external system calls"),
       ),
     ),
   );
@@ -498,6 +668,146 @@ describe("Domain Story", () => {
     ),
   );
 
+  it.effect("a failed then reports every step and the events so far", () =>
+    story(
+      Story.clock("2026-03-01T09:00:00Z"),
+      Story.given(c1, new Incremented({ by: 2, total: 2 })),
+      Story.when(c1, new Increment({ by: 3 })),
+      Story.then(c1, new Incremented({ by: 4, total: 6 })),
+      Story.replied({ total: 6 }),
+    ).pipe(
+      Effect.flip,
+      Effect.map((failure) => {
+        expect(failure.step).toBe(4);
+        expect(failure.reason).toContain("Then: on Counter/c-1");
+        expect(failure.message).toBe(
+          [
+            failure.reason,
+            "",
+            "  ✓ 1 Clock      2026-03-01T09:00:00.000Z",
+            "  ✓ 2 Given      Counter/c-1: Incremented { by: 2, total: 2 }",
+            "  ✓ 3 When       Counter/c-1: Increment { by: 3 }",
+            "  ✗ 4 Then       Counter/c-1: expected Incremented { by: 4, total: 6 }",
+            "                              got      Incremented { by: 3, total: 5 }",
+            "    5 Replied    { total: 6 }",
+            "  events so far",
+            "    Counter/c-1: Incremented → Incremented",
+          ].join("\n"),
+        );
+        expect(failure.steps.map((s) => s.status)).toEqual([
+          "passed",
+          "passed",
+          "passed",
+          "failed",
+          "not-run",
+        ]);
+        expect(failure.events).toEqual({ "Counter/c-1": ["Incremented", "Incremented"] });
+      }),
+    ),
+  );
+
+  it.effect("an unasserted rejection is marked on its command", () =>
+    story(
+      Story.given(c1, new Incremented({ by: 2, total: 2 })),
+      Story.when(c1, new Increment({ by: 99 })),
+      Story.then(c1),
+    ).pipe(
+      Effect.flip,
+      Effect.map((failure) =>
+        expect(failure.message).toBe(
+          [
+            "the command was rejected with TooBig, which no step asserts",
+            "",
+            "  ✓ 1 Given      Counter/c-1: Incremented { by: 2, total: 2 }",
+            "  ✗ 2 When       Counter/c-1: Increment { by: 99 }",
+            "                 rejected TooBig { max: 10 }",
+            "    3 Then       Counter/c-1: nothing new",
+            "  events so far",
+            "    Counter/c-1: Incremented",
+          ].join("\n"),
+        ),
+      ),
+    ),
+  );
+
+  it.effect("a wrong rejection shows what was expected and what came", () =>
+    story(Story.when(c1, new Increment({ by: 99 })), Story.rejected(new TooBig({ max: 5 }))).pipe(
+      Effect.flip,
+      Effect.map((failure) =>
+        expect(failure.message.split("\n\n")[1]).toBe(
+          [
+            "  ✓ 1 When       Counter/c-1: Increment { by: 99 }",
+            "  ✗ 2 Rejected   expected TooBig { max: 5 }",
+            "                 got      TooBig { max: 10 }",
+            "  events so far",
+            "    Counter/c-1: nothing",
+          ].join("\n"),
+        ),
+      ),
+    ),
+  );
+
+  it.effect("a failed policy is marked on the step that ran it", () => {
+    class Boom extends Domain.Policy("Boom", { from: Counter, on: [Capped] }) {}
+    class Breaks extends Domain.Model("Breaks", { aggregates: [Counter], policies: [Boom] }) {}
+    const breaks = Story.make(Breaks, {
+      layer: Boom.toLayer(Effect.succeed(() => Effect.die(new Error("boom")))),
+    });
+    return breaks(
+      Story.when(c1, new Increment({ by: 1 })),
+      Story.when(c1, new Cap()),
+      Story.then(c1, new Incremented({ by: 1, total: 1 }), new Capped()),
+    ).pipe(
+      Effect.flip,
+      Effect.map((failure) => {
+        expect(failure.step).toBe(2);
+        expect(failure.reason).toContain("a policy or projection failed");
+        expect(failure.reason).toContain("boom");
+        expect(failure.message.split("\n\n").at(-1)).toBe(
+          [
+            "  ✓ 1 When       Counter/c-1: Increment { by: 1 }",
+            "  ✗ 2 When       Counter/c-1: Cap",
+            "    3 Then       Counter/c-1: Incremented { by: 1, total: 1 }, Capped",
+            "  events so far",
+            "    Counter/c-1: Incremented → Capped",
+          ].join("\n"),
+        );
+      }),
+    );
+  });
+
+  it.effect("a report never prints a redacted value", () => {
+    class Keyed extends Domain.Event("Keyed", { secret: Schema.Redacted(Schema.String) }) {}
+    class SetKey extends Domain.Command("SetKey", {
+      target: Schema.String,
+      input: { secret: Schema.Redacted(Schema.String) },
+      events: [Keyed],
+    }) {}
+    class Lock extends Domain.Aggregate("Lock", {
+      id: Schema.String,
+      state: Schema.Struct({}),
+      initial: {},
+      commands: [SetKey],
+      decide: { SetKey: (_, { secret }) => [new Keyed({ secret })] },
+      evolve: { Keyed: (s) => s },
+    }) {}
+    class Locks extends Domain.Model("Locks", { aggregates: [Lock] }) {}
+    const lock = Lock.ref("l-1");
+    return Story.make(Locks)(
+      Story.when(lock, new SetKey({ secret: Redacted.make("hunter2") })),
+      Story.then(lock, new Keyed({ secret: Redacted.make("swordfish") })),
+    ).pipe(
+      Effect.flip,
+      Effect.map((failure) => {
+        expect(failure.message).not.toContain("hunter2");
+        expect(failure.message).not.toContain("swordfish");
+        expect(failure.message).toContain(
+          "  ✗ 2 Then       Lock/l-1: expected Keyed { secret: <redacted> }",
+        );
+      }),
+    );
+  });
+
   it.effect("a scheduled command fires when the clock reaches it", () =>
     story(
       Story.clock("2026-01-01T00:00:00Z"),
@@ -505,7 +815,7 @@ describe("Domain Story", () => {
       Story.then(c1, new Capped()),
       Story.clock("2026-01-01T00:59:00Z"),
       Story.then(c1),
-      Story.clock("2026-01-01T01:00:00Z"),
+      Story.clock(DateTime.makeUnsafe("2026-01-01T01:00:00Z")),
       Story.then(c1, new Reminded()),
     ),
   );

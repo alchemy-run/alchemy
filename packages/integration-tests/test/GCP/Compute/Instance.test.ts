@@ -1,7 +1,7 @@
 import * as GCP from "@alchemy.run/gcp";
 import { GcpEnvironment } from "@alchemy.run/gcp/Environment";
+import { expect } from "@alchemy.run/test";
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { expect } from "alchemy-test";
 import { adopt } from "alchemy/AdoptPolicy";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";

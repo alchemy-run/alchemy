@@ -1,6 +1,6 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { normalizeTransferredFrom } from "@alchemy.run/cloudflare/Workers/DurableObject";
-import { expect, test } from "alchemy-test";
+import { expect, test } from "@alchemy.run/test";
 import type { PlatformIdentity } from "alchemy/Platform";
 import * as Effect from "effect/Effect";
 import * as Rpc from "effect/rpc/Rpc";

@@ -5,6 +5,8 @@ description: Trace how commands, events and reactions flow through an @alchemy.r
 
 A model records what it does as it does it. Every command, every event it commits, and every policy, view, projection and saga that reacts to it gets a span, named after the building block. The spans connect into traces that follow a flow from a click to everything it caused.
 
+[Part 7 of the tutorial](/domain/tutorial/part-7) sets this up step by step for the bank.
+
 ## Export the traces
 
 A hosted model records into whatever tracer the runtime provides. Send it to an OpenTelemetry backend, such as Axiom, Honeycomb or your own collector, to see each flow as one connected trace. The bank declares its Axiom datasets and an ingest token next to its Worker:

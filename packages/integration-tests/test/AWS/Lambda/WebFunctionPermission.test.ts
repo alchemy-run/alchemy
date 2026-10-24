@@ -1,8 +1,8 @@
 import { fileURLToPath } from "node:url";
 import * as AWS from "@alchemy.run/aws";
+import { expect } from "@alchemy.run/test";
 import * as LambdaWeb from "@distilled.cloud/aws/lambda-web";
 import * as sts from "@distilled.cloud/aws/sts";
-import { expect } from "alchemy-test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";

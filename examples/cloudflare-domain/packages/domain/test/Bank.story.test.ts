@@ -60,14 +60,14 @@ import { Transfer } from "../src/Transfer/Transfer.aggregate.ts";
 import { TransferStatus } from "../src/Transfer/TransferStatus.view.ts";
 
 const {
+  call,
   clock,
   emitted,
-  expectCall,
   given,
   provide,
   rejected,
   replied,
-  resolve,
+  succeed,
   state,
   streamed,
   then,
@@ -80,7 +80,7 @@ const as = (actor: Actor) => provide(CurrentActor, actor);
 
 const story = Story.make(Bank, {
   layer: BankHandlers.pipe(Layer.provide(MemoryLedgerStore)),
-  externalSystems: [FraudCheck, Payments],
+  stub: [FraudCheck, Payments],
 });
 
 const a1 = Account.ref("a-1");
@@ -179,8 +179,8 @@ it.effect("the daily limit uses the story clock", () =>
     as(sam),
     when(a1, new WithdrawMoney({ amount: 40_000 })),
     when(a1, new WithdrawMoney({ amount: 40_000 })),
-    expectCall(FraudCheck.score, { accountId: a1.id, amount: 80_000 }),
-    resolve(FraudCheck.score, { risk: 0.1 }),
+    call(FraudCheck.score, { accountId: a1.id, amount: 80_000 }),
+    succeed(FraudCheck.score, { risk: 0.1 }),
     when(a1, new WithdrawMoney({ amount: 30_000 })),
     rejected(new DailyLimitExceeded({ remaining: 20_000 })),
     clock("2026-10-10T00:00:01Z"),
@@ -205,15 +205,15 @@ it.effect("freezing twice records nothing", () =>
 );
 
 it.effect(
-  "a risky withdrawal freezes the account (an external system call suspends until resolved)",
+  "a risky withdrawal freezes the account (an external system call suspends until answered)",
   () =>
     story(
       given(a1, opened(), new MoneyDeposited({ amount: 90_000, balanceAfter: 90_000 })),
       as(sam),
       when(a1, new WithdrawMoney({ amount: 60_000 })),
       then(a1, new MoneyWithdrawn({ amount: 60_000, balanceAfter: 30_000 })),
-      expectCall(FraudCheck.score, { accountId: a1.id, amount: 60_000 }),
-      resolve(FraudCheck.score, { risk: 0.95 }),
+      call(FraudCheck.score, { accountId: a1.id, amount: 60_000 }),
+      succeed(FraudCheck.score, { risk: 0.95 }),
       then(a1, new AccountFrozen({ reason: "fraud risk 0.95", by: system("FraudReview") })),
       when(a1, new WithdrawMoney({ amount: 10 })),
       rejected(new Frozen({ reason: "fraud risk 0.95" })),
@@ -234,8 +234,8 @@ it.effect(
         new MoneyWithdrawn({ amount: 30_000, balanceAfter: 30_000 }),
       ),
       emitted(DailyOutflow, a1, [{ day: "2026-01-01", total: 60_000 }]),
-      expectCall(FraudCheck.score, { accountId: a1.id, amount: 60_000 }),
-      resolve(FraudCheck.score, { risk: 0.1 }),
+      call(FraudCheck.score, { accountId: a1.id, amount: 60_000 }),
+      succeed(FraudCheck.score, { risk: 0.1 }),
       then(a1),
     ),
 );
@@ -245,10 +245,10 @@ it.effect("race: the account is closed while the fraud check is pending", () =>
     given(a1, opened(), new MoneyDeposited({ amount: 60_000, balanceAfter: 60_000 })),
     as(sam),
     when(a1, new WithdrawMoney({ amount: 60_000 })),
-    expectCall(FraudCheck.score, { accountId: a1.id, amount: 60_000 }),
+    call(FraudCheck.score, { accountId: a1.id, amount: 60_000 }),
     when(a1, new CloseAccount()),
     then(a1, new MoneyWithdrawn({ amount: 60_000, balanceAfter: 0 }), new AccountClosed()),
-    resolve(FraudCheck.score, { risk: 0.95 }),
+    succeed(FraudCheck.score, { risk: 0.95 }),
     then(a1),
     view(AccountSummary, a1, { closed: true }),
   ),
@@ -404,8 +404,8 @@ it.effect("a settlement on a closed account can't be rejected, so it is refunded
     given(a1, opened(), new AccountClosed()),
     when(a1, new RecordSettlement({ settlementId: "st_1", amount: 500 })),
     then(a1, new SettlementOnClosedAccount({ settlementId: "st_1", amount: 500 })),
-    expectCall(Payments.refund, { settlementId: "st_1", amount: 500 }),
-    resolve(Payments.refund, { refundId: "re_1" }),
+    call(Payments.refund, { settlementId: "st_1", amount: 500 }),
+    succeed(Payments.refund, { refundId: "re_1" }),
     emitted(AccountActivity, a1, (entries) =>
       expect(entries.at(-1)?.event._tag).toBe("SettlementOnClosedAccount"),
     ),
@@ -442,14 +442,14 @@ it.effect("an unasserted rejection fails the story", () =>
   ),
 );
 
-it.effect("an unresolved external system call fails the story", () =>
+it.effect("an unanswered external system call fails the story", () =>
   story(
     given(a1, opened(), new MoneyDeposited({ amount: 90_000, balanceAfter: 90_000 })),
     as(sam),
     when(a1, new WithdrawMoney({ amount: 60_000 })),
   ).pipe(
     Effect.flip,
-    Effect.map((failure) => expect(failure.message).toMatch(/unresolved external system calls/)),
+    Effect.map((failure) => expect(failure.message).toMatch(/unanswered external system calls/)),
   ),
 );
 
@@ -458,7 +458,7 @@ it.effect("an unresolved external system call fails the story", () =>
 /** A story whose projections write a ledger the test can read. */
 const ledgerStory = Story.make(Bank, {
   layer: BankHandlers,
-  externalSystems: [FraudCheck, Payments],
+  stub: [FraudCheck, Payments],
 });
 
 it.effect("the Ledger projection records each movement in a store outside the model", () =>

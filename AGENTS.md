@@ -147,7 +147,7 @@ Alchemy resource coverage is produced as a **software factory**: fleets of agent
 
 ## Speed doctrine: never wait on a hang
 
-- Run tests with `pnpm test` (works from the repo root or `packages/alchemy`; suite paths are relative to `packages/alchemy`, e.g. `test/Cloudflare/...`). Wrap **every** test invocation in a hard kill: `timeout 240 pnpm test <suite> --profile testing`. Hitting the wall **is** the failure — read the partial output (and the run's log under `.alchemy/log/test/`), find the hang (unbounded retry, infinite pagination, the engine deadlock below), fix the root cause. Never just re-run hoping. The runner also prints the currently-running tests whenever nothing finishes for 10s — use that list to identify the hang.
+- Run tests with `pnpm test` (works from the repo root or `packages/alchemy`; suite paths are relative to `packages/alchemy`, e.g. `test/Cloudflare/...`). The runner enforces per-test timeouts and prints the currently-running tests whenever nothing finishes for 10s — use that list to identify a hang, read the run's log under `.alchemy/log/test/`, find the cause (unbounded retry, infinite pagination, the engine deadlock below), and fix the root cause. Never just re-run hoping.
 - Per-test timeout ≤ 90–120s (`{ timeout: ... }` on the test, or `--timeout` for the whole run). A suite needing more than ~3–5 minutes total is a bug.
 - Every `Effect.retry`/`Effect.repeat` is bounded: `times ≤ 8–10`, total backoff under ~45–60s. Never poll for asynchronous provisioning slower than ~90s — skipIf-gate instead.
 - **Known engine bug**: a deploy that *replaces* a resource while simultaneously *removing* its old dependency deadlocks. Keep both dependencies deployed across replacement steps in tests (see `test/Cloudflare/R2/BucketEventNotification.test.ts`).
@@ -704,6 +704,7 @@ Do not use `Effect.orDie` in the lifecycle operations since this will crash the 
 | `await fetch(...)`                                   | `yield* HttpClient.HttpClient` + `HttpClientRequest`        |
 | `Effect.promise(() => listSqlFiles(dir))`            | Make `listSqlFiles` itself return `Effect` and `yield*` it |
 | `new Promise((res) => setTimeout(res, ms))`          | `yield* Effect.sleep(Duration.millis(ms))`                  |
+| `process.env.DOCKER_CONFIG`                          | `yield* Config.String("DOCKER_CONFIG")` (`Config.withDefault` / `Config.option` when optional) |
 
 Sync, CPU-only Node APIs (e.g. `crypto.createHash().update().digest()`, `process.cwd()`, `Buffer`, `TextEncoder`) must still be wrapped in `Effect.sync(() => ...)` (or `Effect.try` if they can throw) so the call participates in the Effect runtime — tracing, interruption, and error channels. Don't call them as bare expressions inside `Effect.gen`.
 
@@ -713,6 +714,8 @@ const hash = yield* Effect.sync(() =>
 );
 const cwd = yield* Effect.sync(() => process.cwd());
 ```
+
+Environment variables are configuration: read them through `effect/Config`, never `process.env`, so a provided `ConfigProvider` (`.env` files, profiles, tests) is honored. `Effect.sync` is only for process facts `Config` can't express, like `process.platform` or `process.cwd()`. Module-scope test gates (`test.skipIf(!!process.env.FAST)`) run outside Effect and are exempt.
 
 This applies to **lifecycle operations, helpers, AND tests**. Tests must use `FileSystem.FileSystem`/`Path.Path` for any file/path access (see [Database.test.ts](./packages/integration-tests/test/Cloudflare/D1/Database.test.ts) for the pattern).
 :::
@@ -972,7 +975,7 @@ Compose a `Stack` that deploys the fixture, share one deploy across the file wit
 import * as Alchemy from "@/index.ts";
 import * as Cloudflare from "@/Cloudflare";
 import * as Test from "@/Test/Alchemy";
-import { expect } from "alchemy-test";
+import { expect } from "@alchemy.run/test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/http/HttpClient";
@@ -1087,7 +1090,7 @@ pnpm build          # in a package: builds it and its workspace dependencies
 
 ## Running tests
 
-Tests run on **alchemy-test** (`packages/alchemy-test`), our own single-process, Effect-native test runner. The CLI is vitest/bun-test compatible: positional paths (files or directories) and `-t` work the same way.
+Tests run on **alchemy-test** (`@alchemy.run/test`, in `packages/alchemy-test`), our own single-process, Effect-native test runner. The CLI is vitest/bun-test compatible: positional paths (files or directories) and `-t` work the same way.
 
 There are two entry points, one per test package, both working identically from the repo root and from the package directory:
 
@@ -1155,8 +1158,8 @@ Output behavior (plain mode, the default):
 Runner semantics to know:
 
 - Everything runs in ONE bun process: files run concurrently (respecting `describe.sequential`), imports of all test files happen up-front (they must be lazy and pure — registration only, no top-level side effects beyond `Test.make`/`describe`/`test`).
-- Tests that mutate process-global state (e.g. `process.env.PATH`) must pass `{ exclusive: true }` in the test options to take the whole-process write lock.
-- The harness (`alchemy-test` package) provides `describe`, `it`/`test` (incl. `it.effect`/`it.live`), hooks, `layer`, `expect`, and `assert` — the codemod `scripts/codemod-alchemy-test.ts` migrates vitest imports and is idempotent.
+- Tests that mutate process-global state (e.g. `process.env.PATH`, `process.chdir`, `globalThis.__ALCHEMY_RUNTIME__`) must pass `{ exclusive: true }` in the test options to take the whole-process write lock. Tests that only contend for a shared cloud resource (an account singleton, a quota) pass a label instead — `{ exclusive: "aws:ses-account" }` serializes them with other holders of that label while the rest of the run continues. The same option works on `beforeAll`/`afterAll` hooks.
+- The harness (`@alchemy.run/test` package) provides `describe`, `it`/`test` (incl. `it.effect`/`it.live`), hooks, `layer`, `expect`, and `assert` — the codemod `scripts/codemod-alchemy-test.ts` migrates vitest imports and is idempotent.
 - The runner runs in plain bun, so distilled resolves from `src/*.ts` via the `bun` export condition — a regenerated service is test-visible immediately, no `lib/` rebuild required.
 
 ## The convergence loop: nuke → test → census → fix-fleet
@@ -1168,7 +1171,7 @@ Each iteration:
 0. **Clean slate** — first run `aws sso login` (the alchemy `testing` profile and the raw `aws` CLI ride the same SSO session; an expired token mid-round breaks the pipeline with auth errors — only escalate to a human if the login doesn't complete automatically). Then `pnpm nuke --yes` (deletes every alchemy-tagged cloud resource; `scripts/nuke.sh` already spares state buckets, SSO roles, and AWS-managed singletons) then `pnpm alchemy state delete Nuke --config ./stacks/nuke.ts --profile testing --recursive`. Never overlap nuke with a running suite. Plain `pnpm clear:state` lacks the profile and dies on expired Cloudflare OAuth; nuke without `--yes` hangs on an interactive confirm in non-interactive shells.
 1. **Full suite, bounded** — `pnpm test:integration test/AWS --profile testing`. The runner defaults to `--concurrency 32`; NEVER override it to `unbounded` on a full-suite run: all ~775 files' `beforeAll` deploys start at once, the event loop saturates, and hundreds of fake 0ms `beforeAll TimeoutError` failures drown the real signal (heap is ~8.5 GB regardless of N — the constraint is CPU, not memory). Target ≤10 min wall-clock, hard cap 128; measured 32 → ~21 min clean. The saturation tell is `beforeAll` failures at 0ms; real failures fail slow. If the cap can't reach 10 min, the residual is individual slow files — skipIf-gate them per the speed doctrine.
 2. **Leak census** — `pnpm nuke --dry-run` after the suite; diff against the pre-suite baseline. Worklist = **failed services ∪ leaking services** (a service can pass green and still leak). Leave the leaked resources LIVE as forensic evidence for the fix agents; carry-over holdouts that survive repeated nuke passes (stuck deletes) go on the worklist too — their delete path is the bug.
-3. **Fix-fleet workflow** — one agent per service on the worklist (account-singleton services — CloudTrail, Config, SecurityHub, GuardDuty, ControlTower, IdentityCenter — run as a sequential chain; everything else fans out). Each agent gets its exact failures, its leak inventory, and this root-cause priority: **provider bug > distilled patch > test fix** — never paper over a provider leak in the test. Each agent runs ONLY its own suite (`timeout 240 pnpm test:integration test/AWS/{Service} --profile testing`), audits its tests for non-deterministic names (rely on PhysicalName auto-naming; random data in message payloads/idempotency tokens is fine), verifies zero orphans from its service via out-of-band distilled list/describe calls, and reports a structured result. Agents never run tsc/build and never run the account-wide nuke.
+3. **Fix-fleet workflow** — one agent per service on the worklist (account-singleton services — CloudTrail, Config, SecurityHub, GuardDuty, ControlTower, IdentityCenter — run as a sequential chain; everything else fans out). Each agent gets its exact failures, its leak inventory, and this root-cause priority: **provider bug > distilled patch > test fix** — never paper over a provider leak in the test. Each agent runs ONLY its own suite (`pnpm test:integration test/AWS/{Service} --profile testing`), audits its tests for non-deterministic names (rely on PhysicalName auto-naming; random data in message payloads/idempotency tokens is fine), verifies zero orphans from its service via out-of-band distilled list/describe calls, and reports a structured result. Agents never run tsc/build and never run the account-wide nuke.
 4. **Gate** — the coordinator runs the one-shot `pnpm exec tsrs -b`, fixes cross-cutting fallout, commits the iteration (+ distilled submodule bump when patches were made), and loops back to 0. Terminate on two consecutive iterations of green-suite + census reduced to documented-undeletable residue (e.g. BackupSearch terminal records, Contributor-Insights rules with no delete API, keys in scheduled deletion).
 
 ## Multi-agent sessions: the coordinator owns type-checking

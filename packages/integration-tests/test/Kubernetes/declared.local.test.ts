@@ -4,8 +4,8 @@ import {
   driftMask,
   hashDriftSelection,
 } from "@alchemy.run/kubernetes/internal/declared";
+import { expect } from "@alchemy.run/test";
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { expect } from "alchemy-test";
 import { toYamlDisplayValue } from "alchemy/Cli/PropertyDiff";
 import { encodeState, reviveStateRecursive } from "alchemy/State/StateEncoding";
 import * as Test from "alchemy/Test/Alchemy";

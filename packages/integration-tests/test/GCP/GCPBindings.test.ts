@@ -1,6 +1,6 @@
 import * as GCP from "@alchemy.run/gcp";
 import { runsAsServiceAccount } from "@alchemy.run/gcp/GCPBindings";
-import { describe, expect, it } from "alchemy-test";
+import { describe, expect, it } from "@alchemy.run/test";
 import type { ResourceLike } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 

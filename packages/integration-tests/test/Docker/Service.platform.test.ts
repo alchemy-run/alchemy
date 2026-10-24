@@ -1,5 +1,5 @@
 import * as Docker from "@alchemy.run/docker";
-import { expect } from "alchemy-test";
+import { expect } from "@alchemy.run/test";
 import { AlchemyContext } from "alchemy/AlchemyContext";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";

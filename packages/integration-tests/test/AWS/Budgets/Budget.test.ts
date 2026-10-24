@@ -1,7 +1,7 @@
 import * as AWS from "@alchemy.run/aws";
 import { Budget, type BudgetCostTypes } from "@alchemy.run/aws/Budgets/Budget";
+import { expect } from "@alchemy.run/test";
 import * as budgets from "@distilled.cloud/aws/budgets";
-import { expect } from "alchemy-test";
 import * as Provider from "alchemy/Provider";
 import * as Test from "alchemy/Test/Alchemy";
 import { defaultStage } from "alchemy/Test/Core";

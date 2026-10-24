@@ -19,12 +19,12 @@ import { fileURLToPath } from "node:url";
  */
 import * as AWS from "@alchemy.run/aws";
 import { Certificate, CertificateProvider } from "@alchemy.run/aws/ACM/Certificate";
+import { describe, expect } from "@alchemy.run/test";
 import * as acm from "@distilled.cloud/aws/acm";
 import * as cloudfront from "@distilled.cloud/aws/cloudfront";
 import { Credentials } from "@distilled.cloud/aws/Credentials";
 import type { RegionName } from "@distilled.cloud/aws/Region";
 import * as route53 from "@distilled.cloud/aws/route-53";
-import { describe, expect } from "alchemy-test";
 import * as Stack from "alchemy/Stack";
 import { Stage } from "alchemy/Stage";
 import { inMemoryState } from "alchemy/State";
