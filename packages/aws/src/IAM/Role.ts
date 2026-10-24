@@ -226,6 +226,25 @@ const mergeBoundAssumeRolePolicy = (
  */
 export const Role = Resource<Role>("AWS.IAM.Role");
 
+// The persisted document when it means the same as the observed one, else
+// the observed one.
+const samePolicyDocument = (
+  persisted: PolicyDocument | undefined,
+  observed: PolicyDocument,
+): PolicyDocument =>
+  persisted !== undefined &&
+  normalizePolicyDocument(persisted) === normalizePolicyDocument(observed)
+    ? persisted
+    : observed;
+
+// The persisted list when it holds the same members as the observed one.
+const sameSet = (persisted: string[] | undefined, observed: string[]): string[] =>
+  persisted !== undefined &&
+  persisted.length === observed.length &&
+  observed.every((value) => persisted.includes(value))
+    ? persisted
+    : observed;
+
 export const RoleProvider = () =>
   Provider.effect(
     Role,
@@ -429,21 +448,33 @@ export const RoleProvider = () =>
             readTags(roleName),
           ]);
 
-          const assumeRolePolicyDocument =
+          const observedAssumeRolePolicy =
             parsePolicyDocument(role.Role.AssumeRolePolicyDocument) ??
             output?.assumeRolePolicyDocument;
-          if (!assumeRolePolicyDocument) {
+          if (!observedAssumeRolePolicy) {
             return undefined;
           }
 
+          // IAM stores documents in its own form (single-item arrays become
+          // scalars, keys reorder) and lists managed policies in its own
+          // order. Keep the persisted value wherever it is equivalent to what
+          // IAM returns, so an untouched role does not read as drifted.
           const attrs = {
             roleArn: role.Role.Arn as RoleArn,
             roleName: role.Role.RoleName,
             roleId: role.Role.RoleId,
             path: role.Role.Path,
-            assumeRolePolicyDocument,
-            managedPolicyArns,
-            inlinePolicies,
+            assumeRolePolicyDocument: samePolicyDocument(
+              output?.assumeRolePolicyDocument,
+              observedAssumeRolePolicy,
+            ),
+            managedPolicyArns: sameSet(output?.managedPolicyArns, managedPolicyArns),
+            inlinePolicies: Object.fromEntries(
+              Object.entries(inlinePolicies).map(([name, document]) => [
+                name,
+                samePolicyDocument(output?.inlinePolicies?.[name], document),
+              ]),
+            ),
             description: role.Role.Description,
             maxSessionDuration: role.Role.MaxSessionDuration,
             permissionsBoundary: role.Role.PermissionsBoundary?.PermissionsBoundaryArn,
