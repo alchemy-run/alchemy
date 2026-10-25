@@ -616,14 +616,26 @@ export const EventSourceMappingProvider = () =>
         state: config.State!,
       });
 
+      const deleteMapping = (uuid: string) =>
+        lambda.deleteEventSourceMapping({ UUID: uuid }).pipe(
+          Effect.retry({
+            while: (e) =>
+              e._tag === "ResourceInUseException" || e._tag === "ResourceConflictException",
+            schedule: Schedule.max([Schedule.exponential(100), Schedule.recurs(20)]),
+          }),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+        );
+
       return {
         stables: ["uuid", "eventSourceMappingArn"],
         diff: Effect.fn(function* ({ news, olds }) {
-          // An event source ARN is unresolved only while its source is being
-          // created or replaced (sources expose their ARN as stable on update),
-          // and AWS cannot move a mapping to another source.
+          // An unresolved event source ARN may or may not change: a replaced
+          // queue gets a new ARN, but a Table updated in place keeps its stream
+          // ARN while exposing it as unstable. Update in place and let
+          // `reconcile` move the mapping if the source really changed, so the
+          // mapping's identity is not stable for downstream consumers.
           if ("eventSourceArn" in news && !isResolved(news.eventSourceArn)) {
-            return { action: "replace" } as const;
+            return { action: "update", stables: [] } as const;
           }
           if (!isResolved(news)) return;
           if ((news.eventSourceArn as string) !== (olds.eventSourceArn as string)) {
@@ -668,8 +680,8 @@ export const EventSourceMappingProvider = () =>
               .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
           }
           // `updateEventSourceMapping` cannot change the source, so a mapping
-          // that reads another source (e.g. state written before a source was
-          // replaced) is recreated for this source and the stale one deleted.
+          // that reads another source (its source was replaced) is recreated
+          // for this source and the stale one deleted.
           let stale: string | undefined;
           if (config?.UUID && config.EventSourceArn !== eventSourceArn) {
             stale = config.UUID;
@@ -756,14 +768,7 @@ export const EventSourceMappingProvider = () =>
 
           const uuid = config.UUID;
           if (stale !== undefined && stale !== uuid) {
-            yield* lambda.deleteEventSourceMapping({ UUID: stale }).pipe(
-              Effect.retry({
-                while: (e: { _tag: string }) =>
-                  e._tag === "ResourceInUseException" || e._tag === "ResourceConflictException",
-                schedule: Schedule.max([Schedule.exponential(100), Schedule.recurs(20)]),
-              }),
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+            yield* deleteMapping(stale);
           }
           const mappingArn = `arn:aws:lambda:${region}:${accountId}:event-source-mapping:${uuid}`;
 
@@ -845,14 +850,7 @@ export const EventSourceMappingProvider = () =>
           return configToAttrs(config);
         }),
         delete: Effect.fn(function* ({ output }) {
-          yield* lambda.deleteEventSourceMapping({ UUID: output.uuid }).pipe(
-            Effect.retry({
-              while: (e: any) =>
-                e._tag === "ResourceInUseException" || e._tag === "ResourceConflictException",
-              schedule: Schedule.max([Schedule.exponential(100), Schedule.recurs(20)]),
-            }),
-            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-          );
+          yield* deleteMapping(output.uuid);
         }),
         // `list()` — AWS account/region collection (§4a). Exhaustively
         // paginate `listEventSourceMappings` with no `FunctionName` filter to

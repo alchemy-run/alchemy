@@ -14,6 +14,10 @@ import {
   FifoQueueLive,
   StandardQueueLive,
 } from "./fixtures/event-source-mapping-replace-handler.ts";
+import {
+  EventSourceMappingTableFunction,
+  makeTableFunction,
+} from "./fixtures/event-source-mapping-table-handler.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -74,9 +78,9 @@ test.provider(
 // Switching the queue between standard and FIFO replaces it in the same deploy
 // that updates the mapping, so the queue's ARN is unresolved when the mapping
 // is diffed. AWS cannot move a mapping to another source, so the mapping must
-// be replaced rather than updated in place.
+// be recreated on the new queue.
 test.provider(
-  "replaces the mapping when its queue is replaced",
+  "moves the mapping to a replaced queue",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
@@ -105,6 +109,43 @@ test.provider(
     }).pipe(Effect.onError(() => stack.destroy().pipe(Effect.ignore))),
   {
     tags: ["provider:aws", "provider:aws:lambda", "provider:aws:sqs", "live"],
+    timeout: 240_000,
+  },
+);
+
+// Retagging a Table updates it in place, so its stream ARN is unresolved when
+// the mapping is diffed but does not change. The mapping must stay in place:
+// recreating it would skip (LATEST) or replay (TRIM_HORIZON) stream records.
+test.provider(
+  "keeps the mapping when its table is updated in place",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const mappingsOf = (functionName: string) =>
+        Lambda.listEventSourceMappings({ FunctionName: functionName }).pipe(
+          Effect.map((page) => page.EventSourceMappings ?? []),
+        );
+
+      const v1 = yield* stack.deploy(
+        EventSourceMappingTableFunction.pipe(Effect.provide(makeTableFunction({ version: "1" }))),
+      );
+      const before = yield* mappingsOf(v1.functionName);
+      expect(before.length).toBe(1);
+
+      const v2 = yield* stack.deploy(
+        EventSourceMappingTableFunction.pipe(Effect.provide(makeTableFunction({ version: "2" }))),
+      );
+      const after = yield* mappingsOf(v2.functionName);
+
+      expect(after.length).toBe(1);
+      expect(after[0]!.UUID).toEqual(before[0]!.UUID);
+      expect(after[0]!.EventSourceArn).toEqual(before[0]!.EventSourceArn);
+
+      yield* stack.destroy();
+    }).pipe(Effect.onError(() => stack.destroy().pipe(Effect.ignore))),
+  {
+    tags: ["provider:aws", "provider:aws:lambda", "provider:aws:dynamodb", "live"],
     timeout: 240_000,
   },
 );
