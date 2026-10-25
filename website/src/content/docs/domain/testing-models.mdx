@@ -167,6 +167,44 @@ it.effect("refunds through the real payments adapter", () =>
 
 The story records every real call. `call` checks what a call was sent, and `returned` checks what it returned. `failed` checks a declared error instead, and `died` a defect. Like a stubbed call, each real call needs its `call` step first, and a story fails if no step asserts how a real call ended. The story waits for real calls to finish before each step.
 
+## Check every adapter against one contract
+
+An external system often has several adapters: the vendor's, an in-memory fake for tests, a no-op for a dev stage. `ExternalSystem.contract` declares one set of cases, and every adapter must pass all of them, so the fake can't drift from the vendor.
+
+```typescript
+// packages/server/test/Sms.contract.test.ts
+import * as ExternalSystem from "@alchemy.run/domain/ExternalSystem";
+import { describe, it } from "@effect/vitest";
+import * as Effect from "effect/Effect";
+import { Sms } from "@bank/domain/Messaging/Sms.external";
+import { FakeSms } from "../src/Messaging/FakeSms.ts";
+import { TwilioSms } from "../src/Messaging/TwilioSms.ts";
+
+const SmsContract = ExternalSystem.contract(Sms, {
+  "sends a message": ExternalSystem.returns(Sms.send, { to: "+15550100", body: "hi" }),
+  "counts the segments": ExternalSystem.returns(
+    Sms.send,
+    { to: "+15550100", body: "x".repeat(200) },
+    { segments: 2 },
+  ),
+  "refuses a landline": ExternalSystem.fails(
+    Sms.send,
+    { to: "+15550199", body: "hi" },
+    "Undeliverable",
+  ),
+});
+
+for (const [adapter, layer] of [["Twilio", TwilioSms], ["fake", FakeSms]] as const) {
+  describe(`Sms contract: ${adapter}`, () => {
+    for (const [name, test] of Object.entries(SmsContract)) {
+      it.effect(name, () => test.pipe(Effect.provide(layer)));
+    }
+  });
+}
+```
+
+`returns` expects the call to return a value its success schema accepts, and `fails` an error its error schema accepts. The last argument is optional: a partial value, the error's `_tag`, or a function that returns `false` (or throws) to reject the outcome. A case fails with a `ContractFailure` that names the system, the operation and the case.
+
 ## Move the clock
 
 A story's clock starts at `2026-01-01T00:00:00Z`, and `Story.clock` moves it to an ISO string, epoch milliseconds or a `DateTime`. Commands are stamped with it, so time-based rules like a daily limit are easy to test, and scheduled commands fire when it passes their time. See [Deadlines](/domain/deadlines).
