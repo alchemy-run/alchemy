@@ -2,73 +2,65 @@ import { noThrow } from "../src/rules/no-throw.ts";
 import { tester } from "./tester.ts";
 
 const head = `import * as Domain from "@alchemy.run/domain";\n`;
-const account = (parts: string, before = "") => `${head}${before}
+const isOpen = `const isOpen = (s) => s._tag === "Open";\n`;
+const account = (parts: string, before = isOpen) => `${head}${before}
 export class Account extends Domain.Aggregate("Account", {
   ${parts}
 }) {}`;
+const mustBeOpen = `const mustBeOpen = (s) => { if (!isOpen(s)) throw new Error("closed"); return s; };\n`;
 
 tester.run("no-throw", noThrow, {
   valid: [
     `const f = Effect.fn(function* () { return yield* new NotOpen(); });`,
     `const f = (s) => (s.open ? new AlreadyOpen() : []);`,
     `const e = new Error("built, not thrown");`,
-    // A guard in `evolve`: the event cannot apply, so the command dies and nothing commits.
+    // A guard written in `evolve`: the event cannot apply, so the command dies and nothing commits.
     account(
-      `evolve: { MoneyDeposited: (s, e) => { if (!s.open) throw new Error("closed"); return s; } },`,
+      `evolve: { MoneyDeposited: (s, e) => { if (!isOpen(s)) throw new Error("closed"); return s; } },`,
     ),
-    // The guard in a helper that only `evolve` calls.
+    // The pattern: one pure predicate; `decide` rejects, `evolve` throws, `reply` reads state.
     account(
-      `evolve: { MoneyDeposited: (s) => mustBeOpen(s), MoneyWithdrawn: (s) => ({ ...mustBeOpen(s) }) },`,
-      `const mustBeOpen = (s) => { if (!s.open) throw new Error("closed"); return s; };`,
-    ),
-    // ... also called from `reply`, which reads the same next state (examples/cloudflare-domain).
-    account(
-      `evolve: { MoneyDeposited: (s) => mustBeOpen(s) },
-  reply: { DepositMoney: (s) => ({ balance: mustBeOpen(s).balance }) },`,
-      `function mustBeOpen(s) { if (!s.open) throw new Error("closed"); return s; }`,
-    ),
-    // ... or through another guard helper.
-    account(
-      `evolve: { MoneyDeposited: (s) => open(s) },`,
-      `const mustBeOpen = (s) => { if (!s.open) throw new Error("closed"); return s; };
-const open = (s) => mustBeOpen(s);`,
+      `decide: { WithdrawMoney: (s) => (isOpen(s) ? [] : new NotOpen()) },
+  evolve: {
+    MoneyWithdrawn: (s, e) => {
+      if (!isOpen(s)) throw new Error("MoneyWithdrawn on a closed account");
+      return { ...s, balance: e.balanceAfter };
+    },
+  },
+  reply: { WithdrawMoney: (s) => ({ balance: s.balance }) },`,
     ),
   ],
   invalid: [
     {
-      code: `const mustBeOpen = (s) => { if (!s.open) throw new Error("closed"); return s; };`,
+      code: mustBeOpen,
       errors: [{ messageId: "throw" }],
     },
     { code: `function f() { throw "x"; }`, errors: [{ messageId: "throw" }] },
     {
-      // `decide` refuses with a rejection, never a throw.
-      code: account(
-        `decide: { WithdrawMoney: (s) => { if (!s.open) throw new Error("closed"); return []; } },`,
-      ),
+      // A throwing helper is reported, even when only `evolve` calls it.
+      code: account(`evolve: { MoneyDeposited: (s) => mustBeOpen(s) },`, isOpen + mustBeOpen),
       errors: [{ messageId: "throw" }],
     },
     {
-      // A helper `decide` also calls is not a guard.
+      // ... and when `reply` calls it too (examples/cloudflare-domain before #2549).
       code: account(
-        `decide: { WithdrawMoney: (s) => [mustBeOpen(s)] },
-  evolve: { MoneyWithdrawn: (s) => mustBeOpen(s) },`,
-        `const mustBeOpen = (s) => { if (!s.open) throw new Error("closed"); return s; };`,
-      ),
-      errors: [{ messageId: "throw" }],
-    },
-    {
-      // Written in `reply` itself.
-      code: account(
-        `reply: { DepositMoney: (s) => { if (!s.open) throw new Error("closed"); return {}; } },`,
-      ),
-      errors: [{ messageId: "throw" }],
-    },
-    {
-      // A helper only `reply` calls.
-      code: account(
-        `evolve: { MoneyDeposited: (s) => s },
+        `evolve: { MoneyDeposited: (s) => mustBeOpen(s) },
   reply: { DepositMoney: (s) => ({ balance: mustBeOpen(s).balance }) },`,
-        `const mustBeOpen = (s) => { if (!s.open) throw new Error("closed"); return s; };`,
+        isOpen + mustBeOpen,
+      ),
+      errors: [{ messageId: "throw" }],
+    },
+    {
+      // `reply` only reads state.
+      code: account(
+        `reply: { DepositMoney: (s) => { if (!isOpen(s)) throw new Error("closed"); return {}; } },`,
+      ),
+      errors: [{ messageId: "throw" }],
+    },
+    {
+      // `decide` refuses with a rejection.
+      code: account(
+        `decide: { WithdrawMoney: (s) => { if (!isOpen(s)) throw new Error("closed"); return []; } },`,
       ),
       errors: [{ messageId: "throw" }],
     },

@@ -104,12 +104,26 @@ decide: { WithdrawMoney: (s) => (s.frozen ? new Frozen() : []) }, // error: Froz
 
 ### `no-throw`
 
-No `throw` for an outcome a caller handles. Fail with a `Domain.Rejection` or a `Schema.TaggedError`. The one exception is a guard in an aggregate's `evolve`: an event that cannot apply to the state is a bug in `decide`, so `evolve` throws, the command dies, and nothing commits. The guard may sit in a local helper that only `evolve` calls (and `reply`, which reads the same next state). A `throw` in `decide`, `reply`, a view, a policy, a projection or a saga is reported.
+No `throw` for an outcome a caller handles. Fail with a `Domain.Rejection` or a `Schema.TaggedError`. The one exception is a guard written in an aggregate's `evolve`: an event that cannot apply to the state is a bug in `decide`, so `evolve` throws, the command dies, and nothing commits.
+
+The exception is lexical, so you check it by reading one function: a `throw` in a helper is reported, also when only `evolve` calls it, and so is any `throw` in `reply`. Share the condition as a pure predicate instead: `decide` returns a rejection, `evolve` throws, `reply` only reads state.
 
 ```ts
-decide: { WithdrawMoney: (s) => (s.open ? [] : new NotOpen()) }, // ok
-evolve: { MoneyWithdrawn: (s, e) => ({ ...mustBeOpen(s), balance: e.balanceAfter }) }, // ok: a guard
-decide: { WithdrawMoney: (s) => { if (!s.open) throw new Error("not open"); return []; } }, // error
+const isOpen = (s: AccountState) => s._tag === "Open";
+
+decide: { WithdrawMoney: (s) => (isOpen(s) ? [] : new NotOpen()) }, // ok
+evolve: {
+  MoneyWithdrawn: (s, e) => {
+    if (!isOpen(s)) throw new Error("MoneyWithdrawn on a closed account"); // ok: a guard in evolve
+    return { ...s, balance: e.balanceAfter };
+  },
+},
+reply: { WithdrawMoney: (s) => ({ balance: s.balance }) }, // ok
+
+const mustBeOpen = (s: AccountState) => {
+  if (!isOpen(s)) throw new Error("closed"); // error: a throwing helper
+  return s;
+};
 ```
 
 ### `no-cross-aggregate-import`
