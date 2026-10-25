@@ -807,9 +807,9 @@ const build = (
  * **Example:** The catalog of an Api
  * ```typescript
  * const catalog = Domain.Api.describe(CustomerApi);
- * const writes = catalog.operations.filter((op) => op.access === "write");
+ * const writes = catalog.operations.filter((op) => op.mode === "write");
  * // [{ api: "CustomerApi", entry: "DepositMoney", kind: "Command", operation: "send",
- * //    rpc: "DepositMoney", access: "write", stream: false, input, success, error }, ...]
+ * //    rpc: "DepositMoney", mode: "write", stream: false, input, success, error }, ...]
  * ```
  *
  * @primitive

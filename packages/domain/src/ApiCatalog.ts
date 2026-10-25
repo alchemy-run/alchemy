@@ -37,7 +37,7 @@ export const Operation = Schema.Struct({
   /** The RPC tag the server answers to (`Deposit`, `Balance.get`). */
   rpc: Schema.String,
   /** A command writes; every other call reads. */
-  access: Schema.Literals(["read", "write"]),
+  mode: Schema.Literals(["read", "write"]),
   /** Whether the call answers with a stream of values (`watch`, `events`). */
   stream: Schema.Boolean,
   /** The payload: a command's `target`, `commandId` and input; a read's `key` and options. */
@@ -71,7 +71,7 @@ export interface Describable {
 /** How an entry is called: its name, whether it writes, and its RPC per operation. */
 interface Surface {
   readonly name: string;
-  readonly access: "read" | "write";
+  readonly mode: "read" | "write";
   readonly calls: ReadonlyArray<{ readonly operation: OperationName; readonly rpc: Rpc.Any }>;
 }
 
@@ -79,14 +79,14 @@ interface Surface {
 const surfaceOf = (entry: Entry): Surface => {
   switch (entry.kind) {
     case "Command":
-      return { name: entry.tag, access: "write", calls: [{ operation: "send", rpc: entry.rpc }] };
+      return { name: entry.tag, mode: "write", calls: [{ operation: "send", rpc: entry.rpc }] };
     case "View":
     case "Aggregate":
     case "Stream": {
       const name = nameOf(entry);
       return {
         name,
-        access: "read",
+        mode: "read",
         calls: Object.values(readRpcs(entry)).map((rpc) => ({
           // Read RPCs are tagged `<name>.<operation>`.
           operation: rpc._tag.slice(name.length + 1) as OperationName,
@@ -134,14 +134,14 @@ const descriptionOf = (entry: Entry): string | undefined =>
  * ```typescript
  * const catalog = Domain.Api.describe(CustomerApi);
  * for (const op of catalog.operations) {
- *   console.log(op.rpc, op.access, op.stream ? "stream" : "call");
+ *   console.log(op.rpc, op.mode, op.stream ? "stream" : "call");
  * }
  * ```
  */
 export const describe = (api: Describable): Catalog => ({
   api: api.apiName,
   operations: api.entries.flatMap((entry) => {
-    const { name, access, calls } = surfaceOf(entry);
+    const { name, mode, calls } = surfaceOf(entry);
     const description = descriptionOf(entry);
     return calls.map(({ operation, rpc }): Operation => {
       // The group's RPC also carries middleware applied to the whole Api.
@@ -155,7 +155,7 @@ export const describe = (api: Describable): Catalog => ({
         kind: entry.kind,
         operation,
         rpc: served._tag,
-        access,
+        mode,
         stream: streamed !== undefined,
         input: toJsonSchema(served.payloadSchema) as Operation["input"],
         success: toJsonSchema(streamed?.success ?? served.successSchema) as Operation["success"],

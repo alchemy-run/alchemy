@@ -88,7 +88,7 @@ describe("Domain Api.describe", () => {
     const catalog = Domain.Api.describe(WalletApi);
     expect(catalog.api).toBe("WalletApi");
     expect(
-      catalog.operations.map((op) => [op.entry, op.kind, op.operation, op.access, op.stream]),
+      catalog.operations.map((op) => [op.entry, op.kind, op.operation, op.mode, op.stream]),
     ).toEqual([
       ["Deposit", "Command", "send", "write", false],
       ["Wallet", "Aggregate", "get", "read", false],

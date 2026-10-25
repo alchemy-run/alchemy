@@ -288,7 +288,7 @@ export class CustomerApi extends Domain.Api(
 
 Clients call commands as methods (`bank.WithdrawMoney({ target, amount }, { headers })`) and reads as namespaces. A view or aggregate has `get(id)` and `watch(id)` for its state, and `events(id)` and `list(id, { take, after })` for what it emitted. A stream has `peek`, `watch`, `events` and `list`. Each Api entry authorizes itself.
 
-`Domain.Api.describe(CustomerApi)` lists every call the Api serves as plain JSON: entry, kind, operation (`send`, `get`, `peek`, `watch`, `events`, `list`), RPC tag, `read` or `write`, whether it streams, and JSON Schemas for its input, success and typed errors. Build tool lists, CLI help or OpenAPI from it instead of a second hand-written list, and snapshot it in a test to catch a change to the public surface.
+`Domain.Api.describe(CustomerApi)` lists every call the Api serves as plain JSON: entry, kind, operation (`send`, `get`, `peek`, `watch`, `events`, `list`), RPC tag, `mode` (`read` or `write`), whether it streams, and JSON Schemas for its input, success and typed errors. Build tool lists, CLI help or OpenAPI from it instead of a second hand-written list, and snapshot it in a test to catch a change to the public surface.
 
 ## Model
 
