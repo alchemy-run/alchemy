@@ -32,7 +32,7 @@ Every screen or report is a view, keyed by what it's about: `AccountSummary` key
 
 A view is a security boundary. Its `validate` judges every read from who is asking. Make a separate view per audience instead of filtering by caller.
 
-A question across keys (an account's ledger, paged; "sites matching this trial, by country, sorted by score") is not a view. A projection writes it to a store you own, and a query serves it: `AccountLedger` reads the `Ledger` projection's table. Its input holds the filters and sort orders it supports, its `validate` judges the request and its `visible` each row.
+A question across keys (an account's ledger, paged; "withdrawals over 1,000 across all accounts, largest first") is not a view. A projection writes it to a store you own, and a query serves it: `AccountLedger` reads the `Ledger` projection's table. Its input holds the filters and sort orders it supports, its `validate` judges the request and its `visible` each row.
 
 More: [View](https://alchemy.run/domain/view).
 
