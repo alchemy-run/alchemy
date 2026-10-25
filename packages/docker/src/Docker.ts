@@ -327,10 +327,12 @@ export class Docker extends Context.Service<
         context?: string;
         replicas?: number;
         "endpoint-mode"?: "vip" | "dnsrr";
+        /** Networks to detach, by name or id; applied before `network-add`. */
+        "network-rm"?: string[];
+        "network-add"?: string[];
         "constraint-add"?: string[];
         "constraint-rm"?: string[];
         "replicas-max-per-node"?: number;
-        "placement-pref"?: string[];
         "update-parallelism"?: number;
         "update-delay"?: string;
         "update-monitor"?: string;
@@ -356,13 +358,23 @@ export class Docker extends Context.Service<
         "health-start-period"?: string;
         "stop-grace-period"?: string;
         "mount-add"?: string[];
+        /** Mount targets to remove. */
+        "mount-rm"?: string[];
         "secret-add"?: string[];
+        /** Secret names to remove; applied before `secret-add`. */
+        "secret-rm"?: string[];
         "config-add"?: string[];
+        /** Config names to remove; applied before `config-add`. */
+        "config-rm"?: string[];
         "read-only"?: boolean;
         "publish-add"?: string[];
+        /** Published ports to remove, as `target=<port>,protocol=<p>,mode=<m>`. */
+        "publish-rm"?: string[];
         "label-add"?: Record<string, string>;
         "label-rm"?: string[];
         "env-add"?: Record<string, string>;
+        /** Environment variable names to remove. */
+        "env-rm"?: string[];
         args?: string;
       }) => Effect.Effect<CommandOutput, PlatformError>;
       /** Inspects a service. */

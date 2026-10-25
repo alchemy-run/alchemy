@@ -10,6 +10,7 @@ import {
 } from "alchemy/Runtime/Process";
 import { Stack } from "alchemy/Stack";
 import { createInternalTags, hasAlchemyTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Equal from "effect/Equal";
 import type { PlatformError } from "effect/PlatformError";
@@ -345,9 +346,14 @@ export interface ServiceRuntimeContext extends HostRuntimeContext {
  * image on a registry every node can reach (build with `Docker.Image` +
  * `registry` and pass the pushed ref as `image` instead).
  *
- * Only replicated services are supported. Configuration changes replace the
- * service (delete-then-create); swarm tasks are stateless, so replacement is
- * cheap and avoids partially-applied `service update` drift.
+ * Only replicated services are supported. Changes to the image, replicas,
+ * environment, labels, networks, ports, mounts, secrets, configs, constraints,
+ * healthcheck, and rollout or restart policies are applied in place with
+ * `docker service update`, so swarm rolls tasks over following `updateConfig`.
+ * An update that swarm rolls back or pauses fails the deploy with
+ * `DockerServiceUpdateFailed`. Changing the name, context, command, args,
+ * endpoint mode, placement preferences, or read-only root filesystem, or
+ * removing a policy setting, replaces the service (delete-then-create).
  * ### Creating Services
  * **Example:** Replicated Nginx
  * ```typescript
@@ -519,16 +525,40 @@ export const Service: Platform<Service, ServiceServices, ServiceShape, ServiceRu
 const isBundledService = (props: ServiceProps): props is BundledServiceProps =>
   typeof (props as BundledServiceProps).main === "string";
 
+/**
+ * A `docker service update` that swarm rolled back or paused instead of
+ * completing. `--detach=false` exits 0 in both cases, so the provider reads
+ * the service's `UpdateStatus` after the update.
+ */
+export class DockerServiceUpdateFailed extends Data.TaggedError("DockerServiceUpdateFailed")<{
+  readonly service: string;
+  readonly state: string;
+  readonly reason: string;
+}> {
+  override get message() {
+    return `Update of service "${this.service}" ended in ${this.state}: ${this.reason}`;
+  }
+}
+
 type ServiceInspect = {
   ID: string;
   CreatedAt?: string;
   UpdatedAt?: string;
+  UpdateStatus?: {
+    State?: string;
+    StartedAt?: string;
+    Message?: string;
+  };
   Spec: {
     Name: string;
     Labels?: Record<string, string> | null;
     TaskTemplate?: {
       ContainerSpec?: {
         Image?: string;
+        Env?: string[] | null;
+        Mounts?: Array<{ Target?: string }> | null;
+        Secrets?: Array<{ SecretName?: string }> | null;
+        Configs?: Array<{ ConfigName?: string }> | null;
       };
       Networks?: Array<{ Target?: string }>;
       Placement?: {
@@ -623,18 +653,20 @@ export const ServiceProvider = () =>
           const newDesired = yield* normalizeDesired(id, news, instanceId);
 
           if (!Equal.equals(oldDesired, newDesired)) {
-            return { action: "replace" as const, deleteFirst: true };
+            return requiresReplacement(oldDesired, newDesired)
+              ? { action: "replace" as const, deleteFirst: true }
+              : { action: "update" as const };
           }
 
           // Bundled program: the image identity is the content hash — a code
-          // or bootstrap change replaces the service with the new image.
+          // or bootstrap change rolls the service onto the new image.
           if (isBundledService(news)) {
             const hash = yield* serviceImage.hash({
               source: news,
               isExternal: news.isExternal,
             });
             if (hash !== output?.code?.hash) {
-              return { action: "replace" as const, deleteFirst: true };
+              return { action: "update" as const };
             }
           }
 
@@ -673,15 +705,51 @@ export const ServiceProvider = () =>
               const labelsToRemove = Object.keys(currentLabels).filter(
                 (k) => !(k in allDesiredLabels),
               );
+              // `service update` only adds and removes list entries, so the
+              // removals are computed from the observed spec rather than olds.
+              const spec = current.Spec.TaskTemplate?.ContainerSpec;
+              const envToRemove = (spec?.Env ?? [])
+                .map((entry) => entry.split("=", 1)[0]!)
+                .filter((key) => !(key in environment));
+              const constraintsToRemove = (
+                current.Spec.TaskTemplate?.Placement?.Constraints ?? []
+              ).filter((c) => !desired.constraints.includes(c));
+              const desiredTargets = new Set(desired.volumes.map((v) => v.containerPath));
+              const mountsToRemove = (spec?.Mounts ?? []).flatMap((m) =>
+                m.Target && !desiredTargets.has(m.Target) ? [m.Target] : [],
+              );
+              const desiredPorts = new Set(desired.ports.map(formatPublish));
+              const portsToRemove = (current.Spec.EndpointSpec?.Ports ?? []).flatMap((p) =>
+                p.TargetPort !== undefined &&
+                !desiredPorts.has(
+                  formatPublish({
+                    external: p.PublishedPort,
+                    internal: p.TargetPort,
+                    protocol: p.Protocol,
+                    mode: p.PublishMode,
+                  }),
+                )
+                  ? // `--publish-rm` matches target, protocol and publish mode.
+                    [
+                      `target=${p.TargetPort},protocol=${p.Protocol ?? "tcp"},mode=${p.PublishMode ?? "ingress"}`,
+                    ]
+                  : [],
+              );
               yield* docker.service.update({
                 context: desired.context,
                 id: output.id,
                 image,
                 replicas: desired.replicas,
                 "endpoint-mode": desired.endpointMode,
+                // Attaching a network the service is already on fails, so
+                // every attachment is detached and the desired set re-added.
+                "network-rm": (current.Spec.TaskTemplate?.Networks ?? []).flatMap((n) =>
+                  n.Target ? [n.Target] : [],
+                ),
+                "network-add": desired.networks.map(formatNetwork),
+                "constraint-rm": constraintsToRemove,
                 "constraint-add": desired.constraints,
                 "replicas-max-per-node": desired.maxReplicasPerNode,
-                "placement-pref": desired.preferences,
                 "update-parallelism": desired.updateConfig?.parallelism,
                 "update-delay": desired.updateConfig?.delay,
                 "update-monitor": desired.updateConfig?.monitor,
@@ -709,13 +777,25 @@ export const ServiceProvider = () =>
                 "health-retries": desired.healthcheck?.retries,
                 "health-start-period": desired.healthcheck?.startPeriod,
                 "stop-grace-period": desired.stopGracePeriod,
+                "mount-rm": mountsToRemove,
                 "mount-add": desired.volumes.map(formatMount),
+                // Re-adding a ref that is still attached conflicts on its
+                // target, so every attached ref is removed and the desired
+                // set re-added in the same update.
+                "secret-rm": (spec?.Secrets ?? []).flatMap((s) =>
+                  s.SecretName ? [s.SecretName] : [],
+                ),
                 "secret-add": desired.secrets.map(formatRef),
+                "config-rm": (spec?.Configs ?? []).flatMap((c) =>
+                  c.ConfigName ? [c.ConfigName] : [],
+                ),
                 "config-add": desired.configs.map(formatRef),
                 "read-only": desired.readOnlyRootFs || undefined,
+                "publish-rm": portsToRemove,
                 "publish-add": desired.ports.map(formatPublish),
                 "label-add": allDesiredLabels,
                 "label-rm": labelsToRemove,
+                "env-rm": envToRemove,
                 "env-add": environment,
                 args:
                   desired.command.length > 0
@@ -723,11 +803,24 @@ export const ServiceProvider = () =>
                     : undefined,
               });
 
-              return toServiceAttributes(
-                yield* inspectOrDie(inspect, output.id, desired.context),
-                desired.context,
-                code,
-              );
+              const updated = yield* inspectOrDie(inspect, output.id, desired.context);
+              // A new `StartedAt` marks a rollout started by this update; an
+              // unchanged one is a stale status from an earlier update.
+              const status = updated.UpdateStatus;
+              if (
+                status?.StartedAt !== current.UpdateStatus?.StartedAt &&
+                (status?.State === "rollback_completed" ||
+                  status?.State === "rollback_paused" ||
+                  status?.State === "paused")
+              ) {
+                return yield* new DockerServiceUpdateFailed({
+                  service: updated.Spec.Name,
+                  state: status.State,
+                  reason: status.Message ?? "",
+                });
+              }
+
+              return toServiceAttributes(updated, desired.context, code);
             }
           }
 
@@ -745,9 +838,7 @@ export const ServiceProvider = () =>
             image,
             replicas: desired.replicas,
             "endpoint-mode": desired.endpointMode,
-            network: desired.networks.map((n) =>
-              [`name=${n.name}`, ...(n.aliases ?? []).map((a) => `alias=${a}`)].join(","),
-            ),
+            network: desired.networks.map(formatNetwork),
             constraint: desired.constraints,
             "replicas-max-per-node": desired.maxReplicasPerNode,
             "placement-pref": desired.preferences,
@@ -866,6 +957,62 @@ const normalizeDesired = (id: string, props: ServiceProps, instanceId: string) =
     })),
   );
 
+type DesiredService = Effect.Success<ReturnType<typeof normalizeDesired>>;
+
+/**
+ * Fields `docker service update` changes in place. Swarm rolls the tasks
+ * onto the new spec following `updateConfig`, so `order: "start-first"` and
+ * `failureAction: "rollback"` apply.
+ */
+const inPlaceFields = new Set<keyof DesiredService>([
+  "image",
+  "replicas",
+  "environment",
+  "labels",
+  "networks",
+  "constraints",
+  "maxReplicasPerNode",
+  "updateConfig",
+  "rollbackConfig",
+  "restartPolicy",
+  "healthcheck",
+  "stopGracePeriod",
+  "volumes",
+  "secrets",
+  "configs",
+  "ports",
+]);
+
+/**
+ * Settings `service update` can change but not reset to the engine default:
+ * removing one, or a field inside one, replaces the service.
+ */
+const resettableFields = new Set<keyof DesiredService>([
+  "maxReplicasPerNode",
+  "updateConfig",
+  "rollbackConfig",
+  "restartPolicy",
+  "healthcheck",
+  "stopGracePeriod",
+]);
+
+const clearsSetting = (olds: unknown, news: unknown): boolean => {
+  if (olds === undefined) return false;
+  if (news === undefined) return true;
+  if (typeof olds !== "object" || olds === null) return false;
+  return Object.entries(olds).some(
+    ([key, value]) => value !== undefined && (news as Record<string, unknown>)[key] === undefined,
+  );
+};
+
+const requiresReplacement = (olds: DesiredService, news: DesiredService): boolean =>
+  (Object.keys(news) as Array<keyof DesiredService>).some(
+    (key) =>
+      !deepEqual(olds[key], news[key]) &&
+      (!inPlaceFields.has(key) ||
+        (resettableFields.has(key) && clearsSetting(olds[key], news[key]))),
+  );
+
 const normalizeImageRef = (image: Service.Image): string =>
   typeof image === "string" ? image : image.imageRef;
 
@@ -927,6 +1074,9 @@ const formatMount = (volume: Service.VolumeMapping): string =>
     `target=${volume.containerPath}`,
     ...(volume.readOnly ? ["readonly=true"] : []),
   ].join(",");
+
+const formatNetwork = (network: Service.NetworkAttachment): string =>
+  [`name=${network.name}`, ...(network.aliases ?? []).map((a) => `alias=${a}`)].join(",");
 
 const formatRef = (ref: Service.SecretRef | Service.ConfigRef): string =>
   Object.entries(ref)

@@ -5,6 +5,8 @@ import { inMemoryState } from "alchemy/State";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
 import { ensureDockerSwarm } from "./Runtime.ts";
 
 const { test } = Test.make({ providers: Docker.providers(), state: inMemoryState() });
@@ -53,7 +55,7 @@ describe(
     );
 
     test.provider(
-      "replaces a service when replicas change",
+      "scales a service in place when replicas change",
       (stack) =>
         Effect.gen(function* () {
           yield* ensureDockerSwarm;
@@ -76,8 +78,215 @@ describe(
             }),
           );
 
-          expect(second.id).not.toBe(first.id);
+          expect(second.id).toBe(first.id);
           expect(second.replicas).toBe(2);
+
+          yield* stack.destroy();
+        }),
+      { timeout: 240_000 },
+    );
+
+    test.provider(
+      "rolls a new image onto the existing service",
+      (stack) =>
+        Effect.gen(function* () {
+          yield* ensureDockerSwarm;
+          const docker = yield* Docker.Docker;
+          const service = (image: string) =>
+            Docker.Service("rolled-service", {
+              name: "alchemy-test-service-rollout",
+              image,
+              labels: { tier: "web" },
+              environment: { MODE: "test" },
+              updateConfig: { order: "start-first", failureAction: "rollback" },
+            });
+
+          const first = yield* stack.deploy(service("nginx:1.27-alpine"));
+          const plan = yield* stack.plan(service("nginx:1.28-alpine"));
+          expect(plan.resources["rolled-service"]).toMatchObject({ action: "update" });
+          const second = yield* stack.deploy(service("nginx:1.28-alpine"));
+
+          expect(second.id).toBe(first.id);
+          expect(second.image).toContain("nginx:1.28-alpine");
+          expect(second.labels.tier).toBe("web");
+
+          // The previous spec is kept by swarm only when the service was
+          // updated, not recreated.
+          const previous = yield* docker
+            .run([
+              "service",
+              "inspect",
+              second.id,
+              "--format",
+              "{{json .PreviousSpec.TaskTemplate.ContainerSpec.Image}}",
+            ])
+            .pipe(Effect.map((output) => JSON.parse(output.stdout) as string));
+          expect(previous).toContain("nginx:1.27-alpine");
+
+          const order = yield* docker
+            .run(["service", "inspect", second.id, "--format", "{{.Spec.UpdateConfig.Order}}"])
+            .pipe(Effect.map((output) => output.stdout.trim()));
+          expect(order).toBe("start-first");
+
+          yield* stack.destroy();
+        }),
+      { timeout: 240_000 },
+    );
+
+    test.provider(
+      "rolls back and fails the deploy when updated tasks are unhealthy",
+      (stack) =>
+        Effect.gen(function* () {
+          yield* ensureDockerSwarm;
+          const docker = yield* Docker.Docker;
+          const deploy = (cmd: string[]) =>
+            stack.deploy(
+              Docker.Service("rollback-service", {
+                name: "alchemy-test-service-rollback",
+                image: "nginx:alpine",
+                healthcheck: { cmd, interval: "1s", timeout: "1s", retries: 1 },
+                updateConfig: { failureAction: "rollback", monitor: "10s" },
+              }),
+            );
+
+          const first = yield* deploy(["CMD-SHELL", "test -d /etc"]);
+
+          const failure = yield* deploy(["CMD", "false"]).pipe(
+            Effect.as(""),
+            Effect.catchCause((cause) => Effect.succeed(Cause.pretty(cause))),
+          );
+          expect(failure).toContain("DockerServiceUpdateFailed");
+          expect(failure).toContain("rollback_completed");
+
+          const healthcheck = yield* docker
+            .run([
+              "service",
+              "inspect",
+              first.id,
+              "--format",
+              "{{json .Spec.TaskTemplate.ContainerSpec.Healthcheck.Test}}",
+            ])
+            .pipe(Effect.map((output) => JSON.parse(output.stdout)));
+          expect(healthcheck).toEqual(["CMD-SHELL", "test -d /etc"]);
+
+          yield* stack.destroy();
+        }),
+      { timeout: 240_000 },
+    );
+
+    test.provider(
+      "removes environment variables, ports and mounts dropped from props",
+      (stack) =>
+        Effect.gen(function* () {
+          yield* ensureDockerSwarm;
+          const docker = yield* Docker.Docker;
+          const name = "alchemy-test-service-remove-entries";
+          // Swarm creates the named volumes on first mount; they outlive the service.
+          yield* Effect.addFinalizer(() =>
+            docker
+              .run(["volume", "rm", "alchemy-test-service-keep", "alchemy-test-service-drop"])
+              .pipe(Effect.ignore),
+          );
+
+          const first = yield* stack.deploy(
+            Docker.Service("pruned-service", {
+              name,
+              image: "nginx:alpine",
+              environment: { KEEP: "1", DROP: "1" },
+              ports: [{ internal: 80 }, { internal: 443 }],
+              volumes: [
+                { hostPath: "alchemy-test-service-keep", containerPath: "/keep" },
+                { hostPath: "alchemy-test-service-drop", containerPath: "/drop" },
+              ],
+            }),
+          );
+
+          const second = yield* stack.deploy(
+            Docker.Service("pruned-service", {
+              name,
+              image: "nginx:alpine",
+              environment: { KEEP: "2" },
+              ports: [{ internal: 80 }],
+              volumes: [{ hostPath: "alchemy-test-service-keep", containerPath: "/keep" }],
+            }),
+          );
+          expect(second.id).toBe(first.id);
+
+          const spec = yield* docker
+            .run(["service", "inspect", second.id, "--format", "{{json .Spec}}"])
+            .pipe(
+              Effect.map(
+                (output) =>
+                  JSON.parse(output.stdout) as {
+                    TaskTemplate: {
+                      ContainerSpec: { Env?: string[]; Mounts?: Array<{ Target: string }> };
+                    };
+                    EndpointSpec?: { Ports?: Array<{ TargetPort: number }> };
+                  },
+              ),
+            );
+          expect(spec.TaskTemplate.ContainerSpec.Env).toEqual(["KEEP=2"]);
+          expect((spec.TaskTemplate.ContainerSpec.Mounts ?? []).map((m) => m.Target)).toEqual([
+            "/keep",
+          ]);
+          expect((spec.EndpointSpec?.Ports ?? []).map((port) => port.TargetPort)).toEqual([80]);
+
+          yield* stack.destroy();
+        }),
+      { timeout: 240_000 },
+    );
+
+    test.provider(
+      "updates the image of a service with secrets attached",
+      (stack) =>
+        Effect.gen(function* () {
+          yield* ensureDockerSwarm;
+          const docker = yield* Docker.Docker;
+          const secretName = "alchemy-test-service-update-secret";
+
+          yield* docker
+            .run(["secret", "rm", secretName])
+            .pipe(Effect.catchCause(() => Effect.void));
+          const fs = yield* FileSystem.FileSystem;
+          const path = yield* Path.Path;
+          const dir = yield* fs.makeTempDirectoryScoped({ prefix: "alchemy-docker-secret-" });
+          const secretFile = path.join(dir, "secret");
+          yield* fs.writeFileString(secretFile, "value");
+          yield* docker.run(["secret", "create", secretName, secretFile]);
+          yield* Effect.addFinalizer(() =>
+            docker.run(["secret", "rm", secretName]).pipe(Effect.ignore),
+          );
+
+          const deploy = (image: string) =>
+            stack.deploy(
+              Docker.Service("secret-service", {
+                name: "alchemy-test-service-secret-update",
+                image,
+                secrets: [{ source: secretName, target: "app_secret" }],
+              }),
+            );
+
+          const first = yield* deploy("nginx:1.27-alpine");
+          const second = yield* deploy("nginx:1.28-alpine");
+          expect(second.id).toBe(first.id);
+          expect(second.image).toContain("nginx:1.28-alpine");
+
+          const targets = yield* docker
+            .run([
+              "service",
+              "inspect",
+              second.id,
+              "--format",
+              "{{json .Spec.TaskTemplate.ContainerSpec.Secrets}}",
+            ])
+            .pipe(
+              Effect.map((output) =>
+                (JSON.parse(output.stdout) as Array<{ File: { Name: string } }>).map(
+                  (secret) => secret.File.Name,
+                ),
+              ),
+            );
+          expect(targets).toEqual(["app_secret"]);
 
           yield* stack.destroy();
         }),
@@ -163,7 +372,39 @@ describe(
     );
 
     test.provider(
-      "replaces a service when labels change",
+      "updates labels in place",
+      (stack) =>
+        Effect.gen(function* () {
+          yield* ensureDockerSwarm;
+          const serviceName = "alchemy-test-service-labels";
+
+          const first = yield* stack.deploy(
+            Docker.Service("labeled-service", {
+              name: serviceName,
+              image: "nginx:alpine",
+              labels: { generation: "1", stale: "true" },
+            }),
+          );
+
+          const second = yield* stack.deploy(
+            Docker.Service("labeled-service", {
+              name: serviceName,
+              image: "nginx:alpine",
+              labels: { generation: "2" },
+            }),
+          );
+
+          expect(second.id).toBe(first.id);
+          expect(second.labels.generation).toBe("2");
+          expect(second.labels.stale).toBeUndefined();
+
+          yield* stack.destroy();
+        }),
+      { timeout: 240_000 },
+    );
+
+    test.provider(
+      "attaches a network created in the same deploy in place",
       (stack) =>
         Effect.gen(function* () {
           yield* ensureDockerSwarm;
@@ -173,20 +414,26 @@ describe(
             Docker.Service("replaceable-service", {
               name: serviceName,
               image: "nginx:alpine",
-              labels: { generation: "1" },
             }),
           );
 
-          const second = yield* stack.deploy(
-            Docker.Service("replaceable-service", {
-              name: serviceName,
-              image: "nginx:alpine",
-              labels: { generation: "2" },
+          const { network, service: second } = yield* stack.deploy(
+            Effect.gen(function* () {
+              const network = yield* Docker.Network("replaceable-service-network", {
+                name: "alchemy-test-service-replace-net",
+                driver: "overlay",
+              });
+              const service = yield* Docker.Service("replaceable-service", {
+                name: serviceName,
+                image: "nginx:alpine",
+                networks: [network.name],
+              });
+              return { network, service };
             }),
           );
 
-          expect(second.id).not.toBe(first.id);
-          expect(second.labels.generation).toBe("2");
+          expect(second.id).toBe(first.id);
+          expect(second.networks).toContain(network.id);
 
           yield* stack.destroy();
         }),
