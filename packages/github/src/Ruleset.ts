@@ -176,6 +176,56 @@ export interface RulesetProps {
      * Prevent force pushes.
      */
     nonFastForward?: boolean;
+
+    /**
+     * Require pull requests to merge through a merge queue. Only applies to
+     * branch rulesets in organization-owned repositories.
+     */
+    mergeQueue?: {
+      /**
+       * Method used to merge the queued pull requests.
+       * @default "MERGE"
+       */
+      mergeMethod?: "MERGE" | "SQUASH" | "REBASE";
+
+      /**
+       * `ALLGREEN` requires every entry's checks to pass; `HEADGREEN` only
+       * requires the checks of the group's head commit.
+       * @default "ALLGREEN"
+       */
+      groupingStrategy?: "ALLGREEN" | "HEADGREEN";
+
+      /**
+       * Maximum number of queued pull requests building at the same time.
+       * @default 5
+       */
+      maxEntriesToBuild?: number;
+
+      /**
+       * Minimum number of pull requests merged together in a group.
+       * @default 1
+       */
+      minEntriesToMerge?: number;
+
+      /**
+       * Maximum number of pull requests merged together in a group.
+       * @default 5
+       */
+      maxEntriesToMerge?: number;
+
+      /**
+       * Minutes to wait for `minEntriesToMerge` pull requests after the first
+       * one is queued before merging a smaller group.
+       * @default 5
+       */
+      minEntriesToMergeWaitMinutes?: number;
+
+      /**
+       * Minutes to wait for a required status check before treating it as failed.
+       * @default 60
+       */
+      checkResponseTimeoutMinutes?: number;
+    };
   };
 
   /**
@@ -301,6 +351,31 @@ export interface Ruleset extends Resource<
  * })
  * ```
  *
+ * ### Merge Queue
+ * GitHub only supports merge queues on branch rulesets in
+ * organization-owned repositories.
+ *
+ * **Example:** Merge Through a Squash Merge Queue
+ * ```typescript
+ * yield* GitHub.Ruleset("merge-queue", {
+ *   owner: "my-org",
+ *   repository: "my-repo",
+ *   name: "Merge queue",
+ *   conditions: {
+ *     include: ["~DEFAULT_BRANCH"],
+ *   },
+ *   rules: {
+ *     mergeQueue: {
+ *       mergeMethod: "SQUASH",
+ *       groupingStrategy: "ALLGREEN",
+ *       maxEntriesToBuild: 2,
+ *       maxEntriesToMerge: 1,
+ *       minEntriesToMergeWaitMinutes: 1,
+ *     },
+ *   },
+ * })
+ * ```
+ *
  * ### Bypass Actors
  * **Example:** Allow Admins to Bypass
  * ```typescript
@@ -416,6 +491,21 @@ export const RulesetProvider = () =>
           }),
         };
         rules.push({ type: "pull_request", parameters });
+      }
+      if (news.rules?.mergeQueue) {
+        const mergeQueue = news.rules.mergeQueue;
+        rules.push({
+          type: "merge_queue",
+          parameters: {
+            merge_method: mergeQueue.mergeMethod ?? "MERGE",
+            grouping_strategy: mergeQueue.groupingStrategy ?? "ALLGREEN",
+            max_entries_to_build: mergeQueue.maxEntriesToBuild ?? 5,
+            min_entries_to_merge: mergeQueue.minEntriesToMerge ?? 1,
+            max_entries_to_merge: mergeQueue.maxEntriesToMerge ?? 5,
+            min_entries_to_merge_wait_minutes: mergeQueue.minEntriesToMergeWaitMinutes ?? 5,
+            check_response_timeout_minutes: mergeQueue.checkResponseTimeoutMinutes ?? 60,
+          },
+        });
       }
       if (news.rules?.requiredStatusChecks) {
         rules.push({
